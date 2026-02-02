@@ -1,0 +1,22 @@
+# env / secrets
+.env
+*.env
+
+# data & artifacts
+**/*.zip
+**/*.xml
+**/*.csv
+**/*.sqlite
+**/*.db
+
+# logs
+logs/
+*.log
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# mac
+.DS_Store
