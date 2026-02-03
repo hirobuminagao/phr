@@ -1,0 +1,9 @@
+
+{
+  "BASE_DIR": "C:/Users/1107858.KSMD/kenshin_list_pydir",
+  "XML_FOLDER": "C:/Users/1107858.KSMD/kenshin_list_pydir/xml_files",
+  "EXPORT_FOLDER": "C:/Users/1107858.KSMD/kenshin_list_pydir/export_summary",
+  "XSD_PATH": "C:/Users/1107858.KSMD/kenshin_list_pydir/XSD/hc08_V08.xsd",
+  "OID_CSV_PATH": "C:/Users/1107858.KSMD/kenshin_list_pydir/mat/oid_code_master.csv"
+}
+

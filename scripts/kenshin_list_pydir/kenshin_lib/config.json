@@ -1,0 +1,18 @@
+{
+  "BASE_DIR": "C:/Users/1107858.KSMD/kenshin_list_pydir",
+  "XML_FOLDERS": {
+    "KENSHIN": "xml_files",
+    "SHG": "shg_xml_files"
+  },
+  "EXPORT_FOLDERS": {
+    "KENSHIN": "export_summary",
+    "SHG": "export_shg_summary"
+  },
+  "XSD_PATHS": {
+    "KENSHIN": "XSD/hc08_V08.xsd",
+    "SHG": "XSD/hg08_V08.xsd"
+  },
+  "OID_CSV_PATH": "mat/oid_code_master.csv"
+}
+
+
