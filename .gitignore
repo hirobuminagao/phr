@@ -22,4 +22,7 @@ __pycache__/
 .DS_Store
 
 *.csv
+!phr/
+!phr/sql/
+!phr/sql/meta/
 !phr/sql/meta/*.csv
