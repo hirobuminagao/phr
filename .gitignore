@@ -20,3 +20,6 @@ __pycache__/
 
 # mac
 .DS_Store
+
+*.csv
+!phr/sql/meta/*.csv
