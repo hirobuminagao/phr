@@ -1,38 +1,40 @@
-TABLE_NAME
-active_reserved_2025_trans
-csv_header_map_submit
-dock_res_2025_trans_errors
-dock_res_2025_trans_map_course
-dock_res_2025_trans_map_medi
-dock_res_2025_trans_norm
-dock_res_2025_trans_raw
-dock_res_2025_trans_runs
-find_xml_subscribers_list_20260128
-find_xml_subscribers_list_20260128_copy1
-health_examination_results
-kenshin_summary_py
-medi_exam_result_item_values
-medi_exam_result_ledger
-medi_import_runs
-medi_lsio_identity_presence
-medi_lsio_missing_items
-medi_normalization_logs
-medi_shared_files
-medi_shared_folder_aliases
-medi_xml_group_item_judgements
-medi_xml_group_judgements
-medi_xml_group_method_presence
-medi_xml_item_extract_errors
-medi_xml_item_extract_logs
-medi_xml_item_extract_runs
-medi_xml_item_values
-medi_xml_ledger
-medi_xml_process_logs
-medi_xml_receipt_runs
-medi_xml_receipts
-medi_zip_passwords
-medi_zip_receipt_runs
-medi_zip_receipts
-shg_result
-symbol100_all_20260127
-symbol100_all_20260127_copy1
+"TABLE_NAME","TABLE_ROWS","CREATE_TIME","UPDATE_TIME"
+"active_reserved_2025_trans","7791","2025/12/18 16:20:48",
+"csv_header_map_submit","218","2026/1/27 11:28:07",
+"dock_res_2025_trans_errors","0","2026/1/8 14:21:16",
+"dock_res_2025_trans_map_course","0","2025/12/18 16:38:44",
+"dock_res_2025_trans_map_medi","0","2025/12/18 16:38:25",
+"dock_res_2025_trans_norm","0","2025/12/18 16:37:46",
+"dock_res_2025_trans_raw","0","2025/12/18 16:37:21",
+"dock_res_2025_trans_runs","0","2025/12/18 16:37:00",
+"find_xml_subscribers_list_20260128","4339","2026/1/29 16:26:47",
+"find_xml_subscribers_list_20260128_copy1","3990","2026/1/29 16:18:11",
+"health_examination_results","790","2026/1/7 10:49:34",
+"kenshin_summary_py","8326","2025/12/2 18:05:18",
+"medi_exam_result_item_values","496","2026/1/30 11:02:17",
+"medi_exam_result_ledger","8","2026/1/30 12:37:53",
+"medi_import_runs","50","2026/1/8 14:29:33",
+"medi_lsio_identity_presence","785622","2026/1/23 14:51:26",
+"medi_lsio_missing_items","851934","2026/1/22 15:26:17",
+"medi_normalization_logs","0","2026/1/8 14:29:53",
+"medi_shared_files","1497","2026/1/26 16:47:55",
+"medi_shared_folder_aliases","188","2026/1/26 17:19:17",
+"medi_xml_group_item_judgements","0","2026/1/21 18:25:59",
+"medi_xml_group_judgements","0","2026/1/21 18:25:59",
+"medi_xml_group_method_presence","0","2026/1/21 18:47:27",
+"medi_xml_item_extract_errors","0","2026/1/20 18:31:14",
+"medi_xml_item_extract_logs","0","2026/1/20 18:30:48",
+"medi_xml_item_extract_runs","0","2026/1/20 18:29:39",
+"medi_xml_item_values","2198567","2026/1/22 10:58:35",
+"medi_xml_ledger","29564","2026/1/29 09:09:02",
+"medi_xml_process_logs","1624298","2026/1/13 16:19:03",
+"medi_xml_receipt_runs","312577","2026/1/13 17:05:11",
+"medi_xml_receipts","32656","2026/1/20 19:10:00",
+"medi_zip_passwords","9","2026/1/15 11:34:59",
+"medi_zip_receipt_runs","12022","2026/1/8 17:08:10",
+"medi_zip_receipts","1250","2026/1/15 12:53:29",
+"shg_result","5852","2025/12/9 18:34:47","2026/2/6 12:46:16"
+"symbol100_all_20260127","26080","2026/1/27 17:13:34",
+"symbol100_all_20260127_copy1","25088","2026/1/29 16:14:26",
+"v_lsio_identity_presence",,"2026/1/22 15:24:44",
+"v_lsio_identity_presence_v2",,"2026/1/23 11:53:53",

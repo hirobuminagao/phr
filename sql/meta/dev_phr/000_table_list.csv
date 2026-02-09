@@ -1,25 +1,26 @@
-TABLE_NAME
-etl_errors
-etl_runs
-event_ledger
-exam_item_group_identity_members
-exam_item_group_members
-exam_item_group_method_members
-exam_item_groups
-exam_item_master
-exam_item_master_src_fuzoku2_min
-fund_insurer_numbers
-fund_line_types
-funds
-norm_rules
-norm_variants
-prefectures
-staging_subscribers_fund
-staging_subscribers_hub
-subscriber_addresses
-subscriber_audit
-subscriber_contacts
-subscribers
-subscribers_exclusions
-template_mappings
-templates
+"TABLE_NAME","TABLE_ROWS","CREATE_TIME","UPDATE_TIME"
+"etl_errors","39748","2025/11/25 11:41:33",
+"etl_runs","15","2025/12/10 17:24:18",
+"event_ledger","26048","2026/1/16 11:29:17",
+"exam_item_group_identity_members","29","2026/1/23 11:16:00",
+"exam_item_group_members","79","2026/1/22 17:50:11",
+"exam_item_group_method_members","33","2026/1/22 17:39:29",
+"exam_item_groups","1","2026/1/22 17:49:51",
+"exam_item_master","322","2026/1/22 17:36:00",
+"exam_item_master_src_fuzoku2_min","322","2026/1/22 14:58:18",
+"fund_insurer_numbers","51","2025/11/25 12:49:40",
+"fund_line_types","3","2025/11/25 12:46:44",
+"funds","45","2025/11/25 12:41:57",
+"norm_rules","5","2026/1/30 12:30:18",
+"norm_variants","774","2026/1/30 18:17:11",
+"prefectures","47","2025/11/25 15:54:41",
+"staging_subscribers_fund","0","2025/12/16 15:31:47",
+"staging_subscribers_hub","41185","2025/12/16 14:37:41",
+"subscriber_addresses","3310","2025/12/10 12:34:14",
+"subscriber_audit","41756","2025/12/10 12:34:24",
+"subscriber_contacts","149","2025/12/10 12:34:33",
+"subscribers","41407","2025/12/16 14:45:39",
+"subscribers_exclusions","143","2025/11/26 12:29:38",
+"template_mappings","20","2025/12/2 12:15:24",
+"templates","0","2025/12/2 12:13:26",
+"v_exam_namecode_to_identity",,"2026/1/22 15:22:38",
