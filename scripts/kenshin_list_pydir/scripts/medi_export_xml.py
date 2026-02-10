@@ -2,32 +2,62 @@
 """
 scripts/medi_export_xml.py
 
+【固定化（freeze）】
+本ファイルは「既に運用中の挙動」を凍結し、後続のリファクト/再設計と混ぜないための仕様メモである。
+このコミットでは原則としてロジック変更は行わず、コメント/ドキュメントの明確化のみを目的とする。
+
 【目的】
 work_other.medi_exam_result_ledger / work_other.medi_exam_result_item_values を元に、
-dev_phr.exam_item_master を参照しつつ、厚労省標準様式（CDA）個人XML＋IX08 を生成し、
-「医療機関 × 提出先健保」ごとに 1 ZIP を作る（厚労省フォーマットをデフォルト固定）。
+dev_phr.exam_item_master を参照しつつ、厚生労働省 標準様式（CDA V08）個人XML と IX08 を生成し、
+「健診実施機関（送信元）× 提出先保険者（送信先）」単位で 1 ZIP にまとめて出力する。
 
-【前提フォルダ】
+【入出力（DB）】
+- 入力:
+  - work_other.medi_exam_result_ledger
+  - work_other.medi_exam_result_item_values
+  - dev_phr.exam_item_master
+- 出力:
+  - ファイル出力のみ（DB更新は行わない）
+
+【出力フォルダ構成】
 KENSHIN_LIST_PYDIR/
   scripts/
     medi_export_xml.py    (このファイル)
-  medi_export_xml/        (出力先 root)
-  xsd/                    (同梱するXSD。フォルダごとコピー)
+  medi_export_xml/        (出力先 root; EXPORT_ROOT で上書き可)
+  xsd/                    (同梱するXSD; 出力側へコピー)
+
+出力例（root_dir は厚労省ルールのデフォルト生成）:
+  <EXPORT_ROOT>/<root_dir>/
+    ix08.xml
+    DATA/
+      h<sender10><yyyymmdd><N><kind><seq6>.xml
+    XSD/
+      ...（xsd/ を丸ごとコピー）
+  <EXPORT_ROOT>/<root_dir>.zip
+
+【XML生成の決定事項（運用固定）】
+- CDA: ClinicalDocument/id は nullFlavor="NI" を使用（識別子採番は行わない）
+- 受診者ID:
+  - 保険者番号 root=1.2.392.200119.6.101
+  - 記号 root=1.2.392.200119.6.204
+  - 番号 root=1.2.392.200119.6.205
+- 値の優先:
+  - nullflavor があれば nullFlavor を優先し値は出さない
+  - それ以外は xml_value_type に従い PQ/CD/CO/ST を出力
 
 【ENV】（DB以外）
-  EXPORT_ROOT
-  EXPORT_FILE_DATE (YYYYMMDD)
-  EXPORT_LIMIT
-  EXPORT_IX08_NAME
-  EXPORT_XML_ENCODING
+  EXPORT_ROOT                 出力先root（未設定は <project>/medi_export_xml）
+  EXPORT_FILE_DATE            ファイル作成日 YYYYMMDD（未設定は実行日）
+  EXPORT_LIMIT                ledger件数の上限（未設定は無制限）
+  EXPORT_IX08_NAME            IX08ファイル名（既定: ix08.xml）
+  EXPORT_XML_ENCODING         XML出力エンコーディング（既定: utf-8）
 
   # 厚労省：同日分割送信回数(N) と 実施区分コード(X)
-  EXPORT_SPLIT_NO=0
-  EXPORT_IMPL_CODE=1
+  EXPORT_SPLIT_NO=0           0-9（既定: 0）
+  EXPORT_IMPL_CODE=1          実施区分（既定: 1）
 
   # 厚労省：個人XMLファイル名 種別（表2の「種別」= 1桁）
-  # 例：特定健診データファイル = 1（運用に合わせて変更）
-  EXPORT_FILE_KIND=1
+  EXPORT_FILE_KIND=1          既定: 1
 
   # ルートフォルダ名テンプレ（空なら厚労省規則で自動生成）
   # 例：{sender}_{receiver}_{date}{split}_{impl}
@@ -35,6 +65,14 @@ KENSHIN_LIST_PYDIR/
 
   # ZIP名テンプレ（空なら「{root_dir}.zip」）
   EXPORT_ZIP_NAME_TEMPLATE=
+
+【DB接続ENV】
+  MEDI_IMPORT_DB_HOST / MEDI_IMPORT_DB_PORT / MEDI_IMPORT_DB_NAME
+  MEDI_IMPORT_DB_USER / MEDI_IMPORT_DB_PASSWORD
+
+【注意】
+- 本スクリプトは Windows 側の運用手順を前提にした既存コードの固定化フェーズ。
+  リファクト（構造変更/責務分割/出力仕様変更）は別フェーズで行う。
 """
 
 from __future__ import annotations
