@@ -2,14 +2,32 @@
 """
 kenshin_lib/medi/db_medi.py
 
-medi_* テーブル向けのDBアクセス（SQL）を集約。
-scripts側はオーケストレーションに寄せる。
+【役割】
+medi_* テーブル群に対する DB アクセス（SQL）をこのモジュールに集約する。
+scripts 側は「処理の流れ（オーケストレーション）」に寄せ、SQL/互換吸収は DB 層で行う。
 
-SAFE-GUARDS:
-- enum/短い型で落ちない（stepなど）
-- zip_inner_path_sha256 等 “空欄で落ちる列” を DB層で埋める（列が存在する場合）
-- receipt_runs の FK 変更（xml_receipt_id）にも追随（列があれば埋める）
-- スキーマ差分（列追加/未追加）に耐えるため information_schema を参照（キャッシュ）
+【対象スキーマ】
+- 取り込み系: medi_import_runs, medi_zip_receipts, medi_zip_receipt_runs,
+           medi_xml_receipts, medi_xml_receipt_runs, medi_xml_process_logs
+- 台帳系: medi_xml_ledger
+- 生抽出: medi_xml_item_values（主に work_other / medi 領域想定）
+
+【設計方針（固定）】
+- 互換吸収: 環境差（列の有無 / FK 変更 / enum 値差）で落とさない。
+  - information_schema を参照して「列がある時だけ」INSERT/UPDATE に含める。
+  - enum 列は許容値に無い値を安全な値へフォールバックする（OTHER/UNKNOWN/先頭）。
+- NOT NULL 対策: 事故りやすい列は DB 層で補正する。
+  - zip_inner_path は "\\"→"/" に寄せて先頭 "/" を除去して同一化
+  - zip_inner_path_sha256 は空なら zip_inner_path から必ず算出（列がある環境のみ）
+- 例外文字列の肥大化対策: error_message 等は軽くクリップして DB/ログを壊さない。
+
+【キャッシュ】
+- information_schema の列存在/型取得はこのプロセス内でキャッシュする。
+  （長時間プロセスでの負荷低減。スキーマ変更が頻発する場合はプロセス再起動で反映。）
+
+【注意】
+- このモジュールは “DB に書く/読む” のみ。ZIP 展開・XML パース等の I/O は scripts 側で行う。
+- 文字コード/照合順序はテーブル定義に従う。namecode は ascii_bin 前提のものが混在し得る。
 """
 
 from __future__ import annotations
