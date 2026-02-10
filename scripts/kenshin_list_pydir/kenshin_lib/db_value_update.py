@@ -2,13 +2,31 @@
 """
 kenshin_lib/db_value_update.py
 
-mysql-connector-python を使って、
-DBから値を読み込み → 変換 → 同一行に UPDATE する汎用ユーティリティ。
+Generic utility to read values from MySQL, transform them, and write the transformed
+values back to the same table using safe key-based UPDATEs.
 
-- テーブル固定しない
-- PK（または一意キー）で安全に更新
-- .env から接続情報を取得（python-dotenv不要）
-- Pylance の型警告を潰す（dictキャスト）
+Purpose
+- Provide a reusable, table-agnostic batch updater.
+- Update only when the transformed value differs from the current destination value.
+
+Design
+- The target table is not hard-coded.
+- Updates are executed by primary key (or a UNIQUE key) columns to avoid accidental
+  multi-row updates.
+- Connection parameters are loaded from a local `.env` file (no external dependency).
+- Cursor results are handled as dictionaries; casts are used to satisfy type checkers.
+
+Environment (.env)
+- MYSQL_HOST (default: 127.0.0.1)
+- MYSQL_PORT (default: 3306)
+- MYSQL_USER (default: root)
+- MYSQL_PASSWORD (default: empty)
+
+Notes
+- Connection charset/collation are set to utf8mb4 / utf8mb4_ja_0900_as_cs to align with
+  the project’s Japanese string handling policy.
+- `where_sql` should be a SQL fragment without the leading `WHERE`.
+
 """
 
 from __future__ import annotations
@@ -24,9 +42,13 @@ import mysql.connector
 # .env loader（依存なし）
 # -----------------------------
 def load_env(dotenv_path: str = ".env") -> None:
-    """
-    シンプルdotenvローダ。
-    既に環境変数にあるキーは上書きしない。
+    """Load key=value pairs from a local .env file.
+
+    - Lines starting with `#` are ignored.
+    - Existing environment variables are not overwritten.
+    - Quoted values (single/double) are unquoted.
+
+    This loader is intentionally minimal to avoid adding external dependencies.
     """
     if not os.path.exists(dotenv_path):
         return
@@ -44,9 +66,12 @@ def load_env(dotenv_path: str = ".env") -> None:
 
 
 def connect_mysql(db_name: str):
-    """
-    接続は .env の以下を参照：
+    """Create a MySQL connection.
+
+    Connection parameters are read from environment variables:
       MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD
+
+    The connection uses utf8mb4 and `utf8mb4_ja_0900_as_cs` collation by default.
     """
     return mysql.connector.connect(
         host=os.getenv("MYSQL_HOST", "127.0.0.1"),
@@ -68,12 +93,12 @@ class UpdateJob:
     name: str
     db_name: str
     table: str
-    key_cols: Sequence[str]   # PK or UNIQUE
+    key_cols: Sequence[str]   # PK or UNIQUE key columns used for safe updates
     src_col: str
     dst_col: str
-    where_sql: str = ""
+    where_sql: str = ""       # SQL fragment without leading WHERE (optional)
     limit: int = 0
-    chunk_size: int = 1000
+    chunk_size: int = 1000    # executemany batch size
 
 
 def _select_sql(job: UpdateJob) -> str:
@@ -99,11 +124,21 @@ def run_update_job(
     dry_run: bool = False,
     verbose: bool = True,
 ) -> Dict[str, int]:
-    """
-    実行結果:
-      selected: SELECT 件数
-      to_update: UPDATE 対象件数
-      updated: 実更新件数（cursor.rowcount の合計）
+    """Run a batch update job.
+
+    The job selects key columns plus (src_col, dst_col), applies `transform(src)` and
+    updates dst_col only when the resulting value differs.
+
+    Parameters
+    - dotenv_path: path to `.env` (loaded only if present)
+    - dry_run: if True, do not persist changes (transaction is rolled back)
+    - verbose: if True, prints basic progress information
+
+    Returns
+      A dict with:
+        selected: number of rows selected
+        to_update: number of rows that would be updated
+        updated: number of rows updated (sum of cursor.rowcount)
     """
     load_env(dotenv_path)
     conn = connect_mysql(job.db_name)

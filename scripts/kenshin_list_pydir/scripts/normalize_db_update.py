@@ -2,13 +2,33 @@
 """
 scripts/normalize_db_update.py
 
-DB内の値を正規化して UPDATE するオーケストレーター。
+DB 内の既存データを「照合用派生列」へ正規化して UPDATE するためのオーケストレーター。
+（例: カナ正規化、保険証記号/番号の照合用キー生成 など）
 
-運用方針：
-- .env に「処理ごとの ON/OFF」を持たせる（NORMALIZE_JOB_*）
-- 新しい処理（Job）が増えたら build_job_specs() に追加し、.env にキーを追加して制御
-- DRY_RUN も .env で制御（NORMALIZE_DRY_RUN=1/0）
-- VS Code Run / CLI 直叩き両対応のため、プロジェクトルートを sys.path に追加する
+このスクリプトは “固定化フェーズ” の前提として、挙動を変えるリファクタは行わず、
+運用・再現・事故防止に必要な情報をコメントとして明文化する。
+
+運用方針
+- Job（更新処理）は build_job_specs() に列挙し、.env の ON/OFF で実行対象を制御する。
+- 未設定の Job は default=False 扱い（意図せず全件更新が走る事故を防ぐ）。
+- DRY_RUN は .env（NORMALIZE_DRY_RUN）を既定とし、CLI の --dry-run があればそちらを優先する。
+- VS Code Run / CLI どちらでも動くように、プロジェクトルートを sys.path に追加する。
+
+必要な環境変数（例）
+- NORMALIZE_DRY_RUN=1|0
+- NORMALIZE_JOB_*=1|0  （下記 “Job一覧” の各 env_key を参照）
+
+実行例
+- 全体は .env のスイッチで制御（推奨）:
+    python scripts/normalize_db_update.py --dotenv .env
+- ドライラン（件数/対象だけ確認）:
+    python scripts/normalize_db_update.py --dotenv .env --dry-run
+- 緊急時の部分実行（job.name の部分一致で絞り込み）:
+    python scripts/normalize_db_update.py --dotenv .env --name-contains ledger_
+
+注意
+- ここで更新するのは “派生列（*_match 等）” が主目的。原本列を破壊しない。
+- 大量更新になるため、まずは DRY_RUN で対象件数を確認してから実行する。
 """
 
 from __future__ import annotations
@@ -69,6 +89,17 @@ def build_job_specs() -> list[JobSpec]:
 
     env_key:
       .env の ON/OFF スイッチ名（NORMALIZE_JOB_* を推奨）
+
+    Job一覧（env_key → job.name）
+      - NORMALIZE_JOB_TARGETS_NAME_KANA_MATCH → targets_name_kana_match
+      - NORMALIZE_JOB_FIND_INSURANCE_NUMBER_MATCH → find_insurance_number_match
+      - NORMALIZE_JOB_FIND_INSURANCE_SYMBOL_MATCH → find_insurance_symbol_match
+      - NORMALIZE_JOB_LEDGER_NAME_KANA_MATCH → ledger_name_kana_match
+      - NORMALIZE_JOB_LEDGER_INSURANCE_NUMBER_MATCH → ledger_insurance_number_match
+      - NORMALIZE_JOB_LEDGER_INSURANCE_SYMBOL_MATCH → ledger_insurance_symbol_match
+      - NORMALIZE_JOB_EXAM_LEDGER_NAME_KANA_MATCH → exam_ledger_name_kana_match
+      - NORMALIZE_JOB_EXAM_LEDGER_INSURANCE_CARD_NUMBER_MATCH → exam_ledger_insurance_card_number_match
+      - NORMALIZE_JOB_EXAM_LEDGER_INSURANCE_CARD_SYMBOL_MATCH → exam_ledger_insurance_card_symbol_match
     """
     specs: list[JobSpec] = []
 
