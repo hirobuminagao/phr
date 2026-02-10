@@ -2,14 +2,29 @@
 """
 kenshin_lib/medi/zip_passwords.py
 
-ZIPパスワード候補をDBから取得して返す。
-scope優先: ZIP_SHA256 -> ZIP_NAME -> FACILITY
-（priority と zip_password_id も加味）
+medi_zip_passwords から ZIP 展開用のパスワード候補を取得して返す。
 
-方針:
-- 返すのは List[str]（encodeは呼び出し側で実施）
-- 重複は除去（同じパスが複数行に居ても1回）
-- 空文字/NULLは除外
+目的
+- パスワード付きZIPの展開で使用する「候補パスワード列」をDBから引き当てる。
+- 呼び出し側は返却された候補を上から順に試行する（このモジュールでは試行しない）。
+
+返却仕様
+- 返すのは List[str]（平文文字列）。バイト列への encode は呼び出し側で行う。
+- 空文字/NULL は除外する。
+- 重複は除去する（同じ password_text が複数行に存在しても 1 回のみ）。
+
+適用範囲（scope_type）と優先順位
+- ZIP_SHA256: zip_sha256 が一致
+- ZIP_NAME  : zip_name が一致
+- FACILITY  : facility_code が一致、または facility_folder_name が一致
+
+優先順位は以下を複合して決定する。
+1) scope_type の優先（ZIP_SHA256 → ZIP_NAME → FACILITY）
+2) priority の昇順（小さいほど優先）
+3) zip_password_id の昇順（同順位の安定化）
+
+注意
+- FACILITY は、facility_code が空の場合でも folder_name で拾えるよう OR 条件にしている。
 """
 
 from __future__ import annotations
@@ -26,13 +41,22 @@ def get_password_candidates(
     zip_sha256: str,
 ) -> List[str]:
     """
-    Returns: ["pw1", "pw2", ...] (重複除去・優先順)
+    DBからパスワード候補を優先順で返す。
 
-    適用範囲:
-    - ZIP_SHA256: zip_sha256一致
-    - ZIP_NAME  : zip_name一致
-    - FACILITY  : facility_code一致 または facility_folder_name一致
-      ※ facility_code が空でも folder_name で拾えるよう OR 条件にしている
+    Args:
+        cur: DBカーソル（mysql-connector の辞書カーソル想定）
+        facility_code: 施設コード（空の可能性あり）
+        facility_folder_name: 施設フォルダ名（例: <facility_code>_<facility_name> 等）
+        zip_name: ZIPファイル名
+        zip_sha256: ZIPのSHA256(hex)
+
+    Returns:
+        優先順に並んだパスワード候補のリスト（重複除去・空文字除外）。
+
+    検索条件:
+    - scope_type='ZIP_SHA256' かつ zip_sha256 一致
+    - scope_type='ZIP_NAME'   かつ zip_name 一致
+    - scope_type='FACILITY'   かつ (facility_code 一致 または facility_folder_name 一致)
     """
     sql = """
     SELECT password_text
