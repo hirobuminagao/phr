@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
 r"""
-MySQL 接続ユーティリティ（kenshin_list_pydir用）
+MySQL 接続ユーティリティ（kenshin_list_pydir 共通）
 
-Path: kenshin_lib/db/mysql.py
+役割:
+- MySQL への接続生成を一箇所に集約する
+- スクリプト側からは「接続方法」を意識させない
+- DB種別や認証方式が変わっても、この層で吸収する
+
+設計方針（固定）:
+- 接続パラメータは MySQLParams に集約する（環境変数の直接参照は禁止）
+- 返却する connection / cursor は mysql-connector 標準のものをそのまま使う
+- トランザクション制御の責務は呼び出し側に置く
+- 本モジュールでは SQL 実行ロジックを持たない
+
+対象:
+- kenshin_list_pydir 配下の scripts / kenshin_lib から利用される共通部品
 """
 
 from __future__ import annotations
