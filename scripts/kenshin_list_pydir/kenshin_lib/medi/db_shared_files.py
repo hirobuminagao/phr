@@ -2,16 +2,35 @@
 """
 kenshin_lib/medi/db_shared_files.py
 
-共有フォルダ観測台帳 medi_shared_files 用のDBアクセスを集約。
+【目的 / 役割】
+共有フォルダ観測台帳 `medi_shared_files` に対する DB アクセス関数を集約する。
+本モジュールは「DB I/O のみ」を責務とし、ZIP の解析・ハッシュ計算などの重い処理や
+ビジネス判定ロジックは持たない。
 
-judge(=auto_judge)でやること:
-- 対象: stage_status='NEW' AND ext='zip' AND sha256あり の行
-- zip内XML判定結果をDBへ反映:
-    zip_has_xml, zip_xml_count, zip_xml_checked_at, note
-- 判定に基づいて auto_judgement を更新（manualがあるものは上書きしない運用想定）
+【このモジュールが提供するもの】
+- `SharedFileRow` : scan/upsert フェーズで使用する入力モデル
+- `db_upsert_shared_file` : path_hash 一意キーでの UPSERT
+- judge 支援（DB側の読み書きのみ）
+  - `db_select_new_zip_files_for_judge` : 判定対象（NEW + zip + sha256あり + manualなし）を取得
+  - `db_update_zip_xml_probe` : ZIP内XML有無の結果（zip_has_xml / zip_xml_count / checked_at）を保存
+  - `db_update_auto_judgement` : `auto_judgement` を更新
+  - `db_mark_stage_status` : `stage_status` を更新
 
-注意:
-- zip_inspect / zipfile には依存しない（ここはDBだけ）
+【明示的に行わないこと（責務外）】
+- ZIP を開く／XML を抽出・検査する
+- sha256 を計算する
+- 判定ロジック（KENSHIN / NON_KENSHIN などの分類）を実装する
+
+【UPSERT 契約（固定仕様）】
+- 一意キー: `path_hash = SHA1(path)`
+- `first_seen_at`: 初回 INSERT 時のみ設定し、既存行では更新しない
+- `last_seen_at`: 観測のたびに更新する
+- `sha256`: NULL で既存値を上書きしない
+- `manual_judgement`: 既存値がある場合は維持（運用上の正）
+
+【補足】
+- mysql-connector の返却型（dictキーが bytes になる等）の差異を吸収するため、
+  `row_to_strkey_dict` で str キー dict に正規化する。
 """
 
 from __future__ import annotations

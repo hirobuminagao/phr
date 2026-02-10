@@ -1,27 +1,47 @@
 # -*- coding: utf-8 -*-
 """
 scripts/medi_shared_files_copy_to_input.py
-（コピー専用：判断しない・probeしない・alias前提）
 
-前提（終わっていること）:
-- sha256 埋まっている
-- zip_has_xml=1 が埋まっている（probe済み）
-- src_folder_raw -> dst_folder_norm の alias が埋まっている（scan側でNULL追加し、後で埋める運用は完了済み）
+Shared-folder intake step: copy vetted ZIP files into MEDI_IMPORT_INPUT_ROOT.
 
-やること:
-- 上記の「事実条件」を満たす行だけをDBから抽出してコピー
-- 成功: stage_status=INPUT_COPIED
-- スキップ/失敗: stage_statusは原則 NEW のまま、noteに理由（必要なら SKIPPED へ）
-- 既に取り込み済みは COPY対象から外す（抽出SQLで除外）
-- input に同名が既に存在する場合はコピーせず INPUT_COPIED で閉じる（上書きしない運用）
+Design principles:
+- This script DOES NOT judge whether a file is a kenshin target.
+  It only copies rows that already satisfy "facts" in the DB.
+- No probing is performed here (no ZIP inspection). Probe results must already be stored.
+- Folder mapping is alias-driven (src_folder_raw -> dst_folder_norm).
 
-env:
-  MEDI_IMPORT_INPUT_ROOT (必須)
+Preconditions (must be satisfied in DB):
+- medi_shared_files.sha256 is present
+- medi_shared_files.zip_has_xml = 1 (probe completed upstream)
+- medi_shared_folder_aliases.dst_folder_norm is set for the corresponding src_folder_raw
+
+Selection policy (SQL):
+- stage_status='NEW', ext='zip'
+- COALESCE(manual_judgement, auto_judgement)='KENSHIN'
+- alias exists and dst_folder_norm is not empty
+- NOT yet imported (no matching medi_zip_receipts.zip_sha256)
+
+Actions:
+- Copy to: <MEDI_IMPORT_INPUT_ROOT>/<dst_folder_norm>/<file_name>
+- If destination already exists and overwrite is false:
+    mark stage_status=INPUT_COPIED (treated as "already copied")
+- On successful copy:
+    mark stage_status=INPUT_COPIED
+- On failures:
+    keep stage_status=NEW (retryable) or mark SKIPPED only when the source is missing
+- Always write a short reason into note.
+
+Environment:
+  MEDI_IMPORT_INPUT_ROOT (required)
   MEDI_SHARED_COPY_LIMIT=500
   MEDI_SHARED_COPY_OVERWRITE=false
 
 DB:
   MEDI_IMPORT_DB_HOST / PORT / NAME / USER / PASSWORD
+
+Notes:
+- File I/O is not transactional; DB updates reflect best-effort progress.
+- All timestamps in logs should be in Asia/Tokyo for operator readability.
 """
 
 from __future__ import annotations
@@ -53,10 +73,25 @@ from kenshin_lib.medi.db_shared_files import db_mark_stage_status
 # -----------------------------
 def setup_logger() -> logging.Logger:
     level = os.getenv("LOG_LEVEL", "INFO").upper()
+
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    JST = ZoneInfo("Asia/Tokyo")
+
+    class JSTFormatter(logging.Formatter):
+        def formatTime(self, record, datefmt=None):
+            dt = datetime.fromtimestamp(record.created, tz=JST)
+            if datefmt:
+                return dt.strftime(datefmt)
+            return dt.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
+
     logger = logging.getLogger("medi_shared_files_copy_to_input")
     logger.setLevel(getattr(logging, level, logging.INFO))
+
     h = logging.StreamHandler()
-    h.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    h.setFormatter(JSTFormatter("%(asctime)s [%(levelname)s] %(message)s"))
+
     logger.handlers.clear()
     logger.addHandler(h)
     logger.propagate = False
@@ -248,17 +283,27 @@ def main() -> None:
                     cur,
                     shared_file_id=sid,
                     stage_status="INPUT_COPIED",
-                    note=f"skip: already exists in input (no overwrite) dst={dst_path}",
+                    note=f"skip: already exists in input (no overwrite) dst={dst_path} sha256={as_str(r.get('sha256'))}",
                 )
                 skipped += 1
                 continue
 
             try:
                 shutil.copy2(str(src_path), str(dst_path))
-                db_mark_stage_status(cur, shared_file_id=sid, stage_status="INPUT_COPIED", note=f"copied to {dst_folder}")
+                db_mark_stage_status(
+                    cur,
+                    shared_file_id=sid,
+                    stage_status="INPUT_COPIED",
+                    note=f"copied to {dst_folder} sha256={as_str(r.get('sha256'))}",
+                )
                 copied += 1
             except Exception as e:
-                db_mark_stage_status(cur, shared_file_id=sid, stage_status="NEW", note=f"fail: copy error: {e}")
+                db_mark_stage_status(
+                    cur,
+                    shared_file_id=sid,
+                    stage_status="NEW",
+                    note=f"fail: copy error: {e} sha256={as_str(r.get('sha256'))}",
+                )
                 logger.warning(f"copy failed: {src_path} -> {dst_path} err={e}")
                 failed += 1
 

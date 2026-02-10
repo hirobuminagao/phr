@@ -1,31 +1,38 @@
 # -*- coding: utf-8 -*-
-"""
-scripts/medi_shared_files_hash_zip.py
+"""scripts/medi_shared_files_hash_zip.py
 
-medi_shared_files のうち「zipで sha256 が未計算」の行だけを対象に、
-ファイル内容SHA-256を計算して DB に埋める。
+【目的】
+medi_shared_files のうち「zip かつ sha256 未計算」の行だけを対象に、
+ファイル内容の SHA-256 を計算して DB に保存する。
 
-重要:
-- 解凍しない（zipを開かない）
-- ファイルを読み取るだけ（sha256計算）
-- UNCでも動くが遅いので LIMIT を推奨
+【このスクリプトの責務】
+- ZIPを解凍しない / ZIP内のXMLを確認しない（=ファイルを開いて読むだけ）
+- UNC/ネットワーク共有でも動く前提だが遅いので LIMIT を推奨
+- 失敗時は sha256 を埋めず、note に要点のみ残す
 
-env:
+【前提】
+- 事前に medi_shared_files_scan.py 等で medi_shared_files が作られていること
+
+【env】
   (DB)  medi_zip_import.py と同じ MEDI_IMPORT_DB_* を使用（必須）
   MEDI_SHARED_HASH_LIMIT=200          (任意: 0=無制限)
-  MEDI_SHARED_HASH_ONLY_STAGE=NEW     (任意: 空なら全stage対象)
-  MEDI_SHARED_HASH_CHUNK_MB=8         (任意)
+  MEDI_SHARED_HASH_ONLY_STAGE=NEW     (任意: 空文字なら全stage対象)
+  MEDI_SHARED_HASH_CHUNK_MB=8         (任意: 読み込みチャンクサイズMB)
+
+【DB更新】
+- sha256 を更新: medi_shared_files.sha256
+- 失敗/欠損時のメモ: medi_shared_files.note（短文化）
 """
 
 from __future__ import annotations
 
-# --- path bootstrap ---
+# --- path bootstrap (MUST be before importing project libs) ---
 import sys
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = Path(__file__).resolve().parents[1]  # = kenshin_list_pydir
 sys.path.insert(0, str(BASE_DIR))
-# ----------------------
+# ------------------------------------------------------------
 
 import os
 import logging
@@ -39,19 +46,16 @@ from mysql.connector.cursor import MySQLCursorDict
 
 
 # -----------------------------
-# Pylance対策（Row型/bytes-key対策）
+# Row normalization (Pylance/typing guard)
 # -----------------------------
 def row_to_strkey_dict(r: Any) -> dict[str, Any]:
-    """
-    mysql-connector の fetchall() 返り値の型スタブが環境によって曖昧で、
-    - r が None の可能性
-    - dictのキーが bytes の可能性
-    を Pylance が強く疑ってくるため、ここで strキーdict に正規化する。
+    """Normalize mysql-connector rows into a str-keyed dict.
+
+    Environments differ: keys may be bytes and row may be None.
     """
     if r is None:
         return {}
     m = cast(Mapping[Any, Any], r)
-
     out: dict[str, Any] = {}
     for k, v in m.items():
         if isinstance(k, (bytes, bytearray)):
@@ -62,10 +66,14 @@ def row_to_strkey_dict(r: Any) -> dict[str, Any]:
     return out
 
 
+# -----------------------------
+# Logging / env utils
+# -----------------------------
 def setup_logger() -> logging.Logger:
     level = os.getenv("LOG_LEVEL", "INFO").upper()
 
     from zoneinfo import ZoneInfo
+
     JST = ZoneInfo("Asia/Tokyo")
 
     class JSTFormatter(logging.Formatter):
@@ -103,6 +111,13 @@ def env_int(key: str, default: int) -> int:
         return default
 
 
+def clip_text(s: Optional[str], limit: int = 1024) -> Optional[str]:
+    if s is None:
+        return None
+    t = str(s)
+    return t[:limit] if len(t) > limit else t
+
+
 def load_medi_db_params() -> dict:
     host = env_required("MEDI_IMPORT_DB_HOST")
     port = int(env_required("MEDI_IMPORT_DB_PORT"))
@@ -124,6 +139,9 @@ def dict_cursor(conn) -> MySQLCursorDict:
     return conn.cursor(dictionary=True, buffered=True)
 
 
+# -----------------------------
+# Hash
+# -----------------------------
 def sha256_file(path: Path, chunk_size: int) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -176,12 +194,15 @@ def main() -> None:
         else:
             cur.execute(sql, (int(lim_param),))
 
-        raw_rows = cur.fetchall()
+        raw_rows = cur.fetchall() or []
         rows = [row_to_strkey_dict(rr) for rr in raw_rows if rr is not None]
 
         logger.info(
-            f"target zip rows={len(rows)} stage_filter={only_stage if only_stage else '(none)'} "
-            f"limit={limit if limit else 'NO LIMIT'} chunk_mb={chunk_mb}"
+            "target zip rows=%s stage_filter=%s limit=%s chunk_mb=%s",
+            len(rows),
+            only_stage if only_stage else "(none)",
+            limit if limit else "NO LIMIT",
+            chunk_mb,
         )
 
         done = 0
@@ -200,7 +221,7 @@ def main() -> None:
 
             p = Path(str(r.get("path") or ""))
 
-            if not str(p) or not p.exists():
+            if (not str(p)) or (not p.exists()):
                 missing += 1
                 cur.execute(
                     """
@@ -212,7 +233,7 @@ def main() -> None:
                 )
                 if processed % 50 == 0:
                     conn.commit()
-                    logger.info(f"progress done={done} missing={missing} failed={failed}")
+                    logger.info("progress done=%s missing=%s failed=%s", done, missing, failed)
                 continue
 
             try:
@@ -234,22 +255,28 @@ def main() -> None:
                     SET note=%s, updated_at=CURRENT_TIMESTAMP(6)
                     WHERE shared_file_id=%s
                     """,
-                    (f"hash failed: {e}", sid),
+                    (clip_text(f"hash failed: {e}", 1024), sid),
                 )
 
             if processed % 50 == 0:
                 conn.commit()
-                logger.info(f"progress done={done} missing={missing} failed={failed}")
+                logger.info("progress done=%s missing=%s failed=%s", done, missing, failed)
 
         conn.commit()
-        logger.info(f"DONE done={done} missing={missing} failed={failed}")
+        logger.info("DONE done=%s missing=%s failed=%s", done, missing, failed)
 
     except Exception:
         conn.rollback()
         raise
     finally:
-        cur.close()
-        conn.close()
+        try:
+            cur.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

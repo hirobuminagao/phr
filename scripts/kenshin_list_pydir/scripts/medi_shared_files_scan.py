@@ -2,31 +2,63 @@
 """
 scripts/medi_shared_files_scan.py
 
-共有フォルダ（UNC でもローカルでも可）をスキャンし、
-medi_shared_files に観測結果をUPSERTする。
+【目的 / 役割】
+共有フォルダ（UNC / ローカル）を走査し、
+ファイル観測結果を medi_shared_files テーブルへ UPSERT する。
+本スクリプトは「共有フォルダ観測フェーズ」の正本実装とする。
 
-重要（今回の地雷対策）:
-- “解凍済みフォルダ地獄” を踏むとUNC走査が死ぬので、探索パターンを基本 zip限定にする。
-  -> shared_root.rglob("*.zip") をデフォルトに採用（探索対象そのものを絞る）
+【責務の範囲（本スクリプトが行うこと）】
+- 共有フォルダ配下を拡張子フィルタ付きで走査する
+- ファイル単位で以下のメタ情報を取得・記帳する
+  - path / file_name / ext / file_size / mtime
+  - src_folder_raw（shared_root 直下の生フォルダ名）
+  - facility_hint（親フォルダ階層からのヒント）
+- medi_shared_files に path_hash を一意キーとして UPSERT する
+- 観測時刻（first_seen_at / last_seen_at）を管理する
 
-運用:
-- 自動化しない。ひろが必要なときに手でキックする。
-- 手動判定(manual_judgement) が入っているものは運用上の正とする（ここでは上書きしない）
-- 自動判定はここでは UNKNOWN 固定（判定は別スクリプト/手動でOK）
+【明示的に行わないこと（責務外）】
+- ZIP の中身を開く／XML を検査する
+- sha256 の計算（重い処理のため別スクリプトに委譲）
+- auto_judgement の判定ロジック
+- input フォルダへのコピー
+- stage_status の遷移管理（常に NEW を指定するのみ）
 
-env:
-  MEDI_SHARED_ROOT=\\\\fs03\\...\\健診結果_請求   (必須)
+【UPSERT 契約（固定仕様）】
+- 一意キー: path_hash = SHA1(path)
+- first_seen_at:
+    - 初回 INSERT 時のみセット
+    - 既存行がある場合は更新しない
+- last_seen_at:
+    - 毎回の走査で必ず更新する
+- sha256:
+    - NULL で既存値を上書きしない（hash_zip フェーズ前提）
+- manual_judgement:
+    - 既存値がある場合は維持（運用上の正）
+- auto_judgement:
+    - 本スクリプトでは常に 'UNKNOWN' をセット
+- stage_status:
+    - 常に 'NEW' を指定（遷移は別フェーズで管理）
 
-  # zipだけにする場合（推奨）
-  MEDI_SHARED_SCAN_EXTS=zip
-  # 互換キー（ひろが先に書いてたやつ）も受ける
-  MEDI_SHARED_EXTS=zip
+【探索ポリシー（安全性重視）】
+- UNC 環境での過剰な再帰探索を避けるため rglob("*") は使用しない
+- 拡張子指定（例: *.zip）による限定探索を行う
+- MEDI_SHARED_SCAN_EXTS / MEDI_SHARED_EXTS により探索対象を制御する
 
-  MEDI_SHARED_SCAN_LIMIT=0 (0=無制限 / >0なら件数制限)
-  MEDI_SHARED_FACILITY_HINT_DEPTH=2 (親フォルダ何階層をヒントにするか)
+【運用ポリシー】
+- 自動実行を前提としない
+- 必要なタイミングで手動実行する
+- 冪等性を保ち、何度でも安全に再実行できることを前提とする
 
-DB:
-  medi_zip_import.py と同じ MEDI_IMPORT_DB_* を使用
+【前提環境変数】
+- MEDI_SHARED_ROOT (必須)
+- MEDI_SHARED_SCAN_EXTS / MEDI_SHARED_EXTS
+- MEDI_SHARED_SCAN_LIMIT
+- MEDI_SHARED_FACILITY_HINT_DEPTH
+- MEDI_IMPORT_DB_*（DB接続）
+
+【位置づけ】
+共有 → 観測 → 判定 → コピー → 取込
+のうち、「観測」フェーズを担う唯一の正本実装。
 """
 
 from __future__ import annotations
@@ -82,7 +114,11 @@ def setup_logger() -> logging.Logger:
 
 
 def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    """Return current timestamp string in JST with microseconds."""
+    from zoneinfo import ZoneInfo
+
+    jst = ZoneInfo("Asia/Tokyo")
+    return datetime.now(tz=jst).strftime("%Y-%m-%d %H:%M:%S.%f")
 
 
 def env_required(key: str) -> str:
@@ -132,12 +168,14 @@ def parse_allow_exts() -> Set[str]:
     """
     優先順位:
       MEDI_SHARED_SCAN_EXTS > MEDI_SHARED_EXTS > default
-    値は "zip,pdf,..." のカンマ区切り
+
+    値は "zip,pdf,..." のカンマ区切り。
+    default は安全側に倒して zip のみ（UNCの探索負荷を抑える）。
     """
     exts = (
         os.getenv("MEDI_SHARED_SCAN_EXTS")
         or os.getenv("MEDI_SHARED_EXTS")
-        or "zip,pdf,xlsx,xls,xml"
+        or "zip"
     ).strip()
 
     allow = {e.strip().lower() for e in exts.split(",") if e.strip()}

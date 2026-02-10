@@ -2,26 +2,33 @@
 """
 scripts/medi_shared_files_auto_judge.py
 
-medi_shared_files の NEW(=only_stage) の zip を対象に judge を行う。
+目的:
+  medi_shared_files の NEW(=only_stage) の zip を対象に自動判定（auto_judgement）を付与する。
 
 確定フロー（このスクリプトだけで完結）:
 - 対象: stage_status='NEW' AND ext='zip' AND sha256あり AND manual_judgement IS NULL
-- zip内にxmlがあるか判定（zip_inspect.probe_zip_has_xml）
-  - zip_has_xml が NULL の行だけ probe する（既に値があれば再計算しない）
+- zip内にxmlがあるか判定（kenshin_lib.medi.zip_inspect.probe_zip_has_xml）
+  - 既定では zip_has_xml が NULL の行だけ probe（probe_always=true なら再probeして上書き）
   - 結果をDBへ反映: zip_has_xml, zip_xml_count, zip_xml_checked_at, note
-- 判定:
+- 判定（固定ルール）:
   - zip_has_xml==1 → auto_judgement='KENSHIN'
-  - zip_has_xml!=1 → auto_judgement='UNKNOWN'（確定的に非健診と言えないため）
+  - それ以外        → auto_judgement='UNKNOWN'（確定的に非健診と言えないため）
 
 env:
   (DB)  medi_zip_import.py と同じ MEDI_IMPORT_DB_* （必須）
 
   # judge対象
-  MEDI_SHARED_AUTO_LIMIT=500     (任意: 0=無制限)
-  MEDI_SHARED_AUTO_ONLY_STAGE=NEW (任意)
+  MEDI_SHARED_AUTO_LIMIT=500        (任意: 0=無制限)
+  MEDI_SHARED_AUTO_ONLY_STAGE=NEW   (任意)
 
   # zip内xml判定
   MEDI_SHARED_AUTO_PROBE_ALWAYS=false (任意: trueならzip_has_xmlが埋まってても再probeして上書き)
+
+  # commit頻度
+  MEDI_SHARED_AUTO_COMMIT_EVERY=200 (任意)
+
+注意:
+  - note は運用都合で 1024 文字に短文化して保存する。
 """
 
 from __future__ import annotations
@@ -121,7 +128,6 @@ def load_medi_db_params() -> dict:
         "use_pure": True,
         # 文字化け/bytes化の予防（会社側環境対策）
         "charset": "utf8mb4",
-        "collation": "utf8mb4_unicode_ci",
     }
 
 
@@ -135,6 +141,13 @@ def as_str(v: Any) -> str:
     if isinstance(v, (bytes, bytearray)):
         return v.decode("utf-8", errors="replace")
     return str(v)
+
+
+def clip_text(s: Optional[str], limit: int = 1024) -> Optional[str]:
+    if s is None:
+        return None
+    t = str(s)
+    return t[:limit] if len(t) > limit else t
 
 
 def parse_int_or_none(v: Any) -> Optional[int]:
@@ -159,13 +172,21 @@ def main() -> None:
     limit = env_int("MEDI_SHARED_AUTO_LIMIT", 500)
     only_stage = os.getenv("MEDI_SHARED_AUTO_ONLY_STAGE", "NEW").strip() or "NEW"
     probe_always = env_bool("MEDI_SHARED_AUTO_PROBE_ALWAYS", False)
+    commit_every = env_int("MEDI_SHARED_AUTO_COMMIT_EVERY", 200)
 
     conn = mysql.connector.connect(**load_medi_db_params())
     cur = dict_cursor(conn)
 
     try:
         rows = db_select_new_zip_files_for_judge(cur, limit=limit, only_stage=only_stage)
-        logger.info(f"target rows={len(rows)} only_stage={only_stage} limit={limit if limit else 'NO LIMIT'} probe_always={probe_always}")
+        logger.info(
+            "target rows=%s only_stage=%s limit=%s probe_always=%s commit_every=%s",
+            len(rows),
+            only_stage,
+            (limit if limit else "NO LIMIT"),
+            probe_always,
+            commit_every,
+        )
 
         changed = 0
         probed = 0
@@ -194,7 +215,7 @@ def main() -> None:
                         shared_file_id=sid,
                         zip_has_xml=1 if pr.has_xml else 0,
                         zip_xml_count=int(pr.xml_count),
-                        note=pr.note,
+                        note=clip_text(pr.note, 1024),
                     )
                     has_xml_db = 1 if pr.has_xml else 0
                     xml_count_db = int(pr.xml_count)
@@ -205,7 +226,7 @@ def main() -> None:
                         shared_file_id=sid,
                         zip_has_xml=None,
                         zip_xml_count=None,
-                        note=pr.note or "zip xml probe failed",
+                        note=clip_text(pr.note or "zip xml probe failed", 1024),
                     )
                     probe_failed += 1
                     has_xml_db = None
@@ -225,12 +246,15 @@ def main() -> None:
                     note = "auto:UNKNOWN (zip_has_xml=NULL; probe failed or not available)"
                 unknown += 1
 
-            db_update_auto_judgement(cur, shared_file_id=sid, auto_judgement=auto, note=note)
+            db_update_auto_judgement(cur, shared_file_id=sid, auto_judgement=auto, note=clip_text(note, 1024))
             changed += 1
 
-            if changed % 200 == 0:
+            if commit_every > 0 and (changed % commit_every == 0):
                 conn.commit()
-                logger.info(f"progress changed={changed} probed={probed} kenshin={kenshin} unknown={unknown} probe_failed={probe_failed}")
+                logger.info(
+                    "progress changed=%s probed=%s kenshin=%s unknown=%s probe_failed=%s",
+                    changed, probed, kenshin, unknown, probe_failed,
+                )
 
         conn.commit()
         logger.info(f"DONE changed={changed} probed={probed} kenshin={kenshin} unknown={unknown} probe_failed={probe_failed}")
