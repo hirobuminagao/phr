@@ -2,10 +2,19 @@
 """
 kenshin_lib/medi/zip_inspect.py
 
-ZIPを解凍せず、ZIP内にXMLが存在するかを軽量に判定する。
+【目的】
+ZIPを展開せずに、ZIP内にXMLが含まれるかを軽量に判定する。
 
-- zipfile の中央ディレクトリ（infolist）を参照するだけ
-- encryptedでも一覧取得はできることが多い（読取は不要）
+【方針】
+- zipfile の中央ディレクトリ（infolist）を走査し、拡張子 .xml のメンバー数を数える
+- 実体ファイルの読み取りや解凍は行わない（＝パスワード付きでも一覧取得できるケースが多い）
+
+【用途】
+- 共有フォルダ観測（medi_shared_files）で「健診候補ZIPっぽいか」を粗く振り分ける前処理
+
+【注意】
+- ZIP自体が壊れている/途中までしかコピーされていない場合は ok=False で返す
+- UNC/ネットワーク由来のIO例外も ok=False 扱い（note に理由を入れる）
 """
 
 from __future__ import annotations
@@ -18,9 +27,9 @@ import zipfile
 @dataclass(frozen=True)
 class ZipXmlProbeResult:
     ok: bool                 # 判定処理自体が成功したか
-    has_xml: bool            # xmlが1つでもあるか（ok=Falseの時はFalse）
-    xml_count: int           # xml個数（ok=Falseの時は0）
-    note: str | None = None  # 失敗理由や補足
+    has_xml: bool            # XMLが1つでもあるか（ok=False の場合は常に False）
+    xml_count: int           # XML個数（ok=False の場合は常に 0）
+    note: str | None = None  # 失敗理由/補足（短文化推奨）
 
 
 def _is_xml_member(name: str) -> bool:
@@ -34,7 +43,7 @@ def _is_xml_member(name: str) -> bool:
 
 
 def probe_zip_has_xml(zip_path: str | Path) -> ZipXmlProbeResult:
-    p = Path(zip_path)
+    p = Path(zip_path).expanduser()
     if not p.exists():
         return ZipXmlProbeResult(ok=False, has_xml=False, xml_count=0, note="zip not found")
     if not p.is_file():
@@ -57,4 +66,4 @@ def probe_zip_has_xml(zip_path: str | Path) -> ZipXmlProbeResult:
         # UNCやネットワーク由来のIOエラーもここに入る
         return ZipXmlProbeResult(ok=False, has_xml=False, xml_count=0, note=f"os error: {e}")
     except Exception as e:
-        return ZipXmlProbeResult(ok=False, has_xml=False, xml_count=0, note=f"unexpected: {e}")
+        return ZipXmlProbeResult(ok=False, has_xml=False, xml_count=0, note=f"unexpected {type(e).__name__}: {e}")

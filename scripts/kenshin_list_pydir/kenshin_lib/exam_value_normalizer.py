@@ -2,17 +2,54 @@
 """
 kenshin_lib/exam_value_normalizer.py
 
-健診結果 raw_value を、exam_item_master.xml_value_type に基づいて正規化する。
+【目的】
+健診結果の raw_value を、exam_item_master.xml_value_type（CD / PQ / ST / CO）に基づいて
+**字句レベルで正規化**するためのユーティリティ。
 
-- CD: norm_variants を引く（result_code_oid + raw_token_norm -> normalized_code）
-- PQ: 数値パース（全角/カンマ/単位混在などを吸収）
-- ST/CO: 文字列トリム＋軽い正規化
+本モジュールは「正規化の前処理層」に専念し、業務判断・DB参照・辞書引きは行わない。
 
-戻り値:
-  (status, normalized_value, normalized_code, normalized_unit, error_reason)
+【設計上の位置づけ】
+- 純関数ユーティリティ（DBアクセスなし）
+- 呼び出し側が master / 辞書（norm_variants 等）を解決する前段で使用する
+- 正規化結果は保存せず、呼び出し元へ返却するのみ
 
-status:
-  OK / EMPTY / UNPARSABLE / NO_MASTER / NO_DICT
+【本モジュールが行うこと】
+- CD:
+  - raw_value を正規化トークン（ASCII / 大文字 / 表記揺れ吸収）へ変換
+  - ※ 辞書引きは行わない（token 生成まで）
+- PQ:
+  - 全角→半角、桁カンマ除去
+  - 数値部分の抽出
+  - 数値に付随する単位らしき文字列の簡易抽出（保証はしない）
+- ST / CO:
+  - トリム、全角→半角、空白正規化による文字列正規化
+
+【本モジュールが行わないこと（重要）】
+- DB 参照・更新
+- exam_item_master / norm_variants の直接参照
+- CD のコード確定（辞書引き）
+- 正規化結果の永続化
+- 業務的な OK / NG 判定
+
+【戻り値: NormResult】
+- status:
+    OK            : 正常に正規化できた
+    EMPTY         : 値が空（None / 空文字）
+    UNPARSABLE    : 解釈不能（数値でない等）
+    NO_MASTER     : xml_value_type が未指定
+- normalized_value:
+    - PQ / ST / CO: 正規化後の値
+    - CD          : 正規化済みトークン（※ code ではない）
+- normalized_code:
+    - 本モジュールでは使用しない（上位層で設定）
+- normalized_unit:
+    - PQ の場合のみ設定される可能性あり（保証なし）
+- error_reason:
+    - 失敗理由の補足（ログ・分析用途）
+
+【注意】
+- 想定外の xml_value_type は ST 相当として扱い、極力データを落とさない方針とする
+- 本ファイルは「挙動固定」を前提とし、将来の機能追加は別モジュールで行う
 """
 
 from __future__ import annotations

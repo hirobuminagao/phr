@@ -2,53 +2,75 @@
 """
 scripts/medi_xml_item_extract.py
 
-【方針（2026-01-21 修正版）】
-work_other.medi_xml_receipts を対象に、ZIPからXMLを取り出して
+【目的】
+受領済みXML（medi_xml_receipts: status='OK'）を対象に、ZIPから個票XMLを読み出して
+CDA(ClinicalDocument)内の observation を中心に「値っぽいもの」を広く抽出し、
+生抽出レイヤーとして work_other.medi_xml_item_values にUPSERT記帳する。
 
-(1) 原本レイヤーとして「値っぽいもの」をまず全部拾って medi_xml_item_values に記帳する（=ベース抽出）
-    - 観測対象: CDAの observation を中心に、code/@code を namecode として採用
-    - namecode が取れないもの（code欠損）は “何の検査か判別不能” なのでスキップ
-    - value は observation/value を基本に拾う（value が無ければ text なども一応拾う）
+【このスクリプトが“やらない”こと】
+- 値の正規化（norm_rules/norm_variants を使った整形）は別工程
+- 法定健診の成立判定（LSIOなどの充足判定）は別工程
+- xpath_template のみを唯一根拠にした抽出（written=0事故を避けるため）
 
-(2) その上で、dev_phr.exam_item_master に当該 namecode が存在する場合は
-    - value_method / xml_value_type などの “評価・整形ヒント” を反映して書き込む
-    - xpath_template は「構造判定（追加抽出）用途」として別モードで使えるよう余地を残す
-      ※今回の事故（written=0）を避けるため、xpath_template だけに依存しない
+【抽出方針（固定）】
+1) observation/code/@code を namecode として採用
+   - code欠損の observation は「何の項目か不明」なのでスキップ
+2) observation/value を優先して取得
+   - value が無い場合は observation/text をフォールバックとして取得
+3) dev_phr.exam_item_master に namecode が存在する場合のみ、
+   xml_value_type / value_method を“ヒント”として反映
+   - ただし抽出そのものは master 未登録でも実施（ベース抽出）
 
-テーブル:
-- work_other.medi_xml_item_values
-  UNIQUE(xml_sha256, namecode, occurrence_no)
+【入出力テーブル】
+- 入力（対象抽出）:
+  - work_other.medi_xml_receipts
+    - 対象: status='OK'
+- 出力（生抽出）:
+  - work_other.medi_xml_item_values
+    - UNIQUE(xml_sha256, namecode, occurrence_no)
+- ステータス更新:
+  - work_other.medi_xml_receipts
+    - items_extract_status / items_extracted_run_id / items_extracted_at
+- ログ:
+  - work_other.medi_xml_process_logs
+    - step='EXTRACT_ITEMS' に OK/ERROR/SKIP と written=xxx を記帳
+- run:
+  - work_other.medi_import_runs
 
-実行結果:
-- medi_xml_receipts.items_extract_status / items_extracted_* を更新
-- medi_xml_process_logs に step=EXTRACT_ITEMS を記帳（written=xxx）
+【終了コード】
+- 0 : エラー無し（err=0 かつ zero_hit=0）
+- 2 : エラーあり、または抽出0件（zero_hit>0）を検出
 
-ENV:
-  # work_other(medi) 接続（.envの既存キーを正にする）
-  MEDI_IMPORT_DB_HOST
-  MEDI_IMPORT_DB_PORT
-  MEDI_IMPORT_DB_USER
-  MEDI_IMPORT_DB_PASSWORD
-  MEDI_IMPORT_DB_NAME (default: work_other)
+【ENV】
+# work_other(medi) 接続
+MEDI_IMPORT_DB_HOST
+MEDI_IMPORT_DB_PORT
+MEDI_IMPORT_DB_USER
+MEDI_IMPORT_DB_PASSWORD
+MEDI_IMPORT_DB_NAME           (default: work_other)
 
-  # dev_phr 接続（2本目）
-  PHR_MYSQL_HOST (空なら MEDI_IMPORT_DB_HOST を流用)
-  PHR_MYSQL_PORT (空なら MEDI_IMPORT_DB_PORT を流用)
-  PHR_MYSQL_USER
-  PHR_MYSQL_PASSWORD
-  PHR_MYSQL_DB (default: dev_phr)
+# dev_phr 接続（exam_item_master 参照）
+PHR_MYSQL_HOST                 (空なら MEDI_IMPORT_DB_HOST を流用)
+PHR_MYSQL_PORT                 (空なら MEDI_IMPORT_DB_PORT を流用)
+PHR_MYSQL_USER
+PHR_MYSQL_PASSWORD
+PHR_MYSQL_DB                   (default: dev_phr)
 
-  # runtime
-  ITEM_EXTRACT_LIMIT (default 200)
-    - limit > 0 : 件数制限あり
-    - limit <= 0: 全件（LIMIT句なし）
-  ITEM_EXTRACT_RUN_ID (default 0)
-    - 0/未指定: このスクリプトが run を起票する
-    - >0: 既存run_idを利用（存在しない場合はエラー）
-  ITEM_EXTRACT_NOTE (optional)
+# runtime
+ITEM_EXTRACT_LIMIT             (default: 200)
+  - >0 : 件数制限あり
+  - <=0: 全件相当（内部で大きい数に置換して取得）
+ITEM_EXTRACT_RUN_ID            (default: 0)
+  - 0/未指定 : run を新規起票
+  - >0      : 既存 run_id を使用（存在しない場合はエラー）
+ITEM_EXTRACT_NOTE              (optional)
 
-  # 追加: 暗号ZIP対応（xml_extract と同様に候補をDBから引く）
-  ITEM_EXTRACT_ZIP_PASSWORD_ENABLED (default true)
+# 暗号ZIP対応（medi_zip_passwords から候補を取得して順に試す）
+ITEM_EXTRACT_ZIP_PASSWORD_ENABLED (default: true)
+
+【前提】
+- XMLはZIP内の member として存在すること（zip_sha256 + zip_inner_path で特定）
+- CDA namespace は urn:hl7-org:v3 を想定（NS_CDA）
 """
 
 from __future__ import annotations

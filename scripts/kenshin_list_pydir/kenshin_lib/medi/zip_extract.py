@@ -2,7 +2,38 @@
 """
 kenshin_lib/medi/zip_extract.py
 
-ZIP展開を担当。パスワード要否判定・候補試行・エラーコード正規化。
+【役割】
+ZIPファイルを一時ディレクトリへ展開するユーティリティ。
+- ZIP内に暗号化メンバが存在するかを判定し、必要な場合のみパスワード候補を順に試行する。
+- 失敗時は運用で扱いやすい error_code に正規化して返す。
+
+【I/O】
+- 入力:
+  - zip_path: 対象ZIP
+  - temp_dir: 展開先（一時ディレクトリ）
+  - pwd_candidates: パスワード候補（文字列）。重複・空白は内部で軽く除去する。
+- 出力: ZipExtractResult
+  - ok: 展開成功なら True
+  - error_code: 失敗時の種別
+  - message: 失敗理由（最大 2000 文字で短文化）
+  - used_password_text: 成功時に使用したパスワード（監査/ログ用途。不要なら呼び出し側で破棄）
+
+【動作仕様】
+- 実行前に temp_dir を必ず作り直す（既存があれば削除→再作成）。
+- 暗号化が無い場合は即 extractall。
+- 暗号化がある場合は、pwd_candidates を順に extractall(pwd=...) で試す。
+  - 候補の最後に None を追加して試行する（暗号判定の揺れ/一部だけ暗号などの保険）。
+- 例外は可能な限り候補試行を継続し、最終的に正規化した error_code を返す。
+
+【error_code】
+- ZIP_PASSWORD: 暗号化ZIPでパスワードが必要/不一致（候補尽き）
+- ZIP_LONG_PATH: 展開中のパス長/生成失敗等（主に Windows 想定）
+- ZIP_UNEXPECTED: それ以外の予期しないZIPエラー（壊れたZIP等を含む）
+
+【注意】
+- zipfile の pwd は bytes を要求するため、基本は UTF-8 で bytes 化して渡す。
+  運用上 Shift-JIS 等が混在する場合は `_to_pwd_bytes()` のみ差し替えで吸収する。
+- temp_dir の削除を伴うため、呼び出し側は temp_dir のパスを安全に設計すること。
 """
 
 from __future__ import annotations

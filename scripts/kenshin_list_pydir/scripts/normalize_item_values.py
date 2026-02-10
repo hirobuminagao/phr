@@ -2,41 +2,74 @@
 """
 scripts/normalize_item_values.py
 
-目的:
-- work_other.medi_exam_result_item_values の RAW を正規化して value に入れるだけ。
-- 走査・更新のみ（run記帳/台帳/トークン生成など一切しない）
+【目的】
+work_other.medi_exam_result_item_values に格納された健診項目値のうち、
+normalize_status='RAW' のレコードを対象に「正規化（最小限）」を実施し、
+正規化結果を value へ書き戻す。
 
-ルール:
-- ST: raw_value をそのまま value へ
-- PQ: raw_value.strip() を value へ（trimのみ）+ 数値チェック（float化）
-- CD: norm_variants に「完全一致」で当たれば normalized_code を value へ
-      当たらなければ ERROR
-- CO: まず exam_item_master.result_code_oid を確認
-      - result_code_oid がある場合：CDと同じ（辞書で完全一致→normalized_code）
-      - result_code_oid がない場合：ERROR（後で仕様化）
+【このスクリプトがやること / やらないこと】
+- やること:
+  - 対象行の抽出（RAW かつ value が未設定）
+  - dev_phr.exam_item_master で xml_value_type / result_code_oid を参照
+  - 型ごとの最小ルールで正規化し、OK/ERROR を更新
+- やらないこと:
+  - run記帳・台帳更新・トークン生成・名寄せなど、正規化以外の処理は一切しない
+  - 推測による値補完（例: '-' を 0 とみなす等）は禁止
 
-重要:
-- 推測でコード割当しない（'-'→0 など禁止）
-- raw_value の trim/トークン生成/変換は「一切しない」
-  ※PQのみ strip()。CD/COは raw_value をそのまま完全一致で照合。
+【対象テーブル】
+- 入力/更新（work_other）
+  - medi_exam_result_item_values
+    - 参照: raw_value, namecode, normalize_status, value
+    - 更新: value, normalize_status, normalized_at, normalize_error
+- 参照のみ（dev_phr）
+  - exam_item_master（namecode → xml_value_type, result_code_oid）
+  - norm_variants（コード系の完全一致辞書）
 
-ENV:
-  # work_other
-  MEDI_IMPORT_DB_HOST
-  MEDI_IMPORT_DB_PORT
-  MEDI_IMPORT_DB_USER
-  MEDI_IMPORT_DB_PASSWORD
-  MEDI_IMPORT_DB_NAME (default: work_other)
+【正規化ルール（固定）】
+- ST:
+  - raw_value をそのまま value へ（NULL は ERROR）
+- PQ:
+  - raw_value.strip() を value へ（trim のみ）
+  - float に変換できない場合は ERROR
+- CD:
+  - norm_variants に「完全一致」でヒットした normalized_code を value へ
+  - ヒットしなければ ERROR
+- CO:
+  - exam_item_master.result_code_oid を確認
+    - result_code_oid がある: CD と同じ（辞書完全一致 → normalized_code）
+    - result_code_oid がない: ERROR（仕様未確定のため）
 
-  # dev_phr
-  PHR_MYSQL_HOST (空なら MEDI_IMPORT_DB_HOST を流用)
-  PHR_MYSQL_PORT (空なら MEDI_IMPORT_DB_PORT を流用)
-  PHR_MYSQL_USER
-  PHR_MYSQL_PASSWORD
-  PHR_MYSQL_DB (default: dev_phr)
+【重要な制約】
+- CD/CO は raw_value を加工しない（trim/トークン化/変換はしない）
+  - 照合は raw_value の完全一致のみ
+- PQ だけ strip() を許可する（それ以外は加工禁止）
 
-  # runtime
-  NORMALIZE_LIMIT (default 500)  # 0以下なら全件相当（大きい数で取る）
+【ENV】
+- work_other 接続
+  - MEDI_IMPORT_DB_HOST
+  - MEDI_IMPORT_DB_PORT
+  - MEDI_IMPORT_DB_USER
+  - MEDI_IMPORT_DB_PASSWORD
+  - MEDI_IMPORT_DB_NAME（default: work_other）
+- dev_phr 接続
+  - PHR_MYSQL_HOST（空なら MEDI_IMPORT_DB_HOST を流用）
+  - PHR_MYSQL_PORT（空なら MEDI_IMPORT_DB_PORT を流用）
+  - PHR_MYSQL_USER
+  - PHR_MYSQL_PASSWORD
+  - PHR_MYSQL_DB（default: dev_phr）
+- 実行設定
+  - NORMALIZE_LIMIT（default: 500 / 0以下なら実質全件）
+
+【.env の読み込み】
+- kenshin_list_pydir/.env を優先して読み込む
+- 見つからない場合は load_dotenv() のデフォルト探索も試す（ログ出力あり）
+
+【実行】
+python scripts/normalize_item_values.py
+
+【終了コード】
+- 0: エラーなし
+- 2: ERROR が1件以上
 """
 
 from __future__ import annotations

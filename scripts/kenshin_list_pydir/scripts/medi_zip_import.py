@@ -2,34 +2,60 @@
 """
 scripts/medi_zip_import.py
 
-MODE:
-- ZIP_IMPORT : ZIP受領台帳 + (optional) XML棚卸し
-- XML_EXTRACT: medi_xml_receipts の PENDING を対象に、well-formed + document_id抽出して更新
-- FULL       : ZIP_IMPORT -> XML_EXTRACT
+【目的】
+medi_input 配下に配置された健診機関フォルダを走査し、ZIP受領台帳（medi_zip_receipts）をUPSERTする。
+必要に応じて、ZIP内のXMLを棚卸ししてXML受領台帳（medi_xml_receipts）をUPSERTし、後続の索引抽出フェーズへ渡す。
 
-env:
-  MEDI_IMPORT_MODE=ZIP_IMPORT|XML_EXTRACT|FULL (default ZIP_IMPORT)
+【モード】
+- ZIP_IMPORT : ZIP受領台帳を更新。任意でZIP内XMLを棚卸し（XMLは基本PENDING、失敗のみERROR）。
+- XML_EXTRACT: medi_xml_receipts から target_status（既定PENDING）を拾い、well-formed確認 + document_id 等を抽出して更新。
+- FULL       : ZIP_IMPORT → XML_EXTRACT を連続実行。
 
-ZIP_IMPORT:
-  MEDI_IMPORT_XML_ENABLED=true/false
-  MEDI_IMPORT_XML_PARSE_WELLFORMED=true/false  # 棚卸し時の軽いチェック（任意）
-    - NOTE: well-formed OKでも status は PENDING のまま（EXTRACTへ回す）
-    - 失敗時のみ status=ERROR にする
+【入力フォルダ構造】
+MEDI_IMPORT_INPUT_ROOT/
+  <facility_code>_<facility_name>/
+    *.zip
 
-XML_EXTRACT:
-  MEDI_IMPORT_XML_EXTRACT_LIMIT=500
-  MEDI_IMPORT_XML_TARGET_STATUS=PENDING
+【主な出力/更新テーブル】
+- medi_import_runs            : 実行ログ（開始/終了/メモ）
+- medi_zip_receipts           : ZIP受領ログ（sha256一意、構造判定、エラー理由）
+- medi_zip_receipt_runs       : run×zip の実績（NEW/SEEN/UPDATED）
+- medi_xml_receipts           : XML受領台帳（zip_sha256 + zip_inner_path一意、xml_sha256一意）
+- medi_xml_receipt_runs       : run×xml の実績（NEW/SEEN）
 
-DB (必須):
-  MEDI_IMPORT_DB_HOST
-  MEDI_IMPORT_DB_PORT
-  MEDI_IMPORT_DB_NAME
-  MEDI_IMPORT_DB_USER
-  MEDI_IMPORT_DB_PASSWORD
+【設計メモ（固定化ポイント）】
+- ZIPの構造判定は「DATAがある/ない」ではなく「XMLが検出できるか」を優先。
+  - DATAが複数でも棚卸し対象にする（異常として error_code/structure_message に記録）。
+  - DATAが無い場合はZIP全体からXMLを探索し、STRUCT_NO_DATA_DIR を記録。
+- XML棚卸し時の well-formed チェックは任意。OKでも status は PENDING のまま（後続EXTRACTで詳細抽出）。
+- 例外が出ても DB へは可能な限り記帳し、run 単位で追跡できることを優先。
+
+【環境変数】
+- MEDI_IMPORT_MODE=ZIP_IMPORT|XML_EXTRACT|FULL (default ZIP_IMPORT)
+
+ZIP_IMPORT系:
+- MEDI_IMPORT_XML_ENABLED=true/false
+- MEDI_IMPORT_XML_PARSE_WELLFORMED=true/false
+
+XML_EXTRACT系:
+- MEDI_IMPORT_XML_EXTRACT_LIMIT=500
+- MEDI_IMPORT_XML_TARGET_STATUS=PENDING
+
+DB（必須）:
+- MEDI_IMPORT_DB_HOST
+- MEDI_IMPORT_DB_PORT
+- MEDI_IMPORT_DB_NAME
+- MEDI_IMPORT_DB_USER
+- MEDI_IMPORT_DB_PASSWORD
 
 PATH:
-  MEDI_IMPORT_INPUT_ROOT=medi_input
-  MEDI_IMPORT_TEMP_ROOT=medi_work/tmp_unzip
+- MEDI_IMPORT_INPUT_ROOT=medi_input
+- MEDI_IMPORT_TEMP_ROOT=medi_work/tmp_unzip
+
+【運用】
+- 本スクリプトは手動実行を前提（スケジューラ常駐は別途）。
+- TEMP_ROOT 配下は run_id 単位で作業し、最後に削除する。
+
 """
 
 from __future__ import annotations

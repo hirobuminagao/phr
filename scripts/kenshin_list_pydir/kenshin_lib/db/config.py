@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 r"""
-DB 設定（kenshin_list_pydir用）
+DB 設定ユーティリティ（kenshin_list_pydir）
 
-Path: kenshin_lib/db/config.py
+Path:
+  kenshin_lib/db/config.py
 
 役割:
-  - .env 読込（ゆるい）
-  - MySQLParams の生成
-  - 環境変数の必須チェックを一元化
+  - プロジェクト直下 `.env` の読込（依存があれば python-dotenv、無ければ簡易パース）
+  - MySQL 接続パラメータの生成を一元化
+  - 必須環境変数の検証を集約
 
-このプロジェクトでは MEDI_IMPORT_DB_* を採用
+採用ルール:
+  - 既定では MEDI_IMPORT_DB_* を使用する
+  - database 名は suffix `NAME` を採用（他系の `DB` とは異なる点に注意）
+
 例:
   MEDI_IMPORT_DB_HOST=localhost
   MEDI_IMPORT_DB_PORT=3306
