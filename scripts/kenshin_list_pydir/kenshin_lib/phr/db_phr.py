@@ -2,12 +2,29 @@
 """
 kenshin_lib/phr/db_phr.py
 
-dev_phr 側の参照専用DBアクセス。
-現時点では exam_item_master を読むだけ。
+PHR（dev_phr）スキーマ参照専用のDBアクセス関数群。
 
-方針:
-- work_other 側に法定マスタ等をコピーしない
-- item_master は dev_phr を一次情報として読む
+目的:
+- 健診XML生成・値正規化処理に必要な
+  exam_item_master の参照を一元化する
+- work_other 側へマスタを複製せず、
+  dev_phr を一次情報（正）として扱う
+
+設計方針:
+- 本モジュールは「参照専用」
+  INSERT / UPDATE / DELETE は行わない
+- 取得対象は XML抽出・正規化に必要な最小限の列のみ
+- namecode を主キーとして扱う前提
+
+利用箇所:
+- item_extract
+- normalize_item_values
+- exam_value_normalizer
+- XML生成系スクリプト
+
+注意:
+- dev_phr.exam_item_master の構造変更時は
+  本モジュールの SELECT 項目も必ず見直すこと
 """
 
 from __future__ import annotations
