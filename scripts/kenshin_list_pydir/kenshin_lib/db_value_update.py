@@ -2,30 +2,39 @@
 """
 kenshin_lib/db_value_update.py
 
-Generic utility to read values from MySQL, transform them, and write the transformed
-values back to the same table using safe key-based UPDATEs.
+【概要】
+MySQL 上のテーブルから値を読み出し、変換（正規化など）して、同じテーブルの別カラムへ安全に UPDATE するための
+汎用バッチ更新ユーティリティ。
 
-Purpose
-- Provide a reusable, table-agnostic batch updater.
-- Update only when the transformed value differs from the current destination value.
+【目的】
+- テーブルや項目ごとの「値の置換・正規化」処理を、共通の枠組み（Job定義 + transform関数）で実行できるようにする。
+- 変換結果が既存の保存先値と同じ場合は UPDATE しない（無駄な更新を避ける）。
 
-Design
-- The target table is not hard-coded.
-- Updates are executed by primary key (or a UNIQUE key) columns to avoid accidental
-  multi-row updates.
-- Connection parameters are loaded from a local `.env` file (no external dependency).
-- Cursor results are handled as dictionaries; casts are used to satisfy type checkers.
+【設計方針（安全第一）】
+- 対象テーブル名は固定しない（Jobで指定）。
+- UPDATE は主キー（または UNIQUE キー）列で絞り込む（誤って複数行更新しないため）。
+  - `key_cols` に「行を一意に特定できる列」を必ず指定する。
+- `where_sql` は WHERE 句の断片（先頭の WHERE は含めない）。
+- `.env` を最小実装のローダーで読み込む（外部依存を増やさない）。
 
-Environment (.env)
-- MYSQL_HOST (default: 127.0.0.1)
-- MYSQL_PORT (default: 3306)
-- MYSQL_USER (default: root)
-- MYSQL_PASSWORD (default: empty)
+【環境変数（.env）】
+- MYSQL_HOST（既定: 127.0.0.1）
+- MYSQL_PORT（既定: 3306）
+- MYSQL_USER（既定: root）
+- MYSQL_PASSWORD（既定: 空）
 
-Notes
-- Connection charset/collation are set to utf8mb4 / utf8mb4_ja_0900_as_cs to align with
-  the project’s Japanese string handling policy.
-- `where_sql` should be a SQL fragment without the leading `WHERE`.
+【文字コード/照合順序】
+- 接続は `utf8mb4` / `utf8mb4_ja_0900_as_cs` を前提に設定している。
+  日本語カナや記号を含む照合を、プロジェクト方針に合わせるため。
+
+【使い方】
+- `UpdateJob` を作る（db名/テーブル/キー列/src_col/dst_col/where_sql など）。
+- `transform(src_value)` を渡して `run_update_job()` を呼ぶ。
+- まずは `dry_run=True` で件数と更新対象を確認してから本番実行する。
+
+【固定化メモ】
+- 本ファイルは「既に動作している処理」を前提に、仕様・前提を docstring に固定する目的で整備している。
+- 挙動変更（SQLや更新条件の変更、アルゴリズム改修）は、別フェーズで行うこと。
 
 """
 
