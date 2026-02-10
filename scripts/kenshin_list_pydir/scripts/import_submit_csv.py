@@ -3,35 +3,44 @@
 scripts/import_submit_csv.py
 
 【目的】
-企業個別の提出用CSV（例: symbol100）を、そのまま MySQL(work_other) の取込テーブルへ入れる。
-- 取込テーブルは残し続ける（最新CSVが来たら TRUNCATE → 再取込）
-- CSVは inbox に 1ファイルだけ置く（複数あったらエラー）
-- CSVヘッダーは csv_header_map_submit.display_order の順と一致する前提（一致しなければエラー）
-  ※ map 側の csv_header / original_header は「改行/余分な空白が混じる」想定なので、
-     CSV側も同様に正規化して比較する
+企業個別の提出用CSV（例: symbol100）を、MySQL（work_other 等）の「生取込テーブル」へそのまま投入する。
+このスクリプトは「固定レイアウトCSVを、そのままDBへ載せる」だけを責務とし、項目の解釈・正規化・名寄せは行わない。
 
-【重要】数値列の扱い
-- INT/DECIMAL/FLOAT系の列に "測定不可" / "未実施" / "H" / "L" などが入ることがある
-- 仕様確認済み: これらは NULL でよい
-→ information_schema から「数値カラム」を自動判定し、数値以外は None に落として INSERT する
+【前提】
+- CSVは inbox（SUBMIT_INBOX_ROOT）に 1ファイルだけ置く（複数あればエラー）
+- 取込先テーブル（SUBMIT_TARGET_TABLE）は事前に作成済みであること
+- csv_header_map_submit の display_order 順が CSV列順と一致していること
+  - map 側の csv_header / original_header には「改行・余分な空白」が混入しうるため、
+    照合時は両者を正規化（空白類の全除去）して比較する
 
-env（必須）※ここは .env に既にある名前に固定（勝手に変えない）
-  SUBMIT_INBOX_ROOT         : CSV置き場フォルダ（BASE_DIRからの相対 or 絶対）
-                              例) submit_inbox/06139463/symbol100
-  SUBMIT_TARGET_TABLE       : 取込先テーブル名 例) symbol100_all_20260127
+【重要: 数値列の扱い】
+- INT/DECIMAL/FLOAT 系の列に "測定不可" / "未実施" / "H" / "L" 等の非数値が入る場合がある
+- 運用仕様: これらは NULL として投入してよい
+  - information_schema から取込先テーブルの「数値カラム」を自動判定し、
+    数値変換できない値は None（=NULL）に落として INSERT する
 
-  SUBMIT_DB_HOST
-  SUBMIT_DB_PORT
-  SUBMIT_DB_NAME
-  SUBMIT_DB_USER
-  SUBMIT_DB_PASSWORD
+【入出力】
+入力: SUBMIT_INBOX_ROOT 配下の CSV 1本
+出力: SUBMIT_TARGET_TABLE への INSERT（必要に応じて TRUNCATE → 再取込）
 
-env（任意）
-  SUBMIT_TRUNCATE           : true/false (default true)
-  SUBMIT_CSV_FILENAME       : 取込対象CSVのファイル名（指定時はそれを使う）
-                              未指定時は inbox 内の *.csv が1つだけであることを要求
-  SUBMIT_INSERT_BATCH       : executemany のバッチサイズ (default 1000)
-  LOG_LEVEL                 : INFO/DEBUG... (default INFO)
+【環境変数】（必須）
+- SUBMIT_INBOX_ROOT        : CSV置き場フォルダ（BASE_DIRからの相対 or 絶対）
+- SUBMIT_TARGET_TABLE      : 取込先テーブル名（例: symbol100_all_20260127）
+- SUBMIT_DB_HOST
+- SUBMIT_DB_PORT
+- SUBMIT_DB_NAME
+- SUBMIT_DB_USER
+- SUBMIT_DB_PASSWORD
+
+【環境変数】（任意）
+- SUBMIT_TRUNCATE          : true/false（default true）
+- SUBMIT_CSV_FILENAME      : 取込対象CSVのファイル名（指定時はそれを使用）
+- SUBMIT_INSERT_BATCH      : executemany のバッチサイズ（default 1000）
+- LOG_LEVEL                : INFO/DEBUG...（default INFO）
+
+【注意】
+- このスクリプトは "今ある運用を固定する" ことが目的のため、処理ロジックのリファクタは行わない。
+- 失敗時は例外で停止し、途中コミットを避ける（DBはトランザクションで保護）。
 """
 
 from __future__ import annotations
