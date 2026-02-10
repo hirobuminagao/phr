@@ -2,46 +2,48 @@
 """
 scripts/medi_shared_files_copy_to_input.py
 
-Shared-folder intake step: copy vetted ZIP files into MEDI_IMPORT_INPUT_ROOT.
+【目的】
+共有フォルダ上で「健診対象として確定したZIP」を、取り込み用の input フォルダ（MEDI_IMPORT_INPUT_ROOT）へコピーする。
 
-Design principles:
-- This script DOES NOT judge whether a file is a kenshin target.
-  It only copies rows that already satisfy "facts" in the DB.
-- No probing is performed here (no ZIP inspection). Probe results must already be stored.
-- Folder mapping is alias-driven (src_folder_raw -> dst_folder_norm).
+【設計方針】
+- このスクリプトは「健診対象かどうか」の判定は行わない（判定済みの事実だけをDBから拾う）。
+- ここではZIPの中身確認（probe / inspect）は行わない。
+  ZIP内XML有無などの判定結果は、上流のスクリプトでDBへ記帳済みであること。
+- フォルダの配置先は alias（src_folder_raw -> dst_folder_norm）に従う。
 
-Preconditions (must be satisfied in DB):
-- medi_shared_files.sha256 is present
-- medi_shared_files.zip_has_xml = 1 (probe completed upstream)
-- medi_shared_folder_aliases.dst_folder_norm is set for the corresponding src_folder_raw
+【前提条件（DBで満たされていること）】
+- medi_shared_files.sha256 が入っている（hash済み）
+- medi_shared_files.zip_has_xml = 1（probe済み）
+- 対応する src_folder_raw に対して、medi_shared_folder_aliases.dst_folder_norm が確定している
 
-Selection policy (SQL):
+【抽出ポリシー（SQL）】
 - stage_status='NEW', ext='zip'
 - COALESCE(manual_judgement, auto_judgement)='KENSHIN'
-- alias exists and dst_folder_norm is not empty
-- NOT yet imported (no matching medi_zip_receipts.zip_sha256)
+- alias が存在し、dst_folder_norm が空でない
+- まだ取り込み済みではない（medi_zip_receipts.zip_sha256 に同一shaが存在しない）
 
-Actions:
-- Copy to: <MEDI_IMPORT_INPUT_ROOT>/<dst_folder_norm>/<file_name>
-- If destination already exists and overwrite is false:
-    mark stage_status=INPUT_COPIED (treated as "already copied")
-- On successful copy:
-    mark stage_status=INPUT_COPIED
-- On failures:
-    keep stage_status=NEW (retryable) or mark SKIPPED only when the source is missing
-- Always write a short reason into note.
+【処理内容】
+- コピー先: <MEDI_IMPORT_INPUT_ROOT>/<dst_folder_norm>/<file_name>
+- コピー先に同名が存在し、overwrite=false の場合:
+    stage_status=INPUT_COPIED として「コピー済み扱い」にする（再試行を抑止）
+- コピー成功:
+    stage_status=INPUT_COPIED
+- 失敗:
+    原則 stage_status=NEW のまま（リトライ可能）
+    ただしソースが存在しない場合のみ stage_status=SKIPPED
+- いずれも note に短い理由を残す
 
-Environment:
-  MEDI_IMPORT_INPUT_ROOT (required)
+【環境変数】
+  MEDI_IMPORT_INPUT_ROOT (必須)
   MEDI_SHARED_COPY_LIMIT=500
   MEDI_SHARED_COPY_OVERWRITE=false
 
-DB:
+【DB接続】
   MEDI_IMPORT_DB_HOST / PORT / NAME / USER / PASSWORD
 
-Notes:
-- File I/O is not transactional; DB updates reflect best-effort progress.
-- All timestamps in logs should be in Asia/Tokyo for operator readability.
+【注意】
+- ファイルI/Oはトランザクションにならないため、DB更新はベストエフォートで進捗を反映する。
+- ログ時刻は運用者の視認性のため Asia/Tokyo（JST）で出力する。
 """
 
 from __future__ import annotations
