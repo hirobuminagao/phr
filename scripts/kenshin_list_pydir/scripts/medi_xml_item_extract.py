@@ -71,6 +71,58 @@ ITEM_EXTRACT_ZIP_PASSWORD_ENABLED (default: true)
 【前提】
 - XMLはZIP内の member として存在すること（zip_sha256 + zip_inner_path で特定）
 - CDA namespace は urn:hl7-org:v3 を想定（NS_CDA）
+
+【v1.0固定スコープ（Freeze対象 / as-is 実装契約）】
+- 本スクリプトは「ITEM抽出（生抽出）」フェーズの runner であり、対象XML（status='OK'）から observation を走査して
+  work_other.medi_xml_item_values に UPSERT し、work_other.medi_xml_receipts に items_extract_* を更新する。
+
+【DB I/O（一次情報 / Fact）】
+- Reads (work_other):
+  - `medi_xml_receipts`（対象抽出: status='OK'）
+  - `medi_zip_receipts`（親ZIPの `zip_path` 取得）
+  - `medi_zip_passwords`（暗号ZIPの password candidates 取得。ITEM_EXTRACT_ZIP_PASSWORD_ENABLED=true の場合）
+  - `medi_import_runs`（ITEM_EXTRACT_RUN_ID 指定時の run 存在確認）
+- Writes (work_other):
+  - `medi_import_runs`（run 起票 / finish）
+  - `medi_xml_item_values`（UNIQUE(xml_sha256, namecode, occurrence_no) に対する UPSERT）
+  - `medi_xml_receipts`（items_extract_status / items_extracted_run_id / items_extracted_at）
+  - `medi_xml_process_logs`（step='EXTRACT_ITEMS' の OK/ERROR/SKIP ログ）
+- Reads (dev_phr):
+  - `exam_item_master`（namecode→xml_value_type/value_method のヒント取得。抽出の可否には使わない）
+- Writes (dev_phr):
+  - なし
+
+【処理アクション（Fact / as-is）】
+- run 起票:
+  - ITEM_EXTRACT_RUN_ID=0/未指定 → `db_insert_run` → `conn_medi.commit()`
+  - ITEM_EXTRACT_RUN_ID>0 → `medi_import_runs` に存在しない場合は即エラー
+- master 読み:
+  - dev_phr から `db_select_exam_items(only_with_xpath=False)` を読み込み、namecode map を作る
+- 対象抽出:
+  - `medi_xml_receipts` から status='OK' の行を取得（ITEM_EXTRACT_LIMIT による制御）
+- member 読み出し:
+  - `medi_zip_receipts.zip_path` を使って ZIP を開き、`zip_inner_path` の member を bytes で読む
+  - 暗号ZIPは `medi_zip_passwords` の候補を順に試して継続
+- XML解析:
+  - lxml parse 失敗 → process_logs(ERROR) + receipts(items_extract_status='ERROR')
+  - CDA(ClinicalDocument) でない → process_logs(SKIP) + receipts(items_extract_status='SKIP')
+- observation 走査 → item upsert:
+  - `//cda:observation` を走査し、code/@code を namecode として occurrence_no を採番
+  - value が無い場合は text をフォールバック
+  - master があれば xml_value_type/value_method をヒントとして value_type/value_raw を作る
+  - 1件ごとに `medi_xml_item_values` へ UPSERT（written++）
+- status 更新（1 XMLごと）:
+  - written>0 → process_logs(OK) + receipts(items_extract_status='OK')
+  - written=0 → process_logs(ERROR) + receipts(items_extract_status='ERROR')（zero_hit++）
+
+【commit境界（Fact / as-is）】
+- run 起票直後に `conn_medi.commit()`（run_id を確定させる）
+- 以降は work_other への書き込みを同一 connection で行い、50件ごとに `conn_medi.commit()`
+- ループ完了後に `conn_medi.commit()` し、最後に `db_finish_run` → `conn_medi.commit()`
+
+【終了コード（Fact / as-is）】
+- 0: err=0 かつ zero_hit=0
+- 2: err>0 または zero_hit>0
 """
 
 from __future__ import annotations

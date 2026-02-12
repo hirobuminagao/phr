@@ -70,6 +70,40 @@ python scripts/normalize_item_values.py
 【終了コード】
 - 0: エラーなし
 - 2: ERROR が1件以上
+
+【v1.0固定スコープ（Freeze対象 / as-is 実装契約）】
+- 本スクリプトは「正規化（最小限）」のみを行う。
+  - RUN/台帳/受領/ログ（etl_runs/etl_errors/medi_import_runs 等）への記帳は行わない。
+  - 対象は `medi_exam_result_item_values.normalize_status='RAW'` かつ `value IS NULL/''` の行のみ。
+- 正規化は "推測補完しない" を固定方針とする（docstring上段のルールを一次情報として採用）。
+
+【DB I/O（一次情報 / Fact）】
+- Reads (work_other):
+  - `medi_exam_result_item_values`（item_value_id/ledger_id/namecode/raw_value）
+- Writes (work_other):
+  - `medi_exam_result_item_values`（value/normalize_status/normalized_at/normalize_error を UPDATE）
+- Reads (dev_phr):
+  - `exam_item_master`（namecode → xml_value_type / result_code_oid）
+  - `norm_variants`（result_code_oid + raw_value_utf8 の完全一致 → normalized_code）
+- Writes (dev_phr):
+  - なし
+
+【処理アクション（Fact / as-is）】
+- 対象抽出:
+  - `normalize_status='RAW'` かつ `(value IS NULL OR value='')` を item_value_id 昇順で LIMIT
+- ルール適用:
+  - ST: raw_value をそのまま value へ（raw_value NULL は ERROR）
+  - PQ: raw_value.strip() を value へ（空/数値変換不可は ERROR）
+  - CD: norm_variants を完全一致で引き、normalized_code を value へ（未一致は ERROR）
+  - CO: result_code_oid がある場合のみ CD と同様、無い場合は ERROR
+  - その他: ERROR
+- 更新:
+  - OK: `normalize_status='OK'` / `normalize_error=NULL`
+  - ERROR: `normalize_status='ERROR'` / `normalize_error` に理由文字列
+
+【commit境界（Fact / as-is）】
+- 処理ループ中は commit しない。
+- ループ完了後に work_other を 1回だけ `conn_work.commit()` する。
 """
 
 from __future__ import annotations
