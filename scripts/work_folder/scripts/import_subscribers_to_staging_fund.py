@@ -2,29 +2,49 @@
 r"""
 ============================================================
 Script : import_subscribers_to_staging_fund.py
-Path   : work_folder/phr/scripts/import_subscribers_to_staging_fund.py
+Path   : scripts/work_folder/scripts/import_subscribers_to_staging_fund.py
 Project: PHR / work_folder/phr
 ============================================================
 
-目的:
-- 健保CSV（fund）を staging_subscribers_fund に取り込む（受領履歴の入口）
+目的 (v1.0 as-is):
+- 健保CSV（fund）を staging_subscribers_fund に取り込む（受領履歴の入口）。
+- fund_id / template_ver / template_mappings に基づき、列マッピング→正規化→staging INSERT を行う。
 
-fund側ルール:
+設計 (v1.0 as-is):
+- conn_log : etl_runs / etl_errors（必ず commit して証跡を残す）
+- conn_data: staging_subscribers_fund（エラー時 rollback / 成功時 commit）
+- NormalizeError は「想定内の行エラー」として etl_errors に記録し、処理は継続（行スキップ）
+- ただし 1 件でも行エラーがあれば conn_data は最終的に rollback（staging には何も残さない）
+
+fund側ルール（v1.0 現状）:
 - 成功した src_file は同名で再投入禁止（重複NG）
-- エラーだった src_file は同名で再投入OK
-- 1件でもエラーがあれば staging への INSERT は全件 rollback
-  （etl_errors は rollback されない）
+  - 成功扱い=staging_subscribers_fund に該当 src_file の行が存在すること
+- 失敗（rollback）した src_file は staging に残らないため、同名再投入OK
 
-入力フォルダ（今回の前提）:
+入力フォルダ（v1.0 前提）:
 - <WORK_ROOT>/phr/input/subscribers_fund/active/<insurer(8桁)>/*.csv
 
 デフォ動作（VSCode Run想定）:
 - --insurer 未指定なら active 配下の全保険者番号フォルダを走査（CSVがあるものだけ）
 - --input 未指定なら env/デフォルトパスを使う
+- --version 未指定なら templates の MAX(version) を使用
 
-実装:
-- conn_log : etl_runs / etl_errors（必ず commit）
-- conn_data: staging_subscribers_fund（エラー時 rollback）
+V1.0 Freeze (Scope / Contract):
+- Scope: fund加入者CSV → `staging_subscribers_fund` まで（差分適用/正本更新は対象外）
+- Inputs:
+  - `templates` / `template_mappings` が fund_id ごとに整備済みであること
+  - active/<insurer>/ 配下のCSV（utf-8-sig/utf-8/cp932 を簡易判定）
+- Outputs:
+  - `staging_subscribers_fund`（成功時のみ commit。エラーが1件でもあれば rollback）
+  - `etl_runs` / `etl_errors`（start_run 直後に commit するため、失敗でも証跡は残る）
+- Idempotency (v1.0 現状):
+  - src_file の重複判定は staging の存在で行う（成功済みのみ再投入禁止）
+- Optional:
+  - ENV_* により成功/失敗で CSV を past/error へ移動（既定は移動しない）
+
+Non-goals (v1.0 対象外):
+- fund差分ロジックの確定反映（staging→本表 apply）
+- subscribers（正本）更新、喪失/異動の確定反映、名寄せ精度改善
 """
 
 from __future__ import annotations
@@ -53,7 +73,9 @@ print("WORK_ROOT =", WORK_ROOT)
 print(".env path =", env_path)
 print(".env exists =", env_path.exists())
 
-# ★ Runボタンでも `import phr` が通るようにする（最重要）
+# sys.path 調整
+# - このスクリプトは work_folder 配下に置くが、import は `phr.*` を使う
+# - そのため WORK_ROOT（= scripts/work_folder）を sys.path に追加して解決する
 if str(WORK_ROOT) not in sys.path:
     sys.path.insert(0, str(WORK_ROOT))
 
@@ -155,6 +177,11 @@ def normalize_fieldnames(fn: Sequence[str]) -> List[str]:
 # MySQLParams schema override (immutable / no with_database対応)
 # ============================================================
 
+#
+# v1.0: schema(database) の上書き（MySQLParams は frozen 想定）
+# - with_database があれば最優先
+# - dataclass なら replace
+# - 最後に同型再構築
 def clone_mysql_params_with_schema(params: MySQLParams, schema: Optional[str]) -> MySQLParams:
     if not schema:
         return params
@@ -226,13 +253,14 @@ def metrics_set(m: RunMetrics, **vals) -> RunMetrics:
 # DB helpers
 # ============================================================
 
-def find_fund_id_by_insurer(cur, insurer_number_8: str) -> int:
-    """
-    insurer_number(8桁) から fund_id を解決する。
+"""
+insurer_number(8桁) から fund_id を解決する（v1.0 as-is）。
 
-    - fund_insurer_numbers.fund_id -> funds.id
-    - 期間（valid_from/valid_to）で現行を判定（is_current に依存しない）
-    """
+- fund_insurer_numbers.fund_id -> funds.id
+- 期間（valid_from/valid_to）で現行を判定（is_current に依存しない）
+- 見つからない場合は例外で停止（precheck 失敗）
+"""
+def find_fund_id_by_insurer(cur, insurer_number_8: str) -> int:
     cur.execute(
         """
         SELECT fin.fund_id AS fund_id
@@ -278,6 +306,12 @@ def get_template_mapping(cur, fund_id: int, version: int) -> List[Dict[str, Any]
     return rows
 
 
+"""
+成功済み src_file の重複検知（v1.0 as-is）。
+
+- 成功扱い = staging_subscribers_fund に行が存在すること
+- 失敗時は conn_data.rollback() されるため staging に残らず、同名再投入OK
+"""
 def detect_duplicate_success_files(
     cur,
     *,
@@ -286,10 +320,6 @@ def detect_duplicate_success_files(
     insurer_number: str,
     filenames: List[str],
 ) -> List[str]:
-    """
-    成功扱い=stagingに行が存在すること。
-    失敗時は rollback されるので stagingに残らず、同名再投入OKになる。
-    """
     if not filenames:
         return []
     ph = ", ".join(["%s"] * len(filenames))
@@ -316,7 +346,7 @@ def apply_template_mapping(
 ) -> Dict[str, Any]:
     """
     template_mappings を適用して “素のvals” を作る。
-    ここでは、最低限の変換だけ（重いドメイン正規化は subscriber/common に任せる）。
+    ここではテンプレルールによる最低限の変換のみ（ドメイン正規化は common/subscriber に委譲）。
     """
     def get_src(header: str) -> str:
         v = csv_row.get(header, "")
@@ -372,7 +402,7 @@ def normalize_one_row(
 ) -> Dict[str, Any]:
     """
     staging insert 直前の1行を確定させる。
-    - 証記号/保険証番号/枝番/生年月日/性別/氏名/person_id_custom/続柄/資格日付
+    - 記号/番号/枝番/生年月日/性別/氏名/person_id_custom/続柄/資格日付 を確定させる
     """
     out = dict(vals)
 
@@ -451,6 +481,11 @@ class ImportResult:
     errors: int = 0
 
 
+#
+# v1.0: 1 CSV ファイル処理
+# - 各行を mapping → normalize → INSERT
+# - 行エラーは etl_errors に記録し継続
+# - 最終的に errors>0 の場合は上位で rollback する（staging には残さない）
 def process_one_file(
     *,
     cur_data,
@@ -612,7 +647,7 @@ def move_files_on_result(
 # ============================================================
 
 def main() -> int:
-    # ★ここを最初に（load_mysql_paramsより前）
+    # v1.0: .env を最初に読み込む（load_mysql_params より前）
     env_path = WORK_ROOT / ".env"
     load_dotenv(env_path, override=True)
 
@@ -664,6 +699,9 @@ def main() -> int:
     else:
         insurer_dirs = [p for p in active_dir.iterdir() if p.is_dir()]
 
+    # v1.0: 接続は2本
+    # - conn_log : etl_runs / etl_errors（証跡を残すため先commit）
+    # - conn_data: staging_subscribers_fund（成功時commit / エラー時rollback）
     with connect_ctx(params) as conn_log, connect_ctx(params) as conn_data:
         cur_log = dict_cursor(conn_log)
         cur_data = dict_cursor(conn_data)
@@ -724,7 +762,7 @@ def main() -> int:
             if dup:
                 msg = "duplicate_files=" + ",".join(dup)
                 logging.error(f"[FAIL] {msg}")
-
+                # v1.0: 重複は「成功済み再投入」として failed 扱い（staging への追加は行わない）
                 m = metrics_set(RunMetrics(), files=len(files), errors=1, rows_seen=0, rows_inserted=0)
                 etl_finish(cur_log, run_id=run_id, metrics=m, status_override="failed", extra_notes=msg)
                 conn_log.commit()
@@ -758,6 +796,7 @@ def main() -> int:
             )
 
             if total.errors > 0:
+                # v1.0: 1件でも行エラーがあれば staging は全件 rollback（受領としては失敗）
                 conn_data.rollback()
                 msg = f"errors={total.errors} (staging rollback; see etl_errors)"
                 logging.error(f"[FAIL] {msg}")
@@ -767,6 +806,7 @@ def main() -> int:
                 move_files_on_result(insurer_dir=insurer_dir, files=files, success=False)
                 continue
 
+            # v1.0: 行エラーが無い場合のみ staging を commit
             conn_data.commit()
             etl_finish(cur_log, run_id=run_id, metrics=m, status_override="success")
             conn_log.commit()

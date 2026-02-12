@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 r"""
 fund_enrollee_loader/import_fund_subscribers.py
+【位置づけ（v1.0整理）】
+- 本スクリプトは fund_enrollee_loader 系（SQLite/hub_stg/hub_prod 前提）の取込処理。
+- work_folder/scripts/import_subscribers_to_staging_fund.py（dev_phr/MySQL系）とは別系統。
+- v1.0 現行の正規運用ルートは work_folder 側であり、本ファイルは legacy 位置づけとする。
+- 仕様凍結対象はあるが、今後の拡張・新規機能追加は原則 work_folder 系で行う。
+
 
 機能概要:
 - VS Code の「Run ▶」で実行可能（work_folder/.env を自動読込）

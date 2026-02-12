@@ -1,6 +1,31 @@
 # -*- coding: utf-8 -*-
 r"""
-Path: work_folder/phr/lib/etl/errors.py
+etl/errors.py — ETL行エラー記録ユーティリティ
+
+Path   : scripts/work_folder/lib/etl/errors.py
+Project: PHR / work_folder/phr
+
+Purpose:
+    - ETL処理中に発生した「行単位の失敗」を etl_errors テーブルへ記録する。
+    - NormalizeError を含む想定内エラーを構造化して保存する。
+
+Design (v1.0 as-is):
+    - ensure_tables() を呼び、DDL存在を保証してから INSERT する
+    - INSERT 後に etl_runs.errors を +1 する
+    - commit/rollback は呼び出し側の責務
+
+V1.0 Freeze (Scope / Contract):
+    - 1 error = 1 etl_errors レコード
+    - run_id は基本的に start_run 済みの値を前提
+    - phase/source は呼び出し側が定義する文字列（import/apply 等）
+    - NormalizeError の field/raw_value/code はそのまま保存
+    - person_id_custom は突合キー補助情報として任意で保存
+    - 本モジュールはステータス判定を行わない（runs.py 側の責務）
+
+Non-goals:
+    - エラーの重複排除
+    - ログ出力（logging）
+    - 実行ステータス更新（finish_run の責務）
 """
 
 from __future__ import annotations
@@ -10,6 +35,8 @@ from typing import Any, Optional
 from phr.lib.errors import NormalizeError
 from .ddl import ensure_tables
 
+# v1.0: etl_runs.errors を +1 する内部関数
+# - 1 etl_errors INSERT ごとに必ず呼ばれる
 Cursor = Any
 
 def _bump_error_count(cur: Cursor, run_id: int) -> None:
@@ -18,6 +45,9 @@ def _bump_error_count(cur: Cursor, run_id: int) -> None:
         (run_id,),
     )
 
+# v1.0: 汎用エラー記録
+# - 呼び出し側が field / error_code / message を明示指定するケース
+# - INSERT 後に errors カウンタを増やす
 def log_error(
     cur: Cursor,
     run_id: int,
@@ -76,6 +106,9 @@ def log_error(
     )
     _bump_error_count(cur, run_id)
 
+# v1.0: NormalizeError 専用記録
+# - err.field / err.raw_value / err.code をそのまま保存
+# - message には str(err) を保存
 def log_normalize_error(
     cur: Cursor,
     run_id: int,

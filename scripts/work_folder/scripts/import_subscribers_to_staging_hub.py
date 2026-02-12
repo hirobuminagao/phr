@@ -2,7 +2,7 @@
 r"""
 ============================================================
 Script : import_subscribers_to_staging_hub.py
-Path   : work_folder/phr/scripts/import_subscribers_to_staging_hub.py
+Path   : scripts/work_folder/scripts/import_subscribers_to_staging_hub.py
 Project: PHR / work_folder/phr
 
 Purpose:
@@ -10,8 +10,24 @@ Purpose:
       MySQL の staging_subscribers_hub に取り込む。
 
 Design:
-    - ETL ログは lib.etl（etl_runs / etl_errors）に一元化
-    - 進捗ログは ProgressLogger（RunMetrics参照専用）を利用
+    - ETL ログは lib.etl（etl_runs / etl_errors）に一元化し、run の開始は先に commit する
+    - 本体取込の成否は finish_run で確定し、成功時は staging への INSERT も含めて commit
+    - 取込中の行エラー（NormalizeError 等）は etl_errors に記録し、処理は継続（行スキップ）
+    - dry-run の場合は staging への INSERT を実行せず、最後に rollback（実質 no-op。run/err は残る）
+    - 対象フォルダは `PHR_ROOT/input/subscribers_hub/active/<8桁保険者番号>/` をデフォルトとする
+    - 進捗ログは ProgressLogger（RunMetrics参照専用）を利用（rows_seen が真実）
+
+V1.0 Freeze (Scope / Contract):
+    - Scope: Hub CSV → `staging_subscribers_hub` まで（`subscribers` 本表への反映は本スクリプトの対象外）
+    - Inputs: `PHR_ROOT/input/subscribers_hub/active/<8桁保険者番号>/` 配下の *.csv（8桁フォルダは自動列挙）
+    - Outputs:
+        - `staging_subscribers_hub`（dry-run の場合は INSERT しない）
+        - `etl_runs` / `etl_errors`（start_run 直後に commit するため、dry-run / 失敗でも証跡は残る）
+    - Idempotency (v1.0 現状):
+        - 本スクリプト単体では staging の重複排除/UPSERT は行わない（同一 person_id_custom の再投入制御は下流設計に委譲）
+        - `src_file/src_row_no/src_line_no/import_run_id` は証跡として保持し、後段での突合・検証に使用する
+    - Non-goals (v1.0 対象外):
+        - fund 差分ロジック、喪失/異動の確定反映、名寄せ精度の改善、正本（subscribers）更新
 ============================================================
 """
 
@@ -25,8 +41,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# ------------------------------------------------------------
-# sys.path 調整（work_folder をパスに追加して 'phr' パッケージを見せる）
+#
+# sys.path 調整
+# - このスクリプトは work_folder 配下に置くが、import は `phr.*` を使う
+# - そのため WORK_ROOT（= scripts/work_folder）を sys.path に追加して解決する
 # ------------------------------------------------------------
 WORK_ROOT = Path(__file__).resolve().parents[2]
 if str(WORK_ROOT) not in sys.path:
@@ -120,7 +138,7 @@ def list_target_dirs(base_dir: Path, single_dir: Optional[str]) -> List[Path]:
 def count_csv_data_rows(csv_path: Path) -> int:
     """
     CSVの「データ行数」を数える（ヘッダ除外）。
-    進捗の分母用。速度優先でざっくりでOKな用途。
+    進捗の分母用。速度優先でざっくりでOK（進捗の分母用）。
     """
     with csv_path.open("r", encoding="utf-8-sig", newline="") as f:
         # 1行目ヘッダを読み飛ばし
@@ -177,15 +195,15 @@ def process_csv_dir(
                 line_no += 1
                 csv_row_no += 1
 
-                # 進捗の根っこ：rows_seen は RunMetrics が真実
+                # 進捗の根っこ：rows_seen は RunMetrics が真実（FolderMetrics は表示用）
                 m.rows_seen += 1
                 metrics_all.rows_seen += 1
 
                 try:
-                    # --- 1) マッピング ---
+                    # --- 1) ヘッダ名 → 内部キーへマッピング（未知キーはそのまま残す） ---
                     src = {MAP.get(k, k): (row.get(k, "") or "") for k in row.keys()}
 
-                    # --- 2) 数値・symbol・birth ---
+                    # --- 2) 必須キーの正規化（insurance_number / birth / gender / symbol） ---
                     try:
                         insurance_number_text = ntypes.normalize_insurance_number_required(
                             src.get("insurance_number", ""),
@@ -226,7 +244,7 @@ def process_csv_dir(
                         plog.tick()
                         continue
 
-                    # --- 3) 名前正規化 ---
+                    # --- 3) 氏名の正規化（カナ必須。分割結果は staging へ格納） ---
                     kanji_full_raw = (src.get("name_kanji_full", "") or
                                       row.get("対象者氏名（漢字）", "")).strip()
                     kana_full_raw = (src.get("name_kana_full", "") or
@@ -267,7 +285,7 @@ def process_csv_dir(
                         plog.tick()
                         continue
 
-                    # --- 4) person_id_custom ---
+                    # --- 4) person_id_custom 生成（insurer+symbol+number+birth 由来の固定キー） ---
                     try:
                         person_id_custom = nsub.generate_person_id_custom(
                             insurer_number=insurer_number,
@@ -294,7 +312,7 @@ def process_csv_dir(
                         plog.tick()
                         continue
 
-                    # --- 5) 日付 → ISO ---
+                    # --- 5) 日付 → ISO（空は空のまま。validate は normalize_date_iso 側に委譲） ---
                     qualification_acquired_date_iso = ntypes.normalize_date_iso(
                         src.get("qualification_acquired_date", ""),
                         field="qualification_acquired_date",
@@ -309,7 +327,7 @@ def process_csv_dir(
                         line_no=line_no,
                     )
 
-                    # --- 6) INSERT dict ---
+                    # --- 6) INSERT 用 dict（src_* は証跡。import_run_id は etl_runs と紐付け） ---
                     vals = {
                         "person_id_custom": person_id_custom,
                         "name_kana_full": name_parts["name_kana_full"],
@@ -347,7 +365,7 @@ def process_csv_dir(
                         "import_run_id": run_id,
                     }
 
-                    # --- 7) INSERT ---
+                    # --- 7) INSERT（dry-run の場合は実行しない） ---
                     if not dry_run:
                         cur.execute(
                             """
@@ -441,6 +459,11 @@ def process_csv_dir(
 
 
 # ============================================================
+# 実行仕様（固定化ポイント）
+# - 対象フォルダは 8桁ディレクトリを自動列挙。--input 指定時はそのディレクトリのみ
+# - run_id は start_run 後に即 commit（進捗/失敗の証跡を残す）
+# - 取込中の行エラーは etl_errors に記録し、行スキップで継続
+# - 最終的な run の状態は finish_run で確定する
 # main
 # ============================================================
 
@@ -580,6 +603,7 @@ def main() -> int:
                 )
 
             except Exception as e:
+                # staging への未確定 INSERT を取り消し。run/err の最終状態はこの後 commit する
                 conn.rollback()
                 print(f"[ERR] 取込中に例外発生: {e}")
                 metrics_all.errors += 1
@@ -594,6 +618,7 @@ def main() -> int:
                 return 7
 
     except Exception as e:
+        # DB 接続失敗など start_run 前の致命。etl_runs にも残らない可能性がある
         print(f"[FATAL] DB 接続または実行時エラー: {e}")
         return 7
 

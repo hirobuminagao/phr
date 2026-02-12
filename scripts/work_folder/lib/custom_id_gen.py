@@ -1,20 +1,43 @@
 # -*- coding: utf-8 -*-
 """
-custom_id_gen.py — 正規化(固定幅上限) → 加算 → 乗算 → 1:1マッピング
+custom_id_gen.py — PHRキー（person_id_custom）生成: 正規化(固定幅上限) → 加算 → 乗算 → 1:1マッピング
 
-仕様:
+概要:
+- 加入者突合のための「固定キー」生成ユーティリティ。
+- セキュリティ目的の暗号ではない（復号不可にする強度保証はしない）。
+- 入力4フィールド（保険者番号/記号/番号/生年月日）から、設定ファイルの係数と置換表で決定的に生成する。
+
+仕様（v1.0 as-is）:
 - 各フィールドは「数字のみ」に整えた後、幅(=最大桁)にフィット:
     * 入力桁が幅を超えたらエラー（桁切りはしない）
     * 不足は左ゼロ詰めでちょうど幅
 - (v + add) * mul を適用し、結果の桁数が幅を超えたらエラー、未満は左ゼロ詰めでちょうど幅
 - マッピングは 1 桁 → 1 文字（mapping_one_to_one を既定 True、strict_mapping で 0-9 漏れ検知可）
 - 出力長は各フィールド幅の総和（例: 11+11+11+10=43）
+- 既定の連結順は compose_order（未指定時 DEFAULT_COMPOSE_ORDER）
+
+I/O:
 - stdout: 最終IDのみ（--jsonout なら {"id": "...", "meta": {...}}）
 - --trace: raw / fit / after_add / after_mul / mapped を stderr に出力
 
 運用メモ:
-- mat_dir は「設定ファイル(custom_id_config.json) と mapping JSON」を置くディレクトリ
-- mat_dir を省略した場合は本ファイル位置から ../mat (= phr/mat) を既定にする
+- mat_dir は「設定ファイル(custom_id_config.json) と mapping JSON（対応表）」を置くディレクトリ
+- 対応表（0-9→任意文字の写像表）は py にはハードコードせず、mapping_file JSON として管理する
+- mat_dir を省略した場合の既定探索先は <scripts/work_folder>/mat（default_mat_dir()）
+- 必須ファイル: custom_id_config.json / （config内で指定された）mapping_file
+
+V1.0 Freeze (Scope / Contract):
+- Inputs（4要素）:
+    - insurer_number: 保険者番号（digits-only）
+    - symbol        : 保険証記号（v1.0 は digits-only 運用。記号の英数は落とす）
+    - insurance_number: 保険証番号（digits-only）
+    - birth_yyyymmdd: 生年月日（YYYYMMDD相当に寄せる。区切り文字は許容）
+- Outputs:
+    - person_id_custom として扱う固定長トークン（compose_order に従い連結）
+- Error policy:
+    - 桁あふれ（入力/計算結果/幅超過）は例外で停止（切り捨て・丸めはしない）
+- Non-goals:
+    - 入力の真正性検証、衝突確率の保証、鍵管理や秘匿性の担保
 """
 
 from __future__ import annotations
@@ -84,13 +107,14 @@ def norm_number(raw: Optional[str]) -> str:
 
 
 def norm_symbol_digits_only(raw: Optional[str]) -> str:
-    # 記号は digits-only 運用（仕様）
+    # v1.0: 記号は digits-only 運用（英数・記号は落とす。下流の照合キー仕様に寄せる）
     return digits_only(to_half_digits((raw or "").strip()))
 
 
 def normalize_birth_any(raw: Optional[str]) -> str:
     """
     生年月日を YYYYMMDD 相当に寄せる。
+    （※ここでは厳密な日付妥当性は検証しない。最終的な幅判定は fit_width_max 側。）
     例:
       - '19750307'
       - '1975-03-07'
@@ -128,9 +152,14 @@ REQ_LEN_KEYS = ("insurer", "symbol", "insurance_number", "birth")
 def default_mat_dir() -> Path:
     """
     mat_dir を省略した場合の既定値。
-    想定配置:
-      - this file: phr/lib/custom_id_gen.py
-      - mat dir : phr/mat
+
+    v1.0 想定配置:
+      - this file: scripts/work_folder/lib/custom_id_gen.py
+      - mat dir : scripts/work_folder/mat
+
+    Note:
+      - 以前の phr/lib → phr/mat という説明は旧表記。
+      - 現状は scripts/work_folder をルートとして扱う。
     """
     # .../phr/lib/custom_id_gen.py -> parents[1] == .../phr
     phr_root = Path(__file__).resolve().parents[1]
@@ -138,6 +167,7 @@ def default_mat_dir() -> Path:
 
 
 def load_cfg(mat_dir: Path) -> Dict[str, Any]:
+    # v1.0: 設定は mat_dir/custom_id_config.json を必須とする
     cfg_path = mat_dir / "custom_id_config.json"
     if not cfg_path.exists():
         raise FileNotFoundError(f"custom_id_config.json が見つかりません: {cfg_path}")
@@ -164,6 +194,7 @@ def load_cfg(mat_dir: Path) -> Dict[str, Any]:
         if k not in cfg["lengths"]:
             raise ValueError(f"lengths のキー不足: {k}")
 
+    # v1.0: 対応表（0-9→任意文字）は mapping_file JSON を必須とする（py内ハードコード無し）
     # mapping 読み込み
     mapping: Dict[str, Any] = cfg.get("mapping", {})
     mfile = cfg.get("mapping_file")
@@ -281,8 +312,9 @@ def generate_id(
     ID生成のエントリポイント。
 
     mat_dir:
-      - 省略可（省略時は default_mat_dir() = phr/mat）
-      - 呼び出し側が settings などを持つなら明示的に渡してもOK
+      - 省略可（省略時は default_mat_dir() = <scripts/work_folder>/mat）
+      - v1.0 では mat 配下の JSON（custom_id_config.json / mapping_file）を一次情報として固定
+      - 呼び出し側が環境別に切替える場合は --mat で明示指定する
     """
     mat_dir = mat_dir or default_mat_dir()
     cfg = load_cfg(mat_dir)

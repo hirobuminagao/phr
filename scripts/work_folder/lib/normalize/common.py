@@ -1,8 +1,34 @@
 # -*- coding: utf-8 -*-
 r"""
-共通の正規化ユーティリティ（型・日付・数字抽出など）。
+normalize/common.py — 共通の正規化ユーティリティ（数字抽出・日付・記号正規化など）
 
-Path: work_folder/phr/lib/normalize/common.py
+Path   : scripts/work_folder/lib/normalize/common.py
+Project: PHR / work_folder/phr
+
+Purpose:
+    - CSV/外部入力の「ゆれ」を吸収し、後段の照合・格納処理が扱える形へ整形する。
+    - 例外（NormalizeError）で「この行は採用できない」理由をコード化して返す。
+
+Design (v1.0 as-is):
+    - なるべく軽量: translate / regex を中心に、過剰な依存は持たない
+    - 日付は厳密な暦チェックまではしない（m=1..12, d=1..31 程度の粗チェック）
+    - 返り値は基本的に文字列（digits-only / YYYYMMDD / YYYY-MM-DD）
+
+V1.0 Freeze (Scope / Contract):
+    - Inputs:
+        - raw 文字列（全角/半角混在、区切り記号、空白、記号ゆれを許容）
+    - Outputs:
+        - digits-only 文字列、YYYYMMDD、ISO日付(YYYY-MM-DD)、記号正規化済み文字列 など
+    - Error policy:
+        - 必須フィールドの欠落や形式不正は NormalizeError（field/code/raw_value/message）で通知
+        - ここでは "どのテーブルに入れるか" は関知しない（利用側が行スキップ/中断を決める）
+    - Non-goals:
+        - 住所や氏名などドメイン固有の正規化（subscriber.py 側の責務）
+        - 日付の存在検証（2/30 などの厳密判定）
+
+Notes:
+    - normalize_insurance_symbol は「表記ゆれを減らした文字列」と「含まれる数字の連結 int?」を返す
+      → v1.0 の照合キーは別途定義（本関数は値の標準化のみ）
 """
 
 from __future__ import annotations
@@ -37,6 +63,10 @@ _MIDDOTS = {"・", "･"}
 # 基本：数字系
 # ------------------------------------------------------------
 
+# v1.0 固定メモ:
+# - to_half_digits / digits_only は "入力のゆれ吸収" の最下層。
+# - ここでの digits_only は "数字以外を捨てる" だけで、桁数や必須判定は上位関数で行う。
+
 def to_half_digits(s: str) -> str:
     """全角数字→半角数字（NFKCでもOKだが、ここは軽く translate を優先）"""
     if s is None:
@@ -52,14 +82,18 @@ def digits_only(s: str) -> str:
 
 
 def split_digit_chunks(s: str) -> list[str]:
-    """任意区切り値を → [数字ブロック, ...]"""
+    """任意区切り値を → [数字ブロック, ...]（例: '12-34' → ['12','34']）"""
     src = to_half_digits(s or "")
     return [p for p in re.split(r"[^\d]+", src) if p]
+
 
 
 # ------------------------------------------------------------
 # 保険証番号（必須）
 # ------------------------------------------------------------
+
+# v1.0: 保険証番号は必須（数字が1つも無い場合は行エラー）
+# - 返り値は digits-only（桁数固定はしない。桁の妥当性は下流の突合仕様で扱う）
 
 def normalize_insurance_number_required(
     raw: str,
@@ -83,9 +117,12 @@ def normalize_insurance_number_required(
     return d
 
 
+
 # ------------------------------------------------------------
 # 枝番（任意）
 # ------------------------------------------------------------
+
+# v1.0: 枝番は任意（空なら None）
 
 def normalize_branchnumber_optional(raw: str) -> Optional[str]:
     s = to_half_digits(raw or "")
@@ -93,9 +130,13 @@ def normalize_branchnumber_optional(raw: str) -> Optional[str]:
     return d or None
 
 
+
 # ------------------------------------------------------------
 # 生年月日（YYYYMMDD）
 # ------------------------------------------------------------
+
+# v1.0: 生年月日は "YYYYMMDD" に寄せる（区切り記号は許容）
+# - 厳密な暦チェックはしない（m=1..12, d=1..31 程度）
 
 def normalize_birth_yyyymmdd(
     raw: str,
@@ -137,9 +178,13 @@ def normalize_birth_yyyymmdd(
     )
 
 
+
 # ------------------------------------------------------------
 # YYYYMMDD → ISO 日付文字列 (YYYY-MM-DD)
 # ------------------------------------------------------------
+
+# v1.0: YYYYMMDD → ISO 変換（空は None）
+# - 形式が崩れている場合は NormalizeError
 
 def yyyymmdd_to_iso_date(
     raw: Optional[str],
@@ -167,9 +212,14 @@ def yyyymmdd_to_iso_date(
     return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
 
 
+
 # ------------------------------------------------------------
 # 汎用日付正規化 → ISO (YYYY-MM-DD)
 # ------------------------------------------------------------
+
+# v1.0: 汎用日付の正規化 → ISO（YYYY-MM-DD）
+# - 空は None
+# - 形式の推定に失敗したら NormalizeError
 
 def normalize_date_iso(
     raw: Optional[str],
@@ -229,9 +279,12 @@ def normalize_date_iso(
     )
 
 
+
 # ------------------------------------------------------------
 # 性別コード
 # ------------------------------------------------------------
+
+# v1.0: 性別コードは 1=男, 2=女, 9=不明/その他 に寄せる（入力ゆれは吸収）
 
 def normalize_gender_code(raw: str) -> str:
     t = (raw or "").strip().lower()
@@ -242,9 +295,14 @@ def normalize_gender_code(raw: str) -> str:
     return "9"
 
 
+
 # ------------------------------------------------------------
 # 記号（半角主体 + 数字抽出）
 # ------------------------------------------------------------
+
+# v1.0: 記号の正規化（表記ゆれを減らす）
+# - 文字列としての "記号" を保持しつつ、含まれる数字を連結した int? も返す
+# - ここでは digits-only 運用への強制はしない（必要なら呼び出し側で digits_only を適用）
 
 def normalize_insurance_symbol(raw: str) -> Tuple[str, Optional[int]]:
     s = (raw or "").translate(_FW2HW)
@@ -266,9 +324,13 @@ def normalize_insurance_symbol(raw: str) -> Tuple[str, Optional[int]]:
     return s_norm, digits_val
 
 
+
 # ------------------------------------------------------------
 # フォルダ名 → 保険者番号（8桁 int）
 # ------------------------------------------------------------
+
+# v1.0: 入力フォルダ名（8桁）→ 保険者番号 int
+# - 8桁でない場合は NormalizeError
 
 def normalize_insurer_folder_name_to_int(folder: Path) -> int:
     name = folder.name
