@@ -23,6 +23,46 @@ FIX (2026-01-15):
 POLICY (2026-01-20):
 - postal_code / gender_code 等の “人情報欠損” では突き返さない（ここは原本保持レイヤー）。
   欠損は warning としてログへ残し、ledger には NULL のまま格納して継続する。
+
+【v1.0固定スコープ（Freeze対象 / as-is 実装契約）】
+- 本モジュールは「XML抽出フェーズ」のロジック本体であり、DB commit/rollback 境界は呼び出し元（runner script）側で管理する。
+  - 本関数群は DB-API cursor（cur）を受け取り、SQL実行（READ/WRITE）のみ行う。
+
+【DB I/O（一次情報 / Fact）】
+- Writes (work_other):
+  - `medi_xml_process_logs`（step/result/message のログ）
+  - `medi_xml_receipts`（index/status/error_code/error_message/document_id/extracted_* の更新）
+  - `medi_xml_ledger`（台帳 upsert。warning があっても実施）
+- Reads (work_other):
+  - `medi_xml_receipts`（target_status の対象行を取得）
+  - `medi_zip_receipts`（親ZIPの zip_path/facility_* 取得）
+  - `medi_zip_passwords`（暗号ZIP member 対応のパスワード候補取得）
+- Writes (dev_phr):
+  - なし（本モジュールは dev_phr へ直接書き込まない）
+- Reads (dev_phr):
+  - なし（XSD や辞書はファイル/ENV 経由。DB辞書は参照しない）
+
+【処理アクション（Fact / as-is）】
+- 対象抽出:
+  - `medi_xml_receipts` から `target_status` の行を取得（limit あり）
+- ZIP member 読み出し:
+  - `medi_zip_receipts.zip_path` を使って ZIP を開き、`zip_inner_path` の member を読む
+  - encrypted の場合は `medi_zip_passwords` 由来の候補を順に試して継続
+- 検証/抽出ステップ（process_logs に記帳）:
+  - WELLFORMED（ElementTree parse）
+  - CDA_INDEX（ClinicalDocument/id の抽出。OK/SKIP/ERROR）
+  - XSD_VALIDATE（ログのみ。抽出自体は継続。XSD無い場合はSKIP）
+  - EXTRACT_ITEMS（住所/保険ID/施設/日付等の抽出。欠損は warning として記録）
+  - LEDGER（`medi_xml_ledger` へ upsert）
+- index 更新:
+  - 成功時: `medi_xml_receipts.status='OK'` + `extracted_run_id` 等を更新
+  - 失敗時: `status='ERROR'` + `error_code` / `error_message` を更新
+
+【入力/外部参照（Fact）】
+- ZIP 実体: `medi_zip_receipts.zip_path` が指すローカルZIPファイル
+- XSD: ENV `MEDI_IMPORT_XSD_ROOT` / `MEDI_IMPORT_XSD_MAIN` によりローカルXSDを参照（無い場合は SKIP）
+- 本モジュールは XML から抽出した値を「原本保持レイヤー」として ledger に保存する。
+  - 欠損（postal_code/gender_code 等）では突き返さず、process_logs に warning を残す。
 """
 
 from __future__ import annotations

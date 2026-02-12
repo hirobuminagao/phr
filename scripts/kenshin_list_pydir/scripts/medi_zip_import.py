@@ -52,9 +52,26 @@ PATH:
 - MEDI_IMPORT_INPUT_ROOT=medi_input
 - MEDI_IMPORT_TEMP_ROOT=medi_work/tmp_unzip
 
+
 【運用】
 - 本スクリプトは手動実行を前提（スケジューラ常駐は別途）。
 - TEMP_ROOT 配下は run_id 単位で作業し、最後に削除する。
+
+【v1.0固定スコープ（Freeze対象）】
+- 本スクリプトは work_other スキーマの以下テーブルに対してのみ書き込みを行う。
+  - medi_import_runs
+  - medi_zip_receipts
+  - medi_zip_receipt_runs
+  - medi_xml_receipts
+  - medi_xml_receipt_runs
+- 本スクリプトは dev_phr スキーマのテーブルには直接書き込みを行わない。
+- ZIP構造判定ロジック（DATA有無ではなくXML検出優先）は v1.0 の固定仕様とする。
+- XML棚卸し時の status=PENDING 運用も v1.0 の固定仕様とする。
+- commit境界は以下の単位で確定する。
+  - run開始時
+  - ZIP単位の upsert完了時
+  - XML棚卸し完了時
+- 本docstring記載内容を「as-is実装契約」とし、DDL再整理時は本契約との差分を明示する。
 
 """
 
