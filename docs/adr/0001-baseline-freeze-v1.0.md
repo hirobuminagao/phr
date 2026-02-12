@@ -29,3 +29,23 @@
 - 含む: `scripts/kenshin_list_pydir/` の実行スクリプトと `kenshin_lib`
 - 含む: `sql/meta/dev_phr` の初期マスタCSV（再現用）
 - 含まない: 実データ（ZIP/XML/CSV）および本番の`.env`（機微情報）
+
+---
+
+## 補足（2026-02-12）: v1.0-freeze タグとの関係
+
+本ADR（0001）は、当初 `scripts/kenshin_list_pydir/` を主対象とした
+「健診データ基盤のBaseline Freeze」を定義したものである。
+
+2026-02-12 に付与した `v1.0-freeze` タグでは、これに加えて
+`scripts/work_folder/` 系（hub/fund 取込・apply・共通lib・mat）についても
+「現状の意味（契約）の固定」を行った。
+
+- work_folder の主要テーブル前提は `dev_phr` スキーマ
+- `mat/`（custom_id_config.json / custom_id_mapping.json）はID仕様の一次情報
+- `scripts/fund_enrollee_loader/` は SQLite 前提の legacy 系と整理
+
+work_folder 系のFreeze方針および設計判断の詳細は、別ADRとして記録する（0002予定）。
+
+本ADR 0001 は「kenshin_list_pydir を中心とした初期Baseline定義」として有効であり、
+v1.0-freeze タグはその拡張基点として位置づける。

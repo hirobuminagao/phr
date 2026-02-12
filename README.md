@@ -18,6 +18,18 @@
 
 ※ Freezeは「開発禁止」ではない。あくまで **前提・基準・比較の軸** を固定する。
 
+### v1.0-freeze（2026-02-12 時点の追加基点）
+2026-02-12 に `v1.0-freeze` タグを付与し、`scripts/work_folder/` 系の「現状の意味（契約）」も凍結した。
+
+- 対象: `scripts/work_folder/`
+  - import/apply スクリプト（hub/fund）と共通lib
+  - `mat/`（person_id_custom 生成仕様: `custom_id_config.json` / `custom_id_mapping.json` / README）
+- 前提: v1.0 現状では work_folder が参照する主要テーブルはすべて `dev_phr` スキーマに存在する
+- 目的: リファクタではなく「現状の意味の固定」（docstring/README による明文化）
+- 位置づけ: `scripts/fund_enrollee_loader/` は SQLite 前提の legacy 系（v1.0 正規運用対象外）
+
+※ タグ確認: `git show --stat v1.0-freeze`
+
 ## ディレクトリ構成（重要）
 - `scripts/kenshin_list_pydir/`
   - `scripts/` : 実行スクリプト群（手動キック前提のものが中心）
@@ -109,6 +121,12 @@
 
 ## ドキュメント（ADR）
 設計判断・凍結点・方針は `docs/adr/` に記録する。
+
+- ADRに残すべき論点（v1.0-freeze で確定したもの）:
+  - work_folder のDB座標: 主要テーブルは dev_phr スキーマ
+  - mat の配置と変更ポリシー: 変更＝ID仕様変更（v2扱い）
+  - legacy（SQLite）ルートの位置づけ: fund_enrollee_loader は正規運用対象外
+
 - ADRは「なぜそうしたか」を残す文書
 - READMEは「何があり、どう使うか」を説明する文書
 
