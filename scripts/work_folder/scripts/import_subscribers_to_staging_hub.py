@@ -23,6 +23,63 @@ V1.0 Freeze (Scope / Contract):
     - Outputs:
         - `staging_subscribers_hub`（dry-run の場合は INSERT しない）
         - `etl_runs` / `etl_errors`（start_run 直後に commit するため、dry-run / 失敗でも証跡は残る）
+    - DB I/O (dev_phr):
+        - READS: なし（参照テーブル無し。正規化はローカル処理）
+        - WRITES:
+            - `staging_subscribers_hub`（主成果物。dry-run 時は INSERT しない）
+            - `etl_runs` / `etl_errors`（証跡。start_run 直後 commit のため dry-run/失敗でも残る）
+        - DB Actions (Fact):
+            - start_run: `etl_runs` に INSERT → 直後に `conn.commit()`（dry-run/失敗でも run_id の証跡を残す）
+            - per-row error:
+                - 正規化エラー: `log_normalize_error` → `etl_errors` に INSERT（行スキップで継続）
+                - 例外: `log_error` → `etl_errors` に INSERT（行スキップで継続）
+            - staging insert: `staging_subscribers_hub` に明示カラム指定 INSERT（dry-run 時は実行しない）
+                - columns:
+                    - person_id_custom
+                    - name_kana_full
+                    - name_kanji_full
+                    - name_kanji_family
+                    - name_kanji_middle
+                    - name_kanji_given
+                    - name_kana_family
+                    - name_kana_middle
+                    - name_kana_given
+                    - gender_code
+                    - birth
+                    - insured_attribute_name
+                    - relationship_name
+                    - insurer_number
+                    - insurance_symbol
+                    - insurance_symbol_digits
+                    - insurance_number
+                    - insurance_branchnumber
+                    - qualification_acquired_date
+                    - qualification_lost_date
+                    - postal_code
+                    - address_line
+                    - building
+                    - phone
+                    - email
+                    - employer_code
+                    - department_code
+                    - distribution_code
+                    - employee_code
+                    - connect_id
+                    - created_at
+                    - loaded_at
+                    - processed_at
+                    - src_file
+                    - src_row_no
+                    - src_line_no
+                    - import_run_id
+            - finish_run:
+                - 正常系: `finish_run` 実行後、dry-run は `conn.rollback()` / 本番は `conn.commit()`
+                - 異常系: 例外時は `conn.rollback()` → `finish_run(status=failed)` → `conn.commit()`
+    - File I/O:
+        - READS: `PHR_ROOT/input/subscribers_hub/active/<8桁保険者番号>/*.csv`
+        - READS (config): `scripts/work_folder/mat/custom_id_config.json` + `custom_id_mapping.json`
+    - Key generation:
+        - `person_id_custom` は mat 配下の JSON（config + mapping）を一次情報として生成する（py 内ハードコード無し）
     - Idempotency (v1.0 現状):
         - 本スクリプト単体では staging の重複排除/UPSERT は行わない（同一 person_id_custom の再投入制御は下流設計に委譲）
         - `src_file/src_row_no/src_line_no/import_run_id` は証跡として保持し、後段での突合・検証に使用する

@@ -37,6 +37,77 @@ V1.0 Freeze (Scope / Contract):
 - Outputs:
   - `staging_subscribers_fund`（成功時のみ commit。エラーが1件でもあれば rollback）
   - `etl_runs` / `etl_errors`（start_run 直後に commit するため、失敗でも証跡は残る）
+
+  - DB I/O (dev_phr):
+    - READS (precheck/mapping):
+      - `fund_insurer_numbers` / `funds`（insurer_number→fund_id 解決）
+      - `templates`（template version 決定。未指定なら MAX(version)）
+      - `template_mappings`（CSV→target_column マッピング定義）
+    - READS (dedupe):
+      - `staging_subscribers_fund`（成功済み src_file の重複検知）
+    - WRITES:
+      - `staging_subscribers_fund`（主成果物。dry-run 時は INSERT しない）
+      - `etl_runs` / `etl_errors`（証跡。start_run 直後 commit のため dry-run/失敗でも残る）
+
+  - DB Actions (Fact / v1.0 as-is):
+    - connections:
+      - conn_log: `etl_runs` / `etl_errors`（証跡用。start_run 後に commit）
+      - conn_data: `staging_subscribers_fund`（成功時 commit / エラー時 rollback）
+    - precheck:
+      - insurer_number(8桁) → fund_id を解決（`fund_insurer_numbers` JOIN `funds`）
+      - template_ver を決定（未指定なら `templates` の MAX(version)）
+      - mapping_defs を取得（`template_mappings`）
+    - start_run:
+      - INSERT INTO `etl_runs` → 直後に `conn_log.commit()`
+    - duplicate check (成功済み再投入禁止):
+      - `staging_subscribers_fund` に fund_id/template_ver/insurer/src_file が存在するファイル名は failed 扱いで終了（staging 追加なし）
+    - per-row error handling:
+      - 正規化エラー（NormalizeError）: INSERT INTO `etl_errors`（行スキップで継続）
+      - 例外: INSERT INTO `etl_errors`（行スキップで継続）
+    - staging insert:
+      - INSERT INTO `staging_subscribers_fund`（明示カラム指定）
+      - dry-run 時は実行しない
+      - columns:
+        - fund_id
+        - template_ver
+        - person_id_custom
+        - name_kana_full
+        - name_kanji_full
+        - name_kanji_family
+        - name_kanji_middle
+        - name_kanji_given
+        - name_kana_family
+        - name_kana_middle
+        - name_kana_given
+        - gender_code
+        - birth
+        - insurer_number
+        - insurance_symbol
+        - insurance_symbol_digits
+        - insurance_number
+        - insurance_branchnumber
+        - qualification_acquired_date
+        - qualification_lost_date
+        - postal_code
+        - address_line
+        - building
+        - phone
+        - email
+        - employer_code
+        - department_code
+        - distribution_code
+        - employee_code
+        - connect_id
+        - relationship_code
+        - relationship_name
+        - src_file
+        - src_row_no
+        - src_line_no
+        - import_run_id
+        - loaded_at
+    - finish_run:
+      - 行エラーが1件でもあれば `conn_data.rollback()`（staging には残さない）→ `finish_run(status=failed)` → `conn_log.commit()`
+      - 行エラーが無ければ `conn_data.commit()` → `finish_run(status=success)` → `conn_log.commit()`
 - Idempotency (v1.0 現状):
   - src_file の重複判定は staging の存在で行う（成功済みのみ再投入禁止）
 - Optional:
