@@ -580,69 +580,79 @@ def build_clinical_document_xml(
     add_comment(root, "健診結果情報（component/structuredBody）")
     component = ET.SubElement(root, f"{{{NS_HL7}}}component")
     structured_body = ET.SubElement(component, f"{{{NS_HL7}}}structuredBody")
-    body_comp = ET.SubElement(structured_body, f"{{{NS_HL7}}}component")
-    section = ET.SubElement(body_comp, f"{{{NS_HL7}}}section")
 
-    add_comment(section, "CDAセクションのコード（検査・問診結果）")
-    ET.SubElement(
-        section,
-        f"{{{NS_HL7}}}code",
-        {"code": "01010", "codeSystem": "1.2.392.200119.6.1010", "displayName": "検査・問診結果セクション"},
-    )
-
-    add_comment(section, "セクションタイトル")
-    ET.SubElement(section, f"{{{NS_HL7}}}title").text = "検査・問診結果セクション"
-
-    add_comment(section, "セクション本文（text）")
-    ET.SubElement(section, f"{{{NS_HL7}}}text")
-
-    # entries（ここはコメント入れない：ユーザー指定）
+    # セクション振り分け（法定 / 任意）
+    sections: Dict[str, List[ItemRow]] = {}
     for it in items:
-        entry = ET.SubElement(section, f"{{{NS_HL7}}}entry")
-        obs = ET.SubElement(entry, f"{{{NS_HL7}}}observation", {"classCode": "OBS", "moodCode": "EVN"})
-
-        c = ET.SubElement(obs, f"{{{NS_HL7}}}code", {"code": it.namecode})
-        if safe_text(it.item_name):
-            c.set("displayName", safe_text(it.item_name) or "")
-
-        vtype = safe_text(it.xml_value_type) or "ST"
-        val = ET.SubElement(obs, f"{{{NS_HL7}}}value")
-        val.set(f"{{{NS_XSI}}}type", vtype)
-
-        # nullFlavor優先
-        if safe_text(it.nullflavor):
-            val.set("nullFlavor", safe_text(it.nullflavor) or "")
+        if it.annex2_legal_report_flag in (1, 2):
+            section_code = safe_text(it.cda_section_code_default) or "01010"
         else:
-            if vtype == "PQ":
-                vv = safe_text(it.value)
-                if vv is None:
-                    val.set("nullFlavor", "NI")
-                else:
-                    val.set("value", vv)
-                    unit = safe_text(it.ucum_unit) or safe_text(it.display_unit)
-                    if unit:
-                        val.set("unit", unit)
+            section_code = "01990"
+        sections.setdefault(section_code, []).append(it)
 
-            elif vtype in ("CD", "CO"):
-                cv = safe_text(it.value)
-                if cv is None:
-                    val.set("nullFlavor", "NI")
-                else:
-                    val.set("code", cv)
-                    oid = safe_text(it.result_code_oid)
-                    if oid:
-                        val.set("codeSystem", oid)
+    # セクション生成
+    for section_code, section_items in sections.items():
+        body_comp = ET.SubElement(structured_body, f"{{{NS_HL7}}}component")
+        section = ET.SubElement(body_comp, f"{{{NS_HL7}}}section")
 
+        add_comment(section, f"CDAセクションコード={section_code}")
+        ET.SubElement(
+            section,
+            f"{{{NS_HL7}}}code",
+            {
+                "code": section_code,
+                "codeSystem": "1.2.392.200119.6.1010",
+            },
+        )
+
+        ET.SubElement(section, f"{{{NS_HL7}}}title").text = section_code
+        ET.SubElement(section, f"{{{NS_HL7}}}text")
+
+        for it in section_items:
+            entry = ET.SubElement(section, f"{{{NS_HL7}}}entry")
+            obs = ET.SubElement(entry, f"{{{NS_HL7}}}observation", {"classCode": "OBS", "moodCode": "EVN"})
+
+            c = ET.SubElement(obs, f"{{{NS_HL7}}}code", {"code": it.namecode})
+            if safe_text(it.item_name):
+                c.set("displayName", safe_text(it.item_name) or "")
+
+            vtype = safe_text(it.xml_value_type) or "ST"
+            val = ET.SubElement(obs, f"{{{NS_HL7}}}value")
+            val.set(f"{{{NS_XSI}}}type", vtype)
+
+            if safe_text(it.nullflavor):
+                val.set("nullFlavor", safe_text(it.nullflavor) or "")
             else:
-                sv = safe_text(it.value)
-                if sv is None:
-                    val.set("nullFlavor", "NI")
-                else:
-                    val.text = sv
+                if vtype == "PQ":
+                    vv = safe_text(it.value)
+                    if vv is None:
+                        val.set("nullFlavor", "NI")
+                    else:
+                        val.set("value", vv)
+                        unit = safe_text(it.ucum_unit) or safe_text(it.display_unit)
+                        if unit:
+                            val.set("unit", unit)
 
-        mc = safe_text(it.xml_method_code)
-        if mc:
-            ET.SubElement(obs, f"{{{NS_HL7}}}methodCode", {"code": mc})
+                elif vtype in ("CD", "CO"):
+                    cv = safe_text(it.value)
+                    if cv is None:
+                        val.set("nullFlavor", "NI")
+                    else:
+                        val.set("code", cv)
+                        oid = safe_text(it.result_code_oid)
+                        if oid:
+                            val.set("codeSystem", oid)
+
+                else:
+                    sv = safe_text(it.value)
+                    if sv is None:
+                        val.set("nullFlavor", "NI")
+                    else:
+                        val.text = sv
+
+            mc = safe_text(it.xml_method_code)
+            if mc:
+                ET.SubElement(obs, f"{{{NS_HL7}}}methodCode", {"code": mc})
 
     return ET.ElementTree(root)
 
