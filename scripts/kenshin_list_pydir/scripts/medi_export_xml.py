@@ -280,6 +280,10 @@ def fix_addr_postalcode_tail_indent(elem: ET.Element, level: int = 0, space: str
     ここでは postalCode の tail が実テキストを持つ場合に、
     `\n + (space * level) + text` へ整形して見た目を安定させる。
 
+    注意:
+      xml.etree.ElementTree の Comment ノード等は elem.tag が str ではなく関数になることがあるため、
+      その場合は安全にスキップする。
+
     期待する出力例:
       <addr>
         <postalCode>123-0001</postalCode>
@@ -287,7 +291,12 @@ def fix_addr_postalcode_tail_indent(elem: ET.Element, level: int = 0, space: str
       </addr>
     """
     tag = elem.tag
-    local = tag.split('}', 1)[1] if '}' in tag else tag
+
+    # Comment等: tag が str ではない（function など）ことがあるのでスキップ
+    if not isinstance(tag, str):
+        return
+
+    local = tag.split("}", 1)[1] if "}" in tag else tag
 
     if local == "postalCode":
         if elem.tail and elem.tail.strip():
