@@ -436,11 +436,16 @@ def build_clinical_document_xml(
         {"extension": num, "root": "1.2.392.200119.6.205"},
     )
 
-    # addr/postalCode（郵便番号のみ）
-    if safe_text(ledger.postalcode):
+    # addr（住所・郵便番号）
+    p_postal = safe_text(ledger.postalcode)
+    p_addr = safe_text(ledger.address)
+    if p_postal or p_addr:
         add_comment(patient_role, "住所と郵便番号")
         addr = ET.SubElement(patient_role, f"{{{NS_HL7}}}addr")
-        ET.SubElement(addr, f"{{{NS_HL7}}}postalCode").text = safe_text(ledger.postalcode)
+        if p_postal:
+            ET.SubElement(addr, f"{{{NS_HL7}}}postalCode").text = p_postal
+        if p_addr:
+            ET.SubElement(addr, f"{{{NS_HL7}}}streetAddressLine").text = p_addr
 
     # patient
     patient = ET.SubElement(patient_role, f"{{{NS_HL7}}}patient")
@@ -492,10 +497,15 @@ def build_clinical_document_xml(
         add_comment(rep_org, "電話番号")
         ET.SubElement(rep_org, f"{{{NS_HL7}}}telecom", {"value": telv})
 
-    if safe_text(ledger.org_postalcode):
+    o_postal = safe_text(ledger.org_postalcode)
+    o_addr_txt = safe_text(ledger.org_address)
+    if o_postal or o_addr_txt:
         add_comment(rep_org, "所在地と郵便番号")
         oaddr = ET.SubElement(rep_org, f"{{{NS_HL7}}}addr")
-        ET.SubElement(oaddr, f"{{{NS_HL7}}}postalCode").text = safe_text(ledger.org_postalcode)
+        if o_postal:
+            ET.SubElement(oaddr, f"{{{NS_HL7}}}postalCode").text = o_postal
+        if o_addr_txt:
+            ET.SubElement(oaddr, f"{{{NS_HL7}}}streetAddressLine").text = o_addr_txt
 
     # --- custodian（NI固定）---
     add_comment(root, "custodian（管理組織：NI固定）")
@@ -545,10 +555,15 @@ def build_clinical_document_xml(
         add_comment(rep_org2, "健診実施機関電話番号")
         ET.SubElement(rep_org2, f"{{{NS_HL7}}}telecom", {"value": telv2})
 
-    if safe_text(ledger.org_postalcode):
+    o2_postal = safe_text(ledger.org_postalcode)
+    o2_addr_txt = safe_text(ledger.org_address)
+    if o2_postal or o2_addr_txt:
         add_comment(rep_org2, "健診実施機関所在地と郵便番号")
         oaddr2 = ET.SubElement(rep_org2, f"{{{NS_HL7}}}addr")
-        ET.SubElement(oaddr2, f"{{{NS_HL7}}}postalCode").text = safe_text(ledger.org_postalcode)
+        if o2_postal:
+            ET.SubElement(oaddr2, f"{{{NS_HL7}}}postalCode").text = o2_postal
+        if o2_addr_txt:
+            ET.SubElement(oaddr2, f"{{{NS_HL7}}}streetAddressLine").text = o2_addr_txt
 
     # --- body ---
     add_comment(root, "健診結果情報（component/structuredBody）")
