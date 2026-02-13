@@ -26,6 +26,9 @@ CREATE TABLE `dev_phr`.`exam_item_master` (
   `jun_no` int DEFAULT NULL COMMENT '付属2: 順番号',
   `identity_item_code` varchar(32) DEFAULT NULL COMMENT '付属2: 同一性項目コード',
   `identity_item_name` varchar(190) DEFAULT NULL COMMENT '付属2: 同一性項目名称',
+  `annex2_exec_requirement` varchar(32) DEFAULT NULL COMMENT '付属2 A列: 実施要件（MUST / OPTIONAL_BY_DOCTOR / EITHER_OK / REPORT_IF_AVAILABLE）',
+  `annex2_legal_report_flag` tinyint(1) DEFAULT NULL COMMENT '付属2 B列: 法定報告フラグ（1=法定, 0=任意）',
+  `cda_section_code_default` varchar(16) DEFAULT NULL COMMENT 'CDAデフォルトセクションコード（01010 / 01990）',
 
   PRIMARY KEY (`namecode`),
   KEY `idx_exam_item_category` (`category_name`),
