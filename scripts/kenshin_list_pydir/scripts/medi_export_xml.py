@@ -178,6 +178,24 @@ def normalize_postalcode(x: Any) -> Optional[str]:
         return f"{digits[:3]}-{digits[3:]}"
     return digits
 
+# --- 医療機関用: 郵便番号正規化（ハイフン無し） ---
+def normalize_postalcode_no_hyphen(x: Any) -> Optional[str]:
+    """出力専用: 郵便番号を正規化（ハイフン無し）。
+
+    医療機関側は運用上「数字7桁」を出したいケースがあるため、
+    数字7桁が取れる場合はハイフン無しで返す。
+    それ以外は取得できた数字列をそのまま返す。
+    """
+    s = safe_text(x)
+    if not s:
+        return None
+    digits = re.sub(r"[^0-9]", "", s)
+    if not digits:
+        return None
+    if len(digits) == 7:
+        return digits
+    return digits
+
 
 def safe_int(x: Any) -> Optional[int]:
     if x is None:
@@ -481,7 +499,7 @@ def build_clinical_document_xml(
             pc.text = p_postal
             if p_addr:
                 # postalCode の後ろ（addr/text() としても拾える）に住所を置く
-                pc.tail = p_addr
+                pc.tail = "\n  " + p_addr
         else:
             # 郵便番号が無い場合は addr直下テキストに住所
             if p_addr:
@@ -537,16 +555,22 @@ def build_clinical_document_xml(
         add_comment(rep_org, "電話番号")
         ET.SubElement(rep_org, f"{{{NS_HL7}}}telecom", {"value": telv})
 
-    o_postal = normalize_postalcode(ledger.org_postalcode)
+    o_postal = normalize_postalcode_no_hyphen(ledger.org_postalcode)
     o_addr_txt = safe_text(ledger.org_address)
     if o_postal or o_addr_txt:
-        # 支払基金サンプル寄せ: addr直下テキストに住所、postalCodeは子要素
+        # 受診者側と同じ順番に寄せる: <addr><postalCode>...</postalCode>住所</addr>
+        # 医療機関側の郵便番号はハイフン無し（数字7桁）で出す。
         add_comment(rep_org, "所在地と郵便番号")
         oaddr = ET.SubElement(rep_org, f"{{{NS_HL7}}}addr")
-        if o_addr_txt:
-            oaddr.text = o_addr_txt
+
         if o_postal:
-            ET.SubElement(oaddr, f"{{{NS_HL7}}}postalCode").text = o_postal
+            pc = ET.SubElement(oaddr, f"{{{NS_HL7}}}postalCode")
+            pc.text = o_postal
+            if o_addr_txt:
+                pc.tail = "\n  " + o_addr_txt
+        else:
+            if o_addr_txt:
+                oaddr.text = o_addr_txt
 
     # --- custodian（NI固定）---
     add_comment(root, "custodian（管理組織：NI固定）")
@@ -596,16 +620,22 @@ def build_clinical_document_xml(
         add_comment(rep_org2, "健診実施機関電話番号")
         ET.SubElement(rep_org2, f"{{{NS_HL7}}}telecom", {"value": telv2})
 
-    o2_postal = normalize_postalcode(ledger.org_postalcode)
+    o2_postal = normalize_postalcode_no_hyphen(ledger.org_postalcode)
     o2_addr_txt = safe_text(ledger.org_address)
     if o2_postal or o2_addr_txt:
-        # 支払基金サンプル寄せ: addr直下テキストに住所、postalCodeは子要素
+        # 受診者側と同じ順番に寄せる: <addr><postalCode>...</postalCode>住所</addr>
+        # 医療機関側の郵便番号はハイフン無し（数字7桁）で出す。
         add_comment(rep_org2, "健診実施機関所在地と郵便番号")
         oaddr2 = ET.SubElement(rep_org2, f"{{{NS_HL7}}}addr")
-        if o2_addr_txt:
-            oaddr2.text = o2_addr_txt
+
         if o2_postal:
-            ET.SubElement(oaddr2, f"{{{NS_HL7}}}postalCode").text = o2_postal
+            pc = ET.SubElement(oaddr2, f"{{{NS_HL7}}}postalCode")
+            pc.text = o2_postal
+            if o2_addr_txt:
+                pc.tail = "\n  " + o2_addr_txt
+        else:
+            if o2_addr_txt:
+                oaddr2.text = o2_addr_txt
 
     # --- body ---
     add_comment(root, "健診結果情報（component/structuredBody）")
