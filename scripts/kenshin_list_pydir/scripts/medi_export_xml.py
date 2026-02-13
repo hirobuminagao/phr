@@ -153,11 +153,22 @@ def ensure_tel_prefix(t: Optional[str]) -> Optional[str]:
     return s if s.startswith("tel:") else f"tel:{s}"
 
 
+
 def safe_text(x: Any) -> Optional[str]:
     if x is None:
         return None
     s = str(x).strip()
     return s if s else None
+
+
+# --- 郵便番号の正規化（CDA出力専用） ---
+def normalize_postalcode(x: Any) -> Optional[str]:
+    """出力専用: 郵便番号を7桁数字へ正規化（ハイフン等は除去）。DBは原文保持のため、ここでのみ整形する。"""
+    s = safe_text(x)
+    if not s:
+        return None
+    digits = re.sub(r"[^0-9]", "", s)
+    return digits if digits else None
 
 
 def safe_int(x: Any) -> Optional[int]:
@@ -437,7 +448,7 @@ def build_clinical_document_xml(
     )
 
     # addr（住所・郵便番号）
-    p_postal = safe_text(ledger.postalcode)
+    p_postal = normalize_postalcode(ledger.postalcode)
     p_addr = safe_text(ledger.address)
     if p_postal or p_addr:
         add_comment(patient_role, "住所と郵便番号")
@@ -497,7 +508,7 @@ def build_clinical_document_xml(
         add_comment(rep_org, "電話番号")
         ET.SubElement(rep_org, f"{{{NS_HL7}}}telecom", {"value": telv})
 
-    o_postal = safe_text(ledger.org_postalcode)
+    o_postal = normalize_postalcode(ledger.org_postalcode)
     o_addr_txt = safe_text(ledger.org_address)
     if o_postal or o_addr_txt:
         add_comment(rep_org, "所在地と郵便番号")
@@ -555,7 +566,7 @@ def build_clinical_document_xml(
         add_comment(rep_org2, "健診実施機関電話番号")
         ET.SubElement(rep_org2, f"{{{NS_HL7}}}telecom", {"value": telv2})
 
-    o2_postal = safe_text(ledger.org_postalcode)
+    o2_postal = normalize_postalcode(ledger.org_postalcode)
     o2_addr_txt = safe_text(ledger.org_address)
     if o2_postal or o2_addr_txt:
         add_comment(rep_org2, "健診実施機関所在地と郵便番号")
