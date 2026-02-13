@@ -244,6 +244,7 @@ def zero_pad_numeric(s: Optional[str], width: int) -> Optional[str]:
 # -----------------------------
 # XML pretty print（Pylance対策込み）
 # -----------------------------
+
 def indent_xml(elem: ET.Element, level: int = 0, space: str = "  ") -> None:
     """
     ElementTree を人間が読めるようにインデントする。
@@ -265,6 +266,35 @@ def indent_xml(elem: ET.Element, level: int = 0, space: str = "  ") -> None:
     else:
         if level and not (elem.tail and elem.tail.strip()):
             elem.tail = i
+
+
+# ---------------------------------------
+# addr/postalCode tail indent fix
+# ---------------------------------------
+def fix_addr_postalcode_tail_indent(elem: ET.Element, level: int = 0, space: str = "  ") -> None:
+    """mixed content 対策。
+
+    <addr> の直下に <postalCode> があり、その `postalCode.tail` に住所テキストを置く場合、
+    ElementTree のインデント処理後に tail 先頭の空白が揃わず見た目が崩れることがある。
+
+    ここでは postalCode の tail が実テキストを持つ場合に、
+    `\n + (space * level) + text` へ整形して見た目を安定させる。
+
+    期待する出力例:
+      <addr>
+        <postalCode>123-0001</postalCode>
+        東京都千代田区...
+      </addr>
+    """
+    tag = elem.tag
+    local = tag.split('}', 1)[1] if '}' in tag else tag
+
+    if local == "postalCode":
+        if elem.tail and elem.tail.strip():
+            elem.tail = "\n" + (space * level) + elem.tail.strip()
+
+    for child in list(elem):
+        fix_addr_postalcode_tail_indent(child, level + 1, space)
 
 
 # -----------------------------
@@ -499,7 +529,7 @@ def build_clinical_document_xml(
             pc.text = p_postal
             if p_addr:
                 # postalCode の後ろ（addr/text() としても拾える）に住所を置く
-                pc.tail = "\n  " + p_addr
+                pc.tail = "\n" + p_addr
         else:
             # 郵便番号が無い場合は addr直下テキストに住所
             if p_addr:
@@ -567,7 +597,7 @@ def build_clinical_document_xml(
             pc = ET.SubElement(oaddr, f"{{{NS_HL7}}}postalCode")
             pc.text = o_postal
             if o_addr_txt:
-                pc.tail = "\n  " + o_addr_txt
+                pc.tail = "\n" + o_addr_txt
         else:
             if o_addr_txt:
                 oaddr.text = o_addr_txt
@@ -632,7 +662,7 @@ def build_clinical_document_xml(
             pc = ET.SubElement(oaddr2, f"{{{NS_HL7}}}postalCode")
             pc.text = o2_postal
             if o2_addr_txt:
-                pc.tail = "\n  " + o2_addr_txt
+                pc.tail = "\n" + o2_addr_txt
         else:
             if o2_addr_txt:
                 oaddr2.text = o2_addr_txt
@@ -789,6 +819,8 @@ def write_xml(tree: ET.ElementTree, path: Path, encoding: str) -> None:
     # tree.getroot() は通常 None にならない。型スタブ差で怒られる環境向けに cast して明示。
     root = cast(ET.Element, tree.getroot())
     indent_xml(root)
+    # mixed content（addr内のpostalCode.tail=住所）をインデントに揃える
+    fix_addr_postalcode_tail_indent(root, level=0, space="  ")
 
     tree.write(path, encoding=encoding, xml_declaration=True)
 
