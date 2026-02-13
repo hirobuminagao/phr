@@ -1,3 +1,32 @@
+-- =====================================================================
+-- Migration: 20260213_002_dev_phr_update_exam_item_master_annex2_from_mhlw
+-- Target   : dev_phr.exam_item_master
+-- Purpose  : 付属2（A列/B列）に基づき annex2 3カラムを初期反映（namecodeキー）
+-- Source   : docs/mhlw/phase4_v08/001082795.xlsx
+-- Author   : hiro
+-- Notes    : freeze v1.0 中の前提固定。UPDATEは生成Excelを元に貼り付け。
+-- =====================================================================
+
+-- =============================
+-- 0) Pre-check
+-- =============================
+-- 対象カラム存在確認
+SELECT COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = 'dev_phr'
+  AND TABLE_NAME   = 'exam_item_master'
+  AND COLUMN_NAME IN (
+    'annex2_exec_requirement',
+    'annex2_legal_report_flag',
+    'cda_section_code_default'
+  );
+
+-- 参考: 対象件数（namecodeが存在する前提）
+SELECT COUNT(*) AS total_rows
+FROM dev_phr.exam_item_master;
+
+START TRANSACTION;
+
 UPDATE dev_phr.exam_item_master SET annex2_exec_requirement = 'MUST', annex2_legal_report_flag = 1, cda_section_code_default = '01010' WHERE namecode = '9N001000000000001';
 UPDATE dev_phr.exam_item_master SET annex2_exec_requirement = 'MUST', annex2_legal_report_flag = 1, cda_section_code_default = '01010' WHERE namecode = '9N006000000000001';
 UPDATE dev_phr.exam_item_master SET annex2_exec_requirement = 'MUST', annex2_legal_report_flag = 1, cda_section_code_default = '01010' WHERE namecode = '9N011000000000001';
@@ -83,3 +112,26 @@ UPDATE dev_phr.exam_item_master SET annex2_exec_requirement = 'REPORT_IF_AVAILAB
 UPDATE dev_phr.exam_item_master SET annex2_exec_requirement = 'MUST', annex2_legal_report_flag = 1, cda_section_code_default = '01010' WHERE namecode = '9N701000000000011';
 UPDATE dev_phr.exam_item_master SET annex2_exec_requirement = 'REPORT_IF_AVAILABLE', annex2_legal_report_flag = 2, cda_section_code_default = '01010' WHERE namecode = '9N701167000000049';
 UPDATE dev_phr.exam_item_master SET annex2_exec_requirement = 'REPORT_IF_AVAILABLE', annex2_legal_report_flag = 2, cda_section_code_default = '01010' WHERE namecode = '9N701167100000049';
+
+COMMIT;
+
+-- =============================
+-- 1) Post-check
+-- =============================
+-- 反映状況のざっくり集計（NULLも含めて確認）
+SELECT
+  COUNT(*) AS total,
+  SUM(annex2_exec_requirement IS NOT NULL) AS filled_exec_requirement,
+  SUM(annex2_legal_report_flag IS NOT NULL) AS filled_legal_flag,
+  SUM(cda_section_code_default IS NOT NULL) AS filled_section
+FROM dev_phr.exam_item_master;
+
+-- flag別の分布
+SELECT annex2_legal_report_flag, COUNT(*) AS cnt
+FROM dev_phr.exam_item_master
+GROUP BY annex2_legal_report_flag
+ORDER BY annex2_legal_report_flag;
+
+-- =====================================================================
+-- End of migration
+-- =====================================================================
