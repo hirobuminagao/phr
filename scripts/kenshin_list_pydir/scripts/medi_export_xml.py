@@ -163,10 +163,10 @@ def safe_text(x: Any) -> Optional[str]:
 
 # --- 郵便番号の正規化（CDA出力専用） ---
 def normalize_postalcode(x: Any) -> Optional[str]:
-    """出力専用: 郵便番号を正規化。
+    """出力専用: 郵便番号を正規化（ハイフン無し）。
 
-    厚労省サンプル（例: 123-0001）に合わせ、数字7桁が取れる場合は `NNN-NNNN` 形式で出す。
-    それ以外は、取得できた数字列をそのまま出す（DBは原文保持）。
+    受診者・医療機関ともに「数字7桁（ハイフン無し）」で統一出力する。
+    DBは原文保持とし、XML出力時のみ正規化する。
     """
     s = safe_text(x)
     if not s:
@@ -174,11 +174,12 @@ def normalize_postalcode(x: Any) -> Optional[str]:
     digits = re.sub(r"[^0-9]", "", s)
     if not digits:
         return None
+    # 7桁が取れたらそのまま返す（ハイフン無し）
     if len(digits) == 7:
-        return f"{digits[:3]}-{digits[3:]}"
+        return digits
     return digits
 
-# --- 医療機関用: 郵便番号正規化（ハイフン無し） ---
+ # --- 医療機関用: 郵便番号正規化（ハイフン無し） ---
 def normalize_postalcode_no_hyphen(x: Any) -> Optional[str]:
     """出力専用: 郵便番号を正規化（ハイフン無し）。
 
