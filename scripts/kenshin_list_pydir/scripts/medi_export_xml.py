@@ -163,12 +163,20 @@ def safe_text(x: Any) -> Optional[str]:
 
 # --- 郵便番号の正規化（CDA出力専用） ---
 def normalize_postalcode(x: Any) -> Optional[str]:
-    """出力専用: 郵便番号を7桁数字へ正規化（ハイフン等は除去）。DBは原文保持のため、ここでのみ整形する。"""
+    """出力専用: 郵便番号を正規化。
+
+    厚労省サンプル（例: 123-0001）に合わせ、数字7桁が取れる場合は `NNN-NNNN` 形式で出す。
+    それ以外は、取得できた数字列をそのまま出す（DBは原文保持）。
+    """
     s = safe_text(x)
     if not s:
         return None
     digits = re.sub(r"[^0-9]", "", s)
-    return digits if digits else None
+    if not digits:
+        return None
+    if len(digits) == 7:
+        return f"{digits[:3]}-{digits[3:]}"
+    return digits
 
 
 def safe_int(x: Any) -> Optional[int]:
@@ -443,7 +451,7 @@ def build_clinical_document_xml(
         {"extension": insurer_ext, "root": "1.2.392.200119.6.101"},
     )
 
-    add_comment(patient_role, "被保険者証等記号")
+    add_comment(patient_role, "被保険者証記号")
     sym = safe_text(ledger.symbol_match) or safe_text(ledger.insurance_card_symbol) or ""
     ET.SubElement(
         patient_role,
@@ -451,7 +459,7 @@ def build_clinical_document_xml(
         {"extension": sym, "root": "1.2.392.200119.6.204"},
     )
 
-    add_comment(patient_role, "被保険者証等番号")
+    add_comment(patient_role, "被保険者証番号")
     num = safe_text(ledger.number_match) or safe_text(ledger.insurance_card_number) or ""
     ET.SubElement(
         patient_role,
@@ -459,25 +467,34 @@ def build_clinical_document_xml(
         {"extension": num, "root": "1.2.392.200119.6.205"},
     )
 
-    # addr（住所・郵便番号）
+    # addr（受診者の郵便番号と住所）
     p_postal = normalize_postalcode(ledger.postalcode)
     p_addr = safe_text(ledger.address)
     if p_postal or p_addr:
-        add_comment(patient_role, "住所と郵便番号")
+        # 厚労省サンプル（p22）に合わせる:
+        # <addr><postalCode>123-0001</postalCode>東京都千代田区... </addr>
+        add_comment(patient_role, "受診者の郵便番号と住所")
         addr = ET.SubElement(patient_role, f"{{{NS_HL7}}}addr")
+
         if p_postal:
-            ET.SubElement(addr, f"{{{NS_HL7}}}postalCode").text = p_postal
-        if p_addr:
-            ET.SubElement(addr, f"{{{NS_HL7}}}streetAddressLine").text = p_addr
+            pc = ET.SubElement(addr, f"{{{NS_HL7}}}postalCode")
+            pc.text = p_postal
+            if p_addr:
+                # postalCode の後ろ（addr/text() としても拾える）に住所を置く
+                pc.tail = p_addr
+        else:
+            # 郵便番号が無い場合は addr直下テキストに住所
+            if p_addr:
+                addr.text = p_addr
 
     # patient
     patient = ET.SubElement(patient_role, f"{{{NS_HL7}}}patient")
 
-    add_comment(patient, "氏名")
+    add_comment(patient, "氏名カナ")
     nm = safe_text(ledger.name_kana_match) or safe_text(ledger.name_kana) or safe_text(ledger.name_full) or ""
     ET.SubElement(patient, f"{{{NS_HL7}}}name").text = nm
 
-    add_comment(patient, "男女区分")
+    add_comment(patient, "別表４の性別コード")
     g = safe_text(ledger.gender_code) or "9"
     ET.SubElement(
         patient,
@@ -523,12 +540,13 @@ def build_clinical_document_xml(
     o_postal = normalize_postalcode(ledger.org_postalcode)
     o_addr_txt = safe_text(ledger.org_address)
     if o_postal or o_addr_txt:
+        # 支払基金サンプル寄せ: addr直下テキストに住所、postalCodeは子要素
         add_comment(rep_org, "所在地と郵便番号")
         oaddr = ET.SubElement(rep_org, f"{{{NS_HL7}}}addr")
+        if o_addr_txt:
+            oaddr.text = o_addr_txt
         if o_postal:
             ET.SubElement(oaddr, f"{{{NS_HL7}}}postalCode").text = o_postal
-        if o_addr_txt:
-            ET.SubElement(oaddr, f"{{{NS_HL7}}}streetAddressLine").text = o_addr_txt
 
     # --- custodian（NI固定）---
     add_comment(root, "custodian（管理組織：NI固定）")
@@ -581,12 +599,13 @@ def build_clinical_document_xml(
     o2_postal = normalize_postalcode(ledger.org_postalcode)
     o2_addr_txt = safe_text(ledger.org_address)
     if o2_postal or o2_addr_txt:
+        # 支払基金サンプル寄せ: addr直下テキストに住所、postalCodeは子要素
         add_comment(rep_org2, "健診実施機関所在地と郵便番号")
         oaddr2 = ET.SubElement(rep_org2, f"{{{NS_HL7}}}addr")
+        if o2_addr_txt:
+            oaddr2.text = o2_addr_txt
         if o2_postal:
             ET.SubElement(oaddr2, f"{{{NS_HL7}}}postalCode").text = o2_postal
-        if o2_addr_txt:
-            ET.SubElement(oaddr2, f"{{{NS_HL7}}}streetAddressLine").text = o2_addr_txt
 
     # --- body ---
     add_comment(root, "健診結果情報（component/structuredBody）")
