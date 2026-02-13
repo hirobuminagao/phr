@@ -320,6 +320,16 @@ class ItemRow:
     ucum_unit: Optional[str]
     xml_method_code: Optional[str]
     jun_no: Optional[int]
+
+    # --- Annex2 / CDA section split (Phase4 V08) ---
+    # 0 or NULL: 任意扱い（optional）
+    # 1 or 2: 法定扱い（legal report）
+    annex2_legal_report_flag: Optional[int]
+
+    # CDA section code（法定側の既定セクションコード。NULL時はスクリプト側でデフォルトに寄せる）
+    cda_section_code_default: Optional[str]
+
+    # --- value ---
     value: Optional[str]
     nullflavor: Optional[str]
     value_seq: int
@@ -365,6 +375,8 @@ SELECT
   m.ucum_unit,
   m.xml_method_code,
   m.jun_no,
+  m.annex2_legal_report_flag,
+  m.cda_section_code_default,
   iv.value,
   iv.nullflavor,
   iv.value_seq
@@ -814,6 +826,8 @@ def fetch_items_for_ledger(conn, ledger_id: int) -> List[ItemRow]:
                 ucum_unit=safe_text(r.get("ucum_unit")),
                 xml_method_code=safe_text(r.get("xml_method_code")),
                 jun_no=safe_int(r.get("jun_no")),
+                annex2_legal_report_flag=safe_int(r.get("annex2_legal_report_flag")),
+                cda_section_code_default=safe_text(r.get("cda_section_code_default")),
                 value=safe_text(r.get("value")),
                 nullflavor=safe_text(r.get("nullflavor")),
                 value_seq=int(safe_int(r.get("value_seq")) or 1),
