@@ -607,18 +607,34 @@ def build_clinical_document_xml(
         body_comp = ET.SubElement(structured_body, f"{{{NS_HL7}}}component")
         section = ET.SubElement(body_comp, f"{{{NS_HL7}}}section")
 
-        add_comment(section, f"CDAセクションコード={section_code}")
-        ET.SubElement(
-            section,
-            f"{{{NS_HL7}}}code",
-            {
-                "code": section_code,
-                "codeSystem": "1.2.392.200119.6.1010",
-            },
-        )
+        # 支払基金サンプル（厚労省フォーマット例）に合わせたコメント・title
+        add_comment(section, "ＣＤＡセクションのコード")
 
-        ET.SubElement(section, f"{{{NS_HL7}}}title").text = section_code
+        # セクション表示名（title/displayName）
+        if section_code == "01010":
+            section_title = "検査・問診結果セクション"
+            section_display_name = "検査・問診結果セクション"
+        elif section_code == "01990":
+            section_title = "任意追加項目セクション"
+            section_display_name = None
+        else:
+            # 既知外コードはコード値をそのまま出す（運用上は01010/01990が主）
+            section_title = section_code
+            section_display_name = None
+
+        code_attrs = {
+            "code": section_code,
+            "codeSystem": "1.2.392.200119.6.1010",
+        }
+        if section_display_name:
+            code_attrs["displayName"] = section_display_name
+
+        ET.SubElement(section, f"{{{NS_HL7}}}code", code_attrs)
+
+        ET.SubElement(section, f"{{{NS_HL7}}}title").text = section_title
         ET.SubElement(section, f"{{{NS_HL7}}}text")
+
+        add_comment(section, "健診（検査）結果")
 
         for it in section_items:
             entry = ET.SubElement(section, f"{{{NS_HL7}}}entry")
