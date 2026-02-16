@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-保険証番号を「照合用キー」として正規化するための最小ユーティリティ。
+数字のみ抽出（digits-only）＋前方0制御のための最小ユーティリティ。
 
 【概要】
-保険証番号（insurance_number）を、データ突合・名寄せ用途に適した
-「数字のみの文字列」に正規化する。
+本モジュールは、保険証番号に限定せず、任意の文字列から
+(a) 数字のみの正規化（digits-only）と
+(b) XMLやシステム連携用途に適した前方0の除去（leading-zero stripping）を
+提供しつつ、突合用キーとしての役割を果たすことを目的とする。
 
 【目的】
 - 異体字・全角半角・記号混在などの表記揺れを吸収する
@@ -41,11 +43,28 @@ from __future__ import annotations
 import unicodedata
 import re
 
-def normalize_insurance_number_for_match(value: str | None) -> str:
+
+def digits_only(value: str | None) -> str:
+    """Unicode正規化(NFKC) → 数字(0-9)以外を除去して digits-only を返す。"""
     if not value:
         return ""
-
     s = unicodedata.normalize("NFKC", str(value))
-    # 数字以外を除去
-    s = re.sub(r"[^0-9]", "", s)
+    return re.sub(r"[^0-9]", "", s)
+
+
+def strip_leading_zeros(digits: str) -> str:
+    """前方0をすべて削除する。全て0/空の場合は空文字列を返す。"""
+    if not digits:
+        return ""
+    s = str(digits)
+    s = s.lstrip("0")
     return s
+
+
+def normalize_insurance_number_for_match(value: str | None) -> str:
+    return digits_only(value)
+
+
+def normalize_digits_for_xml(value: str | None) -> str:
+    """XML/連携用途: digits-only にした後、前方0をすべて削除して返す。"""
+    return strip_leading_zeros(digits_only(value))

@@ -50,6 +50,7 @@ HIA 取り込み前に “決まった正規化” を一括適用し、再ZIP�
 
 3) 被保険者証 番号（root=1.2.392.200119.6.205 の id/@extension）
    - 半角数字へ正規化（非数字は除去する）
+   - 先頭の 0 はすべて削除（桁数不問）
 
 4) XMLの namespace prefix 由来の表記（HIA側が判別できない問題の回避）
    - 受領XMLに含まれる
@@ -70,6 +71,7 @@ HIA 取り込み前に “決まった正規化” を一括適用し、再ZIP�
 
 from __future__ import annotations
 
+import io
 import os
 import re
 import shutil
@@ -164,20 +166,68 @@ def normalize_symbol_digits_strip_leading_zeros(ext: str) -> str:
     return d
 
 
-def normalize_number_digits(ext: str) -> str:
-    return digits_only(ext)
+def normalize_number_digits_strip_leading_zeros(ext: str) -> str:
+    d = digits_only(ext)
+    d = d.lstrip("0")
+    return d
 
 
 # -----------------------------
 # XML transformation
 # -----------------------------
-def register_namespaces_for_reserialize() -> None:
-    """Register namespaces so ElementTree will not emit ns0: prefixes."""
-    # HL7 CDA should be default namespace
+def collect_namespaces(xml_bytes: bytes) -> List[Tuple[str, str]]:
+    """Collect (prefix, uri) namespace declarations from XML bytes."""
+    out: List[Tuple[str, str]] = []
+    # iterparse yields ('start-ns', (prefix, uri))
+    for _event, ns in ET.iterparse(io.BytesIO(xml_bytes), events=("start-ns",)):
+        prefix, uri = ns
+        out.append((prefix or "", uri))
+    return out
+
+
+def register_namespaces_for_reserialize(found: List[Tuple[str, str]]) -> None:
+    """Register namespaces so ElementTree will not emit auto-generated ns0 prefixes.
+
+    Policy:
+    - HL7 CDA is default namespace ("")
+    - XSI keeps 'xsi'
+    - MHLW index keeps 'ix'
+    - Any other namespace URIs are assigned deterministic 'ns1', 'ns2', ... prefixes (never 'ns0')
+    """
     ET.register_namespace("", NS_HL7)
     ET.register_namespace("xsi", NS_XSI)
-    # IX08 index namespace (if present) should keep ix prefix
     ET.register_namespace("ix", NS_MHLW_INDEX)
+
+    seen_uris = {NS_HL7, NS_XSI, NS_MHLW_INDEX}
+    # deterministically assign non-ns0 prefixes for any other URIs
+    idx = 1
+    for _pfx, uri in found:
+        if not uri or uri in seen_uris:
+            continue
+        # assign ns{idx} (start from 1 so we never use ns0)
+        ET.register_namespace(f"ns{idx}", uri)
+        seen_uris.add(uri)
+        idx += 1
+
+
+def indent_xml(elem: ET.Element, level: int = 0, space: str = "  ") -> None:
+    """Pretty-print indentation for ElementTree output (Python 3.9+ uses ET.indent)."""
+    if hasattr(ET, "indent"):
+        # type: ignore[attr-defined]
+        ET.indent(elem, space=space, level=level)
+        return
+
+    i = "\n" + level * space
+    if len(elem):
+        if not (elem.text and elem.text.strip()):
+            elem.text = i + space
+        for e in elem:
+            indent_xml(e, level + 1, space)
+        if not (elem.tail and elem.tail.strip()):
+            elem.tail = i
+    else:
+        if level and not (elem.tail and elem.tail.strip()):
+            elem.tail = i
 
 
 def iter_all_id_elements(root: ET.Element) -> Iterable[ET.Element]:
@@ -209,7 +259,7 @@ def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
 
         elif r == OID_ROOT_NUMBER:
             before = ide.get("extension", "")
-            after = normalize_number_digits(before)
+            after = normalize_number_digits_strip_leading_zeros(before)
             if after != before:
                 ide.set("extension", after)
             counts["number"] += 1
@@ -219,7 +269,8 @@ def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
 
 def transform_xml_bytes(xml_bytes: bytes, insurer_no: str) -> Tuple[bytes, Dict[str, int]]:
     """Parse -> patch -> reserialize. Returns (new_bytes, patch_counts)."""
-    register_namespaces_for_reserialize()
+    found_ns = collect_namespaces(xml_bytes)
+    register_namespaces_for_reserialize(found_ns)
 
     # parse
     root = ET.fromstring(xml_bytes)
@@ -229,6 +280,7 @@ def transform_xml_bytes(xml_bytes: bytes, insurer_no: str) -> Tuple[bytes, Dict[
 
     # reserialize (this is what removes ns0 prefixes)
     # NOTE: keep original declaration style simple; pretty printing is not required for HIA parsing.
+    indent_xml(root)
     out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return out, counts
 
