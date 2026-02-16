@@ -81,7 +81,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, cast
 
 import xml.etree.ElementTree as ET
 
@@ -180,7 +180,7 @@ def collect_namespaces(xml_bytes: bytes) -> List[Tuple[str, str]]:
     out: List[Tuple[str, str]] = []
     # iterparse yields ('start-ns', (prefix, uri))
     for _event, ns in ET.iterparse(io.BytesIO(xml_bytes), events=("start-ns",)):
-        prefix, uri = ns
+        prefix, uri = cast(Tuple[str, str], ns)
         out.append((prefix or "", uri))
     return out
 
