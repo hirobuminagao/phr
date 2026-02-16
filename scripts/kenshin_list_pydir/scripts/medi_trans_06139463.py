@@ -7,19 +7,37 @@ scripts/medi_trans_06139463.py
 このコミットでは、対象保険者（06139463）向けの変換仕様を“そのまま”実装し、過剰な一般化はしない。
 
 【目的】
-医療機関から受領した ZIP（厚労省 指定フォルダ構成）内の DATA/*.xml を対象に、
+医療機関から受領した ZIP（厚労省 指定ファイル構成）内の DATA/*.xml を対象に、
 HIA 取り込み前に “決まった正規化” を一括適用し、再ZIP化して出力する。
 （DB更新は行わない。入力ZIPを直接書き換えず、出力ZIPを作る。）
 
 【対象データ】
 - 入力: 厚労省 指定ファイル構成の ZIP
-  - ルート配下に DATA/ が存在すること
+  - ZIPのどこかに DATA/ が存在すること（通常はルートフォルダ配下に DATA/）
   - 処理対象は DATA/*.xml のみ
 - 出力: 変換後ZIP（元ZIPと同じ構成で出力）
 
 【運用前提（今回の決定）】
 - 解凍〜再ZIP化までスクリプトで実施する（手作業解凍はしない）
 - 対象ZIPは「保険者番号 06139463 の結果だけ」が入っている前提で運用する
+
+【運用フォルダ（固定）】
+本スクリプトは `kenshin_list_pydir` 配下で完結する。
+
+  kenshin_list_pydir/
+    medi_trans_06139463/
+      in/                     # ここに入力ZIPを置く（複数OK）
+      out/
+        out_YYYYMMDD_HHMMSS/  # 変換後ZIP出力
+      done/
+        done_YYYYMMDD_HHMMSS/ # 処理済み元ZIP保管
+
+【実行方針（今回の決定）】
+- in/ 内のZIPを名前順に処理する
+- 1つでも失敗したら「全停止」する
+  - 失敗したZIPは in/ に残す
+  - それ以前に成功したZIPは out/done に移動済み（ロールバックしない）
+  - 失敗原因は out_*/ERROR_*.log に残す（スタックトレース付き）
 
 【変換仕様（固定）】
 1) 保険者番号（root=1.2.392.200119.6.101 の id/@extension）
@@ -28,26 +46,337 @@ HIA 取り込み前に “決まった正規化” を一括適用し、再ZIP�
 2) 被保険者証 記号（root=1.2.392.200119.6.204 の id/@extension）
    - 今回の対象は「半角数字のみ」で運用する（HIAの加入者情報がそう登録されているため）
    - 先頭の 0 はすべて削除（桁数不問）
-     - 例: "000123" -> "123", "0" -> ""（空になる場合は後述の扱いに寄せる）
-   - 数字以外が混入した場合の一般化は今回しない（ログに出してスキップ/そのまま等は別途）
+     - 例: "000123" -> "123", "0" -> ""（空になったら空のまま。運用で弾く）
 
 3) 被保険者証 番号（root=1.2.392.200119.6.205 の id/@extension）
-   - 半角数字へ正規化（非数字は除去しない/する等は運用決定後。今回の受領データは数字想定）
+   - 半角数字へ正規化（非数字は除去する）
 
 4) XMLの namespace prefix 由来の表記（HIA側が判別できない問題の回避）
    - 受領XMLに含まれる
        "<ns0:" / "xmlns:ns0=" / "</ns0:"
      を、再シリアライズにより “ns0 という接頭辞が出ない形” に正規化する
-   - これは単純置換ではなく、XMLとして parse -> 要素のnamespaceを正規化 -> 再出力する
+   - これは単純置換ではなく、XMLとして parse -> namespace を登録 -> 再出力する
 
 【ENV】（DBなし）
-  TRANS_IN_ZIP            入力ZIPパス
-  TRANS_OUT_DIR           出力先フォルダ（未設定なら <project>/medi_trans_out）
-  TRANS_INSURER_NO        既定: 06139463
-  TRANS_DRY_RUN           1なら書き出さず差分ログのみ（任意）
-  TRANS_KEEP_TEMP         1なら作業ディレクトリを残す（任意）
+  TRANS_ROOT_DIR             既定: <kenshin_list_pydir>/medi_trans_06139463
+  TRANS_INSURER_NO           既定: 06139463
+  TRANS_DRY_RUN              1なら書き出さず差分ログのみ（任意）
+  TRANS_KEEP_TEMP            1なら作業ディレクトリを残す（任意）
 
 【注意】
 - 本スクリプトは “この保険者向けの個別対応” として凍結する。
 - 別保険者や一般化が必要になったら、新スクリプトにする（このファイルを育てない）。
 """
+
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import tempfile
+import traceback
+import zipfile
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional, Tuple
+
+import xml.etree.ElementTree as ET
+
+
+# -----------------------------
+# constants / namespaces
+# -----------------------------
+NS_HL7 = "urn:hl7-org:v3"
+NS_XSI = "http://www.w3.org/2001/XMLSchema-instance"
+NS_MHLW_INDEX = "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/0000161103.html"
+
+OID_ROOT_INSURER = "1.2.392.200119.6.101"
+OID_ROOT_SYMBOL = "1.2.392.200119.6.204"
+OID_ROOT_NUMBER = "1.2.392.200119.6.205"
+
+
+# -----------------------------
+# env utils
+# -----------------------------
+def env_optional(key: str, default: str = "") -> str:
+    v = os.getenv(key)
+    if v is None:
+        return default
+    return v.strip()
+
+
+def now_ts() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def is_truthy_env(key: str) -> bool:
+    return env_optional(key, "").strip() in ("1", "true", "TRUE", "yes", "YES")
+
+
+# -----------------------------
+# folder config (fixed)
+# -----------------------------
+def kenshin_list_root_dir() -> Path:
+    # .../scripts/kenshin_list_pydir/scripts/medi_trans_06139463.py
+    # => parents[1] == .../scripts/kenshin_list_pydir
+    return Path(__file__).resolve().parents[1]
+
+
+def trans_root_dir() -> Path:
+    # default: <kenshin_list_pydir>/medi_trans_06139463
+    root = env_optional("TRANS_ROOT_DIR", "")
+    if root:
+        return Path(root)
+    return kenshin_list_root_dir() / "medi_trans_06139463"
+
+
+@dataclass
+class TransFolders:
+    root: Path
+    in_dir: Path
+    out_dir: Path
+    done_dir: Path
+
+
+def ensure_trans_folders() -> TransFolders:
+    root = trans_root_dir()
+    in_dir = root / "in"
+    out_dir = root / "out"
+    done_dir = root / "done"
+    in_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    done_dir.mkdir(parents=True, exist_ok=True)
+    return TransFolders(root=root, in_dir=in_dir, out_dir=out_dir, done_dir=done_dir)
+
+
+# -----------------------------
+# normalization helpers
+# -----------------------------
+def digits_only(s: str) -> str:
+    return re.sub(r"[^0-9]", "", s)
+
+
+def normalize_symbol_digits_strip_leading_zeros(ext: str) -> str:
+    d = digits_only(ext)
+    # strip all leading zeros (any length)
+    d = d.lstrip("0")
+    return d
+
+
+def normalize_number_digits(ext: str) -> str:
+    return digits_only(ext)
+
+
+# -----------------------------
+# XML transformation
+# -----------------------------
+def register_namespaces_for_reserialize() -> None:
+    """Register namespaces so ElementTree will not emit ns0: prefixes."""
+    # HL7 CDA should be default namespace
+    ET.register_namespace("", NS_HL7)
+    ET.register_namespace("xsi", NS_XSI)
+    # IX08 index namespace (if present) should keep ix prefix
+    ET.register_namespace("ix", NS_MHLW_INDEX)
+
+
+def iter_all_id_elements(root: ET.Element) -> Iterable[ET.Element]:
+    # id elements are in HL7 namespace
+    return root.findall(f".//{{{NS_HL7}}}id")
+
+
+def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
+    """Patch id/@extension for specific roots. Returns counts per category."""
+    counts = {"insurer": 0, "symbol": 0, "number": 0}
+
+    for ide in iter_all_id_elements(root):
+        r = ide.get("root")
+        if not r:
+            continue
+
+        if r == OID_ROOT_INSURER:
+            before = ide.get("extension", "")
+            if before != insurer_no:
+                ide.set("extension", insurer_no)
+            counts["insurer"] += 1
+
+        elif r == OID_ROOT_SYMBOL:
+            before = ide.get("extension", "")
+            after = normalize_symbol_digits_strip_leading_zeros(before)
+            if after != before:
+                ide.set("extension", after)
+            counts["symbol"] += 1
+
+        elif r == OID_ROOT_NUMBER:
+            before = ide.get("extension", "")
+            after = normalize_number_digits(before)
+            if after != before:
+                ide.set("extension", after)
+            counts["number"] += 1
+
+    return counts
+
+
+def transform_xml_bytes(xml_bytes: bytes, insurer_no: str) -> Tuple[bytes, Dict[str, int]]:
+    """Parse -> patch -> reserialize. Returns (new_bytes, patch_counts)."""
+    register_namespaces_for_reserialize()
+
+    # parse
+    root = ET.fromstring(xml_bytes)
+
+    # patch
+    counts = patch_patient_ids(root, insurer_no)
+
+    # reserialize (this is what removes ns0 prefixes)
+    # NOTE: keep original declaration style simple; pretty printing is not required for HIA parsing.
+    out = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    return out, counts
+
+
+# -----------------------------
+# ZIP transformation
+# -----------------------------
+def find_data_xml_paths(extract_dir: Path) -> List[Path]:
+    """Find DATA/*.xml in extracted ZIP. Supports both root/DATA/*.xml and nested."""
+    out: List[Path] = []
+    # common: <root_dir>/DATA/*.xml
+    for p in extract_dir.rglob("*.xml"):
+        try:
+            if p.is_file() and p.parent.name == "DATA":
+                out.append(p)
+        except OSError:
+            continue
+    return sorted(out)
+
+
+def unzip_to_dir(zip_path: Path, dst_dir: Path) -> None:
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(dst_dir)
+
+
+def zip_dir_as_same_structure(src_dir: Path, out_zip_path: Path) -> None:
+    out_zip_path.parent.mkdir(parents=True, exist_ok=True)
+    if out_zip_path.exists():
+        out_zip_path.unlink()
+
+    with zipfile.ZipFile(out_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for fp in src_dir.rglob("*"):
+            if fp.is_file():
+                arcname = fp.relative_to(src_dir).as_posix()
+                zf.write(fp, arcname)
+
+
+# -----------------------------
+# logging
+# -----------------------------
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def build_success_log(zip_name: str, xml_count: int, per_file_counts: List[Tuple[str, Dict[str, int]]]) -> str:
+    lines: List[str] = []
+    lines.append(f"ZIP: {zip_name}")
+    lines.append(f"XML files processed: {xml_count}")
+    lines.append("Counts per XML (id roots matched):")
+    for rel, cnt in per_file_counts:
+        lines.append(f"  - {rel}: insurer={cnt['insurer']} symbol={cnt['symbol']} number={cnt['number']}")
+    return "\n".join(lines) + "\n"
+
+
+def build_error_log(zip_name: str, exc: BaseException) -> str:
+    tb = traceback.format_exc()
+    return (
+        f"ZIP: {zip_name}\n"
+        f"ERROR: {type(exc).__name__}: {exc}\n\n"
+        f"TRACEBACK:\n{tb}\n"
+    )
+
+
+# -----------------------------
+# main
+# -----------------------------
+def main() -> int:
+    insurer_no = env_optional("TRANS_INSURER_NO", "06139463") or "06139463"
+    dry_run = is_truthy_env("TRANS_DRY_RUN")
+    keep_temp = is_truthy_env("TRANS_KEEP_TEMP")
+
+    folders = ensure_trans_folders()
+    ts = now_ts()
+
+    out_batch_dir = folders.out_dir / f"out_{ts}"
+    done_batch_dir = folders.done_dir / f"done_{ts}"
+    out_batch_dir.mkdir(parents=True, exist_ok=True)
+    done_batch_dir.mkdir(parents=True, exist_ok=True)
+
+    in_zips = sorted([p for p in folders.in_dir.glob("*.zip") if p.is_file()])
+    if not in_zips:
+        print(f"[INFO] No input ZIPs. Put ZIPs into: {folders.in_dir}")
+        return 0
+
+    print(f"[INFO] TRANS_ROOT_DIR = {folders.root}")
+    print(f"[INFO] in_zips = {len(in_zips)} (sorted by name)")
+    print(f"[INFO] out_batch = {out_batch_dir}")
+    print(f"[INFO] done_batch = {done_batch_dir}")
+    print(f"[INFO] insurer_no = {insurer_no} dry_run={dry_run} keep_temp={keep_temp}")
+
+    for zip_path in in_zips:
+        zip_name = zip_path.name
+        print(f"\n[RUN] {zip_name}")
+
+        temp_dir_obj = tempfile.TemporaryDirectory(prefix=f"trans_06139463_{ts}_")
+        temp_dir = Path(temp_dir_obj.name)
+
+        try:
+            unzip_to_dir(zip_path, temp_dir)
+
+            data_xmls = find_data_xml_paths(temp_dir)
+            if not data_xmls:
+                raise RuntimeError("DATA/*.xml が見つかりません（厚労省の指定構成を確認）")
+
+            per_file_counts: List[Tuple[str, Dict[str, int]]] = []
+            for xml_file in data_xmls:
+                rel = xml_file.relative_to(temp_dir).as_posix()
+                b = xml_file.read_bytes()
+                new_b, cnt = transform_xml_bytes(b, insurer_no)
+                per_file_counts.append((rel, cnt))
+
+                if not dry_run:
+                    xml_file.write_bytes(new_b)
+
+            # output zip
+            out_zip_path = out_batch_dir / zip_name
+            if not dry_run:
+                zip_dir_as_same_structure(temp_dir, out_zip_path)
+
+            # logs
+            ok_log_path = out_batch_dir / f"OK_{zip_name}.log"
+            write_text(ok_log_path, build_success_log(zip_name, len(data_xmls), per_file_counts))
+
+            # move original to done
+            if not dry_run:
+                shutil.move(str(zip_path), str(done_batch_dir / zip_name))
+
+            print(f"[OK] xml={len(data_xmls)} -> out={out_zip_path if not dry_run else '(dry-run)'}")
+
+        except Exception as e:
+            err_log_path = out_batch_dir / f"ERROR_{zip_name}.log"
+            write_text(err_log_path, build_error_log(zip_name, e))
+            print(f"[ERROR] {zip_name} failed. See: {err_log_path}")
+            print("[STOP] One failure occurred, stopping the whole batch as decided.")
+            return 1
+
+        finally:
+            if keep_temp:
+                print(f"[INFO] keep temp dir: {temp_dir}")
+                # do not cleanup
+                temp_dir_obj.cleanup = lambda: None  # type: ignore[assignment]
+            else:
+                temp_dir_obj.cleanup()
+
+    print("\n[DONE] All ZIPs processed successfully.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
