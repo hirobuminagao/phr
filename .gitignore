@@ -1,6 +1,8 @@
 # env / secrets
 .env
 *.env
+scripts/kenshin_list_pydir/.env.trans_*
+!scripts/kenshin_list_pydir/.env.trans_*.template
 
 # data & artifacts
 **/*.zip
@@ -12,6 +14,9 @@
 # logs
 logs/
 *.log
+
+# local tooling / scratch scripts
+local_ops/
 
 # python
 __pycache__/
