@@ -91,11 +91,16 @@ import xml.etree.ElementTree as ET
 # -----------------------------
 # Requirement (2): keep XML comments even after ET re-serialize.
 # NOTE: This does NOT guarantee identical whitespace/indentation vs original bytes.
-try:
-    PARSER_KEEP_COMMENTS = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
-except TypeError:
-    # Fallback for older Python/ET that doesn't support insert_comments.
-    PARSER_KEEP_COMMENTS = None  # type: ignore[assignment]
+# IMPORTANT: ElementTree XMLParser is stateful; do NOT reuse the same parser instance.
+#            Create a fresh parser per XML to avoid ParseError like:
+#            "parsing finished: line X, column Y".
+
+def make_parser_keep_comments() -> Optional[ET.XMLParser]:
+    try:
+        return ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    except TypeError:
+        # Fallback for older Python/ET that doesn't support insert_comments.
+        return None
 
 
 # -----------------------------
@@ -285,8 +290,9 @@ def transform_xml_bytes(xml_bytes: bytes, insurer_no: str) -> Tuple[bytes, Dict[
     register_namespaces_for_reserialize(found_ns)
 
     # parse
-    if PARSER_KEEP_COMMENTS is not None:
-        root = ET.fromstring(xml_bytes, parser=PARSER_KEEP_COMMENTS)
+    parser = make_parser_keep_comments()
+    if parser is not None:
+        root = ET.fromstring(xml_bytes, parser=parser)
     else:
         root = ET.fromstring(xml_bytes)
 
