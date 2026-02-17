@@ -83,7 +83,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, cast
 
+
 import xml.etree.ElementTree as ET
+
+# -----------------------------
+# XML parser (keep comments)
+# -----------------------------
+# Requirement (2): keep XML comments even after ET re-serialize.
+# NOTE: This does NOT guarantee identical whitespace/indentation vs original bytes.
+try:
+    PARSER_KEEP_COMMENTS = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+except TypeError:
+    # Fallback for older Python/ET that doesn't support insert_comments.
+    PARSER_KEEP_COMMENTS = None  # type: ignore[assignment]
 
 
 # -----------------------------
@@ -273,7 +285,10 @@ def transform_xml_bytes(xml_bytes: bytes, insurer_no: str) -> Tuple[bytes, Dict[
     register_namespaces_for_reserialize(found_ns)
 
     # parse
-    root = ET.fromstring(xml_bytes)
+    if PARSER_KEEP_COMMENTS is not None:
+        root = ET.fromstring(xml_bytes, parser=PARSER_KEEP_COMMENTS)
+    else:
+        root = ET.fromstring(xml_bytes)
 
     # patch
     counts = patch_patient_ids(root, insurer_no)
