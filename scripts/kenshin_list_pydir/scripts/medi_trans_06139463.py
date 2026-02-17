@@ -173,7 +173,18 @@ def ensure_trans_folders() -> TransFolders:
 # normalization helpers
 # -----------------------------
 def digits_only(s: str) -> str:
-    return re.sub(r"[^0-9]", "", s)
+    """Return digits only.
+
+    NOTE:
+    - Incoming XML sometimes contains full-width digits (e.g. "９９９９９９").
+    - Regex class [0-9] matches only ASCII digits, so full-width digits would be dropped.
+    - We first normalize full-width digits to ASCII, then strip non-digits.
+    """
+    if not s:
+        return ""
+    # Convert full-width digits to ASCII digits
+    s2 = s.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+    return re.sub(r"[^0-9]", "", s2)
 
 
 def normalize_symbol_digits_strip_leading_zeros(ext: str) -> str:
