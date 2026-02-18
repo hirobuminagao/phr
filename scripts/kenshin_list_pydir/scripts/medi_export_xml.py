@@ -197,39 +197,54 @@ def safe_text(x: Any) -> Optional[str]:
 
 # --- 郵便番号の正規化（CDA出力専用） ---
 def normalize_postalcode(x: Any) -> Optional[str]:
-    """出力専用: 郵便番号を正規化（ハイフン無し）。
+    """出力専用: 郵便番号を正規化（厚労省 p24 想定）。
 
-    受診者・医療機関ともに「数字7桁（ハイフン無し）」で統一出力する。
-    DBは原文保持とし、XML出力時のみ正規化する。
+    出力は `XXX-XXXX`（8バイト固定）に寄せる。
+
+    想定入力（Excel/CSV由来の揺れを吸収）:
+      - "000-0000"（すでにハイフン形式）
+      - "1234567"（7桁）
+      - "0123456"（先頭0あり 7桁）
+      - "123456"（先頭0落ち等の桁不足） -> 左0埋めして7桁化
+      - "〒123-4567" 等の混在文字列 -> 数字のみ抽出
+
+    ルール:
+      - 全角数字は半角へ
+      - 数字のみ抽出
+      - 7桁なら `XXX-XXXX`
+      - 7桁未満なら左0埋めで7桁化して `XXX-XXXX`
+      - 7桁超は採用しない（None）
     """
     s = safe_text(x)
     if not s:
         return None
-    digits = re.sub(r"[^0-9]", "", s)
+
+    # full-width digits -> ascii digits
+    fw = "０１２３４５６７８９"
+    aw = "0123456789"
+    trans = str.maketrans({fw[i]: aw[i] for i in range(10)})
+    s2 = s.translate(trans)
+
+    # digits only
+    digits = re.sub(r"[^0-9]", "", s2)
     if not digits:
         return None
-    # 7桁が取れたらそのまま返す（ハイフン無し）
-    if len(digits) == 7:
-        return digits
-    return digits
 
- # --- 医療機関用: 郵便番号正規化（ハイフン無し） ---
+    if len(digits) > 7:
+        return None
+
+    # pad left (Excel等で先頭0が落ちる想定)
+    digits7 = digits.zfill(7)
+    return f"{digits7[:3]}-{digits7[3:]}"
+
+# --- 医療機関用: 郵便番号正規化（互換名だが p24 に合わせてハイフン形式で出す） ---
 def normalize_postalcode_no_hyphen(x: Any) -> Optional[str]:
-    """出力専用: 郵便番号を正規化（ハイフン無し）。
+    """出力専用: 郵便番号を正規化（厚労省 p24 想定）。
 
-    医療機関側は運用上「数字7桁」を出したいケースがあるため、
-    数字7桁が取れる場合はハイフン無しで返す。
-    それ以外は取得できた数字列をそのまま返す。
+    既存コード互換のため関数名は据え置くが、出力は `XXX-XXXX` に寄せる。
+    変換ルールは `normalize_postalcode` と同一。
     """
-    s = safe_text(x)
-    if not s:
-        return None
-    digits = re.sub(r"[^0-9]", "", s)
-    if not digits:
-        return None
-    if len(digits) == 7:
-        return digits
-    return digits
+    return normalize_postalcode(x)
 
 
 def safe_int(x: Any) -> Optional[int]:
