@@ -62,7 +62,11 @@ def strip_leading_zeros(digits: str) -> str:
 
 
 def normalize_insurance_number_for_match(value: str | None) -> str:
-    return digits_only(value)
+    """突合用（match）: digits-only の後、前方0をすべて削除する。
+
+    v1方針: 0001 と 1 を同一として扱うため、match は先頭ゼロを落とす。
+    """
+    return strip_leading_zeros(digits_only(value))
 
 
 def normalize_digits_for_xml(value: str | None) -> str:
