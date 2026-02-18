@@ -58,15 +58,13 @@ HIA 取り込み前に “決まった正規化” を一括適用し、再ZIP�
      を、再シリアライズにより “ns0 という接頭辞が出ない形” に正規化する
    - これは単純置換ではなく、XMLとして parse -> namespace を登録 -> 再出力する
 
-【ENV】（DBなし）
-  TRANS_ROOT_DIR             既定: <kenshin_list_pydir>/medi_trans_06139463
-  TRANS_INSURER_NO           既定: 06139463
-  TRANS_DRY_RUN              1なら書き出さず差分ログのみ（任意）
-  TRANS_KEEP_TEMP            1なら作業ディレクトリを残す（任意）
-
-【注意】
-- 本スクリプトは “この保険者向けの個別対応” として凍結する。
-- 別保険者や一般化が必要になったら、新スクリプトにする（このファイルを育てない）。
+5) 電話番号（telecom/@value が "tel:" で始まる場合）
+   - HIAアップロードで "tel:03-1234-5678" のようなハイフン付きがエラーになるため、電話番号部分を数字のみに正規化する
+   - 手順:
+      - value が "tel:"（大文字小文字は無視）で始まる場合のみ対象
+      - "tel:" 以降の文字列から、";" 以降（パラメータ部）があれば切り捨てる
+      - 電話番号部分について、全角数字→半角数字→数字以外を除去（結果は数字のみ）
+      - 正規化後は "tel:" + 数字のみ をセットする（"+" は保持しない）
 """
 
 from __future__ import annotations
@@ -200,6 +198,42 @@ def normalize_number_digits_strip_leading_zeros(ext: str) -> str:
     return d
 
 
+def normalize_tel_value(value: str) -> str:
+    """Normalize HL7 telecom/@value for tel: URIs.
+
+    - Only applies to values that start with 'tel:' (case-insensitive).
+    - Drops any parameter part after ';' (RFC3966 params are not used for HIA/MHLW here).
+    - Normalizes the phone-number part to digits only (full-width digits -> ASCII digits -> strip non-digits).
+    - Does NOT keep a leading '+'.
+    """
+    if not value:
+        return value
+
+    v = value.strip()
+    if not v.lower().startswith("tel:"):
+        return value
+
+    rest = v[4:]  # after 'tel:'
+    number_part = rest.split(";", 1)[0].strip()
+
+    d = digits_only(number_part)
+    return f"tel:{d}"
+
+
+def patch_telecom_tel_values(root: ET.Element) -> int:
+    """Patch telecom/@value that starts with tel: by removing non-digits in the number part."""
+    cnt = 0
+    for te in root.findall(f".//{{{NS_HL7}}}telecom"):
+        before = te.get("value", "")
+        if not before:
+            continue
+        after = normalize_tel_value(before)
+        if after != before:
+            te.set("value", after)
+            cnt += 1
+    return cnt
+
+
 # -----------------------------
 # XML transformation
 # -----------------------------
@@ -265,7 +299,7 @@ def iter_all_id_elements(root: ET.Element) -> Iterable[ET.Element]:
 
 def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
     """Patch id/@extension for specific roots. Returns counts per category."""
-    counts = {"insurer": 0, "symbol": 0, "number": 0}
+    counts = {"insurer": 0, "symbol": 0, "number": 0, "tel": 0}
 
     for ide in iter_all_id_elements(root):
         r = ide.get("root")
@@ -291,6 +325,9 @@ def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
             if after != before:
                 ide.set("extension", after)
             counts["number"] += 1
+
+    # telecom/tel: normalization
+    counts["tel"] = patch_telecom_tel_values(root)
 
     return counts
 
@@ -364,7 +401,9 @@ def build_success_log(zip_name: str, xml_count: int, per_file_counts: List[Tuple
     lines.append(f"XML files processed: {xml_count}")
     lines.append("Counts per XML (id roots matched):")
     for rel, cnt in per_file_counts:
-        lines.append(f"  - {rel}: insurer={cnt['insurer']} symbol={cnt['symbol']} number={cnt['number']}")
+        lines.append(
+            f"  - {rel}: insurer={cnt['insurer']} symbol={cnt['symbol']} number={cnt['number']} tel={cnt.get('tel', 0)}"
+        )
     return "\n".join(lines) + "\n"
 
 

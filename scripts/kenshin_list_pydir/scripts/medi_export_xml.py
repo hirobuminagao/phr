@@ -145,12 +145,46 @@ def parse_env_file_date() -> str:
 
 
 def ensure_tel_prefix(t: Optional[str]) -> Optional[str]:
+    """出力専用: telecom/@value を正規化して返す。
+
+    HIA/MHLW運用では telecom/@value は `tel:` + 数字のみ を前提とする。
+    - 入力が `tel:` で始まらない場合は `tel:` を付与
+    - `tel:` 以降に `;` があればパラメータ部を切り捨て
+    - 全角数字→半角数字化後、数字以外を除去（結果は数字のみ）
+    - `+` は保持しない
+
+    例:
+      - "03-1234-5678" -> "tel:0312345678"
+      - "TEL:+81-3-1234-5678" -> "tel:81312345678"
+      - "tel:03-1234-5678;ext=99" -> "tel:0312345678"
+    """
     if not t:
         return None
     s = str(t).strip()
     if not s:
         return None
-    return s if s.startswith("tel:") else f"tel:{s}"
+
+    # normalize prefix (case-insensitive)
+    if s.lower().startswith("tel:"):
+        rest = s[4:]
+    else:
+        rest = s
+
+    # drop RFC3966-like params (anything after ';')
+    number_part = rest.split(";", 1)[0].strip()
+
+    # full-width digits -> ascii digits
+    fw = "０１２３４５６７８９"
+    aw = "0123456789"
+    trans = str.maketrans({fw[i]: aw[i] for i in range(10)})
+    number_part = number_part.translate(trans)
+
+    # digits only (drop '+', '-', spaces, etc.)
+    digits = re.sub(r"[^0-9]", "", number_part)
+    if not digits:
+        return None
+
+    return f"tel:{digits}"
 
 
 
