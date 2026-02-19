@@ -65,6 +65,16 @@ HIA 取り込み前に “決まった正規化” を一括適用し、再ZIP�
       - "tel:" 以降の文字列から、";" 以降（パラメータ部）があれば切り捨てる
       - 電話番号部分について、全角数字→半角数字→数字以外を除去（結果は数字のみ）
       - 正規化後は "tel:" + 数字のみ をセットする（"+" は保持しない）
+
+6) 住所（addr配下の state/city/streetAddressLine 等のテキスト）
+   - HIA側のチェックに合わせ、住所テキストは「空白なし・全角・最大80バイト（cp932換算）」へ正規化する
+   - 対象（postalCode は除外）:
+     - recordTarget/patientRole/addr 配下
+     - representedOrganization/addr 配下
+   - 手順:
+      - 半角/全角スペース・改行・タブを除去
+      - 半角英数字を全角へ寄せ、半角ハイフンは全角ハイフンへ寄せる
+      - cp932換算で80バイト以内に切り詰め
 """
 
 from __future__ import annotations
@@ -220,6 +230,7 @@ def normalize_tel_value(value: str) -> str:
     return f"tel:{d}"
 
 
+
 def patch_telecom_tel_values(root: ET.Element) -> int:
     """Patch telecom/@value that starts with tel: by removing non-digits in the number part."""
     cnt = 0
@@ -231,6 +242,78 @@ def patch_telecom_tel_values(root: ET.Element) -> int:
         if after != before:
             te.set("value", after)
             cnt += 1
+    return cnt
+
+
+# --- 住所の正規化（厚労省 14P） ---
+def _to_fullwidth_basic(s: str) -> str:
+    """最低限の半角→全角（英数字・ハイフン）。"""
+    if not s:
+        return s
+
+    fw_digits = "０１２３４５６７８９"
+    hw_digits = "0123456789"
+    fw_upper = "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ"
+    hw_upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    fw_lower = "ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
+    hw_lower = "abcdefghijklmnopqrstuvwxyz"
+
+    trans_map = {
+        **{hw_digits[i]: fw_digits[i] for i in range(10)},
+        **{hw_upper[i]: fw_upper[i] for i in range(26)},
+        **{hw_lower[i]: fw_lower[i] for i in range(26)},
+        "-": "－",
+    }
+    return s.translate(str.maketrans(trans_map))
+
+
+def normalize_address_text(value: str) -> str:
+    """住所テキスト: 空白なし・全角・最大80バイト（cp932換算）。
+    postalCode は対象外。
+    """
+    if not value:
+        return value
+
+    s = value
+
+    # 空白除去（半角/全角/改行/タブ）
+    s = re.sub(r"[ \t\r\n　]", "", s)
+
+    # 半角→全角（最低限）
+    s = _to_fullwidth_basic(s)
+
+    # 80バイト制限（cp932）
+    b = s.encode("cp932", errors="ignore")
+    if len(b) > 80:
+        b = b[:80]
+        s = b.decode("cp932", errors="ignore")
+
+    return s
+
+
+def patch_address_texts(root: ET.Element) -> int:
+    """patientRole/addr と representedOrganization/addr の住所テキストを正規化（postalCode除外）。"""
+    cnt = 0
+
+    def _patch_addr(addr_elem: ET.Element) -> None:
+        nonlocal cnt
+        for e in list(addr_elem):
+            if e.tag == f"{{{NS_HL7}}}postalCode":
+                continue
+            before = e.text or ""
+            if not before:
+                continue
+            after = normalize_address_text(before)
+            if after != before:
+                e.text = after
+                cnt += 1
+
+    for addr in root.findall(f".//{{{NS_HL7}}}patientRole//{{{NS_HL7}}}addr"):
+        _patch_addr(addr)
+
+    for addr in root.findall(f".//{{{NS_HL7}}}representedOrganization//{{{NS_HL7}}}addr"):
+        _patch_addr(addr)
+
     return cnt
 
 
@@ -299,7 +382,7 @@ def iter_all_id_elements(root: ET.Element) -> Iterable[ET.Element]:
 
 def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
     """Patch id/@extension for specific roots. Returns counts per category."""
-    counts = {"insurer": 0, "symbol": 0, "number": 0, "tel": 0}
+    counts = {"insurer": 0, "symbol": 0, "number": 0, "tel": 0, "addr": 0}
 
     for ide in iter_all_id_elements(root):
         r = ide.get("root")
@@ -328,6 +411,7 @@ def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
 
     # telecom/tel: normalization
     counts["tel"] = patch_telecom_tel_values(root)
+    counts["addr"] = patch_address_texts(root)
 
     return counts
 
@@ -402,7 +486,7 @@ def build_success_log(zip_name: str, xml_count: int, per_file_counts: List[Tuple
     lines.append("Counts per XML (id roots matched):")
     for rel, cnt in per_file_counts:
         lines.append(
-            f"  - {rel}: insurer={cnt['insurer']} symbol={cnt['symbol']} number={cnt['number']} tel={cnt.get('tel', 0)}"
+            f"  - {rel}: insurer={cnt['insurer']} symbol={cnt['symbol']} number={cnt['number']} tel={cnt.get('tel', 0)} addr={cnt.get('addr', 0)}"
         )
     return "\n".join(lines) + "\n"
 

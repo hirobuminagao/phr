@@ -238,6 +238,7 @@ def normalize_postalcode(x: Any) -> Optional[str]:
     return f"{digits7[:3]}-{digits7[3:]}"
 
 # --- 医療機関用: 郵便番号正規化（互換名だが p24 に合わせてハイフン形式で出す） ---
+
 def normalize_postalcode_no_hyphen(x: Any) -> Optional[str]:
     """出力専用: 郵便番号を正規化（厚労省 p24 想定）。
 
@@ -245,6 +246,45 @@ def normalize_postalcode_no_hyphen(x: Any) -> Optional[str]:
     変換ルールは `normalize_postalcode` と同一。
     """
     return normalize_postalcode(x)
+
+# --- 住所の正規化（厚労省 14P） ---
+def normalize_address(x: Any) -> Optional[str]:
+    """出力専用: 住所を正規化（空白なし・全角・最大80バイト）。
+
+    ルール:
+      - None/空は None
+      - 半角/全角スペース・改行・タブ除去
+      - 半角英数字・ハイフンを全角へ寄せ
+      - cp932換算で80バイト以内に切り詰め
+    """
+    s = safe_text(x)
+    if not s:
+        return None
+
+    # 空白除去（半角/全角/改行/タブ）
+    s = re.sub(r"[ \t\r\n　]", "", s)
+
+    # 半角→全角変換（最低限）
+    fw_digits = "０１２３４５６７８９"
+    hw_digits = "0123456789"
+    fw_upper = "ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ"
+    hw_upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    fw_lower = "ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ"
+    hw_lower = "abcdefghijklmnopqrstuvwxyz"
+
+    trans_map = {**{hw_digits[i]: fw_digits[i] for i in range(10)},
+                 **{hw_upper[i]: fw_upper[i] for i in range(26)},
+                 **{hw_lower[i]: fw_lower[i] for i in range(26)},
+                 '-': '－'}
+    s = s.translate(str.maketrans(trans_map))
+
+    # 80バイト制限（cp932）
+    b = s.encode("cp932", errors="ignore")
+    if len(b) > 80:
+        b = b[:80]
+        s = b.decode("cp932", errors="ignore")
+
+    return s or None
 
 
 def safe_int(x: Any) -> Optional[int]:
@@ -576,7 +616,7 @@ def build_clinical_document_xml(
 
     # addr（受診者の郵便番号と住所）
     p_postal = normalize_postalcode(ledger.postalcode)
-    p_addr = safe_text(ledger.address)
+    p_addr = normalize_address(ledger.address)
     if p_postal or p_addr:
         # 厚労省サンプル（p22）に合わせる:
         # <addr><postalCode>123-0001</postalCode>東京都千代田区... </addr>
@@ -645,7 +685,7 @@ def build_clinical_document_xml(
         ET.SubElement(rep_org, f"{{{NS_HL7}}}telecom", {"value": telv})
 
     o_postal = normalize_postalcode_no_hyphen(ledger.org_postalcode)
-    o_addr_txt = safe_text(ledger.org_address)
+    o_addr_txt = normalize_address(ledger.org_address)
     if o_postal or o_addr_txt:
         # 受診者側と同じ順番に寄せる: <addr><postalCode>...</postalCode>住所</addr>
         # 医療機関側の郵便番号はハイフン無し（数字7桁）で出す。
@@ -710,7 +750,7 @@ def build_clinical_document_xml(
         ET.SubElement(rep_org2, f"{{{NS_HL7}}}telecom", {"value": telv2})
 
     o2_postal = normalize_postalcode_no_hyphen(ledger.org_postalcode)
-    o2_addr_txt = safe_text(ledger.org_address)
+    o2_addr_txt = normalize_address(ledger.org_address)
     if o2_postal or o2_addr_txt:
         # 受診者側と同じ順番に寄せる: <addr><postalCode>...</postalCode>住所</addr>
         # 医療機関側の郵便番号はハイフン無し（数字7桁）で出す。
