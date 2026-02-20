@@ -306,16 +306,32 @@ def patch_address_texts(root: ET.Element) -> int:
 
     def _patch_addr(addr_elem: ET.Element) -> None:
         nonlocal cnt
-        for e in list(addr_elem):
-            if e.tag == f"{{{NS_HL7}}}postalCode":
-                continue
-            before = e.text or ""
-            if not before:
-                continue
-            after = normalize_address_text(before)
-            if after != before:
-                e.text = after
+
+        # addr直下にテキストが入るケース（例: <addr>住所...</addr>）
+        before_addr_text = addr_elem.text or ""
+        if before_addr_text:
+            after_addr_text = normalize_address_text(before_addr_text)
+            if after_addr_text != before_addr_text:
+                addr_elem.text = after_addr_text
                 cnt += 1
+
+        for e in list(addr_elem):
+            # postalCode 自体の text は対象外（仕様どおり）
+            if e.tag != f"{{{NS_HL7}}}postalCode":
+                before = e.text or ""
+                if before:
+                    after = normalize_address_text(before)
+                    if after != before:
+                        e.text = after
+                        cnt += 1
+
+            # 子要素の直後に入る tail（例: <postalCode/>住所...）は住所本文なので正規化する
+            before_tail = e.tail or ""
+            if before_tail:
+                after_tail = normalize_address_text(before_tail)
+                if after_tail != before_tail:
+                    e.tail = after_tail
+                    cnt += 1
 
     for addr in root.findall(f".//{{{NS_HL7}}}patientRole//{{{NS_HL7}}}addr"):
         _patch_addr(addr)
