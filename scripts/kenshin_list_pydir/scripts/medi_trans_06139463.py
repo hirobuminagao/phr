@@ -353,6 +353,26 @@ def remove_invalid_hld_participants(root: ET.Element) -> int:
             if (child.get("typeCode") or "") != "HLD":
                 continue
 
+            # --- 券面種別コードチェック（受診券のみ残す） ---
+            fc = child.find(f".//{{{NS_HL7}}}functionCode")
+            func_code = (fc.get("code", "") if fc is not None else "") or ""
+
+            # code=1 以外は利用券（特定保健指導）なので削除
+            if func_code != "1":
+                parent.remove(child)
+                removed += 1
+                continue
+
+            # --- 有効期限チェック ---
+            # high が存在するなら value 必須。空はHIAエラーになるため削除
+            high = child.find(f".//{{{NS_HL7}}}time/{{{NS_HL7}}}high")
+            if high is not None:
+                high_val = (high.get("value", "") or "").strip()
+                if high_val == "":
+                    parent.remove(child)
+                    removed += 1
+                    continue
+
             # 受診券整理番号: associatedEntity/id
             ticket_ext = ""
             ae = child.find(f".//{{{NS_HL7}}}associatedEntity")
