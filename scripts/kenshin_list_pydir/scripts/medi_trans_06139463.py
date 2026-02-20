@@ -75,6 +75,14 @@ HIA 取り込み前に “決まった正規化” を一括適用し、再ZIP�
       - 半角/全角スペース・改行・タブを除去
       - 半角英数字を全角へ寄せ、半角ハイフンは全角ハイフンへ寄せる
       - cp932換算で80バイト以内に切り詰め
+
+7) 受診券（participant/@typeCode="HLD" ブロック）
+   - 受診券の必須値が欠損（空文字/未設定）のブロックは、HIA側でエラーになるためブロックごと削除する
+   - 対象: participant[@typeCode='HLD']
+   - 判定（いずれか欠損で削除）:
+      - associatedEntity/id/@extension（受診券整理番号）
+      - scopingOrganization/id[@root='1.2.392.200119.6.101']/@extension（保険者番号）
+
 """
 
 from __future__ import annotations
@@ -291,6 +299,7 @@ def normalize_address_text(value: str) -> str:
     return s
 
 
+
 def patch_address_texts(root: ET.Element) -> int:
     """patientRole/addr と representedOrganization/addr の住所テキストを正規化（postalCode除外）。"""
     cnt = 0
@@ -315,6 +324,56 @@ def patch_address_texts(root: ET.Element) -> int:
         _patch_addr(addr)
 
     return cnt
+
+# --- 受診券(HLD)ブロックの削除 ---
+def _is_blank(v: Optional[str]) -> bool:
+    return v is None or str(v).strip() == ""
+
+
+def remove_invalid_hld_participants(root: ET.Element) -> int:
+    """Remove invalid HLD participant blocks.
+
+    HIA側で弾かれるケースがあるため、受診券の必須値が欠損している
+    participant(typeCode='HLD') をブロックごと削除する。
+
+    判定（いずれか欠損で削除）:
+      - associatedEntity/id/@extension （受診券整理番号）
+      - scopingOrganization/id[@root='1.2.392.200119.6.101']/@extension （保険者番号）
+
+    NOTE:
+      - ElementTreeは子から親参照が無いので、親を走査し list(parent) から remove する。
+    """
+
+    removed = 0
+
+    for parent in root.iter():
+        for child in list(parent):
+            if child.tag != f"{{{NS_HL7}}}participant":
+                continue
+            if (child.get("typeCode") or "") != "HLD":
+                continue
+
+            # 受診券整理番号: associatedEntity/id
+            ticket_ext = ""
+            ae = child.find(f".//{{{NS_HL7}}}associatedEntity")
+            if ae is not None:
+                ide = ae.find(f"./{{{NS_HL7}}}id")
+                if ide is not None:
+                    ticket_ext = ide.get("extension", "") or ""
+
+            # 保険者番号: scopingOrganization/id(root=...101)
+            insurer_ext = ""
+            so_id = child.find(
+                f".//{{{NS_HL7}}}scopingOrganization/{{{NS_HL7}}}id[@root='{OID_ROOT_INSURER}']"
+            )
+            if so_id is not None:
+                insurer_ext = so_id.get("extension", "") or ""
+
+            if _is_blank(ticket_ext) or _is_blank(insurer_ext):
+                parent.remove(child)
+                removed += 1
+
+    return removed
 
 
 # -----------------------------
@@ -382,7 +441,7 @@ def iter_all_id_elements(root: ET.Element) -> Iterable[ET.Element]:
 
 def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
     """Patch id/@extension for specific roots. Returns counts per category."""
-    counts = {"insurer": 0, "symbol": 0, "number": 0, "tel": 0, "addr": 0}
+    counts = {"insurer": 0, "symbol": 0, "number": 0, "tel": 0, "addr": 0, "hld_removed": 0}
 
     for ide in iter_all_id_elements(root):
         r = ide.get("root")
@@ -412,6 +471,7 @@ def patch_patient_ids(root: ET.Element, insurer_no: str) -> Dict[str, int]:
     # telecom/tel: normalization
     counts["tel"] = patch_telecom_tel_values(root)
     counts["addr"] = patch_address_texts(root)
+    counts["hld_removed"] = remove_invalid_hld_participants(root)
 
     return counts
 
@@ -486,7 +546,7 @@ def build_success_log(zip_name: str, xml_count: int, per_file_counts: List[Tuple
     lines.append("Counts per XML (id roots matched):")
     for rel, cnt in per_file_counts:
         lines.append(
-            f"  - {rel}: insurer={cnt['insurer']} symbol={cnt['symbol']} number={cnt['number']} tel={cnt.get('tel', 0)} addr={cnt.get('addr', 0)}"
+            f"  - {rel}: insurer={cnt['insurer']} symbol={cnt['symbol']} number={cnt['number']} tel={cnt.get('tel', 0)} addr={cnt.get('addr', 0)} hld_removed={cnt.get('hld_removed', 0)}"
         )
     return "\n".join(lines) + "\n"
 
