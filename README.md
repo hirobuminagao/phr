@@ -80,7 +80,20 @@
    - `medi_xml_receipts` の `target_status`（既定PENDING）を拾い、抽出フェーズを実行
    - **`medi_xml_ledger` をUPSERT（= ledger記帳の実体）**
 
-※ `normalize_db_update.py` 等の normalize 系は、ledger / item_values 等が DB に入った **後** に走らせ、照合用（match系）を埋める後処理として扱う。
+
+#### 6以降（抽出値→正規化/照合用埋め）
+
+7. `scripts/kenshin_list_pydir/scripts/medi_xml_item_extract.py`
+   - `medi_xml_receipts.status='OK'` を対象に、XML内の observation/value 等を抽出して **`medi_xml_item_values`（縦持ち）** へUPSERT
+   - ここは「健診結果の値系（項目値）」が主。`medi_xml_ledger` への記帳は行わない
+
+8. `scripts/kenshin_list_pydir/scripts/normalize_item_values.py`
+   - `medi_xml_item_values` の値を正規化（型/PQ/CD/CO/ST、表記ゆれ、単位、NULL扱いなど）
+
+9. `scripts/kenshin_list_pydir/scripts/normalize_db_update.py`
+   - `medi_xml_ledger` 等の **照合用（match系）** を後処理で埋める（例: `insurance_symbol_match`, `insurance_number_match`, `name_kana_match`）
+
+※ 7〜9 は運用上「必要な範囲だけ」手動キックで良い。v1.0-freeze ではロジックの互換性を最優先し、順番のみを固定する。
 
 ## DB（概要）
 本基盤は MySQL を前提とする。
