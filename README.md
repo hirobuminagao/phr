@@ -56,9 +56,31 @@
 - `scripts/medi_shared_files_copy_to_input.py`
   - input側へコピー（運用ステージを進める）
 
+
 ### medi取り込み（DB台帳化・抽出）
 - ZIP受領・XML受領・抽出・ログ記録・LSIO判定など（work_other DBが中心）
 - `kenshin_lib/medi/*` に処理部品・DBアクセスが集約される
+
+#### v1 実行順（shared→input→receipts→ledger）
+
+`medi_xml_ledger` への記帳は **`scripts/kenshin_list_pydir/scripts/medi_zip_import.py` の `MEDI_IMPORT_MODE=XML_EXTRACT`（内部で `kenshin_lib/medi/xml_extract.py::xml_extract_phase` を実行）** により行う。
+
+1. `scripts/kenshin_list_pydir/scripts/medi_shared_files_scan.py`
+   - 共有フォルダを走査し、`medi_shared_files` に **NEW** を積む（観測台帳）
+2. `scripts/kenshin_list_pydir/scripts/medi_shared_files_hash_zip.py`
+   - `medi_shared_files.sha256` を埋める（hashフェーズ）
+3. `scripts/kenshin_list_pydir/scripts/medi_shared_files_auto_judge.py`
+   - ZIPを軽く検査して `zip_has_xml` を埋め、`auto_judgement='KENSHIN'` を付与（manualがあれば尊重）
+4. `scripts/kenshin_list_pydir/scripts/medi_shared_files_copy_to_input.py`
+   - 条件を満たすZIPのみ `MEDI_IMPORT_INPUT_ROOT/<dst_folder_norm>/` にコピーし、`stage_status='INPUT_COPIED'` に進める
+5. `scripts/kenshin_list_pydir/scripts/medi_zip_import.py`（`MEDI_IMPORT_MODE=ZIP_IMPORT`）
+   - input配下のZIPを走査し、`medi_zip_receipts` をUPSERT
+   - `MEDI_IMPORT_XML_ENABLED=true` の場合、ZIP内XMLを棚卸しして `medi_xml_receipts` を基本 **PENDING** で作成（壊れたXMLのみERROR）
+6. `scripts/kenshin_list_pydir/scripts/medi_zip_import.py`（`MEDI_IMPORT_MODE=XML_EXTRACT` または `FULL`）
+   - `medi_xml_receipts` の `target_status`（既定PENDING）を拾い、抽出フェーズを実行
+   - **`medi_xml_ledger` をUPSERT（= ledger記帳の実体）**
+
+※ `normalize_db_update.py` 等の normalize 系は、ledger / item_values 等が DB に入った **後** に走らせ、照合用（match系）を埋める後処理として扱う。
 
 ## DB（概要）
 本基盤は MySQL を前提とする。
