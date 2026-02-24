@@ -41,40 +41,66 @@ def _to_fullwidth_ascii(s: str) -> str:
 
 def normalize_insurance_symbol_for_match(value: str | None) -> str:
     """
-    保険証記号を照合用に正規化して返す。
+    保険証記号を「人突合キー」として安全側に正規化して返す（v1確定仕様）。
+
+    正規化ルール:
+    - None / 空白のみ → ""
+    - NFKC 正規化（半角カナ→全角など）
+    - 空白削除
+    - ハイフン/長音/マイナス類は削除（区切りとして無視）
+    - 英字は半角・大文字へ統一
+    - 数字は半角へ統一
+    - 漢字・カタカナは保持
+    - 許可文字: 英字(A-Z) / 数字(0-9) / 漢字 / カタカナ
+    - 各「数字ブロック」の先頭ゼロ削除（安全側の誤結合防止）
 
     例:
-      - "A-12"      -> "Ａ－１２"
-      - " 埼-30 "   -> "埼－３０"
-      - "ﾊﾝｶｸ-1"    -> "ハンカク－１" （NFKCの後に全角寄せ）
-
-    戻り値:
-      - 入力が None/空の場合: ""
-      - それ以外: 正規化済み文字列
-
-    実装メモ:
-      - NFKCは前処理として使用し、その後に空白除去・ハイフン統一・全角化で確定させる。
+      埼００１ → 埼1
+      A-001 → A1
+      ｶﾀ-0003 → カタ3
+      00123 → 123
     """
-    if not value:
+    if value is None:
         return ""
 
     s = str(value)
 
-    # 互換正規化（例: 半角カナ等の揺れを潰す）
+    # ① NFKC（半角カナ→全角など）
     s = unicodedata.normalize("NFKC", s)
 
-    # 空白除去（半角/全角/タブ等）
+    # ② 空白削除
     s = re.sub(r"[\s　]+", "", s)
 
-    # いろんなハイフン/長音/マイナスを一旦 "-" に寄せる（最後に全角化される）
-    for ch in ("－", "―", "ー", "−", "‐"):
-        s = s.replace(ch, "-")
+    # ③ ハイフン/長音/マイナス類削除（区切りとして無視）
+    for ch in ("-", "－", "―", "ー", "−", "‐"):
+        s = s.replace(ch, "")
 
-    # ASCII範囲を全角へ（数字も英字も全角化）
-    s = _to_fullwidth_ascii(s)
+    # ④ 英字・数字・漢字・カタカナのみ許可
+    #   英数字はASCIIへ、漢字カタカナは保持
+    cleaned_chars = []
+    for ch in s:
+        # ASCII英数字
+        if "0" <= ch <= "9" or "A" <= ch <= "Z" or "a" <= ch <= "z":
+            cleaned_chars.append(ch)
+            continue
 
-    # 最終：ハイフンを「全角ハイフン（－）」に確定
-    # 念のため他の混入を全部 "－" に寄せる
-    s = s.replace("－", "－")
+        code = ord(ch)
+        # 漢字 (CJK Unified Ideographs)
+        if 0x4E00 <= code <= 0x9FFF:
+            cleaned_chars.append(ch)
+            continue
+        # カタカナ
+        if 0x30A0 <= code <= 0x30FF:
+            cleaned_chars.append(ch)
+            continue
+
+    s = "".join(cleaned_chars)
+
+    # ⑤ 英字を大文字化（ASCII）
+    s = s.upper()
+
+    # ⑥ 数字ブロックごとに先頭ゼロ削除
+    # 例: A00012B003 → A12B3
+    s = re.sub(r"\d+", lambda m: str(int(m.group())), s)
 
     return s
