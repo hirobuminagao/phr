@@ -428,25 +428,82 @@ def collect_namespaces(xml_bytes: bytes) -> List[Tuple[str, str]]:
 def register_namespaces_for_reserialize(found: List[Tuple[str, str]]) -> None:
     """Register namespaces so ElementTree will not emit auto-generated ns0 prefixes.
 
+    IMPORTANT:
+      - `xml.etree.ElementTree` reserves prefixes that match the pattern `^ns\d+$`
+        (e.g. ns0, ns1, ns2, ...). Registering them raises:
+          ValueError: Prefix format reserved for internal use
+
     Policy:
-    - HL7 CDA is default namespace ("")
-    - XSI keeps 'xsi'
-    - MHLW index keeps 'ix'
-    - Any other namespace URIs are assigned deterministic 'ns1', 'ns2', ... prefixes (never 'ns0')
+      - HL7 CDA is the default namespace ("")
+      - XSI keeps 'xsi'
+      - MHLW index keeps 'ix'
+      - Any other namespace URIs are assigned deterministic safe prefixes
+        (p1, p2, ...) and we never register `ns\d+`.
+
+    Notes:
+      - `ET.register_namespace` updates a global mapping in the process.
+        We keep registration deterministic and collision-safe.
+      - We register each URI only once.
     """
+
+    # Always register the known ones first.
     ET.register_namespace("", NS_HL7)
     ET.register_namespace("xsi", NS_XSI)
     ET.register_namespace("ix", NS_MHLW_INDEX)
 
     seen_uris = {NS_HL7, NS_XSI, NS_MHLW_INDEX}
-    # deterministically assign non-ns0 prefixes for any other URIs
+    used_prefixes = {"", "xsi", "ix", "xml", "xmlns"}
+
+    def _is_reserved_prefix(p: str) -> bool:
+        # ElementTree reserved internal-use prefix pattern
+        return bool(re.fullmatch(r"ns\d+", p))
+
+    def _pick_safe_prefix(wanted: str, idx: int) -> str:
+        """Pick a safe, deterministic prefix.
+
+        - Preserves the original prefix when possible.
+        - Avoids ElementTree reserved prefixes (ns\d+), and reserved words.
+        - Avoids collisions with prefixes already chosen.
+        """
+        p = (wanted or "").strip()
+
+        # Default namespace is handled separately ("")
+        if p == "":
+            return ""
+
+        # Avoid reserved words and ElementTree reserved pattern.
+        if p in ("xml", "xmlns") or _is_reserved_prefix(p):
+            p = f"p{idx}"
+
+        # Collision avoidance.
+        if p in used_prefixes:
+            base = f"p{idx}"
+            k = 1
+            cand = base
+            while cand in used_prefixes:
+                k += 1
+                cand = f"{base}_{k}"
+            p = cand
+
+        return p
+
+    # Deterministically assign safe prefixes for any other URIs.
     idx = 1
-    for _pfx, uri in found:
+    for pfx, uri in found:
         if not uri or uri in seen_uris:
             continue
-        # assign ns{idx} (start from 1 so we never use ns0)
-        ET.register_namespace(f"ns{idx}", uri)
+
+        # Preserve source prefix if possible; otherwise assign safe p{idx}.
+        safe_pfx = _pick_safe_prefix(pfx, idx)
+
+        # If the source prefix is empty, it is a default namespace decl.
+        # Do NOT overwrite the already registered HL7 default; assign a safe prefix.
+        if safe_pfx == "":
+            safe_pfx = _pick_safe_prefix("p", idx)
+
+        ET.register_namespace(safe_pfx, uri)
         seen_uris.add(uri)
+        used_prefixes.add(safe_pfx)
         idx += 1
 
 
