@@ -429,7 +429,7 @@ def register_namespaces_for_reserialize(found: List[Tuple[str, str]]) -> None:
     """Register namespaces so ElementTree will not emit auto-generated ns0 prefixes.
 
     IMPORTANT:
-      - `xml.etree.ElementTree` reserves prefixes that match the pattern `^ns\d+$`
+      - `xml.etree.ElementTree` reserves prefixes that match the pattern `^ns\\d+$`
         (e.g. ns0, ns1, ns2, ...). Registering them raises:
           ValueError: Prefix format reserved for internal use
 
@@ -438,7 +438,7 @@ def register_namespaces_for_reserialize(found: List[Tuple[str, str]]) -> None:
       - XSI keeps 'xsi'
       - MHLW index keeps 'ix'
       - Any other namespace URIs are assigned deterministic safe prefixes
-        (p1, p2, ...) and we never register `ns\d+`.
+        (p1, p2, ...) and we never register `ns\\d+`.
 
     Notes:
       - `ET.register_namespace` updates a global mapping in the process.
