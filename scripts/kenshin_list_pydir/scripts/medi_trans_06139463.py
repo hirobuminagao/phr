@@ -462,7 +462,7 @@ def register_namespaces_for_reserialize(found: List[Tuple[str, str]]) -> None:
         """Pick a safe, deterministic prefix.
 
         - Preserves the original prefix when possible.
-        - Avoids ElementTree reserved prefixes (ns\d+), and reserved words.
+        - Avoids ElementTree reserved prefixes (ns\\d+), and reserved words.
         - Avoids collisions with prefixes already chosen.
         """
         p = (wanted or "").strip()
