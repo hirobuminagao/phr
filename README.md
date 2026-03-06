@@ -229,13 +229,16 @@ HIA から月締めでダウンロードした健診結果 ZIP/XML を、Fund �
 今後、以下のような設計メモ / ADR / DDL を追加していく前提とする。
 
 ```text
-/docs/hia_fund_ledger_xml/
+/docs/spec/hia_fund_ledger_xml/
   README.md
-  design_memo_v1.md
   flow_overview.md
+  identity_and_normalization.md
+  error_policy.md
+  year_rule.md
+  delivery_exclusion_rules.md
 /docs/adr/
-  xxxx-hia-fund-ledger-xml-freeze-v1.md
-/sql/work_other/
+  0006-hia-fund-ledger-xml-v1-policy.md
+/sql/ddl/work_other/
   hia_fund_ledger_xml/
 ```
 
