@@ -55,7 +55,11 @@ EXAM_YEAR_START_DAY = 1
 # - error.txt 出力
 #
 # 次フェーズで追加予定:
-# - insurance_symbol_match / insurance_number_match 生成
+# - DB照合用 insurance_symbol_match / insurance_number_match 生成
+# - person_id_custom 用の専用 normalize 実装
+#   - symbol_for_custom_id: 記号から数字のみ抽出 + 先頭0削除
+#   - insurance_number_for_custom_id: 半角数字化 + 数字以外除去 + 先頭0削除
+#   - birth_yyyymmdd: 生年月日を yyyymmdd 数字化
 # - person_id_custom 生成
 # - exam_year 算出
 # - hia_import_zips / hia_person_years / hia_xml_events へのDB記帳
@@ -306,8 +310,13 @@ def main():
                 row = parse_hia_xml_identity(xml_path)
 
                 # TODO(next):
-                # - insurance_symbol_match 生成
-                # - insurance_number_match 生成
+                # - DB照合用 insurance_symbol_match 生成
+                #   例: 埼ー０１ -> 埼１
+                # - DB照合用 insurance_number_match 生成
+                # - person_id_custom 用 normalize を別で生成
+                #   - symbol_for_custom_id: 記号から数字のみ抽出 + 先頭0削除
+                #   - insurance_number_for_custom_id: 半角数字化 + 数字以外除去 + 先頭0削除
+                #   - birth_yyyymmdd: 生年月日を yyyymmdd 化
                 # - person_id_custom 生成
                 # - exam_year 算出 (resolve_exam_year)
 
@@ -347,13 +356,17 @@ def main():
             # --------------------------------------------------
 
             # TODO(next):
-            # 1. insurance_symbol_match / insurance_number_match を生成
-            # 2. person_id_custom を生成
-            # 3. exam_year を算出
-            # 4. hia_import_zips を記帳
-            # 5. hia_person_years を upsert
-            # 6. hia_xml_events を insert
-            # 7. エラー時は hia_import_zip_errors を記帳
+            # 1. DB照合用 insurance_symbol_match / insurance_number_match を生成
+            # 2. person_id_custom 用 normalize を別で生成
+            #    - symbol_for_custom_id
+            #    - insurance_number_for_custom_id
+            #    - birth_yyyymmdd
+            # 3. person_id_custom を生成
+            # 4. exam_year を算出
+            # 5. hia_import_zips を記帳
+            # 6. hia_person_years を upsert
+            # 7. hia_xml_events を insert
+            # 8. エラー時は hia_import_zip_errors を記帳
 
             move_zip_to_archive(zip_path, run_id, insurer_number)
 
