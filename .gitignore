@@ -15,6 +15,10 @@ scripts/kenshin_list_pydir/.env.trans_*
 data/hia_export/
 !data/hia_export/.gitkeep
 
+# fund delivery runtime data (input/work/output, not versioned)
+data/fund_delivery/
+!data/fund_delivery/.gitkeep
+
 # logs
 logs/
 *.log
