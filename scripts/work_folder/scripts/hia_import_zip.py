@@ -19,7 +19,6 @@ HIA → fund ledger import pipeline
 - XMLを全件検証してからDB記帳
 """
 
-import sys
 import zipfile
 import shutil
 from pathlib import Path
@@ -28,13 +27,12 @@ from datetime import datetime, date
 import re
 import unicodedata
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-LIB_DIR = BASE_DIR / "scripts" / "work_folder" / "lib"
-if str(LIB_DIR) not in sys.path:
-    sys.path.insert(0, str(LIB_DIR))
+from scripts.work_folder.scripts.hia_parse_xml import parse_hia_xml_identity
+from scripts.work_folder.lib.custom_id_gen import generate_id
+from scripts.work_folder.lib.db.config import load_mysql_params
+from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
 
-from hia_parse_xml import parse_hia_xml_identity
-from custom_id_gen import generate_id
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 # ============================================================
@@ -340,6 +338,126 @@ def collect_xml_files(extract_dir: Path):
     return list(extract_dir.rglob("*.xml"))
 
 
+def calc_file_sha256(path: Path) -> str:
+    """ファイルの SHA256 を返す。"""
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ============================================================
+# DB helpers
+# ============================================================
+
+
+def insert_import_zip(cur, zip_ctx: dict, zip_sha256: str) -> int:
+    """
+    hia_import_zips に PROCESSING で仮登録する。
+    """
+    sql = """
+    INSERT INTO hia_import_zips (
+        insurer_number,
+        folder_name,
+        zip_name,
+        dl_date,
+        send_seq,
+        zip_sha256,
+        xml_count_total,
+        xml_count_success,
+        xml_count_error,
+        import_status
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+    )
+    """
+    cur.execute(
+        sql,
+        (
+            zip_ctx["insurer_number"],
+            zip_ctx["folder_name"],
+            zip_ctx["zip_name"],
+            zip_ctx["dl_date"],
+            zip_ctx["send_seq"],
+            zip_sha256,
+            0,
+            0,
+            0,
+            "PROCESSING",
+        ),
+    )
+    return int(cur.lastrowid)
+
+
+def update_import_zip_status(
+    cur,
+    zip_id: int,
+    import_status: str,
+    xml_count_total: int,
+    xml_count_success: int,
+    xml_count_error: int,
+):
+    """
+    hia_import_zips の処理結果を更新する。
+    """
+    sql = """
+    UPDATE hia_import_zips
+       SET import_status = %s,
+           xml_count_total = %s,
+           xml_count_success = %s,
+           xml_count_error = %s,
+           updated_at = CURRENT_TIMESTAMP
+     WHERE zip_id = %s
+    """
+    cur.execute(
+        sql,
+        (
+            import_status,
+            xml_count_total,
+            xml_count_success,
+            xml_count_error,
+            zip_id,
+        ),
+    )
+
+
+def insert_zip_error(
+    cur,
+    zip_id: int,
+    xml_filename: str | None,
+    error_code: str,
+    error_message: str,
+    error_detail: str | None = None,
+):
+    """
+    hia_import_zip_errors に 1件記帳する。
+    """
+    sql = """
+    INSERT INTO hia_import_zip_errors (
+        zip_id,
+        xml_filename,
+        error_code,
+        error_message,
+        error_detail
+    ) VALUES (
+        %s, %s, %s, %s, %s
+    )
+    """
+    cur.execute(
+        sql,
+        (
+            zip_id,
+            xml_filename,
+            error_code,
+            error_message,
+            error_detail,
+        ),
+    )
+
+
 # ============================================================
 # 必須チェック
 # ============================================================
@@ -409,6 +527,7 @@ def main():
     run_id = build_run_id()
 
     error_lines = []
+    mysql_params = load_mysql_params()
 
     insurer_dirs = find_insurer_dirs()
 
@@ -431,6 +550,7 @@ def main():
                 continue
 
             extract_dir = build_extract_dir(dirs["run_work"], zip_path)
+            zip_sha256 = calc_file_sha256(zip_path)
 
             print(f"Processing ZIP: {zip_path}")
 
@@ -438,8 +558,11 @@ def main():
 
             xml_files = collect_xml_files(extract_dir)
 
-            zip_errors = []
+            xml_count_total = len(xml_files)
+            xml_count_success = 0
+            xml_count_error = 0
 
+            zip_errors = []
             xml_rows = []
 
             for xml_path in xml_files:
@@ -496,49 +619,71 @@ def main():
 
                 if errors:
                     zip_errors.append((xml_path, errors))
+                    xml_count_error += 1
                 else:
                     xml_rows.append(row)
+                    xml_count_success += 1
 
             # --------------------------------------------------
             # ZIP単位 all-or-nothing
             # --------------------------------------------------
 
-            if zip_errors:
+            with connect_ctx(mysql_params, autocommit=False) as conn:
+                cur = dict_cursor(conn)
+                zip_id = insert_import_zip(cur, zip_ctx, zip_sha256)
 
-                detail_lines = []
-                for xml_path, errors in zip_errors:
-                    detail_lines.append(
-                        f"  XML ERROR: {Path(xml_path).name} -> {', '.join(errors)}"
+                if zip_errors:
+
+                    detail_lines = []
+                    for xml_path, errors in zip_errors:
+                        detail_lines.append(
+                            f"  XML ERROR: {Path(xml_path).name} -> {', '.join(errors)}"
+                        )
+                        for error_code in errors:
+                            insert_zip_error(
+                                cur,
+                                zip_id=zip_id,
+                                xml_filename=Path(xml_path).name,
+                                error_code=error_code,
+                                error_message=error_code,
+                                error_detail=str(xml_path),
+                            )
+
+                    update_import_zip_status(
+                        cur,
+                        zip_id=zip_id,
+                        import_status="ERROR",
+                        xml_count_total=xml_count_total,
+                        xml_count_success=xml_count_success,
+                        xml_count_error=xml_count_error,
+                    )
+                    conn.commit()
+
+                    append_zip_error(
+                        error_lines,
+                        (
+                            f"ZIP ERROR: {zip_ctx['zip_name']} "
+                            f"(insurer={zip_ctx['insurer_number']}, dl_date={zip_ctx['dl_date']}, "
+                            f"send_seq={zip_ctx['send_seq']}, xml_errors={len(zip_errors)})"
+                        ),
+                        detail_lines,
                     )
 
-                append_zip_error(
-                    error_lines,
-                    (
-                        f"ZIP ERROR: {zip_ctx['zip_name']} "
-                        f"(insurer={zip_ctx['insurer_number']}, dl_date={zip_ctx['dl_date']}, "
-                        f"send_seq={zip_ctx['send_seq']}, xml_errors={len(zip_errors)})"
-                    ),
-                    detail_lines,
+                    continue
+
+                # TODO(next):
+                # 1. hia_person_years を upsert
+                # 2. hia_xml_events を insert
+
+                update_import_zip_status(
+                    cur,
+                    zip_id=zip_id,
+                    import_status="IMPORTED",
+                    xml_count_total=xml_count_total,
+                    xml_count_success=xml_count_success,
+                    xml_count_error=xml_count_error,
                 )
-
-                continue
-
-            # --------------------------------------------------
-            # TODO: DB記帳
-            # --------------------------------------------------
-
-            # TODO(next):
-            # 1. DB照合用 insurance_symbol_match / insurance_number_match を生成
-            # 2. person_id_custom 用 normalize を別で生成
-            #    - symbol_for_custom_id
-            #    - insurance_number_for_custom_id
-            #    - birth_yyyymmdd
-            # 3. person_id_custom を生成
-            # 4. exam_year を算出
-            # 5. hia_import_zips を記帳
-            # 6. hia_person_years を upsert
-            # 7. hia_xml_events を insert
-            # 8. エラー時は hia_import_zip_errors を記帳
+                conn.commit()
 
             move_zip_to_archive(zip_path, run_id, insurer_number)
 
