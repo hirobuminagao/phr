@@ -181,6 +181,7 @@ def normalize_symbol_for_custom_id(value: str | None) -> str | None:
     return _trim_leading_zeros(digits)
 
 
+
 def normalize_birth_yyyymmdd(value: str | None) -> str | None:
     """
     YYYY-MM-DD -> yyyymmdd
@@ -190,6 +191,26 @@ def normalize_birth_yyyymmdd(value: str | None) -> str | None:
     if len(digits) < 8:
         return None
     return digits[:8]
+
+
+def normalize_name_kana_norm(value: str | None) -> str | None:
+    """
+    name_kana_norm の最小実装。
+
+    現時点では以下のみ行う:
+    - NFKC
+    - 前後空白除去
+    - 半角/全角スペース除去
+    - 中点除去
+
+    NOTE:
+    長音・ダッシュ揺れなどの詳細統一は後続フェーズで拡張する。
+    """
+    s = _nfkc(value)
+    if not s:
+        return None
+    s = re.sub(r"[ 　・･]+", "", s)
+    return s or None
 
 
 def build_person_id_custom(row: dict) -> str | None:
@@ -424,6 +445,7 @@ def update_import_zip_status(
     )
 
 
+
 def insert_zip_error(
     cur,
     zip_id: int,
@@ -454,6 +476,104 @@ def insert_zip_error(
             error_code,
             error_message,
             error_detail,
+        ),
+    )
+
+
+def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
+    """
+    hia_person_years を upsert し、person_year_id を返す。
+
+    UNIQUE KEY:
+      (person_id_custom, name_kana_norm, gender_code, exam_year)
+    を利用し、既存時は LAST_INSERT_ID(person_year_id) を使って id を返す。
+    """
+    sql = """
+    INSERT INTO hia_person_years (
+        person_id_custom,
+        name_kana_norm,
+        gender_code,
+        exam_year,
+        insurer_number,
+        insurance_symbol,
+        insurance_number,
+        insurance_symbol_match,
+        insurance_number_match,
+        birthdate,
+        name_kana_raw,
+        dl_count,
+        first_seen_dl_date,
+        first_seen_zip_name,
+        first_seen_xml_filename,
+        last_seen_dl_date,
+        last_seen_zip_name,
+        last_seen_xml_filename
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+    )
+    ON DUPLICATE KEY UPDATE
+        person_year_id = LAST_INSERT_ID(person_year_id),
+        last_seen_dl_date = VALUES(last_seen_dl_date),
+        last_seen_zip_name = VALUES(last_seen_zip_name),
+        last_seen_xml_filename = VALUES(last_seen_xml_filename),
+        dl_count = dl_count + 1,
+        updated_at = CURRENT_TIMESTAMP
+    """
+    cur.execute(
+        sql,
+        (
+            row["person_id_custom"],
+            row["name_kana_norm"],
+            row["gender_code"],
+            row["exam_year"],
+            row["insurer_number"],
+            row["insurance_symbol"],
+            row["insurance_number"],
+            row["insurance_symbol_match"],
+            row["insurance_number_match"],
+            row["birthdate"],
+            row["name_kana"],
+            1,
+            zip_ctx["dl_date"],
+            zip_ctx["zip_name"],
+            Path(row["xml_path"]).name,
+            zip_ctx["dl_date"],
+            zip_ctx["zip_name"],
+            Path(row["xml_path"]).name,
+        ),
+    )
+    return int(cur.lastrowid)
+
+
+def insert_xml_event(cur, person_year_id: int, zip_id: int, row: dict, zip_ctx: dict):
+    """
+    hia_xml_events に 1件 insert する。
+    """
+    sql = """
+    INSERT INTO hia_xml_events (
+        person_year_id,
+        zip_id,
+        xml_filename,
+        xml_sha256,
+        exam_date,
+        facility_code,
+        facility_name,
+        dl_date
+    ) VALUES (
+        %s, %s, %s, %s, %s, %s, %s, %s
+    )
+    """
+    cur.execute(
+        sql,
+        (
+            person_year_id,
+            zip_id,
+            Path(row["xml_path"]).name,
+            calc_file_sha256(Path(row["xml_path"])),
+            row["exam_date"],
+            row.get("facility_code"),
+            row.get("facility_name"),
+            zip_ctx["dl_date"],
         ),
     )
 
@@ -597,6 +717,10 @@ def main():
                     row.get("birthdate")
                 )
 
+                row["name_kana_norm"] = normalize_name_kana_norm(
+                    row.get("name_kana")
+                )
+
                 # --------------------------------------------------
                 # exam year
                 # --------------------------------------------------
@@ -671,9 +795,9 @@ def main():
 
                     continue
 
-                # TODO(next):
-                # 1. hia_person_years を upsert
-                # 2. hia_xml_events を insert
+                for row in xml_rows:
+                    person_year_id = upsert_person_year(cur, row, zip_ctx)
+                    insert_xml_event(cur, person_year_id, zip_id, row, zip_ctx)
 
                 update_import_zip_status(
                     cur,

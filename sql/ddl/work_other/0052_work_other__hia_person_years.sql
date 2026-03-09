@@ -1,5 +1,3 @@
-
-
 -- =========================================================
 -- Table: hia_person_years
 -- Purpose:
@@ -22,6 +20,8 @@ CREATE TABLE IF NOT EXISTS hia_person_years (
     insurer_number CHAR(8) COLLATE ascii_bin NOT NULL,
     insurance_symbol VARCHAR(20) COLLATE ascii_bin NOT NULL,
     insurance_number VARCHAR(20) COLLATE ascii_bin NOT NULL,
+    insurance_symbol_match VARCHAR(40) COLLATE utf8mb4_ja_0900_as_cs NOT NULL,
+    insurance_number_match VARCHAR(20) COLLATE ascii_bin NOT NULL,
     birthdate DATE NOT NULL,
 
     -- original values (non-normalized)
@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS hia_person_years (
     -- lookup indexes
     INDEX idx_hia_person_year_exam_year (exam_year),
     INDEX idx_hia_person_year_insurer (insurer_number),
+    INDEX idx_hia_person_year_symbol_match (insurance_symbol_match),
+    INDEX idx_hia_person_year_number_match (insurance_number_match),
     INDEX idx_hia_person_year_person_id (person_id_custom)
 
 ) ENGINE=InnoDB
