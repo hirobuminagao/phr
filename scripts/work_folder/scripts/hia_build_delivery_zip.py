@@ -11,20 +11,23 @@ HIA → fund delivery rebuild pipeline
 - DB台帳から納品対象XMLを抽出する
 - 過去登場済み person_year を除外する
 - hia_delivery_exclusion_rules を適用する
-- ix08 / su08 などの集計XMLを除外する
+- ix08 / su08 などの集計XMLを除外・再構成する
+- XSD をコピーする
 - 元ZIPと同名の納品ZIPを fund_delivery/output に再構成する
 
 注意:
 - HIA取込台帳(hia_import_zips / hia_xml_events / hia_person_years)を前提にする
-- 再構成対象は DATA/h*.xml のみ
-- tmp/work ディレクトリはスクリプト側で自動作成する
+- 再構成対象の実データXMLは DATA/h*.xml のみ
+- fund_delivery/work ディレクトリはスクリプト側で自動作成する
 """
 
+import re
 import shutil
 import sys
 import zipfile
-from pathlib import Path
+import xml.etree.ElementTree as ET
 from datetime import datetime
+from pathlib import Path
 
 # ------------------------------------------------------------
 # VSCode Run ボタン (file実行) 対応
@@ -45,6 +48,9 @@ FUND_INPUT_DIR = FUND_DELIVERY_DIR / "input"
 FUND_WORK_DIR = FUND_DELIVERY_DIR / "work"
 FUND_OUTPUT_DIR = FUND_DELIVERY_DIR / "output"
 
+NS = {"hl7": "urn:hl7-org:v3"}
+XML_FILENAME_PATTERN = re.compile(r"^h[^\\/]*\.xml$", re.IGNORECASE)
+
 
 # ============================================================
 # run_id / path helpers
@@ -62,17 +68,20 @@ def ensure_delivery_dirs(run_id: str, insurer_number: str, zip_stem: str) -> dic
     """
     run_work = FUND_WORK_DIR / run_id / insurer_number / zip_stem
     extract_dir = run_work / "extract"
-    selected_dir = run_work / "selected" / "DATA"
+    selected_root = run_work / "selected"
+    selected_data_dir = selected_root / "DATA"
     output_dir = FUND_OUTPUT_DIR / insurer_number
 
     extract_dir.mkdir(parents=True, exist_ok=True)
-    selected_dir.mkdir(parents=True, exist_ok=True)
+    selected_root.mkdir(parents=True, exist_ok=True)
+    selected_data_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     return {
         "run_work": run_work,
         "extract_dir": extract_dir,
-        "selected_dir": selected_dir,
+        "selected_root": selected_root,
+        "selected_data_dir": selected_data_dir,
         "output_dir": output_dir,
     }
 
@@ -161,6 +170,30 @@ def collect_data_xml_files(extract_dir: Path) -> dict[str, Path]:
             continue
         xml_map[p.name] = p
     return xml_map
+
+
+
+def find_first_named_dir(extract_dir: Path, dir_name: str) -> Path | None:
+    for p in sorted(extract_dir.rglob(dir_name)):
+        if p.is_dir():
+            return p
+    return None
+
+
+
+def find_first_named_file(extract_dir: Path, file_prefix: str) -> Path | None:
+    pattern = f"{file_prefix}*.xml"
+    candidates = sorted(extract_dir.rglob(pattern))
+    return candidates[0] if candidates else None
+
+
+
+def collect_support_files(extract_dir: Path) -> dict[str, Path | None]:
+    return {
+        "xsd_dir": find_first_named_dir(extract_dir, "XSD"),
+        "ix08_path": find_first_named_file(extract_dir, "ix08"),
+        "su08_path": find_first_named_file(extract_dir, "su08"),
+    }
 
 
 # ============================================================
@@ -290,11 +323,11 @@ def get_delivery_target_rows(cur, insurer_number: str, dl_date: str, zip_name: s
 
 
 # ============================================================
-# ZIP再構成
+# XML / XSD 再構成
 # ============================================================
 
 
-def copy_selected_xmls(target_rows: list[dict], xml_map: dict[str, Path], selected_dir: Path) -> list[Path]:
+def copy_selected_xmls(target_rows: list[dict], xml_map: dict[str, Path], selected_data_dir: Path) -> list[Path]:
     copied_paths: list[Path] = []
 
     for row in target_rows:
@@ -303,7 +336,7 @@ def copy_selected_xmls(target_rows: list[dict], xml_map: dict[str, Path], select
         if src is None:
             raise FileNotFoundError(f"Source XML not found in ZIP: {xml_filename}")
 
-        dst = selected_dir / xml_filename
+        dst = selected_data_dir / xml_filename
         shutil.copy2(src, dst)
         copied_paths.append(dst)
 
@@ -311,14 +344,98 @@ def copy_selected_xmls(target_rows: list[dict], xml_map: dict[str, Path], select
 
 
 
-def build_delivery_zip(output_zip_path: Path, selected_data_dir: Path):
+def copy_xsd_dir(xsd_dir: Path | None, selected_root: Path):
+    if xsd_dir is None:
+        return
+
+    dst = selected_root / "XSD"
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(xsd_dir, dst)
+
+
+
+def _collect_xml_filename_refs(elem: ET.Element) -> set[str]:
+    refs: set[str] = set()
+
+    if elem.text:
+        text = elem.text.strip()
+        if XML_FILENAME_PATTERN.match(text):
+            refs.add(text)
+
+    for value in elem.attrib.values():
+        text = str(value).strip()
+        if XML_FILENAME_PATTERN.match(text):
+            refs.add(text)
+
+    for child in list(elem):
+        refs.update(_collect_xml_filename_refs(child))
+
+    return refs
+
+
+
+def _prune_non_selected_filename_subtrees(elem: ET.Element, selected_filenames: set[str]):
+    for child in list(elem):
+        refs = _collect_xml_filename_refs(child)
+
+        if refs and refs.isdisjoint(selected_filenames):
+            elem.remove(child)
+            continue
+
+        _prune_non_selected_filename_subtrees(child, selected_filenames)
+
+
+
+def _update_header_dates(root: ET.Element, dl_date: str):
+    yyyymmdd = dl_date.replace("-", "")
+
+    doc_effective = root.find("hl7:effectiveTime", NS)
+    if doc_effective is not None:
+        doc_effective.set("value", yyyymmdd)
+
+    author_time = root.find(".//hl7:author/hl7:time", NS)
+    if author_time is not None:
+        author_time.set("value", yyyymmdd)
+
+
+
+def rewrite_summary_xml(source_path: Path | None, output_path: Path, selected_filenames: set[str], dl_date: str):
+    """
+    ix08 / su08 をコピーし、選択された h*.xml に関係する部分だけ残す。
+
+    v1 方針:
+    - 元XMLをベースにする
+    - h*.xml ファイル名を参照している部分木を選別する
+    - ヘッダ日付は再生成対象DL日に合わせる
+
+    NOTE:
+    - 施設実データに合わせた集計仕様の厳密再構成が必要になった場合は、
+      今後この関数を正式仕様ベースで拡張する
+    """
+    if source_path is None:
+        return
+
+    tree = ET.parse(source_path)
+    root = tree.getroot()
+
+    _prune_non_selected_filename_subtrees(root, selected_filenames)
+    _update_header_dates(root, dl_date)
+
+    tree.write(output_path, encoding="utf-8", xml_declaration=True)
+
+
+
+def build_delivery_zip(output_zip_path: Path, selected_root: Path):
     if output_zip_path.exists():
         output_zip_path.unlink()
 
     with zipfile.ZipFile(output_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for xml_path in sorted(selected_data_dir.glob("h*.xml")):
-            arcname = f"DATA/{xml_path.name}"
-            zf.write(xml_path, arcname)
+        for path in sorted(selected_root.rglob("*")):
+            if not path.is_file():
+                continue
+            arcname = path.relative_to(selected_root).as_posix()
+            zf.write(path, arcname)
 
 
 # ============================================================
@@ -354,6 +471,7 @@ def main():
 
             extract_zip(zip_path, dirs["extract_dir"])
             xml_map = collect_data_xml_files(dirs["extract_dir"])
+            support_files = collect_support_files(dirs["extract_dir"])
 
             with connect_ctx(mysql_params, autocommit=False) as conn:
                 cur = dict_cursor(conn)
@@ -369,13 +487,29 @@ def main():
                 print(f"No delivery targets after exclusion: {zip_path.name}")
                 continue
 
-            copied_paths = copy_selected_xmls(target_rows, xml_map, dirs["selected_dir"])
+            copied_paths = copy_selected_xmls(target_rows, xml_map, dirs["selected_data_dir"])
             if not copied_paths:
                 print(f"No XML copied: {zip_path.name}")
                 continue
 
+            selected_filenames = {path.name for path in copied_paths}
+
+            copy_xsd_dir(support_files["xsd_dir"], dirs["selected_root"])
+            rewrite_summary_xml(
+                support_files["ix08_path"],
+                dirs["selected_root"] / "ix08_V08.xml",
+                selected_filenames,
+                str(zip_ctx["dl_date"]),
+            )
+            rewrite_summary_xml(
+                support_files["su08_path"],
+                dirs["selected_root"] / "su08_V08.xml",
+                selected_filenames,
+                str(zip_ctx["dl_date"]),
+            )
+
             output_zip_path = dirs["output_dir"] / zip_path.name
-            build_delivery_zip(output_zip_path, dirs["selected_dir"])
+            build_delivery_zip(output_zip_path, dirs["selected_root"])
 
             print(
                 f"Built delivery ZIP: {output_zip_path} "
