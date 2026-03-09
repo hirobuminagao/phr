@@ -33,6 +33,7 @@ def _find_attr(root: ET.Element, xpath: str, attr_name: str) -> str | None:
     return elem.get(attr_name)
 
 
+
 def _find_text(root: ET.Element, xpath: str) -> str | None:
     """XPath で見つかった先頭要素の text を返す。無ければ None。"""
     elem = root.find(xpath, NS)
@@ -40,6 +41,15 @@ def _find_text(root: ET.Element, xpath: str) -> str | None:
         return None
     text = elem.text.strip()
     return text or None
+
+
+# 新規追加: OID指定で extension を返すヘルパ
+def _find_id_extension_by_root(root: ET.Element, xpath_base: str, root_oid: str) -> str | None:
+    """
+    指定 base 配下の hl7:id[@root='...'] の extension を返す。
+    厚労省 XML では id 要素が複数出るため、OID(root) 指定で取り分ける。
+    """
+    return _find_attr(root, f"{xpath_base}/hl7:id[@root='{root_oid}']", "extension")
 
 
 def _build_name(root: ET.Element) -> str | None:
@@ -88,29 +98,26 @@ def _parse_hl7_date(value: str | None) -> str | None:
     return None
 
 
+
 def _parse_insurance_fields(root: ET.Element) -> tuple[str | None, str | None]:
     """
-    記号・番号の候補を返す。
+    被保険者証等の記号・番号を OID 指定 XPath で返す。
 
-    XML 方言差があるため、現時点では patientRole 配下の id を広めに拾う。
-    ここは今後の実データ確認で調整前提。
+    - 記号: 1.2.392.200119.6.204
+    - 番号: 1.2.392.200119.6.205
     """
-    ids = root.findall(".//hl7:patientRole/hl7:id", NS)
+    patient_role_base = ".//hl7:recordTarget/hl7:patientRole"
 
-    # 方針:
-    # - extension を優先
-    # - assigningAuthorityName / root / nullFlavor などの個別判定は後で追加
-    # - v1 では 1件目を記号、2件目を番号候補とする簡易実装
-    values: list[str] = []
-    for elem in ids:
-        ext = elem.get("extension")
-        if ext:
-            ext = ext.strip()
-            if ext:
-                values.append(ext)
-
-    insurance_symbol = values[0] if len(values) >= 1 else None
-    insurance_number = values[1] if len(values) >= 2 else None
+    insurance_symbol = _find_id_extension_by_root(
+        root,
+        patient_role_base,
+        "1.2.392.200119.6.204",
+    )
+    insurance_number = _find_id_extension_by_root(
+        root,
+        patient_role_base,
+        "1.2.392.200119.6.205",
+    )
     return insurance_symbol, insurance_number
 
 
@@ -145,37 +152,43 @@ def parse_hia_xml_identity(xml_path: str | Path) -> dict:
     exam_date = _parse_hl7_date(exam_date_raw)
 
     # 基本人情報
+    patient_base = ".//hl7:recordTarget/hl7:patientRole/hl7:patient"
     name = _build_name(root)
-    name_kana = _guess_name_kana(root)
+    name_kana = _guess_name_kana(root) or name
     birthdate = _parse_hl7_date(
-        _find_attr(root, ".//hl7:patientRole/hl7:patient/hl7:birthTime", "value")
+        _find_attr(root, f"{patient_base}/hl7:birthTime", "value")
     )
     gender_code = _find_attr(
         root,
-        ".//hl7:patientRole/hl7:patient/hl7:administrativeGenderCode",
+        f"{patient_base}/hl7:administrativeGenderCode",
         "code",
     )
 
-    # 保険者番号候補
-    insurer_number = (
-        _find_attr(
-            root,
-            ".//hl7:participant/hl7:associatedEntity/hl7:scopingOrganization/hl7:id",
-            "extension",
-        )
-        or _find_attr(root, ".//hl7:recordTarget//hl7:providerOrganization/hl7:id", "extension")
+    # 保険者番号
+    insurer_number = _find_id_extension_by_root(
+        root,
+        ".//hl7:recordTarget/hl7:patientRole",
+        "1.2.392.200119.6.101",
     )
 
     insurance_symbol, insurance_number = _parse_insurance_fields(root)
 
-    # 医療機関候補
+    # 医療機関情報
     facility_code = (
-        _find_attr(root, ".//hl7:custodian//hl7:representedCustodianOrganization/hl7:id", "extension")
-        or _find_attr(root, ".//hl7:author//hl7:assignedAuthor/hl7:representedOrganization/hl7:id", "extension")
+        _find_id_extension_by_root(
+            root,
+            ".//hl7:author/hl7:assignedAuthor/hl7:representedOrganization",
+            "1.2.392.200119.6.102",
+        )
+        or _find_attr(
+            root,
+            ".//hl7:custodian//hl7:representedCustodianOrganization/hl7:id",
+            "extension",
+        )
     )
     facility_name = (
-        _find_text(root, ".//hl7:custodian//hl7:representedCustodianOrganization/hl7:name")
-        or _find_text(root, ".//hl7:author//hl7:assignedAuthor/hl7:representedOrganization/hl7:name")
+        _find_text(root, ".//hl7:author/hl7:assignedAuthor/hl7:representedOrganization/hl7:name")
+        or _find_text(root, ".//hl7:custodian//hl7:representedCustodianOrganization/hl7:name")
     )
 
     return {
