@@ -19,20 +19,30 @@ HIA → fund ledger import pipeline
 - XMLを全件検証してからDB記帳
 """
 
+import sys
 import zipfile
 import shutil
 from pathlib import Path
 from datetime import datetime, date
 
+import re
+import unicodedata
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+LIB_DIR = BASE_DIR / "scripts" / "work_folder" / "lib"
+if str(LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(LIB_DIR))
+
 from hia_parse_xml import parse_hia_xml_identity
+from custom_id_gen import generate_id
 
 
 # ============================================================
 # 初期設定
 # ============================================================
 
-BASE_DIR = Path(__file__).resolve().parents[2]
 HIA_EXPORT_DIR = BASE_DIR / "scripts" / "work_folder" / "hia_export"
+MAT_DIR = BASE_DIR / "scripts" / "work_folder" / "mat"
 
 INPUT_ZIP_DIR = HIA_EXPORT_DIR / "input_zip"
 ARCHIVE_ZIP_DIR = HIA_EXPORT_DIR / "archive_zip"
@@ -87,6 +97,133 @@ def resolve_exam_year(exam_date_str: str) -> int:
     d = date.fromisoformat(exam_date_str)
     boundary = date(d.year, EXAM_YEAR_START_MONTH, EXAM_YEAR_START_DAY)
     return d.year if d >= boundary else d.year - 1
+
+
+# ============================================================
+# normalize helpers
+# ============================================================
+
+
+def _nfkc(value: str | None) -> str:
+    if not value:
+        return ""
+    return unicodedata.normalize("NFKC", value).strip()
+
+
+def _trim_leading_zeros(num_text: str) -> str:
+    trimmed = num_text.lstrip("0")
+    return trimmed if trimmed else "0"
+
+
+def _to_fullwidth_ascii(value: str) -> str:
+    result = []
+    for ch in value:
+        code = ord(ch)
+        if 0x21 <= code <= 0x7E:
+            result.append(chr(code + 0xFEE0))
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+def normalize_insurance_number_match(value: str | None) -> str | None:
+    """
+    番号 match:
+    - 半角数字化
+    - 数字以外除去
+    - 先頭0削除
+    """
+    s = _nfkc(value)
+    digits = re.sub(r"\D", "", s)
+    if not digits:
+        return None
+    return _trim_leading_zeros(digits)
+
+
+def normalize_insurance_symbol_match(value: str | None) -> str | None:
+    """
+    記号 match:
+    - 区切り記号除去
+    - NFKC
+    - 数字連続部分ごとに先頭0削除
+    - ASCII英数は全角化
+
+    例:
+      埼ー０１ -> 埼１
+      AB-01   -> ＡＢ１
+    """
+    s = _nfkc(value)
+    if not s:
+        return None
+
+    s = re.sub(r"[ 　\-‐‑‒–—―ー－ｰ]+", "", s)
+    if not s:
+        return None
+
+    def repl(m: re.Match[str]) -> str:
+        return _trim_leading_zeros(m.group(0))
+
+    s = re.sub(r"\d+", repl, s)
+
+    s = _to_fullwidth_ascii(s)
+
+    return s or None
+
+
+def normalize_symbol_for_custom_id(value: str | None) -> str | None:
+    """
+    person_id_custom 用の記号:
+    - 数字のみ抽出
+    - 先頭0削除
+    """
+    s = _nfkc(value)
+    digits = re.sub(r"\D", "", s)
+    if not digits:
+        return None
+    return _trim_leading_zeros(digits)
+
+
+def normalize_birth_yyyymmdd(value: str | None) -> str | None:
+    """
+    YYYY-MM-DD -> yyyymmdd
+    """
+    s = _nfkc(value)
+    digits = re.sub(r"\D", "", s)
+    if len(digits) < 8:
+        return None
+    return digits[:8]
+
+
+def build_person_id_custom(row: dict) -> str | None:
+    """
+    custom_id_gen.py を用いて person_id_custom を生成する。
+
+    入力順は custom_id_gen.py の DEFAULT_COMPOSE_ORDER に従う:
+      [birth_yyyymmdd][insurance_number][insurer_number][symbol]
+
+    ここで使う値は DB照合用 match 値ではなく、custom_id 用 normalize 後の値。
+    """
+    birth_yyyymmdd = row.get("birth_yyyymmdd")
+    insurance_number_for_custom_id = row.get("insurance_number_for_custom_id")
+    insurer_number = row.get("insurer_number")
+    symbol_for_custom_id = row.get("symbol_for_custom_id")
+
+    if not all([
+        birth_yyyymmdd,
+        insurance_number_for_custom_id,
+        insurer_number,
+        symbol_for_custom_id,
+    ]):
+        return None
+
+    person_id_custom, _meta = generate_id(
+        insurer_number=insurer_number,
+        symbol=symbol_for_custom_id,
+        insurance_number=insurance_number_for_custom_id,
+        birth_yyyymmdd=birth_yyyymmdd,
+        mat_dir=MAT_DIR,
+    )
+    return person_id_custom
 
 
 # ============================================================
@@ -309,18 +446,53 @@ def main():
 
                 row = parse_hia_xml_identity(xml_path)
 
-                # TODO(next):
-                # - DB照合用 insurance_symbol_match 生成
-                #   例: 埼ー０１ -> 埼１
-                # - DB照合用 insurance_number_match 生成
-                # - person_id_custom 用 normalize を別で生成
-                #   - symbol_for_custom_id: 記号から数字のみ抽出 + 先頭0削除
-                #   - insurance_number_for_custom_id: 半角数字化 + 数字以外除去 + 先頭0削除
-                #   - birth_yyyymmdd: 生年月日を yyyymmdd 化
-                # - person_id_custom 生成
-                # - exam_year 算出 (resolve_exam_year)
+                # --------------------------------------------------
+                # normalize for DB match
+                # --------------------------------------------------
+
+                row["insurance_symbol_match"] = normalize_insurance_symbol_match(
+                    row.get("insurance_symbol")
+                )
+
+                row["insurance_number_match"] = normalize_insurance_number_match(
+                    row.get("insurance_number")
+                )
+
+                # --------------------------------------------------
+                # normalize for person_id_custom
+                # --------------------------------------------------
+
+                row["symbol_for_custom_id"] = normalize_symbol_for_custom_id(
+                    row.get("insurance_symbol")
+                )
+
+                row["insurance_number_for_custom_id"] = normalize_insurance_number_match(
+                    row.get("insurance_number")
+                )
+
+                row["birth_yyyymmdd"] = normalize_birth_yyyymmdd(
+                    row.get("birthdate")
+                )
+
+                # --------------------------------------------------
+                # exam year
+                # --------------------------------------------------
+
+                if row.get("exam_date"):
+                    row["exam_year"] = resolve_exam_year(row["exam_date"])
+                else:
+                    row["exam_year"] = None
+
+                # --------------------------------------------------
+                # person_id_custom
+                # --------------------------------------------------
+
+                row["person_id_custom"] = build_person_id_custom(row)
 
                 errors = validate_required_fields(row)
+
+                if not row.get("person_id_custom"):
+                    errors.append("PERSON_ID_CUSTOM_BUILD_FAILED")
 
                 if errors:
                     zip_errors.append((xml_path, errors))
