@@ -18,11 +18,15 @@ CREATE TABLE IF NOT EXISTS hia_person_years (
 
     -- raw identity fields (kept for traceability)
     insurer_number CHAR(8) COLLATE ascii_bin NOT NULL,
-    insurance_symbol VARCHAR(20) COLLATE ascii_bin NOT NULL,
-    insurance_number VARCHAR(20) COLLATE ascii_bin NOT NULL,
+    insurance_symbol VARCHAR(20) COLLATE utf8mb4_ja_0900_as_cs NOT NULL,
+    insurance_number VARCHAR(20) COLLATE utf8mb4_ja_0900_as_cs NOT NULL,
     insurance_symbol_match VARCHAR(40) COLLATE utf8mb4_ja_0900_as_cs NOT NULL,
     insurance_number_match VARCHAR(20) COLLATE ascii_bin NOT NULL,
     birthdate DATE NOT NULL,
+
+    -- optional metadata from XML (can be NULL if not present)
+    report_category VARCHAR(10) COLLATE ascii_bin,
+    exam_program VARCHAR(50) COLLATE utf8mb4_ja_0900_as_cs,
 
     -- original values (non-normalized)
     name_kana_raw VARCHAR(120) COLLATE utf8mb4_ja_0900_as_cs,

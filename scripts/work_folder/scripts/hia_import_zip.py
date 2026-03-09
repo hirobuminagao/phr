@@ -163,11 +163,11 @@ def normalize_insurance_symbol_match(value: str | None) -> str | None:
     - 区切り記号除去
     - NFKC
     - 数字連続部分ごとに先頭0削除
-    - ASCII英数は全角化
+    - 英字・数字は半角のまま（全角化しない）
 
     例:
-      埼ー０１ -> 埼１
-      AB-01   -> ＡＢ１
+      埼ー０１ -> 埼1
+      AB-01   -> AB1
     """
     s = _nfkc(value)
     if not s:
@@ -181,8 +181,6 @@ def normalize_insurance_symbol_match(value: str | None) -> str | None:
         return _trim_leading_zeros(m.group(0))
 
     s = re.sub(r"\d+", repl, s)
-
-    s = _to_fullwidth_ascii(s)
 
     return s or None
 

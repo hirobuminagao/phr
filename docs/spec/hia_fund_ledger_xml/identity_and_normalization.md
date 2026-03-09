@@ -1,5 +1,3 @@
-
-
 # HIA_fund_ledger_xml Identity and Normalization
 
 このドキュメントは `HIA_fund_ledger_xml` における **同一人物判定** と **正規化ルール** の考え方を整理するためのメモである。
@@ -79,8 +77,8 @@ person_id_custom
 |項目|元値|正規化値|
 |---|---|---|
 |氏名カナ|name_kana|name_kana_norm|
-|記号|insurance_symbol|insurance_symbol_norm|
-|番号|insurance_number|insurance_number_norm|
+|記号|insurance_symbol|insurance_symbol_match|
+|番号|insurance_number|insurance_number_match|
 
 ---
 
@@ -106,8 +104,17 @@ person_id_custom
 現時点での方針。
 
 - 前後空白除去
-- 全角数字は半角へ寄せる
-- 必要に応じて照合不要文字を除去する
+- NFKC により英数を半角へ寄せる
+- 区切り記号（例: `-`, `ー`, `−`, `―`）を除去する
+- 数字連続部分は先頭 0 を削除する
+- 照合結果は、たとえば `埼ー０１` / `埼−１` / `埼1` をすべて `埼1` に寄せる
+
+|元値|照合用正規化値|
+|---|---|
+|埼ー０１|埼1|
+|埼−１|埼1|
+|AB-01|AB1|
+|ＡＢ０１|AB1|
 
 ## 3 番号
 
@@ -116,8 +123,9 @@ person_id_custom
 現時点での方針。
 
 - 前後空白除去
-- 全角数字は半角へ寄せる
-- 必要に応じて照合不要文字を除去する
+- NFKC により数字を半角へ寄せる
+- 数字以外を除去する
+- 先頭 0 を削除する
 
 ## 4 gender_code
 
@@ -165,9 +173,8 @@ person_id_custom
 
 ## 正規化後データ
 
-- insurance_symbol_norm
-- insurance_number_norm
-- name_kana_norm
+- insurance_symbol_match
+- insurance_number_match
 
 ## 生成キー
 
