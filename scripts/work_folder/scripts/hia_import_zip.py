@@ -222,7 +222,7 @@ def normalize_name_kana_norm(value: str | None) -> str | None:
     return s or None
 
 
-def build_person_id_custom(row: dict) -> str | None:
+def build_person_id_custom(row: dict[str, object]) -> str | None:
     """
     custom_id_gen.py を用いて person_id_custom を生成する。
 
@@ -231,18 +231,24 @@ def build_person_id_custom(row: dict) -> str | None:
 
     ここで使う値は DB照合用 match 値ではなく、custom_id 用 normalize 後の値。
     """
-    birth_yyyymmdd = row.get("birth_yyyymmdd")
-    insurance_number_for_custom_id = row.get("insurance_number_for_custom_id")
-    insurer_number = row.get("insurer_number")
-    symbol_for_custom_id = row.get("symbol_for_custom_id")
+    birth_val = row.get("birth_yyyymmdd")
+    insurance_number_val = row.get("insurance_number_for_custom_id")
+    insurer_number_val = row.get("insurer_number")
+    symbol_val = row.get("symbol_for_custom_id")
 
-    if not all([
-        birth_yyyymmdd,
-        insurance_number_for_custom_id,
-        insurer_number,
-        symbol_for_custom_id,
-    ]):
+    if not isinstance(birth_val, str) or not birth_val:
         return None
+    if not isinstance(insurance_number_val, str) or not insurance_number_val:
+        return None
+    if not isinstance(insurer_number_val, str) or not insurer_number_val:
+        return None
+    if not isinstance(symbol_val, str) or not symbol_val:
+        return None
+
+    birth_yyyymmdd: str = birth_val
+    insurance_number_for_custom_id: str = insurance_number_val
+    insurer_number: str = insurer_number_val
+    symbol_for_custom_id: str = symbol_val
 
     person_id_custom, _meta = generate_id(
         insurer_number=insurer_number,
