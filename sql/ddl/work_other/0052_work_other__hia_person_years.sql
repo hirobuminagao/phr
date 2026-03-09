@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS hia_person_years (
 
     -- optional metadata from XML (can be NULL if not present)
     report_category VARCHAR(10) COLLATE ascii_bin,
-    exam_program VARCHAR(50) COLLATE utf8mb4_ja_0900_as_cs,
+    health_program_code VARCHAR(50) COLLATE utf8mb4_ja_0900_as_cs,
 
     -- original values (non-normalized)
     name_kana_raw VARCHAR(120) COLLATE utf8mb4_ja_0900_as_cs,

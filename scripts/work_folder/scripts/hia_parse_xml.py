@@ -195,17 +195,19 @@ def parse_hia_xml_identity(xml_path: str | Path) -> dict:
     # 報告区分 / 健診プログラム
     # --------------------------------------------------
 
-    # 報告区分 (例: 特定健診 / 特定保健指導など)
+    # 報告区分
+    # ClinicalDocument 直下の code[@codeSystem='1.2.392.200119.6.1001'] を採用する。
     report_category = _find_attr(
         root,
-        ".//hl7:participant/hl7:functionCode",
+        "hl7:code[@codeSystem='1.2.392.200119.6.1001']",
         "code",
     )
 
     # 健診プログラムコード
+    # documentationOf/serviceEvent/code[@codeSystem='1.2.392.200119.6.1002'] を採用する。
     health_program_code = _find_attr(
         root,
-        ".//hl7:documentationOf//hl7:serviceEvent/hl7:code",
+        ".//hl7:documentationOf/hl7:serviceEvent/hl7:code[@codeSystem='1.2.392.200119.6.1002']",
         "code",
     )
 
