@@ -27,6 +27,16 @@ from datetime import datetime, date
 
 import re
 import unicodedata
+import sys
+from pathlib import Path
+
+# ------------------------------------------------------------
+# VSCode Run ボタン (file実行) 対応
+# ファイル直実行でも project root を import path に追加する
+# ------------------------------------------------------------
+if __name__ == "__main__" and __package__ is None:
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
 
 # VSCode / Pylance では phr ルートを workspace root として解決させるため、
 # import は scripts.work_folder... の絶対パッケージ形式に統一する。
