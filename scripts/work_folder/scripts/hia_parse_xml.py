@@ -191,6 +191,24 @@ def parse_hia_xml_identity(xml_path: str | Path) -> dict:
         or _find_text(root, ".//hl7:custodian//hl7:representedCustodianOrganization/hl7:name")
     )
 
+    # --------------------------------------------------
+    # 報告区分 / 健診プログラム
+    # --------------------------------------------------
+
+    # 報告区分 (例: 特定健診 / 特定保健指導など)
+    report_category = _find_attr(
+        root,
+        ".//hl7:participant/hl7:functionCode",
+        "code",
+    )
+
+    # 健診プログラムコード
+    health_program_code = _find_attr(
+        root,
+        ".//hl7:documentationOf//hl7:serviceEvent/hl7:code",
+        "code",
+    )
+
     return {
         "xml_path": str(xml_path),
         "exam_date": exam_date,
@@ -203,6 +221,8 @@ def parse_hia_xml_identity(xml_path: str | Path) -> dict:
         "insurance_number": insurance_number,
         "facility_code": facility_code,
         "facility_name": facility_name,
+        "report_category": report_category,
+        "health_program_code": health_program_code,
     }
 
 

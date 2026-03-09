@@ -573,6 +573,8 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
         insurance_number,
         insurance_symbol_match,
         insurance_number_match,
+        report_category,
+        health_program_code,
         birthdate,
         name_kana_raw,
         dl_count,
@@ -583,7 +585,7 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
         last_seen_zip_name,
         last_seen_xml_filename
     ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
     )
     ON DUPLICATE KEY UPDATE
         person_year_id = LAST_INSERT_ID(person_year_id),
@@ -605,6 +607,8 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
             row["insurance_number"],
             row["insurance_symbol_match"],
             row["insurance_number_match"],
+            row.get("report_category"),
+            row.get("health_program_code"),
             row["birthdate"],
             row["name_kana"],
             1,
