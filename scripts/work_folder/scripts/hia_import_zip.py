@@ -380,8 +380,15 @@ def extract_zip(zip_path: Path, extract_dir: Path):
 # ============================================================
 
 def collect_xml_files(extract_dir: Path):
-
-    return list(extract_dir.rglob("*.xml"))
+    """
+    HIA対象XMLは DATA 配下の実データXMLのみを収集する。
+    ix08_V08.xml / su08_V08.xml などの補助XMLは対象外。
+    二重フォルダ構成でも拾えるよう、DATA をパスに含む h*.xml に絞る。
+    """
+    return sorted(
+        p for p in extract_dir.rglob("h*.xml")
+        if "DATA" in p.parts
+    )
 
 
 def calc_file_sha256(path: Path) -> str:
