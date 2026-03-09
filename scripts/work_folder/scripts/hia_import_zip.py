@@ -396,6 +396,50 @@ def calc_file_sha256(path: Path) -> str:
 
 
 # ============================================================
+# ZIP Import Deduplication Helpers
+# ============================================================
+
+def find_existing_zip_import(cur, zip_name: str) -> dict | None:
+    """
+    zip_name で既存 import を取得
+    """
+    sql = """
+    SELECT
+        z.zip_id,
+        z.import_status,
+        COALESCE(COUNT(e.zip_error_id),0) AS error_count
+    FROM hia_import_zips z
+    LEFT JOIN hia_import_zip_errors e
+      ON e.zip_id = z.zip_id
+    WHERE z.zip_name = %s
+    GROUP BY z.zip_id, z.import_status
+    ORDER BY z.zip_id DESC
+    LIMIT 1
+    """
+    cur.execute(sql, (zip_name,))
+    return cur.fetchone()
+
+
+def is_successfully_imported(row: dict | None) -> bool:
+    if not row:
+        return False
+
+    return (
+        row.get("import_status") == "IMPORTED"
+        and int(row.get("error_count") or 0) == 0
+    )
+
+
+def delete_existing_zip_run(cur, zip_id: int):
+    """
+    エラーZIP再処理用
+    """
+    cur.execute("DELETE FROM hia_xml_events WHERE zip_id=%s", (zip_id,))
+    cur.execute("DELETE FROM hia_import_zip_errors WHERE zip_id=%s", (zip_id,))
+    cur.execute("DELETE FROM hia_import_zips WHERE zip_id=%s", (zip_id,))
+
+
+# ============================================================
 # DB helpers
 # ============================================================
 
@@ -779,6 +823,18 @@ def main():
 
             with connect_ctx(mysql_params, autocommit=False) as conn:
                 cur = dict_cursor(conn)
+
+                existing = find_existing_zip_import(cur, zip_ctx["zip_name"])
+
+                if is_successfully_imported(existing):
+                    print(f"Skip already imported ZIP: {zip_ctx['zip_name']}")
+                    conn.rollback()
+                    continue
+
+                if existing:
+                    print(f"Reprocessing errored ZIP: {zip_ctx['zip_name']}")
+                    delete_existing_zip_run(cur, int(existing["zip_id"]))
+
                 zip_id = insert_import_zip(cur, zip_ctx, zip_sha256)
 
                 if zip_errors:
