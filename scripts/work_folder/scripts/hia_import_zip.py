@@ -24,13 +24,17 @@ import shutil
 from pathlib import Path
 from datetime import datetime, date
 
+
 import re
 import unicodedata
 
-from scripts.hia_parse_xml import parse_hia_xml_identity
-from lib.custom_id_gen import generate_id
-from lib.db.config import load_mysql_params
-from lib.db.mysql import connect_ctx, dict_cursor
+# VSCode / Pylance では phr ルートを workspace root として解決させるため、
+# import は scripts.work_folder... の絶対パッケージ形式に統一する。
+# 実行時も phr ルートで `python -m scripts.work_folder.scripts.hia_import_zip` を前提にする。
+from scripts.work_folder.scripts.hia_parse_xml import parse_hia_xml_identity
+from scripts.work_folder.lib.custom_id_gen import generate_id
+from scripts.work_folder.lib.db.config import load_mysql_params
+from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
