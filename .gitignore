@@ -11,6 +11,10 @@ scripts/kenshin_list_pydir/.env.trans_*
 **/*.sqlite
 **/*.db
 
+# HIA runtime data (ETL input/output, not versioned)
+data/hia_export/
+!data/hia_export/.gitkeep
+
 # logs
 logs/
 *.log

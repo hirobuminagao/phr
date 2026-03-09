@@ -27,20 +27,25 @@ from datetime import datetime, date
 import re
 import unicodedata
 
-from scripts.work_folder.scripts.hia_parse_xml import parse_hia_xml_identity
-from scripts.work_folder.lib.custom_id_gen import generate_id
-from scripts.work_folder.lib.db.config import load_mysql_params
-from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.hia_parse_xml import parse_hia_xml_identity
+from lib.custom_id_gen import generate_id
+from lib.db.config import load_mysql_params
+from lib.db.mysql import connect_ctx, dict_cursor
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+WORK_FOLDER_DIR = PROJECT_ROOT / "scripts" / "work_folder"
+DATA_DIR = PROJECT_ROOT / "data"
 
 
 # ============================================================
 # 初期設定
 # ============================================================
 
-HIA_EXPORT_DIR = BASE_DIR / "scripts" / "work_folder" / "hia_export"
-MAT_DIR = BASE_DIR / "scripts" / "work_folder" / "mat"
+# data はコード置き場 scripts と分離し、phr/data 配下に置く。
+# HIA の入出力実データは scripts/work_folder ではなく data/hia_export を使う。
+HIA_EXPORT_DIR = DATA_DIR / "hia_export"
+MAT_DIR = WORK_FOLDER_DIR / "mat"
 
 INPUT_ZIP_DIR = HIA_EXPORT_DIR / "input_zip"
 ARCHIVE_ZIP_DIR = HIA_EXPORT_DIR / "archive_zip"
