@@ -25,7 +25,6 @@ import re
 import shutil
 import sys
 import zipfile
-import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 
@@ -48,7 +47,6 @@ FUND_INPUT_DIR = FUND_DELIVERY_DIR / "input"
 FUND_WORK_DIR = FUND_DELIVERY_DIR / "work"
 FUND_OUTPUT_DIR = FUND_DELIVERY_DIR / "output"
 
-NS = {"hl7": "urn:hl7-org:v3"}
 XML_FILENAME_PATTERN = re.compile(r"^h[^\\/]*\.xml$", re.IGNORECASE)
 
 
@@ -231,6 +229,8 @@ def get_delivery_target_rows(cur, insurer_number: str, dl_date: str, zip_name: s
             py.name_kana_norm,
             py.gender_code,
             py.exam_year,
+            py.report_category,
+            py.health_program_code,
             z.insurer_number,
             z.dl_date,
             z.zip_name
@@ -308,6 +308,8 @@ def get_delivery_target_rows(cur, insurer_number: str, dl_date: str, zip_name: s
         name_kana_norm,
         gender_code,
         exam_year,
+        report_category,
+        health_program_code,
         insurer_number,
         dl_date,
         zip_name
@@ -320,6 +322,26 @@ def get_delivery_target_rows(cur, insurer_number: str, dl_date: str, zip_name: s
     cur.execute(sql, (insurer_number, dl_date, zip_name, insurer_number, dl_date))
     rows = cur.fetchall()
     return rows or []
+
+
+def build_delivery_summary(target_rows: list[dict]) -> dict[str, int]:
+    """
+    納品対象 rows から ix08 / su08 再構成用の最小集計値を返す。
+
+    v1 ではまず以下を採用する:
+    - data_xml_count: DATA/h*.xml 件数
+    - report_category_10_count: 報告区分=10 の件数
+    """
+    data_xml_count = len(target_rows)
+    report_category_10_count = sum(
+        1 for row in target_rows
+        if str(row.get("report_category") or "") == "10"
+    )
+
+    return {
+        "data_xml_count": data_xml_count,
+        "report_category_10_count": report_category_10_count,
+    }
 
 
 # ============================================================
@@ -355,74 +377,51 @@ def copy_xsd_dir(xsd_dir: Path | None, selected_root: Path):
 
 
 
-def _collect_xml_filename_refs(elem: ET.Element) -> set[str]:
-    refs: set[str] = set()
-
-    if elem.text:
-        text = elem.text.strip()
-        if XML_FILENAME_PATTERN.match(text):
-            refs.add(text)
-
-    for value in elem.attrib.values():
-        text = str(value).strip()
-        if XML_FILENAME_PATTERN.match(text):
-            refs.add(text)
-
-    for child in list(elem):
-        refs.update(_collect_xml_filename_refs(child))
-
-    return refs
-
-
-
-def _prune_non_selected_filename_subtrees(elem: ET.Element, selected_filenames: set[str]):
-    for child in list(elem):
-        refs = _collect_xml_filename_refs(child)
-
-        if refs and refs.isdisjoint(selected_filenames):
-            elem.remove(child)
-            continue
-
-        _prune_non_selected_filename_subtrees(child, selected_filenames)
-
-
-
-def _update_header_dates(root: ET.Element, dl_date: str):
-    yyyymmdd = dl_date.replace("-", "")
-
-    doc_effective = root.find("hl7:effectiveTime", NS)
-    if doc_effective is not None:
-        doc_effective.set("value", yyyymmdd)
-
-    author_time = root.find(".//hl7:author/hl7:time", NS)
-    if author_time is not None:
-        author_time.set("value", yyyymmdd)
-
-
-
-def rewrite_summary_xml(source_path: Path | None, output_path: Path, selected_filenames: set[str], dl_date: str):
+def rewrite_ix08_text(xml_text: str, total_record_count: int) -> str:
     """
-    ix08 / su08 をコピーし、選択された h*.xml に関係する部分だけ残す。
-
-    v1 方針:
-    - 元XMLをベースにする
-    - h*.xml ファイル名を参照している部分木を選別する
-    - ヘッダ日付は再生成対象DL日に合わせる
-
-    NOTE:
-    - 施設実データに合わせた集計仕様の厳密再構成が必要になった場合は、
-      今後この関数を正式仕様ベースで拡張する
+    ix08 は totalRecordCount のみを書き換える。
+    namespace / コメント / 書式を崩さないため、原文テキストを最小置換する。
     """
+    return re.sub(
+        r'(<totalRecordCount\b[^>]*\bvalue=")[^"]*(")',
+        rf'\g<1>{total_record_count}\2',
+        xml_text,
+        count=1,
+    )
+
+
+
+def rewrite_su08_text(xml_text: str, total_subject_count: int) -> str:
+    """
+    su08 は totalSubjectCount のみを書き換える。
+    namespace / コメント / 書式を崩さないため、原文テキストを最小置換する。
+    """
+    return re.sub(
+        r'(<totalSubjectCount\b[^>]*\bvalue=")[^"]*(")',
+        rf'\g<1>{total_subject_count}\2',
+        xml_text,
+        count=1,
+    )
+
+
+
+def rewrite_ix08_file(source_path: Path | None, output_path: Path, total_record_count: int):
     if source_path is None:
         return
 
-    tree = ET.parse(source_path)
-    root = tree.getroot()
+    xml_text = source_path.read_text(encoding="utf-8")
+    xml_text = rewrite_ix08_text(xml_text, total_record_count)
+    output_path.write_text(xml_text, encoding="utf-8")
 
-    _prune_non_selected_filename_subtrees(root, selected_filenames)
-    _update_header_dates(root, dl_date)
 
-    tree.write(output_path, encoding="utf-8", xml_declaration=True)
+
+def rewrite_su08_file(source_path: Path | None, output_path: Path, total_subject_count: int):
+    if source_path is None:
+        return
+
+    xml_text = source_path.read_text(encoding="utf-8")
+    xml_text = rewrite_su08_text(xml_text, total_subject_count)
+    output_path.write_text(xml_text, encoding="utf-8")
 
 
 
@@ -487,25 +486,28 @@ def main():
                 print(f"No delivery targets after exclusion: {zip_path.name}")
                 continue
 
+            summary = build_delivery_summary(target_rows)
+            print(
+                "Delivery summary: "
+                f"data_xml_count={summary['data_xml_count']}, "
+                f"report_category_10_count={summary['report_category_10_count']}"
+            )
+
             copied_paths = copy_selected_xmls(target_rows, xml_map, dirs["selected_data_dir"])
             if not copied_paths:
                 print(f"No XML copied: {zip_path.name}")
                 continue
 
-            selected_filenames = {path.name for path in copied_paths}
-
             copy_xsd_dir(support_files["xsd_dir"], dirs["selected_root"])
-            rewrite_summary_xml(
+            rewrite_ix08_file(
                 support_files["ix08_path"],
                 dirs["selected_root"] / "ix08_V08.xml",
-                selected_filenames,
-                str(zip_ctx["dl_date"]),
+                summary["data_xml_count"],
             )
-            rewrite_summary_xml(
+            rewrite_su08_file(
                 support_files["su08_path"],
                 dirs["selected_root"] / "su08_V08.xml",
-                selected_filenames,
-                str(zip_ctx["dl_date"]),
+                summary["data_xml_count"],
             )
 
             output_zip_path = dirs["output_dir"] / zip_path.name
