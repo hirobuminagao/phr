@@ -19,15 +19,17 @@ Fund 向け納品用データを生成する補助パイプラインが必要と
 ```
 HIA ZIP
  ↓
-XML検証
+ZIP import
  ↓
-人物照合
+XML検証 / 正規化
  ↓
-person_year ledger
+hia_person_years ledger
  ↓
-xml ledger
+hia_xml_events ledger
  ↓
-Fund納品抽出
+納品対象抽出
+ ↓
+Fund納品 ZIP 再構成
 ```
 
 詳細仕様は以下の spec を参照する。
@@ -80,7 +82,7 @@ person_id_custom
 person + exam_year
 ```
 
-将来は健診イベント台帳を追加することで、年2回以上の健診にも対応できる構造とする。
+v1 では `hia_person_years` と `hia_xml_events` を分離して実装し、年2回以上の健診にも対応可能な構造とする。
 
 ---
 
@@ -118,10 +120,11 @@ person + exam_year
 
 エラー処理は **ZIP 単位 all-or-nothing** とする。
 
-1 XML でも重大エラーがある場合は `ZIP ERROR` として扱い、以下には何も記帳しない。
+1 XML でも重大エラーがある場合は `import_status = ERROR` として扱い、`hia_import_zip_errors` に記録する。
+その場合、以下は更新しない。
 
-- 人台帳
-- XML台帳
+- `hia_person_years`
+- `hia_xml_events`
 
 ---
 
@@ -171,13 +174,15 @@ person + exam_year
 - target_column
 - match_type
 - match_value
-- reason
+- exclusion_reason
 - source_note
 - is_enabled
 
 また、除外条件評価のため、ledger 側には医療機関を特定できる情報
-（例: `facility_code`, `facility_name`, `facility_number`, `insurer_number`）
+（例: `facility_code`, `facility_name`, `insurer_number`）
 を保持する前提とする。
+
+v1 実装では、`hia_delivery_exclusion_rules` を delivery layer で適用し、主に `facility_code` による契約外医療機関除外を行う。
 
 ## Consequences
 
@@ -186,8 +191,9 @@ person + exam_year
 - ZIP 単位の再処理が安全
 - 人物識別が安定
 - 年度単位の履歴管理が可能
-- 将来の健診イベント台帳追加が容易
+- `hia_person_years` と `hia_xml_events` の分離により event 粒度拡張が容易
 - 納品再構成時の除外ルールを ledger から分離して管理できる
+- ix08 / su08 を原文保持で最小書換えする方針を維持できる
 
 ## Related Documents
 
@@ -196,4 +202,6 @@ person + exam_year
 - `docs/spec/hia_fund_ledger_xml/identity_and_normalization.md`
 - `docs/spec/hia_fund_ledger_xml/error_policy.md`
 - `docs/spec/hia_fund_ledger_xml/year_rule.md`
+- `docs/spec/hia_fund_ledger_xml/delivery_exclusion_rules.md`
+- `docs/spec/hia_fund_ledger_xml/er_overview.md`
 - `docs/spec/hia_fund_ledger_xml/delivery_exclusion_rules.md`
