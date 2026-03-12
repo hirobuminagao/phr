@@ -47,6 +47,45 @@ snapshot_identity_key
 
 ---
 
+### 保険証記号・番号の正規化
+
+人物識別および突合に使用する `*_match` 列は、共通正規化ルールを使用する。
+
+#### insurance_symbol_match
+
+`insurance_symbol_match` は **HIA export ZIP v1 で確定した正規化手順**を使用する。
+
+このルールは HIA 系データ処理で共通とし、特段の指示がない限り変更しない。
+
+目的:
+
+- `hia_person_years`
+- HIA XML
+- HIA export CSV
+
+などのデータと安定して join できるようにするため。
+
+#### insurance_number_match
+
+`insurance_number_match` は次の正規化を行う。
+
+1. NFKC 正規化
+2. 数字以外の文字を除去
+3. 半角数字へ統一
+4. 先頭の `0` を削除
+
+例:
+
+```
+００１２３ → 123
+000123 → 123
+001-23 → 123
+```
+
+このルールも HIA 系データ処理の共通ルールとして扱う。
+
+---
+
 # 2. 行変更判定
 
 CSVの各行は正規化された文字列に変換され、
