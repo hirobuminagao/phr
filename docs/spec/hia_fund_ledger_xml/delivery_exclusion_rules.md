@@ -106,7 +106,7 @@ hia_delivery_exclusion_rules
 - `startswith`
 - `is_null`
 
-v1 ではまず `eq` 中心での運用を想定する。
+v1 実装では `EQUAL` を使用する。
 
 ---
 
@@ -120,7 +120,7 @@ v1 ではまず `eq` 中心での運用を想定する。
 |target_schema|work_other|
 |target_table|hia_xml_events|
 |target_column|facility_code|
-|match_type|eq|
+|match_type|EQUAL|
 |match_value|12345678|
 |reason|契約外医療機関|
 |source_note|健保から提供|
@@ -136,7 +136,6 @@ v1 ではまず `eq` 中心での運用を想定する。
 
 - `facility_code`
 - `facility_name`
-- `facility_number`（XML 上の医療機関番号相当）
 - `insurer_number`
 
 原則として、一次情報は **xml ledger 側** に保持する。
@@ -202,6 +201,13 @@ delivery exclusion rules 適用
 
 # ステータス
 
-現在は **freeze 前の除外ルール整理フェーズ**。
+v1 実装完了（2026-03）。
 
-この文書は、DDL / 実装前の判断メモとして扱う。
+本ドキュメントは現在の納品再構成時の除外ルールを freeze した状態を示す。
+
+対応実装
+
+- ledger 取込では除外しない
+- delivery layer で除外適用
+- hia_delivery_exclusion_rules テーブルによる制御
+- facility_code による契約外医療機関除外

@@ -1,5 +1,3 @@
-
-
 # HIA_fund_ledger_xml Error Policy
 
 このドキュメントは `HIA_fund_ledger_xml` における **エラー判定** と **未記帳ポリシー** を整理するためのメモである。
@@ -80,27 +78,29 @@ XML 検証
 ↓
 重大エラーあり
     ↓
-    ZIP ERROR として記録
+    import_status = ERROR
     ↓
-    人台帳 未記帳
+    hia_import_zip_errors に記録
     ↓
-    XML 台帳 未記帳
+    hia_person_years 未更新
+    ↓
+    hia_xml_events 未登録
 ```
 
 重要なのは、**エラー内容は記録するが ledger は更新しない** こと。
 
 ---
 
-# 記録するエラー情報（想定）
+# 記録するエラー情報（v1 実装）
 
 エラーは、少なくとも以下を追跡できるようにする。
 
-- folder_name
+- zip_id
 - zip_name
 - xml_filename
 - error_code
 - error_message
-- dl_date
+- error_detail
 - created_at
 
 必要に応じて、複数 XML のエラーを 1 ZIP に紐づけて保持する。
@@ -166,7 +166,6 @@ XML 単位で部分成功にすると、以下の事故が起こりやすい。
 - name_kana 不正値
 - insurer_number 不正値
 - 記号 / 番号のフォーマット異常
-- XML SHA256 ベースの重複検出
 
 ただし現時点では、人物照合と年度判定に直結するものを優先して freeze 対象とする。
 
@@ -174,6 +173,12 @@ XML 単位で部分成功にすると、以下の事故が起こりやすい。
 
 # ステータス
 
-現在は **freeze 前のエラーポリシー整理フェーズ**。
+v1 実装完了（2026-03）。
 
-この文書は、DDL / スクリプト実装前の判断メモとして扱う。
+本ドキュメントは現在の ZIP 単位エラーポリシーを freeze した状態を示す。
+
+対応実装
+
+- ZIP 単位 all-or-nothing
+- hia_import_zip_errors へのエラー記録
+- 成功時のみ hia_person_years / hia_xml_events 更新

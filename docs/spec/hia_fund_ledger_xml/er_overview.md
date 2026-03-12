@@ -40,10 +40,10 @@ The pipeline manages downloaded HIA ZIP files, their XML contents, person-year i
 | exam_date                   |
 | facility_code               |
 | facility_name               |
-| dl_date                     |
+| report_category             |
+| health_program_code         |
 | created_at                  |
 +-----------------------------+
-        |
         | N
         |
         v
@@ -178,10 +178,10 @@ HIA ZIP Download
 hia_import_zips
         |
         v
-hia_xml_events
+hia_person_years
         |
         v
-hia_person_years
+hia_xml_events
 
 Errors → hia_import_zip_errors
 

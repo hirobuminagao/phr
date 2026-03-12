@@ -99,7 +99,7 @@ person_id_custom
 
 ## 2 記号
 
-`insurance_symbol_norm` は照合用の正規化値として扱う。
+`insurance_symbol_match` は照合用の正規化値として扱う。
 
 現時点での方針。
 
@@ -118,7 +118,7 @@ person_id_custom
 
 ## 3 番号
 
-`insurance_number_norm` は照合用の正規化値として扱う。
+`insurance_number_match` は照合用の正規化値として扱う。
 
 現時点での方針。
 
@@ -159,7 +159,7 @@ person_id_custom
 
 ---
 
-# 人台帳に保持する主な項目（想定）
+# 人台帳に保持する主な項目（v1 実装）
 
 ## 識別元データ
 
@@ -217,7 +217,6 @@ person_id_custom
 
 # 今後ここで詰めること
 
-- `person_id_custom` 生成仕様の明文化
 - 氏名カナのダッシュ / 長音ゆれ吸収ルール
 - 記号 / 番号の照合不要文字ルール
 - 将来の健診イベント台帳追加時の識別粒度
@@ -226,6 +225,13 @@ person_id_custom
 
 # ステータス
 
-現在は **freeze 前の仕様整理フェーズ**。
+v1 実装完了（2026-03）。
 
-この文書は、DDL 作成前の識別ルール整理メモとして扱う。
+本ドキュメントは現在の識別ルールおよび正規化仕様を freeze した状態を示す。
+
+対応実装
+
+- person_id_custom 生成
+- 氏名カナ正規化
+- 記号 / 番号照合用正規化
+- person_year 識別キー

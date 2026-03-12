@@ -1,5 +1,3 @@
-
-
 # HIA_fund_ledger_xml
 
 ## 概要
@@ -26,17 +24,17 @@ HIA
   ↓
 ZIP (月締め)
   ↓
-XML展開
+ZIP import
   ↓
-検証
+XML検証 / 正規化
   ↓
-人照合
+hia_xml_events ledger
   ↓
-person_year ledger
+hia_person_years ledger
   ↓
-xml ledger
+納品対象抽出
   ↓
-Fund向け納品抽出
+Fund納品 ZIP 再構成
 ```
 
 ---
@@ -193,28 +191,87 @@ XML検証
 
 ---
 
-# 台帳構造（予定）
+# 台帳構造（v1 実装）
 
 ## person_year ledger
 
 ```
-person_key
+person_id_custom
+name_kana_norm
+gender_code
 exam_year
+insurer_number
+insurance_symbol
+insurance_number
+birthdate
 first_seen_dl_date
 last_seen_dl_date
 dl_count
 ```
 
-## xml ledger
+## hia_xml_events ledger
 
 ```
+xml_event_id
 person_year_id
 xml_filename
-zip_name
-dl_date
+xml_sha256
+exam_date
+facility_code
+facility_name
+zip_id
 ```
 
 ---
+
+
+# 納品対象抽出ルール（v1 実装）
+
+Fund 向け納品 ZIP を再構成する際、対象 XML は以下の順序で抽出される。
+
+1. **対象 dl_date の ZIP を基準にする**
+
+   対象月は `hia_import_zips.dl_date` で指定する。
+
+2. **過去同一人物（同一年度）を除外**
+
+   以下キーが一致する人物が過去の dl_date に存在する場合は除外する。
+
+   ```
+   person_id_custom
+   + name_kana_norm
+   + gender_code
+   + exam_year
+   ```
+
+3. **除外ルール適用**
+
+   `hia_delivery_exclusion_rules` に登録された条件を適用する。
+
+   v1 実装では主に以下を使用。
+
+   - `facility_code` = 契約外医療機関
+
+4. **XML 重複除外**
+
+   `xml_sha256` を用いて同一 XML を除外する。
+
+5. **報告区分による件数集計**
+
+   XML 内の `report_category` を使用する。
+
+   - `report_category = 10` → 特定健診
+
+6. **ix08 / su08 再生成**
+
+   納品 ZIP 生成時に index / summary を再構成する。
+
+   |項目|算出方法|
+   |---|---|
+   |ix08 totalRecordCount|DATA フォルダ XML 件数|
+   |su08 totalSubjectCount|report_category = 10 件数|
+
+ix08 / su08 は **原文 XML を保持したまま必要な値のみ書き換える**。
 
 # 将来拡張
 
@@ -222,7 +279,6 @@ dl_date
 
 - 健診イベント台帳
 - 年2回以上健診対応
-- XML SHA256 による重複検出
 - 自動納品 ZIP 生成
 
 ---
@@ -243,11 +299,27 @@ year_rule.md
 
 # ステータス
 
-現在は **設計 freeze 前の整理フェーズ**。
+本仕様は **v1 実装完了（2026‑03）時点で一旦 freeze** とする。
 
-順序
+実装済み機能
 
-1. 設計整理
-2. ADR
-3. DDL
-4. スクリプト実装
+- HIA ZIP 取込パイプライン
+- XML 検証
+- person_year ledger 構築
+- xml event ledger 構築
+- 過去登場者除外ロジック
+- 納品対象抽出
+- Fund 向け納品 ZIP 再構成
+- ix08 / su08 自動再生成
+
+対応スクリプト
+
+- `hia_import_zip.py`
+- `hia_parse_xml.py`
+- `hia_build_delivery_zip.py`
+
+今後のドキュメント更新方針
+
+1. 実装により設計と差異が出た箇所を本ディレクトリ内ドキュメントへ記録
+2. 設計変更が発生する場合は ADR に記録
+3. v2 以降の拡張は本 README ではなく個別ドキュメントで管理

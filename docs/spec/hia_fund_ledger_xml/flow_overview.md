@@ -1,5 +1,3 @@
-
-
 # HIA_fund_ledger_xml Flow Overview
 
 このドキュメントは **HIA_fund_ledger_xml の処理フロー全体**を俯瞰するための概要図を示す。
@@ -23,11 +21,15 @@ HIA SYSTEM
 
   ↓
 
+ZIP import
+
+  ↓
+
 ZIP 展開
 
   ↓
 
-XML 一覧取得
+DATA/XML 一覧取得
 
   ↓
 
@@ -58,7 +60,7 @@ person_id_custom
 
          ↓
 
-person_year ledger 照合
+hia_person_years 照合
 
   ├ 既存
   │     ↓
@@ -70,23 +72,29 @@ person_year ledger 照合
 
          ↓
 
-xml ledger 登録
+hia_xml_events 登録
 
-(person_year_id
- xml_filename
- zip_name
- dl_date)
-
-         ↓
-
-Fund 納品対象抽出
-
-・対象年度
-・過去登場無し
+(xml_sha256
+ exam_date
+ facility_code
+ zip_id)
 
          ↓
 
-納品用 ZIP 再構成
+納品対象抽出
+
+・対象 dl_date
+・過去同一 person_year 除外
+・exclusion_rules 適用
+・xml_sha256 重複除外
+
+         ↓
+
+Fund 納品用 ZIP 再構成
+
+・DATA XML コピー
+・ix08 totalRecordCount 再計算
+・su08 totalSubjectCount 再計算
 ```
 
 ---
@@ -148,7 +156,7 @@ xml ledger
 # 台帳関係
 
 ```
-person_year ledger
+hia_person_years
 
   │
   ├ first_seen_dl_date
@@ -159,11 +167,13 @@ person_year ledger
         │ 1:N
         ▼
 
-xml ledger
+hia_xml_events
 
   ├ xml_filename
-  ├ zip_name
-  └ dl_date
+  ├ xml_sha256
+  ├ exam_date
+  ├ facility_code
+  └ zip_id
 ```
 
 ---
@@ -172,7 +182,6 @@ xml ledger
 
 今後以下を追加予定。
 
-- XML SHA256 による重複検出
 - 健診イベント台帳
 - 年2回以上健診対応
 - 自動 Fund 納品 ZIP 生成
@@ -181,11 +190,12 @@ xml ledger
 
 # ステータス
 
-現在は **設計整理フェーズ**。
+v1 実装完了（2026‑03）。
 
-実装順序。
+本フローは現在の実装に合わせて freeze されている。
 
-1. 設計整理
-2. ADR
-3. DDL 作成
-4. スクリプト実装
+主な実装スクリプト
+
+- hia_import_zip.py
+- hia_parse_xml.py
+- hia_build_delivery_zip.py

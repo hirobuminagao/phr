@@ -1,5 +1,3 @@
-
-
 # HIA_fund_ledger_xml Year Rule
 
 このドキュメントは `HIA_fund_ledger_xml` における **健診年度（exam_year）** の決め方を整理するためのメモである。
@@ -142,6 +140,8 @@ person + exam_year
 
 # 将来拡張
 
+※ v1 では `.env` による年度開始日設定を使用している。
+
 将来は年度設定を DB テーブル化する可能性がある。
 
 例:
@@ -171,6 +171,13 @@ exam_year_config
 
 # ステータス
 
-現在は **freeze 前の年度判定ルール整理フェーズ**。
+v1 実装完了（2026-03）。
 
-この文書は DDL / 実装前の判断メモとして扱う。
+本ドキュメントは現在の `exam_year` 判定ルールを freeze した状態を示す。
+
+対応実装
+
+- exam_date 必須チェック
+- exam_date から exam_year 算出
+- 年度境界は `.env` 設定を使用
+- person_year 識別キーに exam_year を使用
