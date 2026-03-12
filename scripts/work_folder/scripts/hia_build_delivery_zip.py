@@ -507,7 +507,7 @@ def main():
             rewrite_su08_file(
                 support_files["su08_path"],
                 dirs["selected_root"] / "su08_V08.xml",
-                summary["data_xml_count"],
+                summary["report_category_10_count"],
             )
 
             output_zip_path = dirs["output_dir"] / zip_path.name
