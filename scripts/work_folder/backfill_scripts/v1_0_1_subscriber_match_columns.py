@@ -94,7 +94,7 @@ def main() -> int:
     args = ap.parse_args()
 
     params = load_mysql_params()
-    schema_name = args.schema or params.database
+    schema_name = "dev_phr"
     schema_sql = quote_schema_name(schema_name)
 
     with connect_ctx(params) as con:
@@ -124,7 +124,7 @@ def main() -> int:
         rows = cast(list[dict[str, Any]], list(cur.fetchall()))
         total = len(rows)
         print(f"[INFO] rows needing backfill = {total}")
-        print(f"[INFO] DB_SCHEMA = {schema_name}")
+        print(f"[INFO] DB_SCHEMA = {schema_name} (forced)")
         print(f"[INFO] DRY_RUN   = {args.dry_run}")
         print(f"[INFO] LIMIT     = {args.limit}")
 
