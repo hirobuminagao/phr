@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from phr.lib.errors import NormalizeError
+from scripts.work_folder.lib.errors import NormalizeError
 from .ddl import ensure_tables
 
 # v1.0: etl_runs.errors を +1 する内部関数

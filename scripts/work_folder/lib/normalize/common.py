@@ -38,7 +38,7 @@ import unicodedata
 from pathlib import Path
 from typing import Optional, Tuple
 
-from phr.lib.errors import NormalizeError
+from scripts.work_folder.lib.errors import NormalizeError
 
 # 全角数字 → 半角数字（軽量）
 _FW_DIGITS = str.maketrans("０１２３４５６７８９", "0123456789")
@@ -81,6 +81,13 @@ def digits_only(s: str) -> str:
     return "".join(ch for ch in to_half_digits(s) if ch.isdigit())
 
 
+def trim_leading_zeros(num_text: str) -> str:
+    """数字文字列の先頭0を削除（全て0なら '0' を返す）"""
+    trimmed = (num_text or "").lstrip("0")
+    return trimmed if trimmed else "0"
+
+
+
 def split_digit_chunks(s: str) -> list[str]:
     """任意区切り値を → [数字ブロック, ...]（例: '12-34' → ['12','34']）"""
     src = to_half_digits(s or "")
@@ -115,6 +122,25 @@ def normalize_insurance_number_required(
             message=f"{field} が空または数字無しです。{where}",
         )
     return d
+
+
+def normalize_insurance_number_match(raw: str) -> Optional[str]:
+    """
+    保険証番号の match 用共通正規化。
+
+    ルール:
+    - NFKC 正規化
+    - 数字以外除去
+    - 半角数字へ統一
+    - 先頭0削除
+
+    数字が1つも無い場合は None を返す。
+    """
+    s = unicodedata.normalize("NFKC", raw or "")
+    d = "".join(ch for ch in s if ch.isdigit())
+    if d == "":
+        return None
+    return trim_leading_zeros(d)
 
 
 
@@ -322,6 +348,57 @@ def normalize_insurance_symbol(raw: str) -> Tuple[str, Optional[int]]:
     digits = re.findall(r"\d+", s_norm)
     digits_val = int("".join(digits)) if digits else None
     return s_norm, digits_val
+
+
+def _to_fullwidth_ascii(value: str) -> str:
+    """ASCII 英数記号を全角へ寄せる。"""
+    result: list[str] = []
+    for ch in value:
+        code = ord(ch)
+        if 0x21 <= code <= 0x7E:
+            result.append(chr(code + 0xFEE0))
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+
+def _trim_leading_zeros_in_digit_chunks(value: str) -> str:
+    """文字列中の数字連続部分ごとに先頭0を削除する。"""
+
+    def repl(m: re.Match[str]) -> str:
+        return trim_leading_zeros(m.group(0))
+
+    return re.sub(r"\d+", repl, value)
+
+
+
+def normalize_insurance_symbol_match(raw: str) -> Optional[str]:
+    """
+    保険証記号の match 用共通正規化。
+
+    HIA export ZIP v1 で確定した正規化手順を共通ルールとして使用する。
+
+    ルール:
+    - NFKC 正規化
+    - 空白 / ダッシュ類を除去
+    - 数字連続部分ごとに先頭0削除
+    - ASCII 英数記号は全角へ寄せる
+
+    空になった場合は None を返す。
+    """
+    s = unicodedata.normalize("NFKC", raw or "").strip()
+    if not s:
+        return None
+
+    s = re.sub(r"[ 　\-‐‑‒–—―ー－ｰ]+", "", s)
+    if not s:
+        return None
+
+    s = _trim_leading_zeros_in_digit_chunks(s)
+    s = _to_fullwidth_ascii(s)
+
+    return s or None
 
 
 
