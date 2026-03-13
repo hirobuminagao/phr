@@ -101,10 +101,10 @@ def normalize_relation_match(value: str) -> str:
 
 
 def normalize_name_match(value: str) -> str:
-    """氏名の match 用正規化（前後空白除去 + 連続空白整理）"""
+    """氏名の match 用正規化（半角/全角スペースを除去）"""
     if not value:
         return ""
-    value = " ".join(value.replace("　", " ").split())
+    value = value.replace(" ", "").replace("　", "")
     return value.strip()
 
 
