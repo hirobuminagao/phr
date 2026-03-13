@@ -20,7 +20,9 @@ data/fund_delivery/
 !data/fund_delivery/.gitkeep
 
 # logs
-logs/
+logs/*
+!logs/com_pc/
+!logs/com_pc/**
 *.log
 
 # local tooling / scratch scripts
