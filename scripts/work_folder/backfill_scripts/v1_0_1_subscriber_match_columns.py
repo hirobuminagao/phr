@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -77,6 +78,14 @@ def as_text(value: Any) -> str:
         return ""
     return str(value)
 
+
+def quote_schema_name(schema_name: str) -> str:
+    """安全なスキーマ名だけを許可して SQL に埋め込む。"""
+    if not re.fullmatch(r"[A-Za-z0-9_]+", schema_name):
+        raise ValueError(f"invalid schema name: {schema_name}")
+    return f"`{schema_name}`"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--schema", default=None, help="接続先 DB スキーマ名")
@@ -86,18 +95,19 @@ def main() -> int:
 
     params = load_mysql_params()
     schema_name = args.schema or params.database
+    schema_sql = quote_schema_name(schema_name)
 
     with connect_ctx(params) as con:
         cur = dict_cursor(con)
 
-        sql = """
+        sql = f"""
             SELECT
                 id,
                 name_kana_full,
                 name_kanji_full,
                 insurance_symbol,
                 insurance_number
-            FROM subscribers
+            FROM {schema_sql}.subscribers
             WHERE
                 name_kana_full_match IS NULL
                 OR name_full_match IS NULL
@@ -128,8 +138,8 @@ def main() -> int:
             row_id = int(row["id"])
 
             cur.execute(
-                """
-                UPDATE subscribers
+                f"""
+                UPDATE {schema_sql}.subscribers
                 SET
                     name_kana_full_match = %s,
                     name_full_match = %s,
