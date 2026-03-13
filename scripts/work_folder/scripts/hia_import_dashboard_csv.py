@@ -162,12 +162,23 @@ def sha256_text(text: str) -> str:
 # snapshot key
 # ------------------------------------------------------------
 
-def build_snapshot_key(insurer_number: str, symbol_match: str, number_match: str, relation_match: str) -> str:
+# NOTE:
+# 現状のダッシュボードCSVでは
+# insurer_number + symbol_match + number_match + relationship_match + name_match
+# を人物識別キーとして扱う。
+# 氏名違いを同一人物として束ねないため、name_match も identity に含める。
+def build_snapshot_key(
+    insurer_number: str,
+    symbol_match: str,
+    number_match: str,
+    relation_match: str,
+    name_match: str,
+) -> str:
     """
     人識別キー
     """
 
-    key = f"{insurer_number}|{symbol_match}|{number_match}|{relation_match}"
+    key = f"{insurer_number}|{symbol_match}|{number_match}|{relation_match}|{name_match}"
 
     return sha256_text(key)
 
@@ -246,6 +257,7 @@ def normalize_dashboard_row(row: dict, insurer_number: str) -> dict:
         symbol_match,
         number_match,
         relation_match,
+        name_match,
     )
     normalized["row_sha256"] = build_row_sha(normalized)
 
