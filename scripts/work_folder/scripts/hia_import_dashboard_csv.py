@@ -605,8 +605,10 @@ def process_csv(
                     run_id=run_id,
                     phase="import",
                     source="hia_fund_dashboard_csv",
+                    insurer_number=insurer_number,
                     src_file=str(csv_path),
-                    src_row_no=i,
+                    row_no=i,
+                    line_no=i,
                     err=e,
                 )
                 continue
@@ -687,16 +689,17 @@ def main():
 
             for csv_path in insurer_dir.glob("*.csv"):
 
-                notes = build_run_notes(csv_path)
                 run_id = start_run(
                     cur,
                     phase="import",
                     source="hia_fund_dashboard_csv",
                     db_schema="work_other",
+                    db_path="",
                     insurer_number=insurer_number,
                     input_base=str(insurer_dir),
                     input_file=str(csv_path),
-                    notes=notes,
+                    dry_run=0,
+                    limit_rows=None,
                 )
                 conn.commit()
 
