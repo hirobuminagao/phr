@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"MySQLParams\" の属性 \"database\" に割り当てることはできません\n  属性 \"database\" は読み取り専用です",
+	"source": "Pylance",
+	"startLineNumber": 89,
+	"startColumn": 16,
+	"endLineNumber": 89,
+	"endColumn": 24
+}]
