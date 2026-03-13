@@ -37,8 +37,8 @@ import re
 import unicodedata
 from typing import Dict
 
-from phr.lib.errors import NormalizeError
-from phr.lib import custom_id_gen
+from scripts.work_folder.lib.errors import NormalizeError
+from scripts.work_folder.lib import custom_id_gen
 
  # v1.0: ひらがな→カタカナ単純変換（コードポイント+0x60）
  # - 長音符や濁点結合の高度補正は行わない
