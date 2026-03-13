@@ -33,9 +33,4 @@ __pycache__/
 
 # mac
 .DS_Store
-
-*.csv
-!phr/
-!phr/sql/
-!phr/sql/meta/
-!phr/sql/meta/*.csv
+.vscode/
