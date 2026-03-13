@@ -350,12 +350,15 @@ def normalize_insurance_symbol(raw: str) -> Tuple[str, Optional[int]]:
     return s_norm, digits_val
 
 
-def _to_fullwidth_ascii(value: str) -> str:
-    """ASCII 英数記号を全角へ寄せる。"""
+
+def _to_fullwidth_non_digits(value: str) -> str:
+    """数字は半角のまま、数字以外の ASCII は全角へ寄せる。"""
     result: list[str] = []
     for ch in value:
         code = ord(ch)
-        if 0x21 <= code <= 0x7E:
+        if ch.isdigit():
+            result.append(ch)
+        elif 0x21 <= code <= 0x7E:
             result.append(chr(code + 0xFEE0))
         else:
             result.append(ch)
@@ -383,7 +386,7 @@ def normalize_insurance_symbol_match(raw: str) -> Optional[str]:
     - NFKC 正規化
     - 空白 / ダッシュ類を除去
     - 数字連続部分ごとに先頭0削除
-    - ASCII 英数記号は全角へ寄せる
+    - 数字は半角のまま、数字以外は全角へ寄せる
 
     空になった場合は None を返す。
     """
@@ -396,7 +399,7 @@ def normalize_insurance_symbol_match(raw: str) -> Optional[str]:
         return None
 
     s = _trim_leading_zeros_in_digit_chunks(s)
-    s = _to_fullwidth_ascii(s)
+    s = _to_fullwidth_non_digits(s)
 
     return s or None
 
