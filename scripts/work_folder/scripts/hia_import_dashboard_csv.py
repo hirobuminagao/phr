@@ -22,12 +22,22 @@ HIA ダッシュボードCSV 取り込みスクリプト（v1）
 ※ まだDB書き込みロジックは骨格のみ
 """
 
+
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# ------------------------------------------------------------
+# ファイル直実行でも project root を import path に追加
+# ------------------------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import csv
 import hashlib
 import json
-from pathlib import Path
 
 from datetime import datetime
 from typing import Optional
