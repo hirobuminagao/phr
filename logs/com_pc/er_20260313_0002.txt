@@ -1,0 +1,96 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"connect_db\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 35,
+	"startColumn": 46,
+	"endLineNumber": 35,
+	"endColumn": 56
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"normalize_kana_full_match\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 37,
+	"startColumn": 5,
+	"endLineNumber": 37,
+	"endColumn": 30
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"normalize_name_full_match\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 38,
+	"startColumn": 5,
+	"endLineNumber": 38,
+	"endColumn": 30
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"normalize_symbol_match\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 39,
+	"startColumn": 5,
+	"endLineNumber": 39,
+	"endColumn": 27
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"normalize_number_match\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 40,
+	"startColumn": 5,
+	"endLineNumber": 40,
+	"endColumn": 27
+}]
