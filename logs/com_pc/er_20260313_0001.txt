@@ -1,0 +1,11 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_dashboard_csv.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_dashboard_csv.py", line 47, in <module>
+    from scripts.work_folder.lib.normalize.common import (
+    ...<2 lines>...
+    )
+  File "C:\Users\1107858.KSMD\work\phr\scripts\work_folder\lib\normalize\__init__.py", line 8, in <module> 
+    from . import subscriber
+  File "C:\Users\1107858.KSMD\work\phr\scripts\work_folder\lib\normalize\subscriber.py", line 40, in <module>
+    from phr.lib.errors import NormalizeError
+ModuleNotFoundError: No module named 'phr'
