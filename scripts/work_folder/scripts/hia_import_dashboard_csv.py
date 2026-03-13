@@ -698,7 +698,7 @@ def main():
                     insurer_number=insurer_number,
                     input_base=str(insurer_dir),
                     input_file=str(csv_path),
-                    dry_run=0,
+                    dry_run=False,
                     limit_rows=None,
                 )
                 conn.commit()
