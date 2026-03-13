@@ -23,6 +23,8 @@ This script is intended to be executed once during migration.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import argparse
 import sys
 from pathlib import Path
@@ -64,9 +66,16 @@ def normalize_name_kana_full_match(value: str) -> str:
     )
 
 
+
 # ------------------------------------------------------------
 # processing
 # ------------------------------------------------------------
+
+def as_text(value: Any) -> str:
+    """DB 値を match 正規化入力用の文字列へ寄せる。None は空文字。"""
+    if value is None:
+        return ""
+    return str(value)
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -103,7 +112,7 @@ def main() -> int:
         else:
             cur.execute(sql)
 
-        rows = list(cur.fetchall())
+        rows = cast(list[dict[str, Any]], list(cur.fetchall()))
         total = len(rows)
         print(f"[INFO] rows needing backfill = {total}")
         print(f"[INFO] DB_SCHEMA = {params.database}")
@@ -113,10 +122,11 @@ def main() -> int:
         updated = 0
 
         for i, row in enumerate(rows, start=1):
-            kana_match = normalize_name_kana_full_match(row.get("name_kana_full") or "")
-            name_match = normalize_name_full_match(row.get("name_kanji_full") or "")
-            symbol_match = normalize_insurance_symbol_match(row.get("insurance_symbol") or "")
-            number_match = normalize_insurance_number_match(row.get("insurance_number") or "")
+            kana_match = normalize_name_kana_full_match(as_text(row["name_kana_full"]))
+            name_match = normalize_name_full_match(as_text(row["name_kanji_full"]))
+            symbol_match = normalize_insurance_symbol_match(as_text(row["insurance_symbol"]))
+            number_match = normalize_insurance_number_match(as_text(row["insurance_number"]))
+            row_id = int(row["id"])
 
             cur.execute(
                 """
@@ -134,7 +144,7 @@ def main() -> int:
                     name_match,
                     symbol_match,
                     number_match,
-                    row["id"],
+                    row_id,
                 ),
             )
 
