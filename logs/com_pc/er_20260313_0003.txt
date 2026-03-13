@@ -1,0 +1,239 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"MySQLParams\" の属性 \"database\" に割り当てることはできません\n  属性 \"database\" は読み取り専用です",
+	"source": "Pylance",
+	"startLineNumber": 80,
+	"startColumn": 16,
+	"endLineNumber": 80,
+	"endColumn": 24
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" の引数を、関数 \"normalize_name_kana_full_match\" の型 \"str\" のパラメーター \"value\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" は型 \"str\" に割り当てできません\n    \"Decimal\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 116,
+	"startColumn": 57,
+	"endLineNumber": 116,
+	"endColumn": 88
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 116,
+	"startColumn": 61,
+	"endLineNumber": 116,
+	"endColumn": 64
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" の引数を、関数 \"normalize_name_full_match\" の型 \"str\" のパラメーター \"value\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" は型 \"str\" に割り当てできません\n    \"Decimal\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 117,
+	"startColumn": 52,
+	"endLineNumber": 117,
+	"endColumn": 84
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 117,
+	"startColumn": 56,
+	"endLineNumber": 117,
+	"endColumn": 59
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" の引数を、関数 \"normalize_insurance_symbol_match\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" は型 \"str\" に割り当てできません\n    \"Decimal\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 118,
+	"startColumn": 61,
+	"endLineNumber": 118,
+	"endColumn": 94
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 118,
+	"startColumn": 65,
+	"endLineNumber": 118,
+	"endColumn": 68
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" の引数を、関数 \"normalize_insurance_number_match\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" は型 \"str\" に割り当てできません\n    \"Decimal\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 119,
+	"startColumn": 61,
+	"endLineNumber": 119,
+	"endColumn": 94
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 119,
+	"startColumn": 65,
+	"endLineNumber": 119,
+	"endColumn": 68
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"tuple[str, str, str | None, str | None, RowItemType | Unknown]\" の引数を、関数 \"execute\" の型 \"Sequence[MySQLConvertibleType] | Dict[str, MySQLConvertibleType]\" のパラメーター \"params\" に割り当てることはできません\n  型 \"tuple[str, str, str | None, str | None, RowItemType | Unknown]\" は型 \"Sequence[MySQLConvertibleType] | Dict[str, MySQLConvertibleType]\" に割り当てできません\n    \"tuple[str, str, str | None, str | None, RowItemType | Unknown]\" は \"Sequence[MySQLConvertibleType]\" に割り当てできません\n      型パラメーター \"_T_co@Sequence\" は共変ですが、\"RowItemType | Unknown\" は \"MySQLConvertibleType\" のサブタイプではありません\n        型 \"RowItemType | Unknown\" は型 \"MySQLConvertibleType\" に割り当てできません\n          型 \"Set[str]\" は型 \"MySQLConvertibleType\" に割り当てできません\n    \"tuple[str, str, str | None, str | None, RowItemType | Unknown]\" は \"Dict[str, MySQLConvertibleType]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 132,
+	"startColumn": 17,
+	"endLineNumber": 138,
+	"endColumn": 18
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 137,
+	"startColumn": 21,
+	"endLineNumber": 137,
+	"endColumn": 30,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_subscriber_match_columns.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 137,
+	"startColumn": 21,
+	"endLineNumber": 137,
+	"endColumn": 30
+}]
