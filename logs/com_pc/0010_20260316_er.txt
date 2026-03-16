@@ -1,0 +1,11 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/apply_subscribers_from_staging_hub.py
+[INFO] DB_SCHEMA = dev_phr (forced)
+[INFO] DRY_RUN   = False
+[INFO] LIMIT     = 0
+[INFO] run_id = 17
+[INFO] staging rows to apply = 44138
+[OK] inserted=0 updated=0 unchanged=0 errors=44138 run_id=17
+
+dev_phr.etl_errors
+error_code message
+ProgrammingError	1054 (42S22): Unknown column 'postal_code' in 'field list'
