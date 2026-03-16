@@ -36,15 +36,15 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from scripts.work_folder.lib.config_db import load_mysql_params  # type: ignore[import]
-from scripts.work_folder.lib.db_mysql import connect_ctx, dict_cursor, MySQLParams  # type: ignore[import]
-from scripts.work_folder.lib.etl import (  # type: ignore[import]
+from scripts.work_folder.lib.db.config import load_mysql_params
+from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor, MySQLParams
+from scripts.work_folder.lib.etl import (
     RunMetrics,
     start_run,
     finish_run,
     log_error,
 )
-from scripts.work_folder.lib.normalize.common import (  # type: ignore[import]
+from scripts.work_folder.lib.normalize.common import (
     normalize_insurance_number_match,
     normalize_insurance_symbol_match,
 )
@@ -459,13 +459,19 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    params: MySQLParams = load_mysql_params()
-    if args.schema:
-        params.database = args.schema
+    params_raw: MySQLParams = load_mysql_params()
+    schema_name = "dev_phr"
+    params = MySQLParams(
+        host=params_raw.host,
+        port=params_raw.port,
+        user=params_raw.user,
+        password=params_raw.password,
+        database=schema_name,
+    )
 
-    db_path_str = f"{params.host}:{params.port}/{params.database}"
+    db_path_str = f"{params.host}:{params.port}/{schema_name}"
 
-    print(f"[INFO] DB_SCHEMA = {params.database}")
+    print(f"[INFO] DB_SCHEMA = {schema_name} (forced)")
     print(f"[INFO] DRY_RUN   = {args.dry_run}")
     print(f"[INFO] LIMIT     = {args.limit}")
 
@@ -478,7 +484,7 @@ def main() -> int:
                 cur,
                 phase="apply",
                 source=JOB_NAME,
-                db_schema=params.database,
+                db_schema=schema_name,
                 db_path=db_path_str,
                 input_base="staging_subscribers_hub",
                 input_file=None,
