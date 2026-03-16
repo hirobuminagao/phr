@@ -566,14 +566,21 @@ def main() -> int:
 
     insurers_summary = ",".join(f"{i:08d}" for i in insurer_ids)
 
-    params: MySQLParams = load_mysql_params()
-    schema_name = args.schema or params.database
+    params_raw: MySQLParams = load_mysql_params()
+    schema_name = "dev_phr"
+    params = MySQLParams(
+        host=params_raw.host,
+        port=params_raw.port,
+        user=params_raw.user,
+        password=params_raw.password,
+        database=schema_name,
+    )
 
     db_path_str = f"{params.host}:{params.port}/{schema_name}"
 
     print(f"[INFO] BASE      = {base_dir}")
     print(f"[INFO] TARGETS   = {[d.name for d in target_dirs]}")
-    print(f"[INFO] DB_SCHEMA = {schema_name}")
+    print(f"[INFO] DB_SCHEMA = {schema_name} (forced)")
     print(f"[INFO] DRY_RUN   = {args.dry_run}")
     print(f"[INFO] LIMIT     = {args.limit}")
     print(f"[INFO] PROGRESS  = {args.progress_interval}")
