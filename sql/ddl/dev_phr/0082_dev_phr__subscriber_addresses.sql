@@ -1,3 +1,12 @@
+-- Design note:
+-- subscriber_addresses is treated as a historical / attribute table.
+-- To keep flexibility for data migration, partial data loads, and
+-- address history corrections, a foreign key constraint to
+-- `subscribers(id)` is intentionally NOT defined here.
+--
+-- Parent-child consistency is enforced by the apply pipeline
+-- (`apply_subscribers_from_staging_hub.py`) rather than by the DB.
+
 CREATE TABLE `dev_phr`.`subscriber_addresses` (
   `address_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `subscriber_id` bigint unsigned NOT NULL,
