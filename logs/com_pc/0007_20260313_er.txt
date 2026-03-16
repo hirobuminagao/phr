@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/import_subscribers_to_staging_hub.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"MySQLParams\" の属性 \"database\" に割り当てることはできません\n  属性 \"database\" は読み取り専用です",
+	"source": "Pylance",
+	"startLineNumber": 571,
+	"startColumn": 16,
+	"endLineNumber": 571,
+	"endColumn": 24
+}]
