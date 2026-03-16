@@ -567,14 +567,13 @@ def main() -> int:
     insurers_summary = ",".join(f"{i:08d}" for i in insurer_ids)
 
     params: MySQLParams = load_mysql_params()
-    if args.schema:
-        params.database = args.schema
+    schema_name = args.schema or params.database
 
-    db_path_str = f"{params.host}:{params.port}/{params.database}"
+    db_path_str = f"{params.host}:{params.port}/{schema_name}"
 
     print(f"[INFO] BASE      = {base_dir}")
     print(f"[INFO] TARGETS   = {[d.name for d in target_dirs]}")
-    print(f"[INFO] DB_SCHEMA = {params.database}")
+    print(f"[INFO] DB_SCHEMA = {schema_name}")
     print(f"[INFO] DRY_RUN   = {args.dry_run}")
     print(f"[INFO] LIMIT     = {args.limit}")
     print(f"[INFO] PROGRESS  = {args.progress_interval}")
@@ -599,7 +598,7 @@ def main() -> int:
                 cur,
                 phase="import",
                 source="import_subscribers_to_staging_hub",
-                db_schema=params.database,
+                db_schema=schema_name,
                 db_path=db_path_str,
                 input_base=str(base_dir),
                 input_file=run_input_file,
