@@ -1,0 +1,106 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_hia_dashboard_subscriber_enrichment.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType] | Any\" の引数を、関数 \"fetch_subscriber\" の型 \"Mapping[str, Any]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType] | Any\" は型 \"Mapping[str, Any]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"Mapping[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 141,
+	"startColumn": 37,
+	"endLineNumber": 141,
+	"endColumn": 38
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_hia_dashboard_subscriber_enrichment.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 150,
+	"startColumn": 39,
+	"endLineNumber": 150,
+	"endColumn": 67,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_hia_dashboard_subscriber_enrichment.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['hia_dashboard_person_id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['hia_dashboard_person_id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 150,
+	"startColumn": 39,
+	"endLineNumber": 150,
+	"endColumn": 67
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_hia_dashboard_subscriber_enrichment.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown | Any\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown | Any\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 150,
+	"startColumn": 39,
+	"endLineNumber": 150,
+	"endColumn": 67
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_hia_dashboard_subscriber_enrichment.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown | Any\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown | Any\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 150,
+	"startColumn": 39,
+	"endLineNumber": 150,
+	"endColumn": 67
+}]
