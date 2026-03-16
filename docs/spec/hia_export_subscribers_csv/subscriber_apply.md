@@ -55,7 +55,7 @@ processed_at
 
 ```
 (person_id_custom,
- name_kana_full,
+ name_kana_full_match,
  gender_code)
 ```
 
@@ -64,7 +64,7 @@ processed_at
 | column | role |
 |------|------|
 | person_id_custom | 保険証 + 生年月日ベースID |
-| name_kana_full | カナ一致 |
+| name_kana_full_match | 正規化・空白吸収後のカナ照合キー |
 | gender_code | 同名異人対策 |
 
 SQL:
@@ -73,7 +73,7 @@ SQL:
 SELECT *
 FROM subscribers
 WHERE person_id_custom = ?
-AND name_kana_full = ?
+AND name_kana_full_match = ?
 AND gender_code IS ?
 LIMIT 1
 ```
@@ -204,23 +204,28 @@ is_current = 1
   is_current = 1
 ```
 
-住所解析:
+## Address Constraint Policy
 
-```
-resolve_prefecture()
+`subscriber_addresses` は履歴・属性テーブルとしての柔軟性を優先する。
+
+そのため `subscriber_contacts` と異なり、
+`subscriber_addresses.subscriber_id` には外部キー制約を設定しない。
+
+親子整合性は
+
+```text
+apply_subscribers_from_staging_hub.py
 ```
 
-処理:
+によって担保する。
 
-```
-郵便番号 / 住所
-↓
-prefecture 推定
-↓
-prefecture_code
-prefecture
-address_line
-```
+この設計により、
+
+- 住所履歴の補修
+- 移行時の段階的データ投入
+- 不完全データの一時保持
+
+を柔軟に扱える。
 
 ---
 
