@@ -8,7 +8,7 @@ Project: PHR / work_folder/phr
 
 Purpose (PHR v1.0.1):
     - `staging_subscribers_hub` の未処理行を `subscribers` に反映する（apply 相当）。
-    - 既存 subscriber は `person_id_custom` を主キー的に扱って照合する。
+    - 既存 subscriber は `person_id_custom + name_kana_full_match + gender_code` で照合する。
     - v1.0.1 追加の identity match columns を生成して `subscribers` に保存する。
 
 Design:
@@ -24,6 +24,9 @@ V1.0.1 Scope:
         - `subscribers`
     - WRITES:
         - `subscribers`
+        - `subscriber_addresses`
+        - `subscriber_contacts`
+        - `subscriber_audit`
         - `staging_subscribers_hub.processed_run_id / processed_at`
         - `etl_runs` / `etl_errors`
 ============================================================
@@ -178,6 +181,7 @@ def fetch_existing_subscriber(cur, person_id_custom: str, name_kana_full_match: 
     return cur.fetchone()
 
 
+
 COMPARE_COLUMNS = [
     "name_kana_full",
     "name_kanji_full",
@@ -209,6 +213,91 @@ COMPARE_COLUMNS = [
     "employee_code",
     "connect_id",
 ]
+
+
+AUDIT_COLUMNS = [
+    "insurer_number",
+    "insurance_symbol",
+    "insurance_symbol_digits",
+    "insurance_number",
+    "insurance_branchnumber",
+    "birth",
+    "gender_code",
+    "name_kana_full",
+    "name_kanji_full",
+    "relationship_name",
+    "qualification_acquired_date",
+    "qualification_lost_date",
+    "employer_code",
+    "department_code",
+    "distribution_code",
+    "employee_code",
+    "connect_id",
+]
+
+
+def audit_value(value: Any) -> Optional[str]:
+    """subscriber_audit 保存用に値を文字列化する。NULL は NULL のまま保持。"""
+    if value is None:
+        return None
+    return str(value)
+
+
+def insert_subscriber_audit_rows(cur, rows: list[tuple[Any, ...]]) -> None:
+    """subscriber_audit へ複数行を一括 INSERT する。"""
+    if not rows:
+        return
+
+    cur.executemany(
+        """
+        INSERT INTO subscriber_audit (
+            subscriber_id,
+            field,
+            old_value,
+            new_value,
+            source,
+            change_run_id
+        ) VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        rows,
+    )
+
+
+def build_insert_audit_rows(subscriber_id: int, run_id: int) -> list[tuple[Any, ...]]:
+    return [
+        (
+            subscriber_id,
+            "__insert__",
+            None,
+            "inserted",
+            JOB_NAME,
+            run_id,
+        )
+    ]
+
+
+def build_update_audit_rows(
+    subscriber_id: int,
+    existing: dict[str, Any],
+    vals: Dict[str, Any],
+    run_id: int,
+) -> list[tuple[Any, ...]]:
+    rows: list[tuple[Any, ...]] = []
+    for col in AUDIT_COLUMNS:
+        old_val = existing.get(col)
+        new_val = vals.get(col)
+        if old_val != new_val:
+            rows.append(
+                (
+                    subscriber_id,
+                    col,
+                    audit_value(old_val),
+                    audit_value(new_val),
+                    JOB_NAME,
+                    run_id,
+                )
+            )
+    return rows
 
 
 
@@ -606,6 +695,8 @@ def apply_once(cur, srow: dict[str, Any], run_id: int) -> str:
 
     if existing is None:
         subscriber_id = insert_subscriber(cur, vals, run_id)
+        audit_rows = build_insert_audit_rows(subscriber_id, run_id)
+        insert_subscriber_audit_rows(cur, audit_rows)
         address_apply(
             cur,
             subscriber_id,
@@ -624,7 +715,9 @@ def apply_once(cur, srow: dict[str, Any], run_id: int) -> str:
     subscriber_id = int(existing["id"])
 
     if subscriber_differs(existing, vals):
+        audit_rows = build_update_audit_rows(subscriber_id, existing, vals, run_id)
         update_subscriber(cur, subscriber_id, vals, run_id)
+        insert_subscriber_audit_rows(cur, audit_rows)
         address_apply(
             cur,
             subscriber_id,
