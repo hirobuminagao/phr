@@ -1,5 +1,3 @@
-
-
 # Subscriber Identity Policy
 
 このドキュメントは **HIA export 加入者 CSV を PHR subscriber master に反映する際の同一人物判定ポリシー**を定義する。
@@ -38,7 +36,7 @@ subscriber identity は以下を目的とする。
 
 ```
 person_id_custom
-name_kana_full
+name_kana_full_match
 gender_code
 ```
 
@@ -51,7 +49,7 @@ gender_code
 | column | role | reason |
 |---|---|---|
 | `person_id_custom` | 主識別子 | 保険者番号・記号・番号・生年月日を元に生成されるため、加入者識別の中核となる |
-| `name_kana_full` | 氏名照合補助 | person_id_custom が偶発的に衝突するケースや入力異常の検出補助 |
+| `name_kana_full_match` | 氏名照合補助 | 正規化・空白吸収後の照合キーとして、person_id_custom の偶発衝突や入力異常の検出を補助する |
 | `gender_code` | 補助識別子 | 同名・近似データの誤結合抑制 |
 
 この設計により、
@@ -93,13 +91,13 @@ phr/lib/normalize/subscriber.py
 
 - これは apply 時の主キーそのものではない
 - subscriber master 内での「同一人物候補検索キー」として使用する
-- person_id_custom 単独ではなく、`name_kana_full` と `gender_code` を併用する
+- person_id_custom 単独ではなく、`name_kana_full_match` と `gender_code` を併用する
 
 ---
 
-# 5. name_kana_full
+# 5. name_kana_full_match
 
-`name_kana_full` は **氏名カナの正規化済み全文字列**を使用する。
+`name_kana_full_match` は **氏名カナの正規化・空白吸収後の照合用文字列**を使用する。
 
 正規化ルール:
 
@@ -107,6 +105,7 @@ phr/lib/normalize/subscriber.py
 - ひらがな → カタカナ
 - 全角/半角空白の除去
 - 連続空白の吸収
+- match 用の full key を生成
 
 生成関数:
 
@@ -122,7 +121,7 @@ phr/lib/normalize/subscriber.py
 
 例:
 
-| raw | normalized |
+| raw | normalized match key |
 |---|---|
 | `ﾅｶﾞｵ ﾋﾛﾌﾐ` | `ナガオヒロフミ` |
 | `ながお　ひろふみ` | `ナガオヒロフミ` |
@@ -158,7 +157,7 @@ apply script の検索イメージ:
 SELECT *
 FROM subscribers
 WHERE person_id_custom = ?
-  AND name_kana_full = ?
+  AND name_kana_full_match = ?
   AND gender_code IS ?
 LIMIT 1;
 ```
@@ -175,7 +174,7 @@ matching rule は次の通り。
 
 ```
 person_id_custom
-name_kana_full
+name_kana_full_match
 gender_code
 ```
 
@@ -257,9 +256,9 @@ insert / update / noop
 
 想定外状態:
 
-- 同じ `(person_id_custom, name_kana_full, gender_code)` を持つ subscriber が複数存在
+- 同じ `(person_id_custom, name_kana_full_match, gender_code)` を持つ subscriber が複数存在
 - 正規化前入力の異常により person_id_custom が生成不能
-- name_kana_full が空
+- name_kana_full_match が空
 
 これらは正常 apply 対象ではなく、
 インポートまたは apply のエラーとして扱う。
@@ -271,7 +270,7 @@ insert / update / noop
 この identity policy は、SQLite 版で運用していた以下の照合思想を MySQL / PHR v1.0.1 に引き継ぐものである。
 
 ```
-(person_id_custom, name_kana_full, gender_code)
+(person_id_custom, name_kana_full_match, gender_code)
 ```
 
 過度に多くの列を identity に含めないことで、
@@ -291,7 +290,7 @@ PHR subscriber identity は以下の3列で定義する。
 
 ```
 person_id_custom
-name_kana_full
+name_kana_full_match
 gender_code
 ```
 
