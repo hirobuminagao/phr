@@ -1,0 +1,4 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_1_hia_dashboard_subscriber_enrichment.py
+[ERROR] MySQL connection failed
+        host=None port=3306 user=None database=work_other
+        detail: 2017 (HY000): Can't open named pipe to host: .  pipe: MySQL (2)
