@@ -28,23 +28,45 @@ It should be executed manually and not used in regular operations.
 """
 
 import argparse
+import os
 import sys
 from typing import Dict, Any, Optional, Mapping, cast
 
 import mysql.connector
+from mysql.connector import Error
 
+from pathlib import Path
+
+
+def load_local_env() -> None:
+    """Load scripts/work_folder/.env if present (KEY=VALUE format)."""
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+load_local_env()
 
 # ------------------------------------------------------------
 # DB connection
 # ------------------------------------------------------------
 
-def get_conn():
+def get_conn(args: argparse.Namespace):
     return mysql.connector.connect(
-        host="127.0.0.1",
-        port=3306,
-        user="root",
-        password="",
-        database="work_other",
+        host=args.host,
+        port=args.port,
+        user=args.user,
+        password=args.password,
+        database=args.database,
     )
 
 
@@ -117,9 +139,19 @@ def update_dashboard(cur, person_id: int, sub):
 # main backfill logic
 # ------------------------------------------------------------
 
-def run_backfill(dry_run: bool = False):
+def run_backfill(args: argparse.Namespace) -> int:
 
-    conn = get_conn()
+    try:
+        conn = get_conn(args)
+    except Error as e:
+        print("[ERROR] MySQL connection failed")
+        print(
+            f"        host={args.host} port={args.port} "
+            f"user={args.user} database={args.database}"
+        )
+        print(f"        detail: {e}")
+        return 1
+
     cur = conn.cursor(dictionary=True)
 
     select_sql = """
@@ -153,10 +185,10 @@ def run_backfill(dry_run: bool = False):
 
         matched += 1
 
-        if not dry_run:
+        if not args.dry_run:
             update_dashboard(cur, int(row_dict["hia_dashboard_person_id"]), sub)
 
-    if not dry_run:
+    if not args.dry_run:
         conn.commit()
 
     print("------------------------------")
@@ -165,6 +197,8 @@ def run_backfill(dry_run: bool = False):
 
     cur.close()
     conn.close()
+
+    return 0
 
 
 # ------------------------------------------------------------
@@ -175,7 +209,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--host", default=os.getenv("MYSQL_HOST"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("MYSQL_PORT", "3306")))
+    parser.add_argument("--user", default=os.getenv("MYSQL_USER"))
+    parser.add_argument("--password", default=os.getenv("MYSQL_PASSWORD"))
+    parser.add_argument("--database", default=os.getenv("MYSQL_DATABASE", "work_other"))
 
     args = parser.parse_args()
 
-    run_backfill(dry_run=args.dry_run)
+    raise SystemExit(run_backfill(args))
