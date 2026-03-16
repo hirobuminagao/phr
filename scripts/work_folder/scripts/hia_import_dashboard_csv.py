@@ -66,6 +66,10 @@ COMPARE_COLUMNS = [
     "status",
     "name",
     "name_match",
+    "subscriber_person_id_custom",
+    "subscriber_name_kana_full",
+    "subscriber_gender_code",
+    "subscriber_birth",
     "insurance_symbol",
     "insurance_number",
     "branch_number",
@@ -86,6 +90,51 @@ COMPARE_COLUMNS = [
     "exclusion_reason",
     "row_sha256",
 ]
+def fetch_subscriber_enrichment(
+    cur: Any,
+    insurer_number: str,
+    insurance_symbol_match: str,
+    insurance_number_match: str,
+    name_full_match: str,
+) -> dict:
+    """dev_phr.subscribers から dashboard 補完用の人物情報を取得する。"""
+    sql = """
+        SELECT
+            person_id_custom,
+            name_kana_full,
+            gender_code,
+            birth
+        FROM dev_phr.subscribers
+        WHERE insurer_number = %s
+          AND insurance_symbol_match = %s
+          AND insurance_number_match = %s
+          AND name_full_match = %s
+        LIMIT 1
+    """
+    cur.execute(
+        sql,
+        (
+            insurer_number,
+            insurance_symbol_match,
+            insurance_number_match,
+            name_full_match,
+        ),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {
+            "subscriber_person_id_custom": None,
+            "subscriber_name_kana_full": None,
+            "subscriber_gender_code": None,
+            "subscriber_birth": None,
+        }
+
+    return {
+        "subscriber_person_id_custom": row.get("person_id_custom"),
+        "subscriber_name_kana_full": row.get("name_kana_full"),
+        "subscriber_gender_code": row.get("gender_code"),
+        "subscriber_birth": row.get("birth"),
+    }
 
 
 # ------------------------------------------------------------
@@ -284,6 +333,10 @@ def build_status_record(normalized: dict, run_id: int, raw_row_json: str) -> dic
         "relationship_match": normalized["relationship_match"],
         "name": normalized["name"],
         "name_match": normalized["name_match"],
+        "subscriber_person_id_custom": normalized["subscriber_person_id_custom"],
+        "subscriber_name_kana_full": normalized["subscriber_name_kana_full"],
+        "subscriber_gender_code": normalized["subscriber_gender_code"],
+        "subscriber_birth": normalized["subscriber_birth"],
         "status": normalized["status"],
         "reservation_date": normalized["reservation_date"],
         "exam_date": normalized["exam_date"],
@@ -360,6 +413,10 @@ def fetch_existing_status(cur: Any, snapshot_identity_key: str) -> Optional[dict
             relationship_match,
             name,
             name_match,
+            subscriber_person_id_custom,
+            subscriber_name_kana_full,
+            subscriber_gender_code,
+            subscriber_birth,
             status,
             reservation_date,
             exam_date,
@@ -399,6 +456,10 @@ def insert_status(cur: Any, status_record: dict) -> int:
             relationship_match,
             name,
             name_match,
+            subscriber_person_id_custom,
+            subscriber_name_kana_full,
+            subscriber_gender_code,
+            subscriber_birth,
             status,
             reservation_date,
             exam_date,
@@ -417,8 +478,9 @@ def insert_status(cur: Any, status_record: dict) -> int:
             %s, %s, %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s,
-            %s, %s, %s,
             %s, %s,
+            %s, %s,
+            %s, %s, %s,
             %s, %s,
             %s, %s,
             %s, %s,
@@ -439,6 +501,10 @@ def insert_status(cur: Any, status_record: dict) -> int:
             status_record["relationship_match"],
             status_record["name"],
             status_record["name_match"],
+            status_record["subscriber_person_id_custom"],
+            status_record["subscriber_name_kana_full"],
+            status_record["subscriber_gender_code"],
+            status_record["subscriber_birth"],
             status_record["status"],
             status_record["reservation_date"],
             status_record["exam_date"],
@@ -485,6 +551,10 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             relationship_match = %s,
             name = %s,
             name_match = %s,
+            subscriber_person_id_custom = %s,
+            subscriber_name_kana_full = %s,
+            subscriber_gender_code = %s,
+            subscriber_birth = %s,
             status = %s,
             reservation_date = %s,
             exam_date = %s,
@@ -514,6 +584,10 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             status_record["relationship_match"],
             status_record["name"],
             status_record["name_match"],
+            status_record["subscriber_person_id_custom"],
+            status_record["subscriber_name_kana_full"],
+            status_record["subscriber_gender_code"],
+            status_record["subscriber_birth"],
             status_record["status"],
             status_record["reservation_date"],
             status_record["exam_date"],
@@ -613,6 +687,15 @@ def process_csv(
             try:
                 normalized = normalize_dashboard_row(row, insurer_number)
                 raw_row_json = build_raw_row_json(row)
+                subscriber_enrichment = fetch_subscriber_enrichment(
+                    cur,
+                    insurer_number=insurer_number,
+                    insurance_symbol_match=normalized["insurance_symbol_match"],
+                    insurance_number_match=normalized["insurance_number_match"],
+                    name_full_match=normalized["name_match"],
+                )
+                normalized.update(subscriber_enrichment)
+
                 status_record = build_status_record(
                     normalized,
                     run_id=run_id,
@@ -651,12 +734,13 @@ def process_csv(
             else:
                 hia_dashboard_person_id = int(existing["hia_dashboard_person_id"])
 
-                if existing.get("row_sha256") == normalized["row_sha256"]:
+                diffs = diff_status_columns(existing, normalized)
+
+                if not diffs:
                     touch_last_seen_run(cur, hia_dashboard_person_id, run_id)
                     metrics.rows_unchanged += 1
 
                 else:
-                    diffs = diff_status_columns(existing, normalized)
                     insert_history_rows(
                         cur,
                         hia_dashboard_person_id,
