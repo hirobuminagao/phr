@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -31,7 +29,7 @@ It should be executed manually and not used in regular operations.
 
 import argparse
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Mapping
 
 import mysql.connector
 
@@ -54,7 +52,7 @@ def get_conn():
 # fetch subscribers
 # ------------------------------------------------------------
 
-def fetch_subscriber(cur, row: Dict[str, Any]):
+def fetch_subscriber(cur, row: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     sql = """
         SELECT
             person_id_custom,
@@ -149,7 +147,7 @@ def run_backfill(dry_run: bool = False):
         matched += 1
 
         if not dry_run:
-            update_dashboard(cur, r["hia_dashboard_person_id"], sub)
+            update_dashboard(cur, int(r["hia_dashboard_person_id"]), sub)
 
     if not dry_run:
         conn.commit()
