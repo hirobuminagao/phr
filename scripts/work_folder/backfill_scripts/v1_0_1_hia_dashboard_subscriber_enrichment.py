@@ -29,7 +29,7 @@ It should be executed manually and not used in regular operations.
 
 import argparse
 import sys
-from typing import Dict, Any, Optional, Mapping
+from typing import Dict, Any, Optional, Mapping, cast
 
 import mysql.connector
 
@@ -47,6 +47,12 @@ def get_conn():
         database="work_other",
     )
 
+
+def require_row_dict(row: Any) -> Dict[str, Any]:
+    """mysql.connector の取得行を dict として扱える形に正規化する。"""
+    if isinstance(row, dict):
+        return cast(Dict[str, Any], row)
+    raise TypeError(f"Expected dict row, got {type(row)!r}")
 
 # ------------------------------------------------------------
 # fetch subscribers
@@ -138,7 +144,8 @@ def run_backfill(dry_run: bool = False):
 
     for r in rows:
 
-        sub = fetch_subscriber(cur, r)
+        row_dict = require_row_dict(r)
+        sub = fetch_subscriber(cur, row_dict)
 
         if not sub:
             unmatched += 1
@@ -147,7 +154,7 @@ def run_backfill(dry_run: bool = False):
         matched += 1
 
         if not dry_run:
-            update_dashboard(cur, int(r["hia_dashboard_person_id"]), sub)
+            update_dashboard(cur, int(row_dict["hia_dashboard_person_id"]), sub)
 
     if not dry_run:
         conn.commit()
