@@ -14,12 +14,12 @@ Design:
     - 本体取込の成否は finish_run で確定し、成功時は staging への INSERT も含めて commit
     - 取込中の行エラー（NormalizeError 等）は etl_errors に記録し、処理は継続（行スキップ）
     - dry-run の場合は staging への INSERT を実行せず、最後に rollback（実質 no-op。run/err は残る）
-    - 対象フォルダは `data/hia_export/input_subscribers/<8桁保険者番号>/` をデフォルトとする
+    - 対象フォルダは `data/hia_export/input_subscribers_csv/<8桁保険者番号>/` をデフォルトとする
     - 進捗ログは ProgressLogger（RunMetrics参照専用）を利用（rows_seen が真実）
 
 V1.0 Freeze (Scope / Contract):
     - Scope: Hub CSV → `staging_subscribers_hub` まで（`subscribers` 本表への反映は本スクリプトの対象外）
-    - Inputs: `data/hia_export/input_subscribers/<8桁保険者番号>/` 配下の *.csv（8桁フォルダは自動列挙）
+    - Inputs: `data/hia_export/input_subscribers_csv/<8桁保険者番号>/` 配下の *.csv（8桁フォルダは自動列挙）
     - Outputs:
         - `staging_subscribers_hub`（dry-run の場合は INSERT しない）
         - `etl_runs` / `etl_errors`（start_run 直後に commit するため、dry-run / 失敗でも証跡は残る）
@@ -76,7 +76,7 @@ V1.0 Freeze (Scope / Contract):
                 - 正常系: `finish_run` 実行後、dry-run は `conn.rollback()` / 本番は `conn.commit()`
                 - 異常系: 例外時は `conn.rollback()` → `finish_run(status=failed)` → `conn.commit()`
     - File I/O:
-        - READS: `data/hia_export/input_subscribers/<8桁保険者番号>/*.csv`
+        - READS: `data/hia_export/input_subscribers_csv/<8桁保険者番号>/*.csv`
         - READS (config): `scripts/work_folder/mat/custom_id_config.json` + `custom_id_mapping.json`
     - Key generation:
         - `person_id_custom` は mat 配下の JSON（config + mapping）を一次情報として生成する（py 内ハードコード無し）
@@ -130,7 +130,7 @@ from scripts.work_folder.lib.normalize import subscriber as nsub
 
 JOB_NAME = "subscribers_hub"
 BASE_DIR = Path(__file__).resolve().parents[3]
-DEFAULT_INPUT_BASE = BASE_DIR / "data" / "hia_export" / "input_subscribers"
+DEFAULT_INPUT_BASE = BASE_DIR / "data" / "hia_export" / "input_subscribers_csv"
 
 MAP: Dict[str, str] = {
     "被保険者証記号": "insurance_symbol",
