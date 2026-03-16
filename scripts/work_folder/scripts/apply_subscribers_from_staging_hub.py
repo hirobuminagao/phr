@@ -30,11 +30,19 @@ V1.0.1 Scope:
 """
 
 from __future__ import annotations
+import sys
 
 import argparse
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+# ------------------------------------------------------------
+# ファイル直実行でも repo root を import path に追加
+# ------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.work_folder.lib.db.config import load_mysql_params
 from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor, MySQLParams
