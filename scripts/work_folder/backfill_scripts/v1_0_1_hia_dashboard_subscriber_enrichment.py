@@ -209,11 +209,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--host", default=os.getenv("MYSQL_HOST"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("MYSQL_PORT", "3306")))
-    parser.add_argument("--user", default=os.getenv("MYSQL_USER"))
-    parser.add_argument("--password", default=os.getenv("MYSQL_PASSWORD"))
-    parser.add_argument("--database", default=os.getenv("MYSQL_DATABASE", "work_other"))
+    parser.add_argument("--host", default=os.getenv("PHR_MYSQL_HOST"))
+    parser.add_argument("--port", type=int, default=int(os.getenv("PHR_MYSQL_PORT", "3306")))
+    parser.add_argument("--user", default=os.getenv("PHR_MYSQL_USER"))
+    parser.add_argument("--password", default=os.getenv("PHR_MYSQL_PASSWORD"))
+    parser.add_argument("--database", default=os.getenv("PHR_MYSQL_DATABASE", "work_other"))
 
     args = parser.parse_args()
 
