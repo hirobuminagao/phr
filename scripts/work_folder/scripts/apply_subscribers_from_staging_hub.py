@@ -357,7 +357,6 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             distribution_code,
             employee_code,
             connect_id,
-            first_import_run_id,
             last_change_run_id,
             created_at,
             updated_at
@@ -391,14 +390,12 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             %(distribution_code)s,
             %(employee_code)s,
             %(connect_id)s,
-            %(first_import_run_id)s,
             %(last_change_run_id)s,
             NOW(3),
             NOW(3)
         )
     """
     params = dict(vals)
-    params["first_import_run_id"] = run_id
     params["last_change_run_id"] = run_id
     cur.execute(sql, params)
     return int(cur.lastrowid)
