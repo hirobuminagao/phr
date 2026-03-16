@@ -1,0 +1,10 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/import_subscribers_to_staging_hub.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\import_subscribers_to_staging_hub.py", line 685, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\import_subscribers_to_staging_hub.py", line 542, in main
+    raw_target_dirs = list_target_dirs(base_dir, args.input)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\import_subscribers_to_staging_hub.py", line 183, in list_target_dirs
+    raise FileNotFoundError(f"ベースフォルダが見つかりません: {base_dir}")
+FileNotFoundError: ベースフォルダが見つかりません: C:\Users\1107858.KSMD\work\phr\data\hia_export\input_subscribers
