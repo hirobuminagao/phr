@@ -40,7 +40,7 @@ from pathlib import Path
 
 def load_local_env() -> None:
     """Load scripts/work_folder/.env if present (KEY=VALUE format)."""
-    env_path = Path(__file__).resolve().parents[2] / ".env"
+    env_path = Path(__file__).resolve().parents[1] / ".env"
     if not env_path.exists():
         return
 
