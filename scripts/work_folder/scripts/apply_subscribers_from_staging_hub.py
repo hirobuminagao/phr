@@ -120,11 +120,7 @@ def build_subscriber_vals(srow: dict[str, Any]) -> Dict[str, Any]:
         "insurance_branchnumber": srow.get("insurance_branchnumber"),
         "qualification_acquired_date": srow.get("qualification_acquired_date"),
         "qualification_lost_date": srow.get("qualification_lost_date"),
-        "postal_code": srow.get("postal_code"),
-        "address_line": srow.get("address_line"),
-        "building": srow.get("building"),
-        "phone": srow.get("phone"),
-        "email": srow.get("email"),
+        # Removed: "postal_code", "address_line", "building", "phone", "email"
         "employer_code": srow.get("employer_code"),
         "department_code": srow.get("department_code"),
         "distribution_code": srow.get("distribution_code"),
@@ -162,11 +158,11 @@ def fetch_existing_subscriber(cur, person_id_custom: str, name_kana_full_match: 
             insurance_branchnumber,
             qualification_acquired_date,
             qualification_lost_date,
-            postal_code,
-            address_line,
-            building,
-            phone,
-            email,
+            -- removed: postal_code,
+            -- removed: address_line,
+            -- removed: building,
+            -- removed: phone,
+            -- removed: email,
             employer_code,
             department_code,
             distribution_code,
@@ -206,11 +202,7 @@ COMPARE_COLUMNS = [
     "insurance_branchnumber",
     "qualification_acquired_date",
     "qualification_lost_date",
-    "postal_code",
-    "address_line",
-    "building",
-    "phone",
-    "email",
+    # Removed: "postal_code", "address_line", "building", "phone", "email"
     "employer_code",
     "department_code",
     "distribution_code",
@@ -255,11 +247,11 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             insurance_branchnumber,
             qualification_acquired_date,
             qualification_lost_date,
-            postal_code,
-            address_line,
-            building,
-            phone,
-            email,
+            -- removed: postal_code,
+            -- removed: address_line,
+            -- removed: building,
+            -- removed: phone,
+            -- removed: email,
             employer_code,
             department_code,
             distribution_code,
@@ -294,11 +286,11 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             %(insurance_branchnumber)s,
             %(qualification_acquired_date)s,
             %(qualification_lost_date)s,
-            %(postal_code)s,
-            %(address_line)s,
-            %(building)s,
-            %(phone)s,
-            %(email)s,
+            -- removed: %(postal_code)s,
+            -- removed: %(address_line)s,
+            -- removed: %(building)s,
+            -- removed: %(phone)s,
+            -- removed: %(email)s,
             %(employer_code)s,
             %(department_code)s,
             %(distribution_code)s,
@@ -345,11 +337,11 @@ def update_subscriber(cur, subscriber_id: int, vals: Dict[str, Any], run_id: int
             insurance_branchnumber = %(insurance_branchnumber)s,
             qualification_acquired_date = %(qualification_acquired_date)s,
             qualification_lost_date = %(qualification_lost_date)s,
-            postal_code = %(postal_code)s,
-            address_line = %(address_line)s,
-            building = %(building)s,
-            phone = %(phone)s,
-            email = %(email)s,
+            -- removed: postal_code = %(postal_code)s,
+            -- removed: address_line = %(address_line)s,
+            -- removed: building = %(building)s,
+            -- removed: phone = %(phone)s,
+            -- removed: email = %(email)s,
             employer_code = %(employer_code)s,
             department_code = %(department_code)s,
             distribution_code = %(distribution_code)s,
@@ -363,6 +355,175 @@ def update_subscriber(cur, subscriber_id: int, vals: Dict[str, Any], run_id: int
     params["last_change_run_id"] = run_id
     params["id"] = subscriber_id
     cur.execute(sql, params)
+
+
+# Address and Contact apply helpers
+def address_apply(cur, subscriber_id: int, postal_code: Any, address_line: Any, building: Any) -> None:
+    """subscriber_addresses の current 行を staging 値で同期する。"""
+    postal_code = postal_code or None
+    address_line = address_line or None
+    building = building or None
+
+    cur.execute(
+        """
+        SELECT
+            address_id,
+            postal_code,
+            address_line,
+            building
+        FROM subscriber_addresses
+        WHERE subscriber_id = %s
+          AND is_current = 1
+        ORDER BY address_id DESC
+        LIMIT 1
+        """,
+        (subscriber_id,),
+    )
+    existing = cur.fetchone()
+
+    if existing is None:
+        if postal_code is None and address_line is None and building is None:
+            return
+        cur.execute(
+            """
+            INSERT INTO subscriber_addresses (
+                subscriber_id,
+                postal_code,
+                address_line,
+                building,
+                is_current,
+                source,
+                created_at,
+                updated_at
+            ) VALUES (
+                %s, %s, %s, %s,
+                1, 'hub_apply', NOW(3), NOW(3)
+            )
+            """,
+            (subscriber_id, postal_code, address_line, building),
+        )
+        return
+
+    if (
+        existing.get("postal_code") == postal_code
+        and existing.get("address_line") == address_line
+        and existing.get("building") == building
+    ):
+        return
+
+    cur.execute(
+        """
+        UPDATE subscriber_addresses
+        SET is_current = 0,
+            valid_to = NOW(3),
+            updated_at = NOW(3)
+        WHERE address_id = %s
+        """,
+        (existing["address_id"],),
+    )
+
+    if postal_code is None and address_line is None and building is None:
+        return
+
+    cur.execute(
+        """
+        INSERT INTO subscriber_addresses (
+            subscriber_id,
+            postal_code,
+            address_line,
+            building,
+            valid_from,
+            is_current,
+            source,
+            created_at,
+            updated_at
+        ) VALUES (
+            %s, %s, %s, %s,
+            NOW(3), 1, 'hub_apply', NOW(3), NOW(3)
+        )
+        """,
+        (subscriber_id, postal_code, address_line, building),
+    )
+
+
+def contact_apply(cur, subscriber_id: int, phone: Any, email: Any) -> None:
+    """subscriber_contacts の current 行を staging 値で同期する。"""
+    phone = phone or None
+    email = email or None
+
+    cur.execute(
+        """
+        SELECT
+            contact_id,
+            phone,
+            email
+        FROM subscriber_contacts
+        WHERE subscriber_id = %s
+          AND is_current = 1
+        ORDER BY contact_id DESC
+        LIMIT 1
+        """,
+        (subscriber_id,),
+    )
+    existing = cur.fetchone()
+
+    if existing is None:
+        if phone is None and email is None:
+            return
+        cur.execute(
+            """
+            INSERT INTO subscriber_contacts (
+                subscriber_id,
+                phone,
+                email,
+                is_current,
+                source,
+                created_at,
+                updated_at
+            ) VALUES (
+                %s, %s, %s,
+                1, 'hub_apply', NOW(3), NOW(3)
+            )
+            """,
+            (subscriber_id, phone, email),
+        )
+        return
+
+    if existing.get("phone") == phone and existing.get("email") == email:
+        return
+
+    cur.execute(
+        """
+        UPDATE subscriber_contacts
+        SET is_current = 0,
+            valid_to = NOW(3),
+            updated_at = NOW(3)
+        WHERE contact_id = %s
+        """,
+        (existing["contact_id"],),
+    )
+
+    if phone is None and email is None:
+        return
+
+    cur.execute(
+        """
+        INSERT INTO subscriber_contacts (
+            subscriber_id,
+            phone,
+            email,
+            valid_from,
+            is_current,
+            source,
+            created_at,
+            updated_at
+        ) VALUES (
+            %s, %s, %s,
+            NOW(3), 1, 'hub_apply', NOW(3), NOW(3)
+        )
+        """,
+        (subscriber_id, phone, email),
+    )
 
 
 
@@ -444,13 +605,54 @@ def apply_once(cur, srow: dict[str, Any], run_id: int) -> str:
     )
 
     if existing is None:
-        insert_subscriber(cur, vals, run_id)
+        subscriber_id = insert_subscriber(cur, vals, run_id)
+        address_apply(
+            cur,
+            subscriber_id,
+            srow.get("postal_code"),
+            srow.get("address_line"),
+            srow.get("building"),
+        )
+        contact_apply(
+            cur,
+            subscriber_id,
+            srow.get("phone"),
+            srow.get("email"),
+        )
         return "insert"
 
+    subscriber_id = int(existing["id"])
+
     if subscriber_differs(existing, vals):
-        update_subscriber(cur, int(existing["id"]), vals, run_id)
+        update_subscriber(cur, subscriber_id, vals, run_id)
+        address_apply(
+            cur,
+            subscriber_id,
+            srow.get("postal_code"),
+            srow.get("address_line"),
+            srow.get("building"),
+        )
+        contact_apply(
+            cur,
+            subscriber_id,
+            srow.get("phone"),
+            srow.get("email"),
+        )
         return "update"
 
+    address_apply(
+        cur,
+        subscriber_id,
+        srow.get("postal_code"),
+        srow.get("address_line"),
+        srow.get("building"),
+    )
+    contact_apply(
+        cur,
+        subscriber_id,
+        srow.get("phone"),
+        srow.get("email"),
+    )
     return "noop"
 
 
