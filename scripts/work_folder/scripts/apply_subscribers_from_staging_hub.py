@@ -62,6 +62,22 @@ from scripts.work_folder.lib.normalize.common import (
 
 
 JOB_NAME = "apply_subscribers_from_staging_hub"
+PROGRESS_LOG_EVERY = 100
+PROGRESS_LOG_FIRST = 10
+# ============================================================
+# main
+# ============================================================
+
+
+def should_log_progress(index: int, total: int) -> bool:
+    """進捗ログを出すタイミングを判定する。"""
+    if index <= 0:
+        return False
+    if index <= PROGRESS_LOG_FIRST:
+        return True
+    if index == total:
+        return True
+    return (index % PROGRESS_LOG_EVERY) == 0
 
 
 # ============================================================
@@ -785,9 +801,10 @@ def main() -> int:
 
             try:
                 rows = fetch_pending_staging_rows(cur, args.limit)
-                print(f"[INFO] staging rows to apply = {len(rows)}")
+                total_rows = len(rows)
+                print(f"[INFO] staging rows to apply = {total_rows}")
 
-                for srow in rows:
+                for idx, srow in enumerate(rows, start=1):
                     metrics.rows_seen += 1
                     try:
                         op = apply_once(cur, srow, run_id)
@@ -801,6 +818,17 @@ def main() -> int:
 
                         if not args.dry_run:
                             mark_staging_processed(cur, int(srow["id"]), run_id)
+
+                        if should_log_progress(idx, total_rows):
+                            print(
+                                "[PROGRESS] "
+                                f"{idx}/{total_rows} "
+                                f"inserted={metrics.rows_inserted} "
+                                f"updated={metrics.rows_updated} "
+                                f"unchanged={metrics.rows_unchanged} "
+                                f"errors={metrics.errors}",
+                                flush=True,
+                            )
 
                     except Exception as e:
                         metrics.errors += 1
@@ -818,6 +846,16 @@ def main() -> int:
                             error_code=type(e).__name__,
                             message=str(e),
                         )
+                        if should_log_progress(idx, total_rows):
+                            print(
+                                "[PROGRESS] "
+                                f"{idx}/{total_rows} "
+                                f"inserted={metrics.rows_inserted} "
+                                f"updated={metrics.rows_updated} "
+                                f"unchanged={metrics.rows_unchanged} "
+                                f"errors={metrics.errors}",
+                                flush=True,
+                            )
                         continue
 
                 finish_run(
