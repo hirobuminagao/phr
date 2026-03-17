@@ -31,6 +31,13 @@ CREATE TABLE IF NOT EXISTS hia_person_years (
     -- original values (non-normalized)
     name_kana_raw VARCHAR(120) COLLATE utf8mb4_ja_0900_as_cs,
 
+    -- identity hash (for fast join)
+    identity_hash CHAR(64)
+        CHARACTER SET ascii
+        COLLATE ascii_bin
+        DEFAULT NULL
+        COMMENT 'SHA256 hash of (person_id_custom|name_kana_full_match|gender_code)',
+
     -- statistics
     dl_count INT UNSIGNED NOT NULL DEFAULT 0,
 
@@ -64,7 +71,8 @@ CREATE TABLE IF NOT EXISTS hia_person_years (
     INDEX idx_hia_person_year_insurer (insurer_number),
     INDEX idx_hia_person_year_symbol_match (insurance_symbol_match),
     INDEX idx_hia_person_year_number_match (insurance_number_match),
-    INDEX idx_hia_person_year_person_id (person_id_custom)
+    INDEX idx_hia_person_year_person_id (person_id_custom),
+    INDEX idx_hia_person_year_identity_hash (identity_hash)
 
 ) ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
