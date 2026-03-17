@@ -36,9 +36,10 @@ from __future__ import annotations
 import re
 import unicodedata
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 from scripts.work_folder.lib.errors import NormalizeError
+from scripts.work_folder.lib.normalize.kanji_dict import load_kanji_normalization_map
 
 # 全角数字 → 半角数字（軽量）
 _FW_DIGITS = str.maketrans("０１２３４５６７８９", "0123456789")
@@ -55,13 +56,152 @@ _FW2HW = str.maketrans(
     "- ･,./\\_()[]{}:;@!\"' +*=<>|^~",
 )
 
+
 _DASHES = {"ー", "―", "—", "ｰ", "－"}
 _MIDDOTS = {"・", "･"}
+
+# 氏名 match 用の除去記号
+_NAME_MATCH_REMOVE_RE = re.compile(
+    r"[・･\-ー―−ｰ‐‑‒–—〜~～_＿()（）\[\]［］{}｛｝/／\\、,，.．。'\"`´]"
+)
+
+# 氏名カナ match 用の除去記号
+_KANA_MATCH_REMOVE_RE = re.compile(
+    r"[・･\-ー―−ｰ‐‑‒–—〜~～_＿()（）\[\]［］{}｛｝/／\\、,，.．。'\"`´]"
+)
+
+# ひらがな → カタカナ
+_HIRAGANA_TO_KATAKANA = str.maketrans(
+    {chr(code): chr(code + 0x60) for code in range(ord("ぁ"), ord("ゖ") + 1)}
+)
+
+# 小書きカナ → 通常カナ
+_SMALL_KANA_TO_LARGE = str.maketrans(
+    {
+        "ァ": "ア",
+        "ィ": "イ",
+        "ゥ": "ウ",
+        "ェ": "エ",
+        "ォ": "オ",
+        "ャ": "ヤ",
+        "ュ": "ユ",
+        "ョ": "ヨ",
+        "ッ": "ツ",
+        "ヮ": "ワ",
+        "ヵ": "カ",
+        "ヶ": "ケ",
+        "ゎ": "わ",
+        "ぁ": "あ",
+        "ぃ": "い",
+        "ぅ": "う",
+        "ぇ": "え",
+        "ぉ": "お",
+        "ゃ": "や",
+        "ゅ": "ゆ",
+        "ょ": "よ",
+        "っ": "つ",
+    }
+)
+
 
 
 # ------------------------------------------------------------
 # 基本：数字系
 # ------------------------------------------------------------
+
+# --- 氏名・カナ match 共通正規化 ---
+def _normalize_nfkc_strip(raw: Optional[str]) -> str:
+    """NFKC + trim の基本正規化。"""
+    return unicodedata.normalize("NFKC", raw or "").strip()
+
+
+def _remove_all_spaces(value: str) -> str:
+    """半角/全角空白をすべて除去する。"""
+    return value.replace(" ", "").replace("　", "")
+
+
+def _hiragana_to_katakana(value: str) -> str:
+    """ひらがなをカタカナへ寄せる。"""
+    return value.translate(_HIRAGANA_TO_KATAKANA)
+
+
+def _normalize_small_kana(value: str) -> str:
+    """小書きカナを通常カナへ寄せる。"""
+    return value.translate(_SMALL_KANA_TO_LARGE)
+
+
+def apply_kanji_normalization_dict(
+    value: str,
+    *,
+    kanji_map: Optional[Mapping[str, str]] = None,
+) -> str:
+    """漢字正規化辞書を適用する。
+
+    辞書が未指定ならそのまま返す。
+    辞書は 1文字置換を前提とする。
+    """
+    if not value or not kanji_map:
+        return value
+
+    return "".join(kanji_map.get(ch, ch) for ch in value)
+
+
+def normalize_name_kanji_match(
+    raw: Optional[str],
+    *,
+    cur=None,
+    kanji_map: Optional[Mapping[str, str]] = None,
+) -> Optional[str]:
+    """氏名（漢字）の match 用共通正規化。
+
+    手順:
+    - NFKC
+    - trim
+    - 半角/全角空白除去
+    - 中黒・ハイフン系・括弧・区切り記号除去
+    - 漢字正規化辞書適用
+
+    方針:
+    - 漢字 match の生成では辞書適用を前提とする
+    - `kanji_map` が未指定の場合は `cur` から辞書をロードする
+    - `cur` も `kanji_map` も無い場合は辞書未適用のまま返す
+    """
+    value = _normalize_nfkc_strip(raw)
+    if not value:
+        return None
+
+    value = _remove_all_spaces(value)
+    value = _NAME_MATCH_REMOVE_RE.sub("", value)
+
+    if kanji_map is None and cur is not None:
+        kanji_map = load_kanji_normalization_map(cur)
+
+    value = apply_kanji_normalization_dict(value, kanji_map=kanji_map)
+
+    return value or None
+
+
+def normalize_name_kana_match(raw: Optional[str]) -> Optional[str]:
+    """氏名（カナ）の match 用共通正規化。
+
+    手順:
+    - NFKC
+    - trim
+    - 半角/全角空白除去
+    - ひらがな→カタカナ
+    - 小書きカナ正規化
+    - 中黒・ハイフン系・括弧・区切り記号除去
+    """
+    value = _normalize_nfkc_strip(raw)
+    if not value:
+        return None
+
+    value = _remove_all_spaces(value)
+    value = _hiragana_to_katakana(value)
+    value = _normalize_small_kana(value)
+    value = _KANA_MATCH_REMOVE_RE.sub("", value)
+
+    return value or None
 
 # v1.0 固定メモ:
 # - to_half_digits / digits_only は "入力のゆれ吸収" の最下層。

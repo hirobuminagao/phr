@@ -1,5 +1,3 @@
-
-
 # Identity Canonicalization Specification (v1.0.2)
 
 ## Overview
@@ -170,6 +168,46 @@ Example conversions:
 | 髙 | 高 |
 
 These mappings are stored in a database dictionary table.
+
+---
+
+### 4.1 Normalization Flow (Implementation Rule)
+
+All match values must be generated via a shared normalization layer.
+
+The system uses a centralized orchestration approach:
+
+- Application scripts must not implement normalization logic directly
+- All normalization must be delegated to `common.py`
+- `common.py` acts as the orchestration layer for canonicalization
+
+Normalization flow:
+
+```
+Application Script
+    ↓
+common.py (orchestration)
+    ↓
+basic normalization (NFKC, trim, whitespace removal, etc.)
+    ↓
+(optional) dictionary normalization (external module / DB)
+    ↓
+final match value
+```
+
+Kanji dictionary normalization is implemented as an external dependency.
+
+`common.py` is responsible for:
+
+- executing normalization steps in order
+- invoking dictionary transformation when required
+- returning the final canonical value
+
+This ensures consistency across:
+
+- subscribers
+- dashboard
+- person_years
 
 ---
 

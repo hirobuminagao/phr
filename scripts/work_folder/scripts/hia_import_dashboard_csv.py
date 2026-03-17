@@ -38,6 +38,8 @@ if str(PROJECT_ROOT) not in sys.path:
 import csv
 import hashlib
 import json
+import re
+import unicodedata
 
 from datetime import datetime
 from typing import Optional
@@ -47,6 +49,7 @@ from typing import Any
 from scripts.work_folder.lib.normalize.common import (
     normalize_insurance_number_match,
     normalize_insurance_symbol_match,
+    normalize_name_kanji_match,
 )
 from scripts.work_folder.lib.etl.metrics import RunMetrics
 from scripts.work_folder.lib.errors import NormalizeError
@@ -68,6 +71,7 @@ COMPARE_COLUMNS = [
     "name_match",
     "subscriber_person_id_custom",
     "subscriber_name_kana_full",
+    "subscriber_name_kana_full_match",
     "subscriber_gender_code",
     "subscriber_birth",
     "insurance_symbol",
@@ -102,6 +106,7 @@ def fetch_subscriber_enrichment(
         SELECT
             person_id_custom,
             name_kana_full,
+            name_kana_full_match,
             gender_code,
             birth
         FROM dev_phr.subscribers
@@ -125,6 +130,7 @@ def fetch_subscriber_enrichment(
         return {
             "subscriber_person_id_custom": None,
             "subscriber_name_kana_full": None,
+            "subscriber_name_kana_full_match": None,
             "subscriber_gender_code": None,
             "subscriber_birth": None,
         }
@@ -132,28 +138,17 @@ def fetch_subscriber_enrichment(
     return {
         "subscriber_person_id_custom": row.get("person_id_custom"),
         "subscriber_name_kana_full": row.get("name_kana_full"),
+        "subscriber_name_kana_full_match": row.get("name_kana_full_match"),
         "subscriber_gender_code": row.get("gender_code"),
         "subscriber_birth": row.get("birth"),
     }
 
-
-# ------------------------------------------------------------
-# 正規化関数
-# ------------------------------------------------------------
 
 
 def normalize_relation_match(value: str) -> str:
     """続柄の match 用正規化（trim ベース）"""
     if not value:
         return ""
-    return value.strip()
-
-
-def normalize_name_match(value: str) -> str:
-    """氏名の match 用正規化（半角/全角スペースを除去）"""
-    if not value:
-        return ""
-    value = value.replace(" ", "").replace("　", "")
     return value.strip()
 
 
@@ -261,7 +256,7 @@ def build_row_sha(normalized_row: dict) -> str:
     return sha256_text(raw)
 
 
-def normalize_dashboard_row(row: dict, insurer_number: str) -> dict:
+def normalize_dashboard_row(row: dict, insurer_number: str, cur: Any) -> dict:
     """CSV 1行を正規化して comparison / insert 用 dict を返す。"""
 
     symbol_match = normalize_insurance_symbol_match(
@@ -271,7 +266,7 @@ def normalize_dashboard_row(row: dict, insurer_number: str) -> dict:
         row.get("被保険者番号", "")
     ) or ""
     relation_match = normalize_relation_match(row.get("続柄", ""))
-    name_match = normalize_name_match(row.get("氏名", ""))
+    name_match = normalize_name_kanji_match(row.get("氏名", ""), cur=cur) or ""
 
     normalized = {
         "insurer_number": insurer_number,
@@ -335,6 +330,7 @@ def build_status_record(normalized: dict, run_id: int, raw_row_json: str) -> dic
         "name_match": normalized["name_match"],
         "subscriber_person_id_custom": normalized["subscriber_person_id_custom"],
         "subscriber_name_kana_full": normalized["subscriber_name_kana_full"],
+        "subscriber_name_kana_full_match": normalized["subscriber_name_kana_full_match"],
         "subscriber_gender_code": normalized["subscriber_gender_code"],
         "subscriber_birth": normalized["subscriber_birth"],
         "status": normalized["status"],
@@ -415,6 +411,7 @@ def fetch_existing_status(cur: Any, snapshot_identity_key: str) -> Optional[dict
             name_match,
             subscriber_person_id_custom,
             subscriber_name_kana_full,
+            subscriber_name_kana_full_match,
             subscriber_gender_code,
             subscriber_birth,
             status,
@@ -458,6 +455,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             name_match,
             subscriber_person_id_custom,
             subscriber_name_kana_full,
+            subscriber_name_kana_full_match,
             subscriber_gender_code,
             subscriber_birth,
             status,
@@ -478,12 +476,10 @@ def insert_status(cur: Any, status_record: dict) -> int:
             %s, %s, %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s,
-            %s, %s,
-            %s, %s,
+            %s, %s, %s, %s, %s,
             %s, %s, %s,
-            %s, %s,
-            %s, %s,
-            %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s,
             %s, %s, %s
         )
     """
@@ -503,6 +499,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             status_record["name_match"],
             status_record["subscriber_person_id_custom"],
             status_record["subscriber_name_kana_full"],
+            status_record["subscriber_name_kana_full_match"],
             status_record["subscriber_gender_code"],
             status_record["subscriber_birth"],
             status_record["status"],
@@ -553,6 +550,7 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             name_match = %s,
             subscriber_person_id_custom = %s,
             subscriber_name_kana_full = %s,
+            subscriber_name_kana_full_match = %s,
             subscriber_gender_code = %s,
             subscriber_birth = %s,
             status = %s,
@@ -586,6 +584,7 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             status_record["name_match"],
             status_record["subscriber_person_id_custom"],
             status_record["subscriber_name_kana_full"],
+            status_record["subscriber_name_kana_full_match"],
             status_record["subscriber_gender_code"],
             status_record["subscriber_birth"],
             status_record["status"],
@@ -685,7 +684,7 @@ def process_csv(
             metrics.rows_seen += 1
 
             try:
-                normalized = normalize_dashboard_row(row, insurer_number)
+                normalized = normalize_dashboard_row(row, insurer_number, cur)
                 raw_row_json = build_raw_row_json(row)
                 subscriber_enrichment = fetch_subscriber_enrichment(
                     cur,
