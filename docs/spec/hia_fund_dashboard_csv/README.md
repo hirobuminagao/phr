@@ -25,6 +25,7 @@ HIA システムの管理画面からダウンロードできる「加入者の�
 - 取込時点の状態スナップショットを保持する
 - 既存の HIA 関連データと付け合わせ可能な状態を作る
 - Navicat 等で SQL 一覧を参照できるようにする
+- `hia_person_years` と join して、HIA export ZIP / XML 由来の person-year 情報を一覧で確認できるようにする
 - 将来の状態変化履歴管理の基礎データとする
 
 ---
@@ -235,13 +236,13 @@ filename=dashboard_06139463_20260312.csv file_mtime=2026-03-12 10:22:31 filter: 
 ## 今後このディレクトリに追加するドキュメント
 
 ```text
-/docs/spec/hia_fund_dashboard_csv/
-
 README.md
 flow_overview.md
 identity_and_matching.md
 snapshot_policy.md
 status_definition.md
+
+dashboard_person_year_join.md
 ```
 
 ---
