@@ -523,9 +523,6 @@ def normalize_insurance_symbol_match(raw: str) -> Optional[str]:
     空になった場合は None を返す。
     """
     s = unicodedata.normalize("NFKC", raw or "").strip()
-    if not s:
-        return None
-
     s = _normalize_symbol_match_delimiters(s)
     if not s:
         return None

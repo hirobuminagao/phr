@@ -1,7 +1,8 @@
 CREATE TABLE `dev_phr`.`subscribers` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '加入者ID（内部採番）',
   `insurer_number` char(8) NOT NULL COMMENT '保険者番号（0埋め8桁想定）',
-  `insurance_symbol` varchar(20) NOT NULL COMMENT '保険証記号',
+  `insurance_symbol` varchar(20) NOT NULL COMMENT '保険証記号（raw）',
+  `insurance_symbol_export` varchar(20) DEFAULT NULL COMMENT '保険証記号（出力用: 全数字なら半角、非数字を含むなら全体を全角）',
   `insurance_symbol_digits` int unsigned DEFAULT NULL COMMENT '保険証記号から数字のみ抽出した派生キー（例: 埼-30→30、数字なし→NULL）',
   `insurance_number` varchar(20) NOT NULL COMMENT '保険証番号（先頭ゼロ保持）',
   `insurance_branchnumber` varchar(5) DEFAULT NULL COMMENT '枝番（数値文字列）',
@@ -45,6 +46,7 @@ CREATE TABLE `dev_phr`.`subscribers` (
   KEY `idx_subscribers_name_kana_full_match` (`name_kana_full_match`),
   KEY `idx_subscribers_name_full_match` (`name_full_match`),
   KEY `idx_subscribers_symbol_match` (`insurance_symbol_match`),
+  KEY `idx_subscribers_symbol_export` (`insurance_symbol_export`),
   KEY `idx_subscribers_number_match` (`insurance_number_match`),
   KEY `idx_subscribers_identity_hash` (`identity_hash`),
 

@@ -60,6 +60,7 @@ from scripts.work_folder.lib.normalize.common import (
     normalize_insurance_symbol_match,
     normalize_name_kanji_match,
     normalize_name_kana_match,
+    normalize_insurance_symbol_export,
 )
 
 
@@ -114,6 +115,7 @@ def build_subscriber_vals(cur, srow: dict[str, Any]) -> Dict[str, Any]:
         "relationship_name": srow.get("relationship_name"),
         "insurer_number": srow.get("insurer_number"),
         "insurance_symbol": insurance_symbol,
+        "insurance_symbol_export": normalize_insurance_symbol_export(insurance_symbol),
         "insurance_symbol_digits": srow.get("insurance_symbol_digits"),
         "insurance_symbol_match": normalize_insurance_symbol_match(insurance_symbol),
         "insurance_number": insurance_number,
@@ -152,6 +154,7 @@ def fetch_existing_subscriber(cur, person_id_custom: str, name_kana_full_match: 
             relationship_name,
             insurer_number,
             insurance_symbol,
+            insurance_symbol_export,
             insurance_symbol_digits,
             insurance_symbol_match,
             insurance_number,
@@ -197,6 +200,7 @@ COMPARE_COLUMNS = [
     "relationship_name",
     "insurer_number",
     "insurance_symbol",
+    "insurance_symbol_export",
     "insurance_symbol_digits",
     "insurance_symbol_match",
     "insurance_number",
@@ -216,6 +220,7 @@ COMPARE_COLUMNS = [
 AUDIT_COLUMNS = [
     "insurer_number",
     "insurance_symbol",
+    "insurance_symbol_export",
     "insurance_symbol_digits",
     "insurance_number",
     "insurance_branchnumber",
@@ -327,6 +332,7 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             relationship_name,
             insurer_number,
             insurance_symbol,
+            insurance_symbol_export,
             insurance_symbol_digits,
             insurance_symbol_match,
             insurance_number,
@@ -360,6 +366,7 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             %(relationship_name)s,
             %(insurer_number)s,
             %(insurance_symbol)s,
+            %(insurance_symbol_export)s,
             %(insurance_symbol_digits)s,
             %(insurance_symbol_match)s,
             %(insurance_number)s,
@@ -404,6 +411,7 @@ def update_subscriber(cur, subscriber_id: int, vals: Dict[str, Any], run_id: int
             relationship_name = %(relationship_name)s,
             insurer_number = %(insurer_number)s,
             insurance_symbol = %(insurance_symbol)s,
+            insurance_symbol_export = %(insurance_symbol_export)s,
             insurance_symbol_digits = %(insurance_symbol_digits)s,
             insurance_symbol_match = %(insurance_symbol_match)s,
             insurance_number = %(insurance_number)s,
