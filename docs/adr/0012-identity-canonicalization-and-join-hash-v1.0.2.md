@@ -1,5 +1,3 @@
-
-
 # ADR-0012: Identity Canonicalization and Join Hash Policy (v1.0.2)
 
 ## Status
@@ -39,18 +37,60 @@ v1.0.2 では、照合に使う項目について以下の原則を採用する�
 
 由来の文字列・コード・日付は、原値のまま保管する。
 
+raw は表示・監査・再計算の基礎データであり、正規化やフォーマット変換で上書きしない。
+
 #### match
 照合用に正規化した値を必ず生成し、保管する。
 
 match 列は、同一人物判定・同一データ判定のための canonical value として扱う。
+
+match 系の基本ルールは以下とする。
+
+- 参照用（match系）は英数字を半角に寄せる
+- 参照用（match系）は先頭0を削除する
+- raw は保持し、match は照合しやすさを優先する
+
+このルールは、保険証記号・保険証番号・氏名カナ・氏名漢字など、人物照合に使う canonical value に適用する。
+
+特に保険証記号については、match を「記号そのものを比較できる canonical value」として扱い、数字部分だけを残すのではなく、非数字部分も保持したまま照合に使う。
+
+例:
+
+- raw: `川崎-01`
+- match: `川崎1`
+
+したがって、`川崎-01` と `横浜-01` を同一の `1` に潰すような正規化は採用しない。
 
 #### hash
 join 最適化に必要な値が揃う場合は、match 列を元にハッシュ列を生成して保管する。
 
 hash 列は raw や match の代替ではなく、結合・参照最適化のための派生キーとする。
 
-### 2. 人物照合の canonical input を明示する
+#### formatted / export value
+出力用・連携用の値正規化は、match とは別に扱う。
 
+厚生労働省フォーマットに寄せる値については、以下を原則とする。
+
+- 値がすべて数字なら半角
+- 一文字でも数字以外が含まれるなら全体を全角
+
+したがって、参照用（match系）の半角寄せルールと、出力用の厚生労働省フォーマット寄せルールは明確に分離する。
+
+保険証記号については、raw / match / formatted(export) を分離して扱う。
+
+例:
+
+- raw: `川崎-01`
+- match: `川崎1`
+- formatted/export: `川崎ー０１`
+
+別例:
+
+- raw: `０００００１２３`
+- match: `123`
+- formatted/export: `123`
+
+### 2. 人物照合の canonical input を明示する
 人物照合用の canonical input は、少なくとも以下を基礎とする。
 
 - `person_id_custom`
@@ -65,6 +105,8 @@ hash 列は raw や match の代替ではなく、結合・参照最適化のた
 - `insurance_symbol`
 
 したがって、保険者番号・記号・番号・生年月日に加えて、カナ match と gender を人物照合の canonical input とする。
+
+ここで使う `person_id_custom`・`name_kana_full_match`・各種 match 値は、いずれも参照用（match系）の半角寄せ・先頭0削除ルールに従う。
 
 ### 3. 漢字氏名 match は NFKC のみで終わらせない
 
@@ -133,6 +175,7 @@ join 用 hash は以下のために使う。
 - match 列生成ロジックの統一
 - 漢字正規化辞書テーブル追加
 - `name_kana_full_match` / `name_full_match` / `name_kana_norm` 系定義見直し
+- `insurance_symbol` の raw / match / formatted(export) 分離方針の明確化
 - join 用 hash 列追加
 - 既存データの backfill
 
@@ -165,5 +208,8 @@ join 用 hash は以下のために使う。
 - 元の値は省かない
 - 必ず match を作って保管する
 - ハッシュに必要なものが揃うなら hash を作る
-
-この原則を、今後の人物照合系テーブルの共通基盤とする。
+- 参照用（match系）は英数字を半角に寄せる
+- 参照用（match系）は先頭0を削除する
+- 出力用の値は「全てが数字なら半角、一文字でも数字以外が入るなら全部全角」のルールに従う
+- 保険証記号は raw / match / formatted(export) を分離して扱う
+- 保険証記号の match は非数字部分も保持した canonical value とする

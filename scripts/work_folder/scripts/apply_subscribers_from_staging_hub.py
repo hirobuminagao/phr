@@ -58,6 +58,8 @@ from scripts.work_folder.lib.etl import (
 from scripts.work_folder.lib.normalize.common import (
     normalize_insurance_number_match,
     normalize_insurance_symbol_match,
+    normalize_name_kanji_match,
+    normalize_name_kana_match,
 )
 
 
@@ -80,33 +82,13 @@ def should_log_progress(index: int, total: int) -> bool:
     return (index % PROGRESS_LOG_EVERY) == 0
 
 
-# ============================================================
-# match fields
-# ============================================================
-
-def normalize_name_full_match(value: str) -> str:
-    """漢字氏名 match 用: 半角/全角スペース除去。"""
-    return (value or "").replace(" ", "").replace("　", "").strip()
-
-
-
-def normalize_name_kana_full_match(value: str) -> str:
-    """カナ氏名 match 用: 半角/全角スペース + 中点除去。"""
-    return (
-        (value or "")
-        .replace(" ", "")
-        .replace("　", "")
-        .replace("・", "")
-        .replace("･", "")
-        .strip()
-    )
 
 
 # ============================================================
 # subscriber row helpers
 # ============================================================
 
-def build_subscriber_vals(srow: dict[str, Any]) -> Dict[str, Any]:
+def build_subscriber_vals(cur, srow: dict[str, Any]) -> Dict[str, Any]:
     """staging 1行から subscribers 反映用の値 dict を作る。"""
 
     insurance_symbol = srow.get("insurance_symbol") or ""
@@ -124,8 +106,8 @@ def build_subscriber_vals(srow: dict[str, Any]) -> Dict[str, Any]:
         "name_kana_family": srow.get("name_kana_family"),
         "name_kana_middle": srow.get("name_kana_middle"),
         "name_kana_given": srow.get("name_kana_given"),
-        "name_kana_full_match": normalize_name_kana_full_match(name_kana_full),
-        "name_full_match": normalize_name_full_match(name_kanji_full),
+        "name_kana_full_match": normalize_name_kana_match(name_kana_full) or "",
+        "name_full_match": normalize_name_kanji_match(name_kanji_full, cur=cur) or "",
         "gender_code": srow.get("gender_code"),
         "birth": srow.get("birth"),
         "insured_attribute_name": srow.get("insured_attribute_name"),
@@ -682,7 +664,7 @@ def fetch_pending_staging_rows(cur, limit: int) -> list[dict[str, Any]]:
 
 def apply_once(cur, srow: dict[str, Any], run_id: int) -> str:
     """return: insert | update | noop"""
-    vals = build_subscriber_vals(srow)
+    vals = build_subscriber_vals(cur, srow)
 
     existing = fetch_existing_subscriber(
         cur,

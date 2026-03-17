@@ -491,18 +491,9 @@ def normalize_insurance_symbol(raw: str) -> Tuple[str, Optional[int]]:
 
 
 
-def _to_fullwidth_non_digits(value: str) -> str:
-    """数字は半角のまま、数字以外の ASCII は全角へ寄せる。"""
-    result: list[str] = []
-    for ch in value:
-        code = ord(ch)
-        if ch.isdigit():
-            result.append(ch)
-        elif 0x21 <= code <= 0x7E:
-            result.append(chr(code + 0xFEE0))
-        else:
-            result.append(ch)
-    return "".join(result)
+def _normalize_symbol_match_delimiters(value: str) -> str:
+    """記号 match 用に空白・ダッシュ類を除去する。"""
+    return re.sub(r"[ 　\-‐‑‒–—―ー－ｰ]+", "", value)
 
 
 
@@ -526,7 +517,8 @@ def normalize_insurance_symbol_match(raw: str) -> Optional[str]:
     - NFKC 正規化
     - 空白 / ダッシュ類を除去
     - 数字連続部分ごとに先頭0削除
-    - 数字は半角のまま、数字以外は全角へ寄せる
+    - 英字・数字は半角のまま（全角化しない）
+    - 非数字部分も保持したまま canonical value とする
 
     空になった場合は None を返す。
     """
@@ -534,12 +526,11 @@ def normalize_insurance_symbol_match(raw: str) -> Optional[str]:
     if not s:
         return None
 
-    s = re.sub(r"[ 　\-‐‑‒–—―ー－ｰ]+", "", s)
+    s = _normalize_symbol_match_delimiters(s)
     if not s:
         return None
 
     s = _trim_leading_zeros_in_digit_chunks(s)
-    s = _to_fullwidth_non_digits(s)
 
     return s or None
 
