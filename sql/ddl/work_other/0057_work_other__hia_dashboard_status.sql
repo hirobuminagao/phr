@@ -1,5 +1,3 @@
-
-
 CREATE TABLE `work_other`.`hia_dashboard_status` (
 
   `hia_dashboard_person_id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -28,6 +26,11 @@ CREATE TABLE `work_other`.`hia_dashboard_status` (
   `subscriber_name_kana_full` varchar(190) DEFAULT NULL,
   `subscriber_gender_code` tinyint unsigned DEFAULT NULL,
   `subscriber_birth` date DEFAULT NULL,
+  `identity_hash` char(64)
+    CHARACTER SET ascii
+    COLLATE ascii_bin
+    DEFAULT NULL
+    COMMENT 'SHA256 hash of (person_id_custom|name_kana_full_match|gender_code) used for fast identity joins',
 
   -- status
   `status` varchar(64) DEFAULT NULL,
@@ -68,6 +71,7 @@ CREATE TABLE `work_other`.`hia_dashboard_status` (
   KEY `idx_hia_dashboard_insurer` (`insurer_number`),
   KEY `idx_hia_dashboard_symbol_number` (`insurance_symbol_match`, `insurance_number_match`),
   KEY `idx_hia_dashboard_subscriber_person_id_custom` (`subscriber_person_id_custom`),
+  KEY `idx_hia_dashboard_identity_hash` (`identity_hash`),
   KEY `idx_hia_dashboard_last_seen_run` (`last_seen_run_id`),
 
   CONSTRAINT `fk_hia_dashboard_first_run`

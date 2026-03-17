@@ -9,6 +9,11 @@ CREATE TABLE `dev_phr`.`subscribers` (
   `gender_code` tinyint unsigned NOT NULL COMMENT '性別コード 1/2/9',
   `name_kana_full` varchar(190) NOT NULL COMMENT '氏名カナ（フル）',
   `person_id_custom` varchar(64) DEFAULT NULL COMMENT 'ナガオPHRキー（将来NOT NULL予定）',
+  `name_kana_full_match` varchar(190) DEFAULT NULL COMMENT '氏名カナ（正規化・照合用）',
+  `name_full_match` varchar(190) DEFAULT NULL COMMENT '氏名漢字（正規化・照合用）',
+  `insurance_symbol_match` varchar(64) DEFAULT NULL COMMENT '保険証記号（正規化・照合用）',
+  `insurance_number_match` varchar(64) DEFAULT NULL COMMENT '保険証番号（正規化・照合用）',
+  `identity_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '本人照合用ハッシュ（person_id_custom + name_kana_full_match + gender_code）',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
@@ -37,6 +42,11 @@ CREATE TABLE `dev_phr`.`subscribers` (
   KEY `idx_subscribers_insurance_full` (`insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branchnumber`),
   KEY `idx_subscribers_gender` (`gender_code`),
   KEY `idx_subscribers_last_change_run` (`last_change_run_id`),
+  KEY `idx_subscribers_name_kana_full_match` (`name_kana_full_match`),
+  KEY `idx_subscribers_name_full_match` (`name_full_match`),
+  KEY `idx_subscribers_symbol_match` (`insurance_symbol_match`),
+  KEY `idx_subscribers_number_match` (`insurance_number_match`),
+  KEY `idx_subscribers_identity_hash` (`identity_hash`),
 
   CONSTRAINT `chk_subscribers_birth`
     CHECK ((`birth` >= DATE '1900-01-01') AND (`birth` <= DATE '2099-12-31')),
@@ -47,7 +57,10 @@ CREATE TABLE `dev_phr`.`subscribers` (
   CONSTRAINT `chk_subscribers_insurance_number`
     CHECK (REGEXP_LIKE(`insurance_number`, '^[0-9]+$')),
   CONSTRAINT `chk_subscribers_insurer_number`
-    CHECK (REGEXP_LIKE(`insurer_number`, '^[0-9]{8}$'))
+    CHECK (REGEXP_LIKE(`insurer_number`, '^[0-9]{8}$')),
+  CONSTRAINT `fk_subscribers_last_change_run`
+    FOREIGN KEY (`last_change_run_id`)
+    REFERENCES `dev_phr`.`etl_runs` (`run_id`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
