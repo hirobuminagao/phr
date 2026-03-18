@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -32,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Mapping
 
 # ------------------------------------------------------------
 # VSCode Run ボタン (file実行) 対応
@@ -84,6 +82,8 @@ UPDATE dev_phr.subscribers
  WHERE id = %s
 """
 
+RowDict = Mapping[str, Any]
+
 
 def _norm_db_value(value: Any) -> str | None:
     """DB値を比較用に正規化する。空文字は None と同じ扱いにする。"""
@@ -94,7 +94,7 @@ def _norm_db_value(value: Any) -> str | None:
     return str(value)
 
 
-def build_recomputed_values(cur, row: Dict[str, Any]) -> Dict[str, str | None]:
+def build_recomputed_values(cur, row: RowDict) -> dict[str, str | None]:
     """raw列から canonical 値を再計算する。"""
     raw_symbol = row.get("insurance_symbol") or ""
     raw_number = row.get("insurance_number") or ""
@@ -110,7 +110,7 @@ def build_recomputed_values(cur, row: Dict[str, Any]) -> Dict[str, str | None]:
     }
 
 
-def needs_update(row: Dict[str, Any], recalculated: Dict[str, str | None]) -> bool:
+def needs_update(row: RowDict, recalculated: Mapping[str, str | None]) -> bool:
     """現在値と再計算値を比較し、更新が必要か判定する。"""
     return any(
         _norm_db_value(row.get(col)) != _norm_db_value(recalculated.get(col))
@@ -134,7 +134,11 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
             if not rows:
                 break
 
-            for row in rows:
+            for row_any in rows:
+                row = row_any if isinstance(row_any, Mapping) else None
+                if row is None:
+                    raise TypeError(f"Unexpected row type from cursor: {type(row_any)!r}")
+
                 scanned += 1
                 recalculated = build_recomputed_values(cur, row)
 
@@ -151,7 +155,7 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
                         recalculated["insurance_number_match"],
                         recalculated["name_kana_full_match"],
                         recalculated["name_full_match"],
-                        row["id"],
+                        row.get("id"),
                     )
                 )
 

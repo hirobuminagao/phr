@@ -532,6 +532,37 @@ def normalize_insurance_symbol_match(raw: str) -> Optional[str]:
     return s or None
 
 
+def normalize_insurance_symbol_export(raw: str) -> Optional[str]:
+    """
+    保険証記号の export 用共通正規化。
+
+    ルール:
+    - NFKC 正規化
+    - すべて数字なら半角のまま返す
+    - 一文字でも数字以外が含まれる場合は全体を全角へ寄せる
+    - 空の場合は None
+    """
+    s = unicodedata.normalize("NFKC", raw or "").strip()
+    if not s:
+        return None
+
+    # 全て数字ならそのまま（半角）
+    if re.fullmatch(r"\d+", s):
+        return s
+
+    # 数字以外含む場合 → 全角寄せ
+    result: list[str] = []
+    for ch in s:
+        code = ord(ch)
+        # ASCII範囲なら全角へ変換
+        if 0x21 <= code <= 0x7E:
+            result.append(chr(code + 0xFEE0))
+        else:
+            result.append(ch)
+
+    return "".join(result) or None
+
+
 
 # ------------------------------------------------------------
 # フォルダ名 → 保険者番号（8桁 int）
