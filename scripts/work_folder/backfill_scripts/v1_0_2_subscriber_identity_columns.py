@@ -45,6 +45,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from scripts.work_folder.lib.db.config import load_mysql_params
 from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.work_folder.lib.normalize.kanji_dict import load_kanji_normalization_map
 from scripts.work_folder.lib.normalize.common import (
     normalize_insurance_number_match,
     normalize_insurance_symbol_export,
@@ -94,7 +95,11 @@ def _norm_db_value(value: Any) -> str | None:
     return str(value)
 
 
-def build_recomputed_values(cur, row: RowDict) -> dict[str, str | None]:
+def build_recomputed_values(
+    row: RowDict,
+    *,
+    kanji_map: Mapping[str, str] | None,
+) -> dict[str, str | None]:
     """raw列から canonical 値を再計算する。"""
     raw_symbol = row.get("insurance_symbol") or ""
     raw_number = row.get("insurance_number") or ""
@@ -106,7 +111,7 @@ def build_recomputed_values(cur, row: RowDict) -> dict[str, str | None]:
         "insurance_symbol_export": normalize_insurance_symbol_export(raw_symbol),
         "insurance_number_match": normalize_insurance_number_match(raw_number),
         "name_kana_full_match": normalize_name_kana_match(raw_kana),
-        "name_full_match": normalize_name_kanji_match(raw_kanji, cur=cur),
+        "name_full_match": normalize_name_kanji_match(raw_kanji, kanji_map=kanji_map),
     }
 
 
@@ -127,6 +132,8 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
 
     with connect_ctx(mysql_params, autocommit=False) as conn:
         cur = dict_cursor(conn)
+        kanji_cur = dict_cursor(conn)
+        kanji_map = load_kanji_normalization_map(kanji_cur)
         cur.execute(SELECT_SQL)
 
         while True:
@@ -140,7 +147,10 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
                     raise TypeError(f"Unexpected row type from cursor: {type(row_any)!r}")
 
                 scanned += 1
-                recalculated = build_recomputed_values(cur, row)
+                recalculated = build_recomputed_values(
+                    row,
+                    kanji_map=kanji_map,
+                )
 
                 if not needs_update(row, recalculated):
                     if limit is not None and scanned >= limit:
