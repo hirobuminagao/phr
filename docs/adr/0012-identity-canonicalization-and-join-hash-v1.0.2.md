@@ -154,6 +154,8 @@ person_id_custom + name_kana_full_match + gender_code
 {person_id_custom}|{name_kana_full_match}|{gender_code}
 ```
 
+実装上は、この canonical string を `common.py` の共通関数で生成し、SHA-256 を計算する。これにより apply / backfill / downstream テーブルで同一の hash 生成ロジックを再利用する。
+
 ### 6. hash の位置づけ
 
 join 用 hash は以下のために使う。
@@ -161,6 +163,10 @@ join 用 hash は以下のために使う。
 - 大量データ join の軽量化
 - SQL の簡素化
 - downstream テーブル間の参照統一
+
+v1.0.2 時点では、`dev_phr.subscribers.identity_hash` を canonical な人物 hash として生成・保持し、`work_other.hia_dashboard_status.identity_hash` は subscriber enrichment として同期する方針とする。
+
+したがって dashboard 側では、identity_hash を dashboard 独自に再定義するのではなく、subscribers を正とした人物参照値として扱う。
 
 ただし、デバッグ・監査・再計算のために raw と match は必ず残す。
 
@@ -170,6 +176,7 @@ join 用 hash は以下のために使う。
 - `dev_phr.subscribers`
 - `work_other.hia_dashboard_status`
 - `work_other.hia_person_years`
+- `work_other.hia_import_zips`
 
 ### 改修対象
 - match 列生成ロジックの統一
@@ -178,6 +185,9 @@ join 用 hash は以下のために使う。
 - `insurance_symbol` の raw / match / formatted(export) 分離方針の明確化
 - join 用 hash 列追加
 - 既存データの backfill
+- `hia_dashboard_status` の subscriber enrichment / identity_hash 同期
+- `hia_import_zip.py` と `hia_build_delivery_zip.py` の責務分離明文化
+- archive 後の ZIP 物理パス追跡
 
 ## Consequences
 ### Positive
@@ -187,11 +197,48 @@ join 用 hash は以下のために使う。
 - 将来的な dashboard / subscribers / person_years / XML ledger join を軽量化できる
 - 正規化ルールの改善を match / hash 再生成で追従できる
 
+- subscribers を正とする identity_hash の流用により、dashboard 側の人物参照が安定する
+- import / apply / backfill の各処理が common の同一ロジックを前提に揃う
+- archive 後の ZIP 物理パスを DB から追跡できる
+
 ### Negative / Trade-offs
 - テーブル列が増える
 - backfill の実装と再実行が必要になる
 - 正規化辞書の保守運用が発生する
 - hash だけを見ても元の照合根拠は分からないため、raw / match を常に併存させる必要がある
+
+- `snapshot_identity_key` は既存 dashboard 行に対して安易に再生成できず、必要な場合は重複整理を伴う別フェーズが必要になる
+- dashboard backfill では subscriber enrichment の更新と snapshot identity の更新を分離して扱う必要がある
+
+## Operational Clarifications (v1.0.2)
+### dashboard backfill policy
+`work_other.hia_dashboard_status` の backfill では、以下を現行ルールで再計算・再同期の対象とする。
+
+- `name_match`
+- `subscriber_person_id_custom`
+- `subscriber_name_kana_full`
+- `subscriber_name_kana_full_match`
+- `subscriber_gender_code`
+- `subscriber_birth`
+- `identity_hash`
+- `row_sha256`
+
+一方で `snapshot_identity_key` は、既存 row が正規化後に同一 key へ収束して unique 制約に衝突する可能性があるため、v1.0.2 の backfill では更新対象から外す。
+
+### HIA ZIP import responsibility
+`hia_import_zip.py` の責務は以下に限定する。
+
+- ZIP探索
+- ZIP展開
+- XML identity 読取
+- 必須項目チェック
+- ZIP単位 all-or-nothing 制御
+- `hia_import_zips` / `hia_person_years` / `hia_xml_events` への DB 記帳
+- 成功ZIPの archive 移動
+- archive 後の物理パス記録
+- `error.txt` 出力
+
+delivery 用の XML 抽出・対象月絞り込み・同一人物の過去 XML 整理は `hia_build_delivery_zip.py` の責務とする。
 
 ## Deferred / Non-goals
 現時点では以下は対象外とする。
@@ -213,3 +260,6 @@ join 用 hash は以下のために使う。
 - 出力用の値は「全てが数字なら半角、一文字でも数字以外が入るなら全部全角」のルールに従う
 - 保険証記号は raw / match / formatted(export) を分離して扱う
 - 保険証記号の match は非数字部分も保持した canonical value とする
+- `identity_hash` は `common.py` の共通関数で生成し、apply / backfill / downstream で同一ロジックを使う
+- `hia_dashboard_status.identity_hash` は subscribers を正とする enrichment 値として扱う
+- `snapshot_identity_key` の再生成は、重複解消ルールなしに既存データへ一括適用しない
