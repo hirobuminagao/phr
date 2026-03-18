@@ -34,6 +34,7 @@ Notes:
 from __future__ import annotations
 
 import re
+import hashlib
 import unicodedata
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
@@ -590,3 +591,37 @@ def normalize_insurer_folder_name_to_int(folder: Path) -> int:
             message=f"保険者番号が範囲外です: {iv}",
         )
     return iv
+
+# ------------------------------------------------------------
+# フォルダ名 → 保険者番号（8桁 int）
+# ------------------------------------------------------------
+
+
+def build_identity_hash(
+    *,
+    person_id_custom: Optional[str],
+    name_kana_full_match: Optional[str],
+    gender_code: Optional[str],
+) -> Optional[str]:
+    """
+    identity_hash を生成する。
+
+    canonical input:
+    - person_id_custom
+    - name_kana_full_match
+    - gender_code
+
+    連結形式:
+        {person_id_custom}|{name_kana_full_match}|{gender_code}
+
+    いずれかが欠ける場合は None を返す。
+    """
+    pid = (person_id_custom or "").strip()
+    kana = (name_kana_full_match or "").strip()
+    gender = (gender_code or "").strip()
+
+    if not pid or not kana or not gender:
+        return None
+
+    base = f"{pid}|{kana}|{gender}"
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()
