@@ -1,0 +1,17 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 216, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 212, in main
+    update_rows(dry_run=args.dry_run, limit=args.limit)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 173, in update_rows
+    cur.executemany(UPDATE_SQL, update_params)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 460, in executemany
+    self._connection.handle_unread_result()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 1121, in handle_unread_result
+    raise InternalError("Unread result found")
+mysql.connector.errors.InternalError: Unread result found
