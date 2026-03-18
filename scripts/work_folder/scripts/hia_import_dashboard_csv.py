@@ -74,6 +74,7 @@ COMPARE_COLUMNS = [
     "subscriber_name_kana_full_match",
     "subscriber_gender_code",
     "subscriber_birth",
+    "identity_hash",
     "insurance_symbol",
     "insurance_number",
     "branch_number",
@@ -108,7 +109,8 @@ def fetch_subscriber_enrichment(
             name_kana_full,
             name_kana_full_match,
             gender_code,
-            birth
+            birth,
+            identity_hash
         FROM dev_phr.subscribers
         WHERE insurer_number = %s
           AND insurance_symbol_match = %s
@@ -133,6 +135,7 @@ def fetch_subscriber_enrichment(
             "subscriber_name_kana_full_match": None,
             "subscriber_gender_code": None,
             "subscriber_birth": None,
+            "identity_hash": None,
         }
 
     return {
@@ -141,6 +144,7 @@ def fetch_subscriber_enrichment(
         "subscriber_name_kana_full_match": row.get("name_kana_full_match"),
         "subscriber_gender_code": row.get("gender_code"),
         "subscriber_birth": row.get("birth"),
+        "identity_hash": row.get("identity_hash"),
     }
 
 
@@ -333,6 +337,7 @@ def build_status_record(normalized: dict, run_id: int, raw_row_json: str) -> dic
         "subscriber_name_kana_full_match": normalized["subscriber_name_kana_full_match"],
         "subscriber_gender_code": normalized["subscriber_gender_code"],
         "subscriber_birth": normalized["subscriber_birth"],
+        "identity_hash": normalized["identity_hash"],
         "status": normalized["status"],
         "reservation_date": normalized["reservation_date"],
         "exam_date": normalized["exam_date"],
@@ -414,6 +419,7 @@ def fetch_existing_status(cur: Any, snapshot_identity_key: str) -> Optional[dict
             subscriber_name_kana_full_match,
             subscriber_gender_code,
             subscriber_birth,
+            identity_hash,
             status,
             reservation_date,
             exam_date,
@@ -458,6 +464,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             subscriber_name_kana_full_match,
             subscriber_gender_code,
             subscriber_birth,
+            identity_hash,
             status,
             reservation_date,
             exam_date,
@@ -476,7 +483,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             %s, %s, %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s,
-            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s, %s, %s,
             %s, %s, %s,
@@ -502,6 +509,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             status_record["subscriber_name_kana_full_match"],
             status_record["subscriber_gender_code"],
             status_record["subscriber_birth"],
+            status_record["identity_hash"],
             status_record["status"],
             status_record["reservation_date"],
             status_record["exam_date"],
@@ -553,6 +561,7 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             subscriber_name_kana_full_match = %s,
             subscriber_gender_code = %s,
             subscriber_birth = %s,
+            identity_hash = %s,
             status = %s,
             reservation_date = %s,
             exam_date = %s,
@@ -587,6 +596,7 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             status_record["subscriber_name_kana_full_match"],
             status_record["subscriber_gender_code"],
             status_record["subscriber_birth"],
+            status_record["identity_hash"],
             status_record["status"],
             status_record["reservation_date"],
             status_record["exam_date"],
