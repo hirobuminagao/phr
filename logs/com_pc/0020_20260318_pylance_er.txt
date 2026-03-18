@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"insurer_number\", \"cur\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 97,
+	"startColumn": 18,
+	"endLineNumber": 97,
+	"endColumn": 46
+}]
