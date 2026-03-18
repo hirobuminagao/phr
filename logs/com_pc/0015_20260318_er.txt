@@ -1,0 +1,106 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"normalize_insurance_symbol_export\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 52,
+	"startColumn": 5,
+	"endLineNumber": 52,
+	"endColumn": 38
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType]\" の引数を、関数 \"build_recomputed_values\" の型 \"Dict[str, Any]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType]\" は型 \"Dict[str, Any]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"Dict[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 139,
+	"startColumn": 61,
+	"endLineNumber": 139,
+	"endColumn": 64
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType]\" の引数を、関数 \"needs_update\" の型 \"Dict[str, Any]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType]\" は型 \"Dict[str, Any]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"Dict[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 141,
+	"startColumn": 37,
+	"endLineNumber": 141,
+	"endColumn": 40
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 154,
+	"startColumn": 25,
+	"endLineNumber": 154,
+	"endColumn": 34,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 154,
+	"startColumn": 25,
+	"endLineNumber": 154,
+	"endColumn": 34
+}]
