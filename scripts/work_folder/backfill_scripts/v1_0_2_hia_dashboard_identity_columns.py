@@ -5,12 +5,10 @@
 v1_0_2_hia_dashboard_identity_columns.py
 
 Purpose:
-- Backfill dashboard identity/enrichment columns using the SAME logic as
-  hia_import_dashboard_csv.py (single source of truth)
-
-Policy:
-- DO NOT duplicate logic
-- Reuse normalize / enrichment / hash from main script
+- Backfill dashboard-side subscriber enrichment columns and `name_match`
+  using the SAME logic as hia_import_dashboard_csv.py.
+- `snapshot_identity_key` is NOT updated here because legacy rows can
+  collapse to the same normalized key and violate the unique constraint.
 """
 
 from __future__ import annotations
