@@ -61,6 +61,7 @@ from scripts.work_folder.lib.normalize.common import (
     normalize_name_kanji_match,
     normalize_name_kana_match,
     normalize_insurance_symbol_export,
+    build_identity_hash,
 )
 
 
@@ -97,8 +98,18 @@ def build_subscriber_vals(cur, srow: dict[str, Any]) -> Dict[str, Any]:
     name_kanji_full = srow.get("name_kanji_full") or ""
     name_kana_full = srow.get("name_kana_full") or ""
 
+    name_kana_full_match = normalize_name_kana_match(name_kana_full) or ""
+    name_full_match = normalize_name_kanji_match(name_kanji_full, cur=cur) or ""
+    person_id_custom = srow.get("person_id_custom")
+    gender_code = srow.get("gender_code")
+    identity_hash = build_identity_hash(
+        person_id_custom=person_id_custom,
+        name_kana_full_match=name_kana_full_match,
+        gender_code=gender_code,
+    )
+
     return {
-        "person_id_custom": srow.get("person_id_custom"),
+        "person_id_custom": person_id_custom,
         "name_kana_full": name_kana_full,
         "name_kanji_full": name_kanji_full,
         "name_kanji_family": srow.get("name_kanji_family"),
@@ -107,9 +118,9 @@ def build_subscriber_vals(cur, srow: dict[str, Any]) -> Dict[str, Any]:
         "name_kana_family": srow.get("name_kana_family"),
         "name_kana_middle": srow.get("name_kana_middle"),
         "name_kana_given": srow.get("name_kana_given"),
-        "name_kana_full_match": normalize_name_kana_match(name_kana_full) or "",
-        "name_full_match": normalize_name_kanji_match(name_kanji_full, cur=cur) or "",
-        "gender_code": srow.get("gender_code"),
+        "name_kana_full_match": name_kana_full_match,
+        "name_full_match": name_full_match,
+        "gender_code": gender_code,
         "birth": srow.get("birth"),
         "insured_attribute_name": srow.get("insured_attribute_name"),
         "relationship_name": srow.get("relationship_name"),
@@ -129,6 +140,7 @@ def build_subscriber_vals(cur, srow: dict[str, Any]) -> Dict[str, Any]:
         "distribution_code": srow.get("distribution_code"),
         "employee_code": srow.get("employee_code"),
         "connect_id": srow.get("connect_id"),
+        "identity_hash": identity_hash,
     }
 
 
@@ -172,6 +184,7 @@ def fetch_existing_subscriber(cur, person_id_custom: str, name_kana_full_match: 
             distribution_code,
             employee_code,
             connect_id
+            , identity_hash
         FROM subscribers
         WHERE person_id_custom = %s
           AND name_kana_full_match = %s
@@ -214,6 +227,7 @@ COMPARE_COLUMNS = [
     "distribution_code",
     "employee_code",
     "connect_id",
+    "identity_hash",
 ]
 
 
@@ -236,6 +250,7 @@ AUDIT_COLUMNS = [
     "distribution_code",
     "employee_code",
     "connect_id",
+    "identity_hash",
 ]
 
 
@@ -345,6 +360,7 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             distribution_code,
             employee_code,
             connect_id,
+            identity_hash,
             last_change_run_id,
             created_at,
             updated_at
@@ -379,6 +395,7 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             %(distribution_code)s,
             %(employee_code)s,
             %(connect_id)s,
+            %(identity_hash)s,
             %(last_change_run_id)s,
             NOW(3),
             NOW(3)
@@ -424,6 +441,7 @@ def update_subscriber(cur, subscriber_id: int, vals: Dict[str, Any], run_id: int
             distribution_code = %(distribution_code)s,
             employee_code = %(employee_code)s,
             connect_id = %(connect_id)s,
+            identity_hash = %(identity_hash)s,
             last_change_run_id = %(last_change_run_id)s,
             updated_at = NOW(3)
         WHERE id = %(id)s
