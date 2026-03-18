@@ -1,0 +1,39 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 170,
+	"startColumn": 31,
+	"endLineNumber": 170,
+	"endColumn": 37
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 170,
+	"startColumn": 31,
+	"endLineNumber": 170,
+	"endColumn": 37
+}]
