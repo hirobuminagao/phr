@@ -174,10 +174,14 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
 
                 recalculated = build_from_existing_row(lookup_cur, row)
                 print(
-                    "DEBUG name:",
-                    row.get("name"),
-                    "=>",
-                    recalculated.get("name_match"),
+                    "DEBUG RAW:",
+                    repr(row.get("name")),
+                    "| MATCH =>",
+                    repr(recalculated.get("name_match")),
+                    "| symbol:",
+                    repr(row.get("insurance_symbol")),
+                    "| number:",
+                    repr(row.get("insurance_number")),
                 )
 
                 if not needs_update(row, recalculated):
