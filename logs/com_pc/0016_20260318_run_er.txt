@@ -1,0 +1,24 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 206, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 202, in main
+    update_rows(dry_run=args.dry_run, limit=args.limit)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 143, in update_rows
+    recalculated = build_recomputed_values(cur, row)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 109, in build_recomputed_values
+    "name_full_match": normalize_name_kanji_match(raw_kanji, cur=cur),
+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\work\phr\scripts\work_folder\lib\normalize\common.py", line 177, in normalize_name_kanji_match
+    kanji_map = load_kanji_normalization_map(cur)
+  File "C:\Users\1107858.KSMD\work\phr\scripts\work_folder\lib\normalize\kanji_dict.py", line 59, in load_kanji_normalization_map
+    cur.execute(sql)
+    ~~~~~~~~~~~^^^^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 315, in execute
+    self._connection.handle_unread_result()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 1121, in handle_unread_result
+    raise InternalError("Unread result found")
+mysql.connector.errors.InternalError: Unread result found
