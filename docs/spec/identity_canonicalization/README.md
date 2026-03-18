@@ -341,6 +341,8 @@ dev_phr.subscribers
 - `name_kana_full_match`
 - `name_full_match`
 - `identity_hash`
+- `insurance_symbol_match`
+- `insurance_symbol_export`
 
 ---
 
@@ -372,8 +374,65 @@ work_other.hia_person_years
 
 - `name_kana_norm`の改善
 - `identity_hash`の追加
+- `insurance_symbol_match` / `insurance_number_match` の common 準拠
 
 ---
+
+# 7.1 現在の実装状態（2026-03 時点）
+
+本節は、v1.0.2 における主要実装の現状を整理する。
+
+## subscribers
+
+`dev_phr.subscribers` は、以下の方針で整備済みである。
+
+- `name_kana_full_match` は `common.py` の `normalize_name_kana_match(...)` を使用する
+- `name_full_match` は `common.py` の `normalize_name_kanji_match(...)` を使用する
+- `insurance_symbol_match` は HIA export ZIP v1 の固定ルールに合わせる
+- `insurance_symbol_export` は raw / match と分離した出力用値として保持する
+
+## dashboard
+
+`work_other.hia_dashboard_status` は、以下の方針で整備済みである。
+
+- `name_match` は `common.py` の `normalize_name_kanji_match(...)` を使用する
+- `subscriber_name_kana_full_match` を subscriber enrichment として保持する
+- dashboard 自身の照合は subscriber 側 canonical value と整合することを前提とする
+
+## person_years / HIA ZIP import
+
+`hia_import_zip.py` は、正規化ロジックをローカル実装せず、`common.py` に寄せる方針へ移行済みである。
+
+対象:
+
+- `insurance_symbol_match`
+- `insurance_number_match`
+- `symbol_for_custom_id`
+- `birth_yyyymmdd`
+- `name_kana_norm`
+
+したがって、HIA ZIP import も subscribers / dashboard と同一の正規化レイヤーを参照する。
+
+## hia_import_zips
+
+`work_other.hia_import_zips` には、archive 後の物理保存先を追跡するため、以下を保持する。
+
+- `archived_zip_path`
+- `archived_at`
+
+これにより、DB 参照時に「読み取った ZIP が物理的にどこへ移動したか」を追跡できる。
+
+# 7.2 既存データの不整合とバックフィル前提
+
+運用開始前後で正規化ロジックが段階的に改善されたため、既存データには旧ロジックで作られた値が残存している可能性がある。
+
+特に注意する点:
+
+- 旧 `name_kana_full_match` / `name_kana_norm` では小書きカナが残っている可能性がある
+- 旧 `insurance_symbol_match` では固定ルール以前の値が残っている可能性がある
+- dashboard の subscriber enrichment は旧 canonical value のまま保持されている可能性がある
+
+したがって、v1.0.2 の完全適用には backfill を前提とする。
 
 # 8. バックフィル戦略
 
@@ -384,6 +443,15 @@ work_other.hia_person_years
 1. matchカラムを再計算
 2. 漢字辞書を適用
 3. identity_hashを再生成
+
+実施順の原則は以下とする。
+
+1. `subscribers` の match / export 系を再計算
+2. `hia_dashboard_status` の subscriber enrichment / name_match 系を再計算
+3. `hia_person_years` の `name_kana_norm` / `insurance_symbol_match` / `insurance_number_match` を再計算
+4. 最後に `identity_hash` を再生成
+
+この順序により、親テーブルである subscribers の canonical value を先に安定化させたうえで、下流テーブルへ反映できる。
 
 これにより既存行も同一の同一性モデルに準拠します。
 
