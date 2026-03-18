@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -36,7 +34,6 @@ from scripts.work_folder.scripts.hia_import_dashboard_csv import (
     normalize_dashboard_row,
     fetch_subscriber_enrichment,
     build_row_sha,
-    build_snapshot_key,
 )
 
 BATCH_SIZE = 1000
@@ -51,8 +48,7 @@ LIMIT %s
 
 UPDATE_SQL = """
 UPDATE work_other.hia_dashboard_status
-   SET snapshot_identity_key = %s,
-       name_match = %s,
+   SET name_match = %s,
        subscriber_person_id_custom = %s,
        subscriber_name_kana_full = %s,
        subscriber_name_kana_full_match = %s,
@@ -111,15 +107,6 @@ def build_from_existing_row(lookup_cur, row: RowDict) -> dict[str, Any]:
 
     normalized.update(enrichment)
 
-    # ④ identity key
-    normalized["snapshot_identity_key"] = build_snapshot_key(
-        normalized["insurer_number"],
-        normalized["insurance_symbol_match"],
-        normalized["insurance_number_match"],
-        normalized["relationship_match"],
-        normalized["name_match"],
-    )
-
     # ⑤ row sha
     normalized["row_sha256"] = build_row_sha(normalized)
 
@@ -128,7 +115,6 @@ def build_from_existing_row(lookup_cur, row: RowDict) -> dict[str, Any]:
 
 def needs_update(row: RowDict, recalculated: Mapping[str, Any]) -> bool:
     cols = [
-        "snapshot_identity_key",
         "name_match",
         "subscriber_person_id_custom",
         "subscriber_name_kana_full",
@@ -197,7 +183,6 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
 
                 params.append(
                     (
-                        recalculated["snapshot_identity_key"],
                         recalculated["name_match"],
                         recalculated["subscriber_person_id_custom"],
                         recalculated["subscriber_name_kana_full"],
