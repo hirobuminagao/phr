@@ -1,0 +1,23 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 245, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 241, in main
+    update_rows(dry_run=args.dry_run, limit=args.limit)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 191, in update_rows
+    recalculated = build_recomputed_values(
+        row,
+        kanji_map=kanji_map,
+    )
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_subscriber_identity_columns.py", line 120, in build_recomputed_values
+    identity_hash = build_identity_hash(
+        person_id_custom=person_id_custom,
+        name_kana_full_match=normalize_name_kana_match(raw_kana),
+        gender_code=gender_code,
+    )
+  File "C:\Users\1107858.KSMD\work\phr\scripts\work_folder\lib\normalize\common.py", line 621, in build_identity_hash
+    gender = (gender_code or "").strip()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'int' object has no attribute 'strip'
