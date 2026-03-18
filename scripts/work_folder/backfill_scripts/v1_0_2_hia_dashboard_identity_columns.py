@@ -94,7 +94,11 @@ def build_from_existing_row(lookup_cur, row: RowDict) -> dict[str, Any]:
     }
 
     # ② normalize
-    normalized = normalize_dashboard_row(raw)
+    normalized = normalize_dashboard_row(
+        raw,
+        insurer_number=str(raw.get("insurer_number") or ""),
+        cur=lookup_cur,
+    )
 
     # ③ subscriber enrichment
     enrichment = fetch_subscriber_enrichment(
