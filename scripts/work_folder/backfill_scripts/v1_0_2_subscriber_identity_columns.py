@@ -70,7 +70,9 @@ SELECT
     name_kana_full_match,
     name_full_match
 FROM dev_phr.subscribers
+WHERE id > %s
 ORDER BY id
+LIMIT %s
 """
 
 UPDATE_SQL = """
@@ -128,33 +130,52 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
 
     scanned = 0
     changed = 0
-    update_params: list[tuple[Any, ...]] = []
+    last_id = 0
 
-    with connect_ctx(mysql_params, autocommit=False) as conn:
-        cur = dict_cursor(conn)
-        kanji_cur = dict_cursor(conn)
-        kanji_map = load_kanji_normalization_map(kanji_cur)
-        cur.execute(SELECT_SQL)
+    # 漢字辞書は最初に1回だけロードする
+    with connect_ctx(mysql_params, autocommit=False) as dict_conn:
+        dict_cur = dict_cursor(dict_conn)
+        kanji_map = load_kanji_normalization_map(dict_cur)
+
+    with connect_ctx(mysql_params, autocommit=True) as read_conn, connect_ctx(
+        mysql_params, autocommit=False
+    ) as write_conn:
+        read_cur = dict_cursor(read_conn)
+        write_cur = dict_cursor(write_conn)
 
         while True:
-            rows = cur.fetchmany(BATCH_SIZE)
+            batch_limit = BATCH_SIZE
+            if limit is not None:
+                remaining = limit - scanned
+                if remaining <= 0:
+                    break
+                batch_limit = min(BATCH_SIZE, remaining)
+
+            read_cur.execute(SELECT_SQL, (last_id, batch_limit))
+            rows = read_cur.fetchall() or []
             if not rows:
                 break
+
+            update_params: list[tuple[Any, ...]] = []
 
             for row_any in rows:
                 row = row_any if isinstance(row_any, Mapping) else None
                 if row is None:
                     raise TypeError(f"Unexpected row type from cursor: {type(row_any)!r}")
 
+                row_id = row.get("id")
+                if row_id is None:
+                    raise ValueError("subscribers.id is required for backfill")
+
+                last_id = int(row_id)
                 scanned += 1
+
                 recalculated = build_recomputed_values(
                     row,
                     kanji_map=kanji_map,
                 )
 
                 if not needs_update(row, recalculated):
-                    if limit is not None and scanned >= limit:
-                        break
                     continue
 
                 changed += 1
@@ -165,24 +186,13 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
                         recalculated["insurance_number_match"],
                         recalculated["name_kana_full_match"],
                         recalculated["name_full_match"],
-                        row.get("id"),
+                        row_id,
                     )
                 )
 
-                if len(update_params) >= BATCH_SIZE and not dry_run:
-                    cur.executemany(UPDATE_SQL, update_params)
-                    conn.commit()
-                    update_params.clear()
-
-                if limit is not None and scanned >= limit:
-                    break
-
-            if limit is not None and scanned >= limit:
-                break
-
-        if update_params and not dry_run:
-            cur.executemany(UPDATE_SQL, update_params)
-            conn.commit()
+            if update_params and not dry_run:
+                write_cur.executemany(UPDATE_SQL, update_params)
+                write_conn.commit()
 
     print(f"scanned={scanned}")
     print(f"changed={changed}")
