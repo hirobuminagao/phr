@@ -29,10 +29,10 @@ from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
 
 # ★ここ重要：本体ロジックをそのまま使う
 from scripts.work_folder.scripts.hia_import_dashboard_csv import (
-    normalize_dashboard_row,
     fetch_subscriber_enrichment,
     build_row_sha,
 )
+from scripts.work_folder.lib.normalize.common import normalize_name_kanji_match
 
 BATCH_SIZE = 1000
 
@@ -63,52 +63,40 @@ RowDict = Mapping[str, Any]
 
 def build_from_existing_row(lookup_cur, row: RowDict) -> dict[str, Any]:
     """
-    既存row → 正規ロジックに乗せ直す
+    既存 row から、dashboard 側で再計算すべき値だけを現行ルールで作り直す。
+
+    注意:
+    - snapshot_identity_key は更新しない
+    - insurance_symbol_match / insurance_number_match / relationship_match は
+      既存列をそのまま使用する
+    - subscriber enrichment は subscribers を正として再取得する
     """
+    insurer_number = str(row.get("insurer_number") or "")
+    insurance_symbol_match = str(row.get("insurance_symbol_match") or "")
+    insurance_number_match = str(row.get("insurance_number_match") or "")
+    raw_name = row.get("name") or ""
 
-    # ① raw的に復元（最低限）
-    raw = {
-        "insurer_number": row.get("insurer_number"),
-        "insurance_symbol": row.get("insurance_symbol"),
-        "insurance_number": row.get("insurance_number"),
-        "relationship": row.get("relationship"),
-        "branch_number": row.get("branch_number"),
-        "name": row.get("name"),
-        "status": row.get("status"),
-        "reservation_date": row.get("reservation_date"),
-        "exam_date": row.get("exam_date"),
-        "company_name": row.get("company_name"),
-        "department_name": row.get("department_name"),
-        "medical_institution": row.get("medical_institution"),
-        "course_name": row.get("course_name"),
-        "employee_number": row.get("employee_number"),
-        "email": row.get("email"),
-        "reminder_send_count": row.get("reminder_send_count"),
-        "exclusion_reason": row.get("exclusion_reason"),
-    }
+    name_match = normalize_name_kanji_match(raw_name, cur=lookup_cur) or ""
 
-    # ② normalize
-    normalized = normalize_dashboard_row(
-        raw,
-        insurer_number=str(raw.get("insurer_number") or ""),
-        cur=lookup_cur,
-    )
-
-    # ③ subscriber enrichment
     enrichment = fetch_subscriber_enrichment(
         lookup_cur,
-        insurer_number=normalized["insurer_number"],
-        insurance_symbol_match=normalized["insurance_symbol_match"],
-        insurance_number_match=normalized["insurance_number_match"],
-        name_full_match=normalized["name_match"],
+        insurer_number=insurer_number,
+        insurance_symbol_match=insurance_symbol_match,
+        insurance_number_match=insurance_number_match,
+        name_full_match=name_match,
     )
 
-    normalized.update(enrichment)
+    recalculated = dict(row)
+    recalculated["name_match"] = name_match
+    recalculated["subscriber_person_id_custom"] = enrichment.get("subscriber_person_id_custom")
+    recalculated["subscriber_name_kana_full"] = enrichment.get("subscriber_name_kana_full")
+    recalculated["subscriber_name_kana_full_match"] = enrichment.get("subscriber_name_kana_full_match")
+    recalculated["subscriber_gender_code"] = enrichment.get("subscriber_gender_code")
+    recalculated["subscriber_birth"] = enrichment.get("subscriber_birth")
+    recalculated["identity_hash"] = enrichment.get("identity_hash")
+    recalculated["row_sha256"] = build_row_sha(recalculated)
 
-    # ⑤ row sha
-    normalized["row_sha256"] = build_row_sha(normalized)
-
-    return normalized
+    return recalculated
 
 
 def needs_update(row: RowDict, recalculated: Mapping[str, Any]) -> bool:
@@ -178,10 +166,12 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
                     repr(row.get("name")),
                     "| MATCH =>",
                     repr(recalculated.get("name_match")),
-                    "| symbol:",
-                    repr(row.get("insurance_symbol")),
-                    "| number:",
-                    repr(row.get("insurance_number")),
+                    "| sub_kana_match =>",
+                    repr(recalculated.get("subscriber_name_kana_full_match")),
+                    "| symbol_match:",
+                    repr(row.get("insurance_symbol_match")),
+                    "| number_match:",
+                    repr(row.get("insurance_number_match")),
                 )
 
                 if not needs_update(row, recalculated):
