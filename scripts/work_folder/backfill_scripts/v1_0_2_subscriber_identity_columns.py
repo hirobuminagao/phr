@@ -53,6 +53,7 @@ from scripts.work_folder.lib.normalize.common import (
     normalize_insurance_symbol_match,
     normalize_name_kana_match,
     normalize_name_kanji_match,
+    build_identity_hash,
 )
 
 
@@ -65,6 +66,9 @@ SELECT
     insurance_number,
     name_kana_full,
     name_kanji_full,
+    person_id_custom,
+    gender_code,
+    identity_hash,
     insurance_symbol_match,
     insurance_symbol_export,
     insurance_number_match,
@@ -82,7 +86,8 @@ UPDATE dev_phr.subscribers
        insurance_symbol_export = %s,
        insurance_number_match = %s,
        name_kana_full_match = %s,
-       name_full_match = %s
+       name_full_match = %s,
+       identity_hash = %s
  WHERE id = %s
 """
 
@@ -109,12 +114,22 @@ def build_recomputed_values(
     raw_kana = row.get("name_kana_full") or ""
     raw_kanji = row.get("name_kanji_full") or ""
 
+    person_id_custom = row.get("person_id_custom")
+    gender_code = row.get("gender_code")
+
+    identity_hash = build_identity_hash(
+        person_id_custom=person_id_custom,
+        name_kana_full_match=normalize_name_kana_match(raw_kana),
+        gender_code=gender_code,
+    )
+
     return {
         "insurance_symbol_match": normalize_insurance_symbol_match(raw_symbol),
         "insurance_symbol_export": normalize_insurance_symbol_export(raw_symbol),
         "insurance_number_match": normalize_insurance_number_match(raw_number),
         "name_kana_full_match": normalize_name_kana_match(raw_kana),
         "name_full_match": normalize_name_kanji_match(raw_kanji, kanji_map=kanji_map),
+        "identity_hash": identity_hash,
     }
 
 
@@ -189,6 +204,7 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
                         recalculated["insurance_number_match"],
                         recalculated["name_kana_full_match"],
                         recalculated["name_full_match"],
+                        recalculated["identity_hash"],
                         row_id,
                     )
                 )
