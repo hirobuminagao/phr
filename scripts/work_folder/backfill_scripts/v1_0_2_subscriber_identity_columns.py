@@ -19,6 +19,7 @@ Updated columns:
 - insurance_number_match
 - name_kana_full_match
 - name_full_match
+- identity_hash
 
 Notes:
 - raw columns are never modified
@@ -30,8 +31,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Mapping
-from typing import cast
+from typing import Any, Mapping, cast
 
 # ------------------------------------------------------------
 # VSCode Run ボタン (file実行) 対応
@@ -116,10 +116,11 @@ def build_recomputed_values(
 
     person_id_custom = row.get("person_id_custom")
     gender_code = row.get("gender_code")
+    name_kana_full_match = normalize_name_kana_match(raw_kana)
 
     identity_hash = build_identity_hash(
         person_id_custom=person_id_custom,
-        name_kana_full_match=normalize_name_kana_match(raw_kana),
+        name_kana_full_match=name_kana_full_match,
         gender_code=gender_code,
     )
 
@@ -127,7 +128,7 @@ def build_recomputed_values(
         "insurance_symbol_match": normalize_insurance_symbol_match(raw_symbol),
         "insurance_symbol_export": normalize_insurance_symbol_export(raw_symbol),
         "insurance_number_match": normalize_insurance_number_match(raw_number),
-        "name_kana_full_match": normalize_name_kana_match(raw_kana),
+        "name_kana_full_match": name_kana_full_match,
         "name_full_match": normalize_name_kanji_match(raw_kanji, kanji_map=kanji_map),
         "identity_hash": identity_hash,
     }
@@ -183,7 +184,6 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
                 if row_id_any is None:
                     raise ValueError("subscribers.id is required for backfill")
 
-                # DBからの値はint想定だが、Pylance対策でcastする
                 row_id = cast(int, row_id_any)
                 last_id = row_id
                 scanned += 1

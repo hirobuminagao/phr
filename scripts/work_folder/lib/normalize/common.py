@@ -599,9 +599,9 @@ def normalize_insurer_folder_name_to_int(folder: Path) -> int:
 
 def build_identity_hash(
     *,
-    person_id_custom: Optional[str],
-    name_kana_full_match: Optional[str],
-    gender_code: Optional[str],
+    person_id_custom: Optional[object],
+    name_kana_full_match: Optional[object],
+    gender_code: Optional[object],
 ) -> Optional[str]:
     """
     identity_hash を生成する。
@@ -616,9 +616,15 @@ def build_identity_hash(
 
     いずれかが欠ける場合は None を返す。
     """
-    pid = (person_id_custom or "").strip()
-    kana = (name_kana_full_match or "").strip()
-    gender = (gender_code or "").strip()
+
+    def _to_text(value: Optional[object]) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    pid = _to_text(person_id_custom)
+    kana = _to_text(name_kana_full_match)
+    gender = _to_text(gender_code)
 
     if not pid or not kana or not gender:
         return None
