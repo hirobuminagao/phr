@@ -1,0 +1,50 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_subscriber_identity_columns.py
+scanned=86076
+changed=86076
+dry_run=False
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_identity_columns.py
+Traceback (most recent call last):
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 772, in cmd_query
+    self._cmysql.query(
+    ~~~~~~~~~~~~~~~~~~^
+        query,
+        ^^^^^^
+    ...<3 lines>...
+        query_attrs=self.query_attrs,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+_mysql_connector.MySQLInterfaceError: Duplicate entry 'b5a1425e3919fb6027c0b38043b14fc938393b324f0b143bf625981d1ad906fc' for key 'hia_dashboard_status.uq_hia_dashboard_snapshot_identity'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_hia_dashboard_identity_columns.py", line 235, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_hia_dashboard_identity_columns.py", line 231, in main
+    update_rows(dry_run=args.dry_run, limit=args.limit)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_hia_dashboard_identity_columns.py", line 214, in update_rows
+    write_cur.executemany(UPDATE_SQL, params)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 483, in executemany
+    self.execute(operation, params)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 353, in execute
+    self._connection.cmd_query(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._stmt_partition["mappable_stmt"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        raw_as_string=self._raw_as_string,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 781, in cmd_query
+    raise get_mysql_exception(
+        err.errno, msg=err.msg, sqlstate=err.sqlstate
+    ) from err
+mysql.connector.errors.IntegrityError: 1062 (23000): Duplicate entry 'b5a1425e3919fb6027c0b38043b14fc938393b324f0b143bf625981d1ad906fc' for key 'hia_dashboard_status.uq_hia_dashboard_snapshot_identity'
