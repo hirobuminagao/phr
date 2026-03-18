@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Any, Mapping
+from typing import cast
 
 # ------------------------------------------------------------
 # VSCode Run ボタン (file実行) 対応
@@ -163,11 +164,13 @@ def update_rows(*, dry_run: bool, limit: int | None) -> None:
                 if row is None:
                     raise TypeError(f"Unexpected row type from cursor: {type(row_any)!r}")
 
-                row_id = row.get("id")
-                if row_id is None:
+                row_id_any = row.get("id")
+                if row_id_any is None:
                     raise ValueError("subscribers.id is required for backfill")
 
-                last_id = int(row_id)
+                # DBからの値はint想定だが、Pylance対策でcastする
+                row_id = cast(int, row_id_any)
+                last_id = row_id
                 scanned += 1
 
                 recalculated = build_recomputed_values(
