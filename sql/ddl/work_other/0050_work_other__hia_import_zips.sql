@@ -1,5 +1,3 @@
-
-
 -- =========================================================
 -- Table: hia_import_zips
 -- Purpose:
@@ -25,6 +23,10 @@ CREATE TABLE IF NOT EXISTS hia_import_zips (
 
     -- file metadata
     zip_sha256 CHAR(64) COLLATE ascii_bin,
+
+    -- archive / physical storage tracking
+    archived_zip_path VARCHAR(500) COLLATE utf8mb4_ja_0900_as_cs,
+    archived_at DATETIME,
 
     -- processing statistics
     xml_count_total INT UNSIGNED NOT NULL DEFAULT 0,

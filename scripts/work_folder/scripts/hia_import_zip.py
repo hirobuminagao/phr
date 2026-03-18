@@ -45,6 +45,13 @@ from scripts.work_folder.scripts.hia_parse_xml import parse_hia_xml_identity
 from scripts.work_folder.lib.custom_id_gen import generate_id
 from scripts.work_folder.lib.db.config import load_mysql_params
 from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.work_folder.lib.normalize.common import (
+    normalize_insurance_number_match,
+    normalize_insurance_symbol_match,
+    normalize_symbol_for_custom_id,
+    normalize_birth_yyyymmdd,
+    normalize_name_kana_match,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -70,26 +77,19 @@ EXAM_YEAR_START_MONTH = 4
 EXAM_YEAR_START_DAY = 1
 
 # ------------------------------------------------------------
-# normalize / person_id_custom の実装は後続で接続する。
-# 現時点では import_zip の責務を以下に限定する:
+# import_zip の責務は以下に限定する。
 # - ZIP単位の探索
 # - ZIP名からの文脈取得
 # - ZIP展開
 # - XML identity の読取
 # - 必須項目チェック
 # - ZIP単位 all-or-nothing 制御
+# - DB への記帳（hia_import_zips / hia_person_years / hia_xml_events）
 # - 成功ZIPの archive 移動
 # - error.txt 出力
 #
-# 次フェーズで追加予定:
-# - DB照合用 insurance_symbol_match / insurance_number_match 生成
-# - person_id_custom 用の専用 normalize 実装
-#   - symbol_for_custom_id: 記号から数字のみ抽出 + 先頭0削除
-#   - insurance_number_for_custom_id: 半角数字化 + 数字以外除去 + 先頭0削除
-#   - birth_yyyymmdd: 生年月日を yyyymmdd 数字化
-# - person_id_custom 生成
-# - exam_year 算出
-# - hia_import_zips / hia_person_years / hia_xml_events へのDB記帳
+# delivery 用の XML 抽出・対象月の絞り込み・同一人物の過去 XML 整理は
+# 別スクリプト hia_build_delivery_zip.py の責務とする。
 # ------------------------------------------------------------
 
 
@@ -116,119 +116,10 @@ def resolve_exam_year(exam_date_str: str) -> int:
     return d.year if d >= boundary else d.year - 1
 
 
+
 # ============================================================
-# normalize helpers
+# person_id_custom helper
 # ============================================================
-
-
-def _nfkc(value: str | None) -> str:
-    if not value:
-        return ""
-    return unicodedata.normalize("NFKC", value).strip()
-
-
-def _trim_leading_zeros(num_text: str) -> str:
-    trimmed = num_text.lstrip("0")
-    return trimmed if trimmed else "0"
-
-
-def _to_fullwidth_ascii(value: str) -> str:
-    result = []
-    for ch in value:
-        code = ord(ch)
-        if 0x21 <= code <= 0x7E:
-            result.append(chr(code + 0xFEE0))
-        else:
-            result.append(ch)
-    return "".join(result)
-
-
-def normalize_insurance_number_match(value: str | None) -> str | None:
-    """
-    番号 match:
-    - 半角数字化
-    - 数字以外除去
-    - 先頭0削除
-    """
-    s = _nfkc(value)
-    digits = re.sub(r"\D", "", s)
-    if not digits:
-        return None
-    return _trim_leading_zeros(digits)
-
-
-def normalize_insurance_symbol_match(value: str | None) -> str | None:
-    """
-    記号 match:
-    - 区切り記号除去
-    - NFKC
-    - 数字連続部分ごとに先頭0削除
-    - 英字・数字は半角のまま（全角化しない）
-
-    例:
-      埼ー０１ -> 埼1
-      AB-01   -> AB1
-    """
-    s = _nfkc(value)
-    if not s:
-        return None
-
-    s = re.sub(r"[ 　\-‐‑‒–—―ー－ｰ]+", "", s)
-    if not s:
-        return None
-
-    def repl(m: re.Match[str]) -> str:
-        return _trim_leading_zeros(m.group(0))
-
-    s = re.sub(r"\d+", repl, s)
-
-    return s or None
-
-
-def normalize_symbol_for_custom_id(value: str | None) -> str | None:
-    """
-    person_id_custom 用の記号:
-    - 数字のみ抽出
-    - 先頭0削除
-    """
-    s = _nfkc(value)
-    digits = re.sub(r"\D", "", s)
-    if not digits:
-        return None
-    return _trim_leading_zeros(digits)
-
-
-
-def normalize_birth_yyyymmdd(value: str | None) -> str | None:
-    """
-    YYYY-MM-DD -> yyyymmdd
-    """
-    s = _nfkc(value)
-    digits = re.sub(r"\D", "", s)
-    if len(digits) < 8:
-        return None
-    return digits[:8]
-
-
-def normalize_name_kana_norm(value: str | None) -> str | None:
-    """
-    name_kana_norm の最小実装。
-
-    現時点では以下のみ行う:
-    - NFKC
-    - 前後空白除去
-    - 半角/全角スペース除去
-    - 中点除去
-
-    NOTE:
-    長音・ダッシュ揺れなどの詳細統一は後続フェーズで拡張する。
-    """
-    s = _nfkc(value)
-    if not s:
-        return None
-    s = re.sub(r"[ 　・･]+", "", s)
-    return s or None
-
 
 def build_person_id_custom(row: dict[str, object]) -> str | None:
     """
@@ -273,19 +164,12 @@ def build_person_id_custom(row: dict[str, object]) -> str | None:
 # ============================================================
 
 def ensure_run_dirs(run_id: str, insurer_number: str):
-
+    """import_zip 用の最小作業ディレクトリだけを準備する。"""
     run_work = WORK_DIR / run_id / insurer_number
-
-    xml_selected = run_work / "xml_selected"
-    run_output = OUTPUT_DIR / run_id / insurer_number
-
-    xml_selected.mkdir(parents=True, exist_ok=True)
-    run_output.mkdir(parents=True, exist_ok=True)
+    run_work.mkdir(parents=True, exist_ok=True)
 
     return {
         "run_work": run_work,
-        "xml_selected": xml_selected,
-        "run_output": run_output,
     }
 
 
@@ -705,15 +589,28 @@ def append_zip_error(error_lines: list[str], header: str, detail_lines: list[str
 # ZIPアーカイブ
 # ============================================================
 
-def move_zip_to_archive(zip_path: Path, run_id: str, insurer_number: str):
+def move_zip_to_archive(zip_path: Path, run_id: str, insurer_number: str) -> Path:
+    """成功した ZIP を archive へ移動し、移動先パスを返す。"""
 
     # archive structure: archive_zip/{run_id}/{insurer_number}/
     target_dir = ARCHIVE_ZIP_DIR / run_id / insurer_number
     target_dir.mkdir(parents=True, exist_ok=True)
 
     target_path = target_dir / zip_path.name
-
     zip_path.rename(target_path)
+    return target_path
+
+
+def update_import_zip_archive_info(cur, zip_id: int, archived_zip_path: str):
+    """hia_import_zips に archive 後の物理パスを記録する。"""
+    sql = """
+    UPDATE hia_import_zips
+       SET archived_zip_path = %s,
+           archived_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+     WHERE zip_id = %s
+    """
+    cur.execute(sql, (archived_zip_path, zip_id))
 
 
 # ============================================================
@@ -795,7 +692,7 @@ def main():
                     row.get("birthdate")
                 )
 
-                row["name_kana_norm"] = normalize_name_kana_norm(
+                row["name_kana_norm"] = normalize_name_kana_match(
                     row.get("name_kana")
                 )
 
@@ -899,7 +796,16 @@ def main():
                 )
                 conn.commit()
 
-            move_zip_to_archive(zip_path, run_id, insurer_number)
+            archived_zip_path = move_zip_to_archive(zip_path, run_id, insurer_number)
+
+            with connect_ctx(mysql_params, autocommit=False) as conn:
+                cur = dict_cursor(conn)
+                update_import_zip_archive_info(
+                    cur,
+                    zip_id=zip_id,
+                    archived_zip_path=str(archived_zip_path),
+                )
+                conn.commit()
 
     # --------------------------------------------------
     # error.txt
