@@ -127,7 +127,7 @@ def _hiragana_to_katakana(value: str) -> str:
 
 
 def _normalize_small_kana(value: str) -> str:
-    """小書きカナを通常カナへ寄せる。"""
+    """小書きカナを通常カナへ寄せる（match 用）。"""
     return value.translate(_SMALL_KANA_TO_LARGE)
 
 
@@ -182,16 +182,20 @@ def normalize_name_kanji_match(
     return value or None
 
 
-def normalize_name_kana_match(raw: Optional[str]) -> Optional[str]:
-    """氏名（カナ）の match 用共通正規化。
+
+def normalize_name_kana_norm(raw: Optional[str]) -> Optional[str]:
+    """氏名（カナ）の norm 用共通正規化。
 
     手順:
     - NFKC
     - trim
     - 半角/全角空白除去
     - ひらがな→カタカナ
-    - 小書きカナ正規化
     - 中黒・ハイフン系・括弧・区切り記号除去
+
+    方針:
+    - 保存・再利用向けの標準形とする
+    - 小書きカナはこの段階では保持する
     """
     value = _normalize_nfkc_strip(raw)
     if not value:
@@ -199,8 +203,27 @@ def normalize_name_kana_match(raw: Optional[str]) -> Optional[str]:
 
     value = _remove_all_spaces(value)
     value = _hiragana_to_katakana(value)
-    value = _normalize_small_kana(value)
     value = _KANA_MATCH_REMOVE_RE.sub("", value)
+
+    return value or None
+
+
+def normalize_name_kana_match(raw: Optional[str]) -> Optional[str]:
+    """氏名（カナ）の match 用共通正規化。
+
+    手順:
+    - norm を生成
+    - 小書きカナ正規化
+
+    方針:
+    - norm は保存・再利用向け標準形
+    - match は照合用 canonical value
+    """
+    value = normalize_name_kana_norm(raw)
+    if not value:
+        return None
+
+    value = _normalize_small_kana(value)
 
     return value or None
 
