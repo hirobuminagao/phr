@@ -48,7 +48,6 @@ from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.work_folder.lib.normalize.common import (
     normalize_insurance_number_match,
     normalize_insurance_symbol_match,
-    normalize_symbol_for_custom_id,
     normalize_birth_yyyymmdd,
     normalize_name_kana_match,
     build_identity_hash,
@@ -544,6 +543,16 @@ def insert_xml_event(cur, person_year_id: int, zip_id: int, row: dict, zip_ctx: 
     )
 
 
+
+
+def _as_text(value: object) -> str:
+    """None や非文字列を含む値を normalize 前提の str に寄せる。"""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
 # ============================================================
 # 必須チェック
 # ============================================================
@@ -668,36 +677,36 @@ def main():
 
                 row = parse_hia_xml_identity(xml_path)
 
-                # --------------------------------------------------
-                # normalize for DB match
-                # --------------------------------------------------
+                insurance_symbol_raw = _as_text(row.get("insurance_symbol"))
+                insurance_number_raw = _as_text(row.get("insurance_number"))
+                birthdate_raw = _as_text(row.get("birthdate"))
+                name_kana_raw = _as_text(row.get("name_kana"))
 
                 row["insurance_symbol_match"] = normalize_insurance_symbol_match(
-                    row.get("insurance_symbol")
+                    insurance_symbol_raw
                 )
 
                 row["insurance_number_match"] = normalize_insurance_number_match(
-                    row.get("insurance_number")
+                    insurance_number_raw
                 )
 
                 # --------------------------------------------------
                 # normalize for person_id_custom
                 # --------------------------------------------------
-
-                row["symbol_for_custom_id"] = normalize_symbol_for_custom_id(
-                    row.get("insurance_symbol")
-                )
+                # custom_id_gen 側で person_id 用の数字寄せを行うため、
+                # ここでは raw を文字列として保持する。
+                row["symbol_for_custom_id"] = insurance_symbol_raw
 
                 row["insurance_number_for_custom_id"] = normalize_insurance_number_match(
-                    row.get("insurance_number")
+                    insurance_number_raw
                 )
 
                 row["birth_yyyymmdd"] = normalize_birth_yyyymmdd(
-                    row.get("birthdate")
+                    birthdate_raw
                 )
 
                 row["name_kana_norm"] = normalize_name_kana_match(
-                    row.get("name_kana")
+                    name_kana_raw
                 )
 
                 # --------------------------------------------------
