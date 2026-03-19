@@ -1,0 +1,96 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_zip.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"normalize_symbol_for_custom_id\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 51,
+	"startColumn": 5,
+	"endLineNumber": 51,
+	"endColumn": 35
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_zip.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"normalize_insurance_symbol_match\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 676,
+	"startColumn": 21,
+	"endLineNumber": 676,
+	"endColumn": 48
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_zip.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"normalize_insurance_number_match\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 680,
+	"startColumn": 21,
+	"endLineNumber": 680,
+	"endColumn": 48
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_zip.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"normalize_insurance_number_match\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 692,
+	"startColumn": 21,
+	"endLineNumber": 692,
+	"endColumn": 48
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_zip.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"normalize_birth_yyyymmdd\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 696,
+	"startColumn": 21,
+	"endLineNumber": 696,
+	"endColumn": 41
+}]
