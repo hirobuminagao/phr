@@ -1,0 +1,60 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_person_year_identity_columns.py
+[START] hia_person_years backfill
+target rows: 27221
+processed: 1000
+processed: 2000
+processed: 3000
+processed: 4000
+processed: 5000
+processed: 6000
+processed: 7000
+processed: 8000
+processed: 9000
+processed: 10000
+processed: 11000
+Traceback (most recent call last):
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 772, in cmd_query
+    self._cmysql.query(
+    ~~~~~~~~~~~~~~~~~~^
+        query,
+        ^^^^^^
+    ...<3 lines>...
+        query_attrs=self.query_attrs,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+_mysql_connector.MySQLInterfaceError: Duplicate entry 'ip3gpgy3zpner55rqnv2qffgigkkhckixtjwaaaawaa-カタカナシメイ-2' for key 'hia_person_years.uq_hia_person_year_identity'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_hia_person_year_identity_columns.py", line 140, in <module>
+    run_backfill()
+    ~~~~~~~~~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\backfill_scripts\v1_0_2_hia_person_year_identity_columns.py", line 114, in run_backfill
+    cur.execute(
+    ~~~~~~~~~~~^
+        """
+        ^^^
+    ...<6 lines>...
+        params,
+        ^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 353, in execute
+    self._connection.cmd_query(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._stmt_partition["mappable_stmt"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        raw_as_string=self._raw_as_string,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 781, in cmd_query
+    raise get_mysql_exception(
+        err.errno, msg=err.msg, sqlstate=err.sqlstate
+    ) from err
+mysql.connector.errors.IntegrityError: 1062 (23000): Duplicate entry 'ip3gpgy3zpner55rqnv2qffgigkkhckixtjwaaaawaa-カタカナシメイ-2' for key 'hia_person_years.uq_hia_person_year_identity'
