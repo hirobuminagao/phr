@@ -16,6 +16,7 @@ v1_0_2_hia_person_year_identity_columns.py
 
 import sys
 from pathlib import Path
+from typing import Any, Mapping, cast
 
 # ------------------------------------------------------------
 # project root を import path に追加
@@ -31,6 +32,8 @@ from scripts.work_folder.lib.normalize.common import (
     normalize_name_kana_match,
     build_identity_hash,
 )
+
+RowDict = Mapping[str, Any]
 
 
 # ============================================================
@@ -70,16 +73,29 @@ def run_backfill():
         """
     )
 
-    rows = cur.fetchall()
+    rows_any = cur.fetchall()
+    rows: list[RowDict] = []
+    for row_any in rows_any:
+        row = row_any if isinstance(row_any, Mapping) else None
+        if row is None:
+            raise TypeError(f"Unexpected row type from cursor: {type(row_any)!r}")
+        rows.append(row)
+
     print(f"target rows: {len(rows)}")
 
     update_count = 0
 
     for r in rows:
-        person_year_id = r["person_year_id"]
+        person_year_id_any = r.get("person_year_id")
+        if person_year_id_any is None:
+            raise ValueError("person_year_id is required")
+        person_year_id = cast(int, person_year_id_any)
 
-        raw = r.get("name_kana_raw")
-        norm_existing = r.get("name_kana_norm")
+        raw_any = r.get("name_kana_raw")
+        raw = raw_any if isinstance(raw_any, str) else None
+
+        norm_existing_any = r.get("name_kana_norm")
+        norm_existing = norm_existing_any if isinstance(norm_existing_any, str) else None
 
         # norm再生成（rawがあれば優先）
         norm = None
@@ -94,6 +110,11 @@ def run_backfill():
             gender_code=r.get("gender_code"),
         )
 
+        params: tuple[str | None, str | None, int] = (
+            norm,
+            identity_hash,
+            person_year_id,
+        )
         cur.execute(
             """
             UPDATE hia_person_years
@@ -102,11 +123,7 @@ def run_backfill():
                 identity_hash = %s
             WHERE person_year_id = %s
             """,
-            (
-                norm,
-                identity_hash,
-                person_year_id,
-            ),
+            params,
         )
 
         update_count += 1
