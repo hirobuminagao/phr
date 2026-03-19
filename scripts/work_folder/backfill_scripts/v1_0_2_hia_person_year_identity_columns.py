@@ -26,7 +26,8 @@ PROJECT_ROOT = CURRENT_FILE.parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-import mysql.connector
+from scripts.work_folder.lib.db.mysql import connect_mysql, dict_cursor
+from scripts.work_folder.lib.db.config import get_mysql_params
 
 from scripts.work_folder.lib.normalize.common import (
     normalize_name_kana_match,
@@ -37,16 +38,11 @@ RowDict = Mapping[str, Any]
 
 
 # ============================================================
-# DB接続（既存ルールに合わせる）
+# DB接続（共通ルートに統一）
 # ============================================================
 def get_connection():
-    return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="password",
-        database="work_other",
-        charset="utf8mb4",
-    )
+    params = get_mysql_params("work_other")
+    return connect_mysql(params, autocommit=False)
 
 
 # ============================================================
@@ -54,7 +50,7 @@ def get_connection():
 # ============================================================
 def run_backfill():
     conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    cur = dict_cursor(conn)
 
     print("[START] hia_person_years backfill")
 
