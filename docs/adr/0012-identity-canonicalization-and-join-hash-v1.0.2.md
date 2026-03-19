@@ -19,14 +19,15 @@ PHR v1.0.1 では、以下の到達点を固定した。
 - CJK互換漢字（例: `羽`, `神`, `塚`, `礼`, `猪`, `﨑`）に起因する未一致
 - dashboard 側の氏名漢字が表示用 / 正規化後に寄った値で出力されるケース
 - `hia_person_years.name_kana_norm` が小書きカナ正規化などを十分に含んでいない
+- `raw` / `norm` / `match` / `export` の命名と役割が一部曖昧で、接尾語なしカラムの意味が将来わかりにくくなる懸念がある
 - join 条件が複雑化し、テーブル件数増加時の保守性・性能に不安がある
 
 このため v1.0.2 では、人物照合で利用する値の作り方を再定義し、raw / match / hash の三段構えを正式方針として採用する。
 
 ## Decision
-v1.0.2 では、照合に使う項目について以下の原則を採用する。
+v1.0.2 では、照合に使う項目について以下の原則を採用する。特に canonicalization の段階は `raw / norm / match / hash` を基本とし、必要な場合のみ `formatted / export` を追加する。
 
-### 1. raw / match / hash の三段構えを標準とする
+### 1. raw / norm / match / hash を標準とし、必要に応じて formatted / export を追加する
 
 #### raw
 元の値は省略せず保持する。
@@ -39,10 +40,29 @@ v1.0.2 では、照合に使う項目について以下の原則を採用する�
 
 raw は表示・監査・再計算の基礎データであり、正規化やフォーマット変換で上書きしない。
 
+#### norm
+norm は、保存・再利用のための標準化済み値とする。
+
+norm では、主に以下を扱う。
+
+- trim
+- 空白除去または空白統一
+- Unicode 正規化（NFKC など）
+- 記号・中点・長音・ハイフン類などのノイズ除去または統一
+- 空欄 / NULL / 空文字の扱い統一
+
+norm は「意味を変えずに保存しやすく整える段階」とし、照合都合でさらに寄せる処理（例: 小書きカナを大文字へ寄せる、先頭0削除、canonical value 化）は match で扱う。
+
+また、互換漢字・旧字体・異体字の変換は norm では扱わない（値そのものを別文字へ置換するため）。
+
 #### match
 照合用に正規化した値を必ず生成し、保管する。
 
 match 列は、同一人物判定・同一データ判定のための canonical value として扱う。
+
+match は、norm を入力としてさらに照合向けに寄せた値である。したがって match は「保存のための標準形」ではなく、「一致判定のための canonical value」として扱う。
+
+互換漢字・旧字体・異体字の変換は、同一人物判定のための同一視として match で扱う。これにより raw / norm の可逆性・保存性を保ちつつ、照合精度を確保する。
 
 match 系の基本ルールは以下とする。
 
@@ -69,6 +89,8 @@ hash 列は raw や match の代替ではなく、結合・参照最適化のた
 #### formatted / export value
 出力用・連携用の値正規化は、match とは別に扱う。
 
+formatted / export は、参照・照合のための値ではなく、外部仕様や表示仕様に合わせるための値である。したがって export は raw / norm / match のいずれの代替にもせず、必要な場面に限定して保持する。
+
 厚生労働省フォーマットに寄せる値については、以下を原則とする。
 
 - 値がすべて数字なら半角
@@ -89,6 +111,20 @@ hash 列は raw や match の代替ではなく、結合・参照最適化のた
 - raw: `０００００１２３`
 - match: `123`
 - formatted/export: `123`
+
+外部連携先の制約により特定の文字体系（例: 互換漢字）でないと取り込めない場合は、変換は export で個別に扱う。norm や match の代替としては使用しない。
+
+#### naming policy
+新規に導入する canonicalization 系カラムでは、原則として接尾語なしの曖昧な名前を避け、役割を接尾語で明示する。
+
+- 元の値: `_raw`
+- 保存・再利用向け標準化: `_norm`
+- 照合用 canonical value: `_match`
+- 出力・連携用: `_export`
+
+したがって、今後新規に追加する列では、接尾語なしで raw / norm / match のどれかが分からない名前は採用しない。
+
+既存列については即時全面リネームを必須とはしないが、comment・ADR・spec で意味を固定し、将来の migration / backfill で順次整理する。
 
 ### 2. 人物照合の canonical input を明示する
 人物照合用の canonical input は、少なくとも以下を基礎とする。
@@ -182,6 +218,7 @@ v1.0.2 時点では、`dev_phr.subscribers.identity_hash` を canonical な人�
 - match 列生成ロジックの統一
 - 漢字正規化辞書テーブル追加
 - `name_kana_full_match` / `name_full_match` / `name_kana_norm` 系定義見直し
+- `raw` / `norm` / `match` / `export` 命名ポリシーの固定
 - `insurance_symbol` の raw / match / formatted(export) 分離方針の明確化
 - join 用 hash 列追加
 - 既存データの backfill
@@ -192,6 +229,7 @@ v1.0.2 時点では、`dev_phr.subscribers.identity_hash` を canonical な人�
 ## Consequences
 ### Positive
 - raw / match / hash の役割が明確になる
+- raw / norm / match / export の役割分担が明文化され、列名だけで用途を判断しやすくなる
 - 氏名・保険証系の照合ロジックを一貫して再利用できる
 - 互換漢字・旧字体・異体字起因の未一致を減らせる
 - 将来的な dashboard / subscribers / person_years / XML ledger join を軽量化できる
@@ -253,13 +291,16 @@ delivery 用の XML 抽出・対象月絞り込み・同一人物の過去 XML �
 本 ADR の大前提は以下である。
 
 - 元の値は省かない
-- 必ず match を作って保管する
+- 必要に応じて `raw` / `norm` / `match` / `hash` を段階的に持つ
 - ハッシュに必要なものが揃うなら hash を作る
+- 新規 canonicalization 系カラムでは接尾語なしを避け、役割を `_raw` / `_norm` / `_match` / `_export` で明示する
+- `norm` は保存・再利用向けの標準形であり、照合向け canonical value は `match` で表す
 - 参照用（match系）は英数字を半角に寄せる
 - 参照用（match系）は先頭0を削除する
 - 出力用の値は「全てが数字なら半角、一文字でも数字以外が入るなら全部全角」のルールに従う
-- 保険証記号は raw / match / formatted(export) を分離して扱う
+- 保険証記号は raw / norm / match / formatted(export) を分離して扱う
 - 保険証記号の match は非数字部分も保持した canonical value とする
 - `identity_hash` は `common.py` の共通関数で生成し、apply / backfill / downstream で同一ロジックを使う
 - `hia_dashboard_status.identity_hash` は subscribers を正とする enrichment 値として扱う
 - `snapshot_identity_key` の再生成は、重複解消ルールなしに既存データへ一括適用しない
+- 互換漢字・旧字体・異体字の変換は norm では行わず、照合は match、外部制約対応は export で扱う

@@ -51,6 +51,7 @@ from scripts.work_folder.lib.normalize.common import (
     normalize_symbol_for_custom_id,
     normalize_birth_yyyymmdd,
     normalize_name_kana_match,
+    build_identity_hash,
 )
 
 
@@ -461,6 +462,7 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
         health_program_code,
         birthdate,
         name_kana_raw,
+        identity_hash,
         dl_count,
         first_seen_dl_date,
         first_seen_zip_name,
@@ -469,13 +471,14 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
         last_seen_zip_name,
         last_seen_xml_filename
     ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
     )
     ON DUPLICATE KEY UPDATE
         person_year_id = LAST_INSERT_ID(person_year_id),
         last_seen_dl_date = VALUES(last_seen_dl_date),
         last_seen_zip_name = VALUES(last_seen_zip_name),
         last_seen_xml_filename = VALUES(last_seen_xml_filename),
+        identity_hash = VALUES(identity_hash),
         dl_count = dl_count + 1,
         updated_at = CURRENT_TIMESTAMP
     """
@@ -495,6 +498,7 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
             row.get("health_program_code"),
             row["birthdate"],
             row["name_kana"],
+            row.get("identity_hash"),
             1,
             zip_ctx["dl_date"],
             zip_ctx["zip_name"],
@@ -710,6 +714,11 @@ def main():
                 # --------------------------------------------------
 
                 row["person_id_custom"] = build_person_id_custom(row)
+                row["identity_hash"] = build_identity_hash(
+                    person_id_custom=row.get("person_id_custom"),
+                    name_kana_full_match=row.get("name_kana_norm"),
+                    gender_code=row.get("gender_code"),
+                )
 
                 errors = validate_required_fields(row)
 
