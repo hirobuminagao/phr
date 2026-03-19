@@ -27,7 +27,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
 from scripts.work_folder.lib.db.mysql import connect_mysql, dict_cursor
-from scripts.work_folder.lib.db.config import get_mysql_params
+from scripts.work_folder.lib.db.config import load_mysql_params
 
 from scripts.work_folder.lib.normalize.common import (
     normalize_name_kana_match,
@@ -41,7 +41,7 @@ RowDict = Mapping[str, Any]
 # DB接続（共通ルートに統一）
 # ============================================================
 def get_connection():
-    params = get_mysql_params("work_other")
+    params = load_mysql_params()
     return connect_mysql(params, autocommit=False)
 
 
