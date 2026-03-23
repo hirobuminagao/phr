@@ -1,0 +1,35 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_dashboard_csv.py
+=== HIA dashboard CSV import start ===
+CSV処理開始: C:\Users\1107858.KSMD\work\phr\data\hia_export\input_dashboard_csv\06139463\202603230932_health_examination_data.csv
+run notes: filename=202603230932_health_examination_data.csv file_mtime=2026-03-23 09:32:44
+1 100 43653 長男 b2a414da 556ae9de
+2 100 92370 長女 ca6513b7 3a88e28f
+3 100 119327 長女 8f8841a7 746a1ece
+4 100 22976 長男 2ba26a61 2c2fd05e
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_dashboard_csv.py", line 857, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_dashboard_csv.py", line 822, in main
+    metrics = process_csv(
+        csv_path,
+    ...<2 lines>...
+        run_id=run_id,
+    )
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_dashboard_csv.py", line 740, in process_csv
+    hia_dashboard_person_id = insert_status(cur, status_record)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_dashboard_csv.py", line 493, in insert_status
+    cur.execute(
+    ~~~~~~~~~~~^
+        sql,
+        ^^^^
+    ...<32 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 335, in execute
+    raise ProgrammingError(
+        "Not all parameters were used in the SQL statement"
+    )
+mysql.connector.errors.ProgrammingError: Not all parameters were used in the SQL statement
