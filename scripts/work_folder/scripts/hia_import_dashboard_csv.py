@@ -487,7 +487,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             %s, %s, %s,
             %s, %s, %s, %s,
             %s, %s, %s,
-            %s, %s, %s
+            %s, %s, %s, %s
         )
     """
     cur.execute(
