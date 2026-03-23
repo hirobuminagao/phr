@@ -1,0 +1,44 @@
+c:/Users/1107858.KSMD/work/phr/scripts/work_folder/scripts/hia_import_zip.py
+Processing ZIP: C:\Users\1107858.KSMD\work\phr\data\hia_export\input_zip\06139463\1322100106_06139463_202507010_1.zip
+Traceback (most recent call last):
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 772, in cmd_query
+    self._cmysql.query(
+    ~~~~~~~~~~~~~~~~~~^
+        query,
+        ^^^^^^
+    ...<3 lines>...
+        query_attrs=self.query_attrs,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+_mysql_connector.MySQLInterfaceError: Unknown column 'updated_at' in 'field list'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_zip.py", line 1006, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_zip.py", line 958, in main   
+    mark_zip_events_deleted(cur, zip_id)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\work_folder\scripts\hia_import_zip.py", line 573, in mark_zip_events_deleted
+    cur.execute(sql, (zip_id,))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 353, in execute
+    self._connection.cmd_query(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._stmt_partition["mappable_stmt"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        raw_as_string=self._raw_as_string,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 781, in cmd_query
+    raise get_mysql_exception(
+        err.errno, msg=err.msg, sqlstate=err.sqlstate
+    ) from err
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'updated_at' in 'field list'
