@@ -285,24 +285,37 @@ def calc_file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-# ============================================================
 # ZIP Import Deduplication Helpers
 # ============================================================
 
+
 def find_existing_zip_import(cur, zip_name: str) -> dict | None:
     """
-    zip_name で既存 import を取得
+    zip_name 単位で最新の import 行を取得する。
+    hia_import_zips は zip_name UNIQUE 前提で最新1行を保持する。
     """
     sql = """
     SELECT
         z.zip_id,
+        z.zip_name,
+        z.zip_sha256,
         z.import_status,
+        z.xml_count_total,
+        z.xml_count_success,
+        z.xml_count_error,
         COALESCE(COUNT(e.zip_error_id),0) AS error_count
     FROM hia_import_zips z
     LEFT JOIN hia_import_zip_errors e
       ON e.zip_id = z.zip_id
     WHERE z.zip_name = %s
-    GROUP BY z.zip_id, z.import_status
+    GROUP BY
+        z.zip_id,
+        z.zip_name,
+        z.zip_sha256,
+        z.import_status,
+        z.xml_count_total,
+        z.xml_count_success,
+        z.xml_count_error
     ORDER BY z.zip_id DESC
     LIMIT 1
     """
@@ -310,23 +323,16 @@ def find_existing_zip_import(cur, zip_name: str) -> dict | None:
     return cur.fetchone()
 
 
-def is_successfully_imported(row: dict | None) -> bool:
+
+def is_successfully_imported(row: dict | None, zip_sha256: str) -> bool:
     if not row:
         return False
 
     return (
-        row.get("import_status") == "IMPORTED"
+        row.get("zip_sha256") == zip_sha256
+        and row.get("import_status") == "IMPORTED"
         and int(row.get("error_count") or 0) == 0
     )
-
-
-def delete_existing_zip_run(cur, zip_id: int):
-    """
-    エラーZIP再処理用
-    """
-    cur.execute("DELETE FROM hia_xml_events WHERE zip_id=%s", (zip_id,))
-    cur.execute("DELETE FROM hia_import_zip_errors WHERE zip_id=%s", (zip_id,))
-    cur.execute("DELETE FROM hia_import_zips WHERE zip_id=%s", (zip_id,))
 
 
 # ============================================================
@@ -336,7 +342,8 @@ def delete_existing_zip_run(cur, zip_id: int):
 
 def insert_import_zip(cur, zip_ctx: dict, zip_sha256: str) -> int:
     """
-    hia_import_zips に PROCESSING で仮登録する。
+    hia_import_zips を zip_name UNIQUE 前提で UPSERT し、zip_id を返す。
+    同名ZIP再取込時は物理削除せず、同一行を最新状態へ更新する。
     """
     sql = """
     INSERT INTO hia_import_zips (
@@ -349,10 +356,26 @@ def insert_import_zip(cur, zip_ctx: dict, zip_sha256: str) -> int:
         xml_count_total,
         xml_count_success,
         xml_count_error,
-        import_status
+        import_status,
+        archived_zip_path,
+        archived_at
     ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
     )
+    ON DUPLICATE KEY UPDATE
+        zip_id = LAST_INSERT_ID(zip_id),
+        insurer_number = VALUES(insurer_number),
+        folder_name = VALUES(folder_name),
+        dl_date = VALUES(dl_date),
+        send_seq = VALUES(send_seq),
+        zip_sha256 = VALUES(zip_sha256),
+        xml_count_total = VALUES(xml_count_total),
+        xml_count_success = VALUES(xml_count_success),
+        xml_count_error = VALUES(xml_count_error),
+        import_status = VALUES(import_status),
+        archived_zip_path = VALUES(archived_zip_path),
+        archived_at = VALUES(archived_at),
+        updated_at = CURRENT_TIMESTAMP
     """
     cur.execute(
         sql,
@@ -367,6 +390,8 @@ def insert_import_zip(cur, zip_ctx: dict, zip_sha256: str) -> int:
             0,
             0,
             "PROCESSING",
+            None,
+            None,
         ),
     )
     return int(cur.lastrowid)
@@ -443,9 +468,8 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
     """
     hia_person_years を upsert し、person_year_id を返す。
 
-    UNIQUE KEY:
-      (person_id_custom, name_kana_norm, gender_code, exam_year)
-    を利用し、既存時は LAST_INSERT_ID(person_year_id) を使って id を返す。
+    dl_count / last_seen_* は hia_xml_events 集約で再計算するため、
+    ここでは人物年度行の存在保証と識別情報更新に限定する。
     """
     sql = """
     INSERT INTO hia_person_years (
@@ -476,13 +500,11 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
     )
     ON DUPLICATE KEY UPDATE
         person_year_id = LAST_INSERT_ID(person_year_id),
-        last_seen_dl_date = VALUES(last_seen_dl_date),
-        last_seen_zip_name = VALUES(last_seen_zip_name),
-        last_seen_xml_filename = VALUES(last_seen_xml_filename),
         name_kana_norm = VALUES(name_kana_norm),
         name_kana_full_match = VALUES(name_kana_full_match),
         identity_hash = VALUES(identity_hash),
-        dl_count = dl_count + 1,
+        report_category = VALUES(report_category),
+        health_program_code = VALUES(health_program_code),
         updated_at = CURRENT_TIMESTAMP
     """
     cur.execute(
@@ -503,47 +525,165 @@ def upsert_person_year(cur, row: dict, zip_ctx: dict) -> int:
             row["name_kana"],
             row["name_kana_full_match"],
             row.get("identity_hash"),
-            1,
+            0,
             zip_ctx["dl_date"],
             zip_ctx["zip_name"],
             Path(row["xml_path"]).name,
-            zip_ctx["dl_date"],
-            zip_ctx["zip_name"],
-            Path(row["xml_path"]).name,
+            None,
+            None,
+            None,
         ),
     )
     return int(cur.lastrowid)
 
 
-def insert_xml_event(cur, person_year_id: int, zip_id: int, row: dict, zip_ctx: dict):
+
+
+
+# === New helper functions after insert_zip_error
+def normalize_facility_code(value: object) -> str:
+    """facility_code の NULL は空文字へ正規化する。"""
+    text = _as_text(value).strip()
+    return text
+
+
+
+def fetch_active_person_year_ids_by_zip(cur, zip_id: int) -> set[int]:
+    """当該 zip_id 配下で現在有効な person_year_id 集合を取得する。"""
+    sql = """
+    SELECT DISTINCT person_year_id
+      FROM hia_xml_events
+     WHERE zip_id = %s
+       AND is_deleted = 0
     """
-    hia_xml_events に 1件 insert する。
+    cur.execute(sql, (zip_id,))
+    rows = cur.fetchall()
+    return {int(r["person_year_id"]) for r in rows if r.get("person_year_id") is not None}
+
+
+
+def mark_zip_events_deleted(cur, zip_id: int):
+    """ZIP再取込開始時に、当該 zip_id 配下イベントを一旦 is_deleted=1 にする。"""
+    sql = """
+    UPDATE hia_xml_events
+       SET is_deleted = 1,
+           updated_at = CURRENT_TIMESTAMP
+     WHERE zip_id = %s
     """
+    cur.execute(sql, (zip_id,))
+
+
+
+def upsert_xml_event(cur, person_year_id: int, zip_id: int, row: dict, zip_ctx: dict):
+    """
+    hia_xml_events を最新スナップショット方針で UPSERT する。
+    一意キーは (person_year_id, zip_id, exam_date, facility_code) を前提にする。
+    """
+    facility_code = normalize_facility_code(row.get("facility_code"))
+    xml_filename = Path(row["xml_path"]).name
+    xml_sha256 = calc_file_sha256(Path(row["xml_path"]))
+
     sql = """
     INSERT INTO hia_xml_events (
         person_year_id,
         zip_id,
         xml_filename,
         xml_sha256,
+        is_deleted,
         exam_date,
         facility_code,
         facility_name,
         dl_date
     ) VALUES (
-        %s, %s, %s, %s, %s, %s, %s, %s
+        %s, %s, %s, %s, %s, %s, %s, %s, %s
     )
+    ON DUPLICATE KEY UPDATE
+        xml_filename = VALUES(xml_filename),
+        xml_sha256 = VALUES(xml_sha256),
+        is_deleted = 0,
+        facility_name = VALUES(facility_name),
+        dl_date = VALUES(dl_date),
+        updated_at = CURRENT_TIMESTAMP
     """
     cur.execute(
         sql,
         (
             person_year_id,
             zip_id,
-            Path(row["xml_path"]).name,
-            calc_file_sha256(Path(row["xml_path"])),
+            xml_filename,
+            xml_sha256,
+            0,
             row["exam_date"],
-            row.get("facility_code"),
+            facility_code,
             row.get("facility_name"),
             zip_ctx["dl_date"],
+        ),
+    )
+
+
+
+def rebuild_person_year_summary(cur, person_year_id: int):
+    """
+    hia_xml_events(is_deleted=0) を集約して hia_person_years を再計算する。
+    dl_count=0 のときは last_seen_* を NULL に戻す。
+    first_seen_* は履歴保持のため変更しない。
+    """
+    sql_count = """
+    SELECT COUNT(*) AS dl_count
+      FROM hia_xml_events
+     WHERE person_year_id = %s
+       AND is_deleted = 0
+    """
+    cur.execute(sql_count, (person_year_id,))
+    count_row = cur.fetchone()
+    dl_count = int(count_row["dl_count"] or 0)
+
+    if dl_count == 0:
+        sql_update_zero = """
+        UPDATE hia_person_years
+           SET dl_count = 0,
+               last_seen_dl_date = NULL,
+               last_seen_zip_name = NULL,
+               last_seen_xml_filename = NULL,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE person_year_id = %s
+        """
+        cur.execute(sql_update_zero, (person_year_id,))
+        return
+
+    sql_latest = """
+    SELECT
+        e.dl_date,
+        z.zip_name,
+        e.xml_filename
+      FROM hia_xml_events e
+      JOIN hia_import_zips z
+        ON z.zip_id = e.zip_id
+     WHERE e.person_year_id = %s
+       AND e.is_deleted = 0
+     ORDER BY e.dl_date DESC, e.exam_date DESC, e.xml_filename DESC
+     LIMIT 1
+    """
+    cur.execute(sql_latest, (person_year_id,))
+    latest = cur.fetchone()
+
+    sql_update = """
+    UPDATE hia_person_years
+       SET dl_count = %s,
+           last_seen_dl_date = %s,
+           last_seen_zip_name = %s,
+           last_seen_xml_filename = %s,
+           updated_at = CURRENT_TIMESTAMP
+     WHERE person_year_id = %s
+    """
+    cur.execute(
+        sql_update,
+        (
+            dl_count,
+            latest["dl_date"],
+            latest["zip_name"],
+            latest["xml_filename"],
+            person_year_id,
         ),
     )
 
@@ -758,14 +898,20 @@ def main():
 
                 existing = find_existing_zip_import(cur, zip_ctx["zip_name"])
 
-                if is_successfully_imported(existing):
-                    print(f"Skip already imported ZIP: {zip_ctx['zip_name']}")
+                if is_successfully_imported(existing, zip_sha256):
+                    print(
+                        "Skip already imported ZIP: "
+                        f"{zip_ctx['zip_name']} (same content by sha256)"
+                    )
                     conn.rollback()
                     continue
 
-                if existing:
-                    print(f"Reprocessing errored ZIP: {zip_ctx['zip_name']}")
-                    delete_existing_zip_run(cur, int(existing["zip_id"]))
+                if existing and existing.get("zip_sha256") != zip_sha256:
+                    print(
+                        "Reimport same-name ZIP with updated content: "
+                        f"{zip_ctx['zip_name']} "
+                        f"(old_sha256={existing.get('zip_sha256')}, new_sha256={zip_sha256})"
+                    )
 
                 zip_id = insert_import_zip(cur, zip_ctx, zip_sha256)
 
@@ -808,9 +954,16 @@ def main():
 
                     continue
 
+                affected_person_year_ids = fetch_active_person_year_ids_by_zip(cur, zip_id)
+                mark_zip_events_deleted(cur, zip_id)
+
                 for row in xml_rows:
                     person_year_id = upsert_person_year(cur, row, zip_ctx)
-                    insert_xml_event(cur, person_year_id, zip_id, row, zip_ctx)
+                    upsert_xml_event(cur, person_year_id, zip_id, row, zip_ctx)
+                    affected_person_year_ids.add(person_year_id)
+
+                for person_year_id in sorted(affected_person_year_ids):
+                    rebuild_person_year_summary(cur, person_year_id)
 
                 update_import_zip_status(
                     cur,
