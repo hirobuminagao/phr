@@ -25,7 +25,9 @@ CREATE TABLE `work_other`.`medi_xml_ledger` (
 
   `gender_code` varchar(10) DEFAULT NULL COMMENT '性別コード',
   `name_kana_full` varchar(190) DEFAULT NULL COMMENT '対象者氏名カナ',
-  `name_kana_match` varchar(190) DEFAULT NULL COMMENT '照合用氏名カナ（name_kana_fullを正規化）',
+  `name_kana_match` varchar(190) DEFAULT NULL COMMENT '照合用氏名カナ（work_folder側の正規化ルールで統一）',
+  `person_id_custom` varchar(64) DEFAULT NULL COMMENT 'raw値から custom_id_gen により生成した人物キー',
+  `identity_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'SHA256(person_id_custom|name_kana_match|gender_code)',
 
   `postal_code` varchar(10) DEFAULT NULL COMMENT '郵便番号',
   `address` text COMMENT '住所（正規化後）',
@@ -68,6 +70,8 @@ CREATE TABLE `work_other`.`medi_xml_ledger` (
   KEY `idx_medi_xml_ledger_zip_sha256` (`zip_sha256`),
   KEY `idx_medi_xml_ledger_facility_code` (`facility_code`),
   KEY `idx_medi_xml_ledger_person_hint` (`insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branch_number`, `birth_date`),
+  KEY `idx_medi_xml_ledger_person_id_custom` (`person_id_custom`),
+  KEY `idx_medi_xml_ledger_identity_hash` (`identity_hash`),
   KEY `idx_medi_xml_ledger_kenshin_date` (`kenshin_date`),
   KEY `idx_medi_xml_ledger_xml_sha256` (`xml_sha256`),
   KEY `idx_medi_xml_ledger_zip_receipt_id` (`zip_receipt_id`)
