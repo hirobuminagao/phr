@@ -1,28 +1,31 @@
-# Identity Canonicalization Specification (v1.0.2)
+# Identity Canonicalization Specification (v1.0.3)
 
 ## 概要
 
-本仕様書は、PHR v1.0.2における正規化および同一性判定ポリシーを定義します。
+本仕様書は、PHR v1.0.3における正規化および同一性判定ポリシーを定義します。
 
-これはADR-0012: *Identity Canonicalization and Join Hash Policy (v1.0.2)* を具現化したものです。
+これは ADR-0012: *Identity Canonicalization and Join Hash Policy (v1.0.2)* および ADR-0015: *medi系への identity_hash 導入と基本情報表現の整流化（v1.0.3）* を具現化したものです。
 
 目的は以下のテーブル間で一貫した同一性判定を保証することです：
 
 - `dev_phr.subscribers`
 - `work_other.hia_dashboard_status`
 - `work_other.hia_person_years`
+- `work_other.medi_xml_ledger`
+- `work_other.medi_xml_receipts`
 
 これらのテーブルは異なるパイプラインから生成されています：
 
 - HUB subscriber CSV
 - HIA dashboard CSV
 - HIA export XML
+- medical institution XML / ZIP
 
 これらのソースは同一性データを異なる方法で正規化しているため、統一された正規化レイヤーが必要です。
 
 ---
 
-# 1. 基本原則: raw / match / hash
+# 1. 基本原則: raw / norm / match / export / hash
 
 すべての同一性フィールドは**三層構造**に従います。
 
@@ -47,7 +50,29 @@ raw値は決して破棄または上書きされてはなりません。
 
 ---
 
-## 1.2 match
+## 1.2 norm
+
+`norm`値は**内部処理用の正規化済み値**です。
+
+目的：
+
+- 内部集約
+- レコード間比較の前段
+- 後続のmatch生成の入力安定化
+
+norm値は、raw値を直接破壊せずに内部処理で扱うための中間層です。
+
+典型例：
+
+- 氏名カナのNFKC正規化
+- 空白除去後の内部値
+- 記号・番号の内部比較用前処理値
+
+norm値は内部処理のための値であり、表示用や外部出力用ではありません。
+
+---
+
+## 1.3 match
 
 `match`値は**同一性比較**に用いられる正規化済みの値です。
 
@@ -96,9 +121,34 @@ match値は以下の用途に使われます：
 
 ---
 
-## 1.3 hash
+## 1.4 export
 
-必要な同一性入力がすべて揃った場合、ハッシュ列が生成されます。
+`export`値は**外部仕様に合わせた出力用の整形値**です。
+
+目的：
+
+- XML出力
+- CSV出力
+- MHLW仕様準拠のフォーマット生成
+
+export値は match 値とは目的が異なります。
+
+- match = 比較最適化
+- export = 出力仕様最適化
+
+例：
+
+- raw: `川崎-01`
+- match: `川崎1`
+- export: `川崎ー０１`
+
+export値は比較用には使いません。
+
+---
+
+## 1.5 hash
+
+必要な同一性入力がすべて揃った場合、hash列が生成されます。
 
 目的：
 
@@ -378,7 +428,25 @@ work_other.hia_person_years
 
 ---
 
-# 7.1 現在の実装状態（2026-03 時点）
+## medi
+
+場所：
+
+```
+work_other.medi_xml_ledger
+work_other.medi_xml_receipts
+```
+
+変更方針（v1.0.3）：
+
+- 既存粒度は変更しない
+- `identity_hash` を後付けで付与できる構造へ寄せる
+- 基本情報の持ち方を raw / norm / match / export で揃える
+- subscribers / dashboard / person_years / HIA出力との人物軸を一致させる
+
+---
+
+# 7.1 現在の実装状態（2026-03 時点, v1.0.3 基準）
 
 本節は、v1.0.2 における主要実装の現状を整理する。
 
@@ -422,6 +490,17 @@ work_other.hia_person_years
 
 これにより、DB 参照時に「読み取った ZIP が物理的にどこへ移動したか」を追跡できる。
 
+## medi
+
+v1.0.3 では、medi系について以下の方針を採用する。
+
+- 既存の ledger / receipts の粒度は壊さない
+- `identity_hash` は取り込み時の直接参照ではなく、後段で付与・更新する
+- 正規化ロジックの原本は `scripts/work_folder` 側に置く
+- `scripts/kenshin_list_pydir` 側で必要な場合は同一ロジックをコピーして反映する
+
+これにより、v1の運用フローを崩さずに人物軸を medi 系へ通す。
+
 # 7.2 既存データの不整合とバックフィル前提
 
 運用開始前後で正規化ロジックが段階的に改善されたため、既存データには旧ロジックで作られた値が残存している可能性がある。
@@ -440,16 +519,19 @@ work_other.hia_person_years
 
 バックフィルスクリプトは：
 
-1. matchカラムを再計算
-2. 漢字辞書を適用
-3. identity_hashを再生成
+1. `subscribers` の match / export 系を再計算
+2. `hia_dashboard_status` の subscriber enrichment / name_match 系を再計算
+3. `hia_person_years` の `name_kana_norm` / `insurance_symbol_match` / `insurance_number_match` を再計算
+4. `medi` 系の `identity_hash` と基本情報表現を再計算
+5. 最後に `identity_hash` を再生成
 
 実施順の原則は以下とする。
 
 1. `subscribers` の match / export 系を再計算
 2. `hia_dashboard_status` の subscriber enrichment / name_match 系を再計算
 3. `hia_person_years` の `name_kana_norm` / `insurance_symbol_match` / `insurance_number_match` を再計算
-4. 最後に `identity_hash` を再生成
+4. `medi` 系の `identity_hash` と基本情報表現を再計算
+5. 最後に `identity_hash` を再生成
 
 この順序により、親テーブルである subscribers の canonical value を先に安定化させたうえで、下流テーブルへ反映できる。
 
@@ -475,10 +557,11 @@ PHRにおける同一性処理は以下の4原則に従います：
 
 ```
 1. raw値を決して破棄しない
-2. 常にmatch値を生成する（英数字は半角、先頭ゼロなし）
-3. 保険証記号は raw / match / formatted(export) を明確に分離する
-4. match（比較用）とformatted（MHLW出力用）を明確に分離する
-5. 入力が揃えばhashを生成する
+2. norm値を内部処理用の中間層として保持する
+3. 常にmatch値を生成する（英数字は半角、先頭ゼロなし）
+4. 保険証記号は raw / norm / match / export を明確に分離する
+5. match（比較用）とexport（出力用）を明確に分離する
+6. 入力が揃えばhashを生成する
 ```
 
 このアーキテクチャにより：
