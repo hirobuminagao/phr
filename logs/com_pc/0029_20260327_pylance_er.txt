@@ -1,0 +1,134 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/kenshin_lib/medi/xml_extract.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"normalize_insurance_symbol_match\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 846,
+	"startColumn": 79,
+	"endLineNumber": 846,
+	"endColumn": 108
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/kenshin_lib/medi/xml_extract.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"normalize_insurance_number_match\" の型 \"str\" のパラメーター \"raw\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 855,
+	"startColumn": 79,
+	"endLineNumber": 855,
+	"endColumn": 108
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/kenshin_lib/medi/xml_extract.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAssignmentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAssignmentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Tuple[str, Dict[str, Any]]\" は宣言された型 \"str | None\" に割り当てできません\n  型 \"Tuple[str, Dict[str, Any]]\" は型 \"str | None\" に割り当てできません\n    \"Tuple[str, Dict[str, Any]]\" は \"str\" に割り当てできません\n    \"Tuple[str, Dict[str, Any]]\" は \"None\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 869,
+	"startColumn": 40,
+	"endLineNumber": 874,
+	"endColumn": 22
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/kenshin_lib/medi/xml_extract.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"generate_id\" の型 \"str\" のパラメーター \"insurer_number\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 870,
+	"startColumn": 40,
+	"endLineNumber": 870,
+	"endColumn": 67
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/kenshin_lib/medi/xml_extract.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"generate_id\" の型 \"str\" のパラメーター \"symbol\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 871,
+	"startColumn": 32,
+	"endLineNumber": 871,
+	"endColumn": 61
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/kenshin_lib/medi/xml_extract.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"generate_id\" の型 \"str\" のパラメーター \"insurance_number\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 872,
+	"startColumn": 42,
+	"endLineNumber": 872,
+	"endColumn": 71
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/kenshin_lib/medi/xml_extract.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | None\" の引数を、関数 \"generate_id\" の型 \"str\" のパラメーター \"birth_yyyymmdd\" に割り当てることはできません\n  型 \"Unknown | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 873,
+	"startColumn": 40,
+	"endLineNumber": 873,
+	"endColumn": 71
+}]
