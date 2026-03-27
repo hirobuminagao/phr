@@ -177,16 +177,18 @@ person_id_custom
 - insurance_number
 - birthdate
 
-つまり、完全な同一性キーは論理的に以下を表します：
+`person_id_custom` は raw 値をそのまま比較用に使うのではなく、`custom_id_gen` 内部で ID生成専用の正規化を行った上で生成されます。
 
-```
-insurer_number
-insurance_symbol
-insurance_number
-birthdate
-name_kana_match
-gender_code
-```
+具体的には、保険者番号・記号・番号については先頭ゼロを正規化してから固定長へフィットさせます。
+
+- 見かけ上の桁長ではなく実効桁で幅判定する
+- 実効桁が幅を超える場合は生成対象外とする
+- 桁切りは行わない
+
+したがって、`match` 値と `person_id_custom` は似た入力を参照していても責務が異なります。
+
+- `match` = 比較用 canonical value
+- `person_id_custom` = ID生成専用 canonical value
 
 ---
 
@@ -496,6 +498,8 @@ v1.0.3 では、medi系について以下の方針を採用する。
 
 - 既存の ledger / receipts の粒度は壊さない
 - `identity_hash` は取り込み時の直接参照ではなく、後段で付与・更新する
+- `person_id_custom` は raw 値から `custom_id_gen` により生成する
+- `custom_id_gen` では保険者番号・記号・番号の先頭ゼロを正規化してから幅判定を行う
 - 正規化ロジックの原本は `scripts/work_folder` 側に置く
 - `scripts/kenshin_list_pydir` 側で必要な場合は同一ロジックをコピーして反映する
 
