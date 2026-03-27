@@ -825,6 +825,7 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
 
             # 4) items extract（欠損でも落とさない）
             items = _extract_items(tree)
+            warn_parts: list[str] = []
 
             # 4.1) canonical / identity fields
             name_kana_match: Optional[str] = None
@@ -844,7 +845,6 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                 if isinstance(raw_patient_name, str) and raw_patient_name:
                     name_kana_match = normalize_name_kana_match(raw_patient_name)
             except NormalizeError as e:
-                warn_parts = []
                 warn_parts.append(f"warning normalize name_kana_match failed: {_shorten(str(e), 300)}")
                 name_kana_match = None
 
@@ -852,8 +852,6 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                 if isinstance(raw_insurance_symbol, str) and raw_insurance_symbol:
                     insurance_symbol_match = normalize_insurance_symbol_match(raw_insurance_symbol)
             except NormalizeError as e:
-                if 'warn_parts' not in locals():
-                    warn_parts = []
                 warn_parts.append(f"warning normalize insurance_symbol_match failed: {_shorten(str(e), 300)}")
                 insurance_symbol_match = None
 
@@ -861,8 +859,6 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                 if isinstance(raw_insurance_number, str) and raw_insurance_number:
                     insurance_number_match = normalize_insurance_number_match(raw_insurance_number)
             except NormalizeError as e:
-                if 'warn_parts' not in locals():
-                    warn_parts = []
                 warn_parts.append(f"warning normalize insurance_number_match failed: {_shorten(str(e), 300)}")
                 insurance_number_match = None
 
@@ -884,8 +880,6 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                         birth_yyyymmdd=raw_birth_yyyymmdd,
                     )
             except Exception as e:
-                if 'warn_parts' not in locals():
-                    warn_parts = []
                 warn_parts.append(f"warning generate person_id_custom failed: {_shorten(str(e), 300)}")
                 person_id_custom = None
 
@@ -897,8 +891,6 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                     gender_code=gender_code_for_hash,
                 )
             except NormalizeError as e:
-                if 'warn_parts' not in locals():
-                    warn_parts = []
                 warn_parts.append(f"warning build identity_hash failed: {_shorten(str(e), 300)}")
                 identity_hash = None
 
