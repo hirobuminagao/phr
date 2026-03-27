@@ -7,9 +7,8 @@ custom_id_gen.py — PHRキー（person_id_custom）生成: 正規化(固定幅�
 - セキュリティ目的の暗号ではない（復号不可にする強度保証はしない）。
 - 入力4フィールド（保険者番号/記号/番号/生年月日）から、設定ファイルの係数と置換表で決定的に生成する。
 
-仕様（v1.0 as-is）:
-- 各フィールドは「数字のみ」に整えた後、幅(=最大桁)にフィット:
-    * 入力桁が幅を超えたらエラー（桁切りはしない）
+- 各フィールドは「数字のみ」に整えた後、保険者番号/記号/番号は先頭ゼロを正規化してから幅(=最大桁)にフィット:
+    * 実効桁が幅を超えたらエラー（桁切りはしない）
     * 不足は左ゼロ詰めでちょうど幅
 - (v + add) * mul を適用し、結果の桁数が幅を超えたらエラー、未満は左ゼロ詰めでちょうど幅
 - マッピングは 1 桁 → 1 文字（mapping_one_to_one を既定 True、strict_mapping で 0-9 漏れ検知可）
@@ -26,11 +25,10 @@ I/O:
 - mat_dir を省略した場合の既定探索先は <scripts/work_folder>/mat（default_mat_dir()）
 - 必須ファイル: custom_id_config.json / （config内で指定された）mapping_file
 
-V1.0 Freeze (Scope / Contract):
 - Inputs（4要素）:
-    - insurer_number: 保険者番号（digits-only）
-    - symbol        : 保険証記号（v1.0 は digits-only 運用。記号の英数は落とす）
-    - insurance_number: 保険証番号（digits-only）
+    - insurer_number: 保険者番号（digits-only。先頭ゼロは正規化して扱う）
+    - symbol        : 保険証記号（v1.0 は digits-only 運用。記号の英数は落とし、先頭ゼロは正規化して扱う）
+    - insurance_number: 保険証番号（digits-only。先頭ゼロは正規化して扱う）
     - birth_yyyymmdd: 生年月日（YYYYMMDD相当に寄せる。区切り文字は許容）
 - Outputs:
     - person_id_custom として扱う固定長トークン（compose_order に従い連結）
@@ -102,13 +100,21 @@ def digits_only(s: str) -> str:
     return "".join(ch for ch in (s or "") if ch.isdigit())
 
 
+def trim_leading_zeros_keep_one(s: str) -> str:
+    d = digits_only(s)
+    if not d:
+        return ""
+    trimmed = d.lstrip("0")
+    return trimmed or "0"
+
+
 def norm_number(raw: Optional[str]) -> str:
-    return digits_only(to_half_digits((raw or "").strip()))
+    return trim_leading_zeros_keep_one(to_half_digits((raw or "").strip()))
 
 
 def norm_symbol_digits_only(raw: Optional[str]) -> str:
     # v1.0: 記号は digits-only 運用（英数・記号は落とす。下流の照合キー仕様に寄せる）
-    return digits_only(to_half_digits((raw or "").strip()))
+    return trim_leading_zeros_keep_one(to_half_digits((raw or "").strip()))
 
 
 def normalize_birth_any(raw: Optional[str]) -> str:
