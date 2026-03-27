@@ -87,7 +87,17 @@ from kenshin_lib.medi.db_medi import (
     db_upsert_xml_ledger,
 )
 
+
 from kenshin_lib.medi.zip_passwords import get_password_candidates
+
+from lib.errors import NormalizeError
+from lib.normalize.common import (
+    build_identity_hash,
+    normalize_insurance_number_match,
+    normalize_insurance_symbol_match,
+    normalize_name_kana_match,
+)
+from lib.custom_id_gen import generate_id as generate_person_id_custom
 
 
 NS_HL7 = {"hl7": "urn:hl7-org:v3"}
@@ -816,7 +826,72 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
             # 4) items extract（欠損でも落とさない）
             items = _extract_items(tree)
 
-            warn_parts: list[str] = []
+            # 4.1) canonical / identity fields
+            name_kana_match: Optional[str] = None
+            insurance_symbol_match: Optional[str] = None
+            insurance_number_match: Optional[str] = None
+            person_id_custom: Optional[str] = None
+            identity_hash: Optional[str] = None
+
+            try:
+                if items.get("patient_name"):
+                    name_kana_match = normalize_name_kana_match(items.get("patient_name"))
+            except NormalizeError as e:
+                warn_parts = []
+                warn_parts.append(f"warning normalize name_kana_match failed: {_shorten(str(e), 300)}")
+                name_kana_match = None
+
+            try:
+                if items.get("insurance_symbol"):
+                    insurance_symbol_match = normalize_insurance_symbol_match(items.get("insurance_symbol"))
+            except NormalizeError as e:
+                if 'warn_parts' not in locals():
+                    warn_parts = []
+                warn_parts.append(f"warning normalize insurance_symbol_match failed: {_shorten(str(e), 300)}")
+                insurance_symbol_match = None
+
+            try:
+                if items.get("insurance_number"):
+                    insurance_number_match = normalize_insurance_number_match(items.get("insurance_number"))
+            except NormalizeError as e:
+                if 'warn_parts' not in locals():
+                    warn_parts = []
+                warn_parts.append(f"warning normalize insurance_number_match failed: {_shorten(str(e), 300)}")
+                insurance_number_match = None
+
+            try:
+                if (
+                    items.get("insurer_number")
+                    and items.get("insurance_symbol")
+                    and items.get("insurance_number")
+                    and items.get("raw_birth_yyyymmdd")
+                ):
+                    person_id_custom = generate_person_id_custom(
+                        insurer_number=items.get("insurer_number"),
+                        symbol=items.get("insurance_symbol"),
+                        insurance_number=items.get("insurance_number"),
+                        birth_yyyymmdd=items.get("raw_birth_yyyymmdd"),
+                    )
+            except Exception as e:
+                if 'warn_parts' not in locals():
+                    warn_parts = []
+                warn_parts.append(f"warning generate person_id_custom failed: {_shorten(str(e), 300)}")
+                person_id_custom = None
+
+            try:
+                identity_hash = build_identity_hash(
+                    person_id_custom=person_id_custom,
+                    name_kana_full_match=name_kana_match,
+                    gender_code=items.get("gender_code") or None,
+                )
+            except NormalizeError as e:
+                if 'warn_parts' not in locals():
+                    warn_parts = []
+                warn_parts.append(f"warning build identity_hash failed: {_shorten(str(e), 300)}")
+                identity_hash = None
+
+            if 'warn_parts' not in locals():
+                warn_parts: list[str] = []
 
             miss_msg = _build_missing_message(items=items)
             if miss_msg:
@@ -865,6 +940,11 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                     kenshin_date=items.get("exam_date"),
                     gender_code=items.get("gender_code") or None,
                     name_kana_full=items.get("patient_name") or None,
+                    name_kana_match=name_kana_match,
+                    insurance_symbol_match=insurance_symbol_match,
+                    insurance_number_match=insurance_number_match,
+                    person_id_custom=person_id_custom,
+                    identity_hash=identity_hash,
                     postal_code=items.get("postal_code") or None,
                     address=items.get("address") or None,
                     org_name_in_xml=items.get("facility_name") or None,
