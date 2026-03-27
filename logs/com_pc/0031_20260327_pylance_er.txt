@@ -1,0 +1,96 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/backfill_scripts/v1_0_3_medi_xml_ledger_identity_columns.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportReturnType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportReturnType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"PooledMySQLConnection | MySQLConnectionAbstract\" は戻り値の型 \"MySQLConnection\" に割り当てできません\n  型 \"PooledMySQLConnection | MySQLConnectionAbstract\" は型 \"MySQLConnection\" に割り当てできません\n    \"MySQLConnectionAbstract\" は \"MySQLConnection\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 106,
+	"startColumn": 12,
+	"endLineNumber": 115,
+	"endColumn": 6
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/backfill_scripts/v1_0_3_medi_xml_ledger_identity_columns.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"dict[str, int]\" の引数を、関数 \"execute\" の型 \"ParamsSequenceOrDictType | None\" のパラメーター \"params\" に割り当てることはできません\n  型 \"dict[str, int]\" は型 \"ParamsSequenceOrDictType | None\" に割り当てできません\n    \"dict[str, int]\" は \"Dict[str, MySQLConvertibleType]\" に割り当てできません\n      型パラメーター \"_VT@dict\" は不変ですが、\"int\" は \"MySQLConvertibleType\" と同じではありません\n      \"dict\" から値の型の共変である \"Mapping\" への切り替えを検討してください\n    \"dict[str, int]\" は \"Sequence[MySQLConvertibleType]\" に割り当てできません\n    \"dict[str, int]\" は \"None\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 254,
+	"startColumn": 22,
+	"endLineNumber": 254,
+	"endColumn": 28
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/backfill_scripts/v1_0_3_medi_xml_ledger_identity_columns.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportReturnType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportReturnType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"list[Dict[str, RowItemType] | None]\" は戻り値の型 \"list[dict[str, Any]]\" に割り当てできません\n  \"list[Dict[str, RowItemType] | None]\" は \"list[dict[str, Any]]\" に割り当てできません\n    型パラメーター \"_T@list\" は不変ですが、\"Dict[str, RowItemType] | None\" は \"dict[str, Any]\" と同じではありません\n    \"list\" から共変である \"Sequence\" への切り替えを検討してください",
+	"source": "Pylance",
+	"startLineNumber": 255,
+	"startColumn": 12,
+	"endLineNumber": 255,
+	"endColumn": 32
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/backfill_scripts/v1_0_3_medi_xml_ledger_identity_columns.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"MySQLCursor\" の引数を、関数 \"fetch_rows\" の型 \"MySQLCursorDict\" のパラメーター \"cur\" に割り当てることはできません\n  \"MySQLCursor\" は \"MySQLCursorDict\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 334,
+	"startColumn": 21,
+	"endLineNumber": 334,
+	"endColumn": 24
+},{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/backfill_scripts/v1_0_3_medi_xml_ledger_identity_columns.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"MySQLCursor\" の引数を、関数 \"apply_updates\" の型 \"MySQLCursorDict\" のパラメーター \"cur\" に割り当てることはできません\n  \"MySQLCursor\" は \"MySQLCursorDict\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 354,
+	"startColumn": 31,
+	"endLineNumber": 354,
+	"endColumn": 34
+}]
