@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Optional, cast
 
 import mysql.connector
+from dotenv import load_dotenv
 from mysql.connector.cursor import MySQLCursorDict
 
 # ------------------------------------------------------------
@@ -49,6 +50,9 @@ from lib.normalize.common import (  # noqa: E402
 )
 from lib.custom_id_gen import generate_id as generate_person_id_custom  # noqa: E402
 
+
+ # load .env like medi_zip_import
+load_dotenv()
 
 DEFAULT_DB_HOST = os.getenv("MEDI_IMPORT_DB_HOST", "127.0.0.1")
 DEFAULT_DB_PORT = int(os.getenv("MEDI_IMPORT_DB_PORT", "3306"))
