@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/kenshin_list_pydir/backfill_scripts/v1_0_3_medi_xml_ledger_identity_columns.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportReturnType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportReturnType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"PooledMySQLConnection | MySQLConnectionAbstract\" は戻り値の型 \"MySQLConnectionAbstract\" に割り当てできません\n  型 \"PooledMySQLConnection | MySQLConnectionAbstract\" は型 \"MySQLConnectionAbstract\" に割り当てできません\n    \"PooledMySQLConnection\" は \"MySQLConnectionAbstract\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 104,
+	"startColumn": 12,
+	"endLineNumber": 113,
+	"endColumn": 6
+}]
