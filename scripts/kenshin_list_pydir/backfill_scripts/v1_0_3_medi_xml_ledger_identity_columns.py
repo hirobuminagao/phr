@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -28,10 +26,10 @@ import sys
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import mysql.connector
-from mysql.connector.connection import MySQLConnection
+from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.cursor import MySQLCursorDict
 
 # ------------------------------------------------------------
@@ -102,7 +100,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def connect_db(args: argparse.Namespace) -> MySQLConnection:
+def connect_db(args: argparse.Namespace) -> MySQLConnectionAbstract:
     return mysql.connector.connect(
         host=args.host,
         port=args.port,
@@ -247,12 +245,13 @@ def fetch_rows(
     ORDER BY xml_ledger_id
     LIMIT %(limit_rows)s
     """
-    params = {
+    params: dict[str, Any] = {
         "last_id": last_id,
         "limit_rows": min(batch_size, limit_remaining) if limit_remaining > 0 else batch_size,
     }
     cur.execute(sql, params)
-    return list(cur.fetchall())
+    rows = cur.fetchall()
+    return [dict(row) for row in rows if row is not None]
 
 
 def build_update(row: dict[str, Any]) -> Optional[RowUpdate]:
@@ -321,7 +320,7 @@ def apply_updates(cur: MySQLCursorDict, updates: list[RowUpdate]) -> None:
 def main() -> int:
     args = parse_args()
     conn = connect_db(args)
-    cur = conn.cursor(dictionary=True)
+    cur = cast(MySQLCursorDict, conn.cursor(dictionary=True))
 
     processed = 0
     changed = 0
