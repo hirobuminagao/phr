@@ -1,0 +1,38 @@
+c:/Users/1107858.KSMD/kenshin_list_pydir/backfill_scripts/v1_0_3_medi_xml_ledger_identity_columns.py
+Traceback (most recent call last):
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 354, in _open_connection
+    self._cmysql.connect(**cnx_kwargs)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+_mysql_connector.MySQLInterfaceError: Can't connect to MySQL server on '127.0.0.1:3306' (10061)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\kenshin_list_pydir\backfill_scripts\v1_0_3_medi_xml_ledger_identity_columns.py", line 378, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "c:\Users\1107858.KSMD\kenshin_list_pydir\backfill_scripts\v1_0_3_medi_xml_ledger_identity_columns.py", line 321, in main
+    conn = connect_db(args)
+  File "c:\Users\1107858.KSMD\kenshin_list_pydir\backfill_scripts\v1_0_3_medi_xml_ledger_identity_columns.py", line 103, in connect_db
+    return mysql.connector.connect(
+           ~~~~~~~~~~~~~~~~~~~~~~~^
+        host=args.host,
+        ^^^^^^^^^^^^^^^
+    ...<6 lines>...
+        autocommit=False,
+        ^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\pooling.py", line 322, in connect
+    return CMySQLConnection(*args, **kwargs)
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 142, in __init__
+    self.connect(**kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\abstracts.py", line 1604, in connect
+    self._open_connection()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 360, in _open_connection
+    raise get_mysql_exception(
+        err.errno, msg=err.msg, sqlstate=err.sqlstate
+    ) from err
+mysql.connector.errors.DatabaseError: 2003 (HY000): Can't connect to MySQL server on '127.0.0.1:3306' (10061)
