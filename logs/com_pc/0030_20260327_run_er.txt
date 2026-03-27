@@ -1,0 +1,13 @@
+2026-03-27 11:11:49,485 [INFO]   [STRUCT] status=OK error_code=None data_dir_count=1 data_xml_count=57
+2026-03-27 11:11:50,296 [INFO]   [XML] total=57 new=0 seen=57 error=0
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\kenshin_list_pydir\scripts\medi_zip_import.py", line 751, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "c:\Users\1107858.KSMD\kenshin_list_pydir\scripts\medi_zip_import.py", line 711, in main
+    processed, ok, err = xml_extract_phase(logger, cur, run_id=run_id, target_status=target_status, limit=limit)
+                         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\kenshin_list_pydir\kenshin_lib\medi\xml_extract.py", line 915, in xml_extract_phase
+    wmsg = "; ".join(warn_parts) if warn_parts else None
+                                    ^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'warn_parts' where it is not associated with a value
