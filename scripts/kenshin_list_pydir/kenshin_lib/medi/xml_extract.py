@@ -833,17 +833,24 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
             person_id_custom: Optional[str] = None
             identity_hash: Optional[str] = None
 
+            raw_patient_name = items.get("patient_name")
+            raw_insurance_symbol = items.get("insurance_symbol")
+            raw_insurance_number = items.get("insurance_number")
+            raw_insurer_number = items.get("insurer_number")
+            raw_birth_yyyymmdd = items.get("raw_birth_yyyymmdd")
+            raw_gender_code = items.get("gender_code")
+
             try:
-                if items.get("patient_name"):
-                    name_kana_match = normalize_name_kana_match(items.get("patient_name"))
+                if isinstance(raw_patient_name, str) and raw_patient_name:
+                    name_kana_match = normalize_name_kana_match(raw_patient_name)
             except NormalizeError as e:
                 warn_parts = []
                 warn_parts.append(f"warning normalize name_kana_match failed: {_shorten(str(e), 300)}")
                 name_kana_match = None
 
             try:
-                if items.get("insurance_symbol"):
-                    insurance_symbol_match = normalize_insurance_symbol_match(items.get("insurance_symbol"))
+                if isinstance(raw_insurance_symbol, str) and raw_insurance_symbol:
+                    insurance_symbol_match = normalize_insurance_symbol_match(raw_insurance_symbol)
             except NormalizeError as e:
                 if 'warn_parts' not in locals():
                     warn_parts = []
@@ -851,8 +858,8 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                 insurance_symbol_match = None
 
             try:
-                if items.get("insurance_number"):
-                    insurance_number_match = normalize_insurance_number_match(items.get("insurance_number"))
+                if isinstance(raw_insurance_number, str) and raw_insurance_number:
+                    insurance_number_match = normalize_insurance_number_match(raw_insurance_number)
             except NormalizeError as e:
                 if 'warn_parts' not in locals():
                     warn_parts = []
@@ -861,16 +868,20 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
 
             try:
                 if (
-                    items.get("insurer_number")
-                    and items.get("insurance_symbol")
-                    and items.get("insurance_number")
-                    and items.get("raw_birth_yyyymmdd")
+                    isinstance(raw_insurer_number, str)
+                    and raw_insurer_number
+                    and isinstance(raw_insurance_symbol, str)
+                    and raw_insurance_symbol
+                    and isinstance(raw_insurance_number, str)
+                    and raw_insurance_number
+                    and isinstance(raw_birth_yyyymmdd, str)
+                    and raw_birth_yyyymmdd
                 ):
-                    person_id_custom = generate_person_id_custom(
-                        insurer_number=items.get("insurer_number"),
-                        symbol=items.get("insurance_symbol"),
-                        insurance_number=items.get("insurance_number"),
-                        birth_yyyymmdd=items.get("raw_birth_yyyymmdd"),
+                    person_id_custom, _person_id_meta = generate_person_id_custom(
+                        insurer_number=raw_insurer_number,
+                        symbol=raw_insurance_symbol,
+                        insurance_number=raw_insurance_number,
+                        birth_yyyymmdd=raw_birth_yyyymmdd,
                     )
             except Exception as e:
                 if 'warn_parts' not in locals():
@@ -879,19 +890,17 @@ def xml_extract_phase(logger, cur, *, run_id: int, target_status: str, limit: in
                 person_id_custom = None
 
             try:
+                gender_code_for_hash = str(raw_gender_code) if raw_gender_code is not None else None
                 identity_hash = build_identity_hash(
                     person_id_custom=person_id_custom,
                     name_kana_full_match=name_kana_match,
-                    gender_code=items.get("gender_code") or None,
+                    gender_code=gender_code_for_hash,
                 )
             except NormalizeError as e:
                 if 'warn_parts' not in locals():
                     warn_parts = []
                 warn_parts.append(f"warning build identity_hash failed: {_shorten(str(e), 300)}")
                 identity_hash = None
-
-            if 'warn_parts' not in locals():
-                warn_parts: list[str] = []
 
             miss_msg = _build_missing_message(items=items)
             if miss_msg:
