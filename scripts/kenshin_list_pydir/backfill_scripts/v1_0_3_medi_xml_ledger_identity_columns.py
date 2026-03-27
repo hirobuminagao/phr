@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any, Optional, cast
 
 import mysql.connector
-from mysql.connector.abstracts import MySQLConnectionAbstract
 from mysql.connector.cursor import MySQLCursorDict
 
 # ------------------------------------------------------------
@@ -100,7 +99,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def connect_db(args: argparse.Namespace) -> MySQLConnectionAbstract:
+def connect_db(args: argparse.Namespace) -> Any:
     return mysql.connector.connect(
         host=args.host,
         port=args.port,
