@@ -27,7 +27,8 @@ if __package__ in (None, ""):
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
-from scripts.work_folder.lib.db_mysql import connect_ctx, dict_cursor, load_mysql_params
+from scripts.work_folder.lib.db.config import load_mysql_params
+from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
 
 
 # ------------------------------------------------------------
