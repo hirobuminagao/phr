@@ -27,12 +27,13 @@ CSVの各行は「1人の状態」を表すレコードである。
 
 ```
 insurer_number
-insurance_symbol
-insurance_number
-relationship
+insurance_symbol_match
+insurance_number_match
+relationship_match
+name_match
 ```
 
-この4項目から次の論理キーを構築する。
+この5項目から次の論理キーを構築する。
 
 ```
 snapshot_identity_key
@@ -41,9 +42,13 @@ snapshot_identity_key
 補足:
 
 - 枝番（branch number）はキーに含めない
-- 氏名は表示用データでありキーとして信用しない
+- 氏名の生値（name）はキーに含めない
+- 氏名は表示用として `name` を保持するが、識別には `name_match` を使用する
 
-氏名は参照用フィールドとしてのみ保持する。
+理由:
+
+- ダッシュボードCSVでは同一保険者・同一記号番号・同一続柄でも氏名表記差異や別人混在を避けたい
+- 氏名違いを同一人物として束ねないため、識別キーには `name_match` を含める
 
 ---
 
@@ -108,6 +113,35 @@ row_sha256
 `row_sha256` は `snapshot_identity_key` によって特定される
 人物単位で評価される。
 
+## row_sha256 の構成項目
+
+現在の `row_sha256` は次の項目を順序固定で連結し、SHA-256 化して生成する。
+
+```
+status
+name_match
+insurance_symbol_match
+insurance_number_match
+relationship_match
+insured_type
+company_name
+department_name
+medical_institution
+course_name
+reservation_date
+exam_date
+employee_number
+email
+reminder_send_count
+exclusion_reason
+```
+
+補足:
+
+- `insured_type` は row hash に含める
+- `row_sha256` は「その人物の現在状態」を高速判定するための要約値として使う
+- `row_sha256` 単体の差分は履歴テーブルの changed_column としては記録しない
+
 ファイル全体のSHAは主比較には使用しない。
 理由:
 
@@ -120,6 +154,16 @@ row_sha256
 
 各runでは、現在CSVと既存データを
 `snapshot_identity_key` を使って比較する。
+
+判定手順は次の通り。
+
+1. `snapshot_identity_key` で既存行を取得する
+2. 既存行がなければ INSERT
+3. 既存行がある場合、まず `row_sha256` を比較する
+4. `row_sha256` が一致すれば UNCHANGED
+5. `row_sha256` が不一致の場合のみ、列単位 diff を実行する
+6. diff があれば UPDATE + history 記録
+7. diff がなければ UNCHANGED とする
 
 結果は次の3種類。
 
@@ -135,16 +179,20 @@ UNCHANGED
 
 ### UPDATE
 
-人物キーは存在するが `row_sha256` が異なる。
+人物キーは存在し、`row_sha256` 不一致かつ列単位 diff が存在する。
 
 ### UNCHANGED
 
-人物キーが存在し `row_sha256` も同じ。
+人物キーが存在し、次のいずれかに該当する。
+
+- `row_sha256` が同じ
+- `row_sha256` は不一致だが、比較用正規化後の列単位 diff が存在しない
 
 ルール:
 
 - 新規INSERTは履歴テーブルには記録しない
 - UPDATEのみ履歴テーブルに記録する
+- `row_sha256` 自体は履歴テーブルの changed_column として記録しない
 
 ---
 
@@ -355,9 +403,10 @@ snapshot_identity_key
 
 ```
 insurer_number
-insurance_symbol
-insurance_number
-relationship
+insurance_symbol_match
+insurance_number_match
+relationship_match
+name_match
 ```
 
 枝番はキーに含めない。
@@ -406,6 +455,7 @@ created_at
 ```
 snapshot_identity_key
 row_sha256
+列単位 diff（row_sha 不一致時のみ）
 ```
 
 最新状態
@@ -432,6 +482,12 @@ ETL管理
 work_other.etl_runs
 work_other.etl_errors
 ```
+
+移行メモ:
+
+- `insured_type` を status 管理対象へ追加した
+- `row_sha256` の定義変更に伴い、既存データは backfill で再計算する
+- 日付項目（例: `reservation_date`, `exam_date`, `subscriber_birth`）は diff 比較時に表現差を吸収する
 
 この構成により
 

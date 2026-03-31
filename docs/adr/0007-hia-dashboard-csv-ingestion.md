@@ -1,7 +1,7 @@
 # ADR 0007: HIA Dashboard CSV ingestion
 
-- Status: Proposed
-- Date: 2026-03-12
+- Status: Accepted
+- Date: 2026-03-31
 
 ## Context
 
@@ -41,15 +41,15 @@ HIA の管理画面から、健保や事業所が現在の健診受診状況を�
 - `hia_dashboard_status_history`  
   変更があった項目のみを記録する履歴テーブル
 
-新規レコードは `hia_dashboard_status` に追加するが、履歴テーブルには記録しない。
-変更があった場合のみ、差分を `hia_dashboard_status_history` に記録する。
+新規レコードは `hia_dashboard_status` に追加するが、履歴テーブルには記録しない。  
+変更があった場合のみ、列単位 diff を `hia_dashboard_status_history` に記録する。
 
 ### 2. 取込先はローカル MySQL とする
 
-HIA ダッシュボード CSV は Ubuntu 上の MySQL に取り込む。
+HIA ダッシュボード CSV は Ubuntu 上の MySQL に取り込む。  
 第一段階では `work_other` スキーマを使用する。
 
-ETL run 管理は `work_other.etl_runs` / `work_other.etl_errors` を使用し、
+ETL run 管理は `work_other.etl_runs` / `work_other.etl_errors` を使用し、  
 現段階では ETL テーブル構造の拡張は行わない。
 
 ### 3. 第一段階の目的は「取込 + 既存台帳との突合可能化」とする
@@ -65,15 +65,16 @@ ETL run 管理は `work_other.etl_runs` / `work_other.etl_errors` を使用し�
 
 ### 4. 人物識別はダッシュボードCSV専用の論理キーで行う
 
-この CSV は加入者マスタそのものではなく、HIA ダッシュボード画面の表示用CSVである。
-そのため、氏名（漢字）は識別キーとして信用しない。
+この CSV は加入者マスタそのものではなく、HIA ダッシュボード画面の表示用CSVである。  
+そのため、氏名の生値（`name`）は識別キーとして信用しない。
 
 第一段階では、次の組み合わせを人物識別の論理キーとする。
 
 - `insurer_number`
-- `insurance_symbol`
-- `insurance_number`
-- `relationship`
+- `insurance_symbol_match`
+- `insurance_number_match`
+- `relationship_match`
+- `name_match`
 
 この組み合わせから `snapshot_identity_key` を構築する。
 
@@ -81,9 +82,15 @@ ETL run 管理は `work_other.etl_runs` / `work_other.etl_errors` を使用し�
 
 - `insurer_number` は input 配置フォルダ名で補完する
 - 枝番は保持するが識別キーには使わない
-- 氏名は参照用フィールドとしてのみ保持する
+- 氏名の生値は表示用として保持する
+- 識別には `name_match` を使用する
 
-`hia_person_years` との完全一致 join は第一段階では前提にしない。
+理由:
+
+- ダッシュボードCSVでは同一保険者・同一記号番号・同一続柄でも氏名表記差異や別人混在を避けたい
+- 氏名違いを同一人物として束ねないため、識別キーには `name_match` を含める
+
+`hia_person_years` との完全一致 join は第一段階では前提にしない。  
 まずは HIA ダッシュボードCSV単体で最新状態管理と変更履歴管理を成立させることを優先する。
 
 ### 5. 状態定義は CSV 原文保持を基本とする
@@ -97,32 +104,66 @@ ETL run 管理は `work_other.etl_runs` / `work_other.etl_errors` を使用し�
 - 受診済み
 - 結果登録済み
 
-受診勧奨送信回数も CSV 値をそのまま保持する。
-送信回数は `hia_dashboard_reminder_events` から再計算して強制一致させる対象とはしない。
+受診勧奨送信回数も CSV 値をそのまま保持する。  
+送信回数は `hia_dashboard_reminder_events` から再計算して強制一致させる対象とはしない。  
 必要な場合のみ、後から比較確認できればよいものとする。
 
-### 6. 変更判定は `snapshot_identity_key` と `row_sha256` で行う
+### 6. 変更判定は `snapshot_identity_key` と `row_sha256` を中心に行う
 
 各 CSV 行は正規化後に `row_sha256` を計算する。
 
-- 同一 `snapshot_identity_key` が存在しない → `INSERT`
-- 同一 `snapshot_identity_key` が存在し、`row_sha256` が異なる → `UPDATE`
-- 同一 `snapshot_identity_key` が存在し、`row_sha256` も同じ → `UNCHANGED`
+`row_sha256` は、人物単位の「現在状態」を高速判定するための要約値として使う。  
+現行の構成項目は以下の通り。
 
-履歴テーブルには `UPDATE` のみを記録する。
-新規INSERTは履歴には記録しない。
+- `status`
+- `name_match`
+- `insurance_symbol_match`
+- `insurance_number_match`
+- `relationship_match`
+- `insured_type`
+- `company_name`
+- `department_name`
+- `medical_institution`
+- `course_name`
+- `reservation_date`
+- `exam_date`
+- `employee_number`
+- `email`
+- `reminder_send_count`
+- `exclusion_reason`
+
+判定手順は次の通り。
+
+- 同一 `snapshot_identity_key` が存在しない → `INSERT`
+- 同一 `snapshot_identity_key` が存在する場合、まず `row_sha256` を比較する
+- `row_sha256` が同じ → `UNCHANGED`
+- `row_sha256` が異なる場合のみ列単位 diff を実行する
+- 列単位 diff がある → `UPDATE`
+- `row_sha256` が異なるが列単位 diff がない → `UNCHANGED`
+
+補足:
+
+- 履歴テーブルには `UPDATE` のみを記録する
+- 新規 `INSERT` は履歴には記録しない
+- `row_sha256` 自体は履歴テーブルの changed_column としては記録しない
+- 日付項目（例: `reservation_date`, `exam_date`, `subscriber_birth`）は diff 比較時に表現差を吸収する
+- `insured_type` は status 管理対象および row hash 構成項目に含める
+
+移行対応:
+
+- `insured_type` を row hash に追加したため、既存 `hia_dashboard_status` の `row_sha256` は backfill で再計算する
 
 ### 7. 自動DELETE判定は禁止する
 
-この CSV は画面フィルタ付きで出力できるため、ある run の CSV に含まれないことをもって
+この CSV は画面フィルタ付きで出力できるため、ある run の CSV に含まれないことをもって  
 レコード削除・消失と判断してはならない。
 
-そのため、DELETE は自動判定しない。
+そのため、DELETE は自動判定しない。  
 必要な場合は `last_seen_run_id` を使った手動分析対象とする。
 
 ### 8. 受診勧奨送信日時は別テーブルに正規化保存する
 
-`受診勧奨送信日時` は `|` 区切りの複数値を取りうるため、
+`受診勧奨送信日時` は `|` 区切りの複数値を取りうるため、  
 `hia_dashboard_reminder_events` に 1送信 = 1レコード で保存する。
 
 推奨ユニーク条件:
@@ -145,14 +186,11 @@ ETL run 管理は `work_other.etl_runs` / `work_other.etl_errors` を使用し�
 - 氏名カナ、生年月日、性別が無いため、人物識別はダッシュボードCSV専用キーに依存する
 - 自動DELETEを行わないため、消失分析は別途必要になる
 - 送信回数はCSV値を保持するが、イベント件数との厳密同期は保証しない
+- row hash 定義変更時は、既存データに対する backfill が必要になる
 
 ## Next step
 
-次に行うことは以下。
-
-1. `docs/spec/hia_fund_dashboard_csv/README.md` を現在合意に合わせて更新する
-2. `docs/spec/hia_fund_dashboard_csv/snapshot_policy.md` を基礎方針として整備する
-3. 一旦コミットして基礎設計完了とする
-4. `work_other` 向け DDL を設計する
-5. 必要に応じて ER を追加する
-6. 実装結果を spec に反映し、ADR を freeze 更新する
+1. `docs/spec/hia_fund_dashboard_csv/README.md` と `snapshot_policy.md` を現行実装と同期維持する  
+2. `work_other` 向け DDL / migration / backfill の整合を保つ  
+3. 会社環境を含む実行環境差分（import path / Pylance / DB接続）の吸収方針を v1.1 で整理する  
+4. 必要に応じて `hia_person_years` など既存 HIA 台帳との分析・突合仕様を拡張する
