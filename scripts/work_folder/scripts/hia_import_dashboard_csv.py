@@ -93,7 +93,6 @@ COMPARE_COLUMNS = [
     "email",
     "reminder_send_count",
     "exclusion_reason",
-    "row_sha256",
 ]
 def fetch_subscriber_enrichment(
     cur: Any,
@@ -244,6 +243,7 @@ def build_row_sha(normalized_row: dict) -> str:
         normalized_row.get("insurance_symbol_match", ""),
         normalized_row.get("insurance_number_match", ""),
         normalized_row.get("relationship_match", ""),
+        normalized_row.get("insured_type", ""),
         normalized_row.get("company_name", ""),
         normalized_row.get("department_name", ""),
         normalized_row.get("medical_institution", ""),
