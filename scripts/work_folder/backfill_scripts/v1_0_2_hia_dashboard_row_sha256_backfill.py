@@ -18,10 +18,20 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, cast
 
+
 # ------------------------------------------------------------
-# 強制的に project root を import path に追加
+# 強制的に project root を import path に追加 (動的に探索)
 # ------------------------------------------------------------
-ROOT = Path(__file__).resolve().parents[4]
+# project root (phr) を動的に探索
+p = Path(__file__).resolve()
+for parent in p.parents:
+    # phr プロジェクトのルート判定（lib/db/config.py が存在する場所）
+    if (parent / "scripts" / "work_folder" / "lib" / "db" / "config.py").exists():
+        ROOT = parent
+        break
+else:
+    raise RuntimeError("project root not found")
+
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
