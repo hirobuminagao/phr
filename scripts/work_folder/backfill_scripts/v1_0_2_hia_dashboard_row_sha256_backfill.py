@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -16,19 +14,20 @@ v1_0_2_hia_dashboard_row_sha256_backfill.py
 """
 
 import hashlib
-import mysql.connector
+import sys
+from pathlib import Path
 from typing import Any, Dict, List, cast
 
 # ------------------------------------------------------------
-# DB接続設定（必要に応じて.envや既存設定に合わせて調整）
+# VSCode Run ボタン (file実行) 対応
+# ファイル直実行でも project root を import path に追加する
 # ------------------------------------------------------------
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "",
-    "database": "work_other",
-}
+if __package__ in (None, ""):
+    ROOT = Path(__file__).resolve().parents[4]
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+
+from scripts.work_folder.lib.db_mysql import connect_ctx, dict_cursor, load_mysql_params
 
 
 # ------------------------------------------------------------
@@ -62,62 +61,67 @@ def build_row_sha(row: Dict[str, Any]) -> str:
 # メイン処理
 # ------------------------------------------------------------
 def main():
-    conn = mysql.connector.connect(**DB_CONFIG)
-    cur = conn.cursor(dictionary=True)
+    params = load_mysql_params()
 
-    print("[INFO] fetch all rows from hia_dashboard_status...")
+    print(
+        "[INFO] DB target: "
+        f"host={params['host']} port={params['port']} "
+        f"user={params['user']} database={params['database']}"
+    )
 
-    cur.execute("""
-        SELECT
-            id,
-            status,
-            name_match,
-            insurance_symbol_match,
-            insurance_number_match,
-            relationship_match,
-            insured_type,
-            company_name,
-            department_name,
-            medical_institution,
-            course_name,
-            reservation_date,
-            exam_date,
-            employee_number,
-            email,
-            reminder_send_count,
-            exclusion_reason
-        FROM hia_dashboard_status
-    """)
+    with connect_ctx(params) as conn:
+        cur = dict_cursor(conn)
 
-    rows = cast(List[Dict[str, Any]], cur.fetchall())
+        print("[INFO] fetch all rows from hia_dashboard_status...")
 
-    print(f"[INFO] total rows: {len(rows)}")
+        cur.execute("""
+            SELECT
+                hia_dashboard_person_id,
+                status,
+                name_match,
+                insurance_symbol_match,
+                insurance_number_match,
+                relationship_match,
+                insured_type,
+                company_name,
+                department_name,
+                medical_institution,
+                course_name,
+                reservation_date,
+                exam_date,
+                employee_number,
+                email,
+                reminder_send_count,
+                exclusion_reason
+            FROM work_other.hia_dashboard_status
+        """)
 
-    update_count = 0
+        rows = cast(List[Dict[str, Any]], cur.fetchall())
 
-    for row in rows:
-        new_sha = build_row_sha(row)
+        print(f"[INFO] total rows: {len(rows)}")
 
-        cur.execute(
-            """
-            UPDATE hia_dashboard_status
-            SET row_sha256 = %s
-            WHERE id = %s
-            """,
-            (new_sha, int(row["id"])),
-        )
+        update_count = 0
 
-        update_count += 1
+        for row in rows:
+            new_sha = build_row_sha(row)
 
-        if update_count % 1000 == 0:
-            print(f"[INFO] updated: {update_count}")
+            cur.execute(
+                """
+                UPDATE work_other.hia_dashboard_status
+                SET row_sha256 = %s
+                WHERE hia_dashboard_person_id = %s
+                """,
+                (new_sha, int(row["hia_dashboard_person_id"])),
+            )
 
-    conn.commit()
+            update_count += 1
 
-    print(f"[DONE] updated rows: {update_count}")
+            if update_count % 1000 == 0:
+                print(f"[INFO] updated: {update_count}")
 
-    cur.close()
-    conn.close()
+        conn.commit()
+
+        print(f"[DONE] updated rows: {update_count}")
 
 
 if __name__ == "__main__":
