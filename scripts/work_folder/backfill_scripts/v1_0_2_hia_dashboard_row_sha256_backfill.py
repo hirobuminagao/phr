@@ -19,13 +19,11 @@ from pathlib import Path
 from typing import Any, Dict, List, cast
 
 # ------------------------------------------------------------
-# VSCode Run ボタン (file実行) 対応
-# ファイル直実行でも project root を import path に追加する
+# 強制的に project root を import path に追加
 # ------------------------------------------------------------
-if __package__ in (None, ""):
-    ROOT = Path(__file__).resolve().parents[4]
-    if str(ROOT) not in sys.path:
-        sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parents[4]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from scripts.work_folder.lib.db.config import load_mysql_params
 from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor
