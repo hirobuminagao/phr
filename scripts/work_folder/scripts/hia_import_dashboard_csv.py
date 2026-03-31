@@ -764,26 +764,36 @@ def process_csv(
             else:
                 hia_dashboard_person_id = int(existing["hia_dashboard_person_id"])
 
-                diffs = diff_status_columns(existing, normalized)
-
-                if not diffs:
+                # --------------------------------------------------
+                # まず hash で高速判定
+                # --------------------------------------------------
+                if existing.get("row_sha256") == normalized.get("row_sha256"):
                     touch_last_seen_run(cur, hia_dashboard_person_id, run_id)
                     metrics.rows_unchanged += 1
 
                 else:
-                    insert_history_rows(
-                        cur,
-                        hia_dashboard_person_id,
-                        run_id,
-                        diffs,
-                    )
-                    update_status(
-                        cur,
-                        hia_dashboard_person_id,
-                        status_record,
-                        run_id,
-                    )
-                    metrics.rows_updated += 1
+                    # hash 不一致の場合のみ詳細 diff
+                    diffs = diff_status_columns(existing, normalized)
+
+                    if not diffs:
+                        # 理論上ほぼ起きないが保険
+                        touch_last_seen_run(cur, hia_dashboard_person_id, run_id)
+                        metrics.rows_unchanged += 1
+
+                    else:
+                        insert_history_rows(
+                            cur,
+                            hia_dashboard_person_id,
+                            run_id,
+                            diffs,
+                        )
+                        update_status(
+                            cur,
+                            hia_dashboard_person_id,
+                            status_record,
+                            run_id,
+                        )
+                        metrics.rows_updated += 1
 
             reminder_rows = build_reminder_event_records(
                 hia_dashboard_person_id,
