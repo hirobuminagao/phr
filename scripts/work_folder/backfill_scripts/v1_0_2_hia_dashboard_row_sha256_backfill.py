@@ -66,8 +66,8 @@ def main():
 
     print(
         "[INFO] DB target: "
-        f"host={params['host']} port={params['port']} "
-        f"user={params['user']} database={params['database']}"
+        f"host={params.host} port={params.port} "
+        f"user={params.user} database={params.database}"
     )
 
     with connect_ctx(params) as conn:
