@@ -9,6 +9,7 @@ CREATE TABLE `work_other`.`hia_dashboard_status` (
   -- raw insurance fields
   `insurance_symbol` varchar(190) DEFAULT NULL,
   `insurance_number` varchar(190) DEFAULT NULL,
+  `insured_type` varchar(64) DEFAULT NULL,
   `relationship` varchar(64) DEFAULT NULL,
   `branch_number` varchar(64) DEFAULT NULL,
 
