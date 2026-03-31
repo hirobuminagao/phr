@@ -1,0 +1,77 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportIndexIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportIndexIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"MySQLParams\" に \"__getitem__\" メソッドが定義されていません",
+	"source": "Pylance",
+	"startLineNumber": 69,
+	"startColumn": 17,
+	"endLineNumber": 69,
+	"endColumn": 23
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportIndexIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportIndexIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"MySQLParams\" に \"__getitem__\" メソッドが定義されていません",
+	"source": "Pylance",
+	"startLineNumber": 69,
+	"startColumn": 39,
+	"endLineNumber": 69,
+	"endColumn": 45
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportIndexIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportIndexIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"MySQLParams\" に \"__getitem__\" メソッドが定義されていません",
+	"source": "Pylance",
+	"startLineNumber": 70,
+	"startColumn": 17,
+	"endLineNumber": 70,
+	"endColumn": 23
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportIndexIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportIndexIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"MySQLParams\" に \"__getitem__\" メソッドが定義されていません",
+	"source": "Pylance",
+	"startLineNumber": 70,
+	"startColumn": 43,
+	"endLineNumber": 70,
+	"endColumn": 49
+}]
