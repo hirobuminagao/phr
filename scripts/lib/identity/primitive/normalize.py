@@ -56,3 +56,32 @@ def empty_to_none(text: str | None) -> str | None:
     if text == "":
         return None
     return text
+
+
+# ------------------------------------------------------------
+# 記号正規化
+# ------------------------------------------------------------
+
+import re
+
+_HYPHEN_LIKE_RE = re.compile(r"[ーｰ－―‐−]")
+
+
+def unify_hyphen(text: str | None) -> str | None:
+    """ハイフン類・長音符類を半角ハイフン `-` に統一する。
+
+    対象:
+    - 長音符: ー
+    - 半角長音: ｰ
+    - 全角ハイフン: －
+    - ダッシュ系: ―, ‐, −
+
+    例:
+    - "01－0023" → "01-0023"
+    - "Aー001" → "A-001"
+
+    None はそのまま返す。
+    """
+    if text is None:
+        return None
+    return _HYPHEN_LIKE_RE.sub("-", text)

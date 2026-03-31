@@ -1,0 +1,30 @@
+{
+  "add": {
+    "insurer_number": 2850000000,
+    "symbol": 9710000000,
+    "insurance_number": 8650000000,
+    "birth_yyyymmdd": 2620000000
+  },
+  "mul": {
+    "insurer_number": 4,
+    "symbol": 2,
+    "insurance_number": 2,
+    "birth_yyyymmdd": 3
+  },
+  "lengths": {
+    "insurer_number": 11,
+    "symbol": 11,
+    "insurance_number": 11,
+    "birth_yyyymmdd": 10
+  },
+  "mapping_file": "custom_id_mapping.json",
+  "compose_order": [
+    "birth_yyyymmdd",
+    "insurance_number",
+    "insurer_number",
+    "symbol"
+  ],
+  "symbol_digits_only": true,
+  "strict_mapping": false,
+  "debug": true
+}
