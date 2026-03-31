@@ -325,6 +325,7 @@ def build_status_record(normalized: dict, run_id: int, raw_row_json: str) -> dic
         "insurer_number": normalized["insurer_number"],
         "insurance_symbol": normalized["insurance_symbol"],
         "insurance_number": normalized["insurance_number"],
+        "insured_type": normalized["insured_type"],
         "relationship": normalized["relationship"],
         "branch_number": normalized["branch_number"],
         "insurance_symbol_match": normalized["insurance_symbol_match"],
@@ -356,6 +357,18 @@ def build_status_record(normalized: dict, run_id: int, raw_row_json: str) -> dic
     }
 
 
+# 差分比較用に DB値 / 正規化値の表現差を吸収する
+def normalize_diff_value(column_name: str, value: Any) -> Any:
+    """差分比較用に DB値 / 正規化値の表現差を吸収する。"""
+    if value is None:
+        return None
+
+    if column_name in {"reservation_date", "exam_date", "subscriber_birth"}:
+        return str(value)
+
+    return value
+
+
 
 def diff_status_columns(existing: dict, normalized: dict) -> list[dict]:
     """existing と normalized を比較して column 単位の差分一覧を返す。"""
@@ -365,12 +378,15 @@ def diff_status_columns(existing: dict, normalized: dict) -> list[dict]:
         old_val = existing.get(col)
         new_val = normalized.get(col)
 
-        if old_val != new_val:
+        old_cmp = normalize_diff_value(col, old_val)
+        new_cmp = normalize_diff_value(col, new_val)
+
+        if old_cmp != new_cmp:
             diffs.append(
                 {
                     "column_name": col,
-                    "old_value": None if old_val is None else str(old_val),
-                    "new_value": None if new_val is None else str(new_val),
+                    "old_value": None if old_cmp is None else str(old_cmp),
+                    "new_value": None if new_cmp is None else str(new_cmp),
                 }
             )
 
@@ -407,6 +423,7 @@ def fetch_existing_status(cur: Any, snapshot_identity_key: str) -> Optional[dict
             insurer_number,
             insurance_symbol,
             insurance_number,
+            insured_type,
             relationship,
             branch_number,
             insurance_symbol_match,
@@ -452,6 +469,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             insurer_number,
             insurance_symbol,
             insurance_number,
+            insured_type,
             relationship,
             branch_number,
             insurance_symbol_match,
@@ -480,7 +498,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             first_seen_run_id,
             last_seen_run_id
         ) VALUES (
-            %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s,
             %s, %s, %s, %s, %s, %s,
@@ -497,6 +515,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             status_record["insurer_number"],
             status_record["insurance_symbol"],
             status_record["insurance_number"],
+            status_record["insured_type"],
             status_record["relationship"],
             status_record["branch_number"],
             status_record["insurance_symbol_match"],
@@ -549,6 +568,7 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
         SET insurer_number = %s,
             insurance_symbol = %s,
             insurance_number = %s,
+            insured_type = %s,
             relationship = %s,
             branch_number = %s,
             insurance_symbol_match = %s,
@@ -584,6 +604,7 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             status_record["insurer_number"],
             status_record["insurance_symbol"],
             status_record["insurance_number"],
+            status_record["insured_type"],
             status_record["relationship"],
             status_record["branch_number"],
             status_record["insurance_symbol_match"],
