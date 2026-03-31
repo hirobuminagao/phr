@@ -17,7 +17,7 @@ v1_0_2_hia_dashboard_row_sha256_backfill.py
 
 import hashlib
 import mysql.connector
-from typing import Any
+from typing import Any, Dict, List, cast
 
 # ------------------------------------------------------------
 # DB接続設定（必要に応じて.envや既存設定に合わせて調整）
@@ -34,7 +34,7 @@ DB_CONFIG = {
 # ------------------------------------------------------------
 # row_sha256 生成ロジック（本体と完全一致させること）
 # ------------------------------------------------------------
-def build_row_sha(row: dict) -> str:
+def build_row_sha(row: Dict[str, Any]) -> str:
     ordered_values = [
         row.get("status", ""),
         row.get("name_match", ""),
@@ -89,7 +89,7 @@ def main():
         FROM hia_dashboard_status
     """)
 
-    rows = cur.fetchall()
+    rows = cast(List[Dict[str, Any]], cur.fetchall())
 
     print(f"[INFO] total rows: {len(rows)}")
 
@@ -104,7 +104,7 @@ def main():
             SET row_sha256 = %s
             WHERE id = %s
             """,
-            (new_sha, row["id"]),
+            (new_sha, int(row["id"])),
         )
 
         update_count += 1
