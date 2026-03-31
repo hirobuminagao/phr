@@ -1,0 +1,87 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType] | Any\" の引数を、関数 \"build_row_sha\" の型 \"dict[Unknown, Unknown]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType] | Any\" は型 \"dict[Unknown, Unknown]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"dict[Unknown, Unknown]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 99,
+	"startColumn": 33,
+	"endLineNumber": 99,
+	"endColumn": 36
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"tuple[str, RowItemType | Unknown | Any]\" の引数を、関数 \"execute\" の型 \"Sequence[MySQLConvertibleType] | Dict[str, MySQLConvertibleType]\" のパラメーター \"params\" に割り当てることはできません\n  型 \"tuple[str, RowItemType | Unknown | Any]\" は型 \"Sequence[MySQLConvertibleType] | Dict[str, MySQLConvertibleType]\" に割り当てできません\n    \"tuple[str, RowItemType | Unknown | Any]\" は \"Sequence[MySQLConvertibleType]\" に割り当てできません\n      型パラメーター \"_T_co@Sequence\" は共変ですが、\"RowItemType | Unknown | Any\" は \"MySQLConvertibleType\" のサブタイプではありません\n        型 \"RowItemType | Unknown | Any\" は型 \"MySQLConvertibleType\" に割り当てできません\n          型 \"Set[str]\" は型 \"MySQLConvertibleType\" に割り当てできません\n    \"tuple[str, RowItemType | Unknown | Any]\" は \"Dict[str, MySQLConvertibleType]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 107,
+	"startColumn": 13,
+	"endLineNumber": 107,
+	"endColumn": 33
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 107,
+	"startColumn": 23,
+	"endLineNumber": 107,
+	"endColumn": 32,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/work_folder/backfill_scripts/v1_0_2_hia_dashboard_row_sha256_backfill.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 107,
+	"startColumn": 23,
+	"endLineNumber": 107,
+	"endColumn": 32
+}]
