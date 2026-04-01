@@ -1,5 +1,3 @@
-
-
 # ADR-0017: Event-centric data model gap and introduction of person-centric event model
 
 ## Status
@@ -104,3 +102,8 @@ Proposed
 人中心イベントモデル導入の方向性を示すものである。
 
 具体的なイベント識別子（event_id）や実装設計は別ドキュメントで定義する。
+
+本ADRに関連する詳細な業務構造およびイベント実体の定義は、以下のドキュメントを参照する。
+
+- docs/spec/domain/01_event_model_overview.md
+- docs/spec/domain/02_event_instance_model.md
