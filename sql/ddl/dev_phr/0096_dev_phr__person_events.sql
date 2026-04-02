@@ -2,6 +2,7 @@ CREATE TABLE dev_phr.person_event (
     person_event_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '人×イベント単位ID',
 
     event_id BIGINT NOT NULL COMMENT 'イベントID',
+    subscriber_id BIGINT NOT NULL COMMENT '加入者ID（subscribers参照）',
     person_id_custom VARCHAR(64) NOT NULL COMMENT '個人ID（簡易キー）',
     identity_hash CHAR(64) NOT NULL COMMENT '識別ハッシュ',
     result_received_count INT NOT NULL DEFAULT 0 COMMENT '結果受領回数',
@@ -28,11 +29,12 @@ CREATE TABLE dev_phr.person_event (
 
     PRIMARY KEY (person_event_id),
 
-    KEY idx_person_event_01 (event_id, person_id_custom),
+    KEY idx_person_event_01 (event_id, subscriber_id),
     KEY idx_person_event_02 (identity_hash),
     KEY idx_person_event_03 (person_id_custom),
-    UNIQUE KEY uk_person_event_01 (event_id, person_id_custom),
-    CONSTRAINT fk_person_event_01 FOREIGN KEY (event_id) REFERENCES dev_phr.event (event_id)
+    UNIQUE KEY uk_person_event_01 (event_id, subscriber_id),
+    CONSTRAINT fk_person_event_01 FOREIGN KEY (event_id) REFERENCES dev_phr.event (event_id),
+    CONSTRAINT fk_person_event_02 FOREIGN KEY (subscriber_id) REFERENCES dev_phr.subscribers (subscriber_id)
 
 ) ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
