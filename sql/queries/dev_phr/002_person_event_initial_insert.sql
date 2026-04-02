@@ -43,7 +43,7 @@ SELECT
 
 FROM dev_phr.subscribers s
 JOIN dev_phr.event e
-  ON s.insurer_number = e.insurer_number
+  ON s.insurer_number COLLATE utf8mb4_unicode_ci = e.insurer_number
 
 WHERE
     -- 対象イベント
