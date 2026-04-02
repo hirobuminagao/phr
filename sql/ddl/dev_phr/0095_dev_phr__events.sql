@@ -10,6 +10,9 @@ CREATE TABLE dev_phr.event (
     end_date DATE NULL COMMENT '終了日',
     submission_deadline DATE NULL COMMENT '提出期限',
     eligibility_reference_date DATE NULL COMMENT '対象判定基準日',
+    eligibility_rule_type VARCHAR(20) NOT NULL DEFAULT 'FIXED_DATE' COMMENT '資格判定ルール種別（NONE/FIXED_DATE）',
+    age_rule_type VARCHAR(20) NOT NULL DEFAULT 'FIXED_DATE' COMMENT '年齢計算ルール種別（FIXED_DATE/EXAM_DATE）',
+    age_reference_date DATE NULL COMMENT '年齢計算基準日',
 
     is_active TINYINT(1) NOT NULL DEFAULT 1 COMMENT '有効フラグ',
 
@@ -18,8 +21,7 @@ CREATE TABLE dev_phr.event (
 
     PRIMARY KEY (event_id),
 
-    KEY idx_event_01 (insurer_number, event_year, event_type),
-    UNIQUE KEY uk_event_01 (insurer_number, event_year, event_type)
+    KEY idx_event_01 (insurer_number, event_year, event_type)
 
 ) ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
