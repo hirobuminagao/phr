@@ -1,5 +1,3 @@
-
-
 -- ============================================================
 -- person_event 初期投入SQL
 --
@@ -49,8 +47,10 @@ WHERE
     -- 対象イベント
     e.event_id = 1
 
-    -- 資格判定（基準日時点で有効）
+    -- 資格判定（加入基準のみ）
     AND s.qualification_acquired_date <= e.eligibility_reference_date
+
+    -- 資格喪失判定（基準日時点で資格が残っていること）
     AND (
         s.qualification_lost_date IS NULL
         OR s.qualification_lost_date >= e.eligibility_reference_date

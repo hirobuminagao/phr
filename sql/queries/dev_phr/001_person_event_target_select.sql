@@ -25,7 +25,9 @@ SELECT
     s.insurer_number,
     s.qualification_acquired_date,
     s.qualification_lost_date,
-    e.eligibility_reference_date
+    e.eligibility_reference_date,
+    e.qualification_lost_rule_type,
+    e.qualification_lost_reference_date
 
 FROM dev_phr.subscribers s
 JOIN dev_phr.event e
@@ -35,12 +37,26 @@ WHERE
     -- 対象イベント　ここを手動で変更
     e.event_id = 1
 
-    -- 資格判定（基準日時点で有効）
+    -- 資格判定（加入基準）
     AND s.qualification_acquired_date <= e.eligibility_reference_date
+
+    -- 資格喪失判定（基準日時点で資格が残っていること）
     AND (
         s.qualification_lost_date IS NULL
         OR s.qualification_lost_date >= e.eligibility_reference_date
     )
+
+    -- 資格喪失判定（ルールに応じて分岐）
+    -- AND (
+    --     e.qualification_lost_rule_type = 'NONE'
+    --     OR (
+    --         e.qualification_lost_rule_type = 'FIXED_DATE'
+    --         AND (
+    --             s.qualification_lost_date IS NULL
+    --             OR s.qualification_lost_date > e.qualification_lost_reference_date
+    --         )
+    --     )
+    -- )
 
     -- 除外対象
     AND NOT EXISTS (
