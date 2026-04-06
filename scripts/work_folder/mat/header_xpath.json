@@ -1,0 +1,23 @@
+{
+  "報告区分（コード）": ["//cda:code/@code"],
+  "保険者番号": [
+    "//cda:recordTarget//cda:providerOrganization/cda:id/@extension",
+    "//cda:participant[@typeCode='COV']//cda:scopingEntity/cda:id/@extension"
+  ],
+  "保険証等記号": [
+    "//cda:recordTarget//cda:patientRole/cda:id[@root='symbol']/@extension",
+    "//cda:recordTarget//cda:patientRole/cda:id[1]/@extension"
+  ],
+  "保険証等番号": ["//cda:recordTarget//cda:patientRole/cda:id[last()]/@extension"],
+  "対象者生年月日（XML形式）": ["//cda:recordTarget//cda:patient/cda:birthTime/@value"],
+  "初回面談日": [
+    "//cda:encompassingEncounter/cda:effectiveTime/@value",
+    "//cda:component//cda:encounter/cda:effectiveTime/@value"
+  ],
+  "保健指導実施日": [
+    "//cda:component//cda:act[cda:effectiveTime]/cda:effectiveTime/@value",
+    "//cda:component//cda:observation[cda:effectiveTime]/cda:effectiveTime/@value"
+  ],
+  "保健指導レベル（コード）": ["//cda:component//cda:code[@code]/@code"],
+  "保健指導レベル（説明）": ["//cda:component//cda:code[@displayName]/@displayName"]
+}
