@@ -1,0 +1,38 @@
+{
+  "mode_map_24010": {
+    "1": "個別支援(対面)",
+    "2": "個別支援(遠隔)",
+    "3": "グループ支援(対面)",
+    "4": "グループ支援(遠隔)",
+    "5": "電話",
+    "6": "電子メール等"
+  },
+  "process_aggregate_90070_evn": {
+    "counts": {
+      "個別支援(対面)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010010']/cda:value/@value",
+      "個別支援(遠隔)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010020']/cda:value/@value",
+      "グループ支援(対面)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010030']/cda:value/@value",
+      "グループ支援(遠隔)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010040']/cda:value/@value",
+      "電話": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010050']/cda:value/@value",
+      "電子メール等": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010060']/cda:value/@value"
+    },
+    "durations_min": {
+      "個別支援(対面)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042020010']/cda:value/@value",
+      "個別支援(遠隔)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042020020']/cda:value/@value",
+      "グループ支援(対面)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042020030']/cda:value/@value",
+      "グループ支援(遠隔)": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042020040']/cda:value/@value",
+      "電話": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042020050']/cda:value/@value"
+    },
+    "points": {
+      "process_continuous_total": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010070']/cda:value/@value",
+      "process_grand_total": "//cda:section[cda:code/@code='90070']//cda:act[@moodCode='EVN']//cda:observation[cda:code/@code='1042010080']/cda:value/@value"
+    }
+  },
+
+  "duration_policy": {
+    "mode": "days",
+    "threshold_days": 93,
+    "months": 3,
+    "eom_clamp": true
+  }
+}

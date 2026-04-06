@@ -1,6 +1,7 @@
 # env / secrets
 .env
 *.env
+!*.env.template
 scripts/kenshin_list_pydir/.env.trans_*
 !scripts/kenshin_list_pydir/.env.trans_*.template
 
