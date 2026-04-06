@@ -6,12 +6,9 @@ Fund 向け納品のための **人単位・年度単位の台帳（ledger）を
 
 本フローは既存の `medi_*` 系処理とは **別フローで管理**するが、XML 由来の項目・正規化ロジックなどは可能な限り共通化する。
 
-主な目的は以下の通り。
+v1.1.0 では、人物識別に関わる正規化・canonicalization・ID生成は、HIA_fund_ledger_xml 固有の実装として増やすのではなく、全パイプライン共通の identity 共通lib（`scripts/lib/identity/`）を前提に整理する。
 
-- HIA からダウンロードした ZIP/XML を台帳化
-- 人単位・年度単位で「初回登場」「既出」を判定
-- 納品対象月に対して「過去に登場していない対象者のみ」を抽出
-- Fund 向け納品用 ZIP を再構成可能にする
+そのため、本ディレクトリ配下の spec は HIA_fund_ledger_xml 固有の要件を定義しつつ、人物識別そのものの実装責務は identity 共通lib 側に置く方針とする。
 
 ---
 
@@ -52,6 +49,19 @@ Fund納品 ZIP 再構成
 |XML項目|medi系と可能な限り同名|
 |ETLログ|既存設計を参考|
 
+## identity 共通lib 前提
+
+人物識別に関わる以下の処理は、HIA_fund_ledger_xml 個別の実装ではなく、全世界観共通の identity 共通lib を前提とする。
+
+- 項目別正規化
+- match 値生成
+- person_id_custom 生成
+- identity_hash 生成
+
+HIA_fund_ledger_xml 側 spec では、何を入力とし、どの粒度で照合し、どの値を保持するかを定義する。
+
+実際の生成ロジックは `scripts/lib/identity/` 配下の共通libに従う。
+
 ---
 
 # 人物識別
@@ -64,6 +74,10 @@ person_id_custom
 + gender_code
 + exam_year
 ```
+
+ただし v1.1.0 では、`person_id_custom` は人物識別の主要な補助キーとして扱い、最終的なイベント台帳系との接続では `subscriber_id` を実体参照キーとして扱う前提とする。
+
+本 README における人物識別は、HIA XML import 時点で人物を年度粒度へ寄せるための識別方針を示す。
 
 ## person_id_custom の元データ
 
@@ -92,6 +106,10 @@ person_id_custom
 |insurance_number_norm|正規化後|
 
 XML 読込時も **同一正規化関数**で変換して照合する。
+
+ここでいう同一正規化関数とは、HIA_fund_ledger_xml 専用実装ではなく、identity 共通lib（`scripts/lib/identity/`）に定義された primitive / base_norm / field / builder の各レイヤを指す。
+
+本パイプラインは、共通libで生成された match 値・person_id_custom・identity_hash を前提に人物年度台帳を構築する。
 
 ---
 
@@ -193,9 +211,11 @@ XML検証
 
 # 台帳構造（v1 実装）
 
+本台帳は HIA_fund_ledger_xml 固有の ledger であるが、人物識別に用いる canonical 値は全世界観共通の identity 共通lib に従って生成する。
+
 ## person_year ledger
 
-```
+```text
 person_id_custom
 name_kana_norm
 gender_code
@@ -203,7 +223,10 @@ exam_year
 insurer_number
 insurance_symbol
 insurance_number
+insurance_symbol_match
+insurance_number_match
 birthdate
+identity_hash
 first_seen_dl_date
 last_seen_dl_date
 dl_count
@@ -277,7 +300,7 @@ ix08 / su08 は **原文 XML を保持したまま必要な値のみ書き換え
 
 将来的には以下を追加予定。
 
-- 健診イベント台帳
+- event / person_event / event_instance との接続
 - 年2回以上健診対応
 - 自動納品 ZIP 生成
 
@@ -295,11 +318,18 @@ error_policy.md
 year_rule.md
 ```
 
+identity 関連の確認は、まず以下の共通 spec を参照する。
+
+- docs/spec/identity_canonicalization/README.md
+- docs/spec/identity_canonicalization/identity_layer_structure.md
+- docs/spec/identity_canonicalization/identity_layers_norm_and_purpose.md
+- docs/spec/identity_canonicalization/v1.1.0_identity_layer_commonization.md
+
 ---
 
 # ステータス
 
-本仕様は **v1 実装完了（2026‑03）時点で一旦 freeze** とする。
+本仕様は **v1 実装完了（2026‑03）時点の内容をベースにしつつ、v1.1.0 に向けて identity 共通lib前提・event 接続前提へ更新中** とする。
 
 実装済み機能
 
@@ -311,6 +341,7 @@ year_rule.md
 - 納品対象抽出
 - Fund 向け納品 ZIP 再構成
 - ix08 / su08 自動再生成
+- HIA_fund_ledger_xml 固有要件と identity 共通lib との接続整理（進行中）
 
 対応スクリプト
 
@@ -323,3 +354,4 @@ year_rule.md
 1. 実装により設計と差異が出た箇所を本ディレクトリ内ドキュメントへ記録
 2. 設計変更が発生する場合は ADR に記録
 3. v2 以降の拡張は本 README ではなく個別ドキュメントで管理
+4. identity 関連は個別パイプライン spec ではなく、共通 spec を正として参照関係を保つ

@@ -26,58 +26,61 @@ ZIP import
 
   ↓
 
+ZIP名解析
+  ├ facility_code
+  ├ insurer_number
+  ├ dl_date
+  └ send_seq
+
+  ↓
+
 ZIP 展開
 
   ↓
 
-DATA/XML 一覧取得
+DATA 配下の h*.xml 一覧取得
 
   ↓
 
 XML 検証
   ├ genderCode
   ├ exam_date
+  ├ 個人識別必須項目
   └ XML構造
 
   ↓
 
-エラー判定
+エラー判定（ZIP単位）
 
   ├ エラーあり
   │      ↓
   │   ZIP ERROR
   │      ↓
-  │   台帳未記帳
+  │   error.txt 出力
+  │      ↓
+  │   DB未記帳
   │
   └ エラーなし
          ↓
 
 人物識別キー生成
 
+insurance_symbol_match
+insurance_number_match
+birth_yyyymmdd
+name_kana_norm
+name_kana_full_match
 person_id_custom
-+ name_kana_norm
-+ gender_code
-+ exam_year
-
-         ↓
-
-hia_person_years 照合
-
-  ├ 既存
-  │     ↓
-  │  person_year 維持
-  │
-  └ 新規
-        ↓
-     person_year 登録
+identity_hash
+exam_year
 
          ↓
 
 hia_import_zips 更新
 
-・zip_name で最新1行保持
-・zip_sha256 で内容更新検知
-・同名ZIP再取込時も物理削除しない
+・zip_name 単位で UPSERT
+・zip_sha256 一致なら skip
+・同名ZIPで内容差分がある場合は再取込
 
          ↓
 
@@ -90,12 +93,13 @@ hia_xml_events 最新化
 
          ↓
 
-hia_person_years 再集計
+hia_person_years 再集計（人物×年度スナップショット）
 
 ・is_deleted=0 の xml_event のみ集計
 ・dl_count = 有効イベント件数
 ・0件なら last_seen_* を NULL に戻す
 ・1件以上なら最新イベントで last_seen_* を更新
+・人物×年度単位の最新状態を保持する集約テーブル
 
          ↓
 
@@ -142,7 +146,9 @@ XML
  ↓
 必須項目チェック
  ↓
-ZIP単位エラー判定
+ZIP単位 all-or-nothing エラー判定
+ ↓
+成功時のみ DB 記帳
 ```
 
 ---
@@ -152,8 +158,12 @@ ZIP単位エラー判定
 人物照合。
 
 ```text
-person_id_custom
+insurance_symbol_match
+insurance_number_match
+birth_yyyymmdd
 name_kana_norm
+name_kana_full_match
+person_id_custom
 gender_code
 exam_year
 identity_hash
@@ -177,10 +187,12 @@ person year ledger
 
 - 当月 ZIP は同一 zip_name でも中身が可変
 - 前月以前の ZIP は固定
+- ZIP は zip_name 単位で最新状態を保持する
+- zip_sha256 一致時は再処理を skip する
 - XMLファイル名は識別子に使わない
 - 同名 XML でも別人物へ差し替わる可能性がある
-- ZIP は物理削除せず最新1行を更新する
 - XMLイベントは物理削除せず `is_deleted` で状態管理する
+- ZIP単位で XML を全件検証し、成功時のみ DB 記帳する
 
 ---
 
@@ -192,6 +204,7 @@ hia_import_zips
   ├ zip_name (UNIQUE)
   ├ zip_sha256
   ├ dl_date
+  ├ send_seq
   └ import_status
 
         │ 1:N
@@ -204,8 +217,9 @@ hia_xml_events
   ├ exam_date
   ├ facility_code
   ├ xml_sha256
+  ├ xml_filename
   ├ is_deleted
-  └ xml_filename (参照用。識別子ではない)
+  └ dl_date（zip 経由）
 
         │ N:1
         ▼
@@ -242,6 +256,7 @@ hia_person_years
 # hia_person_years 再集計ルール
 
 `hia_person_years` は `hia_xml_events(is_deleted=0)` を集約して更新する。
+本テーブルはログではなく、人物×年度単位の「最新スナップショット」を保持する集約テーブルである。
 
 - `dl_count` は有効イベント件数
 - 有効イベントが 0 件の場合:
@@ -251,8 +266,7 @@ hia_person_years
   - `last_seen_xml_filename = NULL`
 - 有効イベントが 1 件以上ある場合:
   - `last_seen_*` は最新イベントから再設定する
-
-`dl_count += 1` のような加算更新は採用しない。
+- XMLイベントの履歴は `hia_xml_events` に保持し、`hia_person_years` は常に再計算で再現可能とする
 
 ---
 
@@ -260,7 +274,7 @@ hia_person_years
 
 今後以下を追加予定。
 
-- 健診イベント台帳の詳細化
+- event / person_event / event_instance との接続
 - 年2回以上健診対応
 - 自動 Fund 納品 ZIP 生成
 - 月次最新スナップショット再構築バッチ
@@ -271,7 +285,7 @@ hia_person_years
 
 v1 実装完了（2026‑03）。
 
-本フローは ADR-0013 に基づき、月次最新スナップショット運用へ更新予定。
+本フローは実装上、zip_name 単位の最新 ZIP 管理と、hia_xml_events の is_deleted による最新有効集合管理を採用している。
 
 主な実装スクリプト
 

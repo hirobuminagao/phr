@@ -178,3 +178,4 @@ value = digits.strip_leading_zeros_keep_zero(value)
 - 本構造は v1.1.0 の実装基準とする
 - 拡張は可能だが、既存責務を崩さないこと
 - ファイル分割は必要になった時点で行う（過分割禁止）
+- 本構造は identity 共通libの実装基準であり、HIA XML import / HIA dashboard import / subscriber import を含む全パイプラインで共通利用する前提とする
