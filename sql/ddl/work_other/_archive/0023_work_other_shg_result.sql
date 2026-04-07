@@ -1,3 +1,15 @@
+-- ============================================================
+-- ARCHIVE: 旧 shg_result 定義（使用中止）
+--
+-- 使用中止日: 2026-04-06
+--
+-- 理由:
+-- 本テーブルは person_id_custom 基準で設計されていたが、
+-- v1.1.0 方針により raw 基準の設計へ再構成したため廃止。
+--
+-- 新定義:
+-- sql/ddl/work_other/0023_work_other_shg_result.sql を参照
+-- ============================================================
 CREATE TABLE `shg_result` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'PK',
 

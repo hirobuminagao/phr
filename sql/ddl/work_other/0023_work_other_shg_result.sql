@@ -29,8 +29,8 @@ CREATE TABLE `shg_result` (
   `gender_code` varchar(1)
     NOT NULL COMMENT '性別コード（正規形）',
 
-  `exam_year` int
-    NOT NULL COMMENT '健診年度',
+  `shg_year` int
+    NOT NULL COMMENT '特定保健指導対象実施年度',
   `usage_ticket_number` varchar(64)
     DEFAULT NULL COMMENT '利用券番号',
   `expiration_date` date
@@ -60,7 +60,7 @@ CREATE TABLE `shg_result` (
   PRIMARY KEY (`id`),
   KEY `idx_shg_person_id_custom` (`person_id_custom`),
   KEY `idx_shg_identity_hash` (`identity_hash`),
-  KEY `idx_shg_exam_year` (`exam_year`),
+  KEY `idx_shg_year` (`shg_year`),
   KEY `idx_shg_usage_ticket_number` (`usage_ticket_number`),
   KEY `idx_shg_received_date` (`received_date`)
 ) ENGINE=InnoDB
