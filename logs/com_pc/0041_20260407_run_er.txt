@@ -1,0 +1,11 @@
+c:/Users/1107858.KSMD/work/phr/scripts/shg/generate_identity_from_shg_result.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\shg\generate_identity_from_shg_result.py", line 19, in <module>
+    from scripts.lib.identity.generator import generate_identity_bundle
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\generator.py", line 16, in <module>
+    from scripts.lib.identity.field.birthdate import normalize_birthdate
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\field\birthdate.py", line 3, in <module>
+    from scripts.lib.identity.base_norm import base_normalize
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\base_norm.py", line 3, in <module>
+    from lib.identity.primitive.normalize import empty_to_none, normalize_spaces, to_nfkc, trim
+ModuleNotFoundError: No module named 'lib'
