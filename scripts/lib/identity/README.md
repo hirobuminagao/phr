@@ -231,7 +231,7 @@ generator は以下の責務を持つ。
 - 必要な入力値（raw / 正規化済み値を含む）を受け取る
 - field を通して canonical 値を生成する
 - builder に渡す
-- person_id_custom / identity_hash を返す
+- person_id_custom / identity_hash と、その生成過程の result を返す
 
 重要:
 - generator は I/O を持たない（DB / CSV / ログ出力を行わない）
@@ -240,6 +240,25 @@ generator は以下の責務を持つ。
 ---
 
 ## Generator Functions
+
+### Generator Return Structure
+
+generator 関数は、値だけではなく生成過程の result も dict で返す。
+
+代表的な返却項目:
+
+- `ok`: 全体成功可否
+- `reason`: NG理由
+- `field_results`: field の処理結果一覧
+- `builder_result`: builder の処理結果（単体generatorの場合）
+- `person_id_custom`: 生成済み person_id_custom（bundle / identity_hash で返却）
+- `identity_hash`: 生成済み identity_hash（bundle で返却）
+- `person_id_custom_result`: person_id_custom 側の集約結果
+- `identity_hash_result`: identity_hash 側の集約結果
+
+方針:
+- generator の利用側は `ok` を必ず確認する
+- 値だけでなく `reason` / `field_results` / `builder_result` を使って失敗原因を追跡できる
 
 ### generate_person_id_custom
 
@@ -250,13 +269,17 @@ from scripts.lib.identity.generator import generate_person_id_custom
 
 res = generate_person_id_custom(
     birthdate=row["birthdate"],
-    insurer_number_raw=row["insurer_number"],
-    insurance_symbol_raw=row["insurance_symbol"],
-    insurance_number_raw=row["insurance_number"],
+    insurer_number_raw=row["insurer_number_raw"],
+    insurance_symbol_raw=row["insurance_symbol_raw"],
+    insurance_number_raw=row["insurance_number_raw"],
 )
 
-if res["ok"]:
-    person_id_custom = res["value"]
+if not res["ok"]:
+    raise Exception(res["reason"])
+
+person_id_custom = res["value"]
+builder_result = res["builder_result"]
+field_results = res["field_results"]
 ```
 
 ---
@@ -272,9 +295,16 @@ from scripts.lib.identity.generator import generate_identity_hash
 
 res = generate_identity_hash(
     person_id_custom=row["person_id_custom"],
-    name_kana_full_raw=row["name_kana_full"],
+    name_kana_full_raw=row["name_kana_full_raw"],
     gender_code=row["gender_code"],
 )
+
+if not res["ok"]:
+    raise Exception(res["reason"])
+
+identity_hash = res["value"]
+builder_result = res["builder_result"]
+field_results = res["field_results"]
 ```
 
 #### パターン2: person_id_custom を内部生成する場合
@@ -282,12 +312,21 @@ res = generate_identity_hash(
 ```python
 res = generate_identity_hash(
     birthdate=row["birthdate"],
-    insurer_number_raw=row["insurer_number"],
-    insurance_symbol_raw=row["insurance_symbol"],
-    insurance_number_raw=row["insurance_number"],
-    name_kana_full_raw=row["name_kana_full"],
+    insurer_number_raw=row["insurer_number_raw"],
+    insurance_symbol_raw=row["insurance_symbol_raw"],
+    insurance_number_raw=row["insurance_number_raw"],
+    name_kana_full_raw=row["name_kana_full_raw"],
     gender_code=row["gender_code"],
 )
+
+if not res["ok"]:
+    raise Exception(res["reason"])
+
+identity_hash = res["value"]
+person_id_custom = res["person_id_custom"]
+person_id_custom_result = res["person_id_custom_result"]
+builder_result = res["builder_result"]
+field_results = res["field_results"]
 ```
 
 ---
@@ -301,16 +340,21 @@ from scripts.lib.identity.generator import generate_identity_bundle
 
 res = generate_identity_bundle(
     birthdate=row["birthdate"],
-    insurer_number_raw=row["insurer_number"],
-    insurance_symbol_raw=row["insurance_symbol"],
-    insurance_number_raw=row["insurance_number"],
-    name_kana_full_raw=row["name_kana_full"],
+    insurer_number_raw=row["insurer_number_raw"],
+    insurance_symbol_raw=row["insurance_symbol_raw"],
+    insurance_number_raw=row["insurance_number_raw"],
+    name_kana_full_raw=row["name_kana_full_raw"],
     gender_code=row["gender_code"],
 )
 
-if res["ok"]:
-    person_id_custom = res["person_id_custom"]
-    identity_hash = res["identity_hash"]
+if not res["ok"]:
+    raise Exception(res["reason"])
+
+person_id_custom = res["person_id_custom"]
+identity_hash = res["identity_hash"]
+person_id_custom_result = res["person_id_custom_result"]
+identity_hash_result = res["identity_hash_result"]
+field_results = res["field_results"]
 ```
 
 ---
@@ -322,6 +366,7 @@ if res["ok"]:
 - builder は直接呼ばない（例外的ケースを除く）
 - すべての identity 生成は generator を経由する
 - generator の戻り値の ok を必ずチェックする
+- generator の戻り値は dict であり、必要に応じて reason / field_results / builder_result まで確認する
 
 ---
 
