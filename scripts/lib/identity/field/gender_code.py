@@ -1,3 +1,4 @@
+from typing import Any, Dict
 
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ _FEMALE_SET = {
 }
 
 
-def normalize_gender_code(raw: str | None) -> dict:
+def normalize_gender_code(raw: str | None) -> Dict[str, Any]:
     """gender_code の field_norm / match を生成する。
 
     v1.1.0 仕様:
@@ -50,7 +51,21 @@ def normalize_gender_code(raw: str | None) -> dict:
             "reason": "missing_raw_or_base_norm",
         }
 
-    normalized = to_halfwidth_ascii(base).lower()
+    half = to_halfwidth_ascii(base)
+
+    if half is None:
+        return {
+            "field_name": "gender_code",
+            "raw": raw,
+            "base_norm": base,
+            "field_norm": None,
+            "match": None,
+            "ok": False,
+            "missing": True,
+            "reason": "convert_failed",
+        }
+
+    normalized = half.lower()
 
     if normalized in _MALE_SET:
         return {
