@@ -9,9 +9,10 @@ from scripts.lib.identity.primitive.dates import (
     to_yyyy_mm_dd,
     to_yyyymmdd,
 )
+from datetime import date
 
 
-def normalize_birthdate(raw: str | None) -> dict:
+def normalize_birthdate(raw: str | date | None) -> dict:
     """birthdate の field_norm / match を生成する。
 
     v1.1.0 仕様:
@@ -23,6 +24,22 @@ def normalize_birthdate(raw: str | None) -> dict:
     - `match` は `YYYYMMDD`
     - 解釈できない値は invalid とする
     """
+    # --- fast path: MySQL DATE (datetime.date) ---
+    if isinstance(raw, date):
+        year, month, day = raw.year, raw.month, raw.day
+        field_norm = to_yyyy_mm_dd(year, month, day)
+        match = to_yyyymmdd(year, month, day)
+        return {
+            "field_name": "birthdate",
+            "raw": raw,
+            "base_norm": None,
+            "field_norm": field_norm,
+            "match": match,
+            "ok": True,
+            "missing": False,
+            "reason": None,
+        }
+
     base = base_normalize(raw)
 
     if base is None:
