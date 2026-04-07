@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from typing import cast
 
 
 
@@ -67,9 +68,9 @@ def build_identity_hash(
         }
 
     joined_input = _build_identity_hash_input(
-        person_id_custom=person_id_custom,
-        name_kana_full_match=name_kana_full_match,
-        gender_code_match=gender_code_match,
+        person_id_custom=cast(str, person_id_custom),
+        name_kana_full_match=cast(str, name_kana_full_match),
+        gender_code_match=cast(str, gender_code_match),
     )
     value = _sha256_hexdigest(joined_input)
 

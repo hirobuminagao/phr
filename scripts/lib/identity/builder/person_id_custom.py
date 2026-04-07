@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 
 def _default_custom_id_resource_dir() -> Path:
@@ -163,10 +163,10 @@ def build_person_id_custom(
         }
 
     canonical_inputs = {
-        "birth_yyyymmdd": birthdate_match,
-        "insurance_number": insurance_number_match,
-        "insurer_number": insurer_number_match,
-        "symbol": insurance_symbol_person_id_custom,
+        "birth_yyyymmdd": cast(str, birthdate_match),
+        "insurance_number": cast(str, insurance_number_match),
+        "insurer_number": cast(str, insurer_number_match),
+        "symbol": cast(str, insurance_symbol_person_id_custom),
     }
 
     resource_root = Path(resource_dir) if resource_dir is not None else _default_custom_id_resource_dir()
