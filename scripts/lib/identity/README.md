@@ -185,6 +185,46 @@ field の normalize 関数は以下の形式を返す:
 
 ---
 
+## Input Type Handling (重要)
+
+field 層は raw の値の「型差異」を吸収する責務を持つ。
+
+### 基本方針
+
+- raw は「文字列とは限らない」
+- DB / CSV / XML により型が異なることを前提とする
+- 型ごとの解釈は field で行う
+- generator / builder では型変換を行わない
+
+### 例: birthdate
+
+入力パターン:
+
+- "19900101" (str)
+- "1990-01-01" (str)
+- "平成010101" (str)
+- `datetime.date(1990, 1, 1)` (MySQL DATE)
+
+対応:
+
+- str → base_norm → digits抽出 → parse
+- date → field 内で直接 `YYYYMMDD` / `YYYY-MM-DD` に変換
+
+### 実装ルール
+
+- field は `isinstance` により型分岐を行ってよい
+- date / int / str など複数型の受け入れを許可する
+- base_norm は基本的に str 前提とする
+- 非 str 型は base_norm に入れる前に処理する
+
+### NGパターン
+
+- generator で型変換する
+- builder で型変換する
+- field を通さず raw を builder に渡す
+
+---
+
 ## Purpose-based Outputs
 
 field は用途別の値を返す:
