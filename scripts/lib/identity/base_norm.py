@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from lib.identity.primitive.normalize import empty_to_none, normalize_spaces, to_nfkc, trim
-from lib.identity.primitive.remove import remove_control_chars
+from scripts.lib.identity.primitive.normalize import empty_to_none, normalize_spaces, to_nfkc, trim
+from scripts.lib.identity.primitive.remove import remove_control_chars
 
 
 def base_normalize(raw: str | None) -> str | None:
