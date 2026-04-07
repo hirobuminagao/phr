@@ -1,7 +1,6 @@
-from typing import Any, Dict
-
-
 from __future__ import annotations
+
+from typing import Any, Dict
 
 
 from lib.identity.base_norm import base_normalize
