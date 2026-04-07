@@ -1,5 +1,3 @@
-
-
 # identity library
 
 ## Overview
@@ -124,8 +122,219 @@ builder
 
 ---
 
+
+## Usage (How to use identity library)
+
+入力値（raw を含む）を直接 builder に渡してはいけない。
+
+必ず以下の順序で処理する。
+
+1. 入力値 → field.normalize_xxx()
+2. field の result から canonical 値を取得
+3. builder に canonical 値を渡す
+
+例:
+
+```python
+from scripts.lib.identity.field.birthdate import normalize_birthdate
+from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
+from scripts.lib.identity.builder.person_id_custom import build_person_id_custom
+
+birth_res = normalize_birthdate(row["birthdate"])
+symbol_res = normalize_insurance_symbol(row["insurance_symbol_raw"])
+
+if not birth_res["ok"]:
+    raise Exception(birth_res["reason"])
+
+person_id_res = build_person_id_custom(
+    birthdate_match=birth_res["match"],
+    insurance_symbol_person_id_custom=symbol_res["person_id_custom"],
+)
+```
+
+---
+
+## Field Result Structure
+
+field の normalize 関数は以下の形式を返す:
+
+- ok: 成功可否
+- match: 照合用値（canonical input）
+- field_norm: 表示用など
+- raw: 元値
+- reason: NG理由
+
+例:
+
+```json
+{
+  "ok": true,
+  "match": "19900101",
+  "field_norm": "1990-01-01"
+}
+```
+
+---
+
+## Important Rules
+
+- 入力値（raw を含む）を直接 builder に渡してはいけない
+- builder は正規化を行わない
+- field がすべての解釈責務を持つ
+- builder は canonical input のみ受け取る
+
+---
+
+## Purpose-based Outputs
+
+field は用途別の値を返す:
+
+- match: 突合用
+- person_id_custom: ID生成用
+- export: 出力用
+
+用途に応じて適切な値を使用すること
+
+---
+
+## Data Flow
+
+```text
+raw
+ ↓
+base_norm
+ ↓
+field (match / canonical)
+ ↓
+builder
+```
+
+---
+
 ## Notes
 
-- v1.1.0 では canonical input の多くを `match` から流用する
-- ただし、責務としては `match` と builder を分離して考える
-- 過分割は避け、責務が明確な単位で実装する
+- raw は生データであり、正規化や解釈は含まない
+- field は raw を受けて正規化し、canonical input を生成する
+- builder は canonical input を受けて最終的な ID やハッシュを生成する
+- 依存関係は primitive → base_norm → field → builder と一方向に固定する
+- builder は field の出力を前提とし、不足時は生成を行わない
+- すべての identity 生成はこの流れに従うこと
+
+---
+
+## Generator (Orchestration Layer)
+
+identity の生成は `generator.py` を使用する。
+
+generator は以下の責務を持つ。
+
+- 必要な入力値（raw / 正規化済み値を含む）を受け取る
+- field を通して canonical 値を生成する
+- builder に渡す
+- person_id_custom / identity_hash を返す
+
+重要:
+- generator は I/O を持たない（DB / CSV / ログ出力を行わない）
+- あくまで field → builder のオーケストレーションのみ
+
+---
+
+## Generator Functions
+
+### generate_person_id_custom
+
+person_id_custom を生成する。
+
+```python
+from scripts.lib.identity.generator import generate_person_id_custom
+
+res = generate_person_id_custom(
+    birthdate=row["birthdate"],
+    insurer_number_raw=row["insurer_number"],
+    insurance_symbol_raw=row["insurance_symbol"],
+    insurance_number_raw=row["insurance_number"],
+)
+
+if res["ok"]:
+    person_id_custom = res["value"]
+```
+
+---
+
+### generate_identity_hash
+
+identity_hash を生成する（2モード対応）。
+
+#### パターン1: person_id_custom が既にある場合
+
+```python
+from scripts.lib.identity.generator import generate_identity_hash
+
+res = generate_identity_hash(
+    person_id_custom=row["person_id_custom"],
+    name_kana_full_raw=row["name_kana_full"],
+    gender_code=row["gender_code"],
+)
+```
+
+#### パターン2: person_id_custom を内部生成する場合
+
+```python
+res = generate_identity_hash(
+    birthdate=row["birthdate"],
+    insurer_number_raw=row["insurer_number"],
+    insurance_symbol_raw=row["insurance_symbol"],
+    insurance_number_raw=row["insurance_number"],
+    name_kana_full_raw=row["name_kana_full"],
+    gender_code=row["gender_code"],
+)
+```
+
+---
+
+### generate_identity_bundle
+
+person_id_custom と identity_hash をまとめて生成する。
+
+```python
+from scripts.lib.identity.generator import generate_identity_bundle
+
+res = generate_identity_bundle(
+    birthdate=row["birthdate"],
+    insurer_number_raw=row["insurer_number"],
+    insurance_symbol_raw=row["insurance_symbol"],
+    insurance_number_raw=row["insurance_number"],
+    name_kana_full_raw=row["name_kana_full"],
+    gender_code=row["gender_code"],
+)
+
+if res["ok"]:
+    person_id_custom = res["person_id_custom"]
+    identity_hash = res["identity_hash"]
+```
+
+---
+
+## Generator Rule
+
+- generator に identity 生成に必要な入力値を渡す
+- generator 内で field を通す
+- builder は直接呼ばない（例外的ケースを除く）
+- すべての identity 生成は generator を経由する
+- generator の戻り値の ok を必ずチェックする
+
+---
+
+## Updated Data Flow
+
+```text
+raw
+ ↓
+generator
+ ↓
+field (canonical)
+ ↓
+builder
+ ↓
+identity
+```
