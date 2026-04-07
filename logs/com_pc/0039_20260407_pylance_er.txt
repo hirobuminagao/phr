@@ -1,0 +1,97 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/identity/builder/person_id_custom.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"dict[str, str | None]\" の引数を、関数 \"_validate_canonical_inputs\" の型 \"dict[str, str]\" のパラメーター \"canonical_inputs\" に割り当てることはできません\n  \"dict[str, str | None]\" は \"dict[str, str]\" に割り当てできません\n    型パラメーター \"_VT@dict\" は不変ですが、\"str | None\" は \"str\" と同じではありません\n    \"dict\" から値の型の共変である \"Mapping\" への切り替えを検討してください",
+	"source": "Pylance",
+	"startLineNumber": 197,
+	"startColumn": 45,
+	"endLineNumber": 197,
+	"endColumn": 61
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/identity/builder/person_id_custom.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"dict[str, str | None]\" の引数を、関数 \"_build_encoded_parts\" の型 \"dict[str, str]\" のパラメーター \"canonical_inputs\" に割り当てることはできません\n  \"dict[str, str | None]\" は \"dict[str, str]\" に割り当てできません\n    型パラメーター \"_VT@dict\" は不変ですが、\"str | None\" は \"str\" と同じではありません\n    \"dict\" から値の型の共変である \"Mapping\" への切り替えを検討してください",
+	"source": "Pylance",
+	"startLineNumber": 223,
+	"startColumn": 26,
+	"endLineNumber": 223,
+	"endColumn": 42
+}]
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/identity/builder/identity_hash.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"str | None\" の引数を、関数 \"_build_identity_hash_input\" の型 \"str\" のパラメーター \"person_id_custom\" に割り当てることはできません\n  型 \"str | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 70,
+	"startColumn": 26,
+	"endLineNumber": 70,
+	"endColumn": 42
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/identity/builder/identity_hash.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"str | None\" の引数を、関数 \"_build_identity_hash_input\" の型 \"str\" のパラメーター \"name_kana_full_match\" に割り当てることはできません\n  型 \"str | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 71,
+	"startColumn": 30,
+	"endLineNumber": 71,
+	"endColumn": 50
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/identity/builder/identity_hash.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"str | None\" の引数を、関数 \"_build_identity_hash_input\" の型 \"str\" のパラメーター \"gender_code_match\" に割り当てることはできません\n  型 \"str | None\" は型 \"str\" に割り当てできません\n    \"None\" は \"str\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 72,
+	"startColumn": 27,
+	"endLineNumber": 72,
+	"endColumn": 44
+}]
