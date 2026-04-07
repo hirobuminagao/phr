@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from lib.identity.base_norm import base_normalize
-from lib.identity.primitive.digits import extract_digits
-from lib.identity.primitive.dates import (
+from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive.digits import extract_digits
+from scripts.lib.identity.primitive.dates import (
     detect_date_format,
     parse_era_code_7,
     parse_yyyymmdd,
