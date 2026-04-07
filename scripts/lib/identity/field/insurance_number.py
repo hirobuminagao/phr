@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from lib.identity.base_norm import base_normalize
-from lib.identity.primitive.digits import extract_digits, strip_leading_zeros_keep_zero
+from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive.digits import extract_digits, strip_leading_zeros_keep_zero
 
 
 def normalize_insurance_number(raw: str | None) -> dict:

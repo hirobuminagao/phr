@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from lib.identity.base_norm import base_normalize
-from lib.identity.primitive.digits import (
+from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive.digits import (
     extract_digits,
     has_max_length,
     strip_leading_zeros_keep_zero,

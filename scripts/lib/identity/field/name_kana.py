@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from lib.identity.base_norm import base_normalize
-from lib.identity.primitive.convert import (
+from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive.convert import (
     hiragana_to_katakana,
     normalize_small_kana,
     to_fullwidth_ascii,
 )
-from lib.identity.primitive.remove import remove_spaces, remove_kana_symbols
+from scripts.lib.identity.primitive.remove import remove_spaces, remove_kana_symbols
 
 
 def normalize_name_kana_full(raw: str | None) -> dict:

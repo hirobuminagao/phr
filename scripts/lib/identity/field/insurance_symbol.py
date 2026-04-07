@@ -16,11 +16,11 @@ insurance_symbol.py
 
 import re
 
-from lib.identity.base_norm import base_normalize
-from lib.identity.primitive.convert import to_fullwidth_ascii, to_halfwidth_ascii
-from lib.identity.primitive.digits import extract_digits, strip_leading_zeros_keep_zero
-from lib.identity.primitive.remove import remove_spaces, remove_symbol_noise
-from lib.identity.primitive.normalize import unify_hyphen
+from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive.convert import to_fullwidth_ascii, to_halfwidth_ascii
+from scripts.lib.identity.primitive.digits import extract_digits, strip_leading_zeros_keep_zero
+from scripts.lib.identity.primitive.remove import remove_spaces, remove_symbol_noise
+from scripts.lib.identity.primitive.normalize import unify_hyphen
 
 
 
