@@ -63,6 +63,7 @@ from scripts.lib.shg.xml.section_90060_final import extract_final_outcomes, extr
 from scripts.lib.shg.xml.role import resolve_shg_role
 from scripts.lib.shg.xml.section_90070_support_summary import extract_support_summary
 from scripts.lib.shg.xml.section_90040_support_detail import extract_process_events
+from scripts.lib.shg.xml.section_90010_guidance_info import extract_90010_guidance
 
 # ------------------------------------------------------------
 # XML namespace / OID constants (fase1.0)
@@ -394,6 +395,7 @@ def main() -> None:
             final_waist_cm, final_weight_kg = extract_final_measurements(root)
             support_summary = extract_support_summary(root)
             process_events = extract_process_events(root)
+            guidance = extract_90010_guidance(root)
 
             if identity_hash:
                 bucket = people.setdefault(
@@ -444,6 +446,8 @@ def main() -> None:
                     "xml_ticket_exp": basic.get("ticket_exp", ""),
                     "db_ticket_no": db_row.get("usage_ticket_number", "") if db_row else "",
                     "db_ticket_exp": db_row.get("expiration_date", "") if db_row else "",
+                    "guidance_type_code": guidance.get("guidance_type_code") if guidance else "",
+                    "guidance_type_name": guidance.get("guidance_type_name") if guidance else "",
                 }
             )
         except Exception as e:
@@ -465,6 +469,8 @@ def main() -> None:
                     "xml_ticket_exp": "",
                     "db_ticket_no": "",
                     "db_ticket_exp": "",
+                    "guidance_type_code": "",
+                    "guidance_type_name": "",
                 }
             )
 
@@ -476,6 +482,22 @@ def main() -> None:
 
         init_goals = (initial or {}).get("initial_goals") or {}
         final_outs = (final or {}).get("final_outs") or {}
+        plan_goal_map = {
+            "腹囲・体重の改善": init_goals.get("腹囲・体重の改善", False),
+            "生活習慣の改善(食習慣)": init_goals.get("生活習慣の改善(食習慣)", False),
+            "生活習慣の改善(運動習慣)": init_goals.get("生活習慣の改善(運動習慣)", False),
+            "生活習慣の改善(喫煙習慣)": init_goals.get("生活習慣の改善(喫煙習慣)", False),
+            "生活習慣の改善(休養習慣)": init_goals.get("生活習慣の改善(休養習慣)", False),
+            "生活習慣の改善(その他)": init_goals.get("生活習慣の改善(その他)", False),
+        }
+        outcome_map = {
+            "腹囲・体重の改善": final_outs.get("腹囲・体重の改善", False),
+            "生活習慣の改善(食習慣)": final_outs.get("生活習慣の改善(食習慣)", False),
+            "生活習慣の改善(運動習慣)": final_outs.get("生活習慣の改善(運動習慣)", False),
+            "生活習慣の改善(喫煙習慣)": final_outs.get("生活習慣の改善(喫煙習慣)", False),
+            "生活習慣の改善(休養習慣)": final_outs.get("生活習慣の改善(休養習慣)", False),
+            "生活習慣の改善(その他)": final_outs.get("生活習慣の改善(その他の生活習慣)", False),
+        }
         outcome_pts = (final or {}).get("outcome_pts") or 0
         belly_text = (final or {}).get("belly_text") or ""
         final_waist_cm = (final or {}).get("final_waist_cm")
@@ -491,17 +513,25 @@ def main() -> None:
         total_points_90070 = int(support_summary.get("_total_points") or 0)
         grand_total_points = int(support_summary.get("_grand_total") or 0)
         total_minutes_90070 = int(sum(support_durations.values()) if support_durations else 0)
+        has_90070_values = any(
+            [
+                total_points_90070 > 0,
+                total_minutes_90070 > 0,
+                any(int(v or 0) > 0 for v in support_counts.values()) if support_counts else False,
+                any(int(v or 0) > 0 for v in support_durations.values()) if support_durations else False,
+            ]
+        )
 
         if events_90040:
             process_source = "90040"
             process_total_points = total_points_90040
             process_total_minutes = total_minutes_90040
-        elif final:
-            process_source = "90070"
+        elif has_90070_values:
+            process_source = "90070_evn"
             process_total_points = total_points_90070
             process_total_minutes = total_minutes_90070
         else:
-            process_source = ""
+            process_source = "none"
             process_total_points = 0
             process_total_minutes = 0
 
@@ -522,9 +552,21 @@ def main() -> None:
                 "initial_goal_summary": ";".join(
                     [f"{k}:{'目標' if v else '非目標'}" for k, v in init_goals.items()]
                 ),
+                "計_腹囲体重": "目標" if plan_goal_map["腹囲・体重の改善"] else "非目標",
+                "計_食": "目標" if plan_goal_map["生活習慣の改善(食習慣)"] else "非目標",
+                "計_運動": "目標" if plan_goal_map["生活習慣の改善(運動習慣)"] else "非目標",
+                "計_喫煙": "目標" if plan_goal_map["生活習慣の改善(喫煙習慣)"] else "非目標",
+                "計_休養": "目標" if plan_goal_map["生活習慣の改善(休養習慣)"] else "非目標",
+                "計_その他": "目標" if plan_goal_map["生活習慣の改善(その他)"] else "非目標",
                 "final_outcome_summary": ";".join(
                     [f"{k}:{'達成' if v else '未'}" for k, v in final_outs.items()]
                 ) if final else "",
+                "結_腹囲体重": "達成" if outcome_map["腹囲・体重の改善"] else "未達成",
+                "結_食": "達成" if outcome_map["生活習慣の改善(食習慣)"] else "未達成",
+                "結_運動": "達成" if outcome_map["生活習慣の改善(運動習慣)"] else "未達成",
+                "結_喫煙": "達成" if outcome_map["生活習慣の改善(喫煙習慣)"] else "未達成",
+                "結_休養": "達成" if outcome_map["生活習慣の改善(休養習慣)"] else "未達成",
+                "結_その他": "達成" if outcome_map["生活習慣の改善(その他)"] else "未達成",
                 "outcome_total_points": int(outcome_pts or 0),
                 "achieve_腹囲体重_内容": belly_text,
                 "process_source": process_source,
