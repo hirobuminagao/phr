@@ -40,7 +40,7 @@ fase1.0 方針:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 import argparse
 import csv
 import sys
@@ -186,9 +186,18 @@ def make_person_key(
 # ------------------------------------------------------------
 # DB
 # ------------------------------------------------------------
-def _normalize_db_row(row: Mapping[str, Any]) -> dict[str, Any]:
+def _normalize_db_row(row: Any) -> dict[str, Any]:
     """DB row を plain dict[str, Any] に正規化する。"""
-    return {str(k): v for k, v in row.items()}
+    if isinstance(row, dict):
+        return {str(k): v for k, v in row.items()}
+
+    if hasattr(row, "items"):
+        try:
+            return {str(k): v for k, v in row.items()}
+        except Exception:
+            pass
+
+    return {}
 
 def load_shg_result_from_mysql() -> dict[str, dict[str, Any]]:
     """新定義の work_other.shg_result を読み込む。
