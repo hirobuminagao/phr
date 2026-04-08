@@ -39,10 +39,11 @@ fase1.0 方針:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 import argparse
 import csv
 import sys
+import xml.etree.ElementTree as ET
 
 # ------------------------------------------------------------
 # VSCode Run ボタン / file実行 対応
@@ -55,6 +56,18 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import WORK_OTHER
 from scripts.lib.identity.generator import generate_identity_bundle
+
+# ------------------------------------------------------------
+# XML namespace / OID constants (fase1.0)
+# ------------------------------------------------------------
+NS = {
+    "cda": "urn:hl7-org:v3",
+    "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+}
+
+OID_INSURER = "1.2.392.200119.6.101"
+OID_SYMBOL = "1.2.392.200119.6.204"
+OID_NUMBER = "1.2.392.200119.6.205"
 
 
 # ------------------------------------------------------------
@@ -103,6 +116,129 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+
+#
+# ------------------------------------------------------------
+# Helpers / XML
+# ------------------------------------------------------------
+def dbg(*args: Any) -> None:
+    print(*args)
+
+
+def _text_or(elem: ET.Element | None, default: str = "") -> str:
+    if elem is None:
+        return default
+    return (elem.text or "").strip()
+
+
+def _get_number(root: ET.Element, oid: str) -> str:
+    # <id root="OID" extension="..."/> の extension を取得
+    for el in root.findall(".//cda:id", NS):
+        if (el.get("root") or "").strip() == oid:
+            return (el.get("extension") or "").strip()
+    return ""
+
+
+def read_xml(xml_path: Path) -> ET.Element:
+    tree = ET.parse(xml_path)
+    return tree.getroot()
+
+
+def scan_xmls(input_dir: Path) -> list[Path]:
+    """fase1.0: 展開済みXMLを走査する。
+
+    想定:
+    - input_dir 配下の XML
+    - input_dir/DATA 配下の XML
+    - XSD系は対象外
+    """
+    candidates: list[Path] = []
+
+    if (input_dir / "DATA").exists():
+        candidates.extend(sorted((input_dir / "DATA").rglob("*.xml")))
+    else:
+        candidates.extend(sorted(input_dir.rglob("*.xml")))
+
+    result: list[Path] = []
+    for p in candidates:
+        name = p.name.lower()
+        if name.startswith("ix08") or name.startswith("su08"):
+            continue
+        result.append(p)
+    return result
+
+
+def make_person_key(
+    *,
+    insurer: str,
+    symbol: str,
+    number: str,
+    name: str,
+    birth: str,
+    gender: str,
+) -> str:
+    """CSV目視確認用の内部表示キー。突合主キーではない。"""
+    parts = [
+        (insurer or "").strip(),
+        (symbol or "").strip(),
+        (number or "").strip(),
+        (name or "").strip(),
+        (birth or "").strip(),
+        (gender or "").strip(),
+    ]
+    return "|".join(parts)
+
+
+def extract_basic(root: ET.Element) -> dict[str, Any]:
+    """fase1.0 の最小 basic 抽出。
+
+    目的:
+    - generator に渡す最小項目を取得する
+    - CSVの基本列を作る
+    """
+    insurer = _get_number(root, OID_INSURER)
+    symbol = _get_number(root, OID_SYMBOL)
+    number = _get_number(root, OID_NUMBER)
+
+    name = _text_or(root.find(".//cda:recordTarget//cda:patient/cda:name", NS))
+
+    gender = ""
+    gender_el = root.find(".//cda:recordTarget//cda:patient/cda:administrativeGenderCode", NS)
+    if gender_el is not None:
+        gender = (gender_el.get("code") or "").strip()
+
+    birth = ""
+    birth_el = root.find(".//cda:recordTarget//cda:patient/cda:birthTime", NS)
+    if birth_el is not None:
+        birth = (birth_el.get("value") or "").strip()
+
+    # 利用券情報（旧スクリプト互換の最小抽出）
+    ticket_no = ""
+    ticket_exp = ""
+    for auth in root.findall(".//cda:authorization", NS):
+        code_el = auth.find(".//cda:functionCode", NS)
+        if code_el is None:
+            continue
+        if (code_el.get("code") or "").strip() != "2":
+            continue
+        id_el = auth.find(".//cda:id", NS)
+        if id_el is not None:
+            ticket_no = (id_el.get("extension") or "").strip()
+        exp_el = auth.find(".//cda:effectiveTime/cda:high", NS)
+        if exp_el is not None:
+            ticket_exp = (exp_el.get("value") or "").strip()
+        break
+
+    return {
+        "insurer": insurer,
+        "symbol": symbol,
+        "number": number,
+        "name": name,
+        "gender": gender,
+        "birth": birth,
+        "ticket_no": ticket_no,
+        "ticket_exp": ticket_exp,
+    }
 
 # ------------------------------------------------------------
 # DB
@@ -244,14 +380,77 @@ def main() -> None:
     export_shg_rows: list[dict[str, Any]] = []
     export_outcome_rows: list[dict[str, Any]] = []
 
-    # TODO fase1.0:
-    # 1. scan_xmls(input_dir) を旧スクリプトから移植
-    # 2. read_xml / extract_basic を移植
-    # 3. build_xml_identity_from_basic() で person_id_custom / identity_hash を生成
-    # 4. shg_result_map を identity_hash キーで引く
-    # 5. export_shg_rows / export_outcome_rows を旧CSV構造に合わせて構築
-    # 6. export_outcome_report では person_id 列を identity_hash に変更
-    # 7. 健診時_腹囲(cm) / 健診時_体重(kg) に shg_result の値を反映
+    xml_paths = scan_xmls(input_dir)
+
+    # fase1.0:
+    # - XML単位の report を先に組み立てる
+    # - people 集約 / outcome_report 本体は次段で移植する
+    for xml_path in xml_paths:
+        try:
+            root = read_xml(xml_path)
+            basic = extract_basic(root)
+            identity_res = build_xml_identity_from_basic(basic)
+
+            identity_hash = identity_res.get("identity_hash") or ""
+            person_id_custom = identity_res.get("person_id_custom") or ""
+            identity_reason = identity_res.get("reason") or ""
+
+            person_key = make_person_key(
+                insurer=str(basic.get("insurer") or ""),
+                symbol=str(basic.get("symbol") or ""),
+                number=str(basic.get("number") or ""),
+                name=str(basic.get("name") or ""),
+                birth=str(basic.get("birth") or ""),
+                gender=str(basic.get("gender") or ""),
+            )
+
+            db_row = shg_result_map.get(str(identity_hash), {}) if identity_hash else {}
+
+            export_shg_rows.append(
+                {
+                    "xml_file": xml_path.name,
+                    "person_key": person_key,
+                    "person_id_custom": person_id_custom,
+                    "identity_hash": identity_hash,
+                    "identity_reason": identity_reason,
+                    "insurer": basic.get("insurer", ""),
+                    "symbol": basic.get("symbol", ""),
+                    "number": basic.get("number", ""),
+                    "name": basic.get("name", ""),
+                    "gender": basic.get("gender", ""),
+                    "birth": basic.get("birth", ""),
+                    "xml_ticket_no": basic.get("ticket_no", ""),
+                    "xml_ticket_exp": basic.get("ticket_exp", ""),
+                    "db_ticket_no": db_row.get("usage_ticket_number", "") if db_row else "",
+                    "db_ticket_exp": db_row.get("expiration_date", "") if db_row else "",
+                }
+            )
+        except Exception as e:
+            export_shg_rows.append(
+                {
+                    "xml_file": xml_path.name,
+                    "person_key": "",
+                    "person_id_custom": "",
+                    "identity_hash": "",
+                    "identity_reason": f"xml_parse_error: {e}",
+                    "insurer": "",
+                    "symbol": "",
+                    "number": "",
+                    "name": "",
+                    "gender": "",
+                    "birth": "",
+                    "xml_ticket_no": "",
+                    "xml_ticket_exp": "",
+                    "db_ticket_no": "",
+                    "db_ticket_exp": "",
+                }
+            )
+
+    # TODO fase1.0 next:
+    # 1. 旧スクリプトの初回/最終集約ロジックを移植
+    # 2. export_outcome_rows を旧CSV構造に合わせて構築
+    # 3. export_outcome_report では person_id 列を identity_hash に変更
+    # 4. 健診時_腹囲(cm) / 健診時_体重(kg) に shg_result の値を反映
 
     write_export_shg_report_csv(
         out_dir / "export_shg_report.csv",
@@ -266,6 +465,8 @@ def main() -> None:
     print(f"[INFO] input_dir={input_dir}")
     print(f"[INFO] out_dir={out_dir}")
     print(f"[INFO] shg_result loaded={len(shg_result_map)}")
+    print(f"[INFO] xml scanned={len(xml_paths)}")
+    print(f"[INFO] export_shg_rows={len(export_shg_rows)}")
 
 
 if __name__ == "__main__":
