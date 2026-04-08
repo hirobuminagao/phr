@@ -34,10 +34,11 @@
 ```text
 scripts/lib/shg/xml/
   ├ basic.py
-  ├ goals.py
-  ├ outcomes.py
-  ├ measurements.py
-  └ role.py
+  ├ role.py
+  ├ section_90030_initial.py
+  ├ section_90060_final.py
+  ├ section_90070_support_summary.py
+  └ README.md
 ```
 
 ## 各ファイルの役割
@@ -49,19 +50,24 @@ scripts/lib/shg/xml/
 - name / gender / birth
 - ticket_no / ticket_exp
 
-### goals.py
-- 90030（初回目標）の抽出
-
-### outcomes.py
-- 90060（最終評価）の抽出
-- 達成状況
-- アウトカムポイント
-
-### measurements.py
-- 90060 の腹囲 / 体重など数値系の抽出
-
 ### role.py
 - report_code から `initial` / `final` を判定するロジック
+
+### section_90030_initial.py
+- 90030 初回面談情報セクションの抽出
+- 目標
+- 初回面談に関する基本情報
+
+### section_90060_final.py
+- 90060 最終評価セクションの抽出
+- 達成状況
+- アウトカムポイント
+- 最終腹囲 / 最終体重などの結果値
+
+### section_90070_support_summary.py
+- 90070 支援実施内容セクションの抽出
+- 支援手段ごとの回数・時間の集計値
+- 90040（支援明細）の集約結果
 
 ## 利用箇所
 

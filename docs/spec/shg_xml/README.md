@@ -1,5 +1,3 @@
-
-
 # SHG XML 処理仕様（shg_xml）
 
 ## 目的
@@ -8,7 +6,7 @@
 
 本仕様は、以下の責務を対象とする。
 
-- XMLからの値抽出（basic / goals / outcomes / measurements）
+- XMLからの値抽出（basic / role / CDAセクション別抽出）
 - XML構造の理解と項目マッピング
 - スクリプト処理（check_shg_result_xml.py）の設計方針
 
@@ -24,10 +22,11 @@
 ```text
 scripts/lib/shg/xml/
   ├ basic.py
-  ├ goals.py
-  ├ outcomes.py
-  ├ measurements.py
-  └ role.py（必要に応じて）
+  ├ role.py
+  ├ section_90030_initial.py
+  ├ section_90060_final.py
+  ├ section_90070_support_summary.py
+  └ README.md
 ```
 
 ### 各ファイルの責務
@@ -39,19 +38,24 @@ scripts/lib/shg/xml/
 - name / gender / birth
 - ticket_no / ticket_exp
 
-#### goals.py
-- 90030（初回目標）の抽出
-
-#### outcomes.py
-- 90060（最終評価）の抽出
-- アウトカム評価
-- ポイント
-
-#### measurements.py
-- 90060の数値系（腹囲・体重など）
-
 #### role.py
 - report_code から initial / final 判定
+
+#### section_90030_initial.py
+- 90030 初回面談情報セクションの抽出
+- 初回面談情報セクション内の目標関連項目
+- 初回面談に関する基本情報
+
+#### section_90060_final.py
+- 90060 最終評価セクションの抽出
+- 達成状況
+- アウトカムポイント
+- 最終腹囲 / 最終体重などの結果値
+
+#### section_90070_support_summary.py
+- 90070 支援実施内容集計セクションの抽出
+- 支援手段ごとの回数・時間の集計値
+- 90040（支援明細）の集約結果
 
 ## 実行スクリプトとの責務分離
 
@@ -92,11 +96,13 @@ scripts/lib/shg/xml/
 ## 設計方針
 
 - XML構造に沿って責務を分割する
+- 値ベースではなく、CDAセクションの意味に沿ってファイルを分割する
 - 「値取得」と「値の利用」を分離する
 - 600行以上の単一スクリプトを避ける
 - 将来的な仕様変更に耐える構造とする
 
-## 備考
+## 補足
 
 - 本仕様はADR-0018に基づく
 - XML仕様変更時は本ディレクトリで吸収する
+- 90030 / 90060 / 90070 は「何を取りたいか」ではなく「どのCDAセクションを扱うか」で分割する
