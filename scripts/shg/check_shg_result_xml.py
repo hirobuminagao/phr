@@ -39,7 +39,7 @@ fase1.0 方針:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 import argparse
 import csv
 import sys
@@ -240,6 +240,127 @@ def extract_basic(root: ET.Element) -> dict[str, Any]:
         "ticket_exp": ticket_exp,
     }
 
+
+# ------------------------------------------------------------
+# SHG XML outcome/goal extraction helpers (fase1.0 minimal)
+# ------------------------------------------------------------
+
+def _find_section_by_code(root: ET.Element, section_code: str) -> ET.Element | None:
+    for sec in root.findall(".//cda:section", NS):
+        code_el = sec.find("cda:code", NS)
+        if code_el is not None and (code_el.get("code") or "").strip() == section_code:
+            return sec
+    return None
+
+
+def _find_observation_in_section(
+    section: ET.Element | None,
+    observation_code: str,
+) -> ET.Element | None:
+    if section is None:
+        return None
+    for obs in section.findall(".//cda:observation", NS):
+        code_el = obs.find("cda:code", NS)
+        if code_el is not None and (code_el.get("code") or "").strip() == observation_code:
+            return obs
+    return None
+
+
+def _get_observation_value_code(
+    root: ET.Element,
+    section_code: str,
+    observation_code: str,
+) -> str:
+    sec = _find_section_by_code(root, section_code)
+    obs = _find_observation_in_section(sec, observation_code)
+    if obs is None:
+        return ""
+    value_el = obs.find("cda:value", NS)
+    if value_el is None:
+        return ""
+    return (value_el.get("code") or "").strip()
+
+
+def _get_observation_value_text(
+    root: ET.Element,
+    section_code: str,
+    observation_code: str,
+) -> str:
+    sec = _find_section_by_code(root, section_code)
+    obs = _find_observation_in_section(sec, observation_code)
+    if obs is None:
+        return ""
+    value_el = obs.find("cda:value", NS)
+    if value_el is None:
+        return ""
+    return (value_el.get("value") or "").strip()
+
+
+def _get_pq_float_or_none(
+    root: ET.Element,
+    section_code: str,
+    observation_code: str,
+) -> float | None:
+    raw = _get_observation_value_text(root, section_code, observation_code)
+    if raw == "":
+        return None
+    try:
+        return float(raw)
+    except Exception:
+        return None
+
+
+def _robust_bool_from_value_code(code: str) -> bool:
+    return (code or "").strip() in {"1", "true", "True"}
+
+
+def extract_initial_goals(root: ET.Element) -> dict[str, bool]:
+    def flag(code: str) -> bool:
+        return _robust_bool_from_value_code(
+            _get_observation_value_code(root, "90030", code)
+        )
+
+    goals: dict[str, bool] = {}
+    goals["腹囲・体重の改善"] = flag("1021001053")
+    goals["生活習慣の改善(食習慣)"] = flag("1021001054")
+    goals["生活習慣の改善(運動習慣)"] = flag("1021001055")
+    goals["生活習慣の改善(喫煙習慣)"] = flag("1021001056")
+    goals["生活習慣の改善(休養習慣)"] = flag("1021001057")
+    goals["生活習慣の改善(その他)"] = flag("1021001058")
+    return goals
+
+
+def extract_final_outcomes(root: ET.Element) -> tuple[dict[str, bool], int, str]:
+    belly_code = _get_observation_value_code(root, "90060", "1042001044")
+    belly_ok = belly_code in {"1", "2"}
+    belly_text_map = {"1": "1cm/1kg", "2": "2cm/2kg"}
+    belly_text = belly_text_map.get(belly_code, "未達成")
+
+    def ok1(code: str) -> bool:
+        return _get_observation_value_code(root, "90060", code) == "1"
+
+    outs: dict[str, bool] = {}
+    outs["腹囲・体重の改善"] = belly_ok
+    outs["生活習慣の改善(食習慣)"] = ok1("1042001042")
+    outs["生活習慣の改善(運動習慣)"] = ok1("1042001041")
+    outs["生活習慣の改善(喫煙習慣)"] = ok1("1042001043")
+    outs["生活習慣の改善(休養習慣)"] = ok1("1042001045")
+    outs["生活習慣の改善(その他の生活習慣)"] = ok1("1042001046")
+
+    total_pts_raw = _get_observation_value_text(root, "90060", "1042001060")
+    try:
+        total_pts = int(total_pts_raw or 0)
+    except Exception:
+        total_pts = 0
+
+    return outs, total_pts, belly_text
+
+
+def extract_final_measurements(root: ET.Element) -> tuple[float | None, float | None]:
+    waist_cm = _get_pq_float_or_none(root, "90060", "1042001031")
+    weight_kg = _get_pq_float_or_none(root, "90060", "1042001032")
+    return waist_cm, weight_kg
+
 # ------------------------------------------------------------
 # DB
 # ------------------------------------------------------------
@@ -379,6 +500,7 @@ def main() -> None:
 
     export_shg_rows: list[dict[str, Any]] = []
     export_outcome_rows: list[dict[str, Any]] = []
+    people: dict[str, dict[str, Any]] = {}
 
     xml_paths = scan_xmls(input_dir)
 
@@ -405,6 +527,38 @@ def main() -> None:
             )
 
             db_row = shg_result_map.get(str(identity_hash), {}) if identity_hash else {}
+
+            initial_goals = extract_initial_goals(root)
+            final_outs, outcome_pts, belly_text = extract_final_outcomes(root)
+            final_waist_cm, final_weight_kg = extract_final_measurements(root)
+
+            if identity_hash:
+                bucket = people.setdefault(
+                    str(identity_hash),
+                    {
+                        "identity_hash": str(identity_hash),
+                        "person_key": person_key,
+                        "person_id_custom": str(person_id_custom),
+                        "db_row": db_row,
+                        "initial": None,
+                        "final": None,
+                    },
+                )
+
+                rec = {
+                    "xml_file": xml_path.name,
+                    "basic": basic,
+                    "initial_goals": initial_goals,
+                    "final_outs": final_outs,
+                    "outcome_pts": outcome_pts,
+                    "belly_text": belly_text,
+                    "final_waist_cm": final_waist_cm,
+                    "final_weight_kg": final_weight_kg,
+                }
+
+                if bucket.get("initial") is None:
+                    bucket["initial"] = rec
+                bucket["final"] = rec
 
             export_shg_rows.append(
                 {
@@ -446,11 +600,43 @@ def main() -> None:
                 }
             )
 
-    # TODO fase1.0 next:
-    # 1. 旧スクリプトの初回/最終集約ロジックを移植
-    # 2. export_outcome_rows を旧CSV構造に合わせて構築
-    # 3. export_outcome_report では person_id 列を identity_hash に変更
-    # 4. 健診時_腹囲(cm) / 健診時_体重(kg) に shg_result の値を反映
+    # fase1.0 outcome rows (最小構成)
+    for identity_hash, info in sorted(people.items()):
+        initial = info.get("initial")
+        final = info.get("final")
+        db_info = info.get("db_row") or {}
+
+        init_goals = (initial or {}).get("initial_goals") or {}
+        final_outs = (final or {}).get("final_outs") or {}
+        outcome_pts = (final or {}).get("outcome_pts") or 0
+        belly_text = (final or {}).get("belly_text") or ""
+        final_waist_cm = (final or {}).get("final_waist_cm")
+        final_weight_kg = (final or {}).get("final_weight_kg")
+
+        export_outcome_rows.append(
+            {
+                "person_key": info.get("person_key", ""),
+                "person_id": identity_hash,
+                "person_id_custom": info.get("person_id_custom", ""),
+                "db_ticket_no": db_info.get("usage_ticket_number", ""),
+                "db_ticket_exp": db_info.get("expiration_date", ""),
+                "initial_xml": (initial or {}).get("xml_file", ""),
+                "final_xml": (final or {}).get("xml_file", ""),
+                "initial_exists": "Yes" if initial else "No",
+                "健診時_腹囲(cm)": db_info.get("exam_waist_cm", ""),
+                "最終_腹囲(cm)": final_waist_cm if final_waist_cm is not None else "",
+                "健診時_体重(kg)": db_info.get("exam_weight_kg", ""),
+                "最終_体重(kg)": final_weight_kg if final_weight_kg is not None else "",
+                "initial_goal_summary": ";".join(
+                    [f"{k}:{'目標' if v else '非目標'}" for k, v in init_goals.items()]
+                ),
+                "final_outcome_summary": ";".join(
+                    [f"{k}:{'達成' if v else '未'}" for k, v in final_outs.items()]
+                ) if final else "",
+                "outcome_total_points": int(outcome_pts or 0),
+                "achieve_腹囲体重_内容": belly_text,
+            }
+        )
 
     write_export_shg_report_csv(
         out_dir / "export_shg_report.csv",
@@ -467,6 +653,9 @@ def main() -> None:
     print(f"[INFO] shg_result loaded={len(shg_result_map)}")
     print(f"[INFO] xml scanned={len(xml_paths)}")
     print(f"[INFO] export_shg_rows={len(export_shg_rows)}")
+
+    print(f"[INFO] people aggregated={len(people)}")
+    print(f"[INFO] export_outcome_rows={len(export_outcome_rows)}")
 
 
 if __name__ == "__main__":
