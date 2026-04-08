@@ -13,6 +13,7 @@ SHG結果XMLチェック（fase1.0: 旧スクリプトからの横移行）
   新実行環境 `scripts/shg/` へ移行する。
 - fase1.0 では入力方式は旧前提（展開済みXML）とし、
   まずは新キー体系・新DB定義・新CSV出力方針へ載せ替える。
+  - 入出力の固定パスは `data/hia_export_shg/` を使用する。
 - fase1.1 で ZIP 直読みに改修する。
 
 fase1.0 方針:
@@ -60,6 +61,8 @@ from scripts.lib.shg.xml.basic import extract_basic
 from scripts.lib.shg.xml.section_90030_initial import extract_initial_goals
 from scripts.lib.shg.xml.section_90060_final import extract_final_outcomes, extract_final_measurements
 from scripts.lib.shg.xml.role import resolve_shg_role
+from scripts.lib.shg.xml.section_90070_support_summary import extract_support_summary
+from scripts.lib.shg.xml.section_90040_support_detail import extract_process_events
 
 # ------------------------------------------------------------
 # XML namespace / OID constants (fase1.0)
@@ -298,13 +301,34 @@ def write_export_outcome_report_csv(
 # Main (fase1.0 skeleton)
 # ------------------------------------------------------------
 def main() -> None:
-    args = build_arg_parser().parse_args()
+    # ------------------------------------------------------------
+    # Fixed paths (VSCode Run前提)
+    # ------------------------------------------------------------
+    # data/hia_export_shg/
+    #   input/<insurer_number>/DATA/*.xml
+    #   output/<yyyymmdd_hhmmss>/export_shg_report.csv
+    #   output/<yyyymmdd_hhmmss>/export_outcome_report.csv
+    BASE_DIR = PROJECT_ROOT / "data" / "hia_export_shg"
+    input_root_dir = BASE_DIR / "input"
+    output_root_dir = BASE_DIR / "output"
 
-    input_dir = Path(args.input_dir)
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # ディレクトリ生成
+    input_root_dir.mkdir(parents=True, exist_ok=True)
+    output_root_dir.mkdir(parents=True, exist_ok=True)
 
     shg_result_map = load_shg_result_from_mysql()
+
+    # input は input/<insurer_number>/DATA/*.xml を前提とする
+    insurer_dirs = sorted([p for p in input_root_dir.iterdir() if p.is_dir()])
+    if not insurer_dirs:
+        print("[WARN] input insurer directory not found")
+        print(f"[INFO] expected input root={input_root_dir}")
+        return
+
+    from datetime import datetime
+    run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = output_root_dir / run_ts
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # NOTE:
     # ここから下は fase1.0 の骨格のみ。
@@ -321,7 +345,9 @@ def main() -> None:
     export_outcome_rows: list[dict[str, Any]] = []
     people: dict[str, dict[str, Any]] = {}
 
-    xml_paths = scan_xmls(input_dir)
+    xml_paths: list[Path] = []
+    for insurer_dir in insurer_dirs:
+        xml_paths.extend(scan_xmls(insurer_dir))
 
     # fase1.0:
     # - XML単位の report を先に組み立てる
@@ -351,6 +377,8 @@ def main() -> None:
             initial_goals = extract_initial_goals(root)
             final_outs, outcome_pts, belly_text = extract_final_outcomes(root)
             final_waist_cm, final_weight_kg = extract_final_measurements(root)
+            support_summary = extract_support_summary(root)
+            process_events = extract_process_events(root)
 
             if identity_hash:
                 bucket = people.setdefault(
@@ -374,6 +402,8 @@ def main() -> None:
                     "belly_text": belly_text,
                     "final_waist_cm": final_waist_cm,
                     "final_weight_kg": final_weight_kg,
+                    "support_summary": support_summary,
+                    "process_events": process_events,
                 }
 
                 if role == "initial":
@@ -435,6 +465,30 @@ def main() -> None:
         belly_text = (final or {}).get("belly_text") or ""
         final_waist_cm = (final or {}).get("final_waist_cm")
         final_weight_kg = (final or {}).get("final_weight_kg")
+        support_summary = (final or {}).get("support_summary") or {}
+        process_events = (final or {}).get("process_events") or {}
+        support_counts = support_summary.get("counts") or {}
+        support_durations = support_summary.get("durations_min") or {}
+        events_90040 = process_events.get("events") or []
+        total_points_90040 = int(process_events.get("_total_points") or 0)
+        total_minutes_90040 = int(process_events.get("_total_minutes") or 0)
+
+        total_points_90070 = int(support_summary.get("_total_points") or 0)
+        grand_total_points = int(support_summary.get("_grand_total") or 0)
+        total_minutes_90070 = int(sum(support_durations.values()) if support_durations else 0)
+
+        if events_90040:
+            process_source = "90040"
+            process_total_points = total_points_90040
+            process_total_minutes = total_minutes_90040
+        elif final:
+            process_source = "90070"
+            process_total_points = total_points_90070
+            process_total_minutes = total_minutes_90070
+        else:
+            process_source = ""
+            process_total_points = 0
+            process_total_minutes = 0
 
         export_outcome_rows.append(
             {
@@ -458,6 +512,21 @@ def main() -> None:
                 ) if final else "",
                 "outcome_total_points": int(outcome_pts or 0),
                 "achieve_腹囲体重_内容": belly_text,
+                "process_source": process_source,
+                "process_total_points": process_total_points,
+                "process_total_minutes": process_total_minutes,
+                "grand_total_points": grand_total_points,
+                "proc_個別支援(対面)_回数": support_counts.get("個別支援(対面)", 0),
+                "proc_個別支援(対面)_分": support_durations.get("個別支援(対面)", 0),
+                "proc_個別支援(遠隔)_回数": support_counts.get("個別支援(遠隔)", 0),
+                "proc_個別支援(遠隔)_分": support_durations.get("個別支援(遠隔)", 0),
+                "proc_グループ支援(対面)_回数": support_counts.get("グループ支援(対面)", 0),
+                "proc_グループ支援(対面)_分": support_durations.get("グループ支援(対面)", 0),
+                "proc_グループ支援(遠隔)_回数": support_counts.get("グループ支援(遠隔)", 0),
+                "proc_グループ支援(遠隔)_分": support_durations.get("グループ支援(遠隔)", 0),
+                "proc_電話_回数": support_counts.get("電話", 0),
+                "proc_電話_分": support_durations.get("電話", 0),
+                "proc_電子メール等_回数": support_counts.get("電子メール等", 0),
             }
         )
 
@@ -471,7 +540,8 @@ def main() -> None:
     )
 
     print("[OK] fase1.0 skeleton ready")
-    print(f"[INFO] input_dir={input_dir}")
+    print(f"[INFO] input_root_dir={input_root_dir}")
+    print(f"[INFO] insurer_dirs={len(insurer_dirs)}")
     print(f"[INFO] out_dir={out_dir}")
     print(f"[INFO] shg_result loaded={len(shg_result_map)}")
     print(f"[INFO] xml scanned={len(xml_paths)}")

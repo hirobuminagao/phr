@@ -19,11 +19,43 @@
 
 ## ディレクトリ構成方針
 
+## 入出力ディレクトリ仕様（固定）
+
+本処理は VSCode Run 前提とし、入出力パスは固定とする。
+
+```text
+data/hia_export_shg/
+├── input/
+│   └── <root_folder_name>/
+│       ├── ix08_V08.xml
+│       ├── su08_V08.xml
+│       ├── DATA/*.xml
+│       ├── CLAIMS/
+│       └── XSD/
+└── output/
+    └── <yyyymmdd_hhmmss>/
+        ├── export_shg_report.csv
+        └── export_outcome_report.csv
+```
+
+### 入力仕様
+
+- `input/<root_folder_name>/` 配下は厚生労働省の「送付用ファイルアーカイブ仕様」に準拠する
+- ZIP解凍後のルートフォルダ構造をそのまま配置する
+- 本スクリプトは `DATA/*.xml` のみを解析対象とする
+- `ix08_V08.xml`、`su08_V08.xml`、`CLAIMS/`、`XSD/` は保持するが、fase1.0では解析対象外とする
+
+### 出力仕様
+
+- 実行ごとに timestamp フォルダを生成
+- 同一入力でも複数回実行した結果を保持する
+
 ```text
 scripts/lib/shg/xml/
   ├ basic.py
   ├ role.py
   ├ section_90030_initial.py
+  ├ section_90040_support_detail.py
   ├ section_90060_final.py
   ├ section_90070_support_summary.py
   └ README.md
