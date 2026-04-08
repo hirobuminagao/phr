@@ -56,6 +56,10 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import WORK_OTHER
 from scripts.lib.identity.generator import generate_identity_bundle
+from scripts.lib.shg.xml.basic import extract_basic
+from scripts.lib.shg.xml.section_90030_initial import extract_initial_goals
+from scripts.lib.shg.xml.section_90060_final import extract_final_outcomes, extract_final_measurements
+from scripts.lib.shg.xml.role import resolve_shg_role
 
 # ------------------------------------------------------------
 # XML namespace / OID constants (fase1.0)
@@ -64,10 +68,6 @@ NS = {
     "cda": "urn:hl7-org:v3",
     "xsi": "http://www.w3.org/2001/XMLSchema-instance",
 }
-
-OID_INSURER = "1.2.392.200119.6.101"
-OID_SYMBOL = "1.2.392.200119.6.204"
-OID_NUMBER = "1.2.392.200119.6.205"
 
 
 # ------------------------------------------------------------
@@ -125,18 +125,6 @@ def dbg(*args: Any) -> None:
     print(*args)
 
 
-def _text_or(elem: ET.Element | None, default: str = "") -> str:
-    if elem is None:
-        return default
-    return (elem.text or "").strip()
-
-
-def _get_number(root: ET.Element, oid: str) -> str:
-    # <id root="OID" extension="..."/> の extension を取得
-    for el in root.findall(".//cda:id", NS):
-        if (el.get("root") or "").strip() == oid:
-            return (el.get("extension") or "").strip()
-    return ""
 
 
 def read_xml(xml_path: Path) -> ET.Element:
@@ -189,177 +177,8 @@ def make_person_key(
     return "|".join(parts)
 
 
-def extract_basic(root: ET.Element) -> dict[str, Any]:
-    """fase1.0 の最小 basic 抽出。
-
-    目的:
-    - generator に渡す最小項目を取得する
-    - CSVの基本列を作る
-    """
-    insurer = _get_number(root, OID_INSURER)
-    symbol = _get_number(root, OID_SYMBOL)
-    number = _get_number(root, OID_NUMBER)
-
-    name = _text_or(root.find(".//cda:recordTarget//cda:patient/cda:name", NS))
-
-    gender = ""
-    gender_el = root.find(".//cda:recordTarget//cda:patient/cda:administrativeGenderCode", NS)
-    if gender_el is not None:
-        gender = (gender_el.get("code") or "").strip()
-
-    birth = ""
-    birth_el = root.find(".//cda:recordTarget//cda:patient/cda:birthTime", NS)
-    if birth_el is not None:
-        birth = (birth_el.get("value") or "").strip()
-
-    # 利用券情報（旧スクリプト互換の最小抽出）
-    ticket_no = ""
-    ticket_exp = ""
-    for auth in root.findall(".//cda:authorization", NS):
-        code_el = auth.find(".//cda:functionCode", NS)
-        if code_el is None:
-            continue
-        if (code_el.get("code") or "").strip() != "2":
-            continue
-        id_el = auth.find(".//cda:id", NS)
-        if id_el is not None:
-            ticket_no = (id_el.get("extension") or "").strip()
-        exp_el = auth.find(".//cda:effectiveTime/cda:high", NS)
-        if exp_el is not None:
-            ticket_exp = (exp_el.get("value") or "").strip()
-        break
-
-    return {
-        "insurer": insurer,
-        "symbol": symbol,
-        "number": number,
-        "name": name,
-        "gender": gender,
-        "birth": birth,
-        "ticket_no": ticket_no,
-        "ticket_exp": ticket_exp,
-    }
 
 
-# ------------------------------------------------------------
-# SHG XML outcome/goal extraction helpers (fase1.0 minimal)
-# ------------------------------------------------------------
-
-def _find_section_by_code(root: ET.Element, section_code: str) -> ET.Element | None:
-    for sec in root.findall(".//cda:section", NS):
-        code_el = sec.find("cda:code", NS)
-        if code_el is not None and (code_el.get("code") or "").strip() == section_code:
-            return sec
-    return None
-
-
-def _find_observation_in_section(
-    section: ET.Element | None,
-    observation_code: str,
-) -> ET.Element | None:
-    if section is None:
-        return None
-    for obs in section.findall(".//cda:observation", NS):
-        code_el = obs.find("cda:code", NS)
-        if code_el is not None and (code_el.get("code") or "").strip() == observation_code:
-            return obs
-    return None
-
-
-def _get_observation_value_code(
-    root: ET.Element,
-    section_code: str,
-    observation_code: str,
-) -> str:
-    sec = _find_section_by_code(root, section_code)
-    obs = _find_observation_in_section(sec, observation_code)
-    if obs is None:
-        return ""
-    value_el = obs.find("cda:value", NS)
-    if value_el is None:
-        return ""
-    return (value_el.get("code") or "").strip()
-
-
-def _get_observation_value_text(
-    root: ET.Element,
-    section_code: str,
-    observation_code: str,
-) -> str:
-    sec = _find_section_by_code(root, section_code)
-    obs = _find_observation_in_section(sec, observation_code)
-    if obs is None:
-        return ""
-    value_el = obs.find("cda:value", NS)
-    if value_el is None:
-        return ""
-    return (value_el.get("value") or "").strip()
-
-
-def _get_pq_float_or_none(
-    root: ET.Element,
-    section_code: str,
-    observation_code: str,
-) -> float | None:
-    raw = _get_observation_value_text(root, section_code, observation_code)
-    if raw == "":
-        return None
-    try:
-        return float(raw)
-    except Exception:
-        return None
-
-
-def _robust_bool_from_value_code(code: str) -> bool:
-    return (code or "").strip() in {"1", "true", "True"}
-
-
-def extract_initial_goals(root: ET.Element) -> dict[str, bool]:
-    def flag(code: str) -> bool:
-        return _robust_bool_from_value_code(
-            _get_observation_value_code(root, "90030", code)
-        )
-
-    goals: dict[str, bool] = {}
-    goals["腹囲・体重の改善"] = flag("1021001053")
-    goals["生活習慣の改善(食習慣)"] = flag("1021001054")
-    goals["生活習慣の改善(運動習慣)"] = flag("1021001055")
-    goals["生活習慣の改善(喫煙習慣)"] = flag("1021001056")
-    goals["生活習慣の改善(休養習慣)"] = flag("1021001057")
-    goals["生活習慣の改善(その他)"] = flag("1021001058")
-    return goals
-
-
-def extract_final_outcomes(root: ET.Element) -> tuple[dict[str, bool], int, str]:
-    belly_code = _get_observation_value_code(root, "90060", "1042001044")
-    belly_ok = belly_code in {"1", "2"}
-    belly_text_map = {"1": "1cm/1kg", "2": "2cm/2kg"}
-    belly_text = belly_text_map.get(belly_code, "未達成")
-
-    def ok1(code: str) -> bool:
-        return _get_observation_value_code(root, "90060", code) == "1"
-
-    outs: dict[str, bool] = {}
-    outs["腹囲・体重の改善"] = belly_ok
-    outs["生活習慣の改善(食習慣)"] = ok1("1042001042")
-    outs["生活習慣の改善(運動習慣)"] = ok1("1042001041")
-    outs["生活習慣の改善(喫煙習慣)"] = ok1("1042001043")
-    outs["生活習慣の改善(休養習慣)"] = ok1("1042001045")
-    outs["生活習慣の改善(その他の生活習慣)"] = ok1("1042001046")
-
-    total_pts_raw = _get_observation_value_text(root, "90060", "1042001060")
-    try:
-        total_pts = int(total_pts_raw or 0)
-    except Exception:
-        total_pts = 0
-
-    return outs, total_pts, belly_text
-
-
-def extract_final_measurements(root: ET.Element) -> tuple[float | None, float | None]:
-    waist_cm = _get_pq_float_or_none(root, "90060", "1042001031")
-    weight_kg = _get_pq_float_or_none(root, "90060", "1042001032")
-    return waist_cm, weight_kg
 
 # ------------------------------------------------------------
 # DB
@@ -511,6 +330,7 @@ def main() -> None:
         try:
             root = read_xml(xml_path)
             basic = extract_basic(root)
+            role = resolve_shg_role(str(basic.get("report_code") or ""))
             identity_res = build_xml_identity_from_basic(basic)
 
             identity_hash = identity_res.get("identity_hash") or ""
@@ -556,9 +376,10 @@ def main() -> None:
                     "final_weight_kg": final_weight_kg,
                 }
 
-                if bucket.get("initial") is None:
+                if role == "initial":
                     bucket["initial"] = rec
-                bucket["final"] = rec
+                elif role == "final":
+                    bucket["final"] = rec
 
             export_shg_rows.append(
                 {
@@ -567,6 +388,7 @@ def main() -> None:
                     "person_id_custom": person_id_custom,
                     "identity_hash": identity_hash,
                     "identity_reason": identity_reason,
+                    "role": role or "",
                     "insurer": basic.get("insurer", ""),
                     "symbol": basic.get("symbol", ""),
                     "number": basic.get("number", ""),
@@ -587,6 +409,7 @@ def main() -> None:
                     "person_id_custom": "",
                     "identity_hash": "",
                     "identity_reason": f"xml_parse_error: {e}",
+                    "role": "",
                     "insurer": "",
                     "symbol": "",
                     "number": "",

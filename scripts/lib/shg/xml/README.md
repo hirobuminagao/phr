@@ -1,5 +1,3 @@
-
-
 # SHG XML ライブラリ
 
 ## 目的
@@ -33,6 +31,7 @@
 
 ```text
 scripts/lib/shg/xml/
+  ├ common.py
   ├ basic.py
   ├ role.py
   ├ section_90030_initial.py
@@ -42,6 +41,14 @@ scripts/lib/shg/xml/
 ```
 
 ## 各ファイルの役割
+
+### common.py
+- XML探索の共通処理
+- namespace（NS）の定義
+- section / observation / value の探索関数
+- 値取得の共通ヘルパ（code / value / displayName / 数値変換など）
+
+※ 各sectionファイルは common.py を利用し、XML構造の探索ロジックを重複定義しない
 
 ### basic.py
 - XMLの基本情報抽出
@@ -80,6 +87,7 @@ scripts/lib/shg/xml/
 - 可能な限り「値取得」に責務を限定する
 - 600行以上の単一スクリプトを避けるため、小さい関数へ分割する
 - SHG XML 特有の処理として閉じ、安易に共通lib化しない
+- namespace（NS）およびXML探索ロジックは common.py に集約し、各sectionでは再定義しない
 
 ## 補足
 
