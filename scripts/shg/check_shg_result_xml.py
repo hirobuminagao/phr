@@ -58,7 +58,7 @@ from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import WORK_OTHER
 from scripts.lib.identity.generator import generate_identity_bundle
 from scripts.lib.shg.xml.basic import extract_basic
-from scripts.lib.shg.xml.section_90030_initial import extract_initial_goals
+from scripts.lib.shg.xml.section_90030_initial import extract_initial_goals, extract_initial_date
 from scripts.lib.shg.xml.section_90060_final import extract_final_outcomes, extract_final_measurements
 from scripts.lib.shg.xml.role import resolve_shg_role
 from scripts.lib.shg.xml.section_90070_support_summary import extract_support_summary
@@ -391,6 +391,7 @@ def main() -> None:
             db_row = shg_result_map.get(str(identity_hash), {}) if identity_hash else {}
 
             initial_goals = extract_initial_goals(root)
+            initial_date = extract_initial_date(root)
             final_outs, outcome_pts, belly_text = extract_final_outcomes(root)
             final_waist_cm, final_weight_kg = extract_final_measurements(root)
             support_summary = extract_support_summary(root)
@@ -413,6 +414,8 @@ def main() -> None:
                 rec = {
                     "xml_file": xml_path.name,
                     "basic": basic,
+                    "guidance": guidance,
+                    "initial_date": initial_date,
                     "initial_goals": initial_goals,
                     "final_outs": final_outs,
                     "outcome_pts": outcome_pts,
@@ -436,6 +439,9 @@ def main() -> None:
                     "identity_hash": identity_hash,
                     "identity_reason": identity_reason,
                     "role": role or "",
+                    "report_code": basic.get("report_code", ""),
+                    "initial_date": initial_date or "",
+                    "final_date": basic.get("final_date", ""),
                     "insurer": basic.get("insurer", ""),
                     "symbol": basic.get("symbol", ""),
                     "number": basic.get("number", ""),
@@ -479,6 +485,28 @@ def main() -> None:
         initial = info.get("initial")
         final = info.get("final")
         db_info = info.get("db_row") or {}
+        initial_guidance = (initial or {}).get("guidance") or {}
+        final_guidance = (final or {}).get("guidance") or {}
+        level_code = (
+            final_guidance.get("guidance_type_code")
+            or initial_guidance.get("guidance_type_code")
+            or ""
+        )
+        level_text = (
+            final_guidance.get("guidance_type_name")
+            or initial_guidance.get("guidance_type_name")
+            or ""
+        )
+
+        initial_date_value = (
+            (final or {}).get("initial_date")
+            or (initial or {}).get("initial_date")
+            or ""
+        )
+        final_date_value = (
+            ((final or {}).get("basic") or {}).get("final_date")
+            or ""
+        )
 
         init_goals = (initial or {}).get("initial_goals") or {}
         final_outs = (final or {}).get("final_outs") or {}
@@ -511,7 +539,6 @@ def main() -> None:
         total_minutes_90040 = int(process_events.get("_total_minutes") or 0)
 
         total_points_90070 = int(support_summary.get("_total_points") or 0)
-        grand_total_points = int(support_summary.get("_grand_total") or 0)
         total_minutes_90070 = int(sum(support_durations.values()) if support_durations else 0)
         has_90070_values = any(
             [
@@ -535,6 +562,8 @@ def main() -> None:
             process_total_points = 0
             process_total_minutes = 0
 
+        grand_total_points = int(outcome_pts or 0) + int(process_total_points or 0)
+
         export_outcome_rows.append(
             {
                 "person_key": info.get("person_key", ""),
@@ -545,6 +574,10 @@ def main() -> None:
                 "initial_xml": (initial or {}).get("xml_file", ""),
                 "final_xml": (final or {}).get("xml_file", ""),
                 "initial_exists": "Yes" if initial else "No",
+                "level_code": level_code,
+                "level_text": level_text,
+                "initial_date": initial_date_value,
+                "final_date": final_date_value,
                 "健診時_腹囲(cm)": db_info.get("exam_waist_cm", ""),
                 "最終_腹囲(cm)": final_waist_cm if final_waist_cm is not None else "",
                 "健診時_体重(kg)": db_info.get("exam_weight_kg", ""),
@@ -584,6 +617,7 @@ def main() -> None:
                 "proc_電話_回数": support_counts.get("電話", 0),
                 "proc_電話_分": support_durations.get("電話", 0),
                 "proc_電子メール等_回数": support_counts.get("電子メール等", 0),
+                "proc_電子メール等_分": 0,
             }
         )
 
