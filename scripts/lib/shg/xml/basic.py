@@ -1,8 +1,6 @@
-
-
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional, Tuple
 import xml.etree.ElementTree as ET
 
 from scripts.lib.shg.xml.common import NS, text_or
@@ -16,44 +14,50 @@ OID_NUMBER = "1.2.392.200119.6.205"
 
 
 
-def get_id_extension_by_oid(root: ET.Element, oid: str) -> str:
+def get_id_extension_by_oid(root: ET.Element, oid: str) -> Optional[str]:
     """<id root="OID" extension="..."/> の extension を取得する。"""
     for el in root.findall(".//cda:id", NS):
         if (el.get("root") or "").strip() == oid:
             return (el.get("extension") or "").strip()
-    return ""
+    return None
 
 
-def get_report_code(root: ET.Element) -> str:
+def get_report_code(root: ET.Element) -> Optional[str]:
     """文書種別系コードではなく、報告区分コードを返す。"""
     for el in root.findall(".//cda:code", NS):
         if (el.get("codeSystem") or "").strip() == "1.2.392.200119.6.1001":
             return (el.get("code") or "").strip()
-    return ""
+    return None
 
 
-def get_name(root: ET.Element) -> str:
-    return text_or(root.find(".//cda:recordTarget//cda:patient/cda:name", NS))
+def get_name(root: ET.Element) -> Optional[str]:
+    val = text_or(root.find(".//cda:recordTarget//cda:patient/cda:name", NS))
+    return val if val else None
 
 
-def get_gender(root: ET.Element) -> str:
+def get_gender(root: ET.Element) -> Optional[str]:
     el = root.find(".//cda:recordTarget//cda:patient/cda:administrativeGenderCode", NS)
     if el is None:
-        return ""
-    return (el.get("code") or "").strip()
+        return None
+    val = (el.get("code") or "").strip()
+    return val if val else None
 
 
-def get_birth(root: ET.Element) -> str:
+def get_birth(root: ET.Element) -> Optional[str]:
     el = root.find(".//cda:recordTarget//cda:patient/cda:birthTime", NS)
     if el is None:
-        return ""
-    return (el.get("value") or "").strip()
+        return None
+    val = (el.get("value") or "").strip()
+    return val if val else None
 
 
-def get_ticket_info(root: ET.Element) -> tuple[str, str]:
-    """利用券（functionCode=2）の番号と有効期限を返す。"""
-    ticket_no = ""
-    ticket_exp = ""
+def get_ticket_info(root: ET.Element) -> Tuple[Optional[str], Optional[str]]:
+    """利用券（functionCode=2）の番号と有効期限を返す。
+
+    SHG XML では実装差異がありうるため、authorization を起点に複数パターンを許容する。
+    """
+    ticket_no = None
+    ticket_exp = None
 
     for auth in root.findall(".//cda:authorization", NS):
         code_el = auth.find(".//cda:functionCode", NS)
@@ -62,6 +66,7 @@ def get_ticket_info(root: ET.Element) -> tuple[str, str]:
         if (code_el.get("code") or "").strip() != "2":
             continue
 
+        # 1) もっとも素直な id / high
         id_el = auth.find(".//cda:id", NS)
         if id_el is not None:
             ticket_no = (id_el.get("extension") or "").strip()
@@ -69,6 +74,22 @@ def get_ticket_info(root: ET.Element) -> tuple[str, str]:
         exp_el = auth.find(".//cda:effectiveTime/cda:high", NS)
         if exp_el is not None:
             ticket_exp = (exp_el.get("value") or "").strip()
+
+        # 2) 代替パターン: descendant を広めに走査
+        if ticket_no is None:
+            for cand in auth.findall(".//cda:id", NS):
+                ext = (cand.get("extension") or "").strip()
+                if ext:
+                    ticket_no = ext
+                    break
+
+        if ticket_exp is None:
+            for cand in auth.findall(".//cda:high", NS):
+                val = (cand.get("value") or "").strip()
+                if val:
+                    ticket_exp = val
+                    break
+
         break
 
     return ticket_no, ticket_exp

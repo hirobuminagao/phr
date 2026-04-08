@@ -89,6 +89,16 @@ scripts/lib/shg/xml/
 - SHG XML 特有の処理として閉じ、安易に共通lib化しない
 - namespace（NS）およびXML探索ロジックは common.py に集約し、各sectionでは再定義しない
 
+- XML構造は完全ではない前提で扱う
+  - セクションが存在しない場合がある
+  - observation / value が欠損する場合がある
+  - 欠損は例外ではなく正常系とする
+  - 取得できない場合は None を返却する
+
+- OIDは仕様上の意味定義として扱う
+  - XML抽出時は code 値を基準に判定する
+  - codeSystem(OID)は仕様の文脈理解に使用し、分岐条件には原則使わない
+
 ## 補足
 
 - 本ディレクトリは ADR-0018 に基づく
