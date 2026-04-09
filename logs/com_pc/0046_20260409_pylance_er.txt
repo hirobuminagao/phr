@@ -1,0 +1,153 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "2 個の位置引数が必要です",
+	"source": "Pylance",
+	"startLineNumber": 54,
+	"startColumn": 60,
+	"endLineNumber": 54,
+	"endColumn": 72
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"section_code\", \"observation_code\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 56,
+	"startColumn": 13,
+	"endLineNumber": 56,
+	"endColumn": 37
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "2 個の位置引数が必要です",
+	"source": "Pylance",
+	"startLineNumber": 67,
+	"startColumn": 59,
+	"endLineNumber": 67,
+	"endColumn": 83
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "2 個の位置引数が必要です",
+	"source": "Pylance",
+	"startLineNumber": 84,
+	"startColumn": 58,
+	"endLineNumber": 84,
+	"endColumn": 70
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "2 個の位置引数が必要です",
+	"source": "Pylance",
+	"startLineNumber": 93,
+	"startColumn": 58,
+	"endLineNumber": 93,
+	"endColumn": 62
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "2 個の位置引数が必要です",
+	"source": "Pylance",
+	"startLineNumber": 107,
+	"startColumn": 60,
+	"endLineNumber": 107,
+	"endColumn": 72
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"section_code\", \"observation_code\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 109,
+	"startColumn": 13,
+	"endLineNumber": 109,
+	"endColumn": 37
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/section_90060_final.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "2 個の位置引数が必要です",
+	"source": "Pylance",
+	"startLineNumber": 126,
+	"startColumn": 58,
+	"endLineNumber": 126,
+	"endColumn": 62
+}]
