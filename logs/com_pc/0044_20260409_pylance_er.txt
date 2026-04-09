@@ -1,0 +1,153 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 208,
+	"startColumn": 24,
+	"endLineNumber": 208,
+	"endColumn": 34
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 208,
+	"startColumn": 24,
+	"endLineNumber": 208,
+	"endColumn": 34
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 208,
+	"startColumn": 44,
+	"endLineNumber": 208,
+	"endColumn": 55
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 208,
+	"startColumn": 44,
+	"endLineNumber": 208,
+	"endColumn": 55
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 209,
+	"startColumn": 25,
+	"endLineNumber": 209,
+	"endColumn": 36
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 209,
+	"startColumn": 25,
+	"endLineNumber": 209,
+	"endColumn": 36
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 209,
+	"startColumn": 46,
+	"endLineNumber": 209,
+	"endColumn": 58
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/shg/xml/outcome_checks.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"float | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToFloat\" のパラメーター \"x\" に割り当てることはできません\n  型 \"float | None\" は型 \"ConvertibleToFloat\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToFloat\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsFloat\" と互換性がありません\n        \"__float__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 209,
+	"startColumn": 46,
+	"endLineNumber": 209,
+	"endColumn": 58
+}]
