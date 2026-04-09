@@ -194,24 +194,31 @@ def collect_input_xml_paths(input_root_dir: Path, work_root: Path) -> list[Path]
     """input配下から処理対象XMLを集める。
 
     対応:
-    - 展開済みディレクトリ
-    - ZIPアーカイブ
+    - input 直下に置かれた ZIPアーカイブ
+    - input 直下またはその配下に置かれた展開済みXML
 
     ZIPは work_root 配下へ展開してから DATA/*.xml を収集する。
     """
     xml_paths: list[Path] = []
 
-    insurer_dirs = sorted([p for p in input_root_dir.iterdir() if p.is_dir()])
-    for insurer_dir in insurer_dirs:
-        zip_files = sorted(insurer_dir.rglob("*.zip"))
-        if zip_files:
-            for zip_path in zip_files:
-                extracted_dir = extract_input_zip(zip_path, work_root)
-                xml_paths.extend(scan_xmls(extracted_dir))
-        else:
-            xml_paths.extend(scan_xmls(insurer_dir))
+    zip_files = sorted(input_root_dir.rglob("*.zip"))
+    for zip_path in zip_files:
+        extracted_dir = extract_input_zip(zip_path, work_root)
+        xml_paths.extend(scan_xmls(extracted_dir))
 
-    return xml_paths
+    xml_paths.extend(scan_xmls(input_root_dir))
+
+    # 重複排除（ZIP展開物と元配置の重複、rglob由来の重複に備える）
+    unique_paths: list[Path] = []
+    seen: set[str] = set()
+    for p in xml_paths:
+        key = str(p.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_paths.append(p)
+
+    return unique_paths
 
 
 def make_person_key(
@@ -388,12 +395,6 @@ def main() -> None:
 
     shg_result_map = load_shg_result_from_mysql()
 
-    # input は input/<insurer_number>/DATA/*.xml を前提とする
-    insurer_dirs = sorted([p for p in input_root_dir.iterdir() if p.is_dir()])
-    if not insurer_dirs:
-        print("[WARN] input insurer directory not found")
-        print(f"[INFO] expected input root={input_root_dir}")
-        return
 
     from datetime import datetime
     run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -788,7 +789,6 @@ def main() -> None:
 
     print("[OK] fase1.0 skeleton ready")
     print(f"[INFO] input_root_dir={input_root_dir}")
-    print(f"[INFO] insurer_dirs={len(insurer_dirs)}")
     print(f"[INFO] out_dir={out_dir}")
     print(f"[INFO] shg_result loaded={len(shg_result_map)}")
     print(f"[INFO] xml scanned={len(xml_paths)}")
