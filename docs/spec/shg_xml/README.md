@@ -52,8 +52,11 @@ data/hia_export_shg/
 
 ```text
 scripts/lib/shg/xml/
+  ├ common.py
+  ├ outcome_checks.py
   ├ basic.py
   ├ role.py
+  ├ section_90010_guidance_info.py
   ├ section_90030_initial.py
   ├ section_90040_support_detail.py
   ├ section_90060_final.py
@@ -62,6 +65,19 @@ scripts/lib/shg/xml/
 ```
 
 ### 各ファイルの責務
+
+#### common.py
+- XML探索の共通ヘルパ
+- namespace（NS）定義
+- section / observation / value の共通取得補助
+
+#### outcome_checks.py
+- outcome 系の加工・判定ロジック
+- XML値の抽出は行わず、抽出済み値の加工・評価のみを担当する
+- 代表例
+  - plan_goal_map / outcome_map を受け取り、一般カテゴリの矛盾判定結果を返す
+  - 腹囲体重について、計画値 / 報告判定結果 / 実測差分を突き合わせるチェックを行う
+- section_* には置かない cross-section 判定をここで扱う
 
 #### basic.py
 - XMLの基本情報抽出
@@ -76,28 +92,7 @@ scripts/lib/shg/xml/
 #### role.py
 - report_code から initial / final 判定
 
-#### section_90030_initial.py
-- 90030 初回面談情報セクションの抽出
-- 初回面談情報セクション内の目標関連項目
-- 初回面談に関する基本情報
-- initial_date の取得
-- 取得元は 90030 内の `entry / act / effectiveTime`
-- 対象 act は `codeSystem = 1.2.392.200119.6.24010`
-
-#### section_90060_final.py
-- 90060 最終評価セクションの抽出
-- 達成状況
-- アウトカムポイント
-- 最終腹囲 / 最終体重などの結果値
-
-
-#### section_90070_support_summary.py
-- 90070 支援実施内容集計セクションの抽出
-- 支援手段ごとの回数・時間の集計値
-- 90040（支援明細）の集約結果
-
-#### section_90010_guidance.py（未定義 → 追加）
-
+#### section_90010_guidance_info.py
 - 90010 保健指導情報セクションの抽出
 - 保健指導区分（積極的支援 / 動機付け支援 等）
 - OID:
@@ -106,11 +101,46 @@ scripts/lib/shg/xml/
 - 注意:
   - XML上は code 値（例: 1020000001）を参照し、OIDは仕様上の意味定義として扱う
 
+#### section_90030_initial.py
+- 90030 初回面談情報セクションの抽出
+- 初回面談情報セクション内の目標関連項目
+- 初回面談に関する基本情報
+- initial_date の取得
+- 取得元は 90030 内の `entry / act / effectiveTime`
+- 対象 act は `codeSystem = 1.2.392.200119.6.24010`
+- 目標値の raw level 取得
+  - `extract_initial_goals(root) -> dict[str, bool]`
+  - `extract_initial_goal_levels(root) -> dict[str, Optional[int]]`
+  - 腹囲体重は `0 / 1 / 2`、他カテゴリは `0 / 1` を想定する
+
+#### section_90040_support_detail.py
+- 90040 支援明細セクションの抽出
+- 支援イベント単位の実施情報
+- mode_code / date / minutes / points の取得
+- `_total_points` / `_total_minutes` の集計
+
+#### section_90060_final.py
+- 90060 最終評価セクションの抽出
+- 達成状況
+- 達成状況の raw level 取得
+  - `extract_final_outcomes(root) -> tuple[dict[str, bool], int, str]`
+  - `extract_final_outcome_levels(root) -> dict[str, Optional[int]]`
+- アウトカムポイント
+- 最終腹囲 / 最終体重などの結果値
+  - `extract_final_measurements(root) -> tuple[Optional[float], Optional[float]]`
+
+#### section_90070_support_summary.py
+- 90070 支援実施内容集計セクションの抽出
+- 支援手段ごとの回数・時間の集計値
+- 90040（支援明細）の集約結果
+
 ## 実行スクリプトとの責務分離
 
 ### XML層（lib/shg/xml）
-- XMLから値を「取得するだけ」
-- 業務ロジックは持たない（最小限に留める）
+- section_* は XMLから値を「取得するだけ」
+- basic / role / section_* は XML構造に責務を寄せる
+- outcome_checks.py は抽出済み値を受けた加工・判定のみを担当する
+- person単位集約やCSV列マッピングは持たない
 
 ### orchestration層（check_shg_result_xml.py）
 - XML列挙
@@ -149,6 +179,13 @@ scripts/lib/shg/xml/
 - 「値取得」と「値の利用」を分離する
 - 600行以上の単一スクリプトを避ける
 - 将来的な仕様変更に耐える構造とする
+- 判定ロジックは section_* に寄せすぎない
+- XML抽出と無関係な加工・判定は outcome_checks.py のような補助ライブラリへ分離する
+- 腹囲体重のチェックは他カテゴリと分けて扱う
+  - 他カテゴリは「計画あり/なし」と「達成/未達成」の整合を主に見る
+  - 腹囲体重は「計画値」「報告判定結果」「実測差分」の三点で見る
+  - 優先順位は「実測差分」→「計画値 fallback」とする
+- 現フェーズでは改修途中のため `xml/` 配下は平置きとし、ファイル数増加時に責務別の階層化を検討する
 
 ## 現状ギャップ（2026-04時点）
 
@@ -179,7 +216,9 @@ scripts/lib/shg/xml/
 - 90010セクションがspec未定義だった（対応済）
 - basicでの券種優先ロジックが未定義だった（対応済）
 - initial_date / final_date の取得責務が未定義だった（対応済）
+- outcome_checks.py の責務分離がspec未反映だった（対応済）
 - outcomeの評価前提未定義
+- 腹囲体重チェックの優先順位（実測差分優先 / 計画値 fallback）が未反映
 
 → 現状、specは「完全な一次情報ではなく、途中状態」である
 
@@ -272,6 +311,27 @@ grand_total_points は XMLの集計済み値をそのまま使用せず、チェ
 - outcome_total_points は 90060（最終評価）由来
 - process_total_points は process_source に応じて 90040 または 90070_evn 由来
 - XML内の集計済み合計値との差異確認を目的とする（検算用）
+
+### 腹囲体重チェックの方針
+
+腹囲体重は、他カテゴリの単純な bool 判定とは分けて扱う。
+
+チェック優先順位は以下とする：
+
+1. 実測差分で判定可能なら、報告判定結果と実測差分の結果が一致するかを見る
+2. 1 が計算不能な場合のみ、報告判定結果と計画値が一致するかを見る
+
+判定に使用する値は以下とする：
+- 計画値: `section_90030_initial.extract_initial_goal_levels`
+- 報告判定結果: `section_90060_final.extract_final_outcome_levels`
+- 実測値: `section_90060_final.extract_final_measurements`
+  - 健診時腹囲 / 健診時体重は DB (`shg_result`) 側の値を使用する
+  - 最終腹囲 / 最終体重は XML 90060 側の実測値を使用する
+
+補足：
+- 本CSVは「正しく記帳されているか」のチェックを目的とする
+- そのため XML内の報告判定結果をそのまま信用せず、実測値から再確認できる場合はそちらを優先する
+- 計画なし → 報告判定結果 1cm/1kg → 実測差分 2cm/2kg のような場合は、XML修正対象として扱う
 
 ### proc_電子メール等_分 の扱い
 

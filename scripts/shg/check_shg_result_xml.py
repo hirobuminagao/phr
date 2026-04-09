@@ -58,12 +58,21 @@ from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import WORK_OTHER
 from scripts.lib.identity.generator import generate_identity_bundle
 from scripts.lib.shg.xml.basic import extract_basic
-from scripts.lib.shg.xml.section_90030_initial import extract_initial_goals, extract_initial_date
-from scripts.lib.shg.xml.section_90060_final import extract_final_outcomes, extract_final_measurements
+from scripts.lib.shg.xml.section_90030_initial import (
+    extract_initial_goals,
+    extract_initial_date,
+    extract_initial_goal_levels,
+)
+from scripts.lib.shg.xml.section_90060_final import (
+    extract_final_outcomes,
+    extract_final_outcome_levels,
+    extract_final_measurements,
+)
 from scripts.lib.shg.xml.role import resolve_shg_role
 from scripts.lib.shg.xml.section_90070_support_summary import extract_support_summary
 from scripts.lib.shg.xml.section_90040_support_detail import extract_process_events
 from scripts.lib.shg.xml.section_90010_guidance_info import extract_90010_guidance
+from scripts.lib.shg.xml.outcome_checks import build_conflict_result, build_waist_weight_check_result
 
 # ------------------------------------------------------------
 # XML namespace / OID constants (fase1.0)
@@ -392,7 +401,9 @@ def main() -> None:
 
             initial_goals = extract_initial_goals(root)
             initial_date = extract_initial_date(root)
+            initial_goal_levels = extract_initial_goal_levels(root)
             final_outs, outcome_pts, belly_text = extract_final_outcomes(root)
+            final_outcome_levels = extract_final_outcome_levels(root)
             final_waist_cm, final_weight_kg = extract_final_measurements(root)
             support_summary = extract_support_summary(root)
             process_events = extract_process_events(root)
@@ -417,7 +428,9 @@ def main() -> None:
                     "guidance": guidance,
                     "initial_date": initial_date,
                     "initial_goals": initial_goals,
+                    "initial_goal_levels": initial_goal_levels,
                     "final_outs": final_outs,
+                    "final_outcome_levels": final_outcome_levels,
                     "outcome_pts": outcome_pts,
                     "belly_text": belly_text,
                     "final_waist_cm": final_waist_cm,
@@ -509,7 +522,9 @@ def main() -> None:
         )
 
         init_goals = (initial or {}).get("initial_goals") or {}
+        initial_goal_levels = (initial or {}).get("initial_goal_levels") or {}
         final_outs = (final or {}).get("final_outs") or {}
+        final_outcome_levels = (final or {}).get("final_outcome_levels") or {}
         plan_goal_map = {
             "腹囲・体重の改善": init_goals.get("腹囲・体重の改善", False),
             "生活習慣の改善(食習慣)": init_goals.get("生活習慣の改善(食習慣)", False),
@@ -526,10 +541,41 @@ def main() -> None:
             "生活習慣の改善(休養習慣)": final_outs.get("生活習慣の改善(休養習慣)", False),
             "生活習慣の改善(その他)": final_outs.get("生活習慣の改善(その他の生活習慣)", False),
         }
+
         outcome_pts = (final or {}).get("outcome_pts") or 0
         belly_text = (final or {}).get("belly_text") or ""
         final_waist_cm = (final or {}).get("final_waist_cm")
         final_weight_kg = (final or {}).get("final_weight_kg")
+
+        general_conflict_result = build_conflict_result(
+            plan_goal_map=plan_goal_map,
+            outcome_map=outcome_map,
+            has_final=bool(final),
+        )
+
+        waist_weight_check_result = build_waist_weight_check_result(
+            plan_level=initial_goal_levels.get("腹囲・体重の改善"),
+            report_level=final_outcome_levels.get("腹囲・体重の改善"),
+            exam_waist_cm=db_info.get("exam_waist_cm", ""),
+            final_waist_cm=final_waist_cm,
+            exam_weight_kg=db_info.get("exam_weight_kg", ""),
+            final_weight_kg=final_weight_kg,
+            has_final=bool(final),
+        )
+
+        conflict_items: list[str] = []
+        if waist_weight_check_result.get("summary") == "NG":
+            conflict_items.append("腹囲体重")
+        for short_name in ["食", "運動", "喫煙", "休養", "その他"]:
+            if general_conflict_result.get(short_name) == "NG":
+                conflict_items.append(short_name)
+
+        if not final:
+            overall_conflict_summary = ""
+        elif conflict_items:
+            overall_conflict_summary = f"Yes: {', '.join(conflict_items)}"
+        else:
+            overall_conflict_summary = "No"
         support_summary = (final or {}).get("support_summary") or {}
         process_events = (final or {}).get("process_events") or {}
         support_counts = support_summary.get("counts") or {}
@@ -578,6 +624,13 @@ def main() -> None:
                 "level_text": level_text,
                 "initial_date": initial_date_value,
                 "final_date": final_date_value,
+                "矛盾(目標なし達成あり)": overall_conflict_summary,
+                "conflict_腹囲体重_XML判定": waist_weight_check_result.get("summary", ""),
+                "conflict_食_XML判定": general_conflict_result.get("食", ""),
+                "conflict_運動_XML判定": general_conflict_result.get("運動", ""),
+                "conflict_喫煙_XML判定": general_conflict_result.get("喫煙", ""),
+                "conflict_休養_XML判定": general_conflict_result.get("休養", ""),
+                "conflict_その他_XML判定": general_conflict_result.get("その他", ""),
                 "健診時_腹囲(cm)": db_info.get("exam_waist_cm", ""),
                 "最終_腹囲(cm)": final_waist_cm if final_waist_cm is not None else "",
                 "健診時_体重(kg)": db_info.get("exam_weight_kg", ""),

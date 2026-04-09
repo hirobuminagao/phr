@@ -23,7 +23,7 @@
 - person単位集約
 - CSV出力
 - DB参照
-- 判定ロジックの集約
+- XML抽出と無関係な orchestration 固有ロジックの集約
 
 これらは `scripts/shg/check_shg_result_xml.py` 側の orchestration 層で扱う。
 
@@ -32,6 +32,7 @@
 ```text
 scripts/lib/shg/xml/
   ├ common.py
+  ├ outcome_checks.py
   ├ basic.py
   ├ role.py
   ├ section_90010_guidance_info.py
@@ -51,6 +52,14 @@ scripts/lib/shg/xml/
 - 値取得の共通ヘルパ（code / value / displayName / 数値変換など）
 
 ※ 各sectionファイルは common.py を利用し、XML構造の探索ロジックを重複定義しない
+
+### outcome_checks.py
+- outcome 系の加工・判定ロジック
+- XML値の抽出は行わず、抽出済み値の加工・評価だけを担当する
+- 代表例
+  - plan_goal_map / outcome_map を受け取り、矛盾判定結果を返す
+  - 腹囲体重のような「計画値 / 報告判定結果 / 実測差分」を突き合わせるチェックを行う
+- section_* には置かない cross-section 判定をここで扱う
 
 ### basic.py
 - XMLの基本情報抽出
@@ -73,11 +82,16 @@ scripts/lib/shg/xml/
 
 ### section_90030_initial.py
 - 90030 初回面談情報セクションの抽出
-- 目標
+- 目標（bool）
+- 目標の raw level（0 / 1 / 2 など）
 - 初回面談に関する基本情報
 - 初回面接実施日（initial_date）の取得
   - 90030 内の `entry / act / effectiveTime` から取得
   - `act/codeSystem = 1.2.392.200119.6.24010` を対象とする
+
+- 提供関数
+  - extract_initial_goals(root) -> dict[str, bool]
+  - extract_initial_goal_levels(root) -> dict[str, Optional[int]]
 
 ### section_90040_support_detail.py
 - 90040 支援明細セクションの抽出
@@ -87,9 +101,15 @@ scripts/lib/shg/xml/
 
 ### section_90060_final.py
 - 90060 最終評価セクションの抽出
-- 達成状況
+- 達成状況（bool）
+- 達成状況の raw level（0 / 1 / 2 / 9 など）
 - アウトカムポイント
 - 最終腹囲 / 最終体重などの結果値
+
+- 提供関数
+  - extract_final_outcomes(root) -> tuple[dict[str, bool], int, str]
+  - extract_final_outcome_levels(root) -> dict[str, Optional[int]]
+  - extract_final_measurements(root) -> tuple[Optional[float], Optional[float]]
 
 ### section_90070_support_summary.py
 - 90070 支援実施内容セクションの抽出
@@ -128,13 +148,30 @@ scripts/lib/shg/xml/
   - 値の優先順位（initial / final）や再計算ロジックは持たない
   - CSV項目とのマッピングや business rule は上位層で実装する
 
+- 判定ロジックの置き場所
+  - section_* は XMLからの値抽出に集中する
+  - 単一sectionで完結しない加工・判定は `outcome_checks.py` で扱う
+  - 例：goal / achieve の矛盾判定、腹囲体重の整合チェック
+  - ただし person単位集約や CSV列への流し込みは orchestration 層の責務とする
+
 - 日付項目の扱い
   - initial_date は 90030 セクションから取得する
   - final_date は basic 情報（report_code=22）から取得する
     - `documentationOf / serviceEvent / effectiveTime` を使用する
   - sectionごとに責務を分け、日付も例外扱いしない
 
+- 腹囲体重チェックの扱い
+  - 腹囲体重は他カテゴリの単純な bool 判定と分けて扱う
+  - 優先順位は「実測差分」→「計画値 fallback」とする
+  - 報告判定結果と実測差分が計算可能なら、その一致可否を優先して判定する
+  - 実測差分が計算不能な場合のみ、報告判定結果と計画値の一致可否を見る
+  - 判定に使用する値は以下とする
+    - 計画値: section_90030_initial.extract_initial_goal_levels
+    - 報告判定結果: section_90060_final.extract_final_outcome_levels
+    - 実測値: section_90060_final.extract_final_measurements
+
 ## 補足
 
 - 本ディレクトリは ADR-0018 に基づく
 - 詳細仕様は `docs/spec/shg_xml/README.md` を参照する
+- 現フェーズでは改修途中のため `xml/` 配下は平置きとし、ファイル数増加時に責務別の階層化を検討する

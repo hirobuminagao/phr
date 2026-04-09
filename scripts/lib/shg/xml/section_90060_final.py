@@ -13,10 +13,8 @@ CDA Section 90060（最終評価 / アウトカム）抽出
 
 主関数:
 - extract_final_outcomes(root) -> tuple[dict[str, bool], int, str]
+- extract_final_outcome_levels(root) -> dict[str, Optional[int]]
 - extract_final_measurements(root) -> tuple[Optional[float], Optional[float]]
-
-互換関数:
-- extract_final_outcome(root) -> dict
 """
 
 from typing import Optional, Dict
@@ -116,6 +114,35 @@ def extract_final_outcomes(root: ET.Element) -> tuple[Dict[str, bool], int, str]
         total_pts = 0
 
     return outs, total_pts, belly_text
+
+
+def extract_final_outcome_levels(root: ET.Element) -> Dict[str, Optional[int]]:
+    """90060 最終評価セクションから結果値の raw level を抽出する。
+
+    返り値は XML に記載された code 値をそのまま int 化したもの。
+    例:
+    - 腹囲・体重の改善: 0 / 1 / 2
+    - 食 / 運動 / 喫煙 / 休養 / その他: 0 / 1 / 9 など
+    """
+
+    def level(code: str) -> Optional[int]:
+        raw = get_observation_value_raw(root, "90060", code)
+        raw = (raw or "").strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except Exception:
+            return None
+
+    levels: Dict[str, Optional[int]] = {}
+    levels["腹囲・体重の改善"] = level("1042001044")
+    levels["生活習慣の改善(食習慣)"] = level("1042001042")
+    levels["生活習慣の改善(運動習慣)"] = level("1042001041")
+    levels["生活習慣の改善(喫煙習慣)"] = level("1042001043")
+    levels["生活習慣の改善(休養習慣)"] = level("1042001045")
+    levels["生活習慣の改善(その他の生活習慣)"] = level("1042001046")
+    return levels
 
 
 def extract_final_measurements(root: ET.Element) -> tuple[Optional[float], Optional[float]]:

@@ -7,7 +7,12 @@ from scripts.lib.shg.xml.common import NS, get_observation_value_code
 
 
 def _robust_bool_from_value_code(code: str) -> bool:
-    return (code or "").strip() in {"1", "true", "True"}
+    """計画系コードを bool 的に扱う。
+
+    90030 では腹囲体重が 0/1/2 を取りうるため、
+    `1` だけでなく `2` も「計画あり」とみなす。
+    """
+    return (code or "").strip() in {"1", "2", "true", "True"}
 
 
 def extract_initial_date(root: ET.Element) -> Optional[str]:
@@ -34,6 +39,35 @@ def extract_initial_date(root: ET.Element) -> Optional[str]:
             return val if val else None
 
     return None
+
+
+def extract_initial_goal_levels(root: ET.Element) -> dict[str, Optional[int]]:
+    """90030 初回面談情報セクションから計画値の raw level を抽出する。
+
+    返り値は XML に記載された code 値をそのまま int 化したもの。
+    例:
+    - 腹囲・体重の改善: 0 / 1 / 2
+    - 食 / 運動 / 喫煙 / 休養 / その他: 0 / 1
+    """
+
+    def level(code: str) -> Optional[int]:
+        raw = get_observation_value_code(root, "90030", code)
+        raw = (raw or "").strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except Exception:
+            return None
+
+    levels: dict[str, Optional[int]] = {}
+    levels["腹囲・体重の改善"] = level("1021001053")
+    levels["生活習慣の改善(食習慣)"] = level("1021001054")
+    levels["生活習慣の改善(運動習慣)"] = level("1021001055")
+    levels["生活習慣の改善(喫煙習慣)"] = level("1021001056")
+    levels["生活習慣の改善(休養習慣)"] = level("1021001057")
+    levels["生活習慣の改善(その他)"] = level("1021001058")
+    return levels
 
 
 def extract_initial_goals(root: ET.Element) -> dict[str, bool]:
