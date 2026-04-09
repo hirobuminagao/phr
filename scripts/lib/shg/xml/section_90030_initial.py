@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 import xml.etree.ElementTree as ET
 
-from scripts.lib.shg.xml.common import NS, get_observation_value_code
+from scripts.lib.shg.xml.common import NS, get_observation_value_code, get_observation_value_raw
 
 
 def _robust_bool_from_value_code(code: str) -> bool:
@@ -39,6 +39,32 @@ def extract_initial_date(root: ET.Element) -> Optional[str]:
             return val if val else None
 
     return None
+
+
+def extract_initial_interview_mode(root: ET.Element) -> dict[str, str]:
+    """90030 から初回面談方式を取得する。
+
+    対象:
+    - observation code: 1022000012
+    - codeSystem: 1.2.392.200119.6.24010
+
+    返り値:
+    - {"code": "...", "display": "..."}
+    - 取得できない場合は空文字を返す
+    """
+    code = (get_observation_value_raw(root, "90030", "1022000012") or "").strip()
+    display_map = {
+        "1": "個別支援（対面）",
+        "2": "個別支援（遠隔）",
+        "3": "グループ支援（対面）",
+        "4": "グループ支援（遠隔）",
+        "5": "電話",
+        "6": "電子メール等",
+    }
+    return {
+        "code": code,
+        "display": display_map.get(code, ""),
+    }
 
 
 def extract_initial_goal_levels(root: ET.Element) -> dict[str, Optional[int]]:

@@ -62,6 +62,7 @@ from scripts.lib.shg.xml.section_90030_initial import (
     extract_initial_goals,
     extract_initial_date,
     extract_initial_goal_levels,
+    extract_initial_interview_mode,
 )
 from scripts.lib.shg.xml.section_90060_final import (
     extract_final_outcomes,
@@ -72,7 +73,11 @@ from scripts.lib.shg.xml.role import resolve_shg_role
 from scripts.lib.shg.xml.section_90070_support_summary import extract_support_summary
 from scripts.lib.shg.xml.section_90040_support_detail import extract_process_events
 from scripts.lib.shg.xml.section_90010_guidance_info import extract_90010_guidance
-from scripts.lib.shg.xml.outcome_checks import build_conflict_result, build_waist_weight_check_result
+from scripts.lib.shg.xml.outcome_checks import (
+    build_conflict_result,
+    build_waist_weight_check_result,
+    compute_duration_days,
+)
 
 # ------------------------------------------------------------
 # XML namespace / OID constants (fase1.0)
@@ -402,6 +407,7 @@ def main() -> None:
             initial_goals = extract_initial_goals(root)
             initial_date = extract_initial_date(root)
             initial_goal_levels = extract_initial_goal_levels(root)
+            initial_interview_mode = extract_initial_interview_mode(root)
             final_outs, outcome_pts, belly_text = extract_final_outcomes(root)
             final_outcome_levels = extract_final_outcome_levels(root)
             final_waist_cm, final_weight_kg = extract_final_measurements(root)
@@ -429,6 +435,7 @@ def main() -> None:
                     "initial_date": initial_date,
                     "initial_goals": initial_goals,
                     "initial_goal_levels": initial_goal_levels,
+                    "initial_interview_mode": initial_interview_mode,
                     "final_outs": final_outs,
                     "final_outcome_levels": final_outcome_levels,
                     "outcome_pts": outcome_pts,
@@ -520,11 +527,22 @@ def main() -> None:
             ((final or {}).get("basic") or {}).get("final_date")
             or ""
         )
+        duration_days = compute_duration_days(initial_date_value, final_date_value)
+        duration_mode = "days"
+        duration_threshold = "93日以上"
+        if duration_days is None:
+            duration_verdict = ""
+        elif duration_days >= 93:
+            duration_verdict = "OK"
+        else:
+            duration_verdict = "NG"
 
         init_goals = (initial or {}).get("initial_goals") or {}
         initial_goal_levels = (initial or {}).get("initial_goal_levels") or {}
         final_outs = (final or {}).get("final_outs") or {}
         final_outcome_levels = (final or {}).get("final_outcome_levels") or {}
+        initial_interview_mode_initial = (initial or {}).get("initial_interview_mode") or {}
+        initial_interview_mode_final = (final or {}).get("initial_interview_mode") or {}
         plan_goal_map = {
             "腹囲・体重の改善": init_goals.get("腹囲・体重の改善", False),
             "生活習慣の改善(食習慣)": init_goals.get("生活習慣の改善(食習慣)", False),
@@ -620,12 +638,24 @@ def main() -> None:
                 "initial_xml": (initial or {}).get("xml_file", ""),
                 "final_xml": (final or {}).get("xml_file", ""),
                 "initial_exists": "Yes" if initial else "No",
+                "初回面談方式_初回XML_コード": initial_interview_mode_initial.get("code", ""),
+                "初回面談方式_初回XML_内容": initial_interview_mode_initial.get("display", ""),
+                "初回面談方式_最終XML_コード": initial_interview_mode_final.get("code", ""),
+                "初回面談方式_最終XML_内容": initial_interview_mode_final.get("display", ""),
                 "level_code": level_code,
                 "level_text": level_text,
                 "initial_date": initial_date_value,
                 "final_date": final_date_value,
+                "継続日数": duration_days if duration_days is not None else "",
+                "継続判定モード": duration_mode,
+                "継続しきい値": duration_threshold,
+                "継続期間_XML判定": duration_verdict,
                 "矛盾(目標なし達成あり)": overall_conflict_summary,
                 "conflict_腹囲体重_XML判定": waist_weight_check_result.get("summary", ""),
+                "腹囲体重_判定ソース": waist_weight_check_result.get("source", ""),
+                "腹囲体重_計画値": waist_weight_check_result.get("plan_level", ""),
+                "腹囲体重_報告値": waist_weight_check_result.get("report_level", ""),
+                "腹囲体重_実測判定": waist_weight_check_result.get("measured_level", ""),
                 "conflict_食_XML判定": general_conflict_result.get("食", ""),
                 "conflict_運動_XML判定": general_conflict_result.get("運動", ""),
                 "conflict_喫煙_XML判定": general_conflict_result.get("喫煙", ""),

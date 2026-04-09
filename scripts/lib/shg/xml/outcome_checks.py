@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, date
 from typing import Any, Optional
 
 # 旧CSV / 新CSV どちらでも扱えるように、短縮カテゴリ名へ正規化する。
@@ -57,6 +58,7 @@ def _pick_int(source: dict[str, Any], aliases: list[str]) -> Optional[int]:
     return None
 
 
+
 def _to_float(value: Any) -> Optional[float]:
     if value is None or value == "":
         return None
@@ -64,6 +66,41 @@ def _to_float(value: Any) -> Optional[float]:
         return float(str(value).strip())
     except Exception:
         return None
+
+
+def _parse_yyyymmdd(value: Any) -> Optional[date]:
+    """YYYYMMDD / YYYY-MM-DD / YYYY/MM/DD を date に変換する。"""
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if len(digits) != 8:
+        return None
+
+    try:
+        return datetime.strptime(digits, "%Y%m%d").date()
+    except Exception:
+        return None
+
+
+def compute_duration_days(initial_date: Any, final_date: Any) -> Optional[int]:
+    """initial_date と final_date の日数差を返す。
+
+    返り値:
+    - int: final_date - initial_date の日数差
+    - None: 日付不足 / 形式不正で計算不能
+    """
+    start_date = _parse_yyyymmdd(initial_date)
+    end_date = _parse_yyyymmdd(final_date)
+
+    if start_date is None or end_date is None:
+        return None
+
+    return (end_date - start_date).days
 
 
 # ----------------------------------------

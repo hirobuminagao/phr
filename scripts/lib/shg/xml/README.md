@@ -59,7 +59,8 @@ scripts/lib/shg/xml/
 - 代表例
   - plan_goal_map / outcome_map を受け取り、矛盾判定結果を返す
   - 腹囲体重のような「計画値 / 報告判定結果 / 実測差分」を突き合わせるチェックを行う
-- section_* には置かない cross-section 判定をここで扱う
+  - initial_date / final_date から継続日数判定を行う
+  - section_* には置かない cross-section 判定をここで扱う
 
 ### basic.py
 - XMLの基本情報抽出
@@ -88,8 +89,13 @@ scripts/lib/shg/xml/
 - 初回面接実施日（initial_date）の取得
   - 90030 内の `entry / act / effectiveTime` から取得
   - `act/codeSystem = 1.2.392.200119.6.24010` を対象とする
+- 初回面談方式の取得
+  - 対象 observation code は `1022000012`
+  - codeSystem は `1.2.392.200119.6.24010`
+  - code / display を返す
 
 - 提供関数
+  - extract_initial_interview_mode(root) -> dict[str, str]
   - extract_initial_goals(root) -> dict[str, bool]
   - extract_initial_goal_levels(root) -> dict[str, Optional[int]]
 
@@ -170,8 +176,18 @@ scripts/lib/shg/xml/
     - 報告判定結果: section_90060_final.extract_final_outcome_levels
     - 実測値: section_90060_final.extract_final_measurements
 
+- 継続判定の扱い
+  - 継続日数 = final_date - initial_date
+  - 判定基準は固定で 93日以上
+  - 動機づけ支援 / 積極的支援 / 動機づけ支援相当を区別せず同一ルールで判定する
+  - calendar（月数）ベースの判定は採用しない
+  - ライブラリ側では日数計算のみを提供する
+
 ## 補足
 
 - 本ディレクトリは ADR-0018 に基づく
 - 詳細仕様は `docs/spec/shg_xml/README.md` を参照する
+- 継続判定はライブラリ側では「日数計算のみ」を提供する
+  - 判定結果（OK/NG）への変換やCSV列へのマッピングは orchestration 層で行う
+  - 実装関数は `outcome_checks.compute_duration_days` を想定する
 - 現フェーズでは改修途中のため `xml/` 配下は平置きとし、ファイル数増加時に責務別の階層化を検討する

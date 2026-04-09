@@ -77,6 +77,7 @@ scripts/lib/shg/xml/
 - 代表例
   - plan_goal_map / outcome_map を受け取り、一般カテゴリの矛盾判定結果を返す
   - 腹囲体重について、計画値 / 報告判定結果 / 実測差分を突き合わせるチェックを行う
+  - initial_date / final_date から継続日数判定を行う
 - section_* には置かない cross-section 判定をここで扱う
 
 #### basic.py
@@ -108,6 +109,10 @@ scripts/lib/shg/xml/
 - initial_date の取得
 - 取得元は 90030 内の `entry / act / effectiveTime`
 - 対象 act は `codeSystem = 1.2.392.200119.6.24010`
+- 初回面談方式の取得
+  - `extract_initial_interview_mode(root) -> dict[str, str]`
+  - 対象 observation code は `1022000012`
+  - `code` と `display` を返す
 - 目標値の raw level 取得
   - `extract_initial_goals(root) -> dict[str, bool]`
   - `extract_initial_goal_levels(root) -> dict[str, Optional[int]]`
@@ -186,6 +191,11 @@ scripts/lib/shg/xml/
   - 腹囲体重は「計画値」「報告判定結果」「実測差分」の三点で見る
   - 優先順位は「実測差分」→「計画値 fallback」とする
 - 現フェーズでは改修途中のため `xml/` 配下は平置きとし、ファイル数増加時に責務別の階層化を検討する
+- 継続判定は days のみで扱う
+  - `継続日数 = final_date - initial_date`
+  - 判定基準は固定で `93日以上`
+  - 動機づけ支援も含めて同じ基準で判定する
+  - `calendar` 判定は採用しない
 
 ## 現状ギャップ（2026-04時点）
 
@@ -218,6 +228,8 @@ scripts/lib/shg/xml/
 - initial_date / final_date の取得責務が未定義だった（対応済）
 - outcome_checks.py の責務分離がspec未反映だった（対応済）
 - outcomeの評価前提未定義
+- 初回面談方式（90030 / 1022000012）の抽出責務とCSV反映が未実装
+- 継続判定の簡略化方針（daysのみ / 93日固定 / 動機づけも判定）が未反映
 - 腹囲体重チェックの優先順位（実測差分優先 / 計画値 fallback）が未反映
 
 → 現状、specは「完全な一次情報ではなく、途中状態」である
@@ -262,6 +274,43 @@ scripts/lib/shg/xml/
 補足：
 - lib/shg/xml は「どこから取るか」のみを責務とする
 - initial / final の優先順位判定や代表値の選択は orchestration 層で行う
+
+### 初回面談方式の扱い
+
+初回面談方式は 90030 から取得する。
+
+- 取得元: `section_90030_initial.extract_initial_interview_mode`
+- 対象 code: `1022000012`
+- codeSystem: `1.2.392.200119.6.24010`
+
+CSV では以下の 4 列に出力する。
+
+- `初回面談方式_初回XML_コード`
+- `初回面談方式_初回XML_内容`
+- `初回面談方式_最終XML_コード`
+- `初回面談方式_最終XML_内容`
+
+補足：
+- 初回XMLが存在する場合は、初回XML側の 90030 から取得する
+- 最終XMLが存在する場合は、最終XML側の 90030 から取得する
+- 抽出責務は lib/shg/xml 側、CSV列への流し込みは orchestration 層の責務とする
+
+
+### 継続判定の扱い
+
+継続判定は、`initial_date` と `final_date` を用いて日数差で判定する。
+
+- `継続日数` = `final_date - initial_date` の日数差
+- `継続判定モード` = `days`
+- `継続しきい値` = `93日以上`
+- `継続期間_XML判定`
+  - `継続日数 >= 93` の場合 `OK`
+  - `継続日数 < 93` の場合 `NG`
+  - 日付不足などで計算不能な場合は空
+
+補足：
+- 動機づけ支援 / 積極的支援 / 動機づけ支援相当を区別せず、同一ルールで判定する
+- 旧スクリプトにあった `calendar` 判定は新仕様では採用しない
 
 ### level_code / level_text の扱い
 
