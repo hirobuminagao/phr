@@ -51,7 +51,7 @@ def extract_final_outcome(root: ET.Element) -> Dict[str, Optional[object]]:
     # アウトカム合計（1042001060）
     # --------------------------------------------------------
     total_points = 0
-    obs_total = find_observation_in_section(section, "1042001060")
+    obs_total = find_observation_in_section(root, "90060", "1042001060")
     if obs_total is not None:
         v = get_int_value(obs_total)
         if v is not None:
@@ -64,7 +64,7 @@ def extract_final_outcome(root: ET.Element) -> Dict[str, Optional[object]]:
     init_mode_code = None
     init_mode_text = None
 
-    obs_mode = find_observation_in_section(section, "1.2.392.200119.6.24010")
+    obs_mode = find_observation_in_section(root, "90060", "1.2.392.200119.6.24010")
     if obs_mode is not None:
         init_mode_code = get_value_code(obs_mode)
         init_mode_text = get_value_display_name(obs_mode)
@@ -81,7 +81,7 @@ def extract_final_outcomes(root: ET.Element) -> tuple[Dict[str, bool], int, str]
     belly_code = ""
     section = find_section_by_code(root, "90060")
     if section is not None:
-        obs = find_observation_in_section(section, "1042001044")
+        obs = find_observation_in_section(root, "90060", "1042001044")
         if obs is not None:
             belly_code = get_value_code(obs) or ""
 
@@ -90,10 +90,7 @@ def extract_final_outcomes(root: ET.Element) -> tuple[Dict[str, bool], int, str]
     belly_text = belly_text_map.get(belly_code, "未達成")
 
     def ok1(code: str) -> bool:
-        sec = find_section_by_code(root, "90060")
-        if sec is None:
-            return False
-        obs = find_observation_in_section(sec, code)
+        obs = find_observation_in_section(root, "90060", code)
         if obs is None:
             return False
         return (get_value_code(obs) or "") == "1"
@@ -107,7 +104,7 @@ def extract_final_outcomes(root: ET.Element) -> tuple[Dict[str, bool], int, str]
     outs["生活習慣の改善(その他の生活習慣)"] = ok1("1042001046")
 
     total_pts = 0
-    obs_total = find_observation_in_section(section, "1042001060") if section is not None else None
+    obs_total = find_observation_in_section(root, "90060", "1042001060") if section is not None else None
     if obs_total is not None:
         v = get_int_value(obs_total)
         if v is not None:
@@ -126,11 +123,7 @@ def extract_final_outcome_levels(root: ET.Element) -> Dict[str, Optional[int]]:
     """
 
     def level(code: str) -> Optional[int]:
-        section = find_section_by_code(root, "90060")
-        if section is None:
-            return None
-
-        obs = find_observation_in_section(section, code)
+        obs = find_observation_in_section(root, "90060", code)
         if obs is None:
             return None
 
