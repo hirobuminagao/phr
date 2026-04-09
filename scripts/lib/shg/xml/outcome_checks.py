@@ -205,8 +205,11 @@ def compute_waist_weight_measured_level(
     if None in {exam_waist, final_waist, exam_weight, final_weight}:
         return None
 
-    waist_diff = float(exam_waist) - float(final_waist)
-    weight_diff = float(exam_weight) - float(final_weight)
+    assert exam_waist is not None and final_waist is not None
+    assert exam_weight is not None and final_weight is not None
+
+    waist_diff = exam_waist - final_waist
+    weight_diff = exam_weight - final_weight
 
     if waist_diff >= 2.0 and weight_diff >= 2.0:
         return 2
