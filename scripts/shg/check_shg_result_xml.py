@@ -571,13 +571,18 @@ def main() -> None:
         outcome_pts = (final or {}).get("outcome_pts") or 0
         belly_text = (final or {}).get("belly_text") or ""
         if not belly_text:
-            belly_level = final_outcome_levels.get("腹囲・体重の改善")
-            belly_text_map = {
+            belly_level_raw = final_outcome_levels.get("腹囲・体重の改善")
+            try:
+                belly_level = int(belly_level_raw) if belly_level_raw is not None else None
+            except (TypeError, ValueError):
+                belly_level = None
+
+            belly_text_map: dict[int, str] = {
                 0: "未達成",
                 1: "1cm/1kg",
                 2: "2cm/2kg",
             }
-            belly_text = belly_text_map.get(belly_level, "")
+            belly_text = belly_text_map.get(belly_level, "") if belly_level is not None else ""
         final_waist_cm = (final or {}).get("final_waist_cm")
         final_weight_kg = (final or {}).get("final_weight_kg")
 
