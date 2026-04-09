@@ -66,9 +66,12 @@ scripts/lib/shg/xml/
 #### basic.py
 - XMLの基本情報抽出
 - report_code
+- final_date
 - insurer / symbol / number
 - name / gender / birth
 - ticket_no / ticket_exp
+- final_date は report_code = 22 の場合のみ取得する
+- 取得元は `documentationOf / serviceEvent / effectiveTime`
 
 #### role.py
 - report_code から initial / final 判定
@@ -77,6 +80,9 @@ scripts/lib/shg/xml/
 - 90030 初回面談情報セクションの抽出
 - 初回面談情報セクション内の目標関連項目
 - 初回面談に関する基本情報
+- initial_date の取得
+- 取得元は 90030 内の `entry / act / effectiveTime`
+- 対象 act は `codeSystem = 1.2.392.200119.6.24010`
 
 #### section_90060_final.py
 - 90060 最終評価セクションの抽出
@@ -170,8 +176,9 @@ scripts/lib/shg/xml/
 
 ### 4. specと実装の乖離
 
-- 90010セクションがspec未定義
-- basicでの券種優先ロジック未定義
+- 90010セクションがspec未定義だった（対応済）
+- basicでの券種優先ロジックが未定義だった（対応済）
+- initial_date / final_date の取得責務が未定義だった（対応済）
 - outcomeの評価前提未定義
 
 → 現状、specは「完全な一次情報ではなく、途中状態」である
@@ -206,6 +213,36 @@ scripts/lib/shg/xml/
 ※ ロジックは旧スクリプトと同一  
 ※ 列名のみ新仕様として短縮・日本語化
 
+### initial_date / final_date の扱い
+
+- `initial_date` は 90030（初回面談情報）から取得する
+- `final_date` は basic 情報から取得する
+  - `report_code = 22` の場合のみ有効
+  - `documentationOf / serviceEvent / effectiveTime` を使用する
+
+補足：
+- lib/shg/xml は「どこから取るか」のみを責務とする
+- initial / final の優先順位判定や代表値の選択は orchestration 層で行う
+
+### level_code / level_text の扱い
+
+`level_code` / `level_text` は、90010（保健指導情報）の保健指導区分を出力する。
+
+値は以下を使用する：
+
+- `level_code` : 保健指導区分コード
+- `level_text` : 正式名称（例：積極的支援 / 動機づけ支援 / 動機づけ支援相当）
+
+出力時の優先順は以下とする：
+
+1. final XML に値があれば final 側を採用
+2. final に無く initial XML に値があれば initial 側を採用
+3. どちらにも無ければ空とする
+
+補足：
+- 旧スクリプトでは final の場合のみ level を出力していた
+- 新スクリプトではチェック用途を考慮し、initial のみ存在する場合も出力対象とする
+
 ### process_source 判定ルール
 
 process_source は、プロセス情報（支援回数・時間・ポイント）の取得元を示す。
@@ -222,3 +259,25 @@ process_source は、プロセス情報（支援回数・時間・ポイント�
 - 90070_evn は「90040の代替ソースとして90070を使用した」ことを示す
 - 動機づけ支援など、90040が存在しないケースで使用される
 - 判定は XMLの存在ではなく、「実際に値（回数・時間・ポイント）が取得できたか」で判断する
+
+### grand_total_points 計算ルール
+
+grand_total_points は XMLの集計済み値をそのまま使用せず、チェック用CSVとして再計算値を出力する。
+
+計算式は以下とする：
+
+- grand_total_points = outcome_total_points + process_total_points
+
+補足：
+- outcome_total_points は 90060（最終評価）由来
+- process_total_points は process_source に応じて 90040 または 90070_evn 由来
+- XML内の集計済み合計値との差異確認を目的とする（検算用）
+
+### proc_電子メール等_分 の扱い
+
+`proc_電子メール等_分` は CSV列としては保持するが、値は常に `0` とする。
+
+理由：
+- 厚生労働省定義上、電子メール等には実施時間の定義がない
+- したがって、電話・個別支援・グループ支援のような「分」集計は行わない
+- 旧仕様との列互換のため、列は保持する

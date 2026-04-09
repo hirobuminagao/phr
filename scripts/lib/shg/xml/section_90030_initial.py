@@ -1,12 +1,39 @@
 from __future__ import annotations
 
+from typing import Optional
 import xml.etree.ElementTree as ET
 
-from scripts.lib.shg.xml.common import get_observation_value_code
+from scripts.lib.shg.xml.common import NS, get_observation_value_code
 
 
 def _robust_bool_from_value_code(code: str) -> bool:
     return (code or "").strip() in {"1", "true", "True"}
+
+
+def extract_initial_date(root: ET.Element) -> Optional[str]:
+    """90030 初回面談情報セクションから初回面接実施日を取得する。"""
+    for sec in root.findall(".//cda:section", NS):
+        sec_code = sec.find("cda:code", NS)
+        if sec_code is None:
+            continue
+        if (sec_code.get("code") or "").strip() != "90030":
+            continue
+
+        for act in sec.findall(".//cda:entry/cda:act", NS):
+            code_el = act.find("cda:code", NS)
+            if code_el is None:
+                continue
+            if (code_el.get("codeSystem") or "").strip() != "1.2.392.200119.6.24010":
+                continue
+
+            eff_el = act.find("cda:effectiveTime", NS)
+            if eff_el is None:
+                return None
+
+            val = (eff_el.get("value") or "").strip()
+            return val if val else None
+
+    return None
 
 
 def extract_initial_goals(root: ET.Element) -> dict[str, bool]:

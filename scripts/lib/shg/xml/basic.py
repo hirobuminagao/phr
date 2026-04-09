@@ -30,6 +30,19 @@ def get_report_code(root: ET.Element) -> Optional[str]:
     return None
 
 
+def get_final_date(root: ET.Element, report_code: Optional[str]) -> Optional[str]:
+    """report_code=22 の場合のみ、documentationOf/serviceEvent/effectiveTime から final_date を取得する。"""
+    if (report_code or "").strip() != "22":
+        return None
+
+    el = root.find("cda:documentationOf/cda:serviceEvent/cda:effectiveTime", NS)
+    if el is None:
+        return None
+
+    val = (el.get("value") or "").strip()
+    return val if val else None
+
+
 def get_name(root: ET.Element) -> Optional[str]:
     val = text_or(root.find(".//cda:recordTarget//cda:patient/cda:name", NS))
     return val if val else None
@@ -104,10 +117,12 @@ def extract_basic(root: ET.Element) -> dict[str, Any]:
     gender = get_gender(root)
     birth = get_birth(root)
     report_code = get_report_code(root)
+    final_date = get_final_date(root, report_code)
     ticket_no, ticket_exp = get_ticket_info(root)
 
     return {
         "report_code": report_code,
+        "final_date": final_date,
         "insurer": insurer,
         "symbol": symbol,
         "number": number,

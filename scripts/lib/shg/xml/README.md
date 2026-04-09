@@ -34,7 +34,9 @@ scripts/lib/shg/xml/
   ├ common.py
   ├ basic.py
   ├ role.py
+  ├ section_90010_guidance_info.py
   ├ section_90030_initial.py
+  ├ section_90040_support_detail.py
   ├ section_90060_final.py
   ├ section_90070_support_summary.py
   └ README.md
@@ -57,13 +59,31 @@ scripts/lib/shg/xml/
 - name / gender / birth
 - ticket_no / ticket_exp
 
+- 保健指導実施年月日（final_date）の取得
+  - report_code = 22 の場合に有効
+  - `documentationOf / serviceEvent / effectiveTime` から取得
+
 ### role.py
 - report_code から `initial` / `final` を判定するロジック
+
+### section_90010_guidance_info.py
+- 90010 保健指導情報セクションの抽出
+- 保健指導区分（積極的支援 / 動機付け支援 など）
+- level_code / level_text の元データ取得
 
 ### section_90030_initial.py
 - 90030 初回面談情報セクションの抽出
 - 目標
 - 初回面談に関する基本情報
+- 初回面接実施日（initial_date）の取得
+  - 90030 内の `entry / act / effectiveTime` から取得
+  - `act/codeSystem = 1.2.392.200119.6.24010` を対象とする
+
+### section_90040_support_detail.py
+- 90040 支援明細セクションの抽出
+- 支援イベント単位の実施情報
+- mode_code / date / minutes / points の取得
+- `_total_points` / `_total_minutes` の集計
 
 ### section_90060_final.py
 - 90060 最終評価セクションの抽出
@@ -98,6 +118,21 @@ scripts/lib/shg/xml/
 - OIDは仕様上の意味定義として扱う
   - XML抽出時は code 値を基準に判定する
   - codeSystem(OID)は仕様の文脈理解に使用し、分岐条件には原則使わない
+
+- section単位で責務を分割する
+  - 90010 / 90030 / 90060 / 90070 など、OIDベースでファイルを分離する
+  - 各sectionは「そのセクションの値取得のみ」を責務とする
+
+- orchestration層との責務分離
+  - 本ライブラリは「値を取るだけ」
+  - 値の優先順位（initial / final）や再計算ロジックは持たない
+  - CSV項目とのマッピングや business rule は上位層で実装する
+
+- 日付項目の扱い
+  - initial_date は 90030 セクションから取得する
+  - final_date は basic 情報（report_code=22）から取得する
+    - `documentationOf / serviceEvent / effectiveTime` を使用する
+  - sectionごとに責務を分け、日付も例外扱いしない
 
 ## 補足
 

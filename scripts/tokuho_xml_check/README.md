@@ -321,6 +321,179 @@ python .\tokuho_xml_check\check_tokuho_xml.py `
 
 ---
 
+### level_code / level_text のロジック
+
+- 取得元は 90010（保健指導情報）の保健指導区分
+- `1020000001` を対象とする
+- `level_code`
+  - `1` = `積極的支援`
+  - `2` = `動機付け支援`
+  - `3` = `動機付け支援相当`
+- 旧スクリプトでは final XML が存在する場合のみ出力し、final が無い場合は空とする
+
+### initial_date / final_date のロジック
+
+- `initial_date`
+  - final XML がある場合は final 側で保持している初回面接日を採用
+  - final が無い場合は initial XML 側の初回面接日を採用
+- `final_date`
+  - final XML がある場合のみ最終面接日を出力
+  - final が無い場合は空とする
+
+### process_source のロジック
+
+`process_source` は、プロセス評価の代表取得元を示す。
+
+判定順は以下とする：
+
+| 条件 | process_source |
+|------|----------------|
+| 90040 にポイントがある | `90040` |
+| 90040 は無いが 90070 にポイントがある | `90070_evn` |
+| 上記いずれでもない | `none` |
+
+補足：
+- 旧スクリプトでは 90040 を優先する
+- `90070_evn` は、90040 の代替ソースとして 90070 を使用したことを示す
+
+### process_total_points / process_total_minutes のロジック
+
+- `process_total_points`
+  - `process_source = 90040` の場合は `90040._total_points`
+  - `process_source = 90070_evn` の場合は `90070._total_points`
+  - `process_source = none` の場合は `0`
+- `process_total_minutes`
+  - `process_source = 90040` の場合は `90040._total_minutes`
+  - `process_source = 90070_evn` の場合は `sum(90070.durations_min)`
+  - `process_source = none` の場合は `0`
+
+### grand_total_points のロジック
+
+`grand_total_points` は、検算用の合計値として以下で算出する。
+
+- `grand_total_points = outcome_total_points + process_total_points`
+
+補足：
+- XML内の集計済み値をそのまま採用する意図ではなく、CSV側で再計算した値を出力する
+
+### goal_* のロジック
+
+カテゴリは以下の 6 つに正規化する。
+
+- 腹囲体重
+- 食
+- 運動
+- 喫煙
+- 休養
+- その他
+
+初回目標 (`init_goals`) をカテゴリへ寄せた `gmap` を作り、以下で出力する。
+
+- `True` → `目標`
+- `False` → `非目標`
+
+### achieve_* のロジック
+
+最終評価 (`final_outs`) を同じ 6 カテゴリへ寄せた `amap` を作り、以下で出力する。
+
+- final XML が無い場合 → 空
+- final XML があり `True` → `達成`
+- final XML があり `False` → `未`
+
+#### achieve_腹囲体重_内容
+
+腹囲・体重改善コードから以下で出力する。
+
+- `1` → `1cm/1kg`
+- `2` → `2cm/2kg`
+- それ以外 → `未達成`
+
+### conflict_* のロジック
+
+矛盾判定は「目標なしなのに達成あり」で判定する。
+
+- `conflict = (not goal) and achieve`
+
+カテゴリごとの出力は以下。
+
+- final XML が無い場合 → 空
+- conflict = `True` → `NG`
+- conflict = `False` → `OK`
+
+#### 矛盾(目標なし達成あり)
+
+- `conflict_*` のどれかが `NG` なら `Yes: 項目一覧`
+- 矛盾が無ければ `No`
+- final XML が無ければ空
+
+### 継続判定のロジック
+
+`compute_duration_verdict()` により以下を算出する。
+
+- `継続日数`
+- `継続判定モード`
+- `継続しきい値`
+- `継続期間_XML判定`
+
+判定モードは以下の 2 種。
+
+- `days`
+- `calendar`
+
+#### days
+
+- `継続日数 >= threshold_days` で判定する
+- 例：93日以上
+
+#### calendar
+
+- 初回日付に月数を足した日付以上かで判定する
+- 例：3カ月（暦）以上
+
+#### 動機付け支援の扱い
+
+- `level_code == 2`（動機付け支援）の場合
+  - `継続期間_XML判定 = N/A(動機付け)`
+  - `継続判定モード = ""`
+  - `継続しきい値 = ""`
+
+### initial_same_folder のロジック
+
+- final と initial の両方がある場合のみ判定する
+- `initial.folder == final.folder`
+  - 一致 → `Yes`
+  - 不一致 → `No`
+- final が無い場合は空とする
+
+### proc_* のロジック
+
+`proc_*` 列は支援方法ごとの回数・時間を表す。
+
+- 代表ソースが 90040 の場合でも、詳細列 `proc_*` は 90070 集計値を使用する
+- 対象は以下の支援方法
+  - 個別支援（対面）
+  - 個別支援（遠隔）
+  - グループ支援（対面）
+  - グループ支援（遠隔）
+  - 電話
+  - 電子メール等
+
+#### proc_電子メール等_分
+
+- 厚生労働省定義上、電子メール等には実施時間の定義がない
+- そのため、旧列互換を保つ場合でも `0` 固定で扱う
+
+### 初回面談方式_* のロジック
+
+`extract_initial_interview_mode()` により初回面談方式を取得する。
+
+- 初回XMLがある場合
+  - `初回面談方式_初回XML_コード`
+  - `初回面談方式_初回XML_内容`
+- 最終XMLがある場合
+  - `初回面談方式_最終XML_コード`
+  - `初回面談方式_最終XML_内容`
+
 ### カスタムID生成について
 
 本ツールでは個人識別を安定させるために、外部スクリプト `custom_id_gen.py` を呼び出して  
