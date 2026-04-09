@@ -537,8 +537,16 @@ def main() -> None:
         else:
             duration_verdict = "NG"
 
-        init_goals = (initial or {}).get("initial_goals") or {}
-        initial_goal_levels = (initial or {}).get("initial_goal_levels") or {}
+        init_goals = (
+            (initial or {}).get("initial_goals")
+            or (final or {}).get("initial_goals")
+            or {}
+        )
+        initial_goal_levels = (
+            (initial or {}).get("initial_goal_levels")
+            or (final or {}).get("initial_goal_levels")
+            or {}
+        )
         final_outs = (final or {}).get("final_outs") or {}
         final_outcome_levels = (final or {}).get("final_outcome_levels") or {}
         initial_interview_mode_initial = (initial or {}).get("initial_interview_mode") or {}
@@ -562,6 +570,14 @@ def main() -> None:
 
         outcome_pts = (final or {}).get("outcome_pts") or 0
         belly_text = (final or {}).get("belly_text") or ""
+        if not belly_text:
+            belly_level = final_outcome_levels.get("腹囲・体重の改善")
+            belly_text_map = {
+                0: "未達成",
+                1: "1cm/1kg",
+                2: "2cm/2kg",
+            }
+            belly_text = belly_text_map.get(belly_level, "")
         final_waist_cm = (final or {}).get("final_waist_cm")
         final_weight_kg = (final or {}).get("final_weight_kg")
 
@@ -651,40 +667,40 @@ def main() -> None:
                 "継続しきい値": duration_threshold,
                 "継続期間_XML判定": duration_verdict,
                 "矛盾(目標なし達成あり)": overall_conflict_summary,
+                "健診時_腹囲(cm)": db_info.get("exam_waist_cm", ""),
+                "最終_腹囲(cm)": final_waist_cm if final_waist_cm is not None else "",
+                "健診時_体重(kg)": db_info.get("exam_weight_kg", ""),
+                "最終_体重(kg)": final_weight_kg if final_weight_kg is not None else "",
+                "計_腹囲体重": "目標" if plan_goal_map["腹囲・体重の改善"] else "非目標",
+                "結_腹囲体重": belly_text,
+                "achieve_腹囲体重_内容": belly_text,
                 "conflict_腹囲体重_XML判定": waist_weight_check_result.get("summary", ""),
                 "腹囲体重_判定ソース": waist_weight_check_result.get("source", ""),
                 "腹囲体重_計画値": waist_weight_check_result.get("plan_level", ""),
                 "腹囲体重_報告値": waist_weight_check_result.get("report_level", ""),
                 "腹囲体重_実測判定": waist_weight_check_result.get("measured_level", ""),
+                "計_食": "目標" if plan_goal_map["生活習慣の改善(食習慣)"] else "非目標",
+                "結_食": "達成" if outcome_map["生活習慣の改善(食習慣)"] else "未達成",
                 "conflict_食_XML判定": general_conflict_result.get("食", ""),
+                "計_運動": "目標" if plan_goal_map["生活習慣の改善(運動習慣)"] else "非目標",
+                "結_運動": "達成" if outcome_map["生活習慣の改善(運動習慣)"] else "未達成",
                 "conflict_運動_XML判定": general_conflict_result.get("運動", ""),
+                "計_喫煙": "目標" if plan_goal_map["生活習慣の改善(喫煙習慣)"] else "非目標",
+                "結_喫煙": "達成" if outcome_map["生活習慣の改善(喫煙習慣)"] else "未達成",
                 "conflict_喫煙_XML判定": general_conflict_result.get("喫煙", ""),
+                "計_休養": "目標" if plan_goal_map["生活習慣の改善(休養習慣)"] else "非目標",
+                "結_休養": "達成" if outcome_map["生活習慣の改善(休養習慣)"] else "未達成",
                 "conflict_休養_XML判定": general_conflict_result.get("休養", ""),
+                "計_その他": "目標" if plan_goal_map["生活習慣の改善(その他)"] else "非目標",
+                "結_その他": "達成" if outcome_map["生活習慣の改善(その他)"] else "未達成",
                 "conflict_その他_XML判定": general_conflict_result.get("その他", ""),
-                "健診時_腹囲(cm)": db_info.get("exam_waist_cm", ""),
-                "最終_腹囲(cm)": final_waist_cm if final_waist_cm is not None else "",
-                "健診時_体重(kg)": db_info.get("exam_weight_kg", ""),
-                "最終_体重(kg)": final_weight_kg if final_weight_kg is not None else "",
                 "initial_goal_summary": ";".join(
                     [f"{k}:{'目標' if v else '非目標'}" for k, v in init_goals.items()]
                 ),
-                "計_腹囲体重": "目標" if plan_goal_map["腹囲・体重の改善"] else "非目標",
-                "計_食": "目標" if plan_goal_map["生活習慣の改善(食習慣)"] else "非目標",
-                "計_運動": "目標" if plan_goal_map["生活習慣の改善(運動習慣)"] else "非目標",
-                "計_喫煙": "目標" if plan_goal_map["生活習慣の改善(喫煙習慣)"] else "非目標",
-                "計_休養": "目標" if plan_goal_map["生活習慣の改善(休養習慣)"] else "非目標",
-                "計_その他": "目標" if plan_goal_map["生活習慣の改善(その他)"] else "非目標",
                 "final_outcome_summary": ";".join(
                     [f"{k}:{'達成' if v else '未'}" for k, v in final_outs.items()]
                 ) if final else "",
-                "結_腹囲体重": "達成" if outcome_map["腹囲・体重の改善"] else "未達成",
-                "結_食": "達成" if outcome_map["生活習慣の改善(食習慣)"] else "未達成",
-                "結_運動": "達成" if outcome_map["生活習慣の改善(運動習慣)"] else "未達成",
-                "結_喫煙": "達成" if outcome_map["生活習慣の改善(喫煙習慣)"] else "未達成",
-                "結_休養": "達成" if outcome_map["生活習慣の改善(休養習慣)"] else "未達成",
-                "結_その他": "達成" if outcome_map["生活習慣の改善(その他)"] else "未達成",
                 "outcome_total_points": int(outcome_pts or 0),
-                "achieve_腹囲体重_内容": belly_text,
                 "process_source": process_source,
                 "process_total_points": process_total_points,
                 "process_total_minutes": process_total_minutes,
