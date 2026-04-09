@@ -1,0 +1,49 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/shg/check_shg_result_xml.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"get\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 580,
+	"startColumn": 26,
+	"endLineNumber": 580,
+	"endColumn": 61,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1209,
+			"startColumn": 9,
+			"endLineNumber": 1209,
+			"endColumn": 12,
+			"message": "オーバーロード 3 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/shg/check_shg_result_xml.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | Any | None\" の引数を、関数 \"get\" の型 \"int\" のパラメーター \"key\" に割り当てることはできません\n  型 \"Unknown | Any | None\" は型 \"int\" に割り当てできません\n    \"None\" は \"int\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 580,
+	"startColumn": 45,
+	"endLineNumber": 580,
+	"endColumn": 56
+}]
