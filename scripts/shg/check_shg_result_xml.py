@@ -43,8 +43,10 @@ from pathlib import Path
 from typing import Any
 import argparse
 import csv
+import shutil
 import sys
 import xml.etree.ElementTree as ET
+import zipfile
 
 # ------------------------------------------------------------
 # VSCode Run ボタン / file実行 対応
@@ -172,6 +174,44 @@ def scan_xmls(input_dir: Path) -> list[Path]:
             continue
         result.append(p)
     return result
+
+
+def extract_input_zip(zip_path: Path, work_root: Path) -> Path:
+    """ZIPを作業用ディレクトリへ展開し、展開先パスを返す。"""
+    extract_dir = work_root / zip_path.stem
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(extract_dir)
+
+    return extract_dir
+
+
+
+def collect_input_xml_paths(input_root_dir: Path, work_root: Path) -> list[Path]:
+    """input配下から処理対象XMLを集める。
+
+    対応:
+    - 展開済みディレクトリ
+    - ZIPアーカイブ
+
+    ZIPは work_root 配下へ展開してから DATA/*.xml を収集する。
+    """
+    xml_paths: list[Path] = []
+
+    insurer_dirs = sorted([p for p in input_root_dir.iterdir() if p.is_dir()])
+    for insurer_dir in insurer_dirs:
+        zip_files = sorted(insurer_dir.rglob("*.zip"))
+        if zip_files:
+            for zip_path in zip_files:
+                extracted_dir = extract_input_zip(zip_path, work_root)
+                xml_paths.extend(scan_xmls(extracted_dir))
+        else:
+            xml_paths.extend(scan_xmls(insurer_dir))
+
+    return xml_paths
 
 
 def make_person_key(
@@ -359,6 +399,7 @@ def main() -> None:
     run_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = output_root_dir / run_ts
     out_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = out_dir / "_work_zip_extract"
 
     # NOTE:
     # ここから下は fase1.0 の骨格のみ。
@@ -375,9 +416,7 @@ def main() -> None:
     export_outcome_rows: list[dict[str, Any]] = []
     people: dict[str, dict[str, Any]] = {}
 
-    xml_paths: list[Path] = []
-    for insurer_dir in insurer_dirs:
-        xml_paths.extend(scan_xmls(insurer_dir))
+    xml_paths = collect_input_xml_paths(input_root_dir, work_dir)
 
     # fase1.0:
     # - XML単位の report を先に組み立てる
