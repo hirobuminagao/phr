@@ -25,7 +25,6 @@ from scripts.lib.shg.xml.common import (
     find_section_by_code,
     get_int_value,
     get_observation_value_code,
-    get_observation_value_raw,
     get_pq_float_or_none,
     get_value_code,
     get_value_display_name,
@@ -54,7 +53,7 @@ def extract_final_outcome(root: ET.Element) -> Dict[str, Optional[object]]:
     total_points = 0
     obs_total = find_observation_in_section(section, "1042001060")
     if obs_total is not None:
-        v = None if obs_total is None else int(get_observation_value_raw(root, "90060", "1042001060") or 0)
+        v = get_int_value(obs_total)
         if v is not None:
             total_points = v
 
@@ -107,11 +106,12 @@ def extract_final_outcomes(root: ET.Element) -> tuple[Dict[str, bool], int, str]
     outs["生活習慣の改善(休養習慣)"] = ok1("1042001045")
     outs["生活習慣の改善(その他の生活習慣)"] = ok1("1042001046")
 
-    total_pts_raw = get_observation_value_raw(root, "90060", "1042001060")
-    try:
-        total_pts = int(total_pts_raw or 0)
-    except Exception:
-        total_pts = 0
+    total_pts = 0
+    obs_total = find_observation_in_section(section, "1042001060") if section is not None else None
+    if obs_total is not None:
+        v = get_int_value(obs_total)
+        if v is not None:
+            total_pts = v
 
     return outs, total_pts, belly_text
 
@@ -126,8 +126,15 @@ def extract_final_outcome_levels(root: ET.Element) -> Dict[str, Optional[int]]:
     """
 
     def level(code: str) -> Optional[int]:
-        raw = get_observation_value_raw(root, "90060", code)
-        raw = (raw or "").strip()
+        section = find_section_by_code(root, "90060")
+        if section is None:
+            return None
+
+        obs = find_observation_in_section(section, code)
+        if obs is None:
+            return None
+
+        raw = (get_value_code(obs) or "").strip()
         if not raw:
             return None
         try:
