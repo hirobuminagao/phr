@@ -65,47 +65,28 @@ def get_birth(root: ET.Element) -> Optional[str]:
 
 
 def get_ticket_info(root: ET.Element) -> Tuple[Optional[str], Optional[str]]:
-    """利用券（functionCode=2）の番号と有効期限を返す。
-
-    SHG XML では実装差異がありうるため、authorization を起点に複数パターンを許容する。
-    """
-    ticket_no = None
-    ticket_exp = None
-
-    for auth in root.findall(".//cda:authorization", NS):
-        code_el = auth.find(".//cda:functionCode", NS)
-        if code_el is None:
+    """利用券(functionCode=2)の整理番号と有効期限を取得する。"""
+    for participant in root.findall(".//cda:participant", NS):
+        func_el = participant.find("cda:functionCode", NS)
+        if func_el is None:
             continue
-        if (code_el.get("code") or "").strip() != "2":
+        if (func_el.get("code") or "").strip() != "2":
             continue
 
-        # 1) もっとも素直な id / high
-        id_el = auth.find(".//cda:id", NS)
+        ticket_no: Optional[str] = None
+        ticket_exp: Optional[str] = None
+
+        id_el = participant.find("cda:associatedEntity/cda:id", NS)
         if id_el is not None:
-            ticket_no = (id_el.get("extension") or "").strip()
+            ticket_no = (id_el.get("extension") or "").strip() or None
 
-        exp_el = auth.find(".//cda:effectiveTime/cda:high", NS)
-        if exp_el is not None:
-            ticket_exp = (exp_el.get("value") or "").strip()
+        high_el = participant.find("cda:time/cda:high", NS)
+        if high_el is not None:
+            ticket_exp = (high_el.get("value") or "").strip() or None
 
-        # 2) 代替パターン: descendant を広めに走査
-        if ticket_no is None:
-            for cand in auth.findall(".//cda:id", NS):
-                ext = (cand.get("extension") or "").strip()
-                if ext:
-                    ticket_no = ext
-                    break
+        return ticket_no, ticket_exp
 
-        if ticket_exp is None:
-            for cand in auth.findall(".//cda:high", NS):
-                val = (cand.get("value") or "").strip()
-                if val:
-                    ticket_exp = val
-                    break
-
-        break
-
-    return ticket_no, ticket_exp
+    return None, None
 
 
 def extract_basic(root: ET.Element) -> dict[str, Any]:

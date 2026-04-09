@@ -538,13 +538,13 @@ def main() -> None:
             duration_verdict = "NG"
 
         init_goals = (
-            (initial or {}).get("initial_goals")
-            or (final or {}).get("initial_goals")
+            (final or {}).get("initial_goals")
+            or (initial or {}).get("initial_goals")
             or {}
         )
         initial_goal_levels = (
-            (initial or {}).get("initial_goal_levels")
-            or (final or {}).get("initial_goal_levels")
+            (final or {}).get("initial_goal_levels")
+            or (initial or {}).get("initial_goal_levels")
             or {}
         )
         final_outs = (final or {}).get("final_outs") or {}
@@ -583,6 +583,19 @@ def main() -> None:
                 2: "2cm/2kg",
             }
             belly_text = belly_text_map.get(belly_level, "") if belly_level is not None else ""
+
+        waist_plan_level_raw = initial_goal_levels.get("腹囲・体重の改善")
+        try:
+            waist_plan_level = int(waist_plan_level_raw) if waist_plan_level_raw is not None else None
+        except (TypeError, ValueError):
+            waist_plan_level = None
+
+        waist_plan_text_map: dict[int, str] = {
+            0: "計画なし",
+            1: "1cm・1kg",
+            2: "2cm・2kg",
+        }
+        waist_plan_text = waist_plan_text_map.get(waist_plan_level, "") if waist_plan_level is not None else ""
         final_waist_cm = (final or {}).get("final_waist_cm")
         final_weight_kg = (final or {}).get("final_weight_kg")
 
@@ -676,7 +689,7 @@ def main() -> None:
                 "最終_腹囲(cm)": final_waist_cm if final_waist_cm is not None else "",
                 "健診時_体重(kg)": db_info.get("exam_weight_kg", ""),
                 "最終_体重(kg)": final_weight_kg if final_weight_kg is not None else "",
-                "計_腹囲体重": "目標" if plan_goal_map["腹囲・体重の改善"] else "非目標",
+                "計_腹囲体重": waist_plan_text,
                 "結_腹囲体重": belly_text,
                 "achieve_腹囲体重_内容": belly_text,
                 "conflict_腹囲体重_XML判定": waist_weight_check_result.get("summary", ""),
