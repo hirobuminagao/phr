@@ -109,12 +109,75 @@ ClinicalDocument:
 report_document:
   xpath: /ClinicalDocument/code/@code
   codeSystem: 1.2.392.200119.6.1001
+  multiplicity: 1..1
 ```
 
-- 報告区分コードは `ClinicalDocument/code` で表現する
-- ヘッダ部サンプルでは `code="21"` が「特定保健指導の初回報告」として示されている
-- 初回XML / 最終XML / その他の区別に関わる header 要素である
-- 各 code 値の完全一覧は、後続で別ファイルへ整理する
+```yaml
+report_code_map:
+  "21":
+    name: 特定保健指導情報開始時
+    meaning: 保健指導実施時点コードの1に相当
+    typical_usage: 1回目報告・請求時
+
+  "22":
+    name: 特定保健指導情報実績評価時
+    meaning: 保健指導実施時点コードの2に相当
+    typical_usage: 2回目報告時・請求時（3ヶ月評価実施時）
+
+  "23":
+    name: 特定保健指導情報途中終了時
+    meaning: 利用停止等、保健指導実施時点コードの3に相当
+    typical_usage: 途中終了時報告
+
+  "24":
+    name: 特定保健指導情報その他
+    meaning: 保健指導実施時点コードの4に相当
+    typical_usage: 継続支援の状況報告時 / 中間評価実施時 など
+
+  "25":
+    name: 特定保健指導情報初回未完了
+    meaning: 保健指導実施時点コードの5に相当
+    typical_usage: 初回未完了時報告
+```
+
+- 報告区分コードは `ClinicalDocument/code/@code` で表現する
+- `@codeSystem` には `1.2.392.200119.6.1001` を設定する
+- 5-1A のヘッダ部では、`@code` には `21 / 22 / 23 / 24 / 25` のいずれかを設定するとされている
+- 21 は「開始時」、22 は「実績評価時」であり、実装上もっとも重要な基本区分である
+- 23 は途中終了、24 はその他、25 は初回未完了であり、単なる予備値ではなく意味のある正式コードである
+- 送信側は、報告区分の10の位に実施区分コード、1の位に保健指導実施時点コードを設定して 2 桁コードとして扱う
+- 受信側は、10の位を実施区分コード、1の位を保健指導実施時点コードとして分解して解釈する
+- 表15では国への実績報告時に `30` が現れるが、これは section 出現関係の表での記載であり、本ファイルでは 3.2.3 の header 管理情報として定義される `21 / 22 / 23 / 24 / 25` を一次の整理対象とする
+
+```yaml
+implementation_notes:
+  start_report_codes:
+    - "21"
+  final_report_codes:
+    - "22"
+  special_report_codes:
+    - "23"
+    - "24"
+    - "25"
+```
+
+- 現行実装でまず必要なのは `21=初回` と `22=最終` の識別である
+- ただし spec 上は `23 / 24 / 25` も正規の報告区分であるため、将来的に無視しない前提で保持する
+- 後続では、各 report_code と 90010 / 90020 / 90030 / 90060 などの section 出現関係を別ファイルで整理する
+
+```yaml
+note:
+  report_code_detailed_spec:
+    description: 報告区分コードごとの必須項目・section出現関係・header条件は本ファイルでは網羅しない
+    separate_file: 11_report_code_and_section_matrix.md
+    includes:
+      - report_codeごとの必須section一覧
+      - section出現条件（開始時 / 実績評価時 / 途中終了時 など）
+      - header項目の条件差分（例: 途中終了時の実施機関情報）
+    reason:
+      - report_codeはheader要素でありながらsection構造と強く結びつくため
+      - 単一ファイル内で管理すると責務が肥大化するため分離する
+```
 
 ---
 
