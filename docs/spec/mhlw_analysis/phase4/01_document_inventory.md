@@ -8,8 +8,14 @@
 ---
 
 ## 1. 対象スコープ
-- 対象: 健診結果XML（CDA）および送付用アーカイブ（ZIP/フォルダ/命名）
+- 対象:
+  - 健診結果XML（CDA）
+  - 特定保健指導XML（CDA）
+  - 送付用アーカイブ（ZIP/フォルダ/命名）
 - 目的: 資料 → ルール整理 → 必要マスタ → OO整理 → 格納仕様 → 入力 → 出力（xml→xml / xml→pdf(+excel)）
+- 整理方針:
+  - 健診と特定保健指導は、共通のCDA土台を持つが、セクション構造・項目コード・業務ルールが異なるため、specは分離して整理する
+  - 送付用ファイルアーカイブ仕様は共通のL0として扱い、その上に健診系 spec と特定保健指導系 spec を分けて積み上げる
 
 ---
 
@@ -30,7 +36,7 @@
 
 ### 2.2 健診結果XML仕様（L1-L3: CDA/基本情報/健診結果記述）
 - ファイル: `docs/mhlw/phase4_v08/3-1A.pdf`
-- タイトル: （第4期 V08）健診結果XML（CDA）仕様説明書（※手元ファイル名に準拠）
+- タイトル: 特定健診情報ファイル仕様説明書（Ver.4）
 - 担当範囲（ユーティリティ観点）:
   - ClinicalDocument 構造（ヘッダ、recordTarget、author等）
   - 名前空間、schemaLocation、必須要素/属性
@@ -41,7 +47,29 @@
   - `docs/spec/04_basic_info_spec.md`
   - `docs/spec/05_observation_spec.md`
 
-### 2.3 マスタ／コード表（L4: namecode/OID/単位/型の根拠）
+### 2.3 特定保健指導XML仕様（L1-L3: CDA/基本情報/保健指導記述）
+- ファイル: `docs/mhlw/phase4_v08/5-1A.pdf`
+- タイトル: 特定保健指導情報ファイル仕様説明書（Ver.4）
+- 担当範囲（ユーティリティ観点）:
+  - ClinicalDocument 構造（ヘッダ、recordTarget、author等）
+  - 名前空間、schemaLocation、必須要素/属性
+  - 利用者情報、利用券情報、保健指導実施情報
+  - 指導共通情報セクション（90010）
+  - 指導初回①情報セクション（90020）
+  - 指導初回情報セクション（90030）
+  - 指導集計情報セクション（90040）
+  - 継続支援情報セクション（90050）
+  - 中間評価情報セクションおよび最終評価情報セクション（90060）
+  - 指導機関情報セクション（90090）
+  - 保健指導項目コード、結果コード、value型、nullFlavor 等
+- 派生成果物（作成先）:
+  - `docs/spec/shg_xml/README.md`
+  - `docs/spec/mhlw_analysis/phase4/07_shg_document_structure.md`
+  - `docs/spec/mhlw_analysis/phase4/08_shg_header_and_ticket_spec.md`
+  - `docs/spec/mhlw_analysis/phase4/09_shg_section_spec.md`
+  - `docs/spec/mhlw_analysis/phase4/10_shg_code_and_value_spec.md`
+
+### 2.4 マスタ／コード表（L4: namecode/OID/単位/型の根拠）
 - ファイル: `docs/mhlw/phase4_v08/001082795.xlsx`
 - タイトル: （コード・マスタ関連 Excel）※暫定
 - 期待する役割:
@@ -54,10 +82,23 @@
 ---
 
 ## 3. 仕様化ドキュメント（このrepo内の成果物）
+
+### 3.1 共通 / L0
 - `docs/spec/02_file_archive_spec.md` : L0（ZIP/フォルダ/命名/必須ファイル）
-- `docs/spec/03_xml_document_spec.md` : L1（CDA文書構造/必須セクション/namespace）
+
+### 3.2 健診系
+- `docs/spec/03_xml_document_spec.md` : L1（健診CDA文書構造/必須セクション/namespace）
 - `docs/spec/04_basic_info_spec.md` : L2（保険者・加入者・連絡先・住所等の基本情報）
 - `docs/spec/05_observation_spec.md` : L3（健診結果の記述、value型、nullFlavor、CD/CO/PQ等）
+
+### 3.3 特定保健指導系
+- `docs/spec/shg_xml/README.md` : 特定保健指導XMLの総合spec
+- `docs/spec/mhlw_analysis/phase4/07_shg_document_structure.md` : 特定保健指導CDA文書構造
+- `docs/spec/mhlw_analysis/phase4/08_shg_header_and_ticket_spec.md` : 利用者情報 / 受診券・利用券 / 保健指導実施情報
+- `docs/spec/mhlw_analysis/phase4/09_shg_section_spec.md` : 90010〜90090 のセクション別仕様
+- `docs/spec/mhlw_analysis/phase4/10_shg_code_and_value_spec.md` : 項目コード / 結果コード / value型 / nullFlavor
+
+### 3.4 マスタ系
 - `docs/spec/06_master_requirements.md` : L4（必要マスタ、参照元、seed方針）
 
 ---
@@ -66,3 +107,5 @@
 - 厚労資料（PDF/XSD/Excel）を一次情報として扱う。
 - ルール化（Check/Fix）・実装は必ず「根拠（資料名・章・図表）」を紐付ける。
 - 局所パッチ（例: `scripts/.../medi_trans_06139463.py`）は **症例（case）** として扱い、仕様ルールの検証用テストベクタとして保存する。
+- 健診 spec と特定保健指導 spec を混在させない。共通化できるのは CDA 共通部・送付用アーカイブ・マスタ参照方針に限る。
+- 特定保健指導XMLの解析は、まず `5-1A.pdf` を章・表・サンプル単位で分解し、90010 / 90020 / 90030 / 90040 / 90050 / 90060 / 90090 の責務ごとに spec 化してから section 実装へ入る。
