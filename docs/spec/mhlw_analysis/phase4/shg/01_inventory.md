@@ -13,14 +13,14 @@
 
 ## 2. 対象範囲
 
-- 特定保健指導情報ファイル仕様書（5-1A.pdf）
+- 厚生労働省 特定保健指導情報ファイル仕様書（5-1A.pdf）※ 本inventoryおよび各section specの親資料
 - SHG XML に関する header / participant / documentationOf / section 構造
 
 ---
 
 ## 3. 一次情報
 
-- 厚生労働省 `5-1A.pdf`
+- 厚生労働省 `5-1A.pdf`（親仕様）
 - 特定保健指導XMLスキーマ（hg08_V08.xsd ほか）
 
 ---
@@ -28,6 +28,8 @@
 ## 4. 整理方針
 
 SHG XML は、以下の2系統に分けて整理する。
+
+※ CDAセクション仕様（90010〜）は、5-1A を一次根拠とし、付属3および fuzoku3.csv を補助資料として整理する。
 
 ### 4.1 CDAセクション以外
 
@@ -92,6 +94,10 @@ shg:
   report_timing_and_section_matrix.md:
     role: report_code / timing / section 対応整理
 ```
+
+---
+
+※ 04_90010 / 05_90020 / 06_90030 は同一フォーマット（親資料＝5-1A、参照章・表明示、section/text/entry分離）で統一済みとする。
 
 ---
 
