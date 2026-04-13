@@ -1,5 +1,3 @@
-
-
 # 01 SHG Inventory
 
 ## 1. 目的
@@ -67,26 +65,32 @@ shg:
   03_section_inventory.md:
     role: CDAセクション一覧と役割の目録
 
-  04_90010_spec.md:
-    role: 90010 保健指導共通情報
+  04_90010_section_spec.md:
+    role: 90010 指導共通情報
 
-  05_90020_spec.md:
-    role: 90020 指導初回①情報
+  05_90020_section_spec.md:
+    role: 90020 初回面接実施情報
 
-  06_90030_spec.md:
-    role: 90030 指導初回情報
+  06_90030_section_spec.md:
+    role: 90030 保健指導計画情報
 
-  07_90040_spec.md:
-    role: 90040 指導集計情報
+  07_90040_section_spec.md:
+    role: 90040 継続支援情報
 
-  08_90050_spec.md:
-    role: 90050 継続支援情報
+  08_90050_section_spec.md:
+    role: 90050 中間評価情報
 
-  09_90060_spec.md:
-    role: 90060 中間評価 / 最終評価情報
+  09_90060_section_spec.md:
+    role: 90060 実績評価情報
 
-  10_90090_spec.md:
+  10_90090_section_spec.md:
     role: 90090 指導機関情報
+
+  fuzoku3.csv:
+    role: 付属3を正規化した項目一覧
+
+  report_timing_and_section_matrix.md:
+    role: report_code / timing / section 対応整理
 ```
 
 ---
@@ -97,10 +101,10 @@ shg:
 
 1. CDAセクション以外の仕様
 2. CDAセクション一覧
-3. 90010
-4. 90020
-5. 90030
-6. 90040 / 90050 / 90060 / 90090
+3. 04_90010_section_spec.md
+4. 05_90020_section_spec.md
+5. 06_90030_section_spec.md
+6. 07_90040_section_spec.md / 08_90050_section_spec.md / 09_90060_section_spec.md / 10_90090_section_spec.md
 
 理由:
 - まず section 以外の土台を固めないと、90030 など個別セクションの責務がぶれやすい
@@ -122,5 +126,5 @@ shg:
 TODO:
   - 5-1A.pdf の章立てと spec 分割案の対応表を作る
   - CDAセクション以外の項目を確定する
-  - 90010 / 90020 / 90030 の役割差分を整理する
+  - 04_90010 / 05_90020 / 06_90030 の section spec の役割差分を整理する
 ```
