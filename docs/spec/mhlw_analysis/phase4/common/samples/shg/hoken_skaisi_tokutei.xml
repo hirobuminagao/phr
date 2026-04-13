@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="urn:hl7-org:v3 ../XSD/hg08_V08.xsd">
+  <typeId extension="POCD_HD000040" root="2.16.840.1.113883.1.3"/>
+  <id nullFlavor="NI"/>
+  <!-- 報告区分 -->
+  <code code="21" codeSystem="1.2.392.200119.6.1001"/>
+  <!-- ファイル作成日 -->
+  <effectiveTime value="20241010"/>
+  <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
+  <!-- 利用者情報 -->
+  <recordTarget>
+    <patientRole>
+      <!-- 保険者番号 -->
+      <id extension="99999999" root="1.2.392.200119.6.101"/>
+      <!-- 被保険者証等記号 -->
+      <id extension="１３１" root="1.2.392.200119.6.204"/>
+      <!-- 被保険者証等番号 -->
+      <id extension="123123123" root="1.2.392.200119.6.205"/>
+      <!-- 郵便番号 -->
+      <addr>
+        <postalCode>999-9999</postalCode>
+      </addr>
+      <patient>
+        <!-- 氏名 -->
+        <name>キキンタロウ</name>
+        <!-- 男女区分 -->
+        <administrativeGenderCode code="1" codeSystem="1.2.392.200119.6.1104"/>
+        <!-- 生年月日 -->
+        <birthTime value="19700516"/>
+      </patient>
+    </patientRole>
+  </recordTarget>
+  <!-- 特定保健指導情報ファイル作成機関情報 -->
+  <author>
+    <!-- ファイル作成日 -->
+    <time value="20241010"/>
+    <assignedAuthor>
+      <id nullFlavor="NI"/>
+      <representedOrganization>
+        <!-- 特定保健指導機関番号 -->
+        <id extension="9999999999" root="1.2.392.200119.6.102"/>
+        <!-- 名称 -->
+        <name>新橋第一診療所</name>
+        <!-- 電話番号 -->
+        <telecom value="tel:0335917441"/>
+        <!-- 所在地と郵便番号 -->
+        <addr>東京都港区新橋２－１－３<postalCode>105-0001</postalCode></addr>
+      </representedOrganization>
+    </assignedAuthor>
+  </author>
+  <custodian>
+    <assignedCustodian>
+      <representedCustodianOrganization>
+        <id nullFlavor="NI"/>
+      </representedCustodianOrganization>
+    </assignedCustodian>
+  </custodian>
+  <!-- 受診券情報 -->
+  <participant typeCode="HLD">
+    <!-- 券面種別 -->
+    <functionCode code="1" codeSystem="1.2.392.200119.6.208"/>
+    <associatedEntity classCode="IDENT">
+      <!-- 特定健診受診券整理番号 -->
+      <id extension="24500000001" root="1.2.392.200119.6.209.199999999"/>
+      <scopingOrganization>
+        <!-- 特定健診受診券発行保険者番号 -->
+        <id extension="99999999" root="1.2.392.200119.6.101"/>
+      </scopingOrganization>
+    </associatedEntity>
+  </participant>
+  <!-- 利用券情報 -->
+  <participant typeCode="HLD">
+    <!-- 券面種別 -->
+    <functionCode code="2" codeSystem="1.2.392.200119.6.208"/>
+    <time>
+    <!-- 利用券有効期限 -->
+      <high value="20250331"/>
+    </time>
+    <associatedEntity classCode="IDENT">
+      <!-- 利用券整理番号 -->
+      <id extension="24500000001" root="1.2.392.200119.6.210.199999999"/>
+      <scopingOrganization>
+        <!-- 利用券発行保険者番号 -->
+        <id extension="99999999" root="1.2.392.200119.6.101"/>
+      </scopingOrganization>
+    </associatedEntity>
+  </participant>
+  <!-- 保健指導実施情報 -->
+  <documentationOf>
+    <serviceEvent>
+      <!-- 保健指導実施時のプログラム種別 -->
+      <code code="100" codeSystem="1.2.392.200119.6.1002" displayName="特定保健指導"/>
+      <!-- 保健指導実施年月日 -->
+      <effectiveTime value="20240923"/>
+      <performer typeCode="PRF">
+        <assignedEntity>
+          <id nullFlavor="NI"/>
+          <representedOrganization>
+            <!-- 保健指導実施機関番号 -->
+            <id extension="9999999999" root="1.2.392.200119.6.102"/>
+            <!-- 保健指導実施機関名 -->
+            <name>新橋第一診療所</name>
+            <!-- 保健指導実施機関電話番号 -->
+            <telecom value="tel:0335917441"/>
+            <!-- 保健指導実施機関所在地と郵便番号 -->
+            <addr>東京都港区新橋２－１－３<postalCode>105-0001</postalCode></addr>
+          </representedOrganization>
+        </assignedEntity>
+      </performer>
+    </serviceEvent>
+  </documentationOf>
+  <!-- 保健指導結果情報 -->
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <!-- ＣＤＡセクションのコード -->
+          <code code="90010" codeSystem="1.2.392.200119.6.1010" />
+          <text>
+            <list>
+              <item>保健指導区分 積極的支援</item>
+              <item>行動変容ステージ 意志あり（６ヶ月以内）</item>
+              <item>保健指導コース名 積極的コース（全６回）</item>
+            </list>
+          </text>
+          <!-- 保健指導項目情報 -->
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <code nullFlavor="NA" />
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1020000001" codeSystem="1.2.392.200119.6.1006" displayName="保健指導区分"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.1112" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1020000002" codeSystem="1.2.392.200119.6.1006"/>
+                  <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.3002" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1020000003" displayName="保健指導コース名"/>
+                  <value xsi:type="ST">積極的コース（全６回）</value>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!--健診実施年月日(確認用) -->
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1020000004"/>
+                  <value xsi:type="ST">20240922</value>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>
+      <component>
+        <section>
+          <!-- ＣＤＡセクションのコード -->
+          <code code="90020" codeSystem="1.2.392.200119.6.1010" />
+          <text />
+          <!-- 初回面接①実施情報 -->
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <code code="1" codeSystem="1.2.392.200119.6.24010" />
+              <effectiveTime value="20240922" />
+              <performer>
+                <assignedEntity>
+                  <id nullFlavor="NI" />
+                  <code code="1" codeSystem="1.2.392.200119.6.3020" />
+                  <representedOrganization>
+                    <id extension="9999999999" root="1.2.392.200119.6.102" />
+                    <name>新橋第一診療所</name>
+                  </representedOrganization>
+                </assignedEntity>
+              </performer>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1022000013" />
+                  <effectiveTime>
+                    <width value="30" unit="min" />
+                  </effectiveTime>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1022000090" displayName="初回面接①情報"/>
+                  <value xsi:type="ST">初回面接①を実施。</value>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>
+      <component>
+        <section>
+          <!-- ＣＤＡセクションのコード -->
+          <code code="90030" codeSystem="1.2.392.200119.6.1010" />
+          <text />
+          <!-- 初回面接実施情報 -->
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <code code="1" codeSystem="1.2.392.200119.6.24010" />
+              <effectiveTime value="20240923" />
+              <performer>
+                <assignedEntity>
+                  <id nullFlavor="NI" />
+                  <code code="1" codeSystem="1.2.392.200119.6.3020" />
+                  <representedOrganization>
+                    <id extension="9999999999" root="1.2.392.200119.6.102" />
+                    <name>新橋第一診療所</name>
+                  </representedOrganization>
+                </assignedEntity>
+              </performer>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <!-- 健診後早期の初回面接 -->
+                  <code code="1022000016"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.24070"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1022000013" />
+                  <effectiveTime>
+                    <width value="120" unit="min" />
+                  </effectiveTime>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="1022000090" displayName="初回面接情報"/>
+                  <value xsi:type="ST">初回面接を実施。</value>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+          <!-- 保健指導計画情報 -->
+          <entry>
+            <act classCode="ACT" moodCode="INT">
+              <code nullFlavor="NA" />
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021000020" />
+                  <value xsi:type="PQ" value="12" unit="wk" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="GOL">
+                  <code code="1021001031" />
+                  <value xsi:type="PQ" value="82.5" unit="cm" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="GOL">
+                  <code code="1021001032" />
+                  <value xsi:type="PQ" value="68.5" unit="kg" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="GOL">
+                  <code code="1021001033" />
+                  <value xsi:type="PQ" value="128" unit="mm[Hg]" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="GOL">
+                  <code code="1021001034" />
+                  <value xsi:type="PQ" value="75" unit="mm[Hg]" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="GOL">
+                  <code code="1021001050" />
+                  <value xsi:type="PQ" value="1400" unit="kcal" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="GOL">
+                  <code code="1021001051" />
+                  <value xsi:type="PQ" value="800" unit="kcal" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="GOL">
+                  <code code="1021001052" />
+                  <value xsi:type="PQ" value="600" unit="kcal" />
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の腹囲・体重の改善 -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021001053"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.24110"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の生活習慣の改善(食習慣) -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021001054"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.24120"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の生活習慣の改善（運動習慣） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021001055"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.24120"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の生活習慣の改善（喫煙習慣） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021001056"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.24120"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の生活習慣の改善（休養習慣） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021001057"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.24120"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の生活習慣の改善（その他の生活習慣） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021001058"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.24120"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上のポイント（アウトカム評価の合計） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1021001059"/>
+                  <value xsi:type="INT" value="130"/>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>
+      <component>
+        <section>
+          <!-- ＣＤＡセクションのコード -->
+          <code code="90070" codeSystem="1.2.392.200119.6.1010" />
+          <text />
+          <!-- 計画集計情報 -->
+          <entry>
+            <act classCode="ACT" moodCode="INT">
+              <code nullFlavor="NA" />
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の実施回数（個別支援(対面)）-->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010010"/>
+                  <value xsi:type="INT" value="0"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の合計実施時間（個別支援(対面)）-->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041020010"/>
+                  <value xsi:type="PQ" value="0" unit="min"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の実施回数（個別支援（遠隔））-->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010020"/>
+                  <value xsi:type="INT" value="0"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の合計実施時間（個別支援（遠隔））-->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041020020"/>
+                  <value xsi:type="PQ" value="0" unit="min"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の実施回数（グループ支援（対面））-->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010030"/>
+                  <value xsi:type="INT" value="0"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の合計実施時間（グループ支援（対面））-->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041020030"/>
+                  <value xsi:type="PQ" value="0" unit="min"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の実施回数(グループ支援(遠隔)) -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010040"/>
+                  <value xsi:type="INT" value="0"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の合計実施時間(グループ支援(遠隔)) -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041020040"/>
+                  <value xsi:type="PQ" value="0" unit="min"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の実施回数（電話） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010050"/>
+                  <value xsi:type="INT" value="0"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の合計実施時間（電話） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041020050"/>
+                  <value xsi:type="PQ" value="0" unit="min"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援の実施回数（電子メール等） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010060"/>
+                  <value xsi:type="INT" value="1"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上の継続的な支援によるポイント（合計） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010070"/>
+                  <value xsi:type="INT" value="30"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <!-- 計画上のポイント（合計） -->
+                <observation classCode="OBS" moodCode="INT">
+                  <code code="1041010080"/>
+                  <value xsi:type="INT" value="180"/>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>

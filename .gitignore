@@ -7,9 +7,15 @@ scripts/kenshin_list_pydir/.env.trans_*
 
 # data & artifacts
 **/*.zip
+# allow spec samples (documentation assets)
+!docs/spec/**
 **/*.xml
 **/*.csv
 !scripts/work_folder/mat/*.csv
+
+# re-allow XML/CSV under spec explicitly
+!docs/spec/**/*.xml
+!docs/spec/**/*.csv
 **/*.sqlite
 **/*.db
 
