@@ -50,18 +50,66 @@ filename:
 
 ---
 
-## 6. 文書構造（概要）
+## 6. 文書構造（詳細）
 
-```yaml
-su08:
-  - header information
-  - summary information
-  - exchange metadata
-```
+su08 は HL7 CDA に準拠した XML 文書構造を持つ。
 
-※ 詳細構造は後続で定義
+本仕様では、要素レベルの詳細定義（タグ名・階層）はスキーマ定義に委ね、
+実装および理解に必要な「構造の役割」に限定して整理する。
 
 ---
+
+### 6.1 基本構造
+
+- ルート要素は ClinicalDocument
+- ヘッダ情報と本文（component）で構成される
+- 本文内にサマリ情報が格納される
+
+---
+
+### 6.2 ヘッダ情報
+
+su08 には文書管理に関する以下の情報が含まれる。
+
+- 文書識別子（id）
+- 文書種別（code）
+- 作成日時（effectiveTime）
+- 作成者（author）
+- 管理者（custodian）
+
+※ 定義の詳細は su08_V08.xsd に従う
+
+---
+
+### 6.3 サマリ情報（最重要）
+
+su08 の主目的は、送付単位における集計情報の保持である。
+
+対象となる情報：
+
+- DATAフォルダ内XMLの件数
+- CLAIMSフォルダ内XMLの件数（存在する場合）
+- その他、送付単位における集計情報
+
+成立条件：
+
+- su08 の集計値は実ファイルと一致する必要がある
+- ix08 に記載されたファイル一覧と整合している必要がある
+
+---
+
+### 6.4 ix08 / DATA / CLAIMS との対応関係
+
+- ix08（ファイル一覧）と su08（集計値）は整合している必要がある
+- su08 の件数は DATA / CLAIMS の実ファイル数と一致する必要がある
+- 不一致は不正データとみなす
+
+---
+
+### 参照元
+
+- 厚生労働省「送付用ファイルアーカイブ仕様説明書 Ver.4」
+- su08_V08.xsd
 
 ## 7. 記載対象
 
@@ -72,24 +120,22 @@ su08:
 
 ## 8. ix08 / DATA / CLAIMS との関係
 
-```yaml
-constraints:
-  - su08 must be consistent with ix08
-  - su08 summary must match DATA contents
-  - su08 summary must match CLAIMS contents if present
-```
+su08 は以下の整合性を満たす必要がある：
+
+- ix08 に記載されたファイル一覧と集計値が一致していること
+- DATAフォルダ内の実ファイル数とサマリ件数が一致していること
+- CLAIMSが存在する場合、実ファイル数とサマリ件数が一致していること
 
 ---
 
 ## 9. 実装チェック観点
 
-```yaml
-Checks:
-  - su08 exists
-  - su08 structure is valid XML
-  - summary counts match DATA
-  - summary counts match CLAIMS if present
-```
+su08 の実装チェックでは、以下を確認する：
+
+- su08 ファイルが存在すること
+- XML構造がスキーマに準拠していること
+- DATAフォルダ内の実ファイル数とサマリ件数が一致していること
+- CLAIMSが存在する場合、実ファイル数とサマリ件数が一致していること
 
 ---
 

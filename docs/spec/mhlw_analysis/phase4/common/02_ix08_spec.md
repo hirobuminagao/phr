@@ -1,13 +1,11 @@
-
-
 # 02 ix08 Spec
 
 ## 1. 目的
 
 ix08 は送付用ファイルアーカイブに含まれるインデックスファイルであり、
-アーカイブ内のXML構成および交換情報を管理するための基礎情報を定義する。
+アーカイブ内のXMLファイル構成および交換に関する情報を記述するものである。
 
-本specでは、実装観点で以下を整理する。
+本仕様では、ix08 に関する以下の事項を対象とする。
 
 - ix08 の役割
 - アーカイブ内における位置付け
@@ -40,124 +38,82 @@ ix08 は送付用ファイルアーカイブに含まれるインデックスフ
 
 ## 5. 配置場所とファイル名
 
-```yaml
-location:
-  root directory
+ix08 は送付用ファイルアーカイブのルートディレクトリ直下に配置する。
 
-filename:
-  ix08_V08.xml
-```
+ファイル名は以下とする：
+
+ix08_V08.xml
+
+### 補足
+
+- アーカイブ内において ix08 は必ず1ファイル存在する
+- ix08 はアーカイブ内のXMLファイル構成を管理するためのインデックスとして機能する
+
+### 参照元
+
+- 厚生労働省「送付用ファイルアーカイブ仕様説明書 Ver.4」
 
 ---
 
 ## 6. 文書構造（詳細）
 
-ix08 は HL7 CDA 準拠の XML構造を持つ。
+ix08 は HL7 CDA に準拠した XML 文書構造を持つ。
 
-```yaml
-ClinicalDocument:
-  id:
-    description: 文書識別子
-
-  code:
-    description: 文書種別コード
-
-  effectiveTime:
-    description: 作成日時
-
-  recordTarget:
-    description: 対象単位識別（※ ix08では個人ではなく交換単位）
-
-  author:
-    description: 作成者（提出元機関）
-
-  custodian:
-    description: 管理者（提出元機関）
-
-  component:
-    structuredBody:
-      component:
-        section:
-          code:
-            description: セクション種別
-
-          entry:
-            file_list:
-              - file_name
-              - file_type
-              - relation
-```
+本仕様では、要素レベルの詳細定義（タグ名・階層）はスキーマ定義に委ね、
+実装および理解に必要な「構造の役割」に限定して整理する。
 
 ---
 
-### 6.1 ヘッダ情報
+### 6.1 基本構造
 
-```yaml
-header:
-  - id
-  - code
-  - effectiveTime
-  - author
-  - custodian
-```
-
-- ix08全体の識別情報
-- 提出元・作成日時の管理
+- ルート要素は ClinicalDocument
+- ヘッダ情報と本文（component）で構成される
+- 本文内にアーカイブ内ファイル一覧が格納される
 
 ---
 
-### 6.2 ファイル一覧（最重要）
+### 6.2 ヘッダ情報
 
-ix08 のコア機能は、アーカイブ内ファイルの列挙である。
+ix08 には文書管理に関する以下の情報が含まれる。
 
-```yaml
-file_list:
-  - file_name: XMLファイル名
-  - file_type: データ種別（健診 / 保健指導 / 決済）
-  - relation: DATA / CLAIMS の関係性
-```
+- 文書識別子（id）
+- 文書種別（code）
+- 作成日時（effectiveTime）
+- 作成者（author）
+- 管理者（custodian）
 
-```yaml
-constraints:
-  - all DATA files must be listed
-  - CLAIMS files must be listed if present
-  - no duplicate file_name
-```
+※ 定義の詳細は ix08_V08.xsd に従う
 
 ---
 
-### 6.3 DATAとの対応関係
+### 6.3 ファイル一覧（最重要）
 
-```yaml
-mapping:
-  ix08.file_name == DATA.filename
-```
+ix08 の主目的は、アーカイブ内XMLファイルの一覧管理である。
 
-- ix08に記載されたファイル名は、DATAフォルダ内の実ファイルと完全一致する必要がある
+対象となるファイル：
 
----
+- DATAフォルダ内XMLファイル
+- CLAIMSフォルダ内XMLファイル（存在する場合）
 
-### 6.4 CLAIMSとの対応関係
+成立条件：
 
-```yaml
-mapping:
-  ix08.file_name == CLAIMS.filename
-```
-
-- CLAIMSが存在する場合、ix08にも必ず記載される
+- DATA内の全XMLは必ずix08に記載される
+- CLAIMSが存在する場合は同様に記載される
+- ファイル名は実ファイルと完全一致する
 
 ---
 
-### 6.5 実装観点（拡張）
+### 6.4 DATA / CLAIMS との対応関係
 
-```yaml
-Checks:
-  - ClinicalDocument root exists
-  - required header fields exist
-  - file_list exists
-  - all DATA files are referenced
-  - CLAIMS files are referenced if present
-```
+- ix08に記載されたファイル名と実ファイルは1対1で対応する
+- 欠落・不一致は不正データとみなす
+
+---
+
+### 参照元
+
+- 厚生労働省「送付用ファイルアーカイブ仕様説明書 Ver.4」
+- ix08_V08.xsd
 
 ---
 
@@ -170,23 +126,21 @@ Checks:
 
 ## 8. DATA / CLAIMS との関係
 
-```yaml
-constraints:
-  - ix08 must reference all DATA XML files
-  - ix08 must be consistent with CLAIMS if present
-```
+ix08 は以下の整合性を満たす必要がある：
+
+- DATAフォルダ内の全XMLがix08に記載されていること
+- CLAIMSが存在する場合、対応するXMLがix08に記載されていること
 
 ---
 
 ## 9. 実装チェック観点
 
-```yaml
-Checks:
-  - ix08 exists
-  - ix08 structure is valid XML
-  - all DATA files are referenced
-  - no missing references
-```
+ix08 の整合性確認では、以下を満たす必要がある：
+
+- ix08 ファイルが存在すること
+- XML構造がスキーマに準拠していること
+- DATAフォルダ内の全XMLがix08に記載されていること
+- ix08に記載されたファイルと実ファイルに不一致がないこと
 
 ---
 
