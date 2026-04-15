@@ -56,10 +56,10 @@
 
 そのため、追加で整理したい内容は以下とする。
 
-- raw / norm / match の役割分担を明確にする
-- `person_id_custom` / `identity_hash` を持つべきか確認する
-- `subscribers` 補完に使う入力面として不足がないか確認する
-- HIA登録補助として必要な最小カラムが揃っているか確認する
+- norm / match を中心としたカラム設計を明確にする
+- `person_id_custom` / `identity_hash` の staging 取り込み時生成方針を明確にする
+- `subscribers` 補完に使う入力面として必要なカラムを整理する
+- HIA登録補助として必要な最小カラムと、fund共通項目の扱いを整理する
 
 ## テンプレートベース取り込みの前提
 
@@ -123,44 +123,49 @@
 
 ### raw
 
-受領原本を追跡するための値を保持する。
+本テーブルは raw データの保持を主目的としない。
 
-例:
-- insurer_number_raw
-- insurance_symbol_raw
-- insurance_number_raw
-- name_kanji_raw
-- name_kana_raw
+受領原本そのものの保持は、入力CSV、archive、ETL実行記録で担保する前提とし、`staging_subscribers_fund` では raw を大量に常設カラムとして保持しない。
+
+ただし、出所追跡や行特定に必要な以下の入力起点情報は保持する。
+
+- `src_file`
+- `src_row_no`
+- `src_line_no`
 
 ### norm
 
-フィールド単位の正規化値を保持する。
+`*_norm` は本テーブルにおける主値であり、登録・更新・比較の基準値として扱う。
 
-ここでいう norm は、照合専用の潰し込みではなく、各項目を一定の規則で整えた値を指す。
+ここでいう norm は、照合専用の潰し込みではなく、各項目を登録に適した形へ整えた値を指す。
 
 例:
-- insurer_number_norm
-- insurance_symbol_norm
-- insurance_number_norm
-- name_kana_norm
+- `insurer_number_norm`
+- `insurance_symbol_norm`
+- `insurance_number_norm`
+- `name_kana_full_norm`
+- `name_kanji_full_norm`
+- `birth_norm`
+- `gender_code_norm`
 
 ### match
 
-照合や比較に用いる値を保持する。
+`*_match` は照合・比較のための補助値であり、比較判定の根拠として用いる。
 
 例:
-- insurance_symbol_match
-- insurance_number_match
-- name_kana_full_match
+- `insurance_symbol_match`
+- `insurance_number_match`
+- `name_kana_full_match`
+- `name_kanji_full_match`
 
 ### identity 系
 
-比較基盤として以下を保持する方向で見直し対象とする。
+以下を比較基盤として staging 取り込み時点で生成・保持する。
 
 - `person_id_custom`
 - `identity_hash`
 
-ただし、現行DDLに存在するかどうかは確認が必要である。
+identity 生成に必要な項目に欠損がある場合は、欠損を明示的にチェックしたうえで `NULL` とする。
 
 ## 現時点で決め切れていないこと
 
@@ -170,21 +175,22 @@
 
 特に以下は整理が必要である。
 
-- テンプレートの適用対象を raw 格納までとするか
-- `rule` によって norm / match 生成まで行うか
-- テンプレート定義とスクリプト実装の責務境界をどう分けるか
+- テンプレート定義により 1つのCSV列から複数の target_column を生成する運用をどこまで正式仕様として採用するか
+- `rule` によって norm / match 生成のどこまでを担うか
+- テンプレート定義とスクリプト実装の責務境界をどこで分けるか
 - `required` を入力必須制御として使うのか、別用途なのか
 
 ### 1. 現行DDLに何があるか
 
 まず、現行の `staging_subscribers_fund` DDL に以下が存在するか確認が必要である。
 
-- raw 系カラム
 - norm 系カラム
 - match 系カラム
 - `person_id_custom`
 - `identity_hash`
-- 生年月日 / 性別など identity 生成に必要な入力項目
+- 出所追跡用カラム（src系、run系）
+- 照合結果保持カラム（matched系）
+- identity 生成に必要な入力項目
 
 ### 2. raw / norm / match の範囲
 
@@ -195,10 +201,13 @@
 - insurer_number
 - insurance_symbol
 - insurance_number
-- name_kanji
-- name_kana
-- birthdate
+- name_kanji_full / family / middle / given
+- name_kana_full / family / middle / given
+- birth
 - gender_code
+- relationship_code / relationship_name
+- qualification_acquired_date / qualification_lost_date
+- received_company_code / received_company_name
 
 ### 3. HIA登録補助として必要な最小カラム
 
@@ -214,56 +223,6 @@
 - `subscribers` 補完は別フェーズ
 - 氏名分解などの完成形保持は `subscribers` 側で扱う
 
-## 確認手順（設計確認）
-
-実装に入る前に、以下の順で確認する。
-
-### Step A. 現行DDLの確認
-
-- `staging_subscribers_fund` の現行DDLを確認する
-- migration / meta DDL / spec のどれが一次情報かを明確にする
-
-### Step A-2. テンプレートテーブルの確認
-
-- `templates` / `template_mappings` の現行DDLを確認する
-- `target_table=staging_subscribers_fund` 向けの定義がどう想定されているか確認する
-- `rule` / `required` / `notes` の使われ方を確認する
-- `fund_id + version` の運用単位を明確にする
-
-### Step B. 既存カラムの棚卸し
-
-既存カラムを以下に分類する。
-
-- raw
-- norm
-- match
-- identity
-- その他
-
-### Step C. 不足カラムの洗い出し
-
-以下の観点で不足を確認する。
-
-- HIA登録補助に必要か
-- `subscribers` 比較に必要か
-- `subscribers` 補完に必要か
-- `identity_hash` 生成に必要か
-
-### Step D. 責務の再確認
-
-追加・変更候補の各カラムについて、`staging_subscribers_fund` に持たせる理由を明確化する。
-
-確認観点:
-- raw追跡のためか
-- norm生成のためか
-- match照合のためか
-- identity生成のためか
-- HIA登録補助のためか
-
-### Step E. 見直し方針の確定
-
-上記確認の結果をもとに、`staging_subscribers_fund` の見直し方針を確定する。
-
 ## 現時点の仮方針
 
 現時点では、以下を仮方針とする。
@@ -278,6 +237,9 @@
 - identity 生成に必要な項目に欠損があるレコードは、欠損を明示的にチェックしたうえで NULL とする
 - テンプレート登録はマニュアル運用を前提とする
 - 氏名分解や業務上の最終判定は `staging_subscribers_fund` の責務に含めない
+- fund共通テーブルであるため、個別健保の受領ヘッダーに存在しないことのみを理由としてテーブル項目を削除しない
+- 項目の利用有無は各健保のテンプレート定義によって制御する
+- matched_subscriber_id は identity_hash 生成後の subscribers 照合結果として保持する
 
 ## 基本方針
 
@@ -301,6 +263,8 @@ match は比較判定の根拠として用いる。
 - `received_company_code_norm`
 - `received_company_name_norm`
 
+`received_company_*_norm` は受領CSV由来の会社情報であり、HIA側で管理する会社コード・会社名とは別概念として扱う。
+
 正規化方針:
 - 空白除去は必須とする
 - カナを含む場合は全角へ統一する
@@ -313,6 +277,17 @@ match は比較判定の根拠として用いる。
 - `person_id_custom`
 - `identity_hash`
 
+### identity構成要素（欠損判定対象）
+
+以下の項目を identity の構成要素とし、同時に欠損判定対象項目とする。
+
+- `insurer_number_norm`
+- `insurance_symbol_norm`
+- `insurance_number_norm`
+- `birth_norm`
+- `name_kana_full_match`
+- `gender_code_norm`
+
 ### 方針
 
 - identity は staging 取り込み時点で生成する
@@ -320,29 +295,30 @@ match は比較判定の根拠として用いる。
 - identity 生成に必要な項目に欠損がある場合は、その欠損を明示的にチェックする
 - 欠損ありのレコードについては、`person_id_custom` / `identity_hash` を `NULL` とする
 - 欠損がないレコードについては、共通ルールに基づき identity を生成する
-- 欠損判定対象項目は別途明文化する
+- identity 構成要素がすべて揃う場合は staging 取り込み時点で identity を生成する
+- identity_hash 生成後、現行 subscribers に同一 identity が存在する場合は matched_subscriber_id へ保持する
+- 欠損判定対象項目は以下の identity構成要素とする
 
 ## 9. テンプレート連携
 
 - `rule` に応じて norm / match を生成し、必要な材料が揃う場合は identity も生成する
 - 現行 template_mappings の実データでは、1つのCSV列から複数の target_column を生成する定義を許容している
+- 項目がテーブルに存在しても、各健保テンプレートで未使用のままとすることを許容する
 
-## 10. 氏名（漢字）match の扱い
+## 9.5 staging 固有の保持項目
 
-### `name_kanji_full_match`
-`name_kanji_full_match` は共通ライブラリで生成し、比較判定の根拠として用いる。
+以下の項目は、raw 保持ではなく staging 運用上の追跡・照合のために保持する。
 
-現時点では辞書登録が十分ではないため、未吸収パターンは今後の辞書追加対象として扱う。
+- `src_file`
+- `src_row_no`
+- `src_line_no`
+- `import_run_id`
+- `loaded_at`
+- `matched_subscriber_id`
+- `matched_checked_at`
+- `connect_id_norm`（健保の基幹システム側IDを保持する項目）
 
-### 分割項目の match
-氏名漢字の分割項目については、少なくとも以下を追加候補として扱う。
-
-- `name_kanji_family_match`
-- `name_kanji_given_match`
-
-これは今回の年度比較において、姓のみの変更等を追跡できるようにするための候補である。
-
-一方で、分割側 match を `staging_subscribers_fund` の責務に含めるか、`subscribers` 側にも同様に持たせるかは別途協議対象とする。
+一方で、意味が曖昧な状態管理カラムは持たない方針とし、`processed_at` は削除対象とする。
 
 ## 🔥 今回の仕様の一文まとめ
 
@@ -362,20 +338,55 @@ match は比較判定の根拠として用いる。
 - `docs/spec/common/db_connection.md`
 - テンプレート関連テーブル定義（別途一次情報確認）
 
+## 現時点の確認結果（確認済み / 未確定）
+
+### 確認済み
+
+- `staging_subscribers_fund` は現時点ではテーブルのみ存在し、取り込み基盤としては未整備である
+- sqlite 版の取り込み実装が存在し、テンプレートベース取り込みの思想自体は既存資産に存在する
+- `templates` / `template_mappings` テーブルが存在し、`fund_id + version` 単位でテンプレートを管理している
+- `template_mappings` では、1つのCSV列から複数の `target_column` を生成する実データが存在する
+- `staging_subscribers_fund` は raw 保持を主目的とせず、norm を主値、match を照合補助値として扱う方針とする
+- `person_id_custom` / `identity_hash` は staging 取り込み時点で生成する方針とする
+- identity 構成要素および欠損判定対象項目は以下で確定済みとする
+  - `insurer_number_norm`
+  - `insurance_symbol_norm`
+  - `insurance_number_norm`
+  - `birth_norm`
+  - `name_kana_full_match`
+  - `gender_code_norm`
+- 受領CSVの配置構成は `input/<insurer_number>/` と `archive/<run_id>_<yyyymmdd_hhmmss>/<insurer_number>/` を基本とする
+- archive への移動処理は取り込みスクリプトへ組み込む方針とする
+- `received_company_*_norm` は受領CSV由来の会社情報であり、HIA管理上の会社情報とは別概念として扱う
+- `matched_subscriber_id` は identity_hash 生成後の subscribers 照合結果として保持する方針とする
+- `connect_id_norm` は健保の基幹システム側IDとして保持対象とする
+- `processed_at` は意味が曖昧な状態管理カラムとして削除対象とする
+
+### 未確定
+
+- `rule` の責務範囲をどこまで認めるか
+- `required` の意味を入力列必須・値必須のどちらで扱うか
+- 現行DDLカラムの最終棚卸し結果（残す / rename / 再設計 / 削除）
+- `received_company_*_norm` の最終カラム設計
+- `name_kanji_full_match` / 分割漢字 match の最終カラム設計
+- `staging_subscribers_fund` と `subscribers` の match 項目分担
+- `connect_id_norm` / `matched_subscriber_id` / `matched_checked_at` の最終カラム設計
+- input / archive の削除ポリシー・保持期間
+
+本 spec では、上記の「確認済み」を前提として以降の設計を進め、「未確定」は次の更新で詰める論点として扱う。
+
 ## このファイルで次に詰めること
 
 次の更新では、以下を具体化する。
 
-- 現行DDLの確認結果
-- `templates` / `template_mappings` のDDL確認結果
-- 現在存在するカラム一覧
-- raw / norm / match の対象列
-- `person_id_custom` / `identity_hash` の扱い確定
+- 現行DDLカラムの棚卸し結果（残す / rename / 再設計 / 削除）
 - `rule` の責務範囲
 - `required` の意味整理
-- input / archive ディレクトリ運用ルールの詳細（削除ポリシー・保持期間）
+- `input / archive ディレクトリ運用ルールの詳細（削除ポリシー・保持期間）`
 - `subscribers` 補完フェーズへの受け渡し項目
-- identity 生成における欠損判定対象項目
+- identity構成要素および欠損判定対象項目（確定済み）
 - received_company_*_norm の確定
 - name_kanji_full_match / 分割漢字 match の扱い確定
 - staging_subscribers_fund と subscribers の match 項目分担
+- connect_id_norm / matched_subscriber_id / matched_checked_at の最終カラム設計
+- processed_at 削除のDDL反映
