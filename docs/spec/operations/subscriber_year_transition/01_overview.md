@@ -1,5 +1,3 @@
-
-
 # 01_overview
 
 ## 目的
@@ -12,7 +10,20 @@
 
 本運用は、以下のステップで構成される。
 
-### Step 0. staging_subscribers_fund の整理
+### Step 0. 2025年度最終状態の確定
+
+- HIAの加入者最新（2026/03/31時点）を `subscribers` に反映する
+- ダッシュボードの年度履歴テーブル（`hia_dashboard_year_end_status`）を作成する
+- 現在のダッシュボード状態を年度履歴テーブルへ記帳する
+- ダッシュボードの運用テーブルのステータスを未予約等の初期状態へクリアする
+- 上記の完了をもって2025年度の終了状態とする
+
+参照:
+- `04_dashboard_year_end_status.md`
+
+---
+
+### Step 1. staging_subscribers_fund の整理
 
 - 健保受領データを `staging_subscribers_fund` に取り込む
 - raw / norm / match の整理方針に基づきカラムを整備する
@@ -23,7 +34,7 @@
 
 ---
 
-### Step 1. subscribers 補完（enrichment）
+### Step 2. subscribers 補完（enrichment）
 
 - `staging_subscribers_fund` を入力として `subscribers` の不足カラムを補完する
 - 主に氏名分解カラム（family / given）の補完を行う
@@ -34,17 +45,17 @@
 
 ---
 
-### Step 2. 2025年度最終状態の確定
+### Step 3. 2025年度最終状態の確定（補完後基準面の確定）
 
-- 補完後の `subscribers` を 2025年度最終状態として扱う
-- 必要に応じてダッシュボード情報を年度末状態として記帳する
+- Step1, Step2 を経て整備された `subscribers` を2025年度最終状態の比較基準面として確定する
+- 以降の比較処理はこの状態を基準として行う
 
 参照:
 - `04_dashboard_year_end_status.md`
 
 ---
 
-### Step 3. 2026受領データの取り込み
+### Step 4. 2026受領データの取り込み
 
 - 2026年度の健保受領データを staging に取り込む
 - 同様に raw / norm / match / identity を生成する
@@ -54,7 +65,7 @@
 
 ---
 
-### Step 4. 一次比較
+### Step 5. 一次比較
 
 - 2025年度最終状態（subscribers）と 2026受領データを比較する
 - 以下の分類を行う
@@ -68,7 +79,7 @@
 
 ---
 
-### Step 5. 二次判定（転籍・例外対応）
+### Step 6. 二次判定（転籍・例外対応）
 
 - missing / new のうち単純比較では確定できないケースを再判定する
 - 転籍、キー変更、表記揺れ等を考慮する
@@ -78,7 +89,7 @@
 
 ---
 
-### Step 6. 更新反映
+### Step 7. 更新反映
 
 - 判定結果に基づき `subscribers` を更新する
 - 必要に応じて履歴・差分を保持する
