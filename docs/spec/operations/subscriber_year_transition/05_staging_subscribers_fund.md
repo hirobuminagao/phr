@@ -2,7 +2,7 @@
 
 ## 目的
 
-本ファイルは、`staging_subscribers_fund` の責務、見えている論点、今後決めるべき事項、およびDDL確認観点を整理するための暫定 spec である。
+本ファイルは、`staging_subscribers_fund` の責務、見えている論点、今後決めるべき事項、およびDDL確認観点を整理するための spec である。
 
 本内容は実装手順そのものではなく、年度更新運用の中で `staging_subscribers_fund` をどのような位置づけで扱うかを明確にすることを目的とする。
 
@@ -20,9 +20,7 @@
 
 ### 1. 現在の主な責務
 
-現時点での `staging_subscribers_fund` の責務は、概ね以下と認識する。
-
-- 健保から受領した加入者CSVの必要項目を raw として格納する
+- 健保から受領した加入者CSVをテンプレート定義に基づいて staging 用カラムへ格納する
 - 取り込み時にテンプレート定義に基づくマッピングを適用する
 - HIA登録補助に利用するための基礎データを保持する
 - 現状のHIA加入者情報（最新）や `subscribers` との比較土台として利用する
@@ -79,10 +77,12 @@
 ```
 
 - `input/<insurer_number>/` 配下に配置されたCSVを取り込み対象とする
-- 取り込み成功後、対象ファイルは `archive/<run_id>_<yyyymmdd_hhmmss>/<insurer_number>/` へ移動する
+- CSV自体がエラーの場合は `input/` に残す
+- run が正常に走り、読み込み判定まで到達したファイルは `archive/<run_id>_<yyyymmdd_hhmmss>/<insurer_number>/` へ移動する
 - `archive/` は実行単位でディレクトリを切り、人間が見て実行日時を判別できるよう日付を含める
 - archive への移動処理は取り込みスクリプトへ組み込む
 - アーカイブは再現性・監査用途のために保持する
+- `archive/` の削除は自動化せず、手動運用とする
 
 ### 2. 現在把握しているテンプレート関連テーブル
 
@@ -119,7 +119,7 @@
 - `rule` の責務を raw / norm / match 生成のどこまでに含めるか
 - `required` はテンプレート単位の値必須フラグとして扱う
 
-## raw / norm / match の考え方（現時点の仮置き）
+## raw / norm / match の考え方
 
 ### rule の位置づけ（今回の設計整理）
 
@@ -462,6 +462,45 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 
 一方で、年度比較や `subscribers` 補完の際には、本人 / 本人以外の判別は重要な補助情報となるため、別途保持・利用する。
 
+
+
+
+## 8.6 match 項目の分担
+
+比較・照合に必要な match 項目は、`staging_subscribers_fund` と `subscribers` の両方に持つ前提とする。
+
+### 基本方針
+
+- `staging_subscribers_fund` は受領データの入力面・比較面として match を保持する
+- `subscribers` は最終保持面・継続参照面として match を保持する
+- 役割は異なるが、比較に必要な match 項目は両テーブルで揃える方針とする
+
+### 揃える対象項目
+
+- `name_kana_full_match`
+- `name_kanji_full_match`
+- `name_kanji_family_match`
+- `name_kanji_middle_match`
+- `name_kanji_given_match`
+- `insurance_symbol_match`
+- `insurance_number_match`
+
+### 補足
+
+- `staging_subscribers_fund` では取り込み時点の比較・補完判断のために保持する
+- `subscribers` では最終保持面として継続利用するために保持する
+- 分担は「どちらか片方だけに持つ」のではなく、「同じ match 項目を両方に持ち、用途で役割を分ける」とする
+
+## 8.7 matched_subscriber_id の位置づけ
+
+`matched_subscriber_id` は、identity_hash 生成後、レコード生成処理の最後に `subscribers` と照合して得た一致先の `subscribers.id` を保持する項目とする。
+
+### 基本方針
+
+- `matched_subscriber_id` は保持する
+- 業務上の最終判定結果は保持しない
+- 照合結果キャッシュとして扱う
+
 ## 9. テンプレート連携
 
 - `rule` に応じて norm / match を生成し、必要な材料が揃う場合は identity も生成する
@@ -507,10 +546,10 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 
 区分は以下の意味で用いる。
 
-- `維持`: 現行カラムをそのまま維持する候補
-- `rename`: 命名規則（主に `_norm` / `_match`）へ寄せる候補
-- `再設計`: 意味は必要だが、命名・粒度・生成方法を見直す候補
-- `削除`: staging の責務から外す候補
+- `維持`: 現行カラムをそのまま維持する
+- `rename`: 命名規則（主に `_norm` / `_match`）へ寄せて引き継ぐ
+- `追加`: 現行DDLに存在しないが新DDLで追加する
+- `削除`: staging の責務から外す
 
 ### 1. 主キー・テンプレート・実行管理
 
@@ -521,14 +560,14 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 | `template_ver` | rename | `template_version` へ rename（命名一貫性のため確定） |
 | `import_run_id` | 維持 | ETL run / archive と連動するため維持 |
 | `created_at` | 維持 | 作成時刻として維持 |
-| `loaded_at` | 維持 | staging 取り込み完了時刻として維持 |
+| `loaded_at` | 維持 | `created_at` とズレうる取り込み完了時刻として維持（確定） |
 
 ### 2. identity・照合結果
 
 | 現行カラム | 区分 | 新方針 / コメント |
 |---|---|---|
 | `person_id_custom` | 維持 | staging 取り込み時点で生成・保持 |
-| `identity_hash` | 追加 | 現行DDLに存在しないため追加候補 |
+| `identity_hash` | 追加 | 現行DDLに存在しないため追加 |
 | `matched_subscriber_id` | 維持 | identity_hash 生成後、レコード生成処理の最後に行う subscribers 照合結果として保持 |
 | `matched_checked_at` | 削除 | 照合はレコード生成処理の最後に実行するため、`created_at` と実質的に重複しやすく削除対象 |
 | `processed_at` | 削除 | 意味が曖昧な状態管理カラムのため削除対象 |
@@ -541,7 +580,7 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 | `name_kana_family` | rename | `name_kana_family_norm` |
 | `name_kana_middle` | rename | `name_kana_middle_norm` |
 | `name_kana_given` | rename | `name_kana_given_norm` |
-| `name_kana_full_match` | 追加 | identity構成要素として追加候補 |
+| `name_kana_full_match` | 追加 | identity構成要素として追加 |
 
 ### 4. 氏名（漢字）
 
@@ -552,8 +591,9 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 | `name_kanji_middle` | rename | `name_kanji_middle_norm` |
 | `name_kanji_given` | rename | `name_kanji_given_norm` |
 | `name_kanji_full_match` | 追加 | 共通ライブラリで生成し、比較判定の根拠として使用 |
-| `name_kanji_family_match` | 要検討 | 今回の年度比較で有力な追加候補 |
-| `name_kanji_given_match` | 要検討 | 今回の年度比較で有力な追加候補 |
+| `name_kanji_family_match` | 追加 | 分割後に共通ライブラリを適用して生成 |
+| `name_kanji_middle_match` | 追加 | 分割後に共通ライブラリを適用して生成 |
+| `name_kanji_given_match` | 追加 | 分割後に共通ライブラリを適用して生成 |
 
 ### 5. 基本属性
 
@@ -571,10 +611,10 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 | `insurer_number` | rename | `insurer_number_norm` |
 | `insurance_symbol` | rename | `insurance_symbol_norm` |
 | `insurance_symbol_digits` | 維持 | 人手確認・運用補助に加え、person_id_custom 生成前提の数字成分確認列として維持 |
-| `insurance_symbol_match` | 追加 | `insurance_symbol_digits` とは別に、照合用の match 列として追加候補 |
+| `insurance_symbol_match` | 追加 | `insurance_symbol_digits` とは別に、照合用の match 列として追加 |
 | `insurance_number` | rename | `insurance_number_norm` |
 | `insurance_branchnumber` | rename | `insurance_branchnumber_norm` |
-| `insurance_number_match` | 追加 | 照合用として追加候補 |
+| `insurance_number_match` | 追加 | 照合用として追加 |
 
 ### 7. 資格・住所・連絡先
 
@@ -592,12 +632,13 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 
 | 現行カラム | 区分 | 新方針 / コメント |
 |---|---|---|
-| `employer_code` | 再設計 | `received_company_code_norm` への置換確定 |
+| `employer_code` | rename | `received_company_code_norm` へ rename（受領会社コードとして扱うため命名変更） |
 | `department_code` | 維持 | 個別健保で未使用でも fund共通項目として維持 |
 | `distribution_code` | 維持 | 個別健保で未使用でも fund共通項目として維持 |
 | `employee_code` | 維持 | 個別健保で未使用でも fund共通項目として維持 |
 | `connect_id` | rename | `connect_id_norm` として保持確定 |
 | `received_company_name_norm` | 追加 | 受領CSV由来の会社名として追加確定 |
+
 
 ### 9. 出所追跡
 
@@ -613,12 +654,10 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 
 次の更新では、本表をもとに以下を詰める。
 
-- 各カラムの最終区分（維持 / rename / 再設計 / 削除）
 - `template_mappings.target_column` の更新方針
-- `staging_subscribers_fund` と `subscribers` の役割分担
+- 新DDLへの落とし込み
 
-## 現時点の確認結果（確認済み / 未確定）
-
+## 現時点の確認結果
 
 ### 確認済み
 
@@ -640,7 +679,7 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 - archive への移動処理は取り込みスクリプトへ組み込む方針とする
 - `received_company_code_norm` / `received_company_name_norm` は fund 共通項目として保持する方針とする
 - 受領CSV由来の会社情報は HIA 側事業所コードとは別概念として扱い、加入者登録時に対応付けて使用する
-- `matched_subscriber_id` は identity_hash 生成後、レコード生成処理の最後に行う subscribers 照合結果として保持する方針とする
+- `matched_subscriber_id` は identity_hash 生成後、レコード生成処理の最後に行う subscribers 照合結果を保持する照合結果キャッシュとして扱う方針とする
 - `matched_checked_at` は `created_at` と実質的に重複しやすいため削除対象とする
 - `connect_id_norm` は保持候補ではなく保持確定とする
 - `processed_at` は意味が曖昧な状態管理カラムとして削除対象とする
@@ -649,25 +688,17 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 - `rule` は単一入力列に対する norm / match / 補助列生成までを担う方針とする
 - 本人 / 本人以外判別は「コード優先、名称補助」で行う方針とする
 - `department_code` / `distribution_code` / `employee_code` は fund 共通項目として維持する方針とする
+- `name_kanji_full_match` / `name_kanji_family_match` / `name_kanji_middle_match` / `name_kanji_given_match` は保持する方針とする
+- 比較に必要な match 項目は `staging_subscribers_fund` と `subscribers` の両方に持つ前提とする
+- `matched_subscriber_id` は照合結果キャッシュとして保持する方針とする
+- CSV自体がエラーの場合は `input/` に残し、run が正常に走って読み込み判定まで到達したファイルは `archive/` へ移動する方針とする
+- `archive/` は自動削除せず、手動運用とする
+- 現行DDLカラムの棚卸し方針（維持 / rename / 追加 / 削除）は確定済み
 
-### 未確定
+### 未実施
 
-- 現行DDLカラムの最終棚卸し結果（rename / 追加 / 維持 / 削除の最終確定）
-- `name_kanji_full_match` / 分割漢字 match の最終カラム設計
-- `staging_subscribers_fund` と `subscribers` の match 項目分担
-- `matched_subscriber_id` の最終カラム設計
-- input / archive の削除ポリシー・保持期間
+- 本 spec の内容をもとに新DDLへ落とし込む
 
-本 spec では、上記の「確認済み」を前提として以降の設計を進め、「未確定」は次の更新で詰める論点として扱う。
+## このファイルで次に行うこと
 
-## このファイルで次に詰めること
-
-次の更新では、以下を具体化する。
-
-- 現行DDLカラムの棚卸し結果（残す / rename / 再設計 / 削除）の最終確定
-- `name_kanji_full_match` / 分割漢字 match の扱い確定
-- `staging_subscribers_fund` と `subscribers` の match 項目分担
-- `matched_subscriber_id` の最終カラム設計
-- processed_at 削除のDDL反映
-- `insurance_symbol_digits` と `insurance_symbol_match` の最終役割分担の反映
-- `input / archive` の削除ポリシー・保持期間確定
+次の更新では、本 spec の内容をもとに新DDLへの落とし込みを行う。

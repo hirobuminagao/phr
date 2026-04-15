@@ -26,7 +26,7 @@
 ### Step 1. staging_subscribers_fund の整理
 
 - 健保受領データを `staging_subscribers_fund` に取り込む
-- raw / norm / match の整理方針に基づきカラムを整備する
+- norm / match の整理方針に基づきカラムを整備する
 - `person_id_custom` / `identity_hash` を生成する
 
 参照:
@@ -89,10 +89,10 @@
 
 ---
 
-### Step 7. 更新反映
+### Step 7. 更新反映（次フェーズ）
 
-- 判定結果に基づき `subscribers` を更新する
-- 必要に応じて履歴・差分を保持する
+- 判定結果に基づく `subscribers` 更新は次フェーズで扱う
+- 本specの主目的は差分抽出までとする
 
 ---
 
@@ -101,7 +101,7 @@
 本運用では以下のデータを主に利用する。
 
 - `staging_subscribers_fund`
-  - 受領データの raw / norm / match / identity を保持する比較基盤
+  - 受領データの norm / match / identity を保持する比較基盤
 
 - `subscribers`
   - 補完後の加入者マスタ（比較基準面）
@@ -112,8 +112,11 @@
 ## 設計方針（重要）
 
 - `staging_subscribers_fund` は比較基盤であり、加入者マスタではない
+- raw は保持せず、norm を主値、match を照合用として扱う
 - `subscribers` は最新状態かつ比較基準面として扱う
-- identity（`person_id_custom` / `identity_hash`）を全体の接続キーとする
+- identity_hash を年度更新運用における主たる比較・接続キー（論理キー）とする
+- `subscribers.id` は自システム内の物理参照IDとして扱う
+- HIA加入者IDは外部システム側の物理参照IDとして扱い、取得可能な場合は identity_hash および subscribers.id と対応付ける
 - 運用判定（転籍等）は staging ではなく比較・判定フェーズで行う
 
 ## 今後の更新方針
