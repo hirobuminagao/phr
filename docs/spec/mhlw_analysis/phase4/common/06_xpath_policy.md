@@ -85,7 +85,7 @@ XPathの記載レベルは、以下のいずれかとする。
 - `/ClinicalDocument/.../observation/code/@code`
 - `/ClinicalDocument/.../observation/value`
 
-※ 原則として、**実装で直接参照する粒度まで記載する**
+※ 原則として、**仕様として必要な粒度（項目単位）まで記載する**
 
 ---
 

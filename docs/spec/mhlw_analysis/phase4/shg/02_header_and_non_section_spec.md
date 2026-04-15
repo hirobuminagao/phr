@@ -7,7 +7,7 @@
 対象は、section（90010 / 90020 / 90030 ...）そのものではなく、
 それらの外側にある文書全体構造・利用者情報・利用券情報・保健指導実施情報・提出元情報などとする。
 
-本specでは、実装観点で以下を整理する。
+本仕様では、header および section 外要素に関する以下の事項を対象とする。
 
 - ClinicalDocument 全体構造
 - report_code / 文書種別の整理
@@ -48,58 +48,44 @@ PDF本文とスキーマの記述に差がある場合は、仕様書本文の�
 
 ## 4. 整理対象（section以外）
 
-```yaml
-non_section_targets:
-  CDA_header:
-    - ClinicalDocument
-    - typeId
-    - id
-    - code
-    - title
-    - effectiveTime
-    - confidentialityCode
-    - languageCode
-    - setId
-    - versionNumber
+本ファイルで整理対象とする section 外要素は以下の通りとする。
 
-  management_information:
-    - recordTarget
-    - author
-    - custodian
-    - participant
-    - documentationOf
-```
+- CDA header
+  - ClinicalDocument
+  - typeId
+  - id
+  - code
+  - title
+  - effectiveTime
+  - confidentialityCode
+  - languageCode
+  - setId
+  - versionNumber
+- 管理情報
+  - recordTarget
+  - author
+  - custodian
+  - participant
+  - documentationOf
 
 ---
 
 ## 5. ClinicalDocument 全体構造（概要）
 
-```yaml
-ClinicalDocument:
-  xmlns:
-  xsi:schemaLocation:
-  typeId:
-  id:
-  code:
-  title:
-  effectiveTime:
-  confidentialityCode:
-  languageCode:
-  setId:
-  versionNumber:
-  recordTarget:
-  author:
-  custodian:
-  participant:
-  documentationOf:
-  component:
-    structuredBody:
-      component:
-        section:
-```
+特定保健指導 XML は、HL7 CDA に準拠した ClinicalDocument 構造を持つ。
 
-- 5-1A は HL7 CDA Release 2 に完全準拠する前提で記述されている
-- 本ファイルでは header 部および section 外要素のみを扱い、section の詳細は後続の section spec 側で整理する
+本ファイルでは header 部および section 外要素のみを扱い、section の詳細は後続の section spec 側で整理する。
+
+### 構成要素
+
+- ClinicalDocument
+- CDA header 要素
+- recordTarget
+- author
+- custodian
+- participant
+- documentationOf
+- component / structuredBody / section
 
 ---
 
@@ -149,35 +135,16 @@ report_code_map:
 - 受信側は、10の位を実施区分コード、1の位を保健指導実施時点コードとして分解して解釈する
 - 表15では国への実績報告時に `30` が現れるが、これは section 出現関係の表での記載であり、本ファイルでは 3.2.3 の header 管理情報として定義される `21 / 22 / 23 / 24 / 25` を一次の整理対象とする
 
-```yaml
-implementation_notes:
-  start_report_codes:
-    - "21"
-  final_report_codes:
-    - "22"
-  special_report_codes:
-    - "23"
-    - "24"
-    - "25"
-```
+### 補足（現在の整理方針）
 
-- 現行実装でまず必要なのは `21=初回` と `22=最終` の識別である
-- ただし spec 上は `23 / 24 / 25` も正規の報告区分であるため、将来的に無視しない前提で保持する
-- 後続では、各 report_code と 90010 / 90020 / 90030 / 90060 などの section 出現関係を別ファイルで整理する
+- 現行実装でまず重要となるのは `21=開始時` と `22=実績評価時` の識別である
+- ただし仕様上は `23 / 24 / 25` も正式な報告区分であるため、無視せず保持する
+- 各 report_code と section 出現関係は、本ファイルでは展開しすぎず別表で管理する
 
-```yaml
-note:
-  report_code_detailed_spec:
-    description: 報告区分コードごとの必須項目・section出現関係・header条件は本ファイルでは網羅しない
-    separate_file: 11_report_code_and_section_matrix.md
-    includes:
-      - report_codeごとの必須section一覧
-      - section出現条件（開始時 / 実績評価時 / 途中終了時 など）
-      - header項目の条件差分（例: 途中終了時の実施機関情報）
-    reason:
-      - report_codeはheader要素でありながらsection構造と強く結びつくため
-      - 単一ファイル内で管理すると責務が肥大化するため分離する
-```
+### 別管理とする事項
+
+報告区分コードごとの必須項目・section 出現関係・header 条件差分は、本ファイルでは網羅しない。
+これらは `report_timing_and_section_matrix.md` 側で管理する。
 
 ---
 
@@ -341,7 +308,8 @@ participant_ticket_structure:
 - 受診券整理番号と受診券発行保険者番号も同様に `functionCode code="1"` 側で取得する
 - `participant` の多重度は `0..2` で、受診券のみ / 利用券のみ / 両方あり のいずれにも対応する
 - 健診および保健指導がそれぞれ個別契約で実施され、受診券も利用券も存在しない場合には `participant` は出現しない
-- 保険者番号は `recordTarget` 側で記述される保険者番号と同一でなければならず、値が異なる場合は `recordTarget` 側を正とする
+- 保険者番号は `recordTarget` 側で記述される保険者番号と同一であることが前提となる
+- 差異が存在する場合の扱いは本仕様では定義しない
 - 特定健診当日に初回面接を実施した場合、利用券整理番号および有効期限には受診券の整理番号（種別番号「5」）および有効期限を設定するため注意が必要
 
 ---
@@ -398,77 +366,51 @@ documentationOf_structure:
 - 保健指導区分コードは `serviceEvent/code/@code` で表現される
 - 実施日付は `serviceEvent/effectiveTime/@value` で表現される
 - 2017年版の修正履歴では、初回面接を分割して行っている場合、初回面接実施日付は「初回面接②の実施日付」であることが追記されている
-- 実装では、単一日付 `@value` と期間表現 `low/high` の両方があり得る前提で扱う
-- initial_date / final_date の実装では、どの XPath を優先するかを別途明示する必要がある
+- `effectiveTime` は `@value` または `low/high` により表現される
+- initial_date / final_date における XPath の優先順位および採用ルールは別途整理する
 
 ---
 
-## 10. 提出元 / 作成者 / 管理者情報
-
-```yaml
-organization_information:
-  - author
-  - custodian
-```
-
+-## 10. 提出元 / 作成者 / 管理者情報
 - `author` は本ファイルの作成者情報を表現する
 - `custodian` は本ファイル作成管理責任機関情報を表現する
 - 5-1A では `custodian` は「本仕様では使用しないが HL7 CDA 規格上必須」であるため、所定の形式で記述するとされている
+- `author` および `custodian` はいずれも CDA header の管理情報として位置付けられる
+- 実運用上の利用有無に関わらず、CDA仕様上の必須要素として構造上は必ず出現する
 
 ---
 
 ## 11. participant の役割
 
-```yaml
-participant:
-  role:
-    - 受診券情報
-    - 利用券情報
-    - 利用券発行保険者情報
-```
-
-- `participant` は単なる付随情報ではなく、受診券・利用券・保険者情報を持つ正式な header 管理情報要素である
-- 実装では `functionCode/@code="1"` と `functionCode/@code="2"` を明示的に分岐して解釈する必要がある
-- 特定保健指導XMLでは、利用券情報の取得と修正に直結する重要要素である
+- `participant` は受診券情報・利用券情報・保険者情報を保持する header 管理情報要素である
+- `functionCode/@code="1"` は受診券、`functionCode/@code="2"` は利用券を表す
+- 特定保健指導XMLでは、利用券情報の取得・解釈に直結する重要要素である
 
 ---
 
 ## 12. documentationOf / serviceEvent の役割
 
-```yaml
-documentationOf:
-  serviceEvent:
-    role:
-      - 保健指導実施情報
-      - 実施日 / 期間情報
-      - 保健指導区分情報
-```
-
-- `documentationOf` / `serviceEvent` は保健指導の実施に関する基本情報を保持する
+- `documentationOf` / `serviceEvent` は保健指導実施情報を保持する header 管理情報要素である
 - `serviceEvent/code` は保健指導区分を表現する
 - `serviceEvent/effectiveTime` は実施日または実施期間を表現する
-- 特定保健指導の期間判定、initial_date / final_date、報告時期の判定に関わる要素である
-- 実装では section 情報と混同せず、header 管理情報として別レイヤーで扱うべき要素である
+- 特定保健指導の期間判定や報告時期判定に関わる基礎情報となる
+- section 情報とは別レイヤーの header 管理情報として扱う
 
 ---
 
 ## 13. 実装チェック観点
 
-```yaml
-Checks:
-  - participant count is within 0..2
-  - participant/@typeCode == HLD
-  - functionCode 1/2 is interpreted correctly
-  - guidance ticket expiration xpath resolves correctly
-  - guidance ticket number xpath resolves correctly
-  - guidance ticket insurer number xpath resolves correctly
-  - receive ticket number xpath resolves correctly when present
-  - participant insurer number matches recordTarget insurer number
-  - documentationOf exists and multiplicity is 1..1
-  - serviceEvent/code xpath resolves correctly
-  - serviceEvent/effectiveTime xpath resolves correctly
-  - effectiveTime value vs low/high usage is handled explicitly
-```
+header および section 外要素の整合性確認では、以下を満たす必要がある：
+
+- participant の出現数が仕様範囲内であること
+- `participant/@typeCode` が `HLD` であること
+- `functionCode/@code="1"` と `functionCode/@code="2"` が正しく解釈されること
+- 利用券有効期限・整理番号・保険者番号の XPath が解決できること
+- 受診券情報が存在する場合、その XPath が解決できること
+- participant 側保険者番号と recordTarget 側保険者番号の関係が明示されていること
+- `documentationOf` が存在し、多重度条件を満たすこと
+- `serviceEvent/code` および `serviceEvent/effectiveTime` の XPath が解決できること
+- `effectiveTime` の `@value` と `low/high` の扱い方針が明示されていること
 
 ---
 

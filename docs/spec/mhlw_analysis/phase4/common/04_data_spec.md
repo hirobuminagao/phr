@@ -5,7 +5,7 @@
 DATAフォルダは、送付対象となる実データXMLを格納する領域であり、
 健診結果・保健指導・関連情報の実体データを定義する。
 
-本specでは、実装観点で以下を整理する。
+本仕様では、DATA に関する以下の事項を対象とする。
 
 - DATA の役割
 - ix08 / su08 との関係
@@ -38,122 +38,90 @@ DATAフォルダは、送付対象となる実データXMLを格納する領域�
 
 ## 5. 配置場所
 
-```yaml
-location:
-  root/DATA/
-```
+DATA フォルダは、送付用ファイルアーカイブのルートディレクトリ直下に配置する。
 
 ---
 
 ## 5.1 ファイル命名規則
 
-```yaml
-filename:
-  pattern: 未確定（要確認）
-```
+DATA 配下の XML ファイル名は、送付用ファイルアーカイブ仕様で定められた命名規則に従う。
 
-- DATA配下のXMLファイル名は仕様上ルールが存在する可能性がある
-- 現時点では ix08 との突合により実体一致を前提とする
+現時点では、本specでは個別の命名パターンを再定義せず、以下を成立条件として扱う。
 
-```yaml
-constraints:
-  - ix08.file_name と完全一致すること
-```
+- ix08 に記載されたファイル名と完全一致すること
+- 実ファイル名は送付用ファイルアーカイブ仕様と矛盾しないこと
 
-- 実装上はファイル名そのものよりも「ix08との一致」を優先する
+※ 個別の命名規則は `01_file_archive_spec.md` を参照する
 
 ---
 
 ## 6. ファイル単位構造
 
-```yaml
-DATA:
-  - 1 XML = 1対象（個人単位）
-```
+DATA フォルダ内の XML は、個別対象ごとの実データファイルとして格納される。
 
+- 1 XML = 1対象（個人単位）
 - ファイル単位で対象者が分離される
 
 ---
 
 ## 7. 文書構造（概要）
 
-```yaml
-ClinicalDocument:
-  - header
-  - body
-```
+DATA 配下の XML は HL7 CDA に準拠した文書構造を持つ。
 
-※ CDA準拠
+- ルート要素は ClinicalDocument
+- ヘッダ部とボディ部を持つ
 
 ---
 
 ## 8. ヘッダ構造（概要）
 
-```yaml
-header:
-  id
-  recordTarget
-  author
-  custodian
-```
+ヘッダ部には、文書識別および対象者・作成機関に関する情報が含まれる。
 
-- 対象者情報
-- 作成機関情報
+- 文書識別子
+- recordTarget
+- author
+- custodian
 
 ---
 
 ## 9. ボディ構造（概要）
 
-```yaml
-body:
-  structuredBody:
-    component:
-      section:
-        - code
-        - entry
-```
+ボディ部は structuredBody / component / section を基本単位として構成される。
 
 ---
 
 ## 10. section構造（重要）
 
-```yaml
-section:
-  code: セクション識別コード
-  entry: 実データ
-```
+section は、実データを意味単位ごとに保持する基本構造である。
 
-```yaml
-examples:
-  - 90030: 実施内容
-  - 24100: 生活習慣改善
-  - 24090: 体重・腹囲改善
-```
+- section は code を持つ
+- 実データは entry 配下に記述される
+
+例：
+
+- 90030：保健指導計画情報
+- 24100：生活習慣改善コード系
+- 24090：腹囲・体重改善コード系
 
 ---
 
 ## 11. ix08 / su08 との関係
 
-```yaml
-relationships:
-  ix08:
-    - DATA XML を列挙
+DATA は以下の関係を持つ。
 
-  su08:
-    - DATA XML を集計
-```
+- ix08：DATA 配下の XML ファイル一覧を列挙する
+- su08：DATA 配下の XML を集計対象とする
 
 ---
 
 ## 12. 実装チェック観点
 
-```yaml
-Checks:
-  - XMLが存在する
-  - XML構造がCDA準拠
-  - sectionが存在する
-  - section codeが正しい
-```
+DATA の整合性確認では、以下を満たす必要がある：
+
+- XML ファイルが存在すること
+- XML構造が CDA / スキーマに準拠していること
+- 必要な section が存在すること
+- section code が仕様と矛盾しないこと
 
 ---
 

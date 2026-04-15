@@ -1,5 +1,3 @@
-
-
 # 90020 初回面接実施情報 セクション仕様
 
 ---
@@ -42,10 +40,25 @@
 
 ## 4. セクション概要
 
+
 | 項目 | 内容 |
 |------|------|
 | セクションコード | 90020 |
 | セクション名 | 初回面接実施情報 |
+
+### ■ セクションの出現前提（重要）
+
+- 90020 は「初回面接を分割実施した場合」にのみ出現するセクションである（5-1A 記載事項）
+- 本セクションは「初回面接①（分割前半）」の実施情報を表現する
+- 初回面接②（分割後半）は別セクション（90030）で扱われる
+
+### ■ 実務上の解釈（参考）
+
+- 初回面接①：健診結果が一部未確定の段階での初期面談・目標設定
+- 初回面接②：健診結果確定後の目標見直し・最終合意
+- 初回面接②では電話・電子メール等が許容される（項目1302の備考と整合）
+
+※ 上記は仕様書の補助理解としての整理であり、一次的な出現条件は「分割実施」である点に注意する
 
 ※ classCode / moodCode は entry 配下の act に対する属性として扱う（sectionそのものの属性ではない）
 
@@ -59,6 +72,7 @@
 <section>
   <code code="90020" codeSystem="1.2.392.200119.6.1010"/>
   <text/>
+</section>
 ```
 
 ---
@@ -67,12 +81,18 @@
 
 5-1A 3.3.3.3（表23）に基づき、90020 セクションの entry 配下について、確認できた事実を以下に整理する。
 
+- 各項目は entryRelationship（typeCode="COMP"）単位で表現される（90010 と同様の構造パターン）
+
 ```xml
 <entry>
   <act classCode="ACT" moodCode="EVN">
     <code code="XXXX" codeSystem="..." />
     <effectiveTime value="YYYYMMDD"/>
-    ...
+    <entryRelationship typeCode="COMP">
+      <observation classCode="OBS" moodCode="EVN">
+        ...
+      </observation>
+    </entryRelationship>
   </act>
 </entry>
 ```
@@ -81,37 +101,43 @@
 
 ## 7. 項目対応（fuzoku3ベース）
 
-| No | 項目ID | 名称 | データ型 | 出現条件（report_code） | 配置メモ |
-|----|--------|------|----------|-------------------------|----------|
-| 1301 | 1022000011 | 初回面接の実施日付 | 年月日 | first_claim / legal_report | effectiveTime |
-| 1302 | 1022000012 | 支援形態 | コード | first_claim / legal_report | code |
-| 1303 | 1022000016 | 健診後早期の初回面接 | コード | first_claim / second_claim / legal_report | code |
-| 1304 | 1022000013 | 実施時間 | 数字 | first_claim / legal_report | OBS（時間） |
-| 1305 | 1022000015 | 実施者 | コード | first_claim / legal_report | performer |
-| 1306 | 1022000090 | 初回面接情報 | 文字列 | first_claim | ST（備考） |
+| No | 項目ID | 名称 | データ型 | XMLデータ型 | 出現条件（report_code） | 配置メモ | OID / 単位 / 条件メモ |
+|----|--------|------|----------|-------------|-------------------------|----------|------------------------|
+| 1301 | `1022000011` | 初回面接の実施日付 | 年月日 | - | `first_claim=○` / `legal_report=○` | `effectiveTime` | `YYYYMMDD` |
+| 1302 | `1022000012` | 初回面接による支援の支援形態 | コード | - | `first_claim=○` / `legal_report=○` | `code` | `OID=1.2.392.200119.6.24010` / `5:電話` と `6:電子メール等` は初回面接②のみ入力可能 |
+| 1303 | `1022000016` | 健診後早期の初回面接 | コード | - | `first_claim=○` / `second_claim=△` / `legal_report=○` | `code` | `OID=1.2.392.200119.6.24070` / `0:実施なし 1:当日 2:1週間以内（当日は除く）` |
+| 1304 | `1022000013` | 初回面接の実施時間 | 数字 | - | `first_claim=○` / `legal_report=○` | `observation` | `OBS/EVN` / 単位 `min` |
+| 1305 | `1022000015` | 初回面接の実施者 | コード | - | `first_claim=○` / `legal_report=○` | `performer` | `OID=1.2.392.200119.6.3020` / `1:医師 2:保健師 3:管理栄養士 4:その他` |
+| 1306 | `1022000090` | 初回面接情報 | 漢字 | `ST` | `first_claim=△` | `observation` | `ST` / 256文字上限 |
 
-※ 項目単位の条件・型は fuzoku3.csv 側でFIX済み。
+`※ 項目単位の条件・型は `fuzoku3.csv` 側で FIX 済みとし、本ファイルでは 90020 section に属する項目として整理する。`
 
 ---
 
 ## 8. 出現条件（項目別）
 
-- 1301 / 1302 / 1304 / 1305：first_claim / legal_report
-- 1303：first_claim / second_claim / legal_report
-- 1306：first_claim のみ
+- 1301 / 1302 / 1304 / 1305：`first_claim=○`、`legal_report=○`
+- 1303：`first_claim=○`、`second_claim=△`、`legal_report=○`
+- 1306：`first_claim=△`
 
-※ セクション単位で一律に second_claim とはならないため、項目単位で管理する。
+※ `second_claim` は 90020 全体で一律に出現するのではなく、1303 のみ条件付きで扱う。
 
 ---
 
 ## 9. このファイルで固定すること
 
-- セクションコードは 90020 で固定
-- `entry` は 1..1（内部に複数 observation / act / performer を含む）
+- セクションコードは `90020` で固定する
+- `entry` は `1..1` である
 - 1301〜1306 を 90020 の対象項目とする
-- entry 配下に act（EVN）として配置する
-- effectiveTime は日付（YYYYMMDD）として扱う（1301）
-- 出現条件は項目単位で管理する（section単位では固定しない）
+- 各項目は `entryRelationship` 単位で表現される
+- entry 配下に `act (moodCode=EVN)` として配置する
+- 1301 は `effectiveTime` に `YYYYMMDD` 形式で格納する
+- 1302 は支援形態コードであり、`OID=1.2.392.200119.6.24010` を参照する
+- 1303 は健診後早期の初回面接コードであり、`OID=1.2.392.200119.6.24070` を参照する
+- 1304 は observation 側で表現し、単位は `min` とする
+- 1305 は実施者コードであり、`OID=1.2.392.200119.6.3020` を参照する
+- 1306 は `ST` として扱い、文字数上限は 256 文字とする
+- 出現条件は section 単位ではなく項目単位で管理する
 
 ---
 

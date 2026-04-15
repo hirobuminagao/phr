@@ -50,7 +50,8 @@ SHG XML は、以下の2系統に分けて整理する。
 - 90040
 - 90050
 - 90060
-- 90090
+- 90070
+- 90080
 
 ---
 
@@ -77,7 +78,7 @@ shg:
     role: 90030 保健指導計画情報
 
   07_90040_section_spec.md:
-    role: 90040 継続支援情報
+    role: 90040 継続的支援実施情報
 
   08_90050_section_spec.md:
     role: 90050 中間評価情報
@@ -85,8 +86,11 @@ shg:
   09_90060_section_spec.md:
     role: 90060 実績評価情報
 
-  10_90090_section_spec.md:
-    role: 90090 指導機関情報
+  10_90070_section_spec.md:
+    role: 90070 計画上の集計情報
+
+  11_90080_section_spec.md:
+    role: 90080 指導機関情報
 
   fuzoku3.csv:
     role: 付属3を正規化した項目一覧
@@ -110,7 +114,7 @@ shg:
 3. 04_90010_section_spec.md
 4. 05_90020_section_spec.md
 5. 06_90030_section_spec.md
-6. 07_90040_section_spec.md / 08_90050_section_spec.md / 09_90060_section_spec.md / 10_90090_section_spec.md
+6. 07_90040_section_spec.md / 08_90050_section_spec.md / 09_90060_section_spec.md / 10_90070_section_spec.md / 11_90080_section_spec.md
 
 理由:
 - まず section 以外の土台を固めないと、90030 など個別セクションの責務がぶれやすい
@@ -120,7 +124,7 @@ shg:
 
 ## 7. 注意
 
-- 現時点では、まだ特定保健指導寄りの知識と実装都合が混ざっている可能性がある
+- inventory には一次情報に基づく事実と整理方針のみを記載し、推測や実装途中の案は含めない
 - spec化では、必ず「一次情報にある事実」と「実装のための整理」を分ける
 - sectionコードの意味やentry構造は、この inventory では確定せず、後続ファイルで分離して整理する
 
@@ -132,5 +136,5 @@ shg:
 TODO:
   - 5-1A.pdf の章立てと spec 分割案の対応表を作る
   - CDAセクション以外の項目を確定する
-  - 04_90010 / 05_90020 / 06_90030 の section spec の役割差分を整理する
+  - 02_header_and_non_section_spec.md と各 section spec の責務境界を確認する
 ```
