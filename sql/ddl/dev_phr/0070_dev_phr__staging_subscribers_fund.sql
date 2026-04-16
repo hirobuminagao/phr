@@ -1,83 +1,83 @@
 CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT 'PK',
 
   -- source / control
-  `fund_id` bigint unsigned NOT NULL,
-  `version` int NOT NULL,
-  `import_run_id` bigint unsigned DEFAULT NULL,
-  `src_file` varchar(190) DEFAULT NULL,
-  `src_row_no` int DEFAULT NULL,
-  `src_line_no` int DEFAULT NULL,
+  `fund_id` bigint unsigned NOT NULL COMMENT '健保識別ID',
+  `version` int NOT NULL COMMENT 'テンプレートバージョン',
+  `import_run_id` bigint unsigned DEFAULT NULL COMMENT '取込実行ID',
+  `src_file` varchar(190) DEFAULT NULL COMMENT '元CSVファイル名',
+  `src_row_no` int DEFAULT NULL COMMENT 'CSV行番号（論理）',
+  `src_line_no` int DEFAULT NULL COMMENT 'CSV行番号（物理）',
 
   -- raw values (原則は norm 格納。mapping上どうしても raw しか取れない項目のみ保持)
 
   -- normalized (norm)
-  `name_kana_full_norm` varchar(190) DEFAULT NULL,
-  `name_kanji_full_norm` varchar(190) DEFAULT NULL,
-  `name_kanji_family_norm` varchar(190) DEFAULT NULL,
-  `name_kanji_middle_norm` varchar(190) DEFAULT NULL,
-  `name_kanji_given_norm` varchar(190) DEFAULT NULL,
+  `name_kana_full_norm` varchar(190) DEFAULT NULL COMMENT '氏名カナ（正規化）',
+  `name_kanji_full_norm` varchar(190) DEFAULT NULL COMMENT '氏名漢字（正規化）',
+  `name_kanji_family_norm` varchar(190) DEFAULT NULL COMMENT '姓（正規化）',
+  `name_kanji_middle_norm` varchar(190) DEFAULT NULL COMMENT 'ミドルネーム（正規化）',
+  `name_kanji_given_norm` varchar(190) DEFAULT NULL COMMENT '名（正規化）',
 
-  `gender_code_norm` tinyint unsigned DEFAULT NULL,
-  `birth_norm` date DEFAULT NULL,
+  `gender_code_norm` tinyint unsigned DEFAULT NULL COMMENT '性別コード（正規化）',
+  `birth_norm` date DEFAULT NULL COMMENT '生年月日（正規化）',
 
-  `insurer_number_norm` char(8) DEFAULT NULL,
-  `insurance_symbol_norm` varchar(190) DEFAULT NULL,
-  `insurance_number_norm` varchar(190) DEFAULT NULL,
-  `insurance_branchnumber_norm` varchar(190) DEFAULT NULL,
-  `insurance_symbol_digits` int unsigned DEFAULT NULL,
+  `insurer_number_norm` char(8) DEFAULT NULL COMMENT '保険者番号（正規化）',
+  `insurance_symbol_norm` varchar(190) DEFAULT NULL COMMENT '保険証記号（正規化）',
+  `insurance_number_norm` varchar(190) DEFAULT NULL COMMENT '保険証番号（正規化）',
+  `insurance_branchnumber_norm` varchar(190) DEFAULT NULL COMMENT '保険証枝番（正規化）',
+  `insurance_symbol_digits` int unsigned DEFAULT NULL COMMENT '記号の数字部分（補助）',
 
-  `relationship_code_norm` varchar(64) DEFAULT NULL,
-  `relationship_name_norm` varchar(190) DEFAULT NULL,
+  `relationship_code_norm` varchar(64) DEFAULT NULL COMMENT '続柄コード（正規化）',
+  `relationship_name_norm` varchar(190) DEFAULT NULL COMMENT '続柄名称（正規化）',
 
   -- exceptional raw-retained field
-  `connect_id_raw` varchar(190) DEFAULT NULL,
+  `connect_id_raw` varchar(190) DEFAULT NULL COMMENT '連携ID（raw例外保持）',
 
-  `connect_id_norm` varchar(190) DEFAULT NULL,
-  `received_company_code_norm` varchar(190) DEFAULT NULL,
-  `received_company_name_norm` varchar(190) DEFAULT NULL,
-  `department_code` varchar(190) DEFAULT NULL,
-  `distribution_code` varchar(190) DEFAULT NULL,
-  `employee_code` varchar(190) DEFAULT NULL,
+  `connect_id_norm` varchar(190) DEFAULT NULL COMMENT '連携ID（正規化）',
+  `received_company_code_norm` varchar(190) DEFAULT NULL COMMENT '受領企業コード（正規化）',
+  `received_company_name_norm` varchar(190) DEFAULT NULL COMMENT '受領企業名（正規化）',
+  `department_code` varchar(190) DEFAULT NULL COMMENT '所属コード',
+  `distribution_code` varchar(190) DEFAULT NULL COMMENT '配布先コード',
+  `employee_code` varchar(190) DEFAULT NULL COMMENT '社員コード',
 
   -- match values
   `name_kana_full_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '氏名カナ（照合用）',
   `name_kanji_full_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '氏名漢字（照合用）',
   `name_kanji_family_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '姓（照合用）',
   `name_kanji_middle_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT 'ミドルネーム（照合用）',
   `name_kanji_given_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '名（照合用）',
 
   `insurance_symbol_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '保険証記号（照合用）',
   `insurance_number_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '保険証番号（照合用）',
 
   `relationship_name_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '続柄名称（照合用）',
 
   -- identity / lookup cache
-  `person_id_custom` varchar(190) DEFAULT NULL,
+  `person_id_custom` varchar(190) DEFAULT NULL COMMENT 'カスタム個人ID',
   `identity_hash` char(64)
     CHARACTER SET ascii
-    COLLATE ascii_bin DEFAULT NULL,
-  `matched_subscriber_id` bigint unsigned DEFAULT NULL,
+    COLLATE ascii_bin DEFAULT NULL COMMENT '同一人物識別ハッシュ',
+  `matched_subscriber_id` bigint unsigned DEFAULT NULL COMMENT '既存加入者ID（突合結果）',
 
   -- timestamps
-  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  `loaded_at` datetime(3) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'レコード作成日時',
+  `loaded_at` datetime(3) DEFAULT NULL COMMENT '取込完了日時',
 
   PRIMARY KEY (`id`),
 
