@@ -97,3 +97,103 @@
   - `hia_dashboard_year_end_status` の目的、保持項目、記帳タイミング
 
 必要に応じて、比較前補完や転籍候補判定を個別ファイルへ分割する。
+
+---
+
+## 実装対象一覧（DDL / スクリプト）
+
+本specに基づき、実装対象となるDDLおよびスクリプトを以下に整理する。
+
+### DDL
+
+#### 新規作成
+
+- `hia_dashboard_year_end_status`
+  - 2025年度のダッシュボード状態を固定するスナップショットテーブル
+  - 年度履歴・母数固定・集計用途
+
+#### 改修
+
+- `staging_subscribers_fund`
+  - `_norm` / `_match` / `identity` 系カラムの整理・追加
+  - 不要カラムの削除（processed系など）
+
+- `subscribers`
+  - match系・identity系カラムの不足があれば追加
+  - 既存仕様との整合確認を実施
+
+#### 確認対象（要調査）
+
+- `templates` / `template_mappings`
+  - staging投入時のマッピング定義
+  - 必要に応じてseedまたは更新
+
+---
+
+### スクリプト
+
+#### Step0（年度末固定）
+
+- `snapshot_hia_dashboard_year_end_status.py`
+  - 実行タイミング：マニュアル指定
+  - `hia_dashboard_status` から必要項目を抽出し、スナップショットへ記帳
+
+#### 取り込み
+
+- `import_staging_subscribers_fund.py`
+  - CSV取り込み
+  - norm / match / identity生成
+  - stagingテーブルへ投入
+
+#### 補完（enrichment）
+
+- `enrich_subscribers_from_fund_staging.py`
+  - `subscribers` の補完
+  - comparison前の基準面整備
+
+#### 比較（comparison）
+
+- `compare_subscribers_with_fund_staging.py`
+  - 差分分類
+  - 転籍候補・氏名変更候補の抽出
+
+#### 出力（任意）
+
+- comparison結果のCSV出力または一時テーブル格納
+
+---
+
+## DDL・カラム確定方針
+
+現時点では、以下の観点で未確定要素が存在するため、実装前に確定を行う。
+
+- 各テーブルの保持カラム（特にmatch系・identity系）
+- `subscribers` 側の既存カラムとの差分
+- stagingテーブルの最終カラム構成
+- スナップショットテーブルの最小保持項目
+
+### 確定手順
+
+1. 現行DDLを全テーブル分確認
+2. spec（03 / 04 / 05 / 06）との突合
+3. 不足カラム・不要カラムの洗い出し
+4. 変更DDL（migration）として確定
+
+---
+
+## 実装順
+
+1. spec最終レビュー・fix
+2. DDL確定・migration作成
+3. Step0スクリプト実装
+4. staging取り込みスクリプト実装
+5. enrichmentスクリプト実装
+6. comparisonスクリプト実装
+7. 必要に応じて出力処理実装
+
+---
+
+## 現在のゴール
+
+- 2025年度を基準とした差分抽出（comparison）までを完了させる
+- 更新反映（apply）は次フェーズとする

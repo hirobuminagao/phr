@@ -268,7 +268,10 @@ identity 生成に必要な項目に欠損がある場合は、欠損を明示�
 - 照合結果保持カラム（matched系）
 - identity 生成に必要な入力項目
 
+
 `identity_hash` は現行DDLに存在しないため、新DDLで追加する前提とする。
+
+現行DDLとの乖離は大きく、実データも未投入であるため、`staging_subscribers_fund` は ALTER ベースではなく DROP + CREATE 前提で再作成する方針とする。
 
 ### 2. raw / norm / match の範囲
 
@@ -695,9 +698,12 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 - `archive/` は自動削除せず、手動運用とする
 - 現行DDLカラムの棚卸し方針（維持 / rename / 追加 / 削除）は確定済み
 
+- `staging_subscribers_fund` は現行DDLとの乖離が大きく、実データも存在しないため、DROP + CREATE 前提で再作成する方針とする
+
 ### 未実施
 
 - 本 spec の内容をもとに新DDLへ落とし込む
+- 会社 Ubuntu 環境側の現行DDLと最終突合を行う
 
 ## このファイルで次に行うこと
 

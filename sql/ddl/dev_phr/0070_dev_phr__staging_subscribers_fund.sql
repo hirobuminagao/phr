@@ -1,52 +1,90 @@
 CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+
+  -- source / control
   `fund_id` bigint unsigned NOT NULL,
   `template_ver` int NOT NULL,
-  `person_id_custom` varchar(190) DEFAULT NULL,
-  `name_kana_full` varchar(190) NOT NULL,
-  `name_kanji_full` varchar(190) DEFAULT NULL,
-  `name_kanji_family` varchar(190) DEFAULT NULL,
-  `name_kanji_middle` varchar(190) DEFAULT NULL,
-  `name_kanji_given` varchar(190) DEFAULT NULL,
-  `name_kana_family` varchar(190) DEFAULT NULL,
-  `name_kana_middle` varchar(190) DEFAULT NULL,
-  `name_kana_given` varchar(190) DEFAULT NULL,
-  `gender_code` varchar(190) NOT NULL,
-  `birth` date DEFAULT NULL COMMENT '日付型に統一（YYYY-MM-DD）',
-  `insurer_number` char(8) DEFAULT NULL,
-  `insurance_symbol` varchar(190) DEFAULT NULL,
-  `insurance_symbol_digits` int unsigned DEFAULT NULL COMMENT 'insurance_symbol から数字のみ抽出した派生キー（例: 埼-30→30、数字なし→NULL）',
-  `insurance_number` varchar(190) NOT NULL,
-  `insurance_branchnumber` varchar(190) DEFAULT NULL,
-  `qualification_acquired_date` date DEFAULT NULL COMMENT '日付型に統一（YYYY-MM-DD）',
-  `qualification_lost_date` date DEFAULT NULL COMMENT '日付型に統一（YYYY-MM-DD）',
-  `postal_code` varchar(190) DEFAULT NULL,
-  `address_line` varchar(190) DEFAULT NULL,
-  `building` varchar(190) DEFAULT NULL,
-  `phone` varchar(190) DEFAULT NULL,
-  `email` varchar(190) DEFAULT NULL,
-  `employer_code` varchar(190) DEFAULT NULL,
-  `department_code` varchar(190) DEFAULT NULL,
-  `distribution_code` varchar(190) DEFAULT NULL,
-  `employee_code` varchar(190) DEFAULT NULL,
-  `connect_id` varchar(190) DEFAULT NULL,
+  `import_run_id` bigint unsigned DEFAULT NULL,
   `src_file` varchar(190) DEFAULT NULL,
   `src_row_no` int DEFAULT NULL,
   `src_line_no` int DEFAULT NULL,
-  `import_run_id` bigint unsigned DEFAULT NULL,
+
+  -- raw values
+  `name_kana_full_raw` varchar(190) DEFAULT NULL,
+  `name_kanji_full_raw` varchar(190) DEFAULT NULL,
+  `name_kanji_family_raw` varchar(190) DEFAULT NULL,
+  `name_kanji_middle_raw` varchar(190) DEFAULT NULL,
+  `name_kanji_given_raw` varchar(190) DEFAULT NULL,
+
+  `gender_code_raw` varchar(190) DEFAULT NULL,
+  `birth_raw` varchar(190) DEFAULT NULL,
+
+  `insurer_number_raw` varchar(190) DEFAULT NULL,
+  `insurance_symbol_raw` varchar(190) DEFAULT NULL,
+  `insurance_number_raw` varchar(190) DEFAULT NULL,
+  `insurance_branchnumber_raw` varchar(190) DEFAULT NULL,
+
+  `relationship_code_raw` varchar(190) DEFAULT NULL,
+  `relationship_name_raw` varchar(190) DEFAULT NULL,
+
+  `connect_id_raw` varchar(190) DEFAULT NULL,
+
+  -- normalized (norm)
+  `name_kana_full_norm` varchar(190) DEFAULT NULL,
+  `name_kanji_full_norm` varchar(190) DEFAULT NULL,
+  `name_kanji_family_norm` varchar(190) DEFAULT NULL,
+  `name_kanji_given_norm` varchar(190) DEFAULT NULL,
+
+  `gender_code_norm` tinyint unsigned DEFAULT NULL,
+  `birth_norm` date DEFAULT NULL,
+
+  `insurer_number_norm` char(8) DEFAULT NULL,
+  `insurance_symbol_norm` varchar(190) DEFAULT NULL,
+  `insurance_number_norm` varchar(190) DEFAULT NULL,
+
+  `relationship_norm` varchar(64) DEFAULT NULL,
+  `connect_id_norm` varchar(190) DEFAULT NULL,
+
+  -- match values
+  `name_kana_full_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+  `name_kanji_full_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+  `name_kanji_family_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+  `name_kanji_given_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+
+  `insurance_symbol_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+  `insurance_number_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+
+  `relationship_match` varchar(64) DEFAULT NULL,
+
+  -- identity
+  `person_id_custom` varchar(190) DEFAULT NULL,
+  `identity_hash` char(64)
+    CHARACTER SET ascii
+    COLLATE ascii_bin DEFAULT NULL,
+
+  -- timestamps
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `loaded_at` datetime(3) DEFAULT NULL,
-  `processed_at` datetime(3) DEFAULT NULL,
-  `matched_subscriber_id` bigint unsigned DEFAULT NULL,
-  `matched_checked_at` datetime(3) DEFAULT NULL,
-  `relationship_code` varchar(190) DEFAULT NULL,
-  `relationship_name` varchar(190) DEFAULT NULL,
 
   PRIMARY KEY (`id`),
-  KEY `idx_stgfund_fund_template` (`fund_id`, `template_ver`),
+
   KEY `idx_stgfund_import_run` (`import_run_id`),
-  KEY `idx_stgfund_namekana` (`name_kana_full`),
-  KEY `idx_stgfund_insurer` (`insurer_number`)
+  KEY `idx_stgfund_identity_hash` (`identity_hash`),
+  KEY `idx_stgfund_symbol_number` (`insurance_symbol_match`, `insurance_number_match`),
+  KEY `idx_stgfund_name_kana_match` (`name_kana_full_match`),
+  KEY `idx_stgfund_insurer` (`insurer_number_norm`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
