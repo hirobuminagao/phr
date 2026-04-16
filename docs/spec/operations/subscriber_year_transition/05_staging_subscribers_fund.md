@@ -612,6 +612,32 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 | `name_kana_given` | rename | `name_kana_given_norm` |
 | `name_kana_full_match` | 追加 | identity構成要素として追加 |
 
+#### 氏名カナの match 設計方針（追加）
+
+氏名カナについては、受領CSVの形式差異（フルのみ / 分割のみ / 両方存在）を前提とし、以下の方針で統一する。
+
+- `*_norm` はフル・分割すべての構造を保持する
+- `*_match` は `name_kana_full_match` のみを保持する
+- match 値は必ず `name_kana_full_norm` から生成する
+- 分割カナ（family / middle / given）は match を直接生成しない
+
+#### 入力パターン別の扱い
+
+- フルのみ存在する場合  
+  → そのまま `name_kana_full_norm` を生成し、そこから match を生成する
+
+- 分割のみ存在する場合  
+  → family / middle / given を結合して `name_kana_full_norm` を生成し、そこから match を生成する
+
+- フル・分割両方存在する場合  
+  → フルを優先し、分割は補助情報として保持する
+
+#### 設計意図
+
+- identity は `name_kana_full_match` を前提としているため、match はフルに統一する
+- 分割ベースでの match は揺れや組み合わせ爆発を招くため採用しない
+- 分割情報は人手確認・補完用途として norm 側に保持する
+
 ### 4. 氏名（漢字）
 
 | 現行カラム | 区分 | 新方針 / コメント |
@@ -658,6 +684,24 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 | `building` | rename | `building_norm` |
 | `phone` | rename | `phone_norm` |
 | `email` | rename | `email_norm` |
+
+#### 住所・連絡先の保持方針（追加）
+
+住所・連絡先情報は、健保ごとに受領形式が異なるが、staging において削除対象としない。
+
+- `postal_code_norm`
+- `address_line_norm`
+- `building_norm`
+- `phone_norm`
+- `email_norm`
+
+これらはすべて norm として保持する。
+
+#### 設計意図
+
+- HIA登録や人手確認で利用される可能性がある
+- 後続処理で利用される可能性が高く、staging段階で削除する合理性がない
+- staging の役割は「削減」ではなく「正規化された入力保持」であるため、業務項目は原則保持する
 
 ### 8. 会社・組織・外部ID
 

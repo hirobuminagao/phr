@@ -13,6 +13,9 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
 
   -- normalized (norm)
   `name_kana_full_norm` varchar(190) DEFAULT NULL COMMENT '氏名カナ（正規化）',
+  `name_kana_family_norm` varchar(190) DEFAULT NULL COMMENT '姓カナ（正規化）',
+  `name_kana_middle_norm` varchar(190) DEFAULT NULL COMMENT 'ミドルネームカナ（正規化）',
+  `name_kana_given_norm` varchar(190) DEFAULT NULL COMMENT '名カナ（正規化）',
   `name_kanji_full_norm` varchar(190) DEFAULT NULL COMMENT '氏名漢字（正規化）',
   `name_kanji_family_norm` varchar(190) DEFAULT NULL COMMENT '姓（正規化）',
   `name_kanji_middle_norm` varchar(190) DEFAULT NULL COMMENT 'ミドルネーム（正規化）',
@@ -25,10 +28,17 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
   `insurance_symbol_norm` varchar(190) DEFAULT NULL COMMENT '保険証記号（正規化）',
   `insurance_number_norm` varchar(190) DEFAULT NULL COMMENT '保険証番号（正規化）',
   `insurance_branchnumber_norm` varchar(190) DEFAULT NULL COMMENT '保険証枝番（正規化）',
+  `qualification_acquired_date_norm` date DEFAULT NULL COMMENT '資格取得日（正規化）',
+  `qualification_lost_date_norm` date DEFAULT NULL COMMENT '資格喪失日（正規化）',
   `insurance_symbol_digits` int unsigned DEFAULT NULL COMMENT '記号の数字部分（補助）',
 
   `relationship_code_norm` varchar(64) DEFAULT NULL COMMENT '続柄コード（正規化）',
   `relationship_name_norm` varchar(190) DEFAULT NULL COMMENT '続柄名称（正規化）',
+  `postal_code_norm` varchar(190) DEFAULT NULL COMMENT '郵便番号（正規化）',
+  `address_line_norm` varchar(190) DEFAULT NULL COMMENT '住所1（正規化）',
+  `building_norm` varchar(190) DEFAULT NULL COMMENT '住所2（建物）（正規化）',
+  `phone_norm` varchar(190) DEFAULT NULL COMMENT '電話番号（正規化）',
+  `email_norm` varchar(190) DEFAULT NULL COMMENT 'メールアドレス（正規化）',
 
   -- exceptional raw-retained field
   `connect_id_raw` varchar(190) DEFAULT NULL COMMENT '連携ID（raw例外保持）',
@@ -43,7 +53,7 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
   -- match values
   `name_kana_full_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '氏名カナ（照合用）',
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '氏名カナ（照合用、必ず name_kana_full_norm から生成。分割カナから直接生成しない）',
   `name_kanji_full_match` varchar(190)
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '氏名漢字（照合用）',
@@ -66,7 +76,7 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
 
   `relationship_name_match` varchar(190)
     CHARACTER SET utf8mb4
-    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '続柄名称（照合用）',
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '続柄名称（照合用、名称優先。名称なしの場合はコード→名称変換ルール適用時のみ生成）',
 
   -- identity / lookup cache
   `person_id_custom` varchar(190) DEFAULT NULL COMMENT 'カスタム個人ID',
