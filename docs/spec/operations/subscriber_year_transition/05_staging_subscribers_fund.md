@@ -110,6 +110,12 @@
 - `required`（値必須フラグ）
 - `notes`
 
+### 2.5 テンプレート版カラムの命名方針
+
+- templates / template_mappings / staging_subscribers_fund におけるテンプレート版カラムは `version` に統一する
+- `template_ver` という命名は最終DDLでは使用しない
+- 既存DDL上 `template_ver` が存在する場合は、新DDLで `version` へ統一する
+
 ### 3. 本 spec 上の位置づけ
 
 今回の `staging_subscribers_fund` 設計では、テンプレートテーブルを前提として以下を整理対象に含める。
@@ -174,6 +180,7 @@
 - `insurance_number_match`
 - `name_kana_full_match`
 - `name_kanji_full_match`
+- `relationship_name_match`
 
 ※ match 系は比較用途であり、norm とは別目的で生成する
 
@@ -259,11 +266,11 @@ identity 生成に必要な項目に欠損がある場合は、欠損を明示�
 
 ### 1. 現行DDL確認の位置づけ
 
-現行の `staging_subscribers_fund` DDL は確認済みであり、本 spec では以下を確認済み前提とする。
+現行の `staging_subscribers_fund` DDL は確認済みであり、本 spec では以下の観点で差分整理を行う前提とする。
 
-- norm 系カラム
-- match 系カラム
-- `person_id_custom`
+- norm 系カラムの追加要否
+- match 系カラムの追加要否
+- `person_id_custom` の扱い
 - 出所追跡用カラム（src系、run系）
 - 照合結果保持カラム（matched系）
 - identity 生成に必要な入力項目
@@ -271,13 +278,14 @@ identity 生成に必要な項目に欠損がある場合は、欠損を明示�
 
 `identity_hash` は現行DDLに存在しないため、新DDLで追加する前提とする。
 
-現行DDLとの乖離は大きく、実データも未投入であるため、`staging_subscribers_fund` は ALTER ベースではなく DROP + CREATE 前提で再作成する方針とする。
+現行DDLとの乖離は大きく、実データも未投入であるため、`staging_subscribers_fund` は ALTER ベースではなく DROP + CREATE 前提で再作成する方針とする。その際、テンプレート版カラム名は `template_ver` ではなく `version` に統一する。
 
 ### 2. raw / norm / match の範囲
 
 本テーブルの保持方針は以下で確定とする。
 
 - raw は大量常設しない
+- norm格納を基本とするが、必要な raw は保持する
 - 主値は `*_norm` とする
 - 照合用補助値は `*_match` とする
 - 出所追跡は `src_*` 系で担保する
@@ -458,6 +466,22 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 - staging では、判別に必要な元情報として `relationship_code_norm` / `relationship_name_norm` を保持する
 - 判別ロジックは「コード優先、名称補助」で確定とする
 
+### relationship_name_match の扱い
+
+続柄については、確実にコードしか存在しない健保がありうるため、`relationship_code_norm` / `relationship_name_norm` とは別に、比較用の `relationship_name_match` を保持対象とする。
+
+#### 基本方針
+
+- `relationship_name_norm` が存在する場合は、その値を共通ルールで `relationship_name_match` へ変換する
+- `relationship_name_norm` が存在しない場合でも、`relationship_code_norm` が存在し、かつコード→名称変換ルールが定義されている場合は、その変換結果を `relationship_name_match` とする
+- `relationship_name_norm` が存在せず、`relationship_code_norm` のみで、かつコード→名称変換ルールも存在しない場合は、`relationship_name_match` は生成不可とする
+
+#### 設計上の意図
+
+- 本人判定や比較で使う match 値は、最終的に名称ベースへ寄せる
+- ただし、コードしか受領しない健保に対応するため、コード→名称変換ルールを許容する
+- 名称も変換ルールもない場合は、無理に match を生成しない
+
 ### 設計上の意図
 
 続柄は資格・関係属性であり、個人同定そのものとは別である。
@@ -560,7 +584,7 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 |---|---|---|
 | `id` | 維持 | 主キーとして維持 |
 | `fund_id` | 維持 | 健保単位の取り込み基盤として維持 |
-| `template_ver` | rename | `template_version` へ rename（命名一貫性のため確定） |
+| `template_ver` | rename | `version` へ rename（templates / template_mappings と命名統一するため確定） |
 | `import_run_id` | 維持 | ETL run / archive と連動するため維持 |
 | `created_at` | 維持 | 作成時刻として維持 |
 | `loaded_at` | 維持 | `created_at` とズレうる取り込み完了時刻として維持（確定） |
@@ -606,6 +630,7 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 | `birth` | rename | `birth_norm` |
 | `relationship_code` | rename | `relationship_code_norm` |
 | `relationship_name` | rename | `relationship_name_norm` |
+| `relationship_name_match` | 追加 | `relationship_name_norm` を基準に生成し、名称がない場合はコード→名称変換ルールがあるときのみ生成 |
 
 ### 6. 保険情報
 
@@ -653,7 +678,7 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 
 ### 10. この棚卸し表の位置づけ
 
-本表は、新DDLを起こすための基礎表として扱う。最終的な rename / 追加 / 維持 / 削除の確定は、次段のDDL設計で反映する。
+本表は、新DDLを起こすための基礎表として扱う。ここで整理した rename / 追加 / 維持 / 削除の方針を、次段のDDL設計へ反映する。
 
 次の更新では、本表をもとに以下を詰める。
 
@@ -690,6 +715,7 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 - `required` はテンプレート単位の値必須フラグとして扱う方針とする
 - `rule` は単一入力列に対する norm / match / 補助列生成までを担う方針とする
 - 本人 / 本人以外判別は「コード優先、名称補助」で行う方針とする
+- `relationship_name_match` は保持対象とし、`relationship_name_norm` がある場合は名称から生成し、名称がない場合はコード→名称変換ルールがあるときのみ生成する方針とする
 - `department_code` / `distribution_code` / `employee_code` は fund 共通項目として維持する方針とする
 - `name_kanji_full_match` / `name_kanji_family_match` / `name_kanji_middle_match` / `name_kanji_given_match` は保持する方針とする
 - 比較に必要な match 項目は `staging_subscribers_fund` と `subscribers` の両方に持つ前提とする
@@ -697,7 +723,9 @@ HIA の加入者登録では事業所コードが必要となるため、受領C
 - CSV自体がエラーの場合は `input/` に残し、run が正常に走って読み込み判定まで到達したファイルは `archive/` へ移動する方針とする
 - `archive/` は自動削除せず、手動運用とする
 - 現行DDLカラムの棚卸し方針（維持 / rename / 追加 / 削除）は確定済み
-
+- `matched_subscriber_id` は staging に保持する方針で確定済みとする
+- `insurance_symbol_digits` は `insurance_symbol_match` とは別用途の補助列として保持する方針で確定済みとする
+- `template_ver` は最終DDLでは `version` に統一する方針で確定済みとする
 - `staging_subscribers_fund` は現行DDLとの乖離が大きく、実データも存在しないため、DROP + CREATE 前提で再作成する方針とする
 
 ### 未実施
