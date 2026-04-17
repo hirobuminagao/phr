@@ -1,0 +1,28 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/from_fund/import_staging_subscribers_fund.py
+processing: 06139463 data\from_fund\import_subscribers_staging\input\06139463\記号100本人_TEKIYO_20250411.csv
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\import_staging_subscribers_fund.py", line 309, in build_row
+    value = apply_rule(m.rule, raw_value)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\import_staging_subscribers_fund.py", line 185, in apply_rule
+    raise ValueError("digits_required: digits not found")
+ValueError: digits_required: digits not found
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\import_staging_subscribers_fund.py", line 422, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\import_staging_subscribers_fund.py", line 411, in main
+    inserted = process_file(conn, insurer_number, path)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\import_staging_subscribers_fund.py", line 364, in process_file
+    row = build_row(
+        fund_id,
+    ...<5 lines>...
+        mappings,
+    )
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\import_staging_subscribers_fund.py", line 311, in build_row
+    raise ValueError(
+    ...<3 lines>...
+    ) from e
+ValueError: rule apply failed: header=番号 target=insurance_number_norm rule=digits_required raw_value='' src_file=記号100本人_TEKIYO_20250411.csv src_row_no=36757
