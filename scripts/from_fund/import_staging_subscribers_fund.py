@@ -41,6 +41,16 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.fund import get_fund_id_from_insurer_number
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
+from scripts.lib.identity.field.date_field import normalize_date_to_ymd_and_compact
+from scripts.lib.identity.field.name_kana import (
+    normalize_name_kana_full,
+    normalize_name_kana_full_to_parts,
+)
+from scripts.lib.identity.field.name_kanji import (
+    normalize_name_kanji_full,
+    normalize_name_kanji_full_to_parts,
+)
+from scripts.lib.identity.base_norm import base_normalize
 
 
 DEFAULT_INPUT_BASE_DIR = Path("data/from_fund/import_subscribers_staging/input")
@@ -54,6 +64,7 @@ SUPPORTED_RULES = {
     "gender_code_norm",
     "date_or_null",
     "kana_full_no_space",
+    "name_kanji_full_norm",
     "split_family",
     "split_middle",
     "split_given",
@@ -134,31 +145,7 @@ def row_get_int(row: Mapping[str, Any], key: str) -> int:
     return int(value)
 
 
-def normalize_spaces_to_fullwidth(value: str) -> str:
-    text = value.replace("\u3000", " ")
-    parts = [p for p in text.strip().split() if p != ""]
-    return "　".join(parts)
 
-
-def normalize_kana_full_no_space(value: str) -> str | None:
-    text = normalize_spaces_to_fullwidth(value)
-    result = text.replace("　", "")
-    return result or None
-
-
-def split_name_parts(value: str) -> tuple[str | None, str | None, str | None]:
-    text = normalize_spaces_to_fullwidth(value)
-    if text == "":
-        return None, None, None
-
-    parts = [p for p in text.split("　") if p != ""]
-    if len(parts) == 0:
-        return None, None, None
-    if len(parts) == 1:
-        return parts[0], None, None
-    if len(parts) == 2:
-        return parts[0], None, parts[1]
-    return parts[0], "　".join(parts[1:-1]), parts[-1]
 
 
 def normalize_digits_or_none(value: str) -> str | None:
@@ -167,20 +154,15 @@ def normalize_digits_or_none(value: str) -> str | None:
 
 
 def normalize_symbol(value: str) -> str | None:
-    text = normalize_spaces_to_fullwidth(value)
+    base = base_normalize(value)
+    if base is None:
+        return None
+
+    text = base.replace(" ", "　")
     text = text.replace("－", "-").replace("ー", "-").replace("―", "-")
     return text or None
 
 
-def normalize_birth(value: str) -> str | None:
-    digits = "".join(ch for ch in value if ch.isdigit())
-    if len(digits) == 8:
-        return f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]}"
-    return None
-
-
-def normalize_date_or_null(value: str) -> str | None:
-    return normalize_birth(value)
 
 
 def normalize_gender_code(value: str) -> int | None:
@@ -219,43 +201,67 @@ def apply_rule(rule: str, value: str | None) -> Any:
         return normalize_digits_or_none(v)
 
     if rule == "birth_norm":
-        normalized = normalize_birth(v)
-        if not normalized:
-            raise ValueError("birth_norm: invalid birth value")
-        return normalized
+        result = normalize_date_to_ymd_and_compact(v, purpose="birthdate")
+        if not result["ok"]:
+            raise ValueError(f"birth_norm: {result['reason']}")
+        return result["field_norm"]
 
     if rule == "gender_code_norm":
         return normalize_gender_code(v)
 
     if rule == "date_or_null":
-        return normalize_date_or_null(v)
+        result = normalize_date_to_ymd_and_compact(v, purpose="date_field")
+        if not result["ok"]:
+            return None
+        return result["field_norm"]
 
     if rule == "kana_full_no_space":
-        return normalize_kana_full_no_space(v)
+        result = normalize_name_kana_full(v)
+        if not result["ok"]:
+            return None
+        return result["field_norm"]
+
+    if rule == "name_kanji_full_norm":
+        result = normalize_name_kanji_full(v)
+        if not result["ok"]:
+            return None
+        return result["field_norm"]
 
     if rule == "split_family":
-        family, _, _ = split_name_parts(v)
-        return family
+        result = normalize_name_kanji_full_to_parts(v)
+        if not result["ok"]:
+            return None
+        return result["family"]
 
     if rule == "split_middle":
-        _, middle, _ = split_name_parts(v)
-        return middle
+        result = normalize_name_kanji_full_to_parts(v)
+        if not result["ok"]:
+            return None
+        return result["middle"]
 
     if rule == "split_given":
-        _, _, given = split_name_parts(v)
-        return given
+        result = normalize_name_kanji_full_to_parts(v)
+        if not result["ok"]:
+            return None
+        return result["given"]
 
     if rule == "split_family_kana":
-        family, _, _ = split_name_parts(v)
-        return family
+        result = normalize_name_kana_full_to_parts(v)
+        if not result["ok"]:
+            return None
+        return result["family"]
 
     if rule == "split_middle_kana":
-        _, middle, _ = split_name_parts(v)
-        return middle
+        result = normalize_name_kana_full_to_parts(v)
+        if not result["ok"]:
+            return None
+        return result["middle"]
 
     if rule == "split_given_kana":
-        _, _, given = split_name_parts(v)
-        return given
+        result = normalize_name_kana_full_to_parts(v)
+        if not result["ok"]:
+            return None
+        return result["given"]
 
     raise ValueError(f"unsupported rule: {rule}")
 

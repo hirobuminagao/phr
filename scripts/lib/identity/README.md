@@ -97,9 +97,16 @@ primitive を組み合わせた全項目共通の下ごしらえ正規化を置�
 - `normalize_name_kana_full_to_parts`
 - `normalize_name_kanji_full_to_parts`
 
-- `field_norm`
-- `match`
-- 必要に応じた `person_id_custom` / `identity_hash_input` / `export` 用値
+代表的な返却値:
+- 単一項目 norm 系
+  - `field_norm`
+  - `match`
+  - 必要に応じた `person_id_custom` / `identity_hash_input` / `export` 用値
+- parts 系
+  - `full`
+  - `family`
+  - `middle`
+  - `given`
 
 ### builder/
 
@@ -176,13 +183,24 @@ person_id_res = build_person_id_custom(
 
 ## Field Result Structure
 
-field の normalize 関数は以下の形式を返す:
+field の normalize 関数は、用途に応じて以下のいずれかの形式を返す。
 
-- ok: 成功可否
-- match: 照合用値（canonical input）
-- field_norm: 表示用など
-- raw: 元値
-- reason: NG理由
+### 1. 単一項目 norm / match 系
+
+代表項目:
+- `normalize_birthdate`
+- `normalize_date_to_ymd_and_compact`
+- `normalize_name_kana_full`
+- `normalize_name_kanji_full`
+
+基本項目:
+- `ok`: 成功可否
+- `missing`: 欠損可否
+- `reason`: NG理由
+- `raw`: 元値
+- `base_norm`: 共通前処理後の値
+- `field_norm`: 表示用など
+- `match`: 照合用値（canonical input）
 
 例:
 
@@ -191,6 +209,35 @@ field の normalize 関数は以下の形式を返す:
   "ok": true,
   "match": "19900101",
   "field_norm": "1990-01-01"
+}
+```
+
+### 2. parts 系
+
+代表項目:
+- `normalize_name_kana_full_to_parts`
+- `normalize_name_kanji_full_to_parts`
+
+基本項目:
+- `ok`: 成功可否
+- `missing`: 欠損可否
+- `reason`: NG理由
+- `raw`: 元値
+- `base_norm`: 共通前処理後の値
+- `full`: 正規化済み full
+- `family`: 姓
+- `middle`: 中間
+- `given`: 名
+
+例:
+
+```json
+{
+  "ok": true,
+  "full": "ナガオ　ヒロフミ",
+  "family": "ナガオ",
+  "middle": null,
+  "given": "ヒロフミ"
 }
 ```
 
