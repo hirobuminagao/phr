@@ -120,6 +120,7 @@ def validate_mapping_headers(loader: Any, mappings: list[MappingRow]) -> None:
         )
 
 
+
 def is_effectively_empty_row(source_row: Mapping[str, Any]) -> bool:
     """Excelエクスポート由来の全列空行をスキップ対象とする。"""
     key_fields = [
@@ -129,6 +130,15 @@ def is_effectively_empty_row(source_row: Mapping[str, Any]) -> bool:
         source_row.get("氏名（漢字）"),
     ]
     return all((v is None or str(v).strip() == "") for v in key_fields)
+
+
+# None / 空文字 / 空白のみ（全角空白含む）を空値として扱う
+def is_effectively_blank_value(value: Any) -> bool:
+    """None / 空文字 / 空白のみ（全角空白含む）を空値として扱う。"""
+    if value is None:
+        return True
+    text = str(value).replace("　", " ").strip()
+    return text == ""
 
 
 def row_get_str(row: Mapping[str, Any], key: str) -> str:
@@ -357,8 +367,14 @@ def build_row(
                 f"raw_value={raw_value!r} src_file={src_file} src_row_no={src_row_no}"
             )
 
-        if m.target_column == "phone_norm" and row.get("phone_norm"):
-            continue
+        existing_value = row.get(m.target_column)
+
+        # 同一 target_column に対して複数 mapping がある場合の現行最適解:
+        # - 後勝ちを基本とする
+        # - ただし、後続値が空値(None / "" / 空白のみ)なら既存の有効値を潰さない
+        if existing_value is not None and not is_effectively_blank_value(existing_value):
+            if is_effectively_blank_value(value):
+                continue
 
         row[m.target_column] = value
 
