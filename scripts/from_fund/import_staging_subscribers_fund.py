@@ -26,9 +26,15 @@ import_staging_subscribers_fund.py
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, cast
+
+# VS Code の Run で直接実行した場合でも `scripts.*` を import できるようにする
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.lib.csv.csv_loader import load_csv
 from scripts.lib.db.config import load_mysql_base_params
