@@ -40,6 +40,7 @@ scripts/lib/identity/
 │   ├── insurance_symbol.py
 │   ├── insurance_number.py
 │   ├── birthdate.py
+│   ├── date_field.py
 │   ├── name_kana.py
 │   ├── name_kanji.py
 │   └── gender_code.py
@@ -77,11 +78,19 @@ primitive を組み合わせた全項目共通の下ごしらえ正規化を置�
 - insurance_symbol
 - insurance_number
 - birthdate
+- date_field
 - name_kana
 - name_kanji
 - gender_code
 
+
 各ファイルでは、主に以下を担当する。
+
+日付系については、既存の `birthdate.py` を維持したまま、用途ベースの共通化先として `date_field.py` を追加してよい。
+この場合、import 先を `birthdate.py` から `date_field.py` へ変更するだけでは足りず、呼び出す関数名も用途ベースの関数へ合わせて修正する。
+例:
+- 旧: `from ...field.birthdate import normalize_birthdate`
+- 新: `from ...field.date_field import normalize_date_to_ymd_and_compact`
 
 また、氏名系 field では full 値を parts（family / middle / given）へ分解する用途を持つ関数を追加してよい。
 例:
@@ -138,6 +147,8 @@ builder
 
 必ず以下の順序で処理する。
 
+なお、日付系は用途ベース共通関数へ切り替える場合、import 文と関数名の両方を合わせて修正すること。
+
 1. 入力値 → field.normalize_xxx()
 2. field の result から canonical 値を取得
 3. builder に canonical 値を渡す
@@ -190,6 +201,7 @@ field の normalize 関数は以下の形式を返す:
 - 入力値（raw を含む）を直接 builder に渡してはいけない
 - builder は正規化を行わない
 - field がすべての解釈責務を持つ
+- builder は canonical input のみ受け取る
 - primitive は単純変換のみに留め、氏名としての解釈（family / middle / given への割当）は field で行う
 
 ---
