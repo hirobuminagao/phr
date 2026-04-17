@@ -53,6 +53,8 @@ from scripts.lib.identity.field.name_kanji import (
     norm_parts_to_match_parts as kanji_norm_parts_to_match_parts,
 )
 from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.field.insurance_number import normalize_insurance_number
+from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
 
 
 DEFAULT_INPUT_BASE_DIR = Path("data/from_fund/import_subscribers_staging/input")
@@ -60,6 +62,9 @@ SUPPORTED_RULES = {
     "as_is",
     "symbol_norm",
     "symbol_digits",
+    "symbol_match",
+    "number_match",
+    "insurance_number_norm",
     "digits_required",
     "digits_or_null",
     "birth_norm",
@@ -165,25 +170,9 @@ def row_get_int(row: Mapping[str, Any], key: str) -> int:
     return int(value)
 
 
-
-
-
 def normalize_digits_or_none(value: str) -> str | None:
     digits = "".join(ch for ch in value if ch.isdigit())
     return digits or None
-
-
-def normalize_symbol(value: str) -> str | None:
-    base = base_normalize(value)
-    if base is None:
-        return None
-
-    text = base.replace(" ", "　")
-    text = text.replace("－", "-").replace("ー", "-").replace("―", "-")
-    return text or None
-
-
-
 
 def normalize_gender_code(value: str) -> int | None:
     text = str(value).strip()
@@ -205,10 +194,22 @@ def apply_rule(rule: str, value: str | None, *, kanji_cur: Any | None = None) ->
         return v or None
 
     if rule == "symbol_norm":
-        return normalize_symbol(v)
+        result = normalize_insurance_symbol(v)
+        if not result["ok"]:
+            return None
+        return result["field_norm"]
+
+    if rule == "symbol_match":
+        result = normalize_insurance_symbol(v)
+        if not result["ok"]:
+            return None
+        return result["match"]
 
     if rule == "symbol_digits":
-        digits = normalize_digits_or_none(v)
+        result = normalize_insurance_symbol(v)
+        if not result["ok"]:
+            return None
+        digits = result.get("person_id_custom")
         return int(digits) if digits else None
 
     if rule == "digits_required":
@@ -216,6 +217,18 @@ def apply_rule(rule: str, value: str | None, *, kanji_cur: Any | None = None) ->
         if not digits:
             raise ValueError("digits_required: digits not found")
         return digits
+
+    if rule == "insurance_number_norm":
+        result = normalize_insurance_number(v)
+        if not result["ok"]:
+            raise ValueError(f"insurance_number_norm: {result['reason']}")
+        return result["field_norm"]
+
+    if rule == "number_match":
+        result = normalize_insurance_number(v)
+        if not result["ok"]:
+            return None
+        return result["match"]
 
     if rule == "digits_or_null":
         return normalize_digits_or_none(v)
