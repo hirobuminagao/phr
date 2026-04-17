@@ -1,0 +1,58 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/db/lookup/fund.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 96,
+	"startColumn": 21,
+	"endLineNumber": 96,
+	"endColumn": 24
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/db/lookup/fund.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 98,
+	"startColumn": 33,
+	"endLineNumber": 98,
+	"endColumn": 38
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/db/lookup/fund.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"Decimal | bytes | date | datetime | float | int | Set[str] | str | timedelta | time | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 98,
+	"startColumn": 33,
+	"endLineNumber": 98,
+	"endColumn": 38
+}]
