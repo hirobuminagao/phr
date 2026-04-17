@@ -5,7 +5,7 @@
 --   staging_subscribers_fund 向け template_mappings に match 系 target を追加する
 -- 対象:
 --   fund_id = 2 (06139463)
---   version = 20250908
+--   version = 20260416
 --
 -- 方針:
 --   - 今回は import_staging_subscribers_fund.py で実装済みの rule のみ追加する
@@ -16,7 +16,7 @@ START TRANSACTION;
 
 DELETE FROM dev_phr.template_mappings
 WHERE fund_id = 2
-  AND version = 20250908
+  AND version = 20260416
   AND target_column IN (
     'name_kana_full_match',
     'name_kanji_full_match',
@@ -38,7 +38,7 @@ INSERT INTO dev_phr.template_mappings (
 VALUES
   (
     2,
-    20250908,
+    20260416,
     8,
     '氏名（カナ）',
     'name_kana_full_match',
@@ -48,7 +48,7 @@ VALUES
   ),
   (
     2,
-    20250908,
+    20260416,
     7,
     '氏名（漢字）',
     'name_kanji_full_match',
@@ -58,7 +58,7 @@ VALUES
   ),
   (
     2,
-    20250908,
+    20260416,
     7,
     '氏名（漢字）',
     'name_kanji_family_match',
@@ -68,7 +68,7 @@ VALUES
   ),
   (
     2,
-    20250908,
+    20260416,
     7,
     '氏名（漢字）',
     'name_kanji_middle_match',
@@ -78,7 +78,7 @@ VALUES
   ),
   (
     2,
-    20250908,
+    20260416,
     7,
     '氏名（漢字）',
     'name_kanji_given_match',
