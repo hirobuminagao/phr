@@ -39,6 +39,21 @@ def normalize_date_to_ymd_and_compact(raw: str | date | None, *, purpose: str) -
 
     base = base_normalize(raw)
 
+    # treat whitespace-only (including fullwidth space) as missing
+    if base is not None:
+        normalized = base.replace("　", " ").strip()
+        if normalized == "":
+            return {
+                "field_name": purpose,
+                "raw": raw,
+                "base_norm": base,
+                "field_norm": None,
+                "match": None,
+                "ok": False,
+                "missing": True,
+                "reason": "blank_after_normalize",
+            }
+
     if base is None:
         return {
             "field_name": purpose,
