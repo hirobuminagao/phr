@@ -79,6 +79,25 @@ class MappingRow:
     required: int
 
 
+@dataclass
+class RowErrorRecord:
+    src_file: str
+    src_row_no: int
+    csv_header: str
+    target_column: str
+    rule: str
+    raw_value: Any
+    reason: str
+
+
+@dataclass
+class ProcessFileResult:
+    inserted_row_count: int
+    skipped_empty_row_count: int
+    row_error_count: int
+    row_errors: list[RowErrorRecord]
+
+
 def validate_mapping_headers(loader: Any, mappings: list[MappingRow]) -> None:
     header_map = loader.get_header_dict()
     missing = sorted({m.csv_header for m in mappings if m.csv_header not in header_map})
@@ -88,6 +107,17 @@ def validate_mapping_headers(loader: Any, mappings: list[MappingRow]) -> None:
             "template_mappings.csv_header が CSV ヘッダーに存在しません: "
             f"missing={missing} available={headers}"
         )
+
+
+def is_effectively_empty_row(source_row: Mapping[str, Any]) -> bool:
+    """Excelエクスポート由来の全列空行をスキップ対象とする。"""
+    key_fields = [
+        source_row.get("記号"),
+        source_row.get("番号"),
+        source_row.get("氏名（カナ）"),
+        source_row.get("氏名（漢字）"),
+    ]
+    return all((v is None or str(v).strip() == "") for v in key_fields)
 
 
 def row_get_str(row: Mapping[str, Any], key: str) -> str:
@@ -329,6 +359,35 @@ def build_row(
     return row
 
 
+def to_row_error_record(error: Exception, mappings: list[MappingRow], source_row: Mapping[str, Any], src_file: str, src_row_no: int) -> RowErrorRecord:
+    """行エラーをログ用の構造へ変換する。"""
+    message = str(error)
+
+    for m in mappings:
+        raw_value = source_row.get(m.csv_header)
+        marker = f"header={m.csv_header} target={m.target_column} rule={m.rule}"
+        if marker in message:
+            return RowErrorRecord(
+                src_file=src_file,
+                src_row_no=src_row_no,
+                csv_header=m.csv_header,
+                target_column=m.target_column,
+                rule=m.rule,
+                raw_value=raw_value,
+                reason=message,
+            )
+
+    return RowErrorRecord(
+        src_file=src_file,
+        src_row_no=src_row_no,
+        csv_header="",
+        target_column="",
+        rule="",
+        raw_value=None,
+        reason=message,
+    )
+
+
 def insert_row(conn: Any, row: dict[str, Any]) -> None:
     cols = sorted(row.keys())
     placeholders = ", ".join(["%s"] * len(cols))
@@ -347,7 +406,7 @@ def insert_row(conn: Any, row: dict[str, Any]) -> None:
         cursor.close()
 
 
-def process_file(conn: Any, insurer_number: str, path: Path) -> int:
+def process_file(conn: Any, insurer_number: str, path: Path) -> ProcessFileResult:
     fund_id = get_fund_id_from_insurer_number(insurer_number)
     template = fetch_latest_template(conn, fund_id)
     mappings = fetch_template_mappings(conn, fund_id, template.version)
@@ -359,21 +418,39 @@ def process_file(conn: Any, insurer_number: str, path: Path) -> int:
     loader = load_csv(path=str(path), header_count=1)
     validate_mapping_headers(loader, mappings)
 
-    count = 0
-    for i, row_src in enumerate(loader.iter_dict_rows(), start=1):
-        row = build_row(
-            fund_id,
-            template.version,
-            insurer_number,
-            path.name,
-            i,
-            row_src,
-            mappings,
-        )
-        insert_row(conn, row)
-        count += 1
+    inserted_row_count = 0
+    skipped_empty_row_count = 0
+    row_error_count = 0
+    row_errors: list[RowErrorRecord] = []
 
-    return count
+    for i, row_src in enumerate(loader.iter_dict_rows(), start=1):
+        if is_effectively_empty_row(row_src):
+            skipped_empty_row_count += 1
+            continue
+
+        try:
+            row = build_row(
+                fund_id,
+                template.version,
+                insurer_number,
+                path.name,
+                i,
+                row_src,
+                mappings,
+            )
+            insert_row(conn, row)
+            inserted_row_count += 1
+        except ValueError as e:
+            row_error_count += 1
+            row_errors.append(to_row_error_record(e, mappings, row_src, path.name, i))
+            continue
+
+    return ProcessFileResult(
+        inserted_row_count=inserted_row_count,
+        skipped_empty_row_count=skipped_empty_row_count,
+        row_error_count=row_error_count,
+        row_errors=row_errors,
+    )
 
 
 def list_files(base: Path) -> list[tuple[str, Path]]:
@@ -405,16 +482,52 @@ def main() -> None:
 
     with connect_ctx(params, database=DEV_PHR, autocommit=False) as conn:
         try:
-            total = 0
+            total_inserted = 0
+            total_skipped_empty = 0
+            total_row_errors = 0
+            completed_with_errors = False
+
             for insurer_number, path in files:
                 print(f"processing: {insurer_number} {path}")
-                inserted = process_file(conn, insurer_number, path)
-                total += inserted
-                print(f"inserted rows: {inserted}")
+                result = process_file(conn, insurer_number, path)
+                total_inserted += result.inserted_row_count
+                total_skipped_empty += result.skipped_empty_row_count
+                total_row_errors += result.row_error_count
+
+                print(f"inserted rows: {result.inserted_row_count}")
+                print(f"skipped empty rows: {result.skipped_empty_row_count}")
+                print(f"row errors: {result.row_error_count}")
+
+                if result.row_errors:
+                    completed_with_errors = True
+                    print("[WARN] row errors detected:")
+                    for row_error in result.row_errors[:20]:
+                        print(
+                            "  - "
+                            f"src_file={row_error.src_file} "
+                            f"src_row_no={row_error.src_row_no} "
+                            f"csv_header={row_error.csv_header!r} "
+                            f"target_column={row_error.target_column!r} "
+                            f"rule={row_error.rule!r} "
+                            f"raw_value={row_error.raw_value!r} "
+                            f"reason={row_error.reason}"
+                        )
+                    if len(result.row_errors) > 20:
+                        print(f"  ... omitted {len(result.row_errors) - 20} more row errors")
+
             conn.commit()
-            print(f"total inserted rows: {total}")
+
+            print(f"total inserted rows: {total_inserted}")
+            print(f"total skipped empty rows: {total_skipped_empty}")
+            print(f"total row errors: {total_row_errors}")
+
+            if completed_with_errors:
+                print("run status: completed_with_errors")
+            else:
+                print("run status: success")
         except Exception:
             conn.rollback()
+            print("run status: failed")
             raise
 
 
