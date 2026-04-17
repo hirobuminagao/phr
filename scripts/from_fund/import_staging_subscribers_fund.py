@@ -79,6 +79,17 @@ class MappingRow:
     required: int
 
 
+def validate_mapping_headers(loader: Any, mappings: list[MappingRow]) -> None:
+    header_map = loader.get_header_dict()
+    missing = sorted({m.csv_header for m in mappings if m.csv_header not in header_map})
+    if missing:
+        headers = list(header_map.keys())
+        raise ValueError(
+            "template_mappings.csv_header が CSV ヘッダーに存在しません: "
+            f"missing={missing} available={headers}"
+        )
+
+
 def row_get_str(row: Mapping[str, Any], key: str) -> str:
     value = row.get(key)
     if value is None:
@@ -293,10 +304,22 @@ def build_row(
     }
 
     for m in mappings:
-        value = apply_rule(m.rule, source_row.get(m.csv_header))
+        raw_value = source_row.get(m.csv_header)
+        try:
+            value = apply_rule(m.rule, raw_value)
+        except Exception as e:
+            raise ValueError(
+                "rule apply failed: "
+                f"header={m.csv_header} target={m.target_column} rule={m.rule} "
+                f"raw_value={raw_value!r} src_file={src_file} src_row_no={src_row_no}"
+            ) from e
 
         if m.required == 1 and (value is None or value == ""):
-            raise ValueError(f"required missing: {m.csv_header}")
+            raise ValueError(
+                "required missing: "
+                f"header={m.csv_header} target={m.target_column} rule={m.rule} "
+                f"raw_value={raw_value!r} src_file={src_file} src_row_no={src_row_no}"
+            )
 
         if m.target_column == "phone_norm" and row.get("phone_norm"):
             continue
@@ -334,6 +357,7 @@ def process_file(conn: Any, insurer_number: str, path: Path) -> int:
         raise ValueError(f"unsupported rules found: {unsupported}")
 
     loader = load_csv(path=str(path), header_count=1)
+    validate_mapping_headers(loader, mappings)
 
     count = 0
     for i, row_src in enumerate(loader.iter_dict_rows(), start=1):

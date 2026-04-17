@@ -9,7 +9,7 @@ START TRANSACTION;
 
 SET @fund_id := 2;
 SET @version := 20260416;
-SET @template_name := '06139463_加入者_2026-04-16版';
+SET @template_name := 'トランス・コスモス_加入者_2026-04-16版';
 SET @version_label := '2026-04-16';
 
 -- templates: 存在しなければ作成、存在すれば名称等を同期
