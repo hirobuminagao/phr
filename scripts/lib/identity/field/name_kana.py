@@ -17,9 +17,9 @@ def normalize_name_kana_full(raw: str | None) -> dict:
 
     - base_norm を起点にする
     - ひらがな → カタカナ
-    - 小書き → 大文字
-    - スペース除去
-    - 中黒・長音・ハイフン等を除去（照合用）
+    - field_norm は norm 側の値として生成する
+    - match は field_norm から照合用変換で生成する
+    - match 側では小書き → 大文字、記号除去、スペース除去を行う
     - 全角カナへ寄せる
     - field_norm は格納・表示用の norm 値
     - match は照合用の値
@@ -41,8 +41,6 @@ def normalize_name_kana_full(raw: str | None) -> dict:
         }
 
     v = hiragana_to_katakana(base)
-    v = remove_spaces(v)
-    v = remove_kana_symbols(v)
     v = to_fullwidth_ascii(v)
 
     if v is None or v == "":
@@ -57,12 +55,14 @@ def normalize_name_kana_full(raw: str | None) -> dict:
             "reason": "empty_after_normalize",
         }
 
+    match = _kana_norm_part_to_match(v)
+
     return {
         "field_name": "name_kana_full",
         "raw": raw,
         "base_norm": base,
         "field_norm": v,
-        "match": v,
+        "match": match,
         "ok": True,
         "missing": False,
         "reason": None,
