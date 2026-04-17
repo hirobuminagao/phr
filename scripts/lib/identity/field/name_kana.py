@@ -21,7 +21,9 @@ def normalize_name_kana_full(raw: str | None) -> dict:
     - スペース除去
     - 中黒・長音・ハイフン等を除去（照合用）
     - 全角カナへ寄せる
-    - field_norm と match は同一
+    - field_norm は格納・表示用の norm 値
+    - match は照合用の値
+    - field_norm と match は同一とは限らない
     """
 
     base = base_normalize(raw)
@@ -39,7 +41,6 @@ def normalize_name_kana_full(raw: str | None) -> dict:
         }
 
     v = hiragana_to_katakana(base)
-    v = normalize_small_kana(v)
     v = remove_spaces(v)
     v = remove_kana_symbols(v)
     v = to_fullwidth_ascii(v)
@@ -84,6 +85,10 @@ def normalize_name_kana_full_to_parts(raw: str | None) -> dict:
       - 1要素: family のみ
       - 2要素: family / given
       - 3要素以上: family / middle(2番目〜末尾手前を全角スペース結合) / given
+    - full は norm 側の値として扱う
+    - family / middle / given も match ではなく norm 側の parts として扱う
+    - match parts が必要な場合は、norm parts を入力にして別関数で生成する
+    - match_full から parts は復元しない
     - full は分解後の parts を全角スペースで再結合した値とする
     """
 
@@ -104,7 +109,6 @@ def normalize_name_kana_full_to_parts(raw: str | None) -> dict:
         }
 
     v = hiragana_to_katakana(base)
-    v = normalize_small_kana(v)
     v = to_fullwidth_ascii(v)
 
     if v is None or v == "":
@@ -168,4 +172,51 @@ def normalize_name_kana_full_to_parts(raw: str | None) -> dict:
         "ok": True,
         "missing": False,
         "reason": None,
+    }
+
+
+def _kana_norm_part_to_match(value: str | None) -> str | None:
+    """norm 側の kana part を match 用へ変換する。"""
+    if value is None:
+        return None
+
+    v = normalize_small_kana(value)
+    v = remove_kana_symbols(v)
+    v = remove_spaces(v)
+    v = to_fullwidth_ascii(v)
+
+    if v is None or v == "":
+        return None
+    return v
+
+
+
+def norm_parts_to_match_parts(parts: dict) -> dict:
+    """norm parts から match parts を生成する。
+
+    方針:
+    - split 用の構造情報は norm parts 側で保持する
+    - match_full から parts は復元できないため、必ず norm parts を入力にする
+    - family / middle / given を個別に match 用へ変換する
+    - match_full が必要な場合は、match parts を結合して別途生成する
+    """
+    family = _kana_norm_part_to_match(parts.get("family"))
+    middle = _kana_norm_part_to_match(parts.get("middle"))
+    given = _kana_norm_part_to_match(parts.get("given"))
+
+    match_full_parts = [p for p in (family, middle, given) if p not in (None, "")]
+    match_full = "".join(match_full_parts) if match_full_parts else None
+
+    return {
+        "field_name": "name_kana_match_parts",
+        "raw": parts.get("raw"),
+        "base_norm": parts.get("base_norm"),
+        "full": parts.get("full"),
+        "family": family,
+        "middle": middle,
+        "given": given,
+        "match_full": match_full,
+        "ok": parts.get("ok", False),
+        "missing": parts.get("missing", True),
+        "reason": parts.get("reason"),
     }
