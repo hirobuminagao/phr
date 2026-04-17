@@ -30,6 +30,7 @@ scripts/lib/identity/
 │   ├── remove.py
 │   ├── convert.py
 │   ├── digits.py
+│   ├── split.py
 │   └── dates.py
 │
 ├── base_norm.py
@@ -40,6 +41,7 @@ scripts/lib/identity/
 │   ├── insurance_number.py
 │   ├── birthdate.py
 │   ├── name_kana.py
+│   ├── name_kanji.py
 │   └── gender_code.py
 │
 └── builder/
@@ -60,6 +62,7 @@ scripts/lib/identity/
 - `convert.py`: 表現変換
 - `digits.py`: 数字専用処理
 - `dates.py`: 日付専用処理
+- `split.py`: delimiter 指定による単純分割処理
 
 ### base_norm.py
 
@@ -75,9 +78,15 @@ primitive を組み合わせた全項目共通の下ごしらえ正規化を置�
 - insurance_number
 - birthdate
 - name_kana
+- name_kanji
 - gender_code
 
 各ファイルでは、主に以下を担当する。
+
+また、氏名系 field では full 値を parts（family / middle / given）へ分解する用途を持つ関数を追加してよい。
+例:
+- `normalize_name_kana_full_to_parts`
+- `normalize_name_kanji_full_to_parts`
 
 - `field_norm`
 - `match`
@@ -181,7 +190,7 @@ field の normalize 関数は以下の形式を返す:
 - 入力値（raw を含む）を直接 builder に渡してはいけない
 - builder は正規化を行わない
 - field がすべての解釈責務を持つ
-- builder は canonical input のみ受け取る
+- primitive は単純変換のみに留め、氏名としての解釈（family / middle / given への割当）は field で行う
 
 ---
 
@@ -259,6 +268,7 @@ builder
 - 依存関係は primitive → base_norm → field → builder と一方向に固定する
 - builder は field の出力を前提とし、不足時は生成を行わない
 - すべての identity 生成はこの流れに従うこと
+- split のような汎用的な単純分割は primitive に置き、用途別の parts 解釈は field に置く
 
 ---
 

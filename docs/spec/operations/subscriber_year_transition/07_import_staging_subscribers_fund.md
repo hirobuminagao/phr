@@ -134,6 +134,10 @@ CSVに存在しないが staging 生成に必要な値は、スクリプト側�
 - `template_mappings.rule` は単一列変換のみを担う
 - rule は norm / 補助列の生成までを担当する
 - identity 生成、subscribers 照合、業務判定はスクリプト側で行う
+- 変換処理は可能な限り共通ライブラリを優先利用する
+- 本体スクリプトに変換ロジックを直接持たせるのは暫定対応に留める
+- 共通利用できる変換は `scripts/lib/` 配下へ寄せる
+- 個別処理が必要な変換は `scripts/from_fund/` 配下の個別ライブラリへ分離する
 
 ### rule で扱うもの
 
@@ -167,9 +171,25 @@ CSVに存在しないが staging 生成に必要な値は、スクリプト側�
 
 これらはすべてスクリプト側の責務とする。
 
+### 共通ライブラリ参照方針
+
+変換処理の実装にあたっては、既存の共通ライブラリを優先的に確認し、流用可能なものは本体スクリプトへ再実装しない方針とする。
+
+現時点で参照候補とする共通ライブラリ例:
+
+- `scripts/lib/csv/csv_loader.py`
+- `scripts/lib/db/lookup/fund.py`
+- `scripts/lib/identity/field/name_kana.py`
+- `scripts/lib/identity/field/birthdate.py`
+- `scripts/lib/identity/field/gender_code.py`
+
+本specでは、特に `name_kana` / `birthdate` の変換について、既存 identity ライブラリの流用可否を確認対象とする。
+
 ---
 
 ## 氏名処理方針
+
+氏名（カナ）の変換については、`scripts/lib/identity/field/name_kana.py` の `normalize_name_kana_full()` を共通利用候補として確認する。
 
 ### 1. 基本方針
 
@@ -186,6 +206,8 @@ CSVに存在しないが staging 生成に必要な値は、スクリプト側�
 2. 前後の余分な空白除去
 3. 半角スペースを全角スペースへ統一
 4. 連続スペースを1つに正規化
+
+ただし、実装時は本ロジックを本体へ直接記述する前に、既存の共通ライブラリで同等責務を持つ関数がないかを確認する。
 
 ### 3. 分解ルール
 
@@ -275,6 +297,8 @@ CSVに存在しないが staging 生成に必要な値は、スクリプト側�
 ---
 
 ## identity 生成
+
+生年月日の正規化については、`scripts/lib/identity/field/birthdate.py` の `normalize_birthdate()` を共通利用候補として確認する。
 
 ### 1. insurer_number_norm
 

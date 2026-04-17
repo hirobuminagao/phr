@@ -9,6 +9,7 @@ from scripts.lib.identity.primitive.convert import (
     to_fullwidth_ascii,
 )
 from scripts.lib.identity.primitive.remove import remove_spaces, remove_kana_symbols
+from scripts.lib.identity.primitive.split import split_by_delimiter
 
 
 def normalize_name_kana_full(raw: str | None) -> dict:
@@ -63,6 +64,94 @@ def normalize_name_kana_full(raw: str | None) -> dict:
         "base_norm": base,
         "field_norm": v,
         "match": v,
+        "ok": True,
+        "missing": False,
+        "reason": None,
+    }
+
+
+def normalize_name_kana_full_to_parts(raw: str | None) -> dict:
+    """name_kana_full を family / middle / given へ分解する。
+
+    方針:
+
+    - base_norm を起点にする
+    - ひらがな → カタカナ
+    - 小書き → 大文字
+    - ASCII は全角へ寄せる
+    - split のため、スペース除去は行わない
+    - 半角スペースを全角スペースへ統一する
+    - delimiter 分割は primitive.split_by_delimiter へ委譲する
+    - 分割後は以下で解釈する
+      - 1要素: family のみ
+      - 2要素: family / given
+      - 3要素以上: family / middle(2番目〜末尾手前を全角スペース結合) / given
+    - full は分解後の parts を全角スペースで再結合した値とする
+    """
+
+    base = base_normalize(raw)
+
+    if base is None:
+        return {
+            "field_name": "name_kana_parts",
+            "raw": raw,
+            "base_norm": None,
+            "full": None,
+            "family": None,
+            "middle": None,
+            "given": None,
+            "ok": False,
+            "missing": True,
+            "reason": "missing_raw_or_base_norm",
+        }
+
+    v = hiragana_to_katakana(base)
+    v = normalize_small_kana(v)
+    v = to_fullwidth_ascii(v)
+    v = v.replace(" ", "　")
+
+    parts = split_by_delimiter(v, delimiter="　", keep_empty=False)
+    if parts is None or len(parts) == 0:
+        return {
+            "field_name": "name_kana_parts",
+            "raw": raw,
+            "base_norm": base,
+            "full": None,
+            "family": None,
+            "middle": None,
+            "given": None,
+            "ok": False,
+            "missing": True,
+            "reason": "empty_after_split",
+        }
+
+    family: str | None
+    middle: str | None
+    given: str | None
+
+    if len(parts) == 1:
+        family = parts[0]
+        middle = None
+        given = None
+    elif len(parts) == 2:
+        family = parts[0]
+        middle = None
+        given = parts[1]
+    else:
+        family = parts[0]
+        middle = "　".join(parts[1:-1])
+        given = parts[-1]
+
+    full = "　".join(parts)
+
+    return {
+        "field_name": "name_kana_parts",
+        "raw": raw,
+        "base_norm": base,
+        "full": full,
+        "family": family,
+        "middle": middle,
+        "given": given,
         "ok": True,
         "missing": False,
         "reason": None,
