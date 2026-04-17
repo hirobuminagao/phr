@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/identity/field/date_field.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportGeneralTypeIssues",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportGeneralTypeIssues.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "__future__ からのインポートは、ファイルの先頭にある必要があります",
+	"source": "Pylance",
+	"startLineNumber": 99,
+	"startColumn": 1,
+	"endLineNumber": 99,
+	"endColumn": 35
+}]

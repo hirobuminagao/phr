@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/lib/identity/field/name_kana.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportOptionalMemberAccess",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportOptionalMemberAccess.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"replace\" は \"None\" の既知の属性ではありません",
+	"source": "Pylance",
+	"startLineNumber": 111,
+	"startColumn": 11,
+	"endLineNumber": 111,
+	"endColumn": 18
+}]
