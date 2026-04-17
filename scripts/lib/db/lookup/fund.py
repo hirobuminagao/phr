@@ -17,7 +17,7 @@ fund 関連の参照系 lookup ライブラリ。
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable, Mapping, cast
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -34,6 +34,13 @@ class FundNotFoundError(FundLookupError):
 
 class FundAmbiguousError(FundLookupError):
     """insurer_number に対応する fund_id が複数見つかった。"""
+
+
+def row_get_int(row: Mapping[str, Any], key: str) -> int:
+    value = row.get(key)
+    if value is None:
+        raise ValueError(f"missing column: {key}")
+    return int(value)
 
 
 def _build_insurer_number_candidates(insurer_number: str) -> list[str]:
@@ -87,15 +94,16 @@ def _fetch_fund_ids_by_candidates(candidates: Iterable[str]) -> list[int]:
         cursor = dict_cursor(conn)
         try:
             cursor.execute(sql, tuple(candidate_list))
-            rows = cursor.fetchall()
+            rows = cast(list[Mapping[str, Any]], cursor.fetchall())
         finally:
             cursor.close()
 
     fund_ids: list[int] = []
     for row in rows:
-        value = row.get("fund_id")
-        if value is not None:
-            fund_ids.append(int(value))
+        try:
+            fund_ids.append(row_get_int(row, "fund_id"))
+        except ValueError:
+            continue
     return fund_ids
 
 
