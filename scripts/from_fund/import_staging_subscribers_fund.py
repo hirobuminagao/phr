@@ -45,10 +45,12 @@ from scripts.lib.identity.field.date_field import normalize_date_to_ymd_and_comp
 from scripts.lib.identity.field.name_kana import (
     normalize_name_kana_full,
     normalize_name_kana_full_to_parts,
+    norm_parts_to_match_parts as kana_norm_parts_to_match_parts,
 )
 from scripts.lib.identity.field.name_kanji import (
     normalize_name_kanji_full,
     normalize_name_kanji_full_to_parts,
+    norm_parts_to_match_parts as kanji_norm_parts_to_match_parts,
 )
 from scripts.lib.identity.base_norm import base_normalize
 
@@ -64,7 +66,15 @@ SUPPORTED_RULES = {
     "gender_code_norm",
     "date_or_null",
     "kana_full_no_space",
+    "name_kana_full_match",
+    "split_family_kana_match",
+    "split_middle_kana_match",
+    "split_given_kana_match",
     "name_kanji_full_norm",
+    "name_kanji_full_match",
+    "split_family_match",
+    "split_middle_match",
+    "split_given_match",
     "split_family",
     "split_middle",
     "split_given",
@@ -186,7 +196,7 @@ def normalize_gender_code(value: str) -> int | None:
     return None
 
 
-def apply_rule(rule: str, value: str | None) -> Any:
+def apply_rule(rule: str, value: str | None, *, kanji_cur: Any | None = None) -> Any:
     if value is None:
         return None
     v = str(value).strip()
@@ -231,11 +241,73 @@ def apply_rule(rule: str, value: str | None) -> Any:
             return None
         return result["field_norm"]
 
+    if rule == "name_kana_full_match":
+        result = normalize_name_kana_full(v)
+        if not result["ok"]:
+            return None
+        return result["match"]
+
+    if rule == "split_family_kana_match":
+        parts = normalize_name_kana_full_to_parts(v)
+        if not parts["ok"]:
+            return None
+        match_parts = kana_norm_parts_to_match_parts(parts)
+        return match_parts["family"]
+
+    if rule == "split_middle_kana_match":
+        parts = normalize_name_kana_full_to_parts(v)
+        if not parts["ok"]:
+            return None
+        match_parts = kana_norm_parts_to_match_parts(parts)
+        return match_parts["middle"]
+
+    if rule == "split_given_kana_match":
+        parts = normalize_name_kana_full_to_parts(v)
+        if not parts["ok"]:
+            return None
+        match_parts = kana_norm_parts_to_match_parts(parts)
+        return match_parts["given"]
+
     if rule == "name_kanji_full_norm":
         result = normalize_name_kanji_full(v)
         if not result["ok"]:
             return None
         return result["field_norm"]
+
+    if rule == "name_kanji_full_match":
+        if kanji_cur is None:
+            raise ValueError("name_kanji_full_match requires kanji_cur")
+        result = normalize_name_kanji_full(v, cur=kanji_cur)
+        if not result["ok"]:
+            return None
+        return result["match"]
+
+    if rule == "split_family_match":
+        if kanji_cur is None:
+            raise ValueError("split_family_match requires kanji_cur")
+        parts = normalize_name_kanji_full_to_parts(v)
+        if not parts["ok"]:
+            return None
+        match_parts = kanji_norm_parts_to_match_parts(parts, kanji_cur)
+        return match_parts["family"]
+
+    if rule == "split_middle_match":
+        if kanji_cur is None:
+            raise ValueError("split_middle_match requires kanji_cur")
+        parts = normalize_name_kanji_full_to_parts(v)
+        if not parts["ok"]:
+            return None
+        match_parts = kanji_norm_parts_to_match_parts(parts, kanji_cur)
+        return match_parts["middle"]
+
+    if rule == "split_given_match":
+        if kanji_cur is None:
+            raise ValueError("split_given_match requires kanji_cur")
+        parts = normalize_name_kanji_full_to_parts(v)
+        if not parts["ok"]:
+            return None
+        match_parts = kanji_norm_parts_to_match_parts(parts, kanji_cur)
+        return match_parts["given"]
 
     if rule == "split_family":
         result = normalize_name_kanji_full_to_parts(v)
@@ -339,6 +411,8 @@ def build_row(
     src_row_no: int,
     source_row: dict[str, Any],
     mappings: list[MappingRow],
+    *,
+    kanji_cur: Any | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "fund_id": fund_id,
@@ -352,7 +426,7 @@ def build_row(
     for m in mappings:
         raw_value = source_row.get(m.csv_header)
         try:
-            value = apply_rule(m.rule, raw_value)
+            value = apply_rule(m.rule, raw_value, kanji_cur=kanji_cur)
         except Exception as e:
             raise ValueError(
                 "rule apply failed: "
@@ -444,28 +518,32 @@ def process_file(conn: Any, insurer_number: str, path: Path) -> ProcessFileResul
     skipped_empty_row_count = 0
     row_error_count = 0
     row_errors: list[RowErrorRecord] = []
+    kanji_cur = dict_cursor(conn)
+    try:
+        for i, row_src in enumerate(loader.iter_dict_rows(), start=1):
+            if is_effectively_empty_row(row_src):
+                skipped_empty_row_count += 1
+                continue
 
-    for i, row_src in enumerate(loader.iter_dict_rows(), start=1):
-        if is_effectively_empty_row(row_src):
-            skipped_empty_row_count += 1
-            continue
-
-        try:
-            row = build_row(
-                fund_id,
-                template.version,
-                insurer_number,
-                path.name,
-                i,
-                row_src,
-                mappings,
-            )
-            insert_row(conn, row)
-            inserted_row_count += 1
-        except ValueError as e:
-            row_error_count += 1
-            row_errors.append(to_row_error_record(e, mappings, row_src, path.name, i))
-            continue
+            try:
+                row = build_row(
+                    fund_id,
+                    template.version,
+                    insurer_number,
+                    path.name,
+                    i,
+                    row_src,
+                    mappings,
+                    kanji_cur=kanji_cur,
+                )
+                insert_row(conn, row)
+                inserted_row_count += 1
+            except ValueError as e:
+                row_error_count += 1
+                row_errors.append(to_row_error_record(e, mappings, row_src, path.name, i))
+                continue
+    finally:
+        kanji_cur.close()
 
     return ProcessFileResult(
         inserted_row_count=inserted_row_count,
