@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from scripts.lib.identity.base_norm import base_normalize
@@ -108,6 +106,21 @@ def normalize_name_kana_full_to_parts(raw: str | None) -> dict:
     v = hiragana_to_katakana(base)
     v = normalize_small_kana(v)
     v = to_fullwidth_ascii(v)
+
+    if v is None or v == "":
+        return {
+            "field_name": "name_kana_parts",
+            "raw": raw,
+            "base_norm": base,
+            "full": None,
+            "family": None,
+            "middle": None,
+            "given": None,
+            "ok": False,
+            "missing": True,
+            "reason": "empty_after_normalize",
+        }
+
     v = v.replace(" ", "　")
 
     parts = split_by_delimiter(v, delimiter="　", keep_empty=False)

@@ -1,3 +1,18 @@
+from __future__ import annotations
+
+from datetime import date
+
+from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive.dates import (
+    detect_date_format,
+    parse_era_code_7,
+    parse_yyyymmdd,
+    to_yyyy_mm_dd,
+    to_yyyymmdd,
+)
+from scripts.lib.identity.primitive.digits import extract_digits
+
+
 def normalize_date_to_ymd_and_compact(raw: str | date | None, *, purpose: str) -> dict:
     """汎用日付正規化（目的ベース）。
 
@@ -96,18 +111,6 @@ def normalize_date_to_ymd_and_compact(raw: str | date | None, *, purpose: str) -
         "missing": False,
         "reason": None,
     }
-from __future__ import annotations
-
-from scripts.lib.identity.base_norm import base_normalize
-from scripts.lib.identity.primitive.digits import extract_digits
-from scripts.lib.identity.primitive.dates import (
-    detect_date_format,
-    parse_era_code_7,
-    parse_yyyymmdd,
-    to_yyyy_mm_dd,
-    to_yyyymmdd,
-)
-from datetime import date
 
 
 def normalize_birthdate(raw: str | date | None) -> dict:
