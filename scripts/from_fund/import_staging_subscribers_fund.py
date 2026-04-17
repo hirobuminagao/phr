@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -30,7 +28,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, cast
 
 from scripts.lib.csv.csv_loader import load_csv
 from scripts.lib.db.config import load_mysql_base_params
@@ -73,6 +71,20 @@ class MappingRow:
     target_column: str
     rule: str
     required: int
+
+
+def row_get_str(row: Mapping[str, Any], key: str) -> str:
+    value = row.get(key)
+    if value is None:
+        raise ValueError(f"missing column: {key}")
+    return str(value)
+
+
+def row_get_int(row: Mapping[str, Any], key: str) -> int:
+    value = row.get(key)
+    if value is None:
+        raise ValueError(f"missing column: {key}")
+    return int(value)
 
 
 def normalize_spaces_to_fullwidth(value: str) -> str:
@@ -214,7 +226,7 @@ def fetch_latest_template(conn: Any, fund_id: int) -> TemplateRow:
             """,
             (fund_id,),
         )
-        row = cursor.fetchone()
+        row = cast(Mapping[str, Any] | None, cursor.fetchone())
     finally:
         cursor.close()
 
@@ -222,10 +234,10 @@ def fetch_latest_template(conn: Any, fund_id: int) -> TemplateRow:
         raise ValueError(f"template not found: fund_id={fund_id}")
 
     return TemplateRow(
-        fund_id=int(row["fund_id"]),
-        version=int(row["version"]),
-        template_type=row["template_type"],
-        target_table=row["target_table"],
+        fund_id=row_get_int(row, "fund_id"),
+        version=row_get_int(row, "version"),
+        template_type=row_get_str(row, "template_type"),
+        target_table=row_get_str(row, "target_table"),
     )
 
 
@@ -241,16 +253,16 @@ def fetch_template_mappings(conn: Any, fund_id: int, version: int) -> list[Mappi
             """,
             (fund_id, version),
         )
-        rows = cursor.fetchall()
+        rows = cast(list[Mapping[str, Any]], cursor.fetchall())
     finally:
         cursor.close()
 
     return [
         MappingRow(
-            csv_header=row["csv_header"],
-            target_column=row["target_column"],
-            rule=row["rule"],
-            required=int(row["required"]),
+            csv_header=row_get_str(row, "csv_header"),
+            target_column=row_get_str(row, "target_column"),
+            rule=row_get_str(row, "rule"),
+            required=row_get_int(row, "required"),
         )
         for row in rows
     ]
