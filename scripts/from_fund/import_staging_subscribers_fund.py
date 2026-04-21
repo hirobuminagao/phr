@@ -61,6 +61,11 @@ from scripts.lib.identity.generator import (
     generate_person_id_custom,
 )
 
+from scripts.lib.transform.relationship import (
+    normalize_relationship_code_match,
+    resolve_relationship_name,
+)
+
 
 DEFAULT_INPUT_BASE_DIR = Path("data/from_fund/import_subscribers_staging/input")
 SUPPORTED_RULES = {
@@ -179,6 +184,7 @@ def normalize_digits_or_none(value: str) -> str | None:
     digits = "".join(ch for ch in value if ch.isdigit())
     return digits or None
 
+
 def normalize_gender_code(value: str) -> int | None:
     text = str(value).strip()
     if text in {"1", "男", "男性"}:
@@ -188,6 +194,25 @@ def normalize_gender_code(value: str) -> int | None:
     if text in {"9", "0", ""}:
         return None
     return None
+
+
+def enrich_relationship_fields(row: dict[str, Any]) -> dict[str, Any]:
+    """relationship_name_norm / relationship_code_norm から relationship_name_match を補完する。"""
+    if row.get("relationship_name_match") not in (None, ""):
+        return row
+
+    relationship_name_norm = row.get("relationship_name_norm")
+    relationship_code_norm = row.get("relationship_code_norm")
+    relationship_code_match = normalize_relationship_code_match(relationship_code_norm)
+
+    relationship_name_match = resolve_relationship_name(
+        relationship_name_norm=relationship_name_norm,
+        relationship_code_norm=relationship_code_match,
+    )
+    if relationship_name_match not in (None, ""):
+        row["relationship_name_match"] = relationship_name_match
+
+    return row
 
 
 def _to_int_or_none(value: Any) -> int | None:
@@ -520,6 +545,7 @@ def build_row(
 
         row[m.target_column] = value
 
+    row = enrich_relationship_fields(row)
     row = enrich_identity_fields(
         row,
         insurer_number=insurer_number,
