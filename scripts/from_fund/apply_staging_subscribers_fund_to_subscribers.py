@@ -29,7 +29,7 @@ def main() -> None:
 
     base_params = load_mysql_base_params()
 
-    conn = connect_mysql(base_params, schema=DEV_PHR)
+    conn = connect_mysql(base_params, database=DEV_PHR)
 
     metrics = RunMetrics()
 
@@ -54,8 +54,6 @@ def main() -> None:
         result = apply_name_parts_from_staging_subscribers_fund(
             conn,
             run_id,
-            audit_source="apply_staging_subscribers_fund_to_subscribers",
-            change_run_id=apply_run_id,
         )
 
         metrics.rows_seen = result.rows_seen_count
@@ -69,7 +67,7 @@ def main() -> None:
 
     except Exception as e:
         status = "failed"
-        metrics.notes = str(e)
+        pass
         raise
     finally:
         finish_cur = conn.cursor()
