@@ -38,7 +38,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.lib.csv.csv_loader import load_csv
-from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.config import MySQLBaseParams, load_mysql_base_params
 from scripts.lib.db.lookup.fund import get_fund_id_from_insurer_number
 from scripts.lib.db.lookup.subscriber import get_single_subscriber_id_by_identity_hash
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -198,10 +198,10 @@ def row_get_int(row: Mapping[str, Any], key: str) -> int:
     return int(value)
 
 
-def build_db_path(params: Mapping[str, Any], schema_name: str) -> str:
+def build_db_path(params: MySQLBaseParams, schema_name: str) -> str:
     """ETL run 記録用の db_path を host:port/schema 形式で返す。"""
-    host = str(params.get("host", "")).strip()
-    port = params.get("port")
+    host = str(params.host).strip() if params.host is not None else ""
+    port = params.port
     if host == "":
         host = "unknown-host"
     port_text = str(port).strip() if port is not None else "unknown-port"
