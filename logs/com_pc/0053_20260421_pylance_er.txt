@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/import_staging_subscribers_fund.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"MySQLBaseParams\" の引数を、関数 \"build_db_path\" の型 \"Mapping[str, Any]\" のパラメーター \"params\" に割り当てることはできません\n  \"MySQLBaseParams\" は \"Mapping[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 772,
+	"startColumn": 29,
+	"endLineNumber": 772,
+	"endColumn": 35
+}]
