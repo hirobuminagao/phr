@@ -55,6 +55,10 @@ from scripts.lib.identity.field.name_kanji import (
 from scripts.lib.identity.base_norm import base_normalize
 from scripts.lib.identity.field.insurance_number import normalize_insurance_number
 from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
+from scripts.lib.identity.generator import (
+    generate_identity_hash,
+    generate_person_id_custom,
+)
 
 
 DEFAULT_INPUT_BASE_DIR = Path("data/from_fund/import_subscribers_staging/input")
@@ -183,6 +187,55 @@ def normalize_gender_code(value: str) -> int | None:
     if text in {"9", "0", ""}:
         return None
     return None
+
+
+def _to_int_or_none(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
+def enrich_identity_fields(
+    row: dict[str, Any],
+    insurer_number: str,
+    source_row: Mapping[str, Any],
+) -> dict[str, Any]:
+    """row と source_row から person_id_custom / identity_hash を補完する。
+
+    方針:
+    - generator には raw を基本入力として渡す
+    - gender は既に row 側で norm 済みならそれを利用する
+    - 必須材料が不足する場合は無理に生成しない
+    - matched_subscriber_id の解決はこの段階では行わない
+    """
+    birth_raw = source_row.get("生年月日")
+    symbol_raw = source_row.get("記号")
+    number_raw = source_row.get("番号")
+    name_kana_raw = source_row.get("氏名（カナ）")
+    gender_code = _to_int_or_none(row.get("gender_code_norm"))
+
+    if row.get("person_id_custom") in (None, ""):
+        pid_res = generate_person_id_custom(
+            birthdate=birth_raw,
+            insurer_number_raw=insurer_number,
+            insurance_symbol_raw=symbol_raw,
+            insurance_number_raw=number_raw,
+        )
+        if pid_res.get("ok") and pid_res.get("value") not in (None, ""):
+            row["person_id_custom"] = pid_res["value"]
+
+    if row.get("identity_hash") in (None, ""):
+        person_id_custom = row.get("person_id_custom")
+        if person_id_custom not in (None, "") and name_kana_raw not in (None, "") and gender_code is not None:
+            identity_res = generate_identity_hash(
+                person_id_custom=person_id_custom,
+                name_kana_full_raw=name_kana_raw,
+                gender_code=gender_code,
+            )
+            if identity_res.get("ok") and identity_res.get("value") not in (None, ""):
+                row["identity_hash"] = identity_res["value"]
+
+    return row
 
 
 def apply_rule(rule: str, value: str | None, *, kanji_cur: Any | None = None) -> Any:
@@ -464,6 +517,12 @@ def build_row(
                 continue
 
         row[m.target_column] = value
+
+    row = enrich_identity_fields(
+        row,
+        insurer_number=insurer_number,
+        source_row=source_row,
+    )
 
     return row
 
