@@ -39,6 +39,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from scripts.lib.csv.csv_loader import load_csv
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.fund import get_fund_id_from_insurer_number
+from scripts.lib.db.lookup.subscriber import get_single_subscriber_id_by_identity_hash
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
 from scripts.lib.identity.field.date_field import normalize_date_to_ymd_and_compact
@@ -470,6 +471,7 @@ def fetch_template_mappings(conn: Any, fund_id: int, version: int) -> list[Mappi
 
 
 def build_row(
+    conn: Any,
     fund_id: int,
     version: int,
     insurer_number: str,
@@ -523,6 +525,28 @@ def build_row(
         insurer_number=insurer_number,
         source_row=source_row,
     )
+    row = enrich_matched_subscriber_id(conn, row)
+
+    return row
+def enrich_matched_subscriber_id(conn: Any, row: dict[str, Any]) -> dict[str, Any]:
+    """identity_hash から matched_subscriber_id を補完する。
+
+    方針:
+    - identity_hash が無い場合は何もしない
+    - 1件一致なら matched_subscriber_id を設定する
+    - 0件なら未設定のままにする
+    - 複数件ヒット時の扱いは lookup 側に委譲する
+    """
+    if row.get("matched_subscriber_id") not in (None, ""):
+        return row
+
+    identity_hash = row.get("identity_hash")
+    if identity_hash in (None, ""):
+        return row
+
+    subscriber_id = get_single_subscriber_id_by_identity_hash(conn, identity_hash)
+    if subscriber_id is not None:
+        row["matched_subscriber_id"] = subscriber_id
 
     return row
 
@@ -599,6 +623,7 @@ def process_file(conn: Any, insurer_number: str, path: Path) -> ProcessFileResul
 
             try:
                 row = build_row(
+                    conn,
                     fund_id,
                     template.version,
                     insurer_number,
