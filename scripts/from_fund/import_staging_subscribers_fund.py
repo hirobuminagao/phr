@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import sys
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, cast
@@ -198,6 +199,7 @@ def row_get_int(row: Mapping[str, Any], key: str) -> int:
     return int(value)
 
 
+
 def build_db_path(params: MySQLBaseParams, schema_name: str) -> str:
     """ETL run 記録用の db_path を host:port/schema 形式で返す。"""
     host = str(params.host).strip() if params.host is not None else ""
@@ -206,6 +208,20 @@ def build_db_path(params: MySQLBaseParams, schema_name: str) -> str:
         host = "unknown-host"
     port_text = str(port).strip() if port is not None else "unknown-port"
     return f"{host}:{port_text}/{schema_name}"
+
+
+def run_apply_staging_subscribers_fund(import_run_id: int) -> None:
+    """staging_subscribers_fund apply スクリプトを run_id 指定で起動する。"""
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.from_fund.apply_staging_subscribers_fund_to_subscribers",
+            "--run-id",
+            str(import_run_id),
+        ],
+        check=True,
+    )
 
 
 def normalize_digits_or_none(value: str) -> str | None:
@@ -852,9 +868,19 @@ def main() -> None:
                         print(f"  ... omitted {len(result.row_errors) - 20} more row errors")
 
                 if result.row_error_count > 0:
+                    run_status = "partial"
                     print("run status: partial")
                 else:
+                    run_status = "success"
                     print("run status: success")
+
+                if run_status in {"success", "partial"} and result.inserted_row_count > 0:
+                    print(f"apply start: run_id={run_id}")
+                    try:
+                        run_apply_staging_subscribers_fund(run_id)
+                        print(f"apply done: run_id={run_id}")
+                    except Exception as e:
+                        print(f"[WARN] apply failed: run_id={run_id} error={e}")
 
             except Exception as e:
                 conn.rollback()
