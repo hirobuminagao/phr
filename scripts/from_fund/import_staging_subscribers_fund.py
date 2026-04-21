@@ -26,6 +26,7 @@ import_staging_subscribers_fund.py
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,6 +66,9 @@ from scripts.lib.transform.relationship import (
     normalize_relationship_code_match,
     resolve_relationship_name,
 )
+
+from scripts.lib.etl.metrics import RunMetrics
+from scripts.lib.etl.runs import finish_run, start_run
 
 
 DEFAULT_INPUT_BASE_DIR = Path("data/from_fund/import_subscribers_staging/input")
@@ -128,6 +132,7 @@ class RowErrorRecord:
 
 @dataclass
 class ProcessFileResult:
+    rows_seen_count: int
     inserted_row_count: int
     skipped_empty_row_count: int
     row_error_count: int
@@ -505,11 +510,15 @@ def build_row(
     source_row: dict[str, Any],
     mappings: list[MappingRow],
     *,
+    import_run_id: int | None = None,
+    loaded_at: datetime | None = None,
     kanji_cur: Any | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "fund_id": fund_id,
         "version": version,
+        "import_run_id": import_run_id,
+        "loaded_at": loaded_at,
         "insurer_number_norm": insurer_number.zfill(8),
         "src_file": src_file,
         "src_row_no": src_row_no,
@@ -624,7 +633,14 @@ def insert_row(conn: Any, row: dict[str, Any]) -> None:
         cursor.close()
 
 
-def process_file(conn: Any, insurer_number: str, path: Path) -> ProcessFileResult:
+def process_file(
+    conn: Any,
+    insurer_number: str,
+    path: Path,
+    *,
+    import_run_id: int | None = None,
+    loaded_at: datetime | None = None,
+) -> ProcessFileResult:
     fund_id = get_fund_id_from_insurer_number(insurer_number)
     template = fetch_latest_template(conn, fund_id)
     mappings = fetch_template_mappings(conn, fund_id, template.version)
@@ -639,10 +655,12 @@ def process_file(conn: Any, insurer_number: str, path: Path) -> ProcessFileResul
     inserted_row_count = 0
     skipped_empty_row_count = 0
     row_error_count = 0
+    rows_seen_count = 0
     row_errors: list[RowErrorRecord] = []
     kanji_cur = dict_cursor(conn)
     try:
         for i, row_src in enumerate(loader.iter_dict_rows(), start=1):
+            rows_seen_count += 1
             if is_effectively_empty_row(row_src):
                 skipped_empty_row_count += 1
                 continue
@@ -657,6 +675,8 @@ def process_file(conn: Any, insurer_number: str, path: Path) -> ProcessFileResul
                     i,
                     row_src,
                     mappings,
+                    import_run_id=import_run_id,
+                    loaded_at=loaded_at,
                     kanji_cur=kanji_cur,
                 )
                 insert_row(conn, row)
@@ -669,6 +689,7 @@ def process_file(conn: Any, insurer_number: str, path: Path) -> ProcessFileResul
         kanji_cur.close()
 
     return ProcessFileResult(
+        rows_seen_count=rows_seen_count,
         inserted_row_count=inserted_row_count,
         skipped_empty_row_count=skipped_empty_row_count,
         row_error_count=row_error_count,
@@ -703,16 +724,60 @@ def main() -> None:
 
     params = load_mysql_base_params()
 
-    with connect_ctx(params, database=DEV_PHR, autocommit=False) as conn:
-        try:
-            total_inserted = 0
-            total_skipped_empty = 0
-            total_row_errors = 0
-            completed_with_errors = False
+    with connect_ctx(params, database=DEV_PHR, autocommit=False) as conn, connect_ctx(
+        params, database=DEV_PHR, autocommit=True
+    ) as etl_conn:
+        total_inserted = 0
+        total_skipped_empty = 0
+        total_row_errors = 0
+        completed_with_errors = False
 
-            for insurer_number, path in files:
-                print(f"processing: {insurer_number} {path}")
-                result = process_file(conn, insurer_number, path)
+        for insurer_number, path in files:
+            metrics = RunMetrics()
+            loaded_at = datetime.now()
+
+            run_cur = dict_cursor(etl_conn)
+            try:
+                run_id = start_run(
+                    run_cur,
+                    phase="import",
+                    source="staging_subscribers_fund",
+                    db_schema=DEV_PHR,
+                    db_path=None,
+                    input_base=str(base),
+                    input_file=path.name,
+                    insurer_number=insurer_number,
+                    dry_run=False,
+                    limit_rows=None,
+                )
+            finally:
+                run_cur.close()
+
+            print(f"processing: {insurer_number} {path}")
+
+            try:
+                result = process_file(
+                    conn,
+                    insurer_number,
+                    path,
+                    import_run_id=run_id,
+                    loaded_at=loaded_at,
+                )
+
+                metrics.files = 1
+                metrics.rows_seen = result.rows_seen_count
+                metrics.rows_inserted = result.inserted_row_count
+                metrics.rows_skipped = result.skipped_empty_row_count
+                metrics.errors = result.row_error_count
+
+                conn.commit()
+
+                run_cur = dict_cursor(etl_conn)
+                try:
+                    finish_run(run_cur, run_id, metrics)
+                finally:
+                    run_cur.close()
+
                 total_inserted += result.inserted_row_count
                 total_skipped_empty += result.skipped_empty_row_count
                 total_row_errors += result.row_error_count
@@ -738,20 +803,37 @@ def main() -> None:
                     if len(result.row_errors) > 20:
                         print(f"  ... omitted {len(result.row_errors) - 20} more row errors")
 
-            conn.commit()
+                if result.row_error_count > 0:
+                    print("run status: partial")
+                else:
+                    print("run status: success")
 
-            print(f"total inserted rows: {total_inserted}")
-            print(f"total skipped empty rows: {total_skipped_empty}")
-            print(f"total row errors: {total_row_errors}")
+            except Exception as e:
+                conn.rollback()
 
-            if completed_with_errors:
-                print("run status: completed_with_errors")
-            else:
-                print("run status: success")
-        except Exception:
-            conn.rollback()
-            print("run status: failed")
-            raise
+                run_cur = dict_cursor(etl_conn)
+                try:
+                    finish_run(
+                        run_cur,
+                        run_id,
+                        metrics,
+                        status_override="failed",
+                        extra_notes=str(e),
+                    )
+                finally:
+                    run_cur.close()
+
+                print("run status: failed")
+                raise
+
+        print(f"total inserted rows: {total_inserted}")
+        print(f"total skipped empty rows: {total_skipped_empty}")
+        print(f"total row errors: {total_row_errors}")
+
+        if completed_with_errors:
+            print("overall status: completed_with_errors")
+        else:
+            print("overall status: success")
 
 
 if __name__ == "__main__":
