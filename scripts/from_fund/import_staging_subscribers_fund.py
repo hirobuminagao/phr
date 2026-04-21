@@ -69,9 +69,12 @@ from scripts.lib.transform.relationship import (
 
 from scripts.lib.etl.metrics import RunMetrics
 from scripts.lib.etl.runs import finish_run, start_run
+from scripts.lib.etl.errors import log_error
 
 
 DEFAULT_INPUT_BASE_DIR = Path("data/from_fund/import_subscribers_staging/input")
+ETL_PHASE = "import"
+ETL_SOURCE = "staging_subscribers_fund"
 SUPPORTED_RULES = {
     "as_is",
     "symbol_norm",
@@ -130,6 +133,15 @@ class RowErrorRecord:
     reason: str
 
 
+def decide_row_error_code(message: str) -> str:
+    """行エラー文言から error_code を決定する。"""
+    if message.startswith("required missing:"):
+        return "required_missing"
+    if message.startswith("rule apply failed:"):
+        return "rule_apply_failed"
+    return "row_error"
+
+
 @dataclass
 class ProcessFileResult:
     rows_seen_count: int
@@ -178,11 +190,22 @@ def row_get_str(row: Mapping[str, Any], key: str) -> str:
     return str(value)
 
 
+
 def row_get_int(row: Mapping[str, Any], key: str) -> int:
     value = row.get(key)
     if value is None:
         raise ValueError(f"missing column: {key}")
     return int(value)
+
+
+def build_db_path(params: Mapping[str, Any], schema_name: str) -> str:
+    """ETL run 記録用の db_path を host:port/schema 形式で返す。"""
+    host = str(params.get("host", "")).strip()
+    port = params.get("port")
+    if host == "":
+        host = "unknown-host"
+    port_text = str(port).strip() if port is not None else "unknown-port"
+    return f"{host}:{port_text}/{schema_name}"
 
 
 def normalize_digits_or_none(value: str) -> str | None:
@@ -635,6 +658,7 @@ def insert_row(conn: Any, row: dict[str, Any]) -> None:
 
 def process_file(
     conn: Any,
+    etl_conn: Any,
     insurer_number: str,
     path: Path,
     *,
@@ -683,7 +707,29 @@ def process_file(
                 inserted_row_count += 1
             except ValueError as e:
                 row_error_count += 1
-                row_errors.append(to_row_error_record(e, mappings, row_src, path.name, i))
+                row_error = to_row_error_record(e, mappings, row_src, path.name, i)
+                row_errors.append(row_error)
+
+                if import_run_id is not None:
+                    error_cur = dict_cursor(etl_conn)
+                    try:
+                        log_error(
+                            error_cur,
+                            import_run_id,
+                            phase=ETL_PHASE,
+                            source=ETL_SOURCE,
+                            insurer_number=insurer_number,
+                            src_file=row_error.src_file,
+                            row_no=row_error.src_row_no,
+                            line_no=row_error.src_row_no + 1,
+                            field=row_error.target_column or row_error.csv_header,
+                            field_value=None if row_error.raw_value is None else str(row_error.raw_value),
+                            error_code=decide_row_error_code(row_error.reason),
+                            message=row_error.reason,
+                            person_id_custom=None,
+                        )
+                    finally:
+                        error_cur.close()
                 continue
     finally:
         kanji_cur.close()
@@ -723,6 +769,7 @@ def main() -> None:
         return
 
     params = load_mysql_base_params()
+    db_path = build_db_path(params, DEV_PHR)
 
     with connect_ctx(params, database=DEV_PHR, autocommit=False) as conn, connect_ctx(
         params, database=DEV_PHR, autocommit=True
@@ -740,10 +787,10 @@ def main() -> None:
             try:
                 run_id = start_run(
                     run_cur,
-                    phase="import",
-                    source="staging_subscribers_fund",
+                    phase=ETL_PHASE,
+                    source=ETL_SOURCE,
                     db_schema=DEV_PHR,
-                    db_path=None,
+                    db_path=db_path,
                     input_base=str(base),
                     input_file=path.name,
                     insurer_number=insurer_number,
@@ -758,6 +805,7 @@ def main() -> None:
             try:
                 result = process_file(
                     conn,
+                    etl_conn,
                     insurer_number,
                     path,
                     import_run_id=run_id,
