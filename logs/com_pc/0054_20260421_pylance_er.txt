@@ -1,0 +1,96 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"database\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 32,
+	"startColumn": 12,
+	"endLineNumber": 32,
+	"endColumn": 54
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"schema\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 32,
+	"startColumn": 39,
+	"endLineNumber": 32,
+	"endColumn": 45
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"audit_source\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 57,
+	"startColumn": 13,
+	"endLineNumber": 57,
+	"endColumn": 25
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"change_run_id\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 58,
+	"startColumn": 13,
+	"endLineNumber": 58,
+	"endColumn": 26
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RunMetrics\" の属性 \"notes\" に割り当てることはできません\n  属性 \"notes\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 72,
+	"startColumn": 17,
+	"endLineNumber": 72,
+	"endColumn": 22
+}]
