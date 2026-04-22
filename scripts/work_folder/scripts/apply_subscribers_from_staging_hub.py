@@ -231,6 +231,7 @@ COMPARE_COLUMNS = [
 ]
 
 
+
 AUDIT_COLUMNS = [
     "insurer_number",
     "insurance_symbol",
@@ -251,6 +252,15 @@ AUDIT_COLUMNS = [
     "employee_code",
     "connect_id",
     "identity_hash",
+]
+
+PARTS_COLUMNS = [
+    "name_kanji_family",
+    "name_kanji_middle",
+    "name_kanji_given",
+    "name_kana_family",
+    "name_kana_middle",
+    "name_kana_given",
 ]
 
 
@@ -294,6 +304,7 @@ def build_insert_audit_rows(subscriber_id: int, run_id: int) -> list[tuple[Any, 
     ]
 
 
+
 def build_update_audit_rows(
     subscriber_id: int,
     existing: dict[str, Any],
@@ -318,10 +329,39 @@ def build_update_audit_rows(
     return rows
 
 
+def is_blank_like(value: Any) -> bool:
+    """NULL または空文字を未設定として扱う。"""
+    if value is None:
+        return True
+    return str(value).strip() == ""
+
+
+def build_effective_subscriber_update_vals(
+    existing: dict[str, Any],
+    vals: Dict[str, Any],
+) -> Dict[str, Any]:
+    """subscribers 更新用の実効値を作る。
+
+    v1.1.0 方針:
+    - parts 列は、staging 側が NULL/空文字なら既存値を保持する
+    - parts 列は、staging 側が値ありならその値で更新候補とする
+    - parts 以外は従来通り staging 側の値をそのまま採用する
+    """
+    effective = dict(vals)
+
+    for col in PARTS_COLUMNS:
+        incoming = vals.get(col)
+        if is_blank_like(incoming):
+            effective[col] = existing.get(col)
+
+    return effective
+
+
 
 def subscriber_differs(existing: dict[str, Any], vals: Dict[str, Any]) -> bool:
+    effective = build_effective_subscriber_update_vals(existing, vals)
     for col in COMPARE_COLUMNS:
-        if existing.get(col) != vals.get(col):
+        if existing.get(col) != effective.get(col):
             return True
     return False
 
@@ -408,7 +448,9 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
 
 
 
-def update_subscriber(cur, subscriber_id: int, vals: Dict[str, Any], run_id: int) -> None:
+
+def update_subscriber(cur, subscriber_id: int, existing: dict[str, Any], vals: Dict[str, Any], run_id: int) -> None:
+    effective_vals = build_effective_subscriber_update_vals(existing, vals)
     sql = """
         UPDATE subscribers
         SET
@@ -446,7 +488,7 @@ def update_subscriber(cur, subscriber_id: int, vals: Dict[str, Any], run_id: int
             updated_at = NOW(3)
         WHERE id = %(id)s
     """
-    params = dict(vals)
+    params = dict(effective_vals)
     params["last_change_run_id"] = run_id
     params["id"] = subscriber_id
     cur.execute(sql, params)
@@ -722,7 +764,7 @@ def apply_once(cur, srow: dict[str, Any], run_id: int) -> str:
 
     if subscriber_differs(existing, vals):
         audit_rows = build_update_audit_rows(subscriber_id, existing, vals, run_id)
-        update_subscriber(cur, subscriber_id, vals, run_id)
+        update_subscriber(cur, subscriber_id, existing, vals, run_id)
         insert_subscriber_audit_rows(cur, audit_rows)
         address_apply(
             cur,

@@ -40,8 +40,8 @@ def main() -> None:
                 source=ETL_SOURCE,
                 db_schema=DEV_PHR,
                 db_path=f"{base_params.host}:{base_params.port}/{DEV_PHR}",
-                input_base="apply",
-                input_file=str(run_id),
+                input_base="apply_staging_subscribers_fund_to_subscribers",
+                input_file=f"run_id={run_id}",
                 insurer_number=None,
                 dry_run=False,
                 limit_rows=None,
@@ -85,7 +85,8 @@ def main() -> None:
                 finish_cur.close()
 
         print("=== apply result ===")
-        print(f"run_id: {run_id}")
+        print(f"import_run_id: {run_id}")
+        print(f"apply_run_id: {apply_run_id}")
         print(f"rows_seen: {metrics.rows_seen}")
         print(f"rows_updated: {metrics.rows_inserted}")
         print(f"rows_skipped: {metrics.rows_skipped}")

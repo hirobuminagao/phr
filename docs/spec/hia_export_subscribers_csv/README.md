@@ -161,4 +161,21 @@ scripts/work_folder/scripts/apply_subscribers_from_staging_hub.py
 
 ## Version
 
-PHR v1.0
+PHR v1.1.0
+
+### v1.1.0 Changes (Subscriber Apply / Identity Handling)
+
+背景:
+- HIA 由来データで `name_kana_given` に `name_kana_full` をそのまま格納していた
+- その結果、parts 列が「空欄ではない」と判定され、fund 由来の正しい分割値が上書きされない問題が発生
+- `NULL` 判定のみだったため、空文字（''）が未設定として扱われなかった
+
+対応:
+- parts 列は「分割できた場合のみ格納」、それ以外は NULL を保持
+- 未設定判定を「NULL または空文字」に統一
+- identity 生成は parts に依存せず `name_kana_full` ベースで実施
+
+効果:
+- fund 側の高精度な name split が正しく反映される
+- HIA / fund のデータ整合性が安定
+- 再処理・バックフィル時の安全性向上

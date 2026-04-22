@@ -17,7 +17,7 @@ Design:
     - 対象フォルダは `data/hia_export/input_subscribers_csv/<8桁保険者番号>/` をデフォルトとする
     - 進捗ログは ProgressLogger（RunMetrics参照専用）を利用（rows_seen が真実）
 
-V1.0 Freeze (Scope / Contract):
+V1.1.0 Contract:
     - Scope: Hub CSV → `staging_subscribers_hub` まで（`subscribers` 本表への反映は本スクリプトの対象外）
     - Inputs: `data/hia_export/input_subscribers_csv/<8桁保険者番号>/` 配下の *.csv（8桁フォルダは自動列挙）
     - Outputs:
@@ -83,7 +83,11 @@ V1.0 Freeze (Scope / Contract):
     - Idempotency (v1.0 現状):
         - 本スクリプト単体では staging の重複排除/UPSERT は行わない（同一 person_id_custom の再投入制御は下流設計に委譲）
         - `src_file/src_row_no/src_line_no/import_run_id` は証跡として保持し、後段での突合・検証に使用する
-    - Non-goals (v1.0 対象外):
+    - Name parts policy (v1.1.0):
+        - 氏名 parts（name_kanji_family/middle/given, name_kana_family/middle/given）は、split 可能な場合のみ格納する
+        - split 不可（1トークン）の場合、parts は空文字のままとし、full を正本として保持する
+        - したがって、parts 列は「分割済みの確定値」のみを表し、暫定的に full を parts へ流し込まない
+    - Non-goals (v1.1.0 対象外):
         - fund 差分ロジック、喪失/異動の確定反映、名寄せ精度の改善、正本（subscribers）更新
 ============================================================
 """
@@ -301,7 +305,8 @@ def process_csv_dir(
                         plog.tick()
                         continue
 
-                    # --- 3) 氏名の正規化（カナ必須。分割結果は staging へ格納） ---
+                    # --- 3) 氏名の正規化（カナ必須） ---
+                    #     v1.1.0: parts は split 可能な場合のみ保持し、split 不可時は full のみを正本として扱う
                     kanji_full_raw = (src.get("name_kanji_full", "") or
                                       row.get("対象者氏名（漢字）", "")).strip()
                     kana_full_raw = (src.get("name_kana_full", "") or
@@ -385,6 +390,7 @@ def process_csv_dir(
                     )
 
                     # --- 6) INSERT 用 dict（src_* は証跡。import_run_id は etl_runs と紐付け） ---
+                    #     parts 列には split 済み確定値のみを入れ、split 不可時は空文字のままとする
                     vals = {
                         "person_id_custom": person_id_custom,
                         "name_kana_full": name_parts["name_kana_full"],

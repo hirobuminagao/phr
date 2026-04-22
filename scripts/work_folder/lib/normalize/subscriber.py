@@ -9,13 +9,15 @@ Purpose:
     - 氏名（漢字/カナ）の分解・正規化
     - person_id_custom 生成のラッパー（実ロジックは lib/custom_id_gen に委譲）
 
-Design (v1.0 as-is):
+Design (v1.1.0):
     - 氏名カナは必須（空の場合は NormalizeError）
     - カナは NFKC 正規化 → ひらがな→カタカナ変換 → 空白整理
     - full は「空白除去済みカナ」を保持（照合キー用途を想定）
+    - 氏名 parts（family / middle / given）は、空白区切りで分割可能な場合のみ格納する
+    - 分割不能（1トークン）の場合、parts は空文字のままとし、full のみを保持する
     - person_id_custom は custom_id_gen.generate_id を呼び出し、例外を NormalizeError に包む
 
-V1.0 Freeze (Scope / Contract):
+V1.1.0 Contract:
     - Inputs:
         - kanji_full: 漢字氏名（空可）
         - kana_full : カナ氏名（必須）
@@ -24,6 +26,9 @@ V1.0 Freeze (Scope / Contract):
         - name_kana_family/middle/given
         - name_kana_full（空白除去済み・全角カタカナ）
         - person_id_custom（別関数）
+    - Name parts policy:
+        - family / middle / given は空白区切りで split 可能な場合のみ保持する
+        - split 不可（1トークン）の場合、parts は空文字とし、full のみを保持する
     - Error policy:
         - カナ未入力は NormalizeError(required)
         - person_id_custom 生成失敗は NormalizeError(generate_failed/empty)
@@ -66,8 +71,9 @@ def _normalize_kana_full_no_space(s: str) -> str:
     t = re.sub(r"\s+", "", t)
     return t
 
- # v1.0: 氏名を空白で分割（family / middle / given）
+ # v1.1.0: 氏名を空白で分割（family / middle / given）
  # - 3トークン以上は middle にまとめる
+ # - 1トークン時は split 不可とみなし、parts はすべて空にする
 def _split_name_by_space(s: str) -> tuple[str, str, str]:
     if not s:
         return ("", "", "")
@@ -76,7 +82,7 @@ def _split_name_by_space(s: str) -> tuple[str, str, str]:
     if not toks:
         return ("", "", "")
     if len(toks) == 1:
-        return ("", "", toks[0])
+        return ("", "", "")
     if len(toks) == 2:
         return (toks[0], "", toks[1])
     return (toks[0], " ".join(toks[1:-1]), toks[-1])
