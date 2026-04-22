@@ -82,6 +82,47 @@ Accepted
 - 2025年度の「未予約」は翌年度比較において追跡優先度を下げる。
 - 未予約以外のステータスは実績または進行状態として、翌年度比較において追跡対象とする。
 
+
+### 9. staging_subscribers_fund の位置付け
+
+- 受領CSVは直接 `subscribers` と比較・反映を行わず、必ず `staging_subscribers_fund` を経由する。
+- `staging_subscribers_fund` は以下の責務を持つ中間レイヤとする。
+
+#### 役割
+
+1. 受領データの保持（raw）
+2. 正規化値（norm）および照合用値（match）の生成
+3. identity_hash の生成
+4. subscribers との照合結果（matched_subscriber_id）の保持
+
+#### 処理分離
+
+処理は以下の2段階に明確に分離する。
+
+1. **Importフェーズ**
+   - CSV → staging への取り込み
+   - 正規化・照合キー生成
+   - エラー記録（etl_errors）
+
+2. **Applyフェーズ**
+   - staging → subscribers への反映
+   - 空欄補完のみを対象とする
+   - audit / last_change_run_id の更新を伴う
+
+#### 設計原則
+
+- Import と Apply は独立した ETL run として管理する
+- staging は「一時データ」ではなく、「照合・判定のための作業台」として扱う
+- subscribers は staging を通過したデータのみを受け入れる
+
+これにより、
+
+- 受領データの再処理（re-run）が可能
+- Apply の再実行が可能
+- Import 成功 / Apply 失敗といった状態を明確に分離できる
+
+という特性を持つ。
+
 ## Consequences
 
 ### 利点

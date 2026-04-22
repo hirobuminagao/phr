@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Mapping, cast
 
 from scripts.lib.db.mysql import dict_cursor
+from scripts.lib.db.insert.subscriber_audit import (
+    insert_subscriber_audit_rows_and_touch_last_change_run,
+)
 from scripts.lib.db.schemas import DEV_PHR
 
 
@@ -15,20 +18,23 @@ class ApplySubscribersFundNamePartsResult:
     row_error_count: int
 
 
-_TARGET_COLUMNS = (
-    "name_kana_family_norm",
-    "name_kana_middle_norm",
-    "name_kana_given_norm",
-    "name_kanji_family_norm",
-    "name_kanji_middle_norm",
-    "name_kanji_given_norm",
-)
+_COLUMN_MAP = {
+    "name_kana_family_norm": "name_kana_family",
+    "name_kana_middle_norm": "name_kana_middle",
+    "name_kana_given_norm": "name_kana_given",
+    "name_kanji_family_norm": "name_kanji_family",
+    "name_kanji_middle_norm": "name_kanji_middle",
+    "name_kanji_given_norm": "name_kanji_given",
+}
 
 
 
 def apply_name_parts_from_staging_subscribers_fund(
     conn: Any,
     run_id: int,
+    *,
+    audit_source: str,
+    change_run_id: int,
 ) -> ApplySubscribersFundNamePartsResult:
     """staging_subscribers_fund から subscribers へ name parts を空欄補完する。
 
@@ -63,11 +69,24 @@ def apply_name_parts_from_staging_subscribers_fund(
             rows_skipped_count += 1
             continue
 
-        updated = update_subscriber_name_parts_if_empty(conn, int(subscriber_id), update_values)
-        if updated:
-            rows_updated_count += 1
-        else:
-            rows_skipped_count += 1
+        audit_rows = build_subscriber_name_parts_audit_rows(
+            subscriber_id=int(subscriber_id),
+            subscriber_row=subscriber_row,
+            update_values=update_values,
+            source=audit_source,
+            change_run_id=change_run_id,
+        )
+
+        cur = dict_cursor(conn)
+        try:
+            updated = update_subscriber_name_parts_if_empty(cur, int(subscriber_id), update_values)
+            if updated:
+                insert_subscriber_audit_rows_and_touch_last_change_run(cur, audit_rows)
+                rows_updated_count += 1
+            else:
+                rows_skipped_count += 1
+        finally:
+            cur.close()
 
     return ApplySubscribersFundNamePartsResult(
         rows_seen_count=rows_seen_count,
@@ -85,7 +104,7 @@ def fetch_apply_target_rows(conn: Any, run_id: int) -> list[dict[str, Any]]:
             "id",
             "matched_subscriber_id",
             "import_run_id",
-            *list(_TARGET_COLUMNS),
+            *list(_COLUMN_MAP.keys()),
         ]
     )
     sql = f"""
@@ -108,8 +127,8 @@ def fetch_apply_target_rows(conn: Any, run_id: int) -> list[dict[str, Any]]:
 
 
 def fetch_subscriber_name_parts(conn: Any, subscriber_id: int) -> dict[str, Any] | None:
-    """subscribers 側の name parts norm を取得する。"""
-    cols = ", ".join(["id", *list(_TARGET_COLUMNS)])
+    """subscribers 側の name parts を取得する。"""
+    cols = ", ".join(["id", *list(_COLUMN_MAP.values())])
     sql = f"""
         SELECT {cols}
         FROM {DEV_PHR}.subscribers
@@ -128,6 +147,7 @@ def fetch_subscriber_name_parts(conn: Any, subscriber_id: int) -> dict[str, Any]
 
 
 
+
 def build_name_parts_update_values(
     staging_row: Mapping[str, Any],
     subscriber_row: Mapping[str, Any],
@@ -135,23 +155,52 @@ def build_name_parts_update_values(
     """staging / subscriber を比較し、空欄補完対象だけを返す。"""
     updates: dict[str, str] = {}
 
-    for column in _TARGET_COLUMNS:
-        subscriber_value = subscriber_row.get(column)
-        staging_value = staging_row.get(column)
+    for staging_column, subscriber_column in _COLUMN_MAP.items():
+        subscriber_value = subscriber_row.get(subscriber_column)
+        staging_value = staging_row.get(staging_column)
 
         if not is_effectively_blank_value(subscriber_value):
             continue
         if is_effectively_blank_value(staging_value):
             continue
 
-        updates[column] = str(staging_value)
+        updates[subscriber_column] = str(staging_value)
 
     return updates
 
 
+# --- audit support ---
+
+def build_subscriber_name_parts_audit_rows(
+    *,
+    subscriber_id: int,
+    subscriber_row: Mapping[str, Any],
+    update_values: Mapping[str, str],
+    source: str,
+    change_run_id: int,
+) -> list[dict[str, Any]]:
+    """subscriber_audit 用の行 dict を構築する。"""
+    rows: list[dict[str, Any]] = []
+
+    for column, new_value in update_values.items():
+        rows.append(
+            {
+                "subscriber_id": subscriber_id,
+                "field": column,
+                "old_value": subscriber_row.get(column),
+                "new_value": new_value,
+                "source": source,
+                "note": None,
+                "change_run_id": change_run_id,
+            }
+        )
+
+    return rows
+
+
 
 def update_subscriber_name_parts_if_empty(
-    conn: Any,
+    cur: Any,
     subscriber_id: int,
     update_values: Mapping[str, str],
 ) -> bool:
@@ -174,12 +223,8 @@ def update_subscriber_name_parts_if_empty(
         WHERE id = %s
     """
 
-    cur = dict_cursor(conn)
-    try:
-        cur.execute(sql, tuple(params))
-        rowcount = cur.rowcount
-    finally:
-        cur.close()
+    cur.execute(sql, tuple(params))
+    rowcount = cur.rowcount
 
     return rowcount > 0
 

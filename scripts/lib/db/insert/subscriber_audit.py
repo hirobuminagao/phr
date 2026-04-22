@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+
 from scripts.lib.db.schemas import DEV_PHR
+
+LAST_CHANGE_RUN_FIELD = "last_change_run_id"
 
 _REQUIRED_FIELDS = ("subscriber_id", "field")
 _AUDIT_COLUMNS = (
@@ -85,4 +88,68 @@ def insert_subscriber_audit_rows(cur: Any, rows: Sequence[Mapping[str, Any]]) ->
         )
         """,
         params,
+    )
+
+
+
+def insert_subscriber_audit_rows_and_touch_last_change_run(
+    cur: Any,
+    rows: Sequence[Mapping[str, Any]],
+) -> None:
+    """subscriber_audit を INSERT し、subscribers.last_change_run_id も更新する。"""
+    if not rows:
+        return
+
+    subscriber_id, change_run_id = validate_touch_last_change_rows(rows)
+    insert_subscriber_audit_rows(cur, rows)
+    touch_subscriber_last_change_run_id(cur, subscriber_id, change_run_id)
+
+
+
+def validate_touch_last_change_rows(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[int, int]:
+    """last_change_run_id 更新前提の rows を検証する。"""
+    first_subscriber_id: int | None = None
+    first_change_run_id: int | None = None
+
+    for row in rows:
+        validate_subscriber_audit_row(row)
+
+        subscriber_id = int(row["subscriber_id"])
+        change_run_id = row.get("change_run_id")
+        if change_run_id is None or str(change_run_id).strip() == "":
+            raise ValueError("change_run_id is required for touch_last_change_run")
+        change_run_id_int = int(change_run_id)
+
+        if first_subscriber_id is None:
+            first_subscriber_id = subscriber_id
+        elif first_subscriber_id != subscriber_id:
+            raise ValueError("all audit rows must have the same subscriber_id")
+
+        if first_change_run_id is None:
+            first_change_run_id = change_run_id_int
+        elif first_change_run_id != change_run_id_int:
+            raise ValueError("all audit rows must have the same change_run_id")
+
+    if first_subscriber_id is None or first_change_run_id is None:
+        raise ValueError("rows must not be empty")
+
+    return first_subscriber_id, first_change_run_id
+
+
+
+def touch_subscriber_last_change_run_id(
+    cur: Any,
+    subscriber_id: int,
+    change_run_id: int,
+) -> None:
+    """subscribers.last_change_run_id を更新する。"""
+    cur.execute(
+        f"""
+        UPDATE {DEV_PHR}.subscribers
+        SET {LAST_CHANGE_RUN_FIELD} = %s
+        WHERE id = %s
+        """,
+        (change_run_id, subscriber_id),
     )

@@ -4,7 +4,7 @@
 """
 import_staging_subscribers_fund.py
 
-健保受領CSVを staging_subscribers_fund へ取り込む最小実装版。
+健保受領CSVを staging_subscribers_fund へ取り込む実装。
 
 今回版の目的:
 - input/<insurer_number>/ 配下のCSVを取得する
@@ -13,14 +13,18 @@ import_staging_subscribers_fund.py
 - templates / template_mappings を取得する
 - mapping に従って *_norm / 補助列を生成する
 - insurer_number_norm をスクリプト側で注入する
+- relationship_name_match を補完する
+- person_id_custom / identity_hash を生成する
+- matched_subscriber_id を解決する
 - staging_subscribers_fund へ INSERT する
+- CSV単位で etl_run / etl_errors を記録する
+- import_run_id / loaded_at を staging 行へ付与する
+- success / partial かつ rows_inserted > 0 の場合、apply スクリプトを起動する
 
 今回版ではまだ行わないもの:
-- *_match 生成
-- person_id_custom / identity_hash 生成
-- matched_subscriber_id 生成
 - archive 移動
-- 詳細なエラー蓄積
+- skip 理由の明細記録
+- apply 側エラーの import run への集約
 """
 
 from __future__ import annotations
@@ -602,6 +606,7 @@ def build_row(
     row = enrich_matched_subscriber_id(conn, row)
 
     return row
+
 def enrich_matched_subscriber_id(conn: Any, row: dict[str, Any]) -> dict[str, Any]:
     """identity_hash から matched_subscriber_id を補完する。
 
@@ -625,7 +630,13 @@ def enrich_matched_subscriber_id(conn: Any, row: dict[str, Any]) -> dict[str, An
     return row
 
 
-def to_row_error_record(error: Exception, mappings: list[MappingRow], source_row: Mapping[str, Any], src_file: str, src_row_no: int) -> RowErrorRecord:
+def to_row_error_record(
+    error: Exception,
+    mappings: list[MappingRow],
+    source_row: Mapping[str, Any],
+    src_file: str,
+    src_row_no: int,
+) -> RowErrorRecord:
     """行エラーをログ用の構造へ変換する。"""
     message = str(error)
 
@@ -739,7 +750,9 @@ def process_file(
                             row_no=row_error.src_row_no,
                             line_no=row_error.src_row_no + 1,
                             field=row_error.target_column or row_error.csv_header,
-                            field_value=None if row_error.raw_value is None else str(row_error.raw_value),
+                            field_value=(
+                                None if row_error.raw_value is None else str(row_error.raw_value)
+                            ),
                             error_code=decide_row_error_code(row_error.reason),
                             message=row_error.reason,
                             person_id_custom=None,
