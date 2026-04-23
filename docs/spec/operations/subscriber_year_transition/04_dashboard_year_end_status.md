@@ -70,6 +70,8 @@
 - Step0 実行時に1回のみ記帳する
 - 年度末としての記帳実行タイミングはマニュアル指定とする
 
+※ 本処理は scripts/hia/snapshot_hia_dashboard_year_end_status.py にて実行する
+
 ---
 
 ### 記帳内容
@@ -89,7 +91,7 @@
 
 - `identity_hash`
 - `fiscal_year`
-- insurer_number
+- `insurer_number`
 - `person_id_custom`
 - `subscribers_id`
 - `hia_subscriber_id`（取得できる場合）
