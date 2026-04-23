@@ -25,7 +25,7 @@ if __package__ in (None, ""):
         sys.path.insert(0, str(REPO_ROOT))
 
 
-from scripts.lib.db.mysql import connect_ctx, dict_cursor, load_mysql_params
+from scripts.lib.db.mysql import connect_ctx, dict_cursor, load_mysql_base_params
 from scripts.lib.db.schemas import WORK_OTHER
 
 
@@ -244,7 +244,7 @@ def main() -> None:
     if config.notes:
         print(f"notes          : {config.notes}")
 
-    params = load_mysql_params()
+    params = load_mysql_base_params()
 
     with connect_ctx(params, database=WORK_OTHER, autocommit=False) as conn:
         cur = dict_cursor(conn)
