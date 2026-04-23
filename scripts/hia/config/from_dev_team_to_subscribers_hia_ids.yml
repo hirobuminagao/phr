@@ -1,0 +1,37 @@
+
+
+# from_dev_team_to_subscribers_hia_ids.yml
+# 開発部提供Excel → subscribers.hia_subscriber_id 補完 用設定
+
+# 実行制御
+# 例:
+# resolveのみ実行したい場合
+# run_resolve_identity_and_subscribers_id: true
+# run_apply_hia_subscriber_id_to_subscribers: false
+#
+# applyのみ実行したい場合
+# run_resolve_identity_and_subscribers_id: false
+# run_apply_hia_subscriber_id_to_subscribers: true
+#
+# 両方実行（通常運用）
+run_resolve_identity_and_subscribers_id: true
+run_apply_hia_subscriber_id_to_subscribers: true
+
+# 対象スキーマ
+db_schema_staging: work_other
+db_schema_subscribers: dev_phr
+
+# stagingテーブル
+table_staging: staging_hia_subscribers_master_export_ids
+
+# subscribersテーブル
+table_subscribers: subscribers
+
+# identity生成に必要な固定値
+insurer_number: "06139463"
+
+# 更新ポリシー
+update_policy: fill_only  # fill_only or overwrite
+
+# 実行メモ（etl_runs等に流用可）
+notes: "開発部Excel由来 hia_subscriber_id 反映"

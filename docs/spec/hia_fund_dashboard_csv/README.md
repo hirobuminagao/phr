@@ -285,3 +285,79 @@ dashboard_person_year_join.md
 3. DDL を設計する
 4. 必要に応じて ER を追加する
 5. 実装後に spec と ADR を更新して v1 を freeze する
+
+
+---
+
+## 開発部提供データ（HIA加入者ID）の取込と補完
+
+### 概要
+
+開発部から提供されるExcel（HIA加入者IDおよび識別情報）を用いて、
+`subscribers.hia_subscriber_id` を補完する。
+
+この処理は dashboard import の前提データ整備として位置付ける。
+
+---
+
+### Excel取込時の前処理（NULL表現）
+
+開発部提供のExcelには、NULL値が文字列として「« NULL »」で表現されている場合がある。
+
+本処理ではこの値をデータとして扱わず、以下の前処理を必須とする。
+
+- Excel上で全置換を実施する
+  - 置換前: `« NULL »`
+  - 置換後: 空文字（""）
+
+この前処理を行った上で、stagingテーブルへ投入する。
+
+理由:
+
+- identity生成および突合処理において、文字列としての「NULL」が混入すると正規化が破綻する可能性がある
+- DB上では NULL または空値として扱うことを前提とする
+
+---
+
+### 処理フロー
+
+1. Excel を staging テーブルへ投入する
+   - テーブル: `work_other.staging_hia_subscribers_master_export_ids`
+
+2. staging テーブル上で以下を実施
+   - identity 算出元データの正規化
+   - `identity_hash` の生成
+   - `subscribers` との突合による `subscribers_id` 解決
+
+3. 条件を満たすレコードのみ `subscribers` を更新
+   - 条件:
+     - `identity_hash` が生成されている
+     - `subscribers_id` が解決されている
+     - `hia_subscriber_id` が存在する
+
+4. `subscribers.hia_subscriber_id` を更新する
+
+---
+
+### 責務分離
+
+- Excel 由来データの取込・正規化・突合は staging + backfill スクリプトで行う
+- `hia_dashboard_status` はこの結果を参照するのみとする
+- snapshot では補完処理を行わない
+
+---
+
+### 想定スクリプト
+
+- `from_dev_team_to_subscribers_hia_ids.py`（オーケストレーション）
+- `backfill_staging_hia_subscribers_master_export_ids_identity.py`
+- `backfill_subscribers_hia_subscriber_id_from_staging.py`
+
+---
+
+### 運用
+
+- staging テーブルは都度 truncate して使用する
+- Navicat 等で Excel を投入する
+- backfill スクリプトを実行する
+- Excel投入前に「« NULL »」の全置換を必ず実施する
