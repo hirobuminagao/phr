@@ -39,6 +39,7 @@ HIA システムの管理画面からダウンロードできる「加入者の�
 - 保険者番号の補完
 - 受診勧奨送信日時の別テーブル保存
 - 一覧 SQL 作成
+- `identity_hash` を用いて `subscribers` から補助ID（`subscribers_id`, `hia_subscriber_id`）を解決し、`hia_dashboard_status` に保持する
 
 ---
 
@@ -144,6 +145,12 @@ snapshot_identity_key
 `hia_person_years` との完全一致 join は第一段階では前提にしない。
 まずは HIA ダッシュボードCSV単体で最新状態管理と変更履歴管理を成立させることを優先する。
 
+補足（v1.1.0 以降の方針）:
+
+- 第一段階ではダッシュボードCSV単体での最新状態管理を優先する
+- ただし年度末固定および横断比較に備え、`identity_hash` を用いた `subscribers` 参照により補助IDを `hia_dashboard_status` に保持する
+- これらの補助IDは import 時に解決し、snapshot 時には追加の補完処理を行わない
+
 ---
 
 ## 状態定義
@@ -203,6 +210,26 @@ hia_dashboard_reminder_events
 - `hia_dashboard_status`
 - `hia_dashboard_status_history`
 - `hia_dashboard_reminder_events`
+
+---
+
+## subscribers との連携方針（補助ID保持）
+
+`hia_dashboard_status` は、ダッシュボードCSVの現状態に加えて、後続の年度末固定および比較処理で利用する補助IDを保持する。
+
+方針:
+
+- `identity_hash` をキーに `subscribers` テーブルを参照する
+- 次の補助IDを `hia_dashboard_status` に保持する
+  - `subscribers_id`（`subscribers.id`）
+  - `hia_subscriber_id`（HIA由来の加入者ID）
+- `subscriber_person_id_custom` は従来どおり保持する
+
+責務分離:
+
+- 補助IDの解決は **dashboard import 時点で行う**
+- 年度末スナップショット（`hia_dashboard_year_end_status`）では、`subscribers` 等への追加 join による補完は行わない
+- snapshot は `hia_dashboard_status` に保持された値をそのまま記帳する
 
 ---
 

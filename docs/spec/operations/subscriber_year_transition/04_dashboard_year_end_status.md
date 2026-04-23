@@ -59,7 +59,8 @@
 
 補助として以下を保持することを許容する。
 
-- subscribers_id（照合済みの場合）
+- subscribers_id（hia_dashboard_status 側で保持済みの場合）
+- hia_subscriber_id（hia_dashboard_status 側で保持済みの場合）
 
 ---
 
@@ -76,8 +77,10 @@
 
 ### 記帳内容
 
-- ダッシュボード運用テーブルの現状態をそのまま記録する
+- ダッシュボード運用テーブル（hia_dashboard_status）の現状態をそのまま記録する
 - 加工や補正は行わない（事実の保存を優先）
+- subscribers や他テーブルを snapshot 時に追加 join して補完しない
+- snapshot に必要な補助IDは、事前に hia_dashboard_status 側へ保持された値をそのまま記帳する
 
 ---
 
@@ -92,9 +95,9 @@
 - `identity_hash`
 - `fiscal_year`
 - `insurer_number`
-- `person_id_custom`
-- `subscribers_id`
-- `hia_subscriber_id`（取得できる場合）
+- `person_id_custom`（hia_dashboard_status 上は `subscriber_person_id_custom` を保持し、snapshot では `person_id_custom` として記帳）
+- `subscribers_id`（hia_dashboard_status 側で保持済みの場合）
+- `hia_subscriber_id`（hia_dashboard_status 側で保持済みの場合）
 
 #### 2. ダッシュボードステータス
 
@@ -129,6 +132,8 @@
 ### 基本方針
 
 - 運用テーブルと年度末テーブルは明確に役割を分離する
+- 補助IDの解決や enrichment は、年度末テーブルではなく運用テーブル側で完了させる
+- 年度末テーブルは「固定」の責務に徹し、補完ロジックを持たない
 
 | テーブル | 役割 |
 |----------|------|

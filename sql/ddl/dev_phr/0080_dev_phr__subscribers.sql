@@ -10,6 +10,7 @@ CREATE TABLE `dev_phr`.`subscribers` (
   `gender_code` tinyint unsigned NOT NULL COMMENT '性別コード 1/2/9',
   `name_kana_full` varchar(190) NOT NULL COMMENT '氏名カナ（フル）',
   `person_id_custom` varchar(64) DEFAULT NULL COMMENT 'ナガオPHRキー（将来NOT NULL予定）',
+  `hia_subscriber_id` varchar(190) DEFAULT NULL COMMENT 'HIA由来の加入者ID',
   `name_kana_full_match` varchar(190) DEFAULT NULL COMMENT '氏名カナ（正規化・照合用）',
   `name_full_match` varchar(190) DEFAULT NULL COMMENT '氏名漢字（正規化・照合用）',
   `insurance_symbol_match` varchar(64) DEFAULT NULL COMMENT '保険証記号（正規化・照合用）',
