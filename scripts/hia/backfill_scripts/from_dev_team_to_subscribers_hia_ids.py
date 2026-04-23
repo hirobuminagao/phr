@@ -12,6 +12,19 @@ import os
 import yaml
 from typing import Any, Dict, cast
 
+import sys
+from pathlib import Path
+
+# ------------------------------------------------------------
+# sys.path bootstrap
+# ------------------------------------------------------------
+# 直接実行時でも `scripts.*` import を解決できるようにする
+if __package__ in (None, ""):
+    THIS_FILE = Path(__file__).resolve()
+    REPO_ROOT = THIS_FILE.parents[3]
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
 from scripts.hia.backfill_scripts.backfill_staging_hia_subscribers_master_export_ids_identity import (
     main as resolve_main,
 )

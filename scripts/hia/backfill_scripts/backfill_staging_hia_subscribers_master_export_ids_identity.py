@@ -11,15 +11,28 @@ backfill_staging_hia_subscribers_master_export_ids_identity.py
 - subscribers と突合して subscribers_id を埋める
 """
 
+import sys
+from pathlib import Path
+
+# ------------------------------------------------------------
+# sys.path bootstrap
+# ------------------------------------------------------------
+# 直接実行時でも `scripts.*` import を解決できるようにする
+if __package__ in (None, ""):
+    THIS_FILE = Path(__file__).resolve()
+    REPO_ROOT = THIS_FILE.parents[3]
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.identity.generator import generate_identity_hash
 
-# Typing imports for Pylance
+# typing
 from typing import Any, Dict, List, cast
 
 
-def main(config: dict):
+def main(config: dict[str, Any]) -> None:
     params = load_mysql_base_params()
 
     schema_staging = config["db_schema_staging"]
@@ -128,6 +141,6 @@ if __name__ == "__main__":
     )
 
     with open(config_path, "r", encoding="utf-8") as f:
-        config = cast(dict[str, Any], yaml.safe_load(f))
+        config = cast(dict[str, Any], yaml.safe_load(f) or {})
 
     main(config)

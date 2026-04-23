@@ -8,12 +8,26 @@ backfill_subscribers_hia_subscriber_id_from_staging.py
 - staging テーブルの hia_subscriber_id を subscribers に反映する
 """
 
-from scripts.lib.db.config import load_mysql_base_params
-from scripts.lib.db.mysql import connect_ctx, dict_cursor
+import sys
+from pathlib import Path
+
+# ------------------------------------------------------------
+# sys.path bootstrap
+# ------------------------------------------------------------
+# 直接実行時でも `scripts.*` import を解決できるようにする
+if __package__ in (None, ""):
+    THIS_FILE = Path(__file__).resolve()
+    REPO_ROOT = THIS_FILE.parents[3]
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
 from typing import Any, cast
 
+from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.mysql import connect_ctx, dict_cursor
 
-def main(config: dict):
+
+def main(config: dict[str, Any]) -> None:
     params = load_mysql_base_params()
 
     schema_staging = config["db_schema_staging"]
@@ -79,6 +93,6 @@ if __name__ == "__main__":
     )
 
     with open(config_path, "r", encoding="utf-8") as f:
-        config = cast(dict[str, Any], yaml.safe_load(f))
+        config = cast(dict[str, Any], yaml.safe_load(f) or {})
 
     main(config)
