@@ -1,0 +1,462 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 61,
+	"startColumn": 23,
+	"endLineNumber": 61,
+	"endColumn": 75,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['staging_hia_subscribers_master_export_ids_sid']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['staging_hia_subscribers_master_export_ids_sid']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 61,
+	"startColumn": 23,
+	"endLineNumber": 61,
+	"endColumn": 75
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 64,
+	"startColumn": 40,
+	"endLineNumber": 64,
+	"endColumn": 56,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['name_kana']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['name_kana']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 64,
+	"startColumn": 40,
+	"endLineNumber": 64,
+	"endColumn": 56
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 65,
+	"startColumn": 33,
+	"endLineNumber": 65,
+	"endColumn": 46,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['gender']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['gender']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 65,
+	"startColumn": 33,
+	"endLineNumber": 65,
+	"endColumn": 46
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 66,
+	"startColumn": 31,
+	"endLineNumber": 66,
+	"endColumn": 51,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['date_of_birth']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['date_of_birth']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 66,
+	"startColumn": 31,
+	"endLineNumber": 66,
+	"endColumn": 51
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 68,
+	"startColumn": 42,
+	"endLineNumber": 68,
+	"endColumn": 70,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['insurance_card_symbol']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['insurance_card_symbol']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 68,
+	"startColumn": 42,
+	"endLineNumber": 68,
+	"endColumn": 70
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 69,
+	"startColumn": 42,
+	"endLineNumber": 69,
+	"endColumn": 70,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['insurance_card_number']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['insurance_card_number']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 69,
+	"startColumn": 42,
+	"endLineNumber": 69,
+	"endColumn": 70
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"tuple[Unknown, RowItemType | Unknown]\" の引数を、関数 \"execute\" の型 \"Sequence[MySQLConvertibleType] | Dict[str, MySQLConvertibleType]\" のパラメーター \"params\" に割り当てることはできません\n  型 \"tuple[Unknown, RowItemType | Unknown]\" は型 \"Sequence[MySQLConvertibleType] | Dict[str, MySQLConvertibleType]\" に割り当てできません\n    \"tuple[Unknown, RowItemType | Unknown]\" は \"Sequence[MySQLConvertibleType]\" に割り当てできません\n      型パラメーター \"_T_co@Sequence\" は共変ですが、\"RowItemType | Unknown\" は \"MySQLConvertibleType\" のサブタイプではありません\n        型 \"RowItemType | Unknown\" は型 \"MySQLConvertibleType\" に割り当てできません\n          型 \"Set[str]\" は型 \"MySQLConvertibleType\" に割り当てできません\n    \"tuple[Unknown, RowItemType | Unknown]\" は \"Dict[str, MySQLConvertibleType]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 84,
+	"startColumn": 46,
+	"endLineNumber": 84,
+	"endColumn": 66
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_staging_hia_subscribers_master_export_ids_identity.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" の引数を、関数 \"main\" の型 \"dict[Unknown, Unknown]\" のパラメーター \"config\" に割り当てることはできません\n  型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" は型 \"dict[Unknown, Unknown]\" に割り当てできません\n    \"list[Unknown]\" は \"dict[Unknown, Unknown]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 124,
+	"startColumn": 10,
+	"endLineNumber": 124,
+	"endColumn": 16
+}]
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscribers_hia_subscriber_id_from_staging.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" の引数を、関数 \"main\" の型 \"dict[Unknown, Unknown]\" のパラメーター \"config\" に割り当てることはできません\n  型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" は型 \"dict[Unknown, Unknown]\" に割り当てできません\n    \"list[Unknown]\" は \"dict[Unknown, Unknown]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 85,
+	"startColumn": 10,
+	"endLineNumber": 85,
+	"endColumn": 16
+}]
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/from_dev_team_to_subscribers_hia_ids.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"list[Unknown]\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 42,
+	"startColumn": 19,
+	"endLineNumber": 42,
+	"endColumn": 22
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/from_dev_team_to_subscribers_hia_ids.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportOptionalMemberAccess",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportOptionalMemberAccess.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"get\" は \"None\" の既知の属性ではありません",
+	"source": "Pylance",
+	"startLineNumber": 42,
+	"startColumn": 19,
+	"endLineNumber": 42,
+	"endColumn": 22
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/from_dev_team_to_subscribers_hia_ids.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" の引数を、関数 \"main\" の型 \"dict[Unknown, Unknown]\" のパラメーター \"config\" に割り当てることはできません\n  型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" は型 \"dict[Unknown, Unknown]\" に割り当てできません\n    \"list[Unknown]\" は \"dict[Unknown, Unknown]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 44,
+	"startColumn": 26,
+	"endLineNumber": 44,
+	"endColumn": 32
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/from_dev_team_to_subscribers_hia_ids.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"list[Unknown]\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 51,
+	"startColumn": 19,
+	"endLineNumber": 51,
+	"endColumn": 22
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/from_dev_team_to_subscribers_hia_ids.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportOptionalMemberAccess",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportOptionalMemberAccess.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"get\" は \"None\" の既知の属性ではありません",
+	"source": "Pylance",
+	"startLineNumber": 51,
+	"startColumn": 19,
+	"endLineNumber": 51,
+	"endColumn": 22
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/from_dev_team_to_subscribers_hia_ids.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" の引数を、関数 \"main\" の型 \"dict[Unknown, Unknown]\" のパラメーター \"config\" に割り当てることはできません\n  型 \"Unknown | dict[Unknown, Unknown] | list[Unknown] | None\" は型 \"dict[Unknown, Unknown]\" に割り当てできません\n    \"list[Unknown]\" は \"dict[Unknown, Unknown]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 53,
+	"startColumn": 24,
+	"endLineNumber": 53,
+	"endColumn": 30
+}]
