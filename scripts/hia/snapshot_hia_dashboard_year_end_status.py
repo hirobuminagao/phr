@@ -25,7 +25,8 @@ if __package__ in (None, ""):
         sys.path.insert(0, str(REPO_ROOT))
 
 
-from scripts.lib.db.mysql import connect_ctx, dict_cursor, load_mysql_base_params
+from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import WORK_OTHER
 
 
