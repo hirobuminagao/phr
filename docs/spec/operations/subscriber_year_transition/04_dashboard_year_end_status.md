@@ -55,7 +55,7 @@
 
 ## キー設計（方針）
 
-- identity_hash + fiscal_year を主キーとする
+- identity_hash + fiscal_year + insurer_number を主キーとする
 
 補助として以下を保持することを許容する。
 
@@ -89,6 +89,7 @@
 
 - `identity_hash`
 - `fiscal_year`
+- insurer_number
 - `person_id_custom`
 - `subscribers_id`
 - `hia_subscriber_id`（取得できる場合）
