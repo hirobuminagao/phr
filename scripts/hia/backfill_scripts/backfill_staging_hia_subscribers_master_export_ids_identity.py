@@ -15,6 +15,9 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.identity.generator import generate_identity_hash
 
+# Typing imports for Pylance
+from typing import Any, Dict, List, cast
+
 
 def main(config: dict):
     params = load_mysql_base_params()
@@ -47,7 +50,7 @@ def main(config: dict):
             """
 
             cur.execute(sql_select)
-            rows = cur.fetchall()
+            rows = cast(List[Dict[str, Any]], cur.fetchall())
 
             print(f"staging rows: {len(rows)}")
 
@@ -60,13 +63,19 @@ def main(config: dict):
             for row in rows:
                 sid = row["staging_hia_subscribers_master_export_ids_sid"]
 
+                name_kana = cast(str | None, row.get("name_kana"))
+                gender = cast(int | str | None, row.get("gender"))
+                birthdate = row.get("date_of_birth")
+                symbol = cast(str | None, row.get("insurance_card_symbol"))
+                number = cast(str | None, row.get("insurance_card_number"))
+
                 res = generate_identity_hash(
-                    name_kana_full_raw=row["name_kana"],
-                    gender_code=row["gender"],
-                    birthdate=row["date_of_birth"],
+                    name_kana_full_raw=name_kana,
+                    gender_code=gender,
+                    birthdate=birthdate,
                     insurer_number_raw=insurer_number,
-                    insurance_symbol_raw=row["insurance_card_symbol"],
-                    insurance_number_raw=row["insurance_card_number"],
+                    insurance_symbol_raw=symbol,
+                    insurance_number_raw=number,
                 )
 
                 if not res["ok"]:
@@ -81,7 +90,7 @@ def main(config: dict):
                     WHERE staging_hia_subscribers_master_export_ids_sid = %s
                 """
 
-                cur.execute(sql_update_hash, (identity_hash, sid))
+                cur.execute(sql_update_hash, cast(tuple[Any, Any], (identity_hash, sid)))
                 ok_count += 1
 
             print(f"identity ok: {ok_count}, ng: {ng_count}")
@@ -119,6 +128,6 @@ if __name__ == "__main__":
     )
 
     with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+        config = cast(dict[str, Any], yaml.safe_load(f))
 
     main(config)

@@ -10,6 +10,7 @@ from_dev_team_to_subscribers_hia_ids.py
 
 import os
 import yaml
+from typing import Any, Dict, cast
 
 from scripts.hia.backfill_scripts.backfill_staging_hia_subscribers_master_export_ids_identity import (
     main as resolve_main,
@@ -19,18 +20,18 @@ from scripts.hia.backfill_scripts.backfill_subscribers_hia_subscriber_id_from_st
 )
 
 
-def load_config():
+def load_config() -> Dict[str, Any]:
     config_path = os.path.join(
         os.path.dirname(__file__),
         "../config/from_dev_team_to_subscribers_hia_ids.yml",
     )
 
     with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return cast(Dict[str, Any], yaml.safe_load(f))
 
 
 def main():
-    config = load_config()
+    config: Dict[str, Any] = load_config()
 
     print("[START] from_dev_team_to_subscribers_hia_ids")
     print(f"config: {config}")

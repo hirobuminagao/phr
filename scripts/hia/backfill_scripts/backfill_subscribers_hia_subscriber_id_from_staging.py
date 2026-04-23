@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -12,6 +10,7 @@ backfill_subscribers_hia_subscriber_id_from_staging.py
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from typing import Any, cast
 
 
 def main(config: dict):
@@ -80,6 +79,6 @@ if __name__ == "__main__":
     )
 
     with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+        config = cast(dict[str, Any], yaml.safe_load(f))
 
     main(config)
