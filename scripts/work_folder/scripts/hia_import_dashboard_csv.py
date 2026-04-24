@@ -403,9 +403,9 @@ def diff_status_columns(existing: dict, normalized: dict) -> list[dict]:
     return diffs
 
 
-# 6. After diff_status_columns(), insert:
-def has_missing_subscriber_enrichment(existing: dict, normalized: dict) -> bool:
-    """CSV行自体が未変更でも、subscriber補完項目が不足していれば更新対象にする。"""
+
+def needs_subscriber_enrichment_update(existing: dict, normalized: dict) -> bool:
+    """CSV行自体が未変更でも、subscriber補完項目に不足または差分があれば更新対象にする。"""
     enrichment_columns = [
         "subscribers_id",
         "hia_subscriber_id",
@@ -418,7 +418,22 @@ def has_missing_subscriber_enrichment(existing: dict, normalized: dict) -> bool:
     ]
 
     for col in enrichment_columns:
-        if existing.get(col) is None and normalized.get(col) is not None:
+        old_val = normalize_diff_value(col, existing.get(col))
+        new_val = normalize_diff_value(col, normalized.get(col))
+
+        if new_val is None:
+            continue
+
+        if isinstance(new_val, str) and new_val.strip() == "":
+            continue
+
+        if old_val is None:
+            return True
+
+        if isinstance(old_val, str) and old_val.strip() == "":
+            return True
+
+        if str(old_val) != str(new_val):
             return True
 
     return False
@@ -809,7 +824,7 @@ def process_csv(
                 # まず hash で高速判定
                 # --------------------------------------------------
                 if existing.get("row_sha256") == normalized.get("row_sha256"):
-                    if has_missing_subscriber_enrichment(existing, normalized):
+                    if needs_subscriber_enrichment_update(existing, normalized):
                         update_status(
                             cur,
                             hia_dashboard_person_id,
