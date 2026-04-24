@@ -158,6 +158,10 @@
 | `employee_code` | 維持 | 個別健保で未使用でも fund共通項目として維持 |
 | `connect_id` | rename | `connect_id_norm` として保持確定 |
 | `received_company_name_norm` | 追加 | 受領CSV由来の会社名として追加確定 |
+| `mapped_employer_code` | 追加 | 健保別マッピング後のHIA側事業所コードとして追加 |
+| `mapped_department_code` | 追加 | 健保別マッピング後のHIA側部署コードとして追加 |
+| `subscribers_employer_code` | 追加 | 現行 `subscribers.employer_code` の比較用キャッシュとして追加 |
+| `subscribers_department_code` | 追加 | 現行 `subscribers.department_code` の比較用キャッシュとして追加 |
 
 ---
 

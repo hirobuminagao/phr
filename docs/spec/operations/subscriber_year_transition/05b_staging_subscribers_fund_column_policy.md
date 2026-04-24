@@ -133,7 +133,35 @@ identity とは別軸で扱う。
 
 - HIA側会社情報とは別概念
 - マッピングして利用する前提
+- HIA側の会社・部署マスタは別テーブルで保持する（HIAの事実をそのまま保持）
+- 健保別の読み替え・対応付けは別のマッピングテーブルで管理する（HIAマスタ本体に混ぜない）
 
+### HIA登録コード比較用カラム
+
+2026年度受領データと現行 `subscribers` の事業所・部署登録状態を比較するため、staging 上に以下を保持する。
+
+受領データをHIA側コードへマッピングした結果:
+
+- `mapped_employer_code`
+- `mapped_department_code`
+
+現行 `subscribers` から取得した値（比較用キャッシュ）:
+
+- `subscribers_employer_code`
+- `subscribers_department_code`
+
+命名方針:
+
+- `subscribers_*` は `subscribers` テーブル由来の現行登録値であることを示す
+- カラム名は `subscribers` 側の項目名に合わせる（`subscribers_employer_code` / `subscribers_department_code`）
+- 比較は `mapped_*` と `subscribers_*` の差分として行う
+
+設計意図:
+
+- 受領CSVの事業所コード・部署コードをそのまま `subscribers` と比較しない
+- 健保別マッピングによりHIA側コードへ変換したうえで、現行 `subscribers` の登録値と比較する
+- 健保固有ルール（例: LEFT 3桁での対応付け）はHIAマスタ本体ではなく、マッピングテーブルまたは処理に閉じ込める
+ 
 ---
 
 ## staging 固有カラム

@@ -60,6 +60,8 @@
 - `diff_status` / `diff_status_method` / `diff_status_reason` を2026年度差分判定用に保持する
 - `diff_status` は一時判定結果であり、業務上の最終確定結果とは分離する
 - 記号100本人データは受領済みだがフォーマットが異なるため、既存取り込みフォーマットへヘッダー・列順を合わせて投入する
+- 会社・部署コードは、HIAマスタ本体と健保別マッピングを分けて扱う
+- staging では、マッピング後の `mapped_employer_code` / `mapped_department_code` と、現行 `subscribers` 由来の `subscribers_employer_code` / `subscribers_department_code` を保持して比較する
 
 ---
 

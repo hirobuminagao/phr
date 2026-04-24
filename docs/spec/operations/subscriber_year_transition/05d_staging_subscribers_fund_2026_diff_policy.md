@@ -39,6 +39,28 @@
 - `insurance_symbol_match` + `insurance_number_match`（補助）
 - `name_kana_full_match` / `gender_code_norm`（補助）
 - `qualification_acquired_date_norm`（新規候補判定）
+- `mapped_employer_code` / `mapped_department_code`（受領データをHIA側コードへ変換した値）
+- `subscribers_employer_code` / `subscribers_department_code`（現行 `subscribers` の登録値）
+
+---
+
+## 会社・部署コード比較の前提
+
+2026年度受領データに含まれる事業所コード・部署コードは、HIA側の登録コード体系とそのまま一致するとは限らない。
+
+そのため、比較は以下の順で行う。
+
+1. HIA側の会社・部署マスタを、そのままマスタテーブルとして保持する
+2. 健保別の読み替え・対応付けは別のマッピングテーブルで管理する
+3. 受領データの事業所・部署情報を、健保別マッピングによりHIA側コードへ変換する
+4. 変換後の `mapped_employer_code` / `mapped_department_code` と、現行 `subscribers` 由来の `subscribers_employer_code` / `subscribers_department_code` を比較する
+
+方針:
+
+- 受領CSVのコードを直接 `subscribers` と比較しない
+- HIAマスタ本体には健保固有の読み替えルールを入れない
+- 健保固有ルール（例: 06139463のLEFT 3桁ルール）はマッピングテーブルまたはマッピング処理に閉じ込める
+- staging には、マッピング結果と `subscribers` 由来の現行値を並べて保持する
 
 ---
 
@@ -82,7 +104,7 @@ staging 取り込み後、以下の4分類を付与する。
 以下のいずれかで候補とする。
 
 - `person_id_custom` が一致するが `identity_hash` が変化
-- 会社情報（`received_company_*`）の変化が検出される
+- HIA側へマッピング後の会社・部署コード（`mapped_employer_code` / `mapped_department_code`）と、現行 `subscribers` 由来の会社・部署コード（`subscribers_employer_code` / `subscribers_department_code`）に差分がある
 
 ---
 
