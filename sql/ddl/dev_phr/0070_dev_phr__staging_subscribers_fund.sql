@@ -85,6 +85,11 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
     COLLATE ascii_bin DEFAULT NULL COMMENT '同一人物識別ハッシュ',
   `matched_subscriber_id` bigint unsigned DEFAULT NULL COMMENT '既存加入者ID（突合結果）',
 
+  -- diff judgment cache
+  `diff_status` varchar(50) DEFAULT NULL COMMENT '差分判定結果（new / transfer / existing / unknown 等）',
+  `diff_status_method` varchar(20) DEFAULT NULL COMMENT '判定手段（script / manual）',
+  `diff_status_reason` varchar(255) DEFAULT NULL COMMENT '判定理由',
+
   -- timestamps
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT 'レコード作成日時',
   `loaded_at` datetime(3) DEFAULT NULL COMMENT '取込完了日時',
