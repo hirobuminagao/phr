@@ -824,7 +824,31 @@ def process_csv(
                 # まず hash で高速判定
                 # --------------------------------------------------
                 if existing.get("row_sha256") == normalized.get("row_sha256"):
-                    if needs_subscriber_enrichment_update(existing, normalized):
+                    needs_enrichment_update = needs_subscriber_enrichment_update(
+                        existing,
+                        normalized,
+                    )
+
+                    # TEMP DEBUG:
+                    # row_sha256 は同じだが、subscriber補完値の更新判定が期待通りか確認する。
+                    if existing.get("identity_hash") is not None and existing.get("subscribers_id") is None:
+                        print(
+                            "[DEBUG enrichment]",
+                            "row=", i,
+                            "dashboard_id=", hia_dashboard_person_id,
+                            "needs_update=", needs_enrichment_update,
+                            "existing_subscribers_id=", existing.get("subscribers_id"),
+                            "normalized_subscribers_id=", normalized.get("subscribers_id"),
+                            "existing_hia_subscriber_id=", existing.get("hia_subscriber_id"),
+                            "normalized_hia_subscriber_id=", normalized.get("hia_subscriber_id"),
+                            "existing_identity_hash=", existing.get("identity_hash"),
+                            "normalized_identity_hash=", normalized.get("identity_hash"),
+                            "symbol_match=", normalized.get("insurance_symbol_match"),
+                            "number_match=", normalized.get("insurance_number_match"),
+                            "name_match=", normalized.get("name_match"),
+                        )
+
+                    if needs_enrichment_update:
                         update_status(
                             cur,
                             hia_dashboard_person_id,
