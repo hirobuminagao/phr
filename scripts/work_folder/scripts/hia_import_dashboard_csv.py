@@ -70,6 +70,8 @@ COMPARE_COLUMNS = [
     "name",
     "name_match",
     "subscriber_person_id_custom",
+    "subscribers_id",
+    "hia_subscriber_id",
     "subscriber_name_kana_full",
     "subscriber_name_kana_full_match",
     "subscriber_gender_code",
@@ -104,7 +106,9 @@ def fetch_subscriber_enrichment(
     """dev_phr.subscribers から dashboard 補完用の人物情報を取得する。"""
     sql = """
         SELECT
+            id AS subscribers_id,
             person_id_custom,
+            hia_subscriber_id,
             name_kana_full,
             name_kana_full_match,
             gender_code,
@@ -130,6 +134,8 @@ def fetch_subscriber_enrichment(
     if not row:
         return {
             "subscriber_person_id_custom": None,
+            "subscribers_id": None,
+            "hia_subscriber_id": None,
             "subscriber_name_kana_full": None,
             "subscriber_name_kana_full_match": None,
             "subscriber_gender_code": None,
@@ -139,6 +145,8 @@ def fetch_subscriber_enrichment(
 
     return {
         "subscriber_person_id_custom": row.get("person_id_custom"),
+        "subscribers_id": row.get("subscribers_id"),
+        "hia_subscriber_id": row.get("hia_subscriber_id"),
         "subscriber_name_kana_full": row.get("name_kana_full"),
         "subscriber_name_kana_full_match": row.get("name_kana_full_match"),
         "subscriber_gender_code": row.get("gender_code"),
@@ -334,6 +342,8 @@ def build_status_record(normalized: dict, run_id: int, raw_row_json: str) -> dic
         "name": normalized["name"],
         "name_match": normalized["name_match"],
         "subscriber_person_id_custom": normalized["subscriber_person_id_custom"],
+        "subscribers_id": normalized["subscribers_id"],
+        "hia_subscriber_id": normalized["hia_subscriber_id"],
         "subscriber_name_kana_full": normalized["subscriber_name_kana_full"],
         "subscriber_name_kana_full_match": normalized["subscriber_name_kana_full_match"],
         "subscriber_gender_code": normalized["subscriber_gender_code"],
@@ -393,6 +403,27 @@ def diff_status_columns(existing: dict, normalized: dict) -> list[dict]:
     return diffs
 
 
+# 6. After diff_status_columns(), insert:
+def has_missing_subscriber_enrichment(existing: dict, normalized: dict) -> bool:
+    """CSV行自体が未変更でも、subscriber補完項目が不足していれば更新対象にする。"""
+    enrichment_columns = [
+        "subscribers_id",
+        "hia_subscriber_id",
+        "subscriber_person_id_custom",
+        "subscriber_name_kana_full",
+        "subscriber_name_kana_full_match",
+        "subscriber_gender_code",
+        "subscriber_birth",
+        "identity_hash",
+    ]
+
+    for col in enrichment_columns:
+        if existing.get(col) is None and normalized.get(col) is not None:
+            return True
+
+    return False
+
+
 
 def build_reminder_event_records(
     hia_dashboard_person_id: int,
@@ -432,6 +463,8 @@ def fetch_existing_status(cur: Any, snapshot_identity_key: str) -> Optional[dict
             name,
             name_match,
             subscriber_person_id_custom,
+            subscribers_id,
+            hia_subscriber_id,
             subscriber_name_kana_full,
             subscriber_name_kana_full_match,
             subscriber_gender_code,
@@ -478,6 +511,8 @@ def insert_status(cur: Any, status_record: dict) -> int:
             name,
             name_match,
             subscriber_person_id_custom,
+            subscribers_id,
+            hia_subscriber_id,
             subscriber_name_kana_full,
             subscriber_name_kana_full_match,
             subscriber_gender_code,
@@ -501,7 +536,7 @@ def insert_status(cur: Any, status_record: dict) -> int:
             %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s,
-            %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s, %s, %s,
             %s, %s, %s,
@@ -524,6 +559,8 @@ def insert_status(cur: Any, status_record: dict) -> int:
             status_record["name"],
             status_record["name_match"],
             status_record["subscriber_person_id_custom"],
+            status_record["subscribers_id"],
+            status_record["hia_subscriber_id"],
             status_record["subscriber_name_kana_full"],
             status_record["subscriber_name_kana_full_match"],
             status_record["subscriber_gender_code"],
@@ -577,6 +614,8 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             name = %s,
             name_match = %s,
             subscriber_person_id_custom = %s,
+            subscribers_id = %s,
+            hia_subscriber_id = %s,
             subscriber_name_kana_full = %s,
             subscriber_name_kana_full_match = %s,
             subscriber_gender_code = %s,
@@ -613,6 +652,8 @@ def update_status(cur: Any, hia_dashboard_person_id: int, status_record: dict, r
             status_record["name"],
             status_record["name_match"],
             status_record["subscriber_person_id_custom"],
+            status_record["subscribers_id"],
+            status_record["hia_subscriber_id"],
             status_record["subscriber_name_kana_full"],
             status_record["subscriber_name_kana_full_match"],
             status_record["subscriber_gender_code"],
@@ -768,8 +809,17 @@ def process_csv(
                 # まず hash で高速判定
                 # --------------------------------------------------
                 if existing.get("row_sha256") == normalized.get("row_sha256"):
-                    touch_last_seen_run(cur, hia_dashboard_person_id, run_id)
-                    metrics.rows_unchanged += 1
+                    if has_missing_subscriber_enrichment(existing, normalized):
+                        update_status(
+                            cur,
+                            hia_dashboard_person_id,
+                            status_record,
+                            run_id,
+                        )
+                        metrics.rows_updated += 1
+                    else:
+                        touch_last_seen_run(cur, hia_dashboard_person_id, run_id)
+                        metrics.rows_unchanged += 1
 
                 else:
                     # hash 不一致の場合のみ詳細 diff

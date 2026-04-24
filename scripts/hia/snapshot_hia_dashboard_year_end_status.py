@@ -212,7 +212,7 @@ def insert_snapshot_rows(
             s.identity_hash,
             %s AS fiscal_year,
             s.insurer_number,
-            s.person_id_custom,
+            s.subscriber_person_id_custom,
             s.subscribers_id,
             s.hia_subscriber_id,
             s.status,

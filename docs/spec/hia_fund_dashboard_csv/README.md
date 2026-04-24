@@ -225,11 +225,26 @@ hia_dashboard_reminder_events
   - `hia_subscriber_id`（HIA由来の加入者ID）
 - `subscriber_person_id_custom` は従来どおり保持する
 
+
 責務分離:
 
 - 補助IDの解決は **dashboard import 時点で行う**
 - 年度末スナップショット（`hia_dashboard_year_end_status`）では、`subscribers` 等への追加 join による補完は行わない
 - snapshot は `hia_dashboard_status` に保持された値をそのまま記帳する
+
+補完更新ルール（dashboard import 時）:
+
+- CSV の内容（row_sha256）が変更されていない場合でも、以下の補助項目が未設定（NULL）の場合は更新対象とする
+  - subscribers_id
+  - hia_subscriber_id
+  - subscriber_person_id_custom
+  - subscriber_name_kana_full
+  - subscriber_name_kana_full_match
+  - subscriber_gender_code
+  - subscriber_birth
+  - identity_hash
+- 上記は CSV 状態差分とは独立した「補完更新」として扱う
+- これにより、subscribers 側の整備後に dashboard データを再補完可能とする
 
 ---
 
