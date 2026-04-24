@@ -30,6 +30,11 @@ CREATE TABLE `work_other`.`hia_dashboard_year_end_status` (
   `exam_date` DATE NULL COMMENT '健診受診日',
 
   -- =============================
+  -- 資格情報
+  -- =============================
+  `qualification_loss_date` DATE NULL COMMENT '資格喪失日',
+
+  -- =============================
   -- 医療機関
   -- =============================
   `medical_institution_code` VARCHAR(50) NULL COMMENT '医療機関コード',

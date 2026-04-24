@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -204,6 +202,7 @@ def insert_snapshot_rows(
             status,
             reservation_date,
             exam_date,
+            qualification_loss_date,
             medical_institution_code,
             medical_institution_name,
             snapshot_at
@@ -218,10 +217,13 @@ def insert_snapshot_rows(
             s.status,
             s.reservation_date,
             s.exam_date,
+            sub.qualification_loss_date,
             s.medical_institution_code,
             s.medical_institution_name,
             NOW() AS snapshot_at
         FROM {SOURCE_TABLE} AS s
+        LEFT JOIN dev_phr.subscribers AS sub
+          ON s.subscribers_id = sub.id
         WHERE s.insurer_number IN ({placeholders})
     """
     cur.execute(sql, [fiscal_year, *params])
