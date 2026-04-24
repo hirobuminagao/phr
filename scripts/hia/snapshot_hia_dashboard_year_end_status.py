@@ -202,7 +202,7 @@ def insert_snapshot_rows(
             status,
             reservation_date,
             exam_date,
-            qualification_loss_date,
+            qualification_lost_date,
             medical_institution_code,
             medical_institution_name,
             snapshot_at
