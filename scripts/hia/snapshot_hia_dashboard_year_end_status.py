@@ -217,7 +217,7 @@ def insert_snapshot_rows(
             s.status,
             s.reservation_date,
             s.exam_date,
-            sub.qualification_loss_date,
+            sub.qualification_lost_date,
             s.medical_institution_code,
             s.medical_institution_name,
             NOW() AS snapshot_at

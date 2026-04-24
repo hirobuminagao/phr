@@ -5,7 +5,7 @@
 -- =========================================
 
 ALTER TABLE work_other.hia_dashboard_year_end_status
-ADD COLUMN qualification_loss_date DATE NULL COMMENT '資格喪失日'
+ADD COLUMN qualification_lost_date DATE NULL COMMENT '資格喪失日'
 AFTER exam_date;
 
 -- 既存データのbackfill（hia_dashboard_statusからコピー）

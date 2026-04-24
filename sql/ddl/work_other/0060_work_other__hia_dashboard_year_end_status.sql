@@ -32,7 +32,7 @@ CREATE TABLE `work_other`.`hia_dashboard_year_end_status` (
   -- =============================
   -- 資格情報
   -- =============================
-  `qualification_loss_date` DATE NULL COMMENT '資格喪失日',
+  `qualification_lost_date` DATE NULL COMMENT '資格喪失日',
 
   -- =============================
   -- 医療機関
