@@ -12,9 +12,14 @@
 
 ### Step 0. 2025年度最終状態の確定
 
-- HIAの加入者最新（2026/03/31時点）を `subscribers` に反映する
+- HIAの加入者最新（2026/03/31時点）を `subscribers` に反映する（当時点の事実として確定）
 - ダッシュボードの年度履歴テーブル（`hia_dashboard_year_end_status`）を作成する
 - 現在のダッシュボード状態を年度履歴テーブルへ記帳する
+- 記帳時に以下を保持する
+  - dashboard状態（status / reservation / exam）
+  - subscribers由来の補助ID（subscribers_id / hia_subscriber_id / identity_hash）
+  - subscribers由来の資格情報（qualification_lost_date）
+- 資格喪失日はdashboard CSVから推定せず、`subscribers` の値を参照して記帳する
 - ダッシュボードの運用テーブルのステータスを未予約等の初期状態へクリアする
 - 上記の完了をもって2025年度の終了状態とする
 
@@ -28,6 +33,10 @@
 - 健保受領データを `staging_subscribers_fund` に取り込む
 - norm / match の整理方針に基づきカラムを整備する
 - `person_id_custom` / `identity_hash` を生成する
+- 差分判定用の補助カラムを追加する
+  - `diff_status`（new / transfer / unknown / existing 等）
+  - `diff_status_method`（script / manual）
+- 本テーブルは年度比較の作業基盤として扱い、年度混在を避けるため投入前に状態を明確化する（truncate または年度管理）
 
 参照:
 - `05_staging_subscribers_fund.md`
@@ -48,7 +57,7 @@
 ### Step 3. 2025年度最終状態の確定（補完後基準面の確定）
 
 - Step1, Step2 を経て整備された `subscribers` を2025年度最終状態の比較基準面として確定する
-- 以降の比較処理はこの状態を基準として行う
+- この時点の `subscribers` は「当時の事実」として扱い、以降の更新の影響を受けない比較基準とする
 
 参照:
 - `04_dashboard_year_end_status.md`
@@ -68,11 +77,14 @@
 ### Step 5. 一次比較
 
 - 2025年度最終状態（subscribers）と 2026受領データを比較する
-- 以下の分類を行う
+- 以下の分類を行う（初期分類）
   - no_change
   - update
   - missing_from_new
   - new_in_file
+- 併せて補助判定情報を付与する
+  - 最新資格取得日を基準とした新規候補判定
+  - identity_hash による存在確認
 
 参照:
 - `03_comparison_policy.md`

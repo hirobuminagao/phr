@@ -41,8 +41,13 @@
 
 ### 主な実施内容
 
-- HIA加入者最新状態を確認し、必要に応じて `subscribers` へ反映する
+- HIA加入者最新状態を確認し、必要に応じて `subscribers` へ反映する（当時点の事実として確定）
 - HIAダッシュボード運用テーブルの現状態を年度末状態として記帳する
+- 記帳時に以下を保持する
+  - dashboard状態（status / reservation / exam）
+  - subscribers由来の補助ID（subscribers_id / hia_subscriber_id / identity_hash）
+  - subscribers由来の資格情報（qualification_lost_date）
+- 資格喪失日は dashboard CSV から推定せず、`subscribers` の値を参照する
 - 翌年度比較で不要な運用中状態を初期化する
 
 ### 主な入力
@@ -130,6 +135,10 @@
 - CSVをテンプレートに従って `staging_subscribers_fund` へ取り込む
 - norm / match / identity を生成する
 - 必要に応じて `subscribers` 照合結果を保持する
+- 差分判定用カラムを付与する
+  - `diff_status`
+  - `diff_status_method`
+- 本テーブルは年度比較の作業基盤として扱い、投入前に状態（年度）を明確化する
 
 ### 主な入力
 
@@ -157,6 +166,9 @@
 
 - 基準面と新受領データを比較する
 - `no_change` / `update` / `missing_from_new` / `new_in_file` に分類する
+- 補助判定情報を付与する
+  - 最新資格取得日を基準とした新規候補判定
+  - identity_hash による存在確認
 
 ### 主な入力
 
