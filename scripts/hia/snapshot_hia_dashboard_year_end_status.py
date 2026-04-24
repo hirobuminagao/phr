@@ -218,8 +218,8 @@ def insert_snapshot_rows(
             s.reservation_date,
             s.exam_date,
             sub.qualification_lost_date,
-            s.medical_institution_code,
-            s.medical_institution_name,
+            NULL AS medical_institution_code,
+            s.medical_institution AS medical_institution_name,
             NOW() AS snapshot_at
         FROM {SOURCE_TABLE} AS s
         LEFT JOIN dev_phr.subscribers AS sub
