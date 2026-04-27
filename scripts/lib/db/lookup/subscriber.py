@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from typing import Any, Mapping, cast
@@ -31,6 +29,8 @@ _SUBSCRIBER_LOOKUP_COLUMNS = (
     "name_full_match",
     "insurance_symbol_match",
     "insurance_number_match",
+    "employer_code",
+    "department_code",
 )
 
 
@@ -82,3 +82,34 @@ def get_single_subscriber_id_by_identity_hash(conn: Any, identity_hash: str | No
             f"multiple subscribers found for identity_hash={identity_hash}: ids={ids}"
         )
     return next(iter(subscriber_map.keys()))
+
+
+def get_subscriber_company_codes_by_id(
+    conn: Any,
+    subscriber_id: int | None,
+) -> dict[str, Any] | None:
+    """subscribers.id から現行の会社・部署コードを返す。"""
+    if subscriber_id is None:
+        return None
+
+    cursor = dict_cursor(conn)
+    try:
+        cursor.execute(
+            f"""
+            SELECT
+              id,
+              employer_code,
+              department_code
+            FROM {DEV_PHR}.subscribers
+            WHERE id = %s
+            """,
+            (subscriber_id,),
+        )
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+
+    if row is None:
+        return None
+
+    return dict(cast(Mapping[str, Any], row))
