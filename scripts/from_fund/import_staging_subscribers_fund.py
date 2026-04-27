@@ -229,6 +229,26 @@ def run_apply_staging_subscribers_fund(import_run_id: int) -> None:
     )
 
 
+# company mapping enrichment subprocess
+def run_update_staging_company_mapping_values(
+    import_run_id: int,
+    insurer_number: str,
+) -> None:
+    """staging_subscribers_fund の会社・部署mapping補完スクリプトを起動する。"""
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.from_fund.update_staging_company_mapping_values",
+            "--import-run-id",
+            str(import_run_id),
+            "--insurer-number",
+            insurer_number,
+        ],
+        check=True,
+    )
+
+
 def normalize_digits_or_none(value: str) -> str | None:
     digits = "".join(ch for ch in value if ch.isdigit())
     return digits or None
@@ -892,6 +912,16 @@ def main() -> None:
                     print("run status: success")
 
                 if run_status in {"success", "partial"} and result.inserted_row_count > 0:
+                    print(f"company mapping enrichment start: run_id={run_id}")
+                    try:
+                        run_update_staging_company_mapping_values(
+                            run_id,
+                            insurer_number,
+                        )
+                        print(f"company mapping enrichment done: run_id={run_id}")
+                    except Exception as e:
+                        print(f"[WARN] company mapping enrichment failed: run_id={run_id} error={e}")
+
                     print(f"apply start: run_id={run_id}")
                     try:
                         run_apply_staging_subscribers_fund(run_id)

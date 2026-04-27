@@ -1,6 +1,6 @@
 
-
 from __future__ import annotations
+import json
 
 from dataclasses import dataclass
 from typing import Any
@@ -28,6 +28,7 @@ def _values_from_row(row: dict[str, Any], columns: list[str]) -> list[Any]:
     return [row.get(c) for c in columns]
 
 
+
 def _build_match_key(
     row: dict[str, Any],
     *,
@@ -39,6 +40,64 @@ def _build_match_key(
         return None
     values = _values_from_row(row, columns)
     return apply_company_match_rule(match_rule, values)
+
+
+# --- source_match_conditions support ---
+
+def _condition_value(row: dict[str, Any], column: str) -> str | None:
+    value = row.get(column)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _source_conditions_match(
+    staging_row: dict[str, Any],
+    conditions_json: Any,
+) -> tuple[bool, str]:
+    """source_match_conditions(JSON) を評価する。
+
+    JSON例:
+    [
+      {"column":"insurance_symbol_norm","operator":"eq","value":"100"},
+      {"column":"relationship_name_match","operator":"neq","value":"本人"}
+    ]
+    """
+    if conditions_json in (None, ""):
+        return True, "no source_match_conditions"
+
+    try:
+        conditions = json.loads(conditions_json) if isinstance(conditions_json, str) else conditions_json
+    except json.JSONDecodeError as e:
+        return False, f"invalid source_match_conditions json: {e}"
+
+    if not isinstance(conditions, list):
+        return False, "source_match_conditions must be a JSON array"
+
+    for condition in conditions:
+        if not isinstance(condition, dict):
+            return False, "source_match_conditions item must be an object"
+
+        column = condition.get("column")
+        operator = condition.get("operator") or "eq"
+        expected = condition.get("value")
+
+        if not column:
+            return False, "source_match_conditions item missing column"
+
+        actual = _condition_value(staging_row, str(column))
+        expected_str = None if expected is None else str(expected)
+
+        if operator == "eq":
+            if actual != expected_str:
+                return False, f"condition failed: {column}={actual} != {expected_str}"
+        elif operator == "neq":
+            if actual == expected_str:
+                return False, f"condition failed: {column}={actual} == {expected_str}"
+        else:
+            return False, f"unsupported condition operator: {operator}"
+
+    return True, "source_match_conditions matched"
 
 
 def _resolve_lookup_company_master(
@@ -154,6 +213,22 @@ def resolve_company_mapping(
             target_columns=mapping.get("source_target_columns"),
             match_rule=mapping.get("source_match_rule"),
         )
+        source_match_operator = mapping.get("source_match_operator") or "eq"
+
+        conditions_ok, conditions_reason = _source_conditions_match(
+            staging_row,
+            mapping.get("source_match_conditions"),
+        )
+        if not conditions_ok:
+            result = CompanyMappingResult(
+                None,
+                None,
+                "not_matched",
+                conditions_reason,
+                mapping_id=mapping.get("fund_company_mapping_id"),
+                source_match_key=source_match_key,
+            )
+            continue
 
         mapping_type = mapping.get("mapping_type")
         if mapping_type == "lookup_company_master":
@@ -163,10 +238,31 @@ def resolve_company_mapping(
                 hia_company_rows=hia_company_rows,
             )
         elif mapping_type == "fixed":
-            result = _resolve_fixed(
-                mapping=mapping,
-                source_match_key=source_match_key,
-            )
+            if source_match_operator == "neq":
+                expected_key = mapping.get("source_match_key")
+                if expected_key is None or str(source_match_key) != str(expected_key):
+                    result = CompanyMappingResult(
+                        mapping.get("fixed_employer_code"),
+                        mapping.get("fixed_department_code"),
+                        "mapped",
+                        "fixed mapping matched (neq)",
+                        mapping_id=mapping.get("fund_company_mapping_id"),
+                        source_match_key=source_match_key,
+                    )
+                else:
+                    result = CompanyMappingResult(
+                        None,
+                        None,
+                        "not_matched",
+                        f"neq condition failed: {source_match_key} == {expected_key}",
+                        mapping_id=mapping.get("fund_company_mapping_id"),
+                        source_match_key=source_match_key,
+                    )
+            else:
+                result = _resolve_fixed(
+                    mapping=mapping,
+                    source_match_key=source_match_key,
+                )
         else:
             result = CompanyMappingResult(
                 None,

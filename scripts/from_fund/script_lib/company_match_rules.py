@@ -1,10 +1,6 @@
-
-
-from __future__ import annotations
-
 from typing import Any, Iterable
 
-from scripts.from_fund.import_staging_subscribers_fund import base_normalize
+from scripts.lib.identity.base_norm import base_normalize
 
 
 def _to_str(v: Any) -> str:
@@ -54,7 +50,13 @@ def rule_left3_before_colon(values: list[Any]) -> str | None:
 def rule_concat_with_pipe(values: list[Any]) -> str | None:
     if not values:
         return None
-    parts = [_norm(v) for v in values if _norm(v)]
+
+    parts: list[str] = []
+    for v in values:
+        s = _norm(v)
+        if s:
+            parts.append(s)
+
     if not parts:
         return None
     return "|".join(parts)

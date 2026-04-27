@@ -1,4 +1,3 @@
-
 CREATE TABLE IF NOT EXISTS dev_phr.fund_company_mapping (
   fund_company_mapping_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '健保別会社マッピングID',
 
@@ -11,6 +10,8 @@ CREATE TABLE IF NOT EXISTS dev_phr.fund_company_mapping (
   source_target_columns VARCHAR(255) NOT NULL COMMENT 'staging側対象カラム（カンマ区切り）',
   source_match_rule VARCHAR(100) NOT NULL COMMENT 'staging側加工ルール（例: left3 / concat_with_pipe / as_is）',
   source_match_key VARCHAR(255) DEFAULT NULL COMMENT 'staging側照合キー（fixed時の比較値、例: 100）',
+  source_match_operator VARCHAR(20) NOT NULL DEFAULT 'eq' COMMENT 'staging側照合演算子（eq / neq）',
+  source_match_conditions JSON DEFAULT NULL COMMENT 'staging側追加照合条件（JSON配列: [{"column":"...","operator":"eq|neq","value":"..."}]）',
 
   -- HIA company master側照合キー生成ルール（mapping_type=lookup_company_master の場合に使用）
   company_lookup_columns VARCHAR(255) DEFAULT NULL COMMENT 'HIA会社マスタ側対象カラム（カンマ区切り）',
