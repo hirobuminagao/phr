@@ -11,6 +11,7 @@ scripts/kenshin_list_pydir/.env.trans_*
 !docs/spec/**
 **/*.xml
 **/*.csv
+**/*.xlsx
 !scripts/work_folder/mat/*.csv
 
 # re-allow XML/CSV under spec explicitly
