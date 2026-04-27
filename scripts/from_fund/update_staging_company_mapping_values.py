@@ -204,7 +204,7 @@ def run(
     not_matched = 0
     updated = 0
 
-    with connect_ctx(**params) as conn:
+    with connect_ctx(**params, database=DEV_PHR) as conn:
         mappings = fetch_company_mapping_rules(conn, insurer_number)
         hia_company_rows = fetch_hia_company_master_rows_by_insurer_number(
             conn,
