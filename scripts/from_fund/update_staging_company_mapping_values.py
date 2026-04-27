@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -180,6 +178,20 @@ def update_staging_company_values(
         cursor.close()
 
 
+def _to_int_or_none(value: Any) -> int | None:
+    """DB更新用に空文字をNULLへ、数値相当をintへ寄せる。"""
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+
+    text = str(value).strip()
+    if text == "":
+        return None
+
+    return int(text)
+
+
 def _subscriber_company_codes(
     conn: Any,
     matched_subscriber_id: Any,
@@ -188,7 +200,7 @@ def _subscriber_company_codes(
     row = get_subscriber_company_codes_by_id(conn, subscriber_id)
     if row is None:
         return None, None
-    return row.get("employer_code"), row.get("department_code")
+    return _to_int_or_none(row.get("employer_code")), _to_int_or_none(row.get("department_code"))
 
 
 def run(
@@ -255,8 +267,8 @@ def run(
                 update_staging_company_values(
                     conn,
                     staging_id=int(row["id"]),
-                    mapped_employer_code=result.mapped_employer_code,
-                    mapped_department_code=result.mapped_department_code,
+                    mapped_employer_code=_to_int_or_none(result.mapped_employer_code),
+                    mapped_department_code=_to_int_or_none(result.mapped_department_code),
                     subscribers_employer_code=subscribers_employer_code,
                     subscribers_department_code=subscribers_department_code,
                 )
