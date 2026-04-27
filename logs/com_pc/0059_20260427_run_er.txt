@@ -1,0 +1,69 @@
+Traceback (most recent call last):
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 772, in cmd_query
+    self._cmysql.query(
+    ~~~~~~~~~~~~~~~~~~^
+        query,
+        ^^^^^^
+    ...<3 lines>...
+        query_attrs=self.query_attrs,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+_mysql_connector.MySQLInterfaceError: Incorrect integer value: '' for column 'subscribers_department_code' at row 1
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_company_mapping_values.py", line 301, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_company_mapping_values.py", line 293, in main
+    run(
+    ~~~^
+        import_run_id=args.import_run_id,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        insurer_number=args.insurer_number,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        dry_run=args.dry_run,
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_company_mapping_values.py", line 255, in run
+    update_staging_company_values(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        conn,
+        ^^^^^
+    ...<4 lines>...
+        subscribers_department_code=subscribers_department_code,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_company_mapping_values.py", line 161, in update_staging_company_values
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        f"""
+        ^^^^
+    ...<14 lines>...
+        ),
+        ^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 353, in execute
+    self._connection.cmd_query(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._stmt_partition["mappable_stmt"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        raw_as_string=self._raw_as_string,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 781, in cmd_query
+    raise get_mysql_exception(
+        err.errno, msg=err.msg, sqlstate=err.sqlstate
+    ) from err
+mysql.connector.errors.DatabaseError: 1366 (HY000): Incorrect integer value: '' for column 'subscribers_department_code' at row 1
