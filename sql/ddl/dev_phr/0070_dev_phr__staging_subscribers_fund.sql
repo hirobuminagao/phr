@@ -46,9 +46,9 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
   `connect_id_norm` varchar(190) DEFAULT NULL COMMENT '連携ID（正規化）',
   `received_company_code_norm` varchar(190) DEFAULT NULL COMMENT '受領企業コード（正規化）',
   `received_company_name_norm` varchar(190) DEFAULT NULL COMMENT '受領企業名（正規化）',
-  `department_code_norm` varchar(190) DEFAULT NULL COMMENT '所属コード（正規化）',
-  `distribution_code_norm` varchar(190) DEFAULT NULL COMMENT '配布先コード（正規化）',
-  `employee_code_norm` varchar(190) DEFAULT NULL COMMENT '社員コード（正規化）',
+  `received_department_code_norm` varchar(190) DEFAULT NULL COMMENT '受領所属コード（正規化）',
+  `received_distribution_code_norm` varchar(190) DEFAULT NULL COMMENT '受領配布先コード（正規化）',
+  `received_employee_code_norm` varchar(190) DEFAULT NULL COMMENT '受領社員コード（正規化）',
 
   -- match values
   `name_kana_full_match` varchar(190)

@@ -108,6 +108,7 @@ SUPPORTED_RULES = {
     "split_family_kana",
     "split_middle_kana",
     "split_given_kana",
+    "text_norm",
 }
 
 
@@ -319,6 +320,9 @@ def apply_rule(rule: str, value: str | None, *, kanji_cur: Any | None = None) ->
 
     if rule == "as_is":
         return v or None
+
+    if rule == "text_norm":
+        return base_normalize(v) or None
 
     if rule == "symbol_norm":
         result = normalize_insurance_symbol(v)
