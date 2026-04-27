@@ -85,6 +85,12 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
     COLLATE ascii_bin DEFAULT NULL COMMENT '同一人物識別ハッシュ',
   `matched_subscriber_id` bigint unsigned DEFAULT NULL COMMENT '既存加入者ID（突合結果）',
 
+  -- company mapping enrichment cache
+  `mapped_employer_code` int unsigned DEFAULT NULL COMMENT 'HIA向け事業所コード（会社部署マッピング後）',
+  `mapped_department_code` int unsigned DEFAULT NULL COMMENT 'HIA向け部署コード（会社部署マッピング後）',
+  `subscribers_employer_code` int unsigned DEFAULT NULL COMMENT '現行subscribers.employer_code（比較用キャッシュ）',
+  `subscribers_department_code` int unsigned DEFAULT NULL COMMENT '現行subscribers.department_code（比較用キャッシュ）',
+
   -- diff judgment cache
   `diff_status` varchar(50) DEFAULT NULL COMMENT '差分判定結果（new / transfer / existing / unknown 等）',
   `diff_status_method` varchar(20) DEFAULT NULL COMMENT '判定手段（script / manual）',
@@ -99,6 +105,8 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
   KEY `idx_stgfund_import_run` (`import_run_id`),
   KEY `idx_stgfund_identity_hash` (`identity_hash`),
   KEY `idx_stgfund_matched_subscriber_id` (`matched_subscriber_id`),
+  KEY `idx_stgfund_company_mapping` (`mapped_employer_code`, `mapped_department_code`),
+  KEY `idx_stgfund_subscribers_company` (`subscribers_employer_code`, `subscribers_department_code`),
   KEY `idx_stgfund_symbol_number` (`insurance_symbol_match`, `insurance_number_match`),
   KEY `idx_stgfund_name_kana_match` (`name_kana_full_match`),
   KEY `idx_stgfund_relationship_name_match` (`relationship_name_match`),

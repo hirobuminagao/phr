@@ -1,5 +1,3 @@
-
-
 # 05d_staging_subscribers_fund_2026_diff_policy
 
 ## 目的
@@ -61,6 +59,95 @@
 - HIAマスタ本体には健保固有の読み替えルールを入れない
 - 健保固有ルール（例: 06139463のLEFT 3桁ルール）はマッピングテーブルまたはマッピング処理に閉じ込める
 - staging には、マッピング結果と `subscribers` 由来の現行値を並べて保持する
+- mapping テーブル上では、受領側照合元は `source_target_columns` / `source_match_rule`、HIA会社マスタ側照合元は `company_lookup_columns` / `company_lookup_rule` として定義する
+
+### HIAマスタ照合時の基本手順
+
+HIA会社部署マスタ（`hia_company_master`）との照合は、以下の順で行う。
+
+1. 対応する部署コードが判明している場合
+   - HIA企業コード（`employer_code`）とHIA部署コード（`department_code`）の組み合わせで紐づける
+   - staging には `mapped_employer_code` / `mapped_department_code` を保持する
+
+2. 部署コードが `NULL` または不明な場合
+   - HIA企業コード（`employer_code`）のみを紐づける
+   - staging には `mapped_employer_code` を保持し、`mapped_department_code` は `NULL` とする
+
+3. 企業コードの紐づけ方法
+   - 健保別の受領データ仕様に依存するため、別途マッピングルールで定義する
+   - HIAマスタ本体には企業コード読み替えルールを持たせない
+
+この手順により、HIAマスタの保持粒度（企業単位 / 企業＋部署単位）を加工せず、そのまま照合に利用する。
+
+---
+
+## 複数カラムによる照合キー生成（match_key）
+
+受領データおよびHIAマスタにおいて、単一カラムではなく複数カラムの組み合わせで照合キー（match_key）を生成する必要があるケースに対応する。
+
+### 基本方針
+
+- 照合キーは単一カラムに限定せず、複数カラムから生成可能とする
+- 照合キーの生成は `target_column(s)` と `match_rule` により定義する
+- 照合キー（match_key）と、マッピング結果（HIAコード）は分離して扱う
+- マッピングは HIA会社マスタ参照型（`lookup_company_master`）と固定値返却型（`fixed`）の2種類をサポートする
+
+### 対応パターン
+
+以下の照合キー生成およびマッピングパターンをサポートする。
+
+1. 単一カラム
+   - 例: `LEFT(received_company_code_norm, 3)`
+
+2. 複数カラム連結
+   - 例: 企業名 + 部署名
+   - 実装例: `concat_with_pipe(received_company_name_norm, received_department_name_norm)`
+   - 例: `トランスコスモス株式会社|社長室`
+
+3. 固定値照合
+   - 例: `insurance_symbol_norm = 100`
+
+4. HIAマスタ参照型マッピング（`lookup_company_master`）
+   - staging 側で生成した照合キーと、HIA会社マスタ側で生成した照合キーを突合する
+   - 一致した `hia_company_master` の `employer_code` / `department_code` を採用する
+
+5. 固定マッピング（`fixed`）
+   - staging 側の条件一致のみで、固定の `employer_code` / `department_code` を返却する
+
+### ルール定義例
+
+- `source_target_columns = received_company_name_norm,received_department_name_norm`
+- `source_match_rule = concat_with_pipe`
+
+または
+
+- `source_target_columns = received_company_code_norm`
+- `source_match_rule = left3`
+
+HIA会社マスタ参照型の場合:
+
+- `company_lookup_columns = department_name`
+- `company_lookup_rule = left3_before_colon`
+
+固定マッピングの場合:
+
+- `mapping_type = fixed`
+- `fixed_employer_code = 103`
+- `fixed_department_code = NULL`
+
+### 設計意図
+
+- 健保ごとの受領フォーマット差異を吸収する
+- 企業名＋部署名など、人間可読な情報をキーとして利用可能にする
+- 文字列連結時の曖昧性を避けるため、区切り文字（例: `|`）を明示的に使用する
+
+### 補足
+
+- 照合キーは staging 内で生成し、マッピング処理に使用する
+- 必要に応じて `*_match_value` として保持することも可能（デバッグ・手動補正用途）
+- mapping テーブルでは `mapping_type` により、`lookup_company_master` / `fixed` を切り替える
+- `lookup_company_master` の場合、mapped 値は HIA会社マスタから取得する
+- `fixed` の場合のみ、mapping テーブルに固定の `fixed_employer_code` / `fixed_department_code` を直接保持する
 
 ---
 

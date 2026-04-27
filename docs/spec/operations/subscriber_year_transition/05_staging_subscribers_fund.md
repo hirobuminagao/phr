@@ -30,6 +30,7 @@
 - `subscribers` 補完の入力面
 - 2025年度固定済み基準と2026年度受領データの比較基盤
 - 2026年度差分判定用ワークベンチ
+- 会社・部署コードのHIA向けマッピング結果を保持する enrichment 対象
 
 ---
 
@@ -60,7 +61,9 @@
 - `diff_status` / `diff_status_method` / `diff_status_reason` を2026年度差分判定用に保持する
 - `diff_status` は一時判定結果であり、業務上の最終確定結果とは分離する
 - 記号100本人データは受領済みだがフォーマットが異なるため、既存取り込みフォーマットへヘッダー・列順を合わせて投入する
-- 会社・部署コードは、HIAマスタ本体と健保別マッピングを分けて扱う
+- 会社・部署コードは、HIA会社部署マスタ本体（HIAの事実）と健保別マッピング（読み替えルール）を分けて扱う
+- 会社・部署コードのマッピングは、CSV取込INSERT後の enrichment 工程として実施する
+- マッピング処理は、`lookup_company_master`（HIA会社部署マスタ参照型）と `fixed`（固定値返却型）の2方式をサポートする
 - staging では、マッピング後の `mapped_employer_code` / `mapped_department_code` と、現行 `subscribers` 由来の `subscribers_employer_code` / `subscribers_department_code` を保持して比較する
 
 ---
@@ -75,6 +78,28 @@
 
 ---
 
+## 取込後 enrichment の位置づけ
+
+`staging_subscribers_fund` へのCSV取込は、受領データを norm / match / identity まで整えて INSERT する工程とする。
+
+会社・部署コードのHIA向けマッピングは、INSERT時に1行ずつ処理せず、取込後の別工程として実施する。
+
+基本フロー:
+
+1. CSVを `staging_subscribers_fund` へ INSERT する
+2. INSERT済み行を対象に、会社・部署コードのマッピング enrichment を実行する
+3. `mapped_employer_code` / `mapped_department_code` を staging に更新する
+4. `matched_subscriber_id` から現行 `subscribers` の `employer_code` / `department_code` を取得し、`subscribers_employer_code` / `subscribers_department_code` として保持する
+5. `mapped_*` と `subscribers_*` を比較して差分判定を行う
+
+run管理:
+
+- CSV取込、会社・部署mapping enrichment、subscribers apply は処理責務が異なるため、ETL run は分ける
+- enrichment 処理は、自身の run_id とは別に、対象データを示す `import_run_id` を引数として受け取る
+- これにより、取込の再実行、mappingの再実行、applyの再実行を分離できる
+
+---
+
 ## 現時点の確認結果
 
 ### 確認済み
@@ -86,11 +111,15 @@
 - 現行DDLとの乖離が大きく、実データも存在しないため、DROP + CREATE 前提で再作成する方針とする
 - 現行DDLカラムの棚卸し方針（維持 / rename / 追加 / 削除）は `05c` に分離済み
 - 2026年度受領データの差分判定方針は `05d` に分離済み
+- HIA会社部署マスタは `hia_company_master` としてDDL追加済み
+- 健保別会社マッピングは `fund_company_mapping` としてDDL整理中
+- 会社・部署mappingは取込後 enrichment として、CSV取込およびsubscribers applyから分離する方針とする
 
 ### 未実施
 
-- 分割後の各specをもとに新DDLへ落とし込む
-- 会社 Ubuntu 環境側の現行DDLと最終突合を行う
+- `staging_subscribers_fund` へ会社・部署mapping用カラムを追加するDDL / migrationを反映する
+- `fund_company_mapping` のDDLを確定し、必要に応じてmigrationを反映する
+- 取込後 enrichment スクリプト（会社・部署mapping値更新）を実装する
 
 ---
 
