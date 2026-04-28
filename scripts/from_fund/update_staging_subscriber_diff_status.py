@@ -189,7 +189,7 @@ def fetch_missing_from_new_rows(
               AND NOT EXISTS (
                 SELECT 1
                 FROM {DEV_PHR}.staging_subscribers_fund stg
-                WHERE stg.insurer_number_norm = s.insurer_number
+                WHERE BINARY stg.insurer_number_norm = BINARY s.insurer_number
                   AND stg.import_run_id IN ({_placeholders(import_run_ids)})
                   AND BINARY stg.identity_hash = BINARY s.identity_hash
               )
