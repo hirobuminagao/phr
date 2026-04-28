@@ -1,0 +1,26 @@
+# 差分判定設定ファイル
+#
+# insurer_number:
+#   対象の保険者番号（8桁）
+#
+# fund_id:
+#   対応するfund_id（任意）
+#
+# import_run_ids:
+#   差分比較対象とするstagingのimport_run_idのリスト
+#   複数指定した場合は「その複数runをまとめた最新状態」として扱う
+#   例:
+#     [70, 71] の場合 → run 70と71の両方に存在するデータを統合して比較
+#
+#   missing_from_new の判定:
+#     subscribers に存在し、指定した全ての import_run_ids に存在しないデータが抽出される
+
+insurer_number: "06130256"
+fund_id: 48
+import_run_ids:
+  - 70
+
+# --- 実行モード設定 ---
+diff_mode: true
+export_mode: true
+export_split_size: 1000
