@@ -1,0 +1,57 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py
+[INFO] using config: c:\Users\1107858.KSMD\work\phr\scripts\from_fund\config\diff_status.yml
+Traceback (most recent call last):
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 772, in cmd_query
+    self._cmysql.query(
+    ~~~~~~~~~~~~~~~~~~^
+        query,
+        ^^^^^^
+    ...<3 lines>...
+        query_attrs=self.query_attrs,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+_mysql_connector.MySQLInterfaceError: COLLATION 'utf8mb4_ja_0900_as_cs' is not valid for CHARACTER SET 'ascii'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_subscriber_diff_status.py", line 375, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_subscriber_diff_status.py", line 371, in main
+    run(config, dry_run=args.dry_run)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_subscriber_diff_status.py", line 306, in run
+    missing_rows = fetch_missing_from_new_rows(
+        conn,
+        insurer_number=config.insurer_number,
+        import_run_ids=config.import_run_ids,
+    )
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\update_staging_subscriber_diff_status.py", line 183, in fetch_missing_from_new_rows
+    cursor.execute(
+    ~~~~~~~~~~~~~~^
+        f"""
+        ^^^^
+    ...<13 lines>...
+        (insurer_number, *import_run_ids),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\cursor_cext.py", line 353, in execute
+    self._connection.cmd_query(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._stmt_partition["mappable_stmt"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        raw_as_string=self._raw_as_string,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\site-packages\mysql\connector\connection_cext.py", line 781, in cmd_query
+    raise get_mysql_exception(
+        err.errno, msg=err.msg, sqlstate=err.sqlstate
+    ) from err
+mysql.connector.errors.ProgrammingError: 1253 (42000): COLLATION 'utf8mb4_ja_0900_as_cs' is not valid for CHARACTER SET 'ascii'
