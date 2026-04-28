@@ -185,13 +185,13 @@ def fetch_missing_from_new_rows(
             SELECT
               s.*
             FROM {DEV_PHR}.subscribers s
-            WHERE s.insurer_number = %s
+            WHERE s.insurer_number COLLATE utf8mb4_ja_0900_as_cs = %s
               AND NOT EXISTS (
                 SELECT 1
                 FROM {DEV_PHR}.staging_subscribers_fund stg
-                WHERE stg.insurer_number_norm = s.insurer_number
+                WHERE stg.insurer_number_norm COLLATE utf8mb4_ja_0900_as_cs = s.insurer_number COLLATE utf8mb4_ja_0900_as_cs
                   AND stg.import_run_id IN ({_placeholders(import_run_ids)})
-                  AND stg.identity_hash = s.identity_hash
+                  AND stg.identity_hash COLLATE utf8mb4_ja_0900_as_cs = s.identity_hash COLLATE utf8mb4_ja_0900_as_cs
               )
             ORDER BY s.insurance_symbol_match, s.insurance_number_match, s.name_kana_full_match
             """,
