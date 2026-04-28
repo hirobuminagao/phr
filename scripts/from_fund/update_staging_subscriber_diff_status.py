@@ -74,10 +74,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="staging_subscribers_fund と subscribers の差分ステータス更新、およびHIA登録用CSV出力を行う",
     )
+    default_config_path = Path(__file__).parent / "config" / "diff_status.yml"
+
     parser.add_argument(
         "--config",
-        required=True,
-        help="差分判定設定YAMLファイルパス",
+        default=str(default_config_path),
+        help="差分判定設定YAMLファイルパス（未指定時は scripts/from_fund/config/diff_status.yml を使用）",
     )
     parser.add_argument(
         "--dry-run",
@@ -364,6 +366,7 @@ def run(config: DiffConfig, *, dry_run: bool = False) -> DiffSummary:
 
 def main() -> None:
     args = parse_args()
+    print(f"[INFO] using config: {args.config}")
     config = load_config(args.config)
     run(config, dry_run=args.dry_run)
 
