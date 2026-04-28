@@ -77,9 +77,6 @@ def _row_id_value(row: dict[str, Any]) -> int:
     return coerced
 
 
-def _row_no_range(rows: list[dict[str, Any]]) -> str:
-    row_numbers = [_row_no_value(row) for row in rows]
-    return f"{min(row_numbers)}-{max(row_numbers)}"
 
 
 def _chunks(rows: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
@@ -165,9 +162,10 @@ def write_hia_subscriber_export_files(
     sorted_rows = sorted(rows, key=lambda row: (_row_no_value(row), _row_id_value(row)))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    for chunk in _chunks(sorted_rows, split_size):
-        row_range = _row_no_range(chunk)
-        filename = f"{status_label}_{insurer_number}_{timestamp}_{row_range}.csv"
+    for chunk_index, chunk in enumerate(_chunks(sorted_rows, split_size)):
+        start_no = (chunk_index * split_size) + 1
+        last_no = start_no + len(chunk) - 1
+        filename = f"{status_label}_{insurer_number}_{timestamp}_{start_no}-{last_no}.csv"
         path = status_dir / filename
         write_hia_subscriber_export_csv(path, chunk)
         paths.append(path)
