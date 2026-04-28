@@ -7,7 +7,7 @@ import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, cast
 
 import yaml
 
@@ -141,7 +141,7 @@ def fetch_target_staging_rows(
         rows = cursor.fetchall()
     finally:
         cursor.close()
-    return [dict(row) for row in rows]
+    return [dict(cast(Mapping[str, Any], row)) for row in rows]
 
 
 def fetch_current_subscribers_by_ids(
@@ -164,7 +164,8 @@ def fetch_current_subscribers_by_ids(
         rows = cursor.fetchall()
     finally:
         cursor.close()
-    return {int(row["id"]): dict(row) for row in rows}
+    normalized_rows = [dict(cast(Mapping[str, Any], row)) for row in rows]
+    return {int(row["id"]): row for row in normalized_rows}
 
 
 def fetch_missing_from_new_rows(
@@ -195,7 +196,7 @@ def fetch_missing_from_new_rows(
         rows = cursor.fetchall()
     finally:
         cursor.close()
-    return [dict(row) for row in rows]
+    return [dict(cast(Mapping[str, Any], row)) for row in rows]
 
 
 def update_diff_status(
