@@ -145,59 +145,32 @@ ORDER BY col_order, csv_header, target_column;
 -- seed: fund_company_mapping for insurer_number = 06130256
 -- 方針:
 -- - 06130256 はHIAフォーマット計算結果列の事業所（企業）コード / 所属コードが正
--- - そのため、健保固有の読み替えは行わず、HIA会社部署マスタへlookupする
--- - 部署コードがある場合は employer_code + department_code の組み合わせでlookup
--- - 部署コードがない場合は employer_code のみでlookup
+-- - HIA会社部署マスタは参照しない
+-- - received_company_code_norm / received_department_code_norm を mapped_* へ直接反映する
+-- - 部署コードが空の場合は mapped_department_code を NULL とする
 -- ============================================================
 
 -- 再実行しやすいように、06130256 の mapping は入れ替える
 DELETE FROM dev_phr.fund_company_mapping
 WHERE insurer_number = '06130256';
 
--- 1. 企業コード + 部署コード lookup（最優先）
+-- 登録用コード passthrough
 INSERT INTO dev_phr.fund_company_mapping (
   insurer_number,
   match_style,
   mapping_type,
   source_target_columns,
   source_match_rule,
-  company_lookup_columns,
-  company_lookup_rule,
   priority,
   notes
 ) VALUES (
   '06130256',
   'department',
-  'lookup_company_master',
+  'passthrough',
   'received_company_code_norm,received_department_code_norm',
-  'concat_with_pipe',
-  'employer_code,department_code',
-  'concat_with_pipe',
+  'as_is',
   1,
-  'HIA登録用の企業コード＋所属コードをそのままHIA会社部署マスタへlookup'
-);
-
--- 2. 企業コードのみ lookup（部署コードなしの fallback）
-INSERT INTO dev_phr.fund_company_mapping (
-  insurer_number,
-  match_style,
-  mapping_type,
-  source_target_columns,
-  source_match_rule,
-  company_lookup_columns,
-  company_lookup_rule,
-  priority,
-  notes
-) VALUES (
-  '06130256',
-  'employer',
-  'lookup_company_master',
-  'received_company_code_norm',
-  'as_is',
-  'employer_code',
-  'as_is',
-  5,
-  'HIA登録用の企業コードをそのままHIA会社部署マスタへlookup（部署コードなし fallback）'
+  'HIA登録用の企業コード＋所属コードをmapped_*へ直接反映'
 );
 
 -- ============================================================

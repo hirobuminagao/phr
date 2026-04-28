@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 import json
 
@@ -197,6 +196,36 @@ def _resolve_fixed(
     )
 
 
+def _resolve_passthrough(
+    *,
+    mapping: dict[str, Any],
+    staging_row: dict[str, Any],
+) -> CompanyMappingResult:
+    """source_target_columns の値を mapped_* へ直接返す。"""
+    mapping_id = mapping.get("fund_company_mapping_id")
+    columns = _split_columns(mapping.get("source_target_columns"))
+
+    if not columns:
+        return CompanyMappingResult(
+            None,
+            None,
+            "config_error",
+            "passthrough requires source_target_columns",
+            mapping_id=mapping_id,
+        )
+
+    employer_code = staging_row.get(columns[0]) if len(columns) >= 1 else None
+    department_code = staging_row.get(columns[1]) if len(columns) >= 2 else None
+
+    return CompanyMappingResult(
+        employer_code,
+        department_code,
+        "mapped",
+        "passthrough mapping matched",
+        mapping_id=mapping_id,
+    )
+
+
 def resolve_company_mapping(
     *,
     staging_row: dict[str, Any],
@@ -236,6 +265,11 @@ def resolve_company_mapping(
                 mapping=mapping,
                 source_match_key=source_match_key,
                 hia_company_rows=hia_company_rows,
+            )
+        elif mapping_type == "passthrough":
+            result = _resolve_passthrough(
+                mapping=mapping,
+                staging_row=staging_row,
             )
         elif mapping_type == "fixed":
             if source_match_operator == "neq":
