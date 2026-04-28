@@ -64,13 +64,14 @@
 - 会社・部署コードは、HIA会社部署マスタ本体（HIAの事実）と健保別マッピング（読み替えルール）を分けて扱う
 - 会社・部署コードのマッピングは、CSV取込INSERT後の enrichment 工程として実施する
 - マッピング処理は、`lookup_company_master`（HIA会社部署マスタ参照型）と `fixed`（固定値返却型）の2方式をサポートする
+- 健保別マッピングでは、`source_match_conditions` による追加AND条件（例: 記号100かつ本人以外）をサポートする
 - staging では、マッピング後の `mapped_employer_code` / `mapped_department_code` と、現行 `subscribers` 由来の `subscribers_employer_code` / `subscribers_department_code` を保持して比較する
 
 ---
 
 ## 2026年度受領データ投入時の方針
 
-- 記号100本人以外は、既存の取り込みテンプレートに従ってそのまま staging へ投入する
+- 記号100本人以外は、既存の取り込みテンプレートに従って staging へ投入する。ただし、本人以外はHIA部署lookupに乗せないため、受領CSV整形時に事業所コード / 事業所を空欄にする運用とする
 - 記号100本人データは、Excel側で取り込みフォーマットのヘッダーおよび列順へ整形したうえで staging へ投入する
 - この段階ではテンプレート拡張を行わず、受領データ側を既存テンプレートへ寄せる
 - 2025年度補完用に投入済みの staging データは、2026年度受領データ投入前に扱いを明確化する
@@ -92,6 +93,11 @@
 4. `matched_subscriber_id` から現行 `subscribers` の `employer_code` / `department_code` を取得し、`subscribers_employer_code` / `subscribers_department_code` として保持する
 5. `mapped_*` と `subscribers_*` を比較して差分判定を行う
 
+補足:
+
+- `subscribers.employer_code` / `subscribers.department_code` は現行DDL上 `varchar(20)` であり、空文字が存在しうる
+- staging 側の `subscribers_employer_code` / `subscribers_department_code` は数値カラムであるため、enrichment スクリプトでは空文字を `NULL`、数値相当を `int` に寄せて更新する
+
 run管理:
 
 - CSV取込、会社・部署mapping enrichment、subscribers apply は処理責務が異なるため、ETL run は分ける
@@ -112,14 +118,18 @@ run管理:
 - 現行DDLカラムの棚卸し方針（維持 / rename / 追加 / 削除）は `05c` に分離済み
 - 2026年度受領データの差分判定方針は `05d` に分離済み
 - HIA会社部署マスタは `hia_company_master` としてDDL追加済み
-- 健保別会社マッピングは `fund_company_mapping` としてDDL整理中
+- 健保別会社マッピングは `fund_company_mapping` としてDDL追加済み
+- `fund_company_mapping` は `lookup_company_master` / `fixed` の2方式と、`source_match_conditions` による追加条件をサポートする
 - 会社・部署mappingは取込後 enrichment として、CSV取込およびsubscribers applyから分離する方針とする
+- 取込後 enrichment スクリプト `update_staging_company_mapping_values.py` は実装済み
+- CSV取込オーケストラには、取込後 enrichment を apply 前に実行する処理を差し込み済み。ただし、enrichment が失敗しても `subscribers` apply は継続する
 
 ### 未実施
 
-- `staging_subscribers_fund` へ会社・部署mapping用カラムを追加するDDL / migrationを反映する
-- `fund_company_mapping` のDDLを確定し、必要に応じてmigrationを反映する
-- 取込後 enrichment スクリプト（会社・部署mapping値更新）を実装する
+- 実行環境へのDDL反映状態を確認する
+- `fund_company_mapping` の06139463向け seed SQLを実行し、実データでmapping結果を確認する
+- 2026年度受領CSVの再投入時には、同一runの扱いを確認し、必要に応じて対象 `import_run_id` 単位でstagingデータを整理する
+- 将来的に、複数 import_run_id を束ねる ETL run group（RUNボタン単位）の導入を検討する
 
 ---
 
