@@ -23,4 +23,16 @@ import_run_ids:
 # --- 実行モード設定 ---
 diff_mode: true
 export_mode: true
-export_split_size: 1000
+# --- 簡易サンプル ---
+# 通常運用（差分更新 + CSV出力）
+# diff_mode: true
+# export_mode: true
+# export_split_size: 1000
+
+# 差分確認のみ
+# diff_mode: true
+# export_mode: false
+
+# CSV再出力のみ
+# diff_mode: false
+# export_mode: true

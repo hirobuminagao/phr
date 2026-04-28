@@ -58,6 +58,32 @@ export_split_size: 1000
 
 ---
 
+## 実行モード
+
+- `diff_mode`
+  - true: 差分ステータス更新 + missing_from_new 出力
+  - false: DB更新・missing出力なし
+
+- `export_mode`
+  - true: HIA加入者登録用CSV（add / update）出力
+  - false: CSV出力なし
+
+---
+
+## 出力分割（export_split_size）
+
+- `export_split_size` で指定した件数ごとにCSVを分割
+- 各CSVには `src_row_no` の範囲がファイル名に付与される
+
+例:
+
+```text
+add_06130256_20260428_153000_1-1000.csv
+add_06130256_20260428_153000_1001-2000.csv
+```
+
+---
+
 ## 実行方法
 
 ### dry-run
