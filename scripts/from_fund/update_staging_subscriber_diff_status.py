@@ -89,7 +89,9 @@ def parse_args() -> argparse.Namespace:
 
 def load_config(path: str | Path) -> DiffConfig:
     with Path(path).open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+        raw_data = yaml.safe_load(f) or {}
+
+    data = cast(Mapping[str, Any], raw_data)
 
     insurer_number = str(data["insurer_number"])
     fund_id_raw = data.get("fund_id")
