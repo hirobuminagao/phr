@@ -1,0 +1,644 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 90,
+	"startColumn": 26,
+	"endLineNumber": 90,
+	"endColumn": 48,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1132,
+			"startColumn": 9,
+			"endLineNumber": 1132,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['insurer_number']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"s\" に割り当てることはできません\n  \"Literal['insurer_number']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 90,
+	"startColumn": 26,
+	"endLineNumber": 90,
+	"endColumn": 48
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"list[Unknown]\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 91,
+	"startColumn": 24,
+	"endLineNumber": 91,
+	"endColumn": 27
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 93,
+	"startColumn": 39,
+	"endLineNumber": 93,
+	"endColumn": 61,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1132,
+			"startColumn": 9,
+			"endLineNumber": 1132,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['import_run_ids']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"s\" に割り当てることはできません\n  \"Literal['import_run_ids']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 93,
+	"startColumn": 39,
+	"endLineNumber": 93,
+	"endColumn": 61
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"list[Unknown]\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 98,
+	"startColumn": 34,
+	"endLineNumber": 98,
+	"endColumn": 37
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"list[Unknown]\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 106,
+	"startColumn": 29,
+	"endLineNumber": 106,
+	"endColumn": 32
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"list[Unknown]\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 107,
+	"startColumn": 31,
+	"endLineNumber": 107,
+	"endColumn": 34
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"fetch_current_subscribers_by_ids\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 180,
+	"startColumn": 5,
+	"endLineNumber": 180,
+	"endColumn": 37,
+	"relatedInformation": [
+		{
+			"startLineNumber": 557,
+			"startColumn": 5,
+			"endLineNumber": 557,
+			"endColumn": 37,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 226,
+	"startColumn": 17,
+	"endLineNumber": 226,
+	"endColumn": 26,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 226,
+	"startColumn": 17,
+	"endLineNumber": 226,
+	"endColumn": 26
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 226,
+	"startColumn": 17,
+	"endLineNumber": 226,
+	"endColumn": 26
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 226,
+	"startColumn": 17,
+	"endLineNumber": 226,
+	"endColumn": 26
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"fetch_missing_from_new_rows\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 227,
+	"startColumn": 5,
+	"endLineNumber": 227,
+	"endColumn": 32,
+	"relatedInformation": [
+		{
+			"startLineNumber": 606,
+			"startColumn": 5,
+			"endLineNumber": 606,
+			"endColumn": 32,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"_norm_text\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 277,
+	"startColumn": 5,
+	"endLineNumber": 277,
+	"endColumn": 15,
+	"relatedInformation": [
+		{
+			"startLineNumber": 658,
+			"startColumn": 5,
+			"endLineNumber": 658,
+			"endColumn": 15,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"_same\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 283,
+	"startColumn": 5,
+	"endLineNumber": 283,
+	"endColumn": 10,
+	"relatedInformation": [
+		{
+			"startLineNumber": 664,
+			"startColumn": 5,
+			"endLineNumber": 664,
+			"endColumn": 10,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"_date_same\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 287,
+	"startColumn": 5,
+	"endLineNumber": 287,
+	"endColumn": 15,
+	"relatedInformation": [
+		{
+			"startLineNumber": 668,
+			"startColumn": 5,
+			"endLineNumber": 668,
+			"endColumn": 15,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"classify_staging_row\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 292,
+	"startColumn": 5,
+	"endLineNumber": 292,
+	"endColumn": 25,
+	"relatedInformation": [
+		{
+			"startLineNumber": 673,
+			"startColumn": 5,
+			"endLineNumber": 673,
+			"endColumn": 25,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"update_diff_status\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 349,
+	"startColumn": 5,
+	"endLineNumber": 349,
+	"endColumn": 23,
+	"relatedInformation": [
+		{
+			"startLineNumber": 723,
+			"startColumn": 5,
+			"endLineNumber": 723,
+			"endColumn": 23,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"build_missing_output_path\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 373,
+	"startColumn": 5,
+	"endLineNumber": 373,
+	"endColumn": 30,
+	"relatedInformation": [
+		{
+			"startLineNumber": 747,
+			"startColumn": 5,
+			"endLineNumber": 747,
+			"endColumn": 30,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportRedeclaration",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportRedeclaration.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "関数宣言 \"write_missing_from_new_csv\" は、同じ名前の宣言によって隠されています",
+	"source": "Pylance",
+	"startLineNumber": 386,
+	"startColumn": 5,
+	"endLineNumber": 386,
+	"endColumn": 31,
+	"relatedInformation": [
+		{
+			"startLineNumber": 760,
+			"startColumn": 5,
+			"endLineNumber": 760,
+			"endColumn": 31,
+			"message": "関数の宣言を参照してください",
+			"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Any | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"Any | None\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 456,
+	"startColumn": 16,
+	"endLineNumber": 456,
+	"endColumn": 21
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Any | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"Any | None\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 456,
+	"startColumn": 16,
+	"endLineNumber": 456,
+	"endColumn": 21
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 603,
+	"startColumn": 17,
+	"endLineNumber": 603,
+	"endColumn": 26,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 603,
+	"startColumn": 17,
+	"endLineNumber": 603,
+	"endColumn": 26
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 603,
+	"startColumn": 17,
+	"endLineNumber": 603,
+	"endColumn": 26
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/update_staging_subscriber_diff_status.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 603,
+	"startColumn": 17,
+	"endLineNumber": 603,
+	"endColumn": 26
+}]
