@@ -625,6 +625,16 @@ def build_row(
 
         row[m.target_column] = value
 
+    # ------------------------------------------------------------
+    # Phone normalization
+    # ------------------------------------------------------------
+    # 電話番号は norm の段階で数字のみへ統一する。
+    # 例: 090-1234-5678 -> 09012345678
+    phone_norm = row.get("phone_norm")
+    if phone_norm is not None:
+        phone_digits = "".join(ch for ch in str(phone_norm) if ch.isdigit())
+        row["phone_norm"] = phone_digits if phone_digits else None
+
     row = enrich_relationship_fields(row)
     row = enrich_identity_fields(
         row,
