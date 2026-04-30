@@ -15,10 +15,12 @@
 #   missing_from_new の判定:
 #     subscribers に存在し、指定した全ての import_run_ids に存在しないデータが抽出される
 
-insurer_number: "06130256"
-fund_id: 48
+insurer_number: "06139463"
+fund_id: 2
 import_run_ids:
-  - 70
+  - 58
+  - 60
+  - 62
 
 # --- 実行モード設定 ---
 diff_mode: true
