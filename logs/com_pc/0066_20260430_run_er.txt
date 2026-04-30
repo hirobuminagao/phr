@@ -1,0 +1,22 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/from_fund/backfill_scripts/backfill_subscribers_name_parts_match.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\backfill_scripts\backfill_subscribers_name_parts_match.py", line 215, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\backfill_scripts\backfill_subscribers_name_parts_match.py", line 211, in main
+    run(limit=args.limit, dry_run=args.dry_run)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\backfill_scripts\backfill_subscribers_name_parts_match.py", line 178, in run
+    update_values = _build_match_update(row)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_fund\backfill_scripts\backfill_subscribers_name_parts_match.py", line 136, in _build_match_update
+    kanji_match_parts = name_kanji.norm_parts_to_match_parts(kanji_parts, cur=None)
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\field\name_kanji.py", line 190, in norm_parts_to_match_parts
+    family = _kanji_norm_part_to_match(parts.get("family"), cur, use_cache=use_cache)
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\field\name_kanji.py", line 56, in _kanji_norm_part_to_match
+    v = _apply_kanji_normalization_dict(value, cur, use_cache=use_cache)
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\field\name_kanji.py", line 34, in _apply_kanji_normalization_dict
+    mapping = load_kanji_normalization_map(cur, use_cache=use_cache)
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\kanji_dict.py", line 59, in load_kanji_normalization_map
+    cur.execute(sql)
+    ^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'execute'
