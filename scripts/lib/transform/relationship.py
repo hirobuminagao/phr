@@ -1,3 +1,5 @@
+from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive.convert import to_fullwidth_ascii
 
 
 from __future__ import annotations
@@ -32,15 +34,20 @@ def resolve_relationship_name(
 
 
 def _normalize_optional_text(value: str | None) -> str | None:
-    """None / 空文字 / 空白のみを None として扱う。"""
+    """None / 空文字 / 空白のみを None として扱い、全角寄せする。"""
     if value is None:
         return None
 
-    text = str(value).replace("　", " ").strip()
+    normalized = base_normalize(value)
+    if normalized is None:
+        return None
+
+    text = str(normalized).strip()
     if text == "":
         return None
 
-    return text
+    # 続柄は比較用として全角寄せ
+    return to_fullwidth_ascii(text)
 
 
 # 続柄コードの match 用正規化

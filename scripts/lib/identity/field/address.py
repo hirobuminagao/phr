@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 from scripts.lib.identity.base_norm import base_normalize
-from scripts.lib.identity.primitive import to_fullwidth_ascii
+from scripts.lib.identity.primitive.convert import to_fullwidth_ascii
 
 
 # ------------------------------------------------------------
