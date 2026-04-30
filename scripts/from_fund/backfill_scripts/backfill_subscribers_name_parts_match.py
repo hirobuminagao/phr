@@ -133,7 +133,7 @@ def _build_match_update(row: dict[str, Any]) -> dict[str, Any]:
         "given": _norm_text(row.get("name_kanji_given")),
     }
     if any(kanji_parts.values()):
-        kanji_match_parts = name_kanji.norm_parts_to_match_parts(kanji_parts)
+        kanji_match_parts = name_kanji.norm_parts_to_match_parts(kanji_parts, cur=None)
         if _is_blank(row.get("name_kanji_family_match")):
             update_values["name_kanji_family_match"] = kanji_match_parts.get("family")
         if _is_blank(row.get("name_kanji_middle_match")):
