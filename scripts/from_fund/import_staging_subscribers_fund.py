@@ -60,6 +60,10 @@ from scripts.lib.identity.field.name_kanji import (
     norm_parts_to_match_parts as kanji_norm_parts_to_match_parts,
 )
 from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.field.address import (
+    build_postal_code_match,
+    build_address_match,
+)
 from scripts.lib.identity.field.insurance_number import normalize_insurance_number
 from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
 from scripts.lib.identity.generator import (
@@ -627,6 +631,19 @@ def build_row(
         insurer_number=insurer_number,
         source_row=source_row,
     )
+
+    # ------------------------------------------------------------
+    # Address / Postal match generation
+    # ------------------------------------------------------------
+    row["postal_code_match"] = build_postal_code_match(
+        row.get("postal_code_norm")
+    )
+
+    row["address_match"] = build_address_match(
+        row.get("address_line_norm"),
+        row.get("building_norm"),
+    )
+
     row = enrich_matched_subscriber_id(conn, row)
 
     return row
