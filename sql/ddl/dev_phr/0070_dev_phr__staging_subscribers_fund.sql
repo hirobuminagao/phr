@@ -35,8 +35,12 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
   `relationship_code_norm` varchar(64) DEFAULT NULL COMMENT '続柄コード（正規化）',
   `relationship_name_norm` varchar(190) DEFAULT NULL COMMENT '続柄名称（正規化）',
   `postal_code_norm` varchar(190) DEFAULT NULL COMMENT '郵便番号（正規化）',
+  `postal_code_match` varchar(7) DEFAULT NULL COMMENT '郵便番号（照合用: 数字のみ7桁0埋め）',
   `address_line_norm` varchar(190) DEFAULT NULL COMMENT '住所1（正規化）',
   `building_norm` varchar(190) DEFAULT NULL COMMENT '住所2（建物）（正規化）',
+  `address_match` varchar(255)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '住所照合用（住所1 + 全角スペース + 建物。建物なしは住所1のみ）',
   `phone_norm` varchar(190) DEFAULT NULL COMMENT '電話番号（正規化）',
   `email_norm` varchar(190) DEFAULT NULL COMMENT 'メールアドレス（正規化）',
 
