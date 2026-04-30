@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -110,7 +108,7 @@ def _fetch_target_rows(conn: Any, *, limit: int | None) -> list[dict[str, Any]]:
     return [dict(cast(Mapping[str, Any], row)) for row in rows]
 
 
-def _build_match_update(row: dict[str, Any]) -> dict[str, Any]:
+def _build_match_update(row: dict[str, Any], *, cur: Any) -> dict[str, Any]:
     update_values: dict[str, Any] = {}
 
     kana_parts = {
@@ -133,7 +131,7 @@ def _build_match_update(row: dict[str, Any]) -> dict[str, Any]:
         "given": _norm_text(row.get("name_kanji_given")),
     }
     if any(kanji_parts.values()):
-        kanji_match_parts = name_kanji.norm_parts_to_match_parts(kanji_parts, cur=None)
+        kanji_match_parts = name_kanji.norm_parts_to_match_parts(kanji_parts, cur=cur)
         if _is_blank(row.get("name_kanji_family_match")):
             update_values["name_kanji_family_match"] = kanji_match_parts.get("family")
         if _is_blank(row.get("name_kanji_middle_match")):
@@ -173,23 +171,27 @@ def run(*, limit: int | None = None, dry_run: bool = False) -> BackfillSummary:
 
     with connect_ctx(params, database=DEV_PHR, autocommit=False) as conn:
         rows = _fetch_target_rows(conn, limit=limit)
-        for row in rows:
-            scanned += 1
-            update_values = _build_match_update(row)
-            if not update_values:
-                skipped += 1
-                continue
+        cur = dict_cursor(conn)
+        try:
+            for row in rows:
+                scanned += 1
+                update_values = _build_match_update(row, cur=cur)
+                if not update_values:
+                    skipped += 1
+                    continue
 
-            updated += 1
-            if not dry_run:
-                _update_row(
-                    conn,
-                    subscriber_id=int(row["id"]),
-                    values=update_values,
-                )
+                updated += 1
+                if not dry_run:
+                    _update_row(
+                        conn,
+                        subscriber_id=int(row["id"]),
+                        values=update_values,
+                    )
 
-            if updated % BATCH_SIZE == 0:
-                print(f"[INFO] updated={updated} scanned={scanned}")
+                if updated % BATCH_SIZE == 0:
+                    print(f"[INFO] updated={updated} scanned={scanned}")
+        finally:
+            cur.close()
 
         if dry_run:
             conn.rollback()
