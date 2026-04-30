@@ -210,6 +210,188 @@ staging 取り込み後、以下の4分類を付与する。
 
 ---
 
+## major / minor 定義
+
+差分判定においては、項目を以下の2系統に分ける。
+
+### major（本人性・同一性に関わる項目）
+
+以下は「同一人物判定」または「重要変更」に該当する。
+
+- identity 系
+  - `person_id_custom`
+  - `identity_hash`
+  - `insurance_symbol_match`
+  - `insurance_number_match`
+  - `name_kana_full_match`
+  - `gender_code_norm`
+  - `birth_norm`
+
+- 氏名系（parts含む）
+  - `name_kana_full_norm`
+  - `name_kana_family_norm`
+  - `name_kana_middle_norm`
+  - `name_kana_given_norm`
+  - `name_kana_full_match`
+  - `name_kanji_full_norm`
+  - `name_kanji_family_norm`
+  - `name_kanji_middle_norm`
+  - `name_kanji_given_norm`
+  - `name_kanji_full_match`
+
+※ 氏名（特に漢字）は表記揺れが発生するため、自動更新には使用せず「確認対象」として扱う
+
+---
+
+### minor（登録情報更新項目）
+
+以下は「同一人物前提で更新してよい情報」とする。
+
+- 資格・続柄
+  - `relationship_name`
+  - `qualification_acquired_date`
+  - `qualification_lost_date`
+
+- 住所・連絡先
+  - `postal_code`
+  - `address_line`
+  - `building`
+  - `phone`
+  - `email`
+
+- 会社・部署・外部ID
+  - `employer_code`
+  - `department_code`
+  - `distribution_code`
+  - `employee_code`
+  - `connect_id`
+
+---
+
+## 差分判定フロー（確定版）
+
+差分判定は以下の順で行う。
+
+1. identity 判定
+   - `identity_hash` で `subscribers` を検索
+   - 一致あり → 同一人物として扱う
+   - 一致なし → major_candidate 探索へ
+
+2. 同一人物の場合（identity一致）
+   - major項目は基本的に一致している前提
+   - minor項目のみ比較する
+     - 差分なし → `no_change`
+     - 差分あり → `update`（minor更新）
+
+※ identity一致後に major差分が出るケースは基本的に想定外（データ不整合として扱う）
+
+3. identity不一致の場合
+   - major_candidate 判定を実施
+   - 該当する場合は `major_candidate` として扱う
+   - 該当しない場合は `add`
+
+---
+
+## major_candidate 判定
+
+identity_hash が一致しない場合でも、以下の条件で「同一人物候補」として扱う。
+
+### 目的
+
+- 転籍（保険証記号・番号変更）
+- 名字変更（氏名変更）
+
+を検出する。
+
+---
+
+### パターン定義
+
+#### 1. 転籍候補（transfer）
+
+条件:
+
+- `name_kana_full_match`
+- `birth_norm`
+- `gender_code_norm`
+
+が一致
+
+かつ
+
+- `insurance_symbol_match` または `insurance_number_match` が不一致
+
+出力:
+
+- `major_candidate_transfer`
+
+---
+
+#### 2. 名字変更候補（family name change）
+
+共通前提:
+
+- `insurance_symbol_match`
+- `insurance_number_match`
+- `birth_norm`
+- `gender_code_norm`
+
+が一致
+
+##### (A) カナgiven一致
+
+- `name_kana_given_norm` 一致
+
+→ `major_candidate_family_name_change_kana_given`
+
+##### (B) 漢字given一致
+
+- `name_kanji_given_norm` 一致
+
+→ `major_candidate_family_name_change_kanji_given`
+
+##### (C) 保険情報のみ一致
+
+- 氏名は一致しないが、保険情報 + 生年月日 + 性別一致
+
+→ `major_candidate_family_name_change_insurance_only`
+
+---
+
+### 判定優先順位
+
+1. transfer
+2. family_name_change_kana_given
+3. family_name_change_kanji_given
+4. family_name_change_insurance_only
+
+---
+
+### 出力方針
+
+- major_candidate は **HIA登録CSVには出力しない**
+- 別途ログCSVとして出力する
+- `major_candidate_pattern` を必ず付与する
+
+---
+
+### missing との関係
+
+`subscribers に存在し、staging に存在しないレコード`について、
+
+- major_candidate と一致する場合
+  - missing として扱うが
+  - 対応する `major_candidate_pattern` を付与する
+
+これにより、
+
+- 単純な消失
+- 転籍／名字変更による見かけ上の消失
+
+を区別可能とする。
+
+---
+
 ## diff カラムへの反映
 
 staging に以下を記録する。

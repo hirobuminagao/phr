@@ -54,6 +54,15 @@ CREATE TABLE `dev_phr`.`staging_subscribers_fund` (
   `name_kana_full_match` varchar(190)
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '氏名カナ（照合用、必ず name_kana_full_norm から生成。分割カナから直接生成しない）',
+  `name_kana_family_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '姓カナ（照合用）',
+  `name_kana_middle_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT 'ミドルネームカナ（照合用）',
+  `name_kana_given_match` varchar(190)
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '名カナ（照合用）',
   `name_kanji_full_match` varchar(190)
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL COMMENT '氏名漢字（照合用）',
