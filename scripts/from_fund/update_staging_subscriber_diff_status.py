@@ -163,9 +163,20 @@ def fetch_current_subscribers_by_ids(
     try:
         cursor.execute(
             f"""
-            SELECT *
-            FROM {DEV_PHR}.subscribers
-            WHERE id IN ({_placeholders(subscriber_ids)})
+            SELECT
+              s.*,
+              a.postal_code AS postal_code,
+              a.address_line AS address_line,
+              c.phone AS phone,
+              c.email AS email
+            FROM {DEV_PHR}.subscribers s
+            LEFT JOIN {DEV_PHR}.subscriber_addresses a
+              ON a.subscriber_id = s.id
+             AND a.is_current = 1
+            LEFT JOIN {DEV_PHR}.subscriber_contacts c
+              ON c.subscriber_id = s.id
+             AND c.is_current = 1
+            WHERE s.id IN ({_placeholders(subscriber_ids)})
             """,
             tuple(subscriber_ids),
         )
