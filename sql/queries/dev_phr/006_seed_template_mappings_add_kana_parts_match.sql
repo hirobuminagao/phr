@@ -31,7 +31,7 @@ FROM (
         'name_kana_family_match' AS target_column,
         'split_family_kana_match' AS rule,
         0 AS required,
-        '氏名（カナ）から姓カナ照合用を生成'
+        '氏名（カナ）から姓カナ照合用を生成' AS notes
 
     UNION ALL
 
