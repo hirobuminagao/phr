@@ -108,6 +108,12 @@ primitive を組み合わせた全項目共通の下ごしらえ正規化を置�
   - `middle`
   - `given`
 
+- parts match 系
+  - `family`
+  - `middle`
+  - `given`
+  - `match_full`
+
 ### builder/
 
 完成値の生成を置く。
@@ -241,6 +247,49 @@ field の normalize 関数は、用途に応じて以下のいずれかの形式
 }
 ```
 
+### 3. parts match 系
+
+代表項目:
+- `name_kana.norm_parts_to_match_parts`
+- `name_kanji.norm_parts_to_match_parts`
+
+前提:
+- `normalize_name_kana_full_to_parts` / `normalize_name_kanji_full_to_parts` は norm parts を返す
+- parts match は、norm parts を `norm_parts_to_match_parts` に渡して生成する
+- full の match と parts の match は生成責務を分ける
+
+基本項目:
+- `family`: 姓の照合用値
+- `middle`: ミドルネームの照合用値
+- `given`: 名の照合用値
+- `match_full`: parts match を結合した full 照合用値
+
+例:
+
+```json
+{
+  "family": "ナガオ",
+  "middle": null,
+  "given": "ヒロフミ",
+  "match_full": "ナガオヒロフミ"
+}
+```
+
+利用例:
+
+```python
+from scripts.lib.identity.field.name_kana import (
+    normalize_name_kana_full_to_parts,
+    norm_parts_to_match_parts,
+)
+
+parts = normalize_name_kana_full_to_parts(raw_name_kana)
+match_parts = norm_parts_to_match_parts(parts)
+
+name_kana_family_match = match_parts["family"]
+name_kana_middle_match = match_parts["middle"]
+name_kana_given_match = match_parts["given"]
+```
 ---
 
 ## Important Rules
@@ -250,6 +299,7 @@ field の normalize 関数は、用途に応じて以下のいずれかの形式
 - field がすべての解釈責務を持つ
 - builder は canonical input のみ受け取る
 - primitive は単純変換のみに留め、氏名としての解釈（family / middle / given への割当）は field で行う
+- 氏名 parts の match は、parts norm 生成後に `norm_parts_to_match_parts` を通して作成する
 
 ---
 

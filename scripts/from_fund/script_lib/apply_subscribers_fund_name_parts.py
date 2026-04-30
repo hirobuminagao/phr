@@ -19,12 +19,25 @@ class ApplySubscribersFundNamePartsResult:
 
 
 _COLUMN_MAP = {
+    # kana parts norm -> subscribers parts
     "name_kana_family_norm": "name_kana_family",
     "name_kana_middle_norm": "name_kana_middle",
     "name_kana_given_norm": "name_kana_given",
+
+    # kanji parts norm -> subscribers parts
     "name_kanji_family_norm": "name_kanji_family",
     "name_kanji_middle_norm": "name_kanji_middle",
     "name_kanji_given_norm": "name_kanji_given",
+
+    # kana parts match -> subscribers parts match
+    "name_kana_family_match": "name_kana_family_match",
+    "name_kana_middle_match": "name_kana_middle_match",
+    "name_kana_given_match": "name_kana_given_match",
+
+    # kanji parts match -> subscribers parts match
+    "name_kanji_family_match": "name_kanji_family_match",
+    "name_kanji_middle_match": "name_kanji_middle_match",
+    "name_kanji_given_match": "name_kanji_given_match",
 }
 
 
@@ -41,7 +54,7 @@ def apply_name_parts_from_staging_subscribers_fund(
     方針:
     - 対象は import_run_id = run_id かつ matched_subscriber_id IS NOT NULL の staging 行のみ
     - subscribers 側が空欄の列に限って更新する
-    - staging 側の norm 値をそのまま利用する
+    - staging 側の norm / match 値をそのまま利用する
     - 新規 subscriber 作成や既存非空欄値の上書きは行わない
     """
     rows_seen_count = 0
