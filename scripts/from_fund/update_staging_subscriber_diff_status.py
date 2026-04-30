@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,7 @@ from scripts.from_fund.script_lib.hia_subscribers_exporter import (
     build_hia_export_base_dir,
     write_hia_subscriber_export_files,
 )
+from scripts.from_fund.script_lib.major_candidate_finder import find_major_candidate
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
@@ -64,8 +66,10 @@ class DiffSummary:
     add: int
     update: int
     unknown: int
+    major_candidate: int
     missing_from_new: int
     missing_from_new_path: str | None
+    major_candidate_path: str | None
     add_export_paths: list[str]
     update_export_paths: list[str]
 
@@ -172,6 +176,28 @@ def fetch_current_subscribers_by_ids(
     return {int(row["id"]): row for row in normalized_rows}
 
 
+def fetch_current_subscribers_for_candidate_search(
+    conn: Any,
+    *,
+    insurer_number: str,
+) -> list[dict[str, Any]]:
+    cursor = dict_cursor(conn)
+    try:
+        cursor.execute(
+            f"""
+            SELECT *
+            FROM {DEV_PHR}.subscribers
+            WHERE insurer_number = %s
+            """,
+            (insurer_number,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    return [dict(cast(Mapping[str, Any], row)) for row in rows]
+
+
 def fetch_missing_from_new_rows(
     conn: Any,
     *,
@@ -240,6 +266,53 @@ def build_missing_output_path(
     return DIFF_OUTPUT_DIR / filename
 
 
+def build_major_candidate_output_path(
+    *,
+    insurer_number: str,
+    import_run_ids: list[int],
+    now: datetime | None = None,
+) -> Path:
+    now = now or datetime.now()
+    timestamp = now.strftime("%Y%m%d_%H%M%S")
+    run_part = "-".join(str(v) for v in sorted(import_run_ids))
+    filename = f"{timestamp}_{insurer_number}_major_candidate_{run_part}.csv"
+    return DIFF_OUTPUT_DIR / filename
+
+
+def write_major_candidate_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        return
+
+    fieldnames = [
+        "staging_id",
+        "import_run_id",
+        "src_row_no",
+        "major_candidate_pattern",
+        "major_candidate_reason",
+        "candidate_subscriber_id",
+        "staging_insurance_symbol_match",
+        "candidate_insurance_symbol_match",
+        "staging_insurance_number_match",
+        "candidate_insurance_number_match",
+        "staging_name_kana_full_match",
+        "candidate_name_kana_full_match",
+        "staging_name_kana_given_match",
+        "candidate_name_kana_given_match",
+        "staging_name_kanji_given_match",
+        "candidate_name_kanji_given_match",
+        "staging_birth",
+        "candidate_birth",
+        "staging_gender_code",
+        "candidate_gender_code",
+    ]
+
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def write_missing_from_new_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     import csv
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -251,6 +324,40 @@ def write_missing_from_new_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def build_major_candidate_log_row(
+    *,
+    staging_row: dict[str, Any],
+    candidate_result: Any,
+    subscribers_by_id: dict[int, dict[str, Any]],
+) -> dict[str, Any]:
+    candidate: dict[str, Any] = {}
+    if candidate_result.candidate_subscriber_id is not None:
+        candidate = subscribers_by_id.get(int(candidate_result.candidate_subscriber_id), {})
+
+    return {
+        "staging_id": staging_row.get("id"),
+        "import_run_id": staging_row.get("import_run_id"),
+        "src_row_no": staging_row.get("src_row_no"),
+        "major_candidate_pattern": candidate_result.pattern,
+        "major_candidate_reason": candidate_result.reason,
+        "candidate_subscriber_id": candidate_result.candidate_subscriber_id,
+        "staging_insurance_symbol_match": staging_row.get("insurance_symbol_match"),
+        "candidate_insurance_symbol_match": candidate.get("insurance_symbol_match"),
+        "staging_insurance_number_match": staging_row.get("insurance_number_match"),
+        "candidate_insurance_number_match": candidate.get("insurance_number_match"),
+        "staging_name_kana_full_match": staging_row.get("name_kana_full_match"),
+        "candidate_name_kana_full_match": candidate.get("name_kana_full_match"),
+        "staging_name_kana_given_match": staging_row.get("name_kana_given_match"),
+        "candidate_name_kana_given_match": candidate.get("name_kana_given_match"),
+        "staging_name_kanji_given_match": staging_row.get("name_kanji_given_match"),
+        "candidate_name_kanji_given_match": candidate.get("name_kanji_given_match"),
+        "staging_birth": staging_row.get("birth_norm"),
+        "candidate_birth": candidate.get("birth"),
+        "staging_gender_code": staging_row.get("gender_code_norm"),
+        "candidate_gender_code": candidate.get("gender_code"),
+    }
+
+
 def run(config: DiffConfig, *, dry_run: bool = False) -> DiffSummary:
     params = load_mysql_base_params()
 
@@ -258,8 +365,10 @@ def run(config: DiffConfig, *, dry_run: bool = False) -> DiffSummary:
     add = 0
     update = 0
     unknown = 0
+    major_candidate = 0
     add_export_rows: list[dict[str, Any]] = []
     update_export_rows: list[dict[str, Any]] = []
+    major_candidate_rows: list[dict[str, Any]] = []
 
     with connect_ctx(params, database=DEV_PHR, autocommit=False) as conn:
         staging_rows = fetch_target_staging_rows(
@@ -276,10 +385,45 @@ def run(config: DiffConfig, *, dry_run: bool = False) -> DiffSummary:
         )
         subscribers_by_id = fetch_current_subscribers_by_ids(conn, matched_ids)
 
+        candidate_subscribers = fetch_current_subscribers_for_candidate_search(
+            conn,
+            insurer_number=config.insurer_number,
+        )
+        candidate_subscribers_by_id = {
+            int(row["id"]): row for row in candidate_subscribers if row.get("id") is not None
+        }
+
         for row in staging_rows:
-            result = classify_staging_row(row, subscribers_by_id)
-            status = result.diff_status
-            reason = result.diff_reason
+            if row.get("matched_subscriber_id") is not None:
+                result = classify_staging_row(row, subscribers_by_id)
+                status = result.diff_status
+                reason = result.diff_reason
+            else:
+                candidate_result = find_major_candidate(row, candidate_subscribers)
+                status = candidate_result.status
+                reason = candidate_result.reason
+
+                if status == "major_candidate":
+                    major_candidate += 1
+                    major_candidate_rows.append(
+                        build_major_candidate_log_row(
+                            staging_row=row,
+                            candidate_result=candidate_result,
+                            subscribers_by_id=candidate_subscribers_by_id,
+                        )
+                    )
+                else:
+                    add += 1
+                    add_export_rows.append(row)
+
+                if config.diff_mode and not dry_run:
+                    update_diff_status(
+                        conn,
+                        staging_id=int(row["id"]),
+                        diff_status=status,
+                        diff_reason=reason,
+                    )
+                continue
 
             if status == DIFF_STATUS_NO_CHANGE:
                 no_change += 1
@@ -315,6 +459,15 @@ def run(config: DiffConfig, *, dry_run: bool = False) -> DiffSummary:
                 )
                 if not dry_run:
                     write_missing_from_new_csv(missing_path, missing_rows)
+
+        major_candidate_path: Path | None = None
+        if config.diff_mode and major_candidate_rows:
+            major_candidate_path = build_major_candidate_output_path(
+                insurer_number=config.insurer_number,
+                import_run_ids=config.import_run_ids,
+            )
+            if not dry_run:
+                write_major_candidate_csv(major_candidate_path, major_candidate_rows)
 
         add_export_paths: list[Path] = []
         update_export_paths: list[Path] = []
@@ -355,8 +508,10 @@ def run(config: DiffConfig, *, dry_run: bool = False) -> DiffSummary:
         add=add,
         update=update,
         unknown=unknown,
+        major_candidate=major_candidate,
         missing_from_new=len(missing_rows),
         missing_from_new_path=str(missing_path) if missing_path else None,
+        major_candidate_path=str(major_candidate_path) if major_candidate_path else None,
         add_export_paths=[str(path) for path in add_export_paths],
         update_export_paths=[str(path) for path in update_export_paths],
     )

@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -63,8 +61,12 @@ def classify_staging_row(
     checks = [
         ("insurance_symbol_match", staging_row.get("insurance_symbol_match"), subscriber.get("insurance_symbol_match")),
         ("insurance_number_match", staging_row.get("insurance_number_match"), subscriber.get("insurance_number_match")),
-        ("name_kana_full_match", staging_row.get("name_kana_full_match"), subscriber.get("name_kana_full_match")),
-        ("name_kanji_full_match", staging_row.get("name_kanji_full_match"), subscriber.get("name_kanji_full_match")),
+        ("name_kana_family_match", staging_row.get("name_kana_family_match"), subscriber.get("name_kana_family_match")),
+        ("name_kana_middle_match", staging_row.get("name_kana_middle_match"), subscriber.get("name_kana_middle_match")),
+        ("name_kana_given_match", staging_row.get("name_kana_given_match"), subscriber.get("name_kana_given_match")),
+        ("name_kanji_family_match", staging_row.get("name_kanji_family_match"), subscriber.get("name_kanji_family_match")),
+        ("name_kanji_middle_match", staging_row.get("name_kanji_middle_match"), subscriber.get("name_kanji_middle_match")),
+        ("name_kanji_given_match", staging_row.get("name_kanji_given_match"), subscriber.get("name_kanji_given_match")),
         ("gender_code", staging_row.get("gender_code_norm"), subscriber.get("gender_code")),
         ("relationship_name", staging_row.get("relationship_name_norm"), subscriber.get("relationship_name")),
         ("postal_code", staging_row.get("postal_code_norm"), subscriber.get("postal_code")),
@@ -93,7 +95,7 @@ def classify_staging_row(
     if differences:
         return DiffClassifyResult(
             DIFF_STATUS_UPDATE,
-            "changed: " + ",".join(differences),
+            "minor: " + ",".join(differences),
         )
 
     return DiffClassifyResult(
