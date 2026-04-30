@@ -38,7 +38,7 @@ def find_major_candidate(
     subscribers から候補を探す
     """
 
-    birth = staging_row.get("birth")
+    birth = staging_row.get("birth_norm")
     gender = staging_row.get("gender_code_norm")
 
     kana_full = staging_row.get("name_kana_full_match")
