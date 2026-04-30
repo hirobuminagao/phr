@@ -13,7 +13,11 @@ from scripts.lib.identity.primitive.remove import remove_kana_symbols, remove_sp
 from scripts.lib.identity.primitive.split import split_by_delimiter
 
 
+
 _HYPHEN_SYMBOLS = ("-", "－", "ー", "―", "ｰ", "‐", "‑", "‒", "–", "—", "⁃")
+
+# 中黒 (middle dot) symbols to remove for match normalization
+_MIDDLE_DOT_SYMBOLS = ("・", "･", "•", "・")
 
 
 def _normalize_name_kanji_norm_full(raw: str | None) -> str | None:
@@ -48,6 +52,17 @@ def _remove_hyphen_symbols(value: str | None) -> str | None:
     return v
 
 
+# Remove middle dot symbols for match normalization
+def _remove_middle_dot_symbols(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    v = value
+    for symbol in _MIDDLE_DOT_SYMBOLS:
+        v = v.replace(symbol, "")
+    return v
+
+
 def _kanji_norm_part_to_match(value: str | None, cur: Any, *, use_cache: bool = True) -> str | None:
     """norm 側の漢字 part を match 用へ変換する。"""
     if value is None:
@@ -58,6 +73,7 @@ def _kanji_norm_part_to_match(value: str | None, cur: Any, *, use_cache: bool = 
     v = normalize_small_kana(v)
     v = remove_kana_symbols(v)
     v = _remove_hyphen_symbols(v)
+    v = _remove_middle_dot_symbols(v)
     v = remove_spaces(v)
     v = to_fullwidth_ascii(v)
 

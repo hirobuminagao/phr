@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 from scripts.lib.identity.base_norm import base_normalize
+from scripts.lib.identity.primitive import to_fullwidth_ascii
 
 
 # ------------------------------------------------------------
@@ -72,6 +73,9 @@ def build_address_match(
                 building = b
 
     if building:
-        return f"{address}　{building}"
+        combined = f"{address}　{building}"
+    else:
+        combined = address
 
-    return address
+    # subscribers側に合わせて英数字・記号を全角寄せ
+    return to_fullwidth_ascii(combined)
