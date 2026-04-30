@@ -64,18 +64,6 @@ def build_address_match(
     if not address:
         return None
 
-    building = None
-    if building_norm is not None:
-        building_base = base_normalize(building_norm)
-        if building_base is not None:
-            b = str(building_base).strip()
-            if b:
-                building = b
-
-    if building:
-        combined = f"{address}　{building}"
-    else:
-        combined = address
-
+    # building はXML側で落としているため、matchも address_line のみを使用
     # subscribers側に合わせて英数字・記号を全角寄せ
-    return to_fullwidth_ascii(combined)
+    return to_fullwidth_ascii(address)
