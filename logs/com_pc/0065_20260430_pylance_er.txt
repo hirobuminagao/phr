@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/backfill_scripts/backfill_subscribers_name_parts_match.py",
+	"owner": "Pylance5",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"cur\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 136,
+	"startColumn": 29,
+	"endLineNumber": 136,
+	"endColumn": 78
+}]
