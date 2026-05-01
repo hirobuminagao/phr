@@ -35,6 +35,13 @@ def rule_left3(values: list[Any]) -> str | None:
     return v[:3]
 
 
+def rule_left2(values: list[Any]) -> str | None:
+    v = _norm(values[0] if values else None)
+    if not v:
+        return None
+    return v[:2]
+
+
 def rule_left3_before_colon(values: list[Any]) -> str | None:
     v = _norm(values[0] if values else None)
     if not v:
@@ -45,6 +52,17 @@ def rule_left3_before_colon(values: list[Any]) -> str | None:
             v = v.split(sep, 1)[0]
             break
     return v[:3] if v else None
+
+
+def rule_left2_before_colon(values: list[Any]) -> str | None:
+    v = _norm(values[0] if values else None)
+    if not v:
+        return None
+    for sep in ("：", ":"):
+        if sep in v:
+            v = v.split(sep, 1)[0]
+            break
+    return v[:2] if v else None
 
 
 def rule_concat_with_pipe(values: list[Any]) -> str | None:
@@ -66,7 +84,9 @@ RULES = {
     "as_is": rule_as_is,
     "text_norm": rule_text_norm,
     "left3": rule_left3,
+    "left2": rule_left2,
     "left3_before_colon": rule_left3_before_colon,
+    "left2_before_colon": rule_left2_before_colon,
     "concat_with_pipe": rule_concat_with_pipe,
 }
 
