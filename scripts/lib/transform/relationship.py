@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from __future__ import annotations
+
 from scripts.lib.identity.base_norm import base_normalize
 from scripts.lib.identity.primitive.convert import to_fullwidth_ascii
 
-
-from __future__ import annotations
 
 
 def resolve_relationship_name(
@@ -21,7 +24,7 @@ def resolve_relationship_name(
     if name is not None:
         return name
 
-    code = _normalize_optional_text(relationship_code_norm)
+    code = _normalize_optional_text_no_fullwidth(relationship_code_norm)
     if code is None:
         return None
 
@@ -50,6 +53,22 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return to_fullwidth_ascii(text)
 
 
+def _normalize_optional_text_no_fullwidth(value: str | None) -> str | None:
+    """None / 空文字 / 空白のみを None として扱い、全角寄せはしない。"""
+    if value is None:
+        return None
+
+    normalized = base_normalize(value)
+    if normalized is None:
+        return None
+
+    text = str(normalized).strip()
+    if text == "":
+        return None
+
+    return text
+
+
 # 続柄コードの match 用正規化
 def normalize_relationship_code_match(
     relationship_code_norm: str | None,
@@ -61,7 +80,7 @@ def normalize_relationship_code_match(
     - "0" は "00" に補正（CSV→Excel問題対策）
     - それ以外はそのまま返す
     """
-    code = _normalize_optional_text(relationship_code_norm)
+    code = _normalize_optional_text_no_fullwidth(relationship_code_norm)
     if code is None:
         return None
 
