@@ -6,6 +6,7 @@ CREATE TABLE `dev_phr`.`staging_subscribers_hub` (
   `import_run_id` bigint unsigned DEFAULT NULL,
   `processed_run_id` bigint unsigned DEFAULT NULL,
   `person_id_custom` varchar(190) DEFAULT NULL,
+  `hia_subscriber_id` varchar(190) DEFAULT NULL COMMENT 'HIA加入者ID（DLフォーマット先頭列）',
   `name_kana_full` varchar(190) DEFAULT NULL,
   `name_kanji_full` varchar(190) DEFAULT NULL,
   `name_kanji_family` varchar(190) DEFAULT NULL,

@@ -36,6 +36,7 @@ V1.1.0 Contract:
             - staging insert: `staging_subscribers_hub` に明示カラム指定 INSERT（dry-run 時は実行しない）
                 - columns:
                     - person_id_custom
+                    - hia_subscriber_id
                     - name_kana_full
                     - name_kanji_full
                     - name_kanji_family
@@ -137,6 +138,7 @@ BASE_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_INPUT_BASE = BASE_DIR / "data" / "hia_export" / "input_subscribers_csv"
 
 MAP: Dict[str, str] = {
+    "加入者ID": "hia_subscriber_id",
     "被保険者証記号": "insurance_symbol",
     "被保険者証番号": "insurance_number",
     "被保険者証枝番": "insurance_branchnumber",
@@ -393,6 +395,7 @@ def process_csv_dir(
                     #     parts 列には split 済み確定値のみを入れ、split 不可時は空文字のままとする
                     vals = {
                         "person_id_custom": person_id_custom,
+                        "hia_subscriber_id": src.get("hia_subscriber_id", ""),
                         "name_kana_full": name_parts["name_kana_full"],
                         "name_kanji_full": kanji_full_raw,
                         "name_kanji_family": name_parts["name_kanji_family"],
@@ -434,6 +437,7 @@ def process_csv_dir(
                             """
                             INSERT INTO staging_subscribers_hub (
                                 person_id_custom,
+                                hia_subscriber_id,
                                 name_kana_full, name_kanji_full,
                                 name_kanji_family, name_kanji_middle, name_kanji_given,
                                 name_kana_family, name_kana_middle, name_kana_given,
@@ -451,6 +455,7 @@ def process_csv_dir(
                             )
                             VALUES (
                                 %(person_id_custom)s,
+                                %(hia_subscriber_id)s,
                                 %(name_kana_full)s, %(name_kanji_full)s,
                                 %(name_kanji_family)s, %(name_kanji_middle)s, %(name_kanji_given)s,
                                 %(name_kana_family)s, %(name_kana_middle)s, %(name_kana_given)s,

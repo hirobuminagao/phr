@@ -10,6 +10,7 @@ Purpose (PHR v1.0.1):
     - `staging_subscribers_hub` の未処理行を `subscribers` に反映する（apply 相当）。
     - 既存 subscriber は `person_id_custom + name_kana_full_match + gender_code` で照合する。
     - v1.0.1 追加の identity match columns を生成して `subscribers` に保存する。
+    - Hub DLフォーマット先頭列の加入者IDを `hia_subscriber_id` として `subscribers` に保存する。
 
 Design:
     - ETL ログは lib.etl（etl_runs / etl_errors）に一元化する
@@ -110,6 +111,7 @@ def build_subscriber_vals(cur, srow: dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "person_id_custom": person_id_custom,
+        "hia_subscriber_id": srow.get("hia_subscriber_id"),
         "name_kana_full": name_kana_full,
         "name_kanji_full": name_kanji_full,
         "name_kanji_family": srow.get("name_kanji_family"),
@@ -150,6 +152,7 @@ def fetch_existing_subscriber(cur, person_id_custom: str, name_kana_full_match: 
         SELECT
             id,
             person_id_custom,
+            hia_subscriber_id,
             name_kana_full,
             name_kanji_full,
             name_kanji_family,
@@ -207,6 +210,7 @@ COMPARE_COLUMNS = [
     "name_kana_given",
     "name_kana_full_match",
     "name_full_match",
+    "hia_subscriber_id",
     "gender_code",
     "birth",
     "insured_attribute_name",
@@ -251,6 +255,7 @@ AUDIT_COLUMNS = [
     "distribution_code",
     "employee_code",
     "connect_id",
+    "hia_subscriber_id",
     "identity_hash",
 ]
 
@@ -371,6 +376,7 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
     sql = """
         INSERT INTO subscribers (
             person_id_custom,
+            hia_subscriber_id,
             name_kana_full,
             name_kanji_full,
             name_kanji_family,
@@ -406,6 +412,7 @@ def insert_subscriber(cur, vals: Dict[str, Any], run_id: int) -> int:
             updated_at
         ) VALUES (
             %(person_id_custom)s,
+            %(hia_subscriber_id)s,
             %(name_kana_full)s,
             %(name_kanji_full)s,
             %(name_kanji_family)s,
@@ -464,6 +471,7 @@ def update_subscriber(cur, subscriber_id: int, existing: dict[str, Any], vals: D
             name_kana_given = %(name_kana_given)s,
             name_kana_full_match = %(name_kana_full_match)s,
             name_full_match = %(name_full_match)s,
+            hia_subscriber_id = %(hia_subscriber_id)s,
             gender_code = %(gender_code)s,
             birth = %(birth)s,
             insured_attribute_name = %(insured_attribute_name)s,
@@ -680,6 +688,7 @@ def fetch_pending_staging_rows(cur, limit: int) -> list[dict[str, Any]]:
         SELECT
             id,
             person_id_custom,
+            hia_subscriber_id,
             name_kana_full,
             name_kanji_full,
             name_kanji_family,
