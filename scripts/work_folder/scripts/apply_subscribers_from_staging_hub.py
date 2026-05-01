@@ -147,6 +147,60 @@ def build_subscriber_vals(cur, srow: dict[str, Any]) -> Dict[str, Any]:
 
 
 
+
+def fetch_existing_subscriber_by_hia_id(cur, hia_subscriber_id: Any) -> Optional[dict[str, Any]]:
+    """HIA加入者IDで既存subscriberを取得する。"""
+    if hia_subscriber_id is None or str(hia_subscriber_id).strip() == "":
+        return None
+
+    sql = """
+        SELECT
+            id,
+            person_id_custom,
+            hia_subscriber_id,
+            name_kana_full,
+            name_kanji_full,
+            name_kanji_family,
+            name_kanji_middle,
+            name_kanji_given,
+            name_kana_family,
+            name_kana_middle,
+            name_kana_given,
+            name_kana_full_match,
+            name_full_match,
+            gender_code,
+            birth,
+            insured_attribute_name,
+            relationship_name,
+            insurer_number,
+            insurance_symbol,
+            insurance_symbol_export,
+            insurance_symbol_digits,
+            insurance_symbol_match,
+            insurance_number,
+            insurance_number_match,
+            insurance_branchnumber,
+            qualification_acquired_date,
+            qualification_lost_date,
+            -- removed: postal_code,
+            -- removed: address_line,
+            -- removed: building,
+            -- removed: phone,
+            -- removed: email,
+            employer_code,
+            department_code,
+            distribution_code,
+            employee_code,
+            connect_id,
+            identity_hash
+        FROM subscribers
+        WHERE hia_subscriber_id = %s
+        LIMIT 1
+    """
+    cur.execute(sql, (str(hia_subscriber_id).strip(),))
+    return cur.fetchone()
+
+
 def fetch_existing_subscriber(cur, person_id_custom: str, name_kana_full_match: str, gender_code) -> Optional[dict[str, Any]]:
     sql = """
         SELECT
@@ -743,12 +797,20 @@ def apply_once(cur, srow: dict[str, Any], run_id: int) -> str:
     """return: insert | update | noop"""
     vals = build_subscriber_vals(cur, srow)
 
-    existing = fetch_existing_subscriber(
+    # 1. HIA加入者IDがあれば最優先で既存subscriberを照合する。
+    existing = fetch_existing_subscriber_by_hia_id(
         cur,
-        vals["person_id_custom"],
-        vals["name_kana_full_match"],
-        vals["gender_code"],
+        vals.get("hia_subscriber_id"),
     )
+
+    # 2. HIA加入者IDで見つからなければ、従来のidentity照合へfallbackする。
+    if existing is None:
+        existing = fetch_existing_subscriber(
+            cur,
+            vals["person_id_custom"],
+            vals["name_kana_full_match"],
+            vals["gender_code"],
+        )
 
     if existing is None:
         subscriber_id = insert_subscriber(cur, vals, run_id)
