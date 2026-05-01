@@ -83,11 +83,7 @@ def _chunks(rows: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]
     return [rows[i : i + size] for i in range(0, len(rows), size)]
 
 
-def build_hia_subscriber_export_row(
-    staging_row: dict[str, Any],
-    *,
-    include_diff_status_reason: bool = False,
-) -> dict[str, str]:
+def build_hia_subscriber_export_row(staging_row: dict[str, Any]) -> dict[str, str]:
     """staging行からHIA加入者情報登録用CSV 1行を生成する。"""
     row = {
         "被保険者証記号": _csv_value(staging_row.get("insurance_symbol_norm")),
@@ -114,18 +110,10 @@ def build_hia_subscriber_export_row(
         "個人ID": "",
     }
 
-    if include_diff_status_reason:
-        row["diff_status_reason"] = _csv_value(staging_row.get("diff_status_reason"))
-
     return row
 
 
-def write_hia_subscriber_export_csv(
-    path: Path,
-    rows: list[dict[str, Any]],
-    *,
-    include_diff_status_reason: bool = False,
-) -> None:
+def write_hia_subscriber_export_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     fieldnames = [
@@ -153,19 +141,11 @@ def write_hia_subscriber_export_csv(
         "個人ID",
     ]
 
-    if include_diff_status_reason:
-        fieldnames.append("diff_status_reason")
-
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for row in rows:
-            writer.writerow(
-                build_hia_subscriber_export_row(
-                    row,
-                    include_diff_status_reason=include_diff_status_reason,
-                )
-            )
+            writer.writerow(build_hia_subscriber_export_row(row))
 
 
 def write_hia_subscriber_export_files(
@@ -184,18 +164,12 @@ def write_hia_subscriber_export_files(
     sorted_rows = sorted(rows, key=lambda row: (_row_no_value(row), _row_id_value(row)))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    include_diff_status_reason = status_label == "update"
-
     for chunk_index, chunk in enumerate(_chunks(sorted_rows, split_size)):
         start_no = (chunk_index * split_size) + 1
         last_no = start_no + len(chunk) - 1
         filename = f"{status_label}_{insurer_number}_{timestamp}_{start_no}-{last_no}.csv"
         path = status_dir / filename
-        write_hia_subscriber_export_csv(
-            path,
-            chunk,
-            include_diff_status_reason=include_diff_status_reason,
-        )
+        write_hia_subscriber_export_csv(path, chunk)
         paths.append(path)
 
     return paths
