@@ -365,7 +365,7 @@ def build_major_candidate_log_row(
         "staging_name_kanji_given_match": staging_row.get("name_kanji_given_match"),
         "candidate_name_kanji_given_match": candidate.get("name_kanji_given_match"),
         "staging_name_kanji_full_norm": staging_row.get("name_kanji_full_norm"),
-        "candidate_name_kanji_full_norm": candidate.get("name_kanji_full_norm"),
+        "candidate_name_kanji_full_norm": candidate.get("name_kanji_full_norm") or candidate.get("name_kanji_full"),
         "staging_birth": staging_row.get("birth_norm"),
         "candidate_birth": candidate.get("birth"),
         "staging_gender_code": staging_row.get("gender_code_norm"),
