@@ -443,7 +443,10 @@ def run(config: DiffConfig, *, dry_run: bool = False) -> DiffSummary:
                 add_export_rows.append(row)
             elif status == DIFF_STATUS_UPDATE:
                 update += 1
-                update_export_rows.append(row)
+                update_row = dict(row)
+                update_row["diff_status"] = status
+                update_row["diff_status_reason"] = reason
+                update_export_rows.append(update_row)
             else:
                 unknown += 1
 

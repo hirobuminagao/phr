@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -23,6 +21,11 @@ class MajorCandidateResult:
 
 def _eq(a: Any, b: Any) -> bool:
     return a is not None and b is not None and a == b
+
+def _candidate_info(subscriber: Dict[str, Any]) -> str:
+    subscriber_id = subscriber.get("id")
+    hia_subscriber_id = subscriber.get("hia_subscriber_id")
+    return f"subscriber_id={subscriber_id}, hia_subscriber_id={hia_subscriber_id}"
 
 
 # ------------------------------------------------------------
@@ -67,7 +70,7 @@ def find_major_candidate(
                     status="major_candidate",
                     pattern="transfer",
                     candidate_subscriber_id=sub.get("id"),
-                    reason="kana_full+birth+gender一致, 記号番号差分",
+                    reason=f"kana_full+birth+gender一致, 記号番号差分, {_candidate_info(sub)}",
                 )
 
     # --------------------------------------------------------
@@ -92,7 +95,7 @@ def find_major_candidate(
                         status="major_candidate",
                         pattern="name_change_strong",
                         candidate_subscriber_id=sub.get("id"),
-                        reason="given+middle（kana/kanji）+birth+gender一致",
+                        reason=f"given+middle（kana/kanji）+birth+gender一致, {_candidate_info(sub)}",
                     )
 
     # --------------------------------------------------------
@@ -111,7 +114,7 @@ def find_major_candidate(
                     status="major_candidate",
                     pattern="name_change_kana",
                     candidate_subscriber_id=sub.get("id"),
-                    reason="記号番号+birth+gender一致, kana_given一致",
+                    reason=f"記号番号+birth+gender一致, kana_given一致, {_candidate_info(sub)}",
                 )
 
             if _eq(kanji_given, sub.get("name_kanji_given_match")):
@@ -119,14 +122,14 @@ def find_major_candidate(
                     status="major_candidate",
                     pattern="name_change_kanji",
                     candidate_subscriber_id=sub.get("id"),
-                    reason="記号番号+birth+gender一致, kanji_given一致",
+                    reason=f"記号番号+birth+gender一致, kanji_given一致, {_candidate_info(sub)}",
                 )
 
             return MajorCandidateResult(
                 status="major_candidate",
                 pattern="name_change_loose",
                 candidate_subscriber_id=sub.get("id"),
-                reason="記号番号+birth+gender一致",
+                reason=f"記号番号+birth+gender一致, {_candidate_info(sub)}",
             )
 
     # --------------------------------------------------------
