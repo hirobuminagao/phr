@@ -318,6 +318,10 @@ def write_major_candidate_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "candidate_birth",
         "staging_gender_code",
         "candidate_gender_code",
+        "staging_mapped_employer_code",
+        "candidate_mapped_employer_code",
+        "staging_relationship_name_match",
+        "candidate_relationship_name_match",
     ]
 
     with path.open("w", encoding="utf-8-sig", newline="") as f:
@@ -370,6 +374,10 @@ def build_major_candidate_log_row(
         "candidate_birth": candidate.get("birth"),
         "staging_gender_code": staging_row.get("gender_code_norm"),
         "candidate_gender_code": candidate.get("gender_code"),
+        "staging_mapped_employer_code": staging_row.get("mapped_employer_code"),
+        "candidate_mapped_employer_code": candidate.get("employer_code"),
+        "staging_relationship_name_match": staging_row.get("relationship_name_match"),
+        "candidate_relationship_name_match": candidate.get("relationship_name"),
     }
 
 
