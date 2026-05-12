@@ -43,10 +43,7 @@ from pathlib import Path
 from typing import Any
 import argparse
 import csv
-import shutil
 import sys
-import xml.etree.ElementTree as ET
-import zipfile
 
 # ------------------------------------------------------------
 # VSCode Run ボタン / file実行 対応
@@ -79,6 +76,14 @@ from scripts.lib.shg.xml.outcome_checks import (
     build_conflict_result,
     build_waist_weight_check_result,
     compute_duration_days,
+)
+
+# ------------------------------------------------------------
+# Use shared XML I/O helpers
+# ------------------------------------------------------------
+from scripts.shg.script_lib.xml_io import (
+    collect_input_xml_paths,
+    read_xml,
 )
 
 # ------------------------------------------------------------
@@ -143,82 +148,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
 # ------------------------------------------------------------
 def dbg(*args: Any) -> None:
     print(*args)
-
-
-
-
-def read_xml(xml_path: Path) -> ET.Element:
-    tree = ET.parse(xml_path)
-    return tree.getroot()
-
-
-def scan_xmls(input_dir: Path) -> list[Path]:
-    """fase1.0: 展開済みXMLを走査する。
-
-    想定:
-    - input_dir 配下の XML
-    - input_dir/DATA 配下の XML
-    - XSD系は対象外
-    """
-    candidates: list[Path] = []
-
-    if (input_dir / "DATA").exists():
-        candidates.extend(sorted((input_dir / "DATA").rglob("*.xml")))
-    else:
-        candidates.extend(sorted(input_dir.rglob("*.xml")))
-
-    result: list[Path] = []
-    for p in candidates:
-        name = p.name.lower()
-        if name.startswith("ix08") or name.startswith("su08"):
-            continue
-        result.append(p)
-    return result
-
-
-def extract_input_zip(zip_path: Path, work_root: Path) -> Path:
-    """ZIPを作業用ディレクトリへ展開し、展開先パスを返す。"""
-    extract_dir = work_root / zip_path.stem
-    if extract_dir.exists():
-        shutil.rmtree(extract_dir)
-    extract_dir.mkdir(parents=True, exist_ok=True)
-
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(extract_dir)
-
-    return extract_dir
-
-
-
-def collect_input_xml_paths(input_root_dir: Path, work_root: Path) -> list[Path]:
-    """input配下から処理対象XMLを集める。
-
-    対応:
-    - input 直下に置かれた ZIPアーカイブ
-    - input 直下またはその配下に置かれた展開済みXML
-
-    ZIPは work_root 配下へ展開してから DATA/*.xml を収集する。
-    """
-    xml_paths: list[Path] = []
-
-    zip_files = sorted(input_root_dir.rglob("*.zip"))
-    for zip_path in zip_files:
-        extracted_dir = extract_input_zip(zip_path, work_root)
-        xml_paths.extend(scan_xmls(extracted_dir))
-
-    xml_paths.extend(scan_xmls(input_root_dir))
-
-    # 重複排除（ZIP展開物と元配置の重複、rglob由来の重複に備える）
-    unique_paths: list[Path] = []
-    seen: set[str] = set()
-    for p in xml_paths:
-        key = str(p.resolve())
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_paths.append(p)
-
-    return unique_paths
 
 
 def make_person_key(
@@ -417,7 +346,7 @@ def main() -> None:
     export_outcome_rows: list[dict[str, Any]] = []
     people: dict[str, dict[str, Any]] = {}
 
-    xml_paths = collect_input_xml_paths(input_root_dir, work_dir)
+    xml_paths, _xml_to_extract_dir = collect_input_xml_paths(input_root_dir, work_dir)
 
     # fase1.0:
     # - XML単位の report を先に組み立てる

@@ -361,6 +361,7 @@ XML内の利用券整理番号・利用券有効期限をDB値と比較し、差
 - `script_lib` 配下では、フォルダを細かく分けず、ファイル名でXML処理か判定処理かを区別する
 - 将来的に他スクリプトでも再利用する段階になったら、`scripts/lib/shg/` 配下への昇格を検討する
 
+
 想定する外出し単位は以下とする。
 
 ```text
@@ -369,6 +370,131 @@ scripts/shg/script_lib/
   ├ xml_ticket_writer.py   # 利用券ノードのXML書き換え
   └ outcome_policy.py      # outcome矛盾判定の除外ポリシー
 ```
+
+### 現時点で追加外出しを検討している責務
+
+
+補足:
+
+- `script_lib` は orchestration 補助層であり、DB接続・identity生成・normalize処理を再実装しない
+- DB接続は既存 `scripts/lib/db/` 系の共通libを使用する
+- `identity_hash` / `person_id_custom` / normalize 系処理は既存共通libを使用する
+- `script_lib` 側で独自のidentity生成やDB接続実装を増やさない
+
+#### xml_io 系
+
+責務:
+
+- ZIP展開
+- XML列挙
+- XML収集
+- XML読込
+
+想定ファイル:
+
+```text
+scripts/shg/script_lib/xml_io.py
+```
+
+補足:
+
+- orchestration の前半に集中している「ファイルシステム責務」を分離する
+- XML抽出ロジックそのものは `scripts/lib/shg/xml/` 側へ残す
+
+#### shg_result_loader 系
+
+責務:
+
+- `shg_result` のDB読込
+- XMLとの照合用データ取得
+- 利用券比較用データ取得
+
+想定ファイル:
+
+```text
+scripts/shg/script_lib/shg_result_loader.py
+```
+
+補足:
+
+- orchestration 本体から DBアクセス責務を分離する
+- repository / data access に近い責務として扱う
+
+#### ticket_fix 系
+
+責務:
+
+- XML利用券値とDB利用券値の比較
+- fix必要判定
+- fix候補情報生成
+- ticket_fix_status 判定
+
+想定ファイル:
+
+```text
+scripts/shg/script_lib/ticket_fix.py
+```
+
+補足:
+
+- 現フェーズでは「利用券整理番号」「利用券有効期限」のみを対象とする
+- 汎用XML比較エンジン化は行わない
+- 利用券と受診券を混同しないことを最優先とする
+
+#### xml_ticket_writer 系
+
+責務:
+
+- 利用券ノードのXML書き換え
+- 利用券整理番号更新
+- 利用券有効期限更新
+
+想定ファイル:
+
+```text
+scripts/shg/script_lib/xml_ticket_writer.py
+```
+
+補足:
+
+- `functionCode/@code = "2"` で識別できた利用券のみを書き換える
+- 出現順による推定は禁止する
+
+#### outcome_policy 系
+
+責務:
+
+- finalのみ動機づけ支援時の除外判定
+- outcome矛盾判定ポリシー
+- 特例ルール適用
+
+想定ファイル:
+
+```text
+scripts/shg/script_lib/outcome_policy.py
+```
+
+補足:
+
+- outcome計算そのものではなく「判定ルール」を責務とする
+- XML抽出処理は持たない
+
+#### 現時点では外出ししない責務
+
+以下は orchestration の幹フローと密結合しているため、現フェーズでは `check_shg_result_xml.py` 側へ残す。
+
+- people集約
+- initial / final bucket管理
+- CSV出力dict生成
+- export rows append
+- 最終CSV出力
+
+理由:
+
+- 現在も仕様変化が多い
+- 列構造変更頻度が高い
+- 無理に分離すると、逆に責務境界が不安定になる
+- まずは fix追加を安全に実装することを優先する
 
 以下は現フェーズでは orchestration 側に残す。
 
