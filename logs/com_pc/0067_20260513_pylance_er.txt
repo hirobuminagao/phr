@@ -1,0 +1,20 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/shg/script_lib/shg_result_loader.py",
+	"owner": "Pylance",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType]\" の引数を、関数 \"normalize_db_row\" の型 \"dict[str, Any]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType]\" は型 \"dict[str, Any]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"dict[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 75,
+	"startColumn": 39,
+	"endLineNumber": 75,
+	"endColumn": 42
+}]
