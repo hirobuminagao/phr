@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree as ET
+from lxml import etree as LET
 
 
 CDA_NS = "urn:hl7-org:v3"
@@ -58,7 +58,7 @@ def update_xml_value(
         item_name: 更新対象項目名。
         location: 値取得層が返した location。
             以下の属性を持つ前提:
-            - elem: xml.etree.ElementTree.Element
+            - elem: XML element
             - attr_name: str
         new_value: 更新後の値。
             呼び出し側で正規化・形式変換済みの値を渡す前提。
@@ -123,16 +123,19 @@ def update_xml_value(
 def save_xml(
     *,
     xml_path: Path,
-    root: ET.Element,
+    root: LET._Element,
 ) -> dict[str, Any]:
     """XMLを指定パスへ保存する。
 
     既存XMLの保存のみを行う。新規XMLブロック作成は行わない。
     """
     try:
-        ET.register_namespace("", CDA_NS)
-        tree = ET.ElementTree(root)
-        tree.write(xml_path, encoding="utf-8", xml_declaration=True)
+        tree = LET.ElementTree(root)
+        tree.write(
+            str(xml_path),
+            encoding="utf-8",
+            xml_declaration=True,
+        )
 
     except Exception as exc:
         return {

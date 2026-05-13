@@ -27,7 +27,7 @@ import shutil
 import zipfile
 from pathlib import Path
 from typing import Iterable
-from xml.etree import ElementTree as ET
+from lxml import etree as LET
 
 
 XSD_RELATED_NAMES = {
@@ -41,9 +41,18 @@ XSD_RELATED_DIR_NAMES = {
 }
 
 
-def read_xml(xml_path: Path) -> ET.Element:
-    """XMLファイルを読み込み、root element を返す。"""
-    tree = ET.parse(xml_path)
+def read_xml(xml_path: Path) -> LET._Element:
+    """XMLファイルを読み込み、root element を返す。
+
+    lxml を使用し、コメントや既存namespace prefixをできるだけ維持する。
+    """
+    parser = LET.XMLParser(
+        remove_comments=False,
+        remove_pis=False,
+        remove_blank_text=False,
+        recover=False,
+    )
+    tree = LET.parse(str(xml_path), parser)
     return tree.getroot()
 
 
