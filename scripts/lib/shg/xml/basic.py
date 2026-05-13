@@ -12,6 +12,12 @@ OID_INSURER = "1.2.392.200119.6.101"
 OID_SYMBOL = "1.2.392.200119.6.204"
 OID_NUMBER = "1.2.392.200119.6.205"
 
+# 利用券 participant 配下で、利用券整理番号を示す id/root prefix。
+# 利用券整理番号OIDは保険者番号サフィックス付きで出現するため、prefix一致で判定する。
+# 例:
+#   1.2.392.200119.6.210.06123456
+OID_USAGE_TICKET_NUMBER_PREFIX = "1.2.392.200119.6.210."
+
 
 @dataclass(frozen=True)
 class XmlValueLocation:
@@ -88,6 +94,42 @@ def get_birth(root: ET.Element) -> Optional[str]:
     return val if val else None
 
 
+def find_ticket_id_element(participant: ET.Element) -> Optional[ET.Element]:
+    """利用券 participant 配下から整理番号を保持する id 要素を探す。
+
+    優先順:
+    1. 利用券整理番号OID prefix に一致する id/root
+    2. associatedEntity/id が1件だけの場合のみ、その id
+
+    注意:
+    - 利用券 participant 自体は呼び出し元で functionCode/@code = "2" により識別済み
+    - id は participant 配下に複数存在し得るため、extension だけでは判定しない
+    - OIDで特定できない複数 id を出現順で推定しない
+    """
+    id_elements = list(participant.findall(".//cda:id", NS))
+
+    for id_el in id_elements:
+        root = (id_el.get("root") or "").strip()
+        extension = (id_el.get("extension") or "").strip()
+
+        if (
+            root.startswith(OID_USAGE_TICKET_NUMBER_PREFIX)
+            and extension
+        ):
+            return id_el
+
+    associated_ids = [
+        id_el
+        for id_el in participant.findall("cda:associatedEntity/cda:id", NS)
+        if (id_el.get("extension") or "").strip()
+    ]
+
+    if len(associated_ids) == 1:
+        return associated_ids[0]
+
+    return None
+
+
 def get_ticket_info_detail(root: ET.Element) -> TicketInfo:
     """利用券(functionCode=2)の整理番号・有効期限とXML上の値位置を取得する。
 
@@ -108,7 +150,7 @@ def get_ticket_info_detail(root: ET.Element) -> TicketInfo:
         ticket_no_location: Optional[XmlValueLocation] = None
         ticket_exp_location: Optional[XmlValueLocation] = None
 
-        id_el = participant.find("cda:associatedEntity/cda:id", NS)
+        id_el = find_ticket_id_element(participant)
         if id_el is not None:
             ticket_no_location = XmlValueLocation(elem=id_el, attr_name="extension")
             ticket_no = ticket_no_location.current_value() or None
