@@ -52,9 +52,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from scripts.lib.db.config import load_mysql_base_params
-from scripts.lib.db.mysql import connect_ctx, dict_cursor
-from scripts.lib.db.schemas import WORK_OTHER
 from scripts.lib.identity.generator import generate_identity_bundle
 from scripts.lib.shg.xml.basic import extract_basic
 from scripts.lib.shg.xml.section_90030_initial import (
@@ -84,6 +81,38 @@ from scripts.lib.shg.xml.outcome_checks import (
 from scripts.shg.script_lib.xml_io import (
     collect_input_xml_paths,
     read_xml,
+)
+
+# ------------------------------------------------------------
+# Use shared SHG result loader
+# ------------------------------------------------------------
+from scripts.shg.script_lib.shg_result_loader import (
+    load_shg_result_from_mysql,
+)
+
+# ------------------------------------------------------------
+# Ticket fix import
+# ------------------------------------------------------------
+# ------------------------------------------------------------
+# Ticket fix import
+# ------------------------------------------------------------
+from scripts.shg.script_lib.ticket_fix import (
+    build_ticket_fix_result,
+)
+
+# ------------------------------------------------------------
+# XML ticket update import
+# ------------------------------------------------------------
+
+from scripts.shg.script_lib.xml_ticket_writer import (
+    update_usage_ticket_xml_file,
+)
+
+# ------------------------------------------------------------
+# Outcome policy import
+# ------------------------------------------------------------
+from scripts.shg.script_lib.outcome_policy import (
+    apply_final_only_motivation_conflict_policy,
 )
 
 # ------------------------------------------------------------
@@ -171,72 +200,6 @@ def make_person_key(
     return "|".join(parts)
 
 
-
-
-
-# ------------------------------------------------------------
-# DB
-# ------------------------------------------------------------
-def _normalize_db_row(row: Any) -> dict[str, Any]:
-    """DB row を plain dict[str, Any] に正規化する。"""
-    if isinstance(row, dict):
-        return {str(k): v for k, v in row.items()}
-
-    if hasattr(row, "items"):
-        try:
-            return {str(k): v for k, v in row.items()}
-        except Exception:
-            pass
-
-    return {}
-
-def load_shg_result_from_mysql() -> dict[str, dict[str, Any]]:
-    """新定義の work_other.shg_result を読み込む。
-
-    fase1.0 方針:
-    - 返却キーは identity_hash 優先
-    - person_id_custom / person_key は CSV表示・橋渡し用途で別途保持可
-    - ここでは最低限、CSV出力と突合に必要な項目を返す
-    """
-    params = load_mysql_base_params()
-    result: dict[str, dict[str, Any]] = {}
-
-    sql = """
-        SELECT
-            id,
-            insurer_number_raw,
-            insurance_symbol_raw,
-            insurance_number_raw,
-            name_kana_full_raw,
-            birthdate,
-            gender_code,
-            shg_year,
-            usage_ticket_number,
-            expiration_date,
-            health_checkup_date,
-            exam_waist_cm,
-            exam_weight_kg,
-            received_date,
-            person_id_custom,
-            identity_hash
-        FROM shg_result
-        WHERE identity_hash IS NOT NULL
-    """
-
-    with connect_ctx(params, database=WORK_OTHER, autocommit=False) as conn:
-        cursor = dict_cursor(conn)
-        cursor.execute(sql)
-        rows = cursor.fetchall()
-
-    for row in rows:
-        row_dict = _normalize_db_row(row)
-        identity_hash_raw = row_dict.get("identity_hash")
-        identity_hash = str(identity_hash_raw).strip() if identity_hash_raw is not None else ""
-        if not identity_hash:
-            continue
-        result[identity_hash] = row_dict
-
-    return result
 
 
 # ------------------------------------------------------------
@@ -373,6 +336,18 @@ def main() -> None:
 
             db_row = shg_result_map.get(str(identity_hash), {}) if identity_hash else {}
 
+            ticket_fix_result = build_ticket_fix_result(
+                xml_ticket_no=basic.get("ticket_no", ""),
+                xml_ticket_exp=basic.get("ticket_exp", ""),
+                db_ticket_no=db_row.get("usage_ticket_number", "") if db_row else "",
+                db_ticket_exp=db_row.get("expiration_date", "") if db_row else "",
+            )
+            ticket_update_result = update_usage_ticket_xml_file(
+                xml_path=xml_path,
+                root=root,
+                ticket_fix_result=ticket_fix_result,
+            )
+
             initial_goals = extract_initial_goals(root)
             initial_date = extract_initial_date(root)
             initial_goal_levels = extract_initial_goal_levels(root)
@@ -441,6 +416,12 @@ def main() -> None:
                     "xml_ticket_exp": basic.get("ticket_exp", ""),
                     "db_ticket_no": db_row.get("usage_ticket_number", "") if db_row else "",
                     "db_ticket_exp": db_row.get("expiration_date", "") if db_row else "",
+                    "ticket_fix_status": ticket_fix_result.status,
+                    "ticket_fix_fields": ",".join(ticket_fix_result.fix_fields),
+                    "ticket_fix_reason": ticket_fix_result.reason,
+                    "ticket_update_applied": "Yes" if ticket_update_result.updated else "No",
+                    "ticket_update_fields": ",".join(ticket_update_result.updated_fields),
+                    "ticket_update_reason": ticket_update_result.reason,
                     "guidance_type_code": guidance.get("guidance_type_code") if guidance else "",
                     "guidance_type_name": guidance.get("guidance_type_name") if guidance else "",
                 }
@@ -464,6 +445,12 @@ def main() -> None:
                     "xml_ticket_exp": "",
                     "db_ticket_no": "",
                     "db_ticket_exp": "",
+                    "ticket_fix_status": "",
+                    "ticket_fix_fields": "",
+                    "ticket_fix_reason": "",
+                    "ticket_update_applied": "",
+                    "ticket_update_fields": "",
+                    "ticket_update_reason": "",
                     "guidance_type_code": "",
                     "guidance_type_name": "",
                 }
@@ -573,6 +560,16 @@ def main() -> None:
             outcome_map=outcome_map,
             has_final=bool(final),
         )
+        final_report_code = ((final or {}).get("basic") or {}).get("report_code", "")
+        has_initial = bool(initial)
+        for short_name in ["食", "運動", "喫煙", "休養", "その他"]:
+            general_conflict_result[short_name] = apply_final_only_motivation_conflict_policy(
+                conflict_result=general_conflict_result.get(short_name, ""),
+                report_code=final_report_code,
+                has_initial=has_initial,
+                level_text=level_text,
+                category=short_name,
+            )
 
         waist_weight_check_result = build_waist_weight_check_result(
             plan_level=initial_goal_levels.get("腹囲・体重の改善"),

@@ -11,6 +11,8 @@
 この層の責務は以下に限定する。
 
 - XMLから対象項目の値を取得する
+- 必要に応じて、値だけでなくXML上の値位置（element / attribute）も取得する
+- 指定された値位置に対して既存XML値を更新するための共通ヘルパを提供する
 - section / observation / value の構造をたどる
 - report_code などの基本情報を取得する
 - XML構造変更時の影響をこの層で吸収する
@@ -23,7 +25,8 @@
 - person単位集約
 - CSV出力
 - DB参照
-- XML抽出と無関係な orchestration 固有ロジックの集約
+- XML抽出・XML更新と無関係な orchestration 固有ロジックの集約
+- XML更新可否や修正対象の業務判断
 
 これらは `scripts/shg/check_shg_result_xml.py` 側の orchestration 層で扱う。
 
@@ -32,6 +35,7 @@
 ```text
 scripts/lib/shg/xml/
   ├ common.py
+  ├ update.py
   ├ outcome_checks.py
   ├ basic.py
   ├ role.py
@@ -53,6 +57,20 @@ scripts/lib/shg/xml/
 
 ※ 各sectionファイルは common.py を利用し、XML構造の探索ロジックを重複定義しない
 
+### update.py
+- XML値更新の共通処理
+- 更新対象パス・ファイル名・更新項目・更新場所・更新値を受け取り、既存XMLの該当属性値へ反映する
+- 更新結果は dict で返す
+  - `ok`
+  - `status`
+  - `item_name`
+  - `old_value`
+  - `new_value`
+  - `message`
+- 更新場所は、値取得層が返した location（element / attribute）を前提とする
+- 新規XMLブロック作成は行わない
+- 利用券か受診券か、どの項目を修正対象にするか、といった業務判断は持たない
+
 ### outcome_checks.py
 - outcome 系の加工・判定ロジック
 - XML値の抽出は行わず、抽出済み値の加工・評価だけを担当する
@@ -68,6 +86,12 @@ scripts/lib/shg/xml/
 - insurer / symbol / number
 - name / gender / birth
 - ticket_no / ticket_exp
+
+- 利用券情報の値位置取得
+  - 利用券整理番号: 利用券 participant 配下の `id/@extension`
+  - 利用券有効期限: 利用券 participant 配下の `time/high/@value` または同等の有効期限位置
+  - 利用券 participant は `functionCode/@code = "2"` で識別する
+  - 出現順による利用券 / 受診券の推定は禁止する
 
 - 保健指導実施年月日（final_date）の取得
   - report_code = 22 の場合に有効
@@ -135,6 +159,13 @@ scripts/lib/shg/xml/
 - SHG XML 特有の処理として閉じ、安易に共通lib化しない
 - namespace（NS）およびXML探索ロジックは common.py に集約し、各sectionでは再定義しない
 
+- 値取得・値位置取得・値更新の扱い
+  - 既存の値取得関数は壊さず、必要な場合のみ location 付き取得を追加する
+  - location は「どの element のどの attribute が値か」を示す
+  - XML値更新は、値位置と更新値を受け取る共通処理として提供する
+  - XML更新対象にするかどうかの業務判断は orchestration / script_lib 側で行う
+  - 書き換え側が同じ探索条件を再実装しないよう、値位置の一次情報はこの層で提供できるようにする
+
 - XML構造は完全ではない前提で扱う
   - セクションが存在しない場合がある
   - observation / value が欠損する場合がある
@@ -182,6 +213,37 @@ scripts/lib/shg/xml/
   - 動機づけ支援 / 積極的支援 / 動機づけ支援相当を区別せず同一ルールで判定する
   - calendar（月数）ベースの判定は採用しない
   - ライブラリ側では日数計算のみを提供する
+
+## 値位置取得・値更新の方針
+
+本ライブラリは原則として「XMLから値を取得する」層であり、業務判断を持たない。
+
+ただし、利用券整理番号・利用券有効期限のように、後続処理でXML修正対象となる項目については、値だけでなくXML上の値位置も返せるようにする。
+
+### 方針
+
+- 値取得と値位置取得は同じ探索条件を使う
+- 値位置は element と attribute 名の組み合わせで表現する
+- XML値の更新自体は `scripts/lib/shg/xml/update.py` の共通ヘルパで行う
+- XML更新可否や修正対象の判断は `scripts/shg/script_lib/` または orchestration 側で行う
+- `scripts/shg/script_lib/` 側で利用券探索条件を再実装しない
+
+### 利用券情報
+
+利用券情報は、受診券と形式が似ているため、必ず `functionCode/@code = "2"` で利用券 participant を識別する。
+
+利用券の値位置は、現フェーズでは以下を想定する。
+
+| 項目 | 値位置 |
+|------|--------|
+| 利用券整理番号 | `id/@extension` |
+| 利用券有効期限 | `time/high/@value` または同等の有効期限位置 |
+
+注意:
+
+- participant の出現順による推定は禁止する
+- 受診券情報を利用券として扱ってはならない
+- 値位置取得は探索条件の共有が目的であり、値位置取得関数自体はXML更新を行わない
 
 ## 補足
 
