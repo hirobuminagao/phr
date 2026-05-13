@@ -40,14 +40,26 @@ WHERE identity_hash IS NOT NULL
 """
 
 
-def normalize_db_row(row: dict[str, Any]) -> dict[str, Any]:
-    """DB row をSHGチェック用に正規化する。"""
+def normalize_db_row(row: Any) -> dict[str, Any]:
+    """DB row をSHGチェック用に正規化する。
+
+    dict_cursor の型注釈上は tuple / dict の union になり得るため、
+    Pylance対策として入力は Any で受ける。
+    実運用では dict row を前提としつつ、items() を持つ row も吸収する。
+    """
+    if isinstance(row, dict):
+        row_dict = row
+    elif hasattr(row, "items"):
+        row_dict = {str(k): v for k, v in row.items()}
+    else:
+        row_dict = {}
+
     return {
-        "identity_hash": (row.get("identity_hash") or "").strip(),
-        "usage_ticket_number": (row.get("usage_ticket_number") or "").strip(),
-        "expiration_date": str(row.get("expiration_date") or "").strip(),
-        "exam_waist_cm": row.get("exam_waist_cm"),
-        "exam_weight_kg": row.get("exam_weight_kg"),
+        "identity_hash": (row_dict.get("identity_hash") or "").strip(),
+        "usage_ticket_number": (row_dict.get("usage_ticket_number") or "").strip(),
+        "expiration_date": str(row_dict.get("expiration_date") or "").strip(),
+        "exam_waist_cm": row_dict.get("exam_waist_cm"),
+        "exam_weight_kg": row_dict.get("exam_weight_kg"),
     }
 
 
