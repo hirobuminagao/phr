@@ -21,6 +21,7 @@ SHG結果テーブル読込ヘルパ。
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 from scripts.lib.db.config import load_mysql_base_params
@@ -40,6 +41,37 @@ WHERE identity_hash IS NOT NULL
 """
 
 
+def format_xml_yyyymmdd(value: Any) -> str:
+    """XML出力・比較用に日付値を yyyymmdd へ変換する。
+
+    shg_result.expiration_date はDB上では DATE で保持される想定だが、
+    XMLの利用券有効期限は厚生労働省XMLの表現に合わせて yyyymmdd とする。
+
+    この関数はSHG利用券fix用の整形であり、update.py 側では形式変換しない。
+    """
+    if value is None:
+        return ""
+
+    if isinstance(value, datetime):
+        return value.strftime("%Y%m%d")
+
+    if isinstance(value, date):
+        return value.strftime("%Y%m%d")
+
+    text = str(value).strip()
+    if not text:
+        return ""
+
+    # 既に yyyymmdd の場合はそのまま返す。
+    if len(text) == 8 and text.isdigit():
+        return text
+
+    # MySQL DATE が文字列化されて yyyy-mm-dd になるケースを吸収する。
+    if len(text) >= 10 and text[4:5] == "-" and text[7:8] == "-":
+        return text[:10].replace("-", "")
+
+    return text
+
 def normalize_db_row(row: Any) -> dict[str, Any]:
     """DB row をSHGチェック用に正規化する。
 
@@ -57,7 +89,7 @@ def normalize_db_row(row: Any) -> dict[str, Any]:
     return {
         "identity_hash": (row_dict.get("identity_hash") or "").strip(),
         "usage_ticket_number": (row_dict.get("usage_ticket_number") or "").strip(),
-        "expiration_date": str(row_dict.get("expiration_date") or "").strip(),
+        "expiration_date": format_xml_yyyymmdd(row_dict.get("expiration_date")),
         "exam_waist_cm": row_dict.get("exam_waist_cm"),
         "exam_weight_kg": row_dict.get("exam_weight_kg"),
     }
