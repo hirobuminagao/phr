@@ -26,7 +26,7 @@ from __future__ import annotations
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 from lxml import etree as LET
 
 
@@ -41,10 +41,11 @@ XSD_RELATED_DIR_NAMES = {
 }
 
 
-def read_xml(xml_path: Path) -> LET._Element:
+def read_xml(xml_path: Path) -> Any:
     """XMLファイルを読み込み、root element を返す。
 
     lxml を使用し、コメントや既存namespace prefixをできるだけ維持する。
+    戻り値は既存のXML抽出関数との型互換を優先して Any とする。
     """
     parser = LET.XMLParser(
         remove_comments=False,

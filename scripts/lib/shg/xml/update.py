@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -123,11 +121,12 @@ def update_xml_value(
 def save_xml(
     *,
     xml_path: Path,
-    root: LET._Element,
+    root: Any,
 ) -> dict[str, Any]:
     """XMLを指定パスへ保存する。
 
     既存XMLの保存のみを行う。新規XMLブロック作成は行わない。
+    root は lxml root を想定するが、呼び出し側との型互換を優先して Any で受ける。
     """
     try:
         tree = LET.ElementTree(root)
