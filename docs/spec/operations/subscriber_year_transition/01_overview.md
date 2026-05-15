@@ -49,6 +49,11 @@
 - 主に氏名分解カラム（family / given）の補完を行う
 - 比較可能な基準面として `subscribers` を整備する
 
+補足:
+- `staging_subscribers_fund` を利用した補完・backfill は年度更新専用処理ではなく、通常運用でも実施する
+- 通常運用時の apply / backfill / 再突合仕様は別specで管理する
+- `matched_subscriber_id` は import 時点の参考突合値として扱い、apply 時は identity_hash による再突合結果を利用する方針とする
+
 参照:
 - `06_subscriber_enrichment.md`
 
