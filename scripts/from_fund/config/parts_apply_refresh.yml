@@ -1,0 +1,25 @@
+
+
+# parts補完用 apply_subscriber_id 再確認設定
+#
+# import_run_ids:
+#   parts_apply_* を再確認・更新する対象run_id
+#
+# mode:
+#   refresh_only:
+#     parts_apply_* の再確認だけ行う
+#
+#   refresh_and_apply:
+#     再確認後に parts 補完 apply まで実行する
+
+import_run_ids:
+  - 0
+
+mode: refresh_only
+
+# true:
+#   DB更新を行わず確認ログのみ
+# false:
+#   DB更新を実行
+
+dry_run: true
