@@ -52,7 +52,7 @@ def apply_name_parts_from_staging_subscribers_fund(
     """staging_subscribers_fund から subscribers へ name parts を空欄補完する。
 
     方針:
-    - 対象は import_run_id = run_id かつ matched_subscriber_id IS NOT NULL の staging 行のみ
+    - 対象は import_run_id = run_id かつ parts_apply_subscriber_id IS NOT NULL かつ parts_apply_status = 'IDENTITY_MATCHED' の staging 行のみ
     - subscribers 側が空欄の列に限って更新する
     - staging 側の norm / match 値をそのまま利用する
     - 新規 subscriber 作成や既存非空欄値の上書きは行わない
@@ -67,7 +67,7 @@ def apply_name_parts_from_staging_subscribers_fund(
     for row in staging_rows:
         rows_seen_count += 1
 
-        subscriber_id = row.get("matched_subscriber_id")
+        subscriber_id = row.get("parts_apply_subscriber_id")
         if subscriber_id is None:
             rows_skipped_count += 1
             continue
@@ -115,7 +115,8 @@ def fetch_apply_target_rows(conn: Any, run_id: int) -> list[dict[str, Any]]:
     cols = ", ".join(
         [
             "id",
-            "matched_subscriber_id",
+            "parts_apply_subscriber_id",
+            "parts_apply_status",
             "import_run_id",
             *list(_COLUMN_MAP.keys()),
         ]
@@ -124,7 +125,8 @@ def fetch_apply_target_rows(conn: Any, run_id: int) -> list[dict[str, Any]]:
         SELECT {cols}
         FROM {DEV_PHR}.staging_subscribers_fund
         WHERE import_run_id = %s
-          AND matched_subscriber_id IS NOT NULL
+          AND parts_apply_subscriber_id IS NOT NULL
+          AND parts_apply_status = 'IDENTITY_MATCHED'
         ORDER BY id
     """
 

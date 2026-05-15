@@ -13,7 +13,9 @@
 #     再確認後に parts 補完 apply まで実行する
 
 import_run_ids:
-  - 0
+  - 123
+  - 124
+  - 125
 
 mode: refresh_only
 

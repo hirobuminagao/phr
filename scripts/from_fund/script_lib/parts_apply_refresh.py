@@ -11,6 +11,7 @@ staging_subscribers_fund の parts_apply_* 再確認処理。
 - parts_apply_* を初期化する
 - matched_subscriber_id と identity_hash を再確認する
 - parts_apply_subscriber_id / status / reason を更新する
+- dry_run 時はDB更新を行わず、判定metricsのみ返す
 
 非責務:
 - subscribers の name parts 更新
@@ -192,10 +193,11 @@ def refresh_parts_apply_targets(
 
     cur = dict_cursor(conn)
     try:
-        metrics["cleared_rows"] = clear_parts_apply_columns(
-            cur=cur,
-            import_run_id=import_run_id,
-        )
+        if not dry_run:
+            metrics["cleared_rows"] = clear_parts_apply_columns(
+                cur=cur,
+                import_run_id=import_run_id,
+            )
 
         rows = fetch_target_rows(
             cur=cur,
@@ -232,11 +234,12 @@ def refresh_parts_apply_targets(
             elif status == STATUS_MISSING_MATCHED_SUBSCRIBER:
                 metrics["missing_matched_subscriber"] += 1
 
-            metrics["updated_rows"] += update_parts_apply_result(
-                cur=cur,
-                staging_id=int(row["id"]),
-                result=result,
-            )
+            if not dry_run:
+                metrics["updated_rows"] += update_parts_apply_result(
+                    cur=cur,
+                    staging_id=int(row["id"]),
+                    result=result,
+                )
     finally:
         cur.close()
 

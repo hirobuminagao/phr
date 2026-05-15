@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -35,10 +33,9 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx
 from scripts.lib.db.schemas import DEV_PHR
 
-# 後続実装予定:
-# from scripts.from_fund.script_lib.parts_apply_refresh import (
-#     refresh_parts_apply_targets,
-# )
+from scripts.from_fund.script_lib.parts_apply_refresh import (
+    refresh_parts_apply_targets,
+)
 
 
 DEFAULT_CONFIG_PATH = (
@@ -100,13 +97,12 @@ def main() -> int:
         for run_id in config["import_run_ids"]:
             print(f"[parts_apply_refresh] run_id={run_id}")
 
-            # 後続実装予定:
-            # result = refresh_parts_apply_targets(
-            #     conn=conn,
-            #     import_run_id=run_id,
-            #     dry_run=config["dry_run"],
-            # )
-            # print(result)
+            result = refresh_parts_apply_targets(
+                conn=conn,
+                import_run_id=run_id,
+                dry_run=config["dry_run"],
+            )
+            print(result)
 
         if config["dry_run"]:
             conn.rollback()
