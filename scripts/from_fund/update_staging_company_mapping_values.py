@@ -251,41 +251,6 @@ def run(
                 mappings=mappings,
                 hia_company_rows=hia_company_rows,
             )
-            if result.status != "mapped":
-                print(
-                    "company mapping not mapped:",
-                    {
-                        "staging_id": row.get("id"),
-                        "received_company_code_norm": row.get(
-                            "received_company_code_norm"
-                        ),
-                        "received_company_name_norm": row.get(
-                            "received_company_name_norm"
-                        ),
-                        "received_department_code_norm": row.get(
-                            "received_department_code_norm"
-                        ),
-                        "received_distribution_code_norm": row.get(
-                            "received_distribution_code_norm"
-                        ),
-                        "status": result.status,
-                        "mapped_employer_code": result.mapped_employer_code,
-                        "mapped_department_code": result.mapped_department_code,
-                    },
-                )
-            else:
-                print(
-                    "company mapping mapped:",
-                    {
-                        "staging_id": row.get("id"),
-                        "received_company_code_norm": row.get(
-                            "received_company_code_norm"
-                        ),
-                        "status": result.status,
-                        "mapped_employer_code": result.mapped_employer_code,
-                        "mapped_department_code": result.mapped_department_code,
-                    },
-                )
 
             if result.status == "mapped":
                 mapped += 1
