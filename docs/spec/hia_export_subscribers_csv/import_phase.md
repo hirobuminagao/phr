@@ -1,22 +1,39 @@
-
-
 # HIA Export Subscribers CSV – Import Phase
 
 このドキュメントは **HIA export 加入者 CSV → staging_subscribers_hub 取込処理**の仕様を定義する。
 
 対象スクリプト:
 
-```
+```text
+# 旧実装
 scripts/work_folder/scripts/import_subscribers_to_staging_hub.py
+
+# ADR-0021 以降の新構成予定
+scripts/hia/import_subscribers_to_staging_hub.py
+scripts/hia/script_lib/hub_subscriber_import.py
 ```
 
-このフェーズの役割は **CSV正規化 + staging登録**であり、
-subscriber master への反映は apply phase が担当する。
+旧実装では import 後に apply phase を直接起動していたが、
+ADR-0021 以降は:
 
-参照:
+```text
+import
+  ↓
+prepare / compare
+  ↓
+apply
+```
 
-- apply 処理仕様 → `subscriber_apply.md`
-- 正規化ルール → `phr/lib/normalize/`
+の3段階へ分離する。
+
+Import phase の役割は:
+
+```text
+CSV → raw / norm / match / identity_hash を生成し、
+staging_subscribers_hub を構築すること
+```
+
+に限定する。
 
 ---
 
@@ -34,10 +51,13 @@ CSV reader
 column mapping
       │
       ▼
-normalize rules
+normalize / match / hash
       │
       ▼
 staging_subscribers_hub
+      │
+      ▼
+prepare / compare phase
 ```
 
 Import phase の責務:
@@ -45,9 +65,22 @@ Import phase の責務:
 - CSV 読み込み
 - 列マッピング
 - 正規化処理
+- identity_hash 生成
 - staging テーブル登録
 - import_run_id 記録
 - 行エラー記録
+
+Import phase は compare / apply 判定を行わない。
+
+```text
+insert
+update
+noop
+identity_changed
+review
+```
+
+などの action 判定は prepare / compare phase が担当する。
 
 ---
 
@@ -115,24 +148,25 @@ CSV列名の揺れは import 側で吸収する。
 正規化は以下のモジュールを使用する。
 
 ```
-phr/lib/normalize/
+scripts/lib/identity/
+scripts/lib/normalize/
 ```
 
 構成:
 
 ```
-common.py
-rules.py
-subscriber.py
+identity/
+normalize/
+subscriber/
 ```
 
 役割:
 
 | module | role |
 |------|------|
-| common | 基本正規化 |
-| rules | CSV列ルール |
-| subscriber | 氏名 / ID |
+| identity | identity_hash / person_id_custom |
+| normalize | 基本 normalize |
+| subscriber | 氏名 / subscriber normalize |
 
 ---
 
@@ -222,9 +256,45 @@ person_id_custom
 
 これは **加入者識別ID** として master 照合に使用される。
 
+ADR-0021 以降は、以下を combine した:
+
+```text
+identity_hash
+```
+
+を compare / join 用 identity の中核として利用する。
+
 ---
 
-# 8. Date Normalize
+# 8. identity_hash Generation
+
+identity_hash は compare phase 用 join hash として生成する。
+
+入力:
+
+```text
+person_id_custom
+name_kana_full_match
+gender_code
+```
+
+生成値:
+
+```text
+identity_hash
+```
+
+利用目的:
+
+- compare phase join
+- subscriber identity compare
+- diff 判定
+- identity change 検知
+- apply_action 判定補助
+
+---
+
+# 9. Date Normalize
 
 関数:
 
@@ -253,7 +323,7 @@ NULL
 
 ---
 
-# 9. Staging Table
+# 10. Staging Table
 
 テーブル:
 
@@ -271,6 +341,8 @@ Insert列:
 
 ```
 person_id_custom
+hia_subscriber_id
+identity_hash
 insurer_number
 
 insurance_symbol
@@ -283,6 +355,8 @@ gender_code
 
 name_kanji_full
 name_kana_full
+name_kanji_full_match
+name_kana_full_match
 
 name_kanji_family
 name_kanji_middle
@@ -312,7 +386,7 @@ loaded_at
 
 ---
 
-# 10. Run Management
+# 11. Run Management
 
 Import 実行は
 
@@ -340,7 +414,7 @@ errors
 
 ---
 
-# 11. Error Handling
+# 12. Error Handling
 
 正規化エラー:
 
@@ -370,7 +444,7 @@ Import は **fail-fast しない**。
 
 ---
 
-# 12. Import Output
+# 13. Import Output
 
 成功した行は
 
@@ -382,9 +456,18 @@ staging_subscribers_hub
 
 次フェーズ:
 
+```text
+prepare_subscriber_apply_actions.py
 ```
-apply_subscribers_from_staging_hub.py
-```
+
+prepare / compare phase により:
+
+- subscriber compare
+- identity_hash compare
+- address/contact compare
+- apply_action 作成
+
+を実施する。
 
 ---
 
@@ -395,11 +478,13 @@ CSV
  ↓
 column mapping
  ↓
-normalize
+normalize / match
  ↓
 person_id generation
  ↓
+identity_hash generation
+ ↓
 staging_subscribers_hub
  ↓
-apply phase
+prepare / compare phase
 ```

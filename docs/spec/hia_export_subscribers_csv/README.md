@@ -8,11 +8,13 @@
 ```
 HIA export subscribers CSV
         ↓
-import_subscribers_to_staging_hub.py
+import phase
         ↓
 staging_subscribers_hub
         ↓
-apply_subscribers_from_staging_hub.py
+prepare / compare phase
+        ↓
+apply phase
         ↓
 subscribers
 subscriber_addresses
@@ -20,6 +22,11 @@ subscriber_contacts
 subscriber_audit
 ```
 
+本spec群は旧版では `import → apply` の2段階を中心に記述していたが、
+ADR-0021 以降は `import → prepare / compare → apply` の3段階へ再整理する。
+
+旧実装・旧specの内容は、移行前の事実として残しつつ、
+本ディレクトリ内で新フローへ順次更新する。
 
 ## Reading Map
 
@@ -28,13 +35,15 @@ subscriber_audit
 ```
 HIA Export CSV
    ↓
-import_phase.md
+flow_overview.md
    ↓
-staging_subscribers_hub
+import_phase.md
    ↓
 staging_schema.md
    ↓
 identity_policy.md
+   ↓
+compare_prepare_phase.md
    ↓
 subscriber_apply.md
    ↓
@@ -59,9 +68,10 @@ HIA 側から提供される加入者 CSV（export）
 
 1. CSV Import
 2. Staging 保存
-3. Subscriber Apply
-4. Address / Contact 履歴管理
-5. Subscriber Audit 生成
+3. Prepare / Compare
+4. Subscriber Apply
+5. Address / Contact Apply
+6. Subscriber Audit 生成
 
 ---
 
@@ -72,6 +82,7 @@ HIA 側から提供される加入者 CSV（export）
 - `ADR-0008` subscribers identity matching
 - `ADR-0009` DB connection policy
 - `ADR-0010` subscriber audit implementation
+- `ADR-0021` HIA加入者 import / compare / apply フロー再設計
 
 ---
 
@@ -94,6 +105,9 @@ staging_schema.md
 
 identity_policy.md
     subscriber 同一人物判定ポリシー
+
+compare_prepare_phase.md
+    staging と subscribers / address / contact の比較・apply_action 作成仕様
 
 subscriber_apply.md
     staging → subscribers 反映仕様
@@ -148,20 +162,87 @@ gender_code
 
 ---
 
+### 4. Import / Prepare / Apply の分離
+
+旧実装では apply スクリプト内で以下を同時に行っていた。
+
+- 既存 subscribers 照合
+- 差分比較
+- insert / update / noop 判定
+- subscribers 更新
+- address / contact 同期
+- audit 保存
+
+ADR-0021 以降は、比較結果を staging 側へ保持し、apply は判定済み action を実行するだけにする。
+
+```text
+import
+  = CSV → staging
+
+prepare / compare
+  = staging と本番テーブルを比較し、apply_action / diff を作成
+
+apply
+  = apply_action に従って insert / update / noop を実行
+```
+
+---
+
+### 5. HIA を最新正本として扱う
+
+HIA export subscribers CSV を最新正本として扱う。
+
+`subscribers` は業務参照用の現在状態キャッシュであり、
+差分がある場合は audit を必ず保存したうえで HIA 側値へ追従する。
+
+---
+
+### 6. audit は必ず保存する
+
+HIA側値を正として反映するため、更新前後の差分は必ず audit に残す。
+
+identity_hash 変更、住所変更、連絡先変更も audit / 履歴管理対象とする。
+
+---
+
 ## Implementation Entry Points
 
-主な実装スクリプト:
-
-```
+# 旧実装
 scripts/work_folder/scripts/import_subscribers_to_staging_hub.py
 scripts/work_folder/scripts/apply_subscribers_from_staging_hub.py
-```
+
+# 新構成予定（ADR-0021）
+scripts/hia/import_subscribers_to_staging_hub.py
+scripts/hia/prepare_subscriber_apply_actions.py
+scripts/hia/apply_subscribers_from_staging_hub.py
+scripts/hia/script_lib/
 
 ---
 
 ## Version
 
 PHR v1.1.0
+
+### Next Refactor Direction (ADR-0021)
+
+今後の実装では、旧 `import → apply` 構成を以下へ再整理する。
+
+```text
+import
+  ↓
+prepare / compare
+  ↓
+apply
+```
+
+主な変更方針:
+
+- `scripts/work_folder/scripts/` から `scripts/hia/` へ移設
+- orchestration と処理関数を分離
+- 比較結果を staging 側へ保持
+- HIA を最新正本として扱う
+- identity_hash 変更も audit 保存のうえ subscribers へ反映
+- name_kana_match 変更時は既存 name parts をクリアする
 
 ### v1.1.0 Changes (Subscriber Apply / Identity Handling)
 

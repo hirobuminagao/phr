@@ -10,7 +10,12 @@ apply_subscribers_from_staging_hub.py
 ```
 
 このポリシーは主に apply phase で利用され、
-`staging_subscribers_hub` の1行を既存 `subscribers` に結びつけるための基準となる。
+旧実装では apply phase 内で subscriber identity 判定を実施していたが、
+ADR-0021 以降は prepare / compare phase により compare 状態を staging 側へ保持する。
+
+このポリシーは、
+`staging_subscribers_hub` の1行を既存 `subscribers` に結びつけ、
+HIA 最新状態との比較・同期を行うための基準となる。
 
 関連ADR:
 
@@ -30,35 +35,47 @@ subscriber identity は以下を目的とする。
 
 ---
 
-# 2. Identity Key
+# 2. Identity Core
 
-同一人物判定キーは以下の3項目を使用する。
+subscriber identity の中核には以下を使用する。
 
+```text
+identity_hash
 ```
+
+identity_hash は:
+
+```text
 person_id_custom
 name_kana_full_match
 gender_code
 ```
 
-この3項目がすべて一致した場合に、同一 subscriber とみなす。
+を元に生成される compare / join 用 hash である。
+
+旧実装では3列を直接比較していたが、
+ADR-0021 以降は compare phase において `identity_hash` を中心に利用する。
 
 ---
 
-# 3. Why These Columns
+# 3. identity_hash Components
+
+identity_hash は以下の3要素から構成される。
 
 | column | role | reason |
 |---|---|---|
-| `person_id_custom` | 主識別子 | 保険者番号・記号・番号・生年月日を元に生成されるため、加入者識別の中核となる |
-| `name_kana_full_match` | 氏名照合補助 | 正規化・空白吸収後の照合キーとして、person_id_custom の偶発衝突や入力異常の検出を補助する |
-| `gender_code` | 補助識別子 | 同名・近似データの誤結合抑制 |
+| `person_id_custom` | 主識別子 | 保険者番号・記号・番号・生年月日を元に生成される加入者識別キー |
+| `name_kana_full_match` | 氏名照合補助 | 正規化済みカナ照合キー |
+| `gender_code` | 補助識別子 | 同名・近似データの誤結合抑止 |
 
-この設計により、
+identity_hash は compare phase における:
 
-- 保険証系情報ベースの識別
-- 氏名カナによる本人性の補助確認
-- 性別による誤結合抑止
+- subscriber 同一性比較
+- diff 判定
+- identity change 検知
+- parts clear 判定
 
-をバランス良く実現する。
+に利用する。
 
 ---
 
@@ -92,6 +109,8 @@ phr/lib/normalize/subscriber.py
 - これは apply 時の主キーそのものではない
 - subscriber master 内での「同一人物候補検索キー」として使用する
 - person_id_custom 単独ではなく、`name_kana_full_match` と `gender_code` を併用する
+
+ADR-0021 以降は、これらを combine した `identity_hash` を compare phase の主比較キーとして扱う。
 
 ---
 
@@ -164,39 +183,114 @@ LIMIT 1;
 
 ---
 
-# 7. Matching Rule
+# 7. Compare Policy
 
-matching rule は次の通り。
+旧実装では:
 
-## match
-
-以下の3項目がすべて一致:
-
-```
+```text
 person_id_custom
 name_kana_full_match
 gender_code
 ```
 
-結果:
+の3列一致を subscriber match としていた。
 
-```
-existing subscriber を採用
-```
+ADR-0021 以降は:
 
-## no match
-
-3項目のいずれかが一致しない場合:
-
-```
-新規 subscriber 候補
+```text
+HIA subscriber ID
+↓
+identity_hash
+↓
+compare status
 ```
 
-結果:
+HIA subscriber ID は、同一 subscriber を追跡する最優先の外部IDとして扱う。
 
+HIA subscriber ID が一致する場合、
+identity_hash が変更されていても、原則として:
+
+```text
+同一 HIA subscriber の情報更新
 ```
-INSERT subscribers
+
+として扱う。
+
+ただし、identity_hash 変更内容は compare phase で確認する。
+
+特に:
+
+```text
+name_kana_full_match changed
 ```
+
+の場合は、既存 name parts をクリアし、
+後続 normalize / split により再生成する。
+
+## identity_hash same
+
+```text
+identity_hash same
+```
+
+の場合:
+
+```text
+同一 subscriber
+```
+
+として扱う。
+
+この場合は:
+
+```text
+address
+contact
+qualification
+employer/dept
+```
+
+などの差分比較へ進む。
+
+## identity_hash changed
+
+```text
+identity_hash changed
+```
+
+の場合:
+
+```text
+HIA 最新状態へ更新候補
+```
+
+として扱う。
+
+ただし差分内容を確認する。
+
+### name_kana_match changed
+
+```text
+name_kana_full_match changed
+```
+
+の場合:
+
+```text
+既存 name parts をクリア
+```
+
+し、後続 normalize / split により再生成する。
+
+### insurance_symbol / insurance_number changed only
+
+記号・番号のみ変更の場合:
+
+```text
+parts は維持
+```
+
+する。
 
 ---
 
@@ -230,23 +324,46 @@ INSERT subscribers
 
 # 9. Apply Decision Relationship
 
-identity 判定後の分岐:
+旧実装では apply phase 内で compare と apply を同時に実施していた。
 
-```
-identity match
-   ↓
-subscriber exists?
-   ├ yes → diff compare → update / noop
-   └ no  → insert
-```
+ADR-0021 以降は:
 
-つまり identity は
-
-```
-insert / update / noop
+```text
+import
+  ↓
+prepare / compare
+  ↓
+apply_action 作成
+  ↓
+apply
 ```
 
-の入口判定である。
+へ分離する。
+
+compare phase では:
+
+```text
+identity_hash
+address
+contact
+qualification
+employer/dept
+```
+
+などを比較し、staging 側へ compare 状態を保持する。
+
+例:
+
+```text
+apply_action:
+- insert
+- update
+- noop
+- identity_changed
+- review
+```
+
+apply phase は compare 結果をもとに insert / update / noop を実行する。
 
 ---
 
@@ -256,7 +373,7 @@ insert / update / noop
 
 想定外状態:
 
-- 同じ `(person_id_custom, name_kana_full_match, gender_code)` を持つ subscriber が複数存在
+- 同じ `identity_hash` を持つ subscriber が複数存在
 - 正規化前入力の異常により person_id_custom が生成不能
 - name_kana_full_match が空
 
@@ -286,18 +403,41 @@ insert / update / noop
 
 # Summary
 
-PHR subscriber identity は以下の3列で定義する。
+PHR subscriber identity は:
 
-```
+```text
 person_id_custom
 name_kana_full_match
 gender_code
 ```
 
-この3列は
+を元に生成される:
 
-- 加入者識別の安定性
-- 表記ゆれ耐性
-- 誤結合抑制
+```text
+identity_hash
+```
 
-を両立するための最小コアである。
+を中心に compare / apply を行う。
+
+ADR-0021 以降は:
+
+```text
+import
+  ↓
+prepare / compare
+  ↓
+apply
+```
+
+へ責務分離し、compare 状態と diff 情報を staging 側へ保持する。
+
+identity_hash changed の場合でも、
+HIA 側を最新正本として subscribers へ反映する。
+
+ただし:
+
+```text
+name_kana_full_match changed
+```
+
+の場合は、既存 name parts をクリアし、後続 normalize / split により再生成する。

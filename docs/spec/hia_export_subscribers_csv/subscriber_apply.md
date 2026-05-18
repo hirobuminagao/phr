@@ -38,12 +38,37 @@ HIA export 加入者 CSV を staging から **PHR subscriber マスターへ反�
 
 対象スクリプト:
 
-```
+```text
+# 旧実装
 apply_subscribers_from_staging_hub.py
+
+# ADR-0021 以降の新構成予定
+scripts/hia/apply_subscribers_from_staging_hub.py
+scripts/hia/script_lib/hub_subscriber_apply.py
 ```
 
-この処理は **staging → subscriber master** の反映エンジンであり、
-加入者の名寄せ・更新・履歴管理を行う。
+旧実装では apply phase 内で compare / update / audit を同時に実施していた。
+
+ADR-0021 以降は:
+
+```text
+import
+  ↓
+prepare / compare
+  ↓
+apply
+```
+
+へ責務分離する。
+
+Apply phase は:
+
+```text
+prepare / compare phase により生成された
+apply_action を実行する反映エンジン
+```
+
+として扱う。
 
 ---
 
@@ -58,59 +83,78 @@ WHERE processed_run_id IS NULL
 
 フロー:
 
-```
 staging_subscribers_hub
       │
-      │ identity match
+      │ apply_action
       ▼
 subscribers
       │
-      ├ address history
+      ├ address apply
       │
-      ├ contact history
+      ├ contact apply
       │
       └ subscriber_audit
-```
 
-成功した staging 行には
+Apply phase 自身は compare 判定を行わない。
 
-```
-processed_run_id
-processed_at
-```
+```text
+apply_action = insert
+  → insert
 
-を刻印する。
+apply_action = update
+  → update
+
+apply_action = noop
+  → skip
+
+apply_action = review
+  → skip
+```
 
 ---
 
-# 2. Subscriber Identity
+# 2. Subscriber Identity Relationship
 
-同一 subscriber 判定キー:
+旧実装では apply phase 内で subscriber identity compare を実施していた。
 
-```
+旧 compare 条件:
+
+```text
 (person_id_custom,
  name_kana_full_match,
  gender_code)
 ```
 
-理由:
+ADR-0021 以降は compare phase 側で:
 
-| column | role |
-|------|------|
-| person_id_custom | 保険証 + 生年月日ベースID |
-| name_kana_full_match | 正規化・空白吸収後のカナ照合キー |
-| gender_code | 同名異人対策 |
-
-SQL:
-
+```text
+HIA subscriber ID
+↓
+identity_hash
+↓
+compare status
 ```
-SELECT *
-FROM subscribers
-WHERE person_id_custom = ?
-AND name_kana_full_match = ?
-AND gender_code IS ?
-LIMIT 1
+
+を生成する。
+
+Apply phase は compare phase により確定済みの:
+
+```text
+apply_subscriber_id
+apply_action
+compare status
 ```
+
+を利用して処理を実行する。
+
+identity compare の詳細は:
+
+```text
+identity_policy.md
+compare_prepare_phase.md
+```
+
+を参照する。
 
 ## identity_hash / person_id_custom 生成時の parts 依存禁止
 
@@ -129,6 +173,12 @@ parts 列を前提にしてはならない。
 ---
 
 # 3. Subscriber Insert
+
+条件:
+
+```text
+apply_action = insert
+```
 
 既存 subscriber が存在しない場合:
 
@@ -205,44 +255,50 @@ name_kana_family / middle / given は格納しない（NULL のまま）
 
 # 4. Subscriber Update
 
-既存 subscriber が存在する場合:
+条件:
 
-```
-差分比較
-```
-
-対象カラム:
-
-```
-COMPARE_COLS
+```text
+apply_action = update
 ```
 
-差分あり:
+compare / diff 判定は prepare / compare phase 側で実施済みとする。
 
+Apply phase は compare phase により生成された:
+
+```text
+apply_diff_columns
+identity_match_status
+address_diff_status
+contact_diff_status
 ```
+
+を参照して UPDATE を実行する。
+
+実行:
+
+```text
 UPDATE subscribers
 SET ...
 updated_at = now()
 last_change_run_id = run_id
 ```
 
-差分なし:
+identity_hash changed の場合でも、
+HIA 側を最新正本として subscribers へ反映する。
 
+ただし:
+
+```text
+name_kana_full_match changed
 ```
-noop
+
+の場合は:
+
+```text
+既存 name parts を clear
 ```
 
-ただし住所・連絡先は別途差分判定を行う。
-
-## 空欄判定ポリシー
-
-本仕様における「値あり」「値なし」の判定は以下とする。
-
-- 値あり: `NULL` ではない **かつ** 空文字ではない
-- 値なし: `NULL` または空文字
-
-したがって、parts 補完や差分判定においては、単に `IS NOT NULL` だけでは不十分であり、
-**空文字も未設定として扱う**。
+し、後続 normalize / split により再生成可能な状態へ戻す。
 
 ---
 
@@ -259,6 +315,8 @@ subscriber_addresses
 ```
 現用1件のみ
 ```
+
+compare / diff 判定は prepare / compare phase により実施済みとする。
 
 条件:
 
@@ -323,6 +381,8 @@ subscriber_contacts
 現用1件のみ
 ```
 
+compare / diff 判定は prepare / compare phase により実施済みとする。
+
 差分あり:
 
 ```
@@ -354,9 +414,13 @@ subscriber_audit
 
 生成タイミング:
 
-```
+```text
 subscriber insert
 subscriber update
+identity_hash change
+address change
+contact change
+qualification change
 ```
 
 実装方式:
@@ -371,6 +435,9 @@ Python apply script
 - ETL context を保持できる
 - DB trigger 依存を避ける
 
+HIA 側を最新正本として同期するため、
+変更前後差分は必ず audit として永続保存する。
+
 参照:
 
 ```
@@ -382,7 +449,7 @@ subscriber-audit-implementation
 
 # 8. Processed Mark
 
-apply 成功後:
+apply_action 実行成功後:
 
 ```
 UPDATE staging_subscribers_hub
@@ -455,29 +522,28 @@ etl_errors
 
 # Summary
 
-処理全体:
-
-```
 staging_subscribers_hub
       │
+      │ apply_action
       ▼
-subscriber identity match
+subscriber apply
       │
       ├ insert
       │
       ├ update
       │
-      └ noop
+      ├ noop
+      │
+      └ review(skip)
       │
       ▼
-address history
+address apply
       │
       ▼
-contact history
+contact apply
       │
       ▼
 subscriber audit
       │
       ▼
 processed mark
-```

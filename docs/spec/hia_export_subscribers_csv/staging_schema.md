@@ -1,5 +1,3 @@
-
-
 # Staging Schema
 
 このドキュメントは **HIA export 加入者 CSV を一時受けする `staging_subscribers_hub` テーブルの役割と列仕様**を定義する。
@@ -13,18 +11,30 @@ staging_subscribers_hub
 関連処理:
 
 ```
+# 旧実装
 import_subscribers_to_staging_hub.py
 apply_subscribers_from_staging_hub.py
+
+# ADR-0021 以降の新構成予定
+scripts/hia/import_subscribers_to_staging_hub.py
+scripts/hia/prepare_subscriber_apply_actions.py
+scripts/hia/apply_subscribers_from_staging_hub.py
 ```
 
-この staging は **CSV import phase と subscriber apply phase の間に置かれる受け皿**であり、
-正規化済みデータを保持して本番反映を安定化するための中間層である。
+旧実装ではこの staging は **CSV import phase と subscriber apply phase の間に置かれる受け皿**として利用していた。
+
+ADR-0021 以降は、`import → prepare / compare → apply` の3段階へ再整理し、
+この staging は以下の2つを保持する中間層として扱う。
+
+- import phase により生成された raw / norm / match / identity_hash
+- prepare / compare phase により生成された apply_action / diff / compare status
 
 関連spec:
 
 - `import_phase.md`
 - `subscriber_apply.md`
 - `identity_policy.md`
+- `compare_prepare_phase.md`
 
 ---
 
@@ -35,6 +45,8 @@ apply_subscribers_from_staging_hub.py
 - HIA export CSV の正規化済みデータを保持する
 - import と apply を分離する
 - apply 前の確認・再実行を可能にする
+- prepare / compare phase の結果を保持する
+- apply_action / diff / compare status を保持する
 - import run / apply run を追跡できるようにする
 - 行単位エラー時の切り分けをしやすくする
 
@@ -50,13 +62,19 @@ apply_subscribers_from_staging_hub.py
 HIA Export CSV
       │
       ▼
-import_subscribers_to_staging_hub.py
+import phase
       │
       ▼
 staging_subscribers_hub
       │
       ▼
-apply_subscribers_from_staging_hub.py
+prepare / compare phase
+      │
+      ▼
+apply_action / diff / compare status
+      │
+      ▼
+apply phase
       │
       ▼
 subscribers
@@ -65,19 +83,22 @@ subscriber_contacts
 subscriber_audit
 ```
 
-staging は
+staging は以下の状態を列で管理する。
 
 - import 済
+- compare 未実行
+- compare 済
 - apply 未実行
 - apply 済
 
-を列で管理し、**未処理キュー**として使う。
+旧実装では `processed_run_id IS NULL` を apply 未処理キューとして扱っていた。
+ADR-0021 以降は、prepare / compare phase により `apply_action` を生成し、apply phase は判定済み action を実行する。
 
 ---
 
 # 3. Queue Semantics
 
-apply 対象は次の条件。
+旧実装での apply 対象は次の条件。
 
 ```sql
 SELECT *
@@ -100,6 +121,20 @@ processed_run_id
 processed_at
 ```
 
+ADR-0021 以降の apply 対象は `apply_action` を基準とする。
+
+例:
+
+```sql
+SELECT *
+FROM staging_subscribers_hub
+WHERE processed_run_id IS NULL
+  AND apply_action IN ('insert', 'update')
+ORDER BY rowid ASC;
+```
+
+`apply_action = 'noop'` または `apply_action = 'review'` は自動更新しない。
+
 ---
 
 # 4. Column Groups
@@ -111,8 +146,9 @@ processed_at
 3. name columns
 4. address / contact columns
 5. qualification / organization columns
-6. source trace columns
-7. run management columns
+6. prepare / compare columns
+7. source trace columns
+8. run management columns
 
 ---
 
@@ -121,13 +157,17 @@ processed_at
 | column | type | meaning |
 |---|---|---|
 | `person_id_custom` | TEXT / VARCHAR | 加入者識別用の正規化ID |
+| `hia_subscriber_id` | TEXT / VARCHAR | HIA加入者ID。HIA上の同一加入者を追跡する最優先外部ID |
+| `identity_hash` | CHAR(64) | compare / join 用 identity hash |
 | `birth` | DATE / TEXT | 生年月日 |
 | `gender_code` | TEXT / INTEGER | 性別コード |
 
 用途:
 
-- subscriber identity 判定の中核
-- apply 時の既存 subscriber 検索
+- import phase で identity を生成する
+- prepare / compare phase で既存 subscriber を照合する
+- HIA subscriber ID を最優先外部IDとして利用する
+- identity_hash を compare / join 用 identity として利用する
 
 参照:
 
@@ -161,6 +201,8 @@ processed_at
 |---|---|
 | `name_kanji_full` | 氏名漢字全文 |
 | `name_kana_full` | 氏名カナ全文（正規化済み） |
+| `name_kanji_full_match` | 氏名漢字全文の照合用match値 |
+| `name_kana_full_match` | 氏名カナ全文の照合用match値 |
 
 ## Split Name
 
@@ -175,12 +217,10 @@ processed_at
 
 用途:
 
-- identity 判定
-- subscriber master 反映
-- 後続の表示・帳票・検索補助
+`name_kana_full_match` は identity_hash の構成要素として使用する。
 
-`name_kana_full` は identity key に使うため、
-表記ゆれ吸収後の値を保持する。
+prepare / compare phase で `name_kana_full_match` の変更を検知した場合、
+既存 subscribers 側の name parts は clear 対象とする。
 
 ---
 
@@ -232,7 +272,52 @@ processed_at
 
 ---
 
-# 10. Source Trace Columns
+# 10. Prepare / Compare Columns
+
+ADR-0021 以降、prepare / compare phase の結果を staging 側へ保持する。
+
+| column | type | meaning |
+|---|---|---|
+| `apply_subscriber_id` | BIGINT / INTEGER | apply phase が更新対象とする subscribers.id |
+| `apply_action` | TEXT / VARCHAR | apply phase の実行 action |
+| `apply_diff_columns` | JSON / TEXT | 差分あり列の一覧 |
+| `identity_match_status` | TEXT / VARCHAR | identity compare 結果 |
+| `address_diff_status` | TEXT / VARCHAR | current address との差分状態 |
+| `contact_diff_status` | TEXT / VARCHAR | current contact との差分状態 |
+| `apply_checked_at` | DATETIME / TEXT | prepare / compare 実行時刻 |
+
+想定 `apply_action`:
+
+```text
+insert
+update
+noop
+review
+```
+
+想定 `identity_match_status`:
+
+```text
+hia_id_matched
+identity_hash_matched
+identity_hash_changed
+identity_hash_not_found
+identity_hash_multiple_match
+review
+```
+
+用途:
+
+- apply phase の判定済み入力
+- diff確認
+- 再実行制御
+- audit生成補助
+
+apply phase は compare 判定を行わず、これらの列を参照して実行する。
+
+---
+
+# 11. Source Trace Columns
 
 | column | meaning |
 |---|---|
@@ -251,11 +336,12 @@ processed_at
 
 ---
 
-# 11. Run Management Columns
+# 12. Run Management Columns
 
 | column | meaning |
 |---|---|
 | `import_run_id` | import 実行ID |
+| `apply_checked_at` | prepare / compare 実行時刻 |
 | `processed_run_id` | apply 実行ID |
 | `processed_at` | apply 完了時刻 |
 
@@ -269,7 +355,7 @@ processed_at
 
 ---
 
-# 12. Row Lifecycle
+# 13. Row Lifecycle
 
 `staging_subscribers_hub` の1行は次のライフサイクルを持つ。
 
@@ -284,17 +370,37 @@ import_run_id = <run_id>
 processed_run_id = NULL
 ```
 
-## 2. Waiting
+## 2. Waiting for Compare
 
-apply 待機状態。
+prepare / compare 待機状態。
 
 意味:
 
 ```
-未処理キュー
+compare未実行
 ```
 
-## 3. Applied
+## 3. Compared
+
+prepare / compare phase により `apply_action` が生成される。
+
+状態例:
+
+```
+apply_action = insert / update / noop / review
+apply_checked_at = now()
+```
+
+## 4. Waiting for Apply
+
+apply_action が `insert` または `update` の行は apply 対象となる。
+
+```
+processed_run_id = NULL
+apply_action IN ('insert', 'update')
+```
+
+## 5. Applied
 
 apply 成功時に刻印。
 
@@ -307,20 +413,20 @@ processed_at = now()
 
 ---
 
-# 13. Constraints and Expectations
+# 14. Constraints and Expectations
 
 期待する性質:
 
 - import 時点で列名揺れは吸収済み
 - 正規化済みデータのみを保持する
 - 1行は1加入者候補を表す
-- apply は `processed_run_id IS NULL` を前提に走る
+- apply は `processed_run_id IS NULL` かつ `apply_action IN ('insert', 'update')` を前提に走る
 
 この staging は **長期マスタではなく処理中間層** である。
 
 ---
 
-# 14. Design Notes
+# 15. Design Notes
 
 staging を設ける理由は、CSV 直反映を避けて処理を分層するためである。
 
@@ -340,8 +446,9 @@ PHR v1.0.1 では、この staging を subscriber ingest pipeline の中心中�
 
 `staging_subscribers_hub` は、HIA export 加入者 CSV の **正規化済み受け皿** であり、
 
-- import と apply の分離
-- subscriber identity 判定の入力
+- import / prepare / apply の分離
+- subscriber identity compare の入力
+- apply_action / diff / compare status の保持
 - 履歴反映の入力
 - run / source trace の保持
 - 未処理キュー管理
