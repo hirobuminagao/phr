@@ -456,16 +456,186 @@ HIA側を最新正本として扱うため、連絡先差分がある場合は�
 
 # 6. subscriber_audit
 
-DDL確認後に追記する。
+`subscriber_audit` は subscribers 系更新の差分を列単位で保持する audit テーブルである。
 
-予定記載内容:
+HIA側を最新正本として扱うため、apply phase で本番テーブルを更新する場合は、変更前後差分を必ず保存する。
 
-- subscribers更新前後差分
-- identity_hash変更
-- name parts clear
-- address変更
-- contact変更
-- run_id / source / reason
+---
+
+## 6.1 Row Model
+
+DDL実態に合わせ、audit は以下の粒度で保存する。
+
+```text
+1 changed field = 1 audit row
+```
+
+主な列:
+
+| column | 用途 |
+|---|---|
+| `subscriber_id` | 対象 subscribers.id |
+| `field` | 変更フィールド名 |
+| `old_value` | 変更前値 |
+| `new_value` | 変更後値 |
+| `changed_at` | 変更日時 |
+| `source` | 変更元 |
+| `note` | 補足理由 |
+| `change_run_id` | apply run_id |
+
+---
+
+## 6.2 Audit Required Events
+
+以下は audit 必須対象とする。
+
+```text
+subscriber insert
+subscriber update
+identity_hash change
+name parts clear
+address change
+contact change
+qualification change
+organization change
+```
+
+---
+
+## 6.3 Field Naming Policy
+
+`field` には、変更対象が分かる名前を保持する。
+
+subscribers 本体:
+
+```text
+identity_hash
+name_kana_full_match
+insurance_symbol
+insurance_number
+qualification_acquired_date
+employer_code
+...
+```
+
+address 変更:
+
+```text
+address.postal_code
+address.address_line
+address.building
+address.prefecture
+address.city
+address.prefecture_code
+```
+
+contact 変更:
+
+```text
+contact.phone
+contact.email
+```
+
+name parts clear:
+
+```text
+name_kana_family
+name_kana_given
+name_kanji_family
+name_kanji_given
+...
+```
+
+---
+
+## 6.4 Source Policy
+
+`source` は変更元を表す。
+
+想定値例:
+
+```text
+hia_apply
+manual
+migration
+backfill
+```
+
+HIA export subscribers CSV 由来の apply では、原則として:
+
+```text
+source = hia_apply
+```
+
+を使用する。
+
+---
+
+## 6.5 change_run_id Policy
+
+`change_run_id` には apply phase の run_id を保持する。
+
+方針:
+
+- import run_id ではなく、実際に本番更新を行った apply run_id を入れる
+- compare / prepare phase の判定結果は staging 側に保持する
+- 永続auditは apply 実行時に保存する
+
+---
+
+## 6.6 Address / Contact Audit
+
+`subscriber_audit.subscriber_id` は必須のため、address / contact の変更も subscriber 単位の audit として保存する。
+
+address / contact の変更は、履歴テーブル自体にも残るが、subscriber apply の監査性を高めるため、`subscriber_audit` にも変更概要を保存する。
+
+例:
+
+```text
+field = address.address_line
+old_value = 旧住所
+new_value = 新住所
+source = hia_apply
+change_run_id = <apply_run_id>
+```
+
+```text
+field = contact.email
+old_value = old@example.com
+new_value = new@example.com
+source = hia_apply
+change_run_id = <apply_run_id>
+```
+
+---
+
+## 6.7 Name Parts Clear Audit
+
+`name_kana_full_match` が変更され、既存 name parts を clear する場合も audit 対象とする。
+
+例:
+
+```text
+field = name_kana_family
+old_value = 旧姓カナparts
+new_value = NULL
+source = hia_apply
+note = name_kana_full_match changed; clear name parts
+```
+
+---
+
+## 6.8 Audit Timing
+
+compare / prepare phase では audit 用差分情報を生成する。
+
+実際の `subscriber_audit` 永続保存は apply phase で行う。
+
+理由:
+
+- compare phase は判定フェーズであり、本番更新を確定しない
+- apply phase が本番更新と audit 保存を同一transactionで扱う
+- audit と本番更新の不整合を避ける
 
 ---
 

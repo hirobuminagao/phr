@@ -277,13 +277,23 @@ compare 対象:
 旧spec上で `address1` / `address2` / `address3` と表現している箇所がある場合、
 本DDLでは `address_line` / `building` / `prefecture` / `city` 等へ読み替える。
 
-差分がある場合:
+address compare の結果は `address_diff_status` に保持する。
+
+想定値:
 
 ```text
-address_diff_status = changed
+noop
+changed
+insert
 ```
 
-とする。
+意味:
+
+| status | 意味 |
+|---|---|
+| `noop` | current address が存在し、差分なし |
+| `changed` | current address が存在し、差分あり |
+| `insert` | current address が存在しない |
 
 ---
 
@@ -305,13 +315,23 @@ compare 対象:
 現DDLの `subscriber_contacts` には `mobile` 列は存在しないため、
 連絡先比較では `phone` / `email` のみを対象とする。
 
-差分がある場合:
+contact compare の結果は `contact_diff_status` に保持する。
+
+想定値:
 
 ```text
-contact_diff_status = changed
+noop
+changed
+insert
 ```
 
-とする。
+意味:
+
+| status | 意味 |
+|---|---|
+| `noop` | current contact が存在し、差分なし |
+| `changed` | current contact が存在し、差分あり |
+| `insert` | current contact が存在しない |
 
 ---
 
@@ -344,7 +364,15 @@ apply_action = insert
 ```text
 existing subscriber found
 AND
-差分あり
+いずれかの差分あり
+```
+
+差分対象:
+
+- subscribers 本体差分
+- identity_hash changed
+- address_diff_status IN ('changed', 'insert')
+- contact_diff_status IN ('changed', 'insert')
 ```
 
 結果:
@@ -362,7 +390,11 @@ apply_action = update
 ```text
 existing subscriber found
 AND
-差分なし
+subscribers 本体差分なし
+AND
+address_diff_status = 'noop'
+AND
+contact_diff_status = 'noop'
 ```
 
 結果:
