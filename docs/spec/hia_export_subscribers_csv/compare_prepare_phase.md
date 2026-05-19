@@ -1,7 +1,7 @@
 # HIA Export Subscribers CSV – Compare / Prepare Phase
 
 このドキュメントは、
-`staging_subscribers_hub` と本番 subscriber 系テーブルを比較し、
+`staging_subscribers_hub` に保持された import 値と current snapshot を比較し、
 apply_action を生成する compare / prepare phase の仕様を定義する。
 
 関連ADR:
@@ -15,7 +15,7 @@ apply_action を生成する compare / prepare phase の仕様を定義する。
 compare / prepare phase の目的は:
 
 ```text
-import 済み staging データを、本番 subscribers 系と比較し、
+import 済み staging データと current snapshot を比較し、
 apply_action を確定すること
 ```
 
@@ -28,6 +28,8 @@ ADR-0021 以降は:
 ```text
 import
   ↓
+current snapshot update
+  ↓
 prepare / compare
   ↓
 apply
@@ -39,7 +41,7 @@ apply
 
 # 2. Input Tables
 
-compare / prepare phase は以下を入力として使用する。
+compare / prepare phase は、import phase により staging 側へ保持された current snapshot を主な入力として使用する。
 
 ## staging
 
@@ -47,27 +49,33 @@ compare / prepare phase は以下を入力として使用する。
 staging_subscribers_hub
 ```
 
-## current subscriber
+staging には以下が保持されている前提とする。
 
 ```text
-subscribers
+import値
+current_subscriber_id
+current_identity_hash
+current_name_kana_full_match
+current_address_id
+current_contact_id
+current_lookup_status
+current_lookup_checked_at
 ```
 
-## current address
+## current snapshot
 
 ```text
-subscriber_addresses
+current_subscriber_id
+current_identity_hash
+current_name_kana_full_match
+current_address_id
+current_contact_id
+current_lookup_status
 ```
 
-current 行のみ比較対象とする。
+current snapshot は import phase の後続処理で取得済みとする。
 
-## current contact
-
-```text
-subscriber_contacts
-```
-
-current 行のみ比較対象とする。
+prepare / compare phase は、原則として current snapshot と staging import 値を比較する。
 
 ---
 
@@ -76,7 +84,7 @@ current 行のみ比較対象とする。
 ```text
 staging_subscribers_hub
   ↓
-HIA subscriber ID compare
+current snapshot確認
   ↓
 identity_hash compare
   ↓
@@ -89,73 +97,72 @@ apply_action decision
 
 ---
 
-# 4. HIA Subscriber ID Compare
+# 4. Current Snapshot / HIA Subscriber ID
 
-HIA subscriber ID は:
+HIA subscriber ID は、import phase の current snapshot update において、同一 subscriber を追跡する最優先外部IDとして利用する。
+
+prepare / compare phase では、その結果として staging に保持された:
 
 ```text
-同一 subscriber を追跡する最優先外部ID
+current_subscriber_id
+current_lookup_status
 ```
 
-として扱う。
+を利用する。
 
-## HIA subscriber ID match
+## current subscriber found
 
 ```text
-staging.hia_subscriber_id
-=
-subscribers.hia_subscriber_id
+current_subscriber_id IS NOT NULL
 ```
 
 の場合:
 
 ```text
-同一 HIA subscriber
+既存 subscriber あり
 ```
 
 として compare を継続する。
 
-identity_hash が変更されていても、
-原則として HIA 最新状態への更新候補とする。
-
 ---
 
-## HIA subscriber ID not found
+## current subscriber not found
 
-HIA subscriber ID に一致する subscriber が存在しない場合:
+current snapshot update の結果、既存 subscriber が存在しない場合:
 
 ```text
-identity_hash compare
+current_subscriber_id IS NULL
+current_lookup_status = not_found
 ```
 
-へ進む。
+として扱う。
+
+この場合、compare phase では insert 候補として扱う。
 
 ---
 
 # 5. identity_hash Compare
 
-compare phase では:
+compare phase では、staging import値の:
 
 ```text
 identity_hash
 ```
 
-を subscriber identity compare の中心に利用する。
-
-identity_hash 入力:
+と current snapshot の:
 
 ```text
-person_id_custom
-name_kana_full_match
-gender_code
+current_identity_hash
 ```
+
+を比較する。
 
 ---
 
-## identity_hash same
+## identity_hash same / current match
 
 ```text
-identity_hash same
+identity_hash = current_identity_hash
 ```
 
 の場合:
@@ -177,10 +184,11 @@ identity_hash same
 
 ---
 
-## identity_hash changed
+## identity_hash changed against current snapshot
 
 ```text
-identity_hash changed
+current_subscriber_id IS NOT NULL
+AND identity_hash <> current_identity_hash
 ```
 
 の場合:
@@ -226,32 +234,6 @@ parts は維持
 ```
 
 する。
-
----
-
-## identity_hash not found
-
-identity_hash 一致 subscriber が存在しない場合:
-
-```text
-insert candidate
-```
-
-として扱う。
-
----
-
-## identity_hash multiple match
-
-同じ identity_hash を持つ subscriber が複数存在する場合:
-
-```text
-review
-```
-
-として扱う。
-
-自動 apply は行わない。
 
 ---
 
@@ -344,9 +326,9 @@ compare 結果から apply_action を決定する。
 条件:
 
 ```text
-HIA subscriber ID not found
+current_subscriber_id IS NULL
 AND
-identity_hash not found
+current_lookup_status = 'not_found'
 ```
 
 結果:
@@ -370,7 +352,7 @@ AND
 差分対象:
 
 - subscribers 本体差分
-- identity_hash changed
+- identity_hash <> current_identity_hash
 - address_diff_status IN ('changed', 'insert')
 - contact_diff_status IN ('changed', 'insert')
 ```
@@ -388,9 +370,11 @@ apply_action = update
 条件:
 
 ```text
-existing subscriber found
+current_subscriber_id IS NOT NULL
 AND
 subscribers 本体差分なし
+AND
+identity_hash = current_identity_hash
 AND
 address_diff_status = 'noop'
 AND
@@ -409,7 +393,7 @@ apply_action = noop
 
 条件例:
 
-- identity_hash multiple match
+- current_lookup_status = 'multiple_match'
 - compare ambiguity
 - invalid normalize
 
@@ -430,8 +414,12 @@ compare / prepare phase の結果は staging 側へ保持する。
 想定カラム:
 
 ```text
-matched_subscriber_id
-apply_subscriber_id
+current_subscriber_id
+current_identity_hash
+current_name_kana_full_match
+current_address_id
+current_contact_id
+current_lookup_status
 apply_action
 apply_diff_columns
 identity_match_status
@@ -474,7 +462,7 @@ apply_action = review
 
 # 11. Audit Policy
 
-compare / prepare phase では audit 用差分情報を生成する。
+compare / prepare phase では、staging import値と current snapshot の差分から audit 用差分情報を生成する。
 
 対象:
 
@@ -496,15 +484,13 @@ compare / prepare phase は:
 staging_subscribers_hub
 ```
 
-と:
+に保持された:
 
 ```text
-subscribers
-subscriber_addresses
-subscriber_contacts
+current snapshot
 ```
 
-を比較し、
+と import値を比較し、
 
 ```text
 apply_action

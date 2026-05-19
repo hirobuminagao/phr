@@ -7,6 +7,13 @@ CREATE TABLE `dev_phr`.`staging_subscribers_hub` (
   `processed_run_id` bigint unsigned DEFAULT NULL,
   `person_id_custom` varchar(190) DEFAULT NULL,
   `identity_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'compare / join 用 identity hash',
+  `current_subscriber_id` bigint unsigned DEFAULT NULL COMMENT 'current snapshot subscribers.id',
+  `current_identity_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'current snapshot identity_hash',
+  `current_name_kana_full_match` varchar(190) DEFAULT NULL COMMENT 'current snapshot 氏名カナ全文match値',
+  `current_address_id` bigint unsigned DEFAULT NULL COMMENT 'current snapshot subscriber_addresses.id',
+  `current_contact_id` bigint unsigned DEFAULT NULL COMMENT 'current snapshot subscriber_contacts.id',
+  `current_lookup_status` varchar(50) DEFAULT NULL COMMENT 'current snapshot lookup status',
+  `current_lookup_checked_at` datetime(3) DEFAULT NULL COMMENT 'current snapshot lookup checked at',
   `hia_subscriber_id` varchar(190) DEFAULT NULL COMMENT 'HIA加入者ID（DLフォーマット先頭列）',
   `name_kana_full` varchar(190) DEFAULT NULL,
   `name_kana_full_match` varchar(190) DEFAULT NULL COMMENT '氏名カナ全文match値',
@@ -40,7 +47,6 @@ CREATE TABLE `dev_phr`.`staging_subscribers_hub` (
   `employee_code` varchar(190) DEFAULT NULL,
   `connect_id` varchar(190) DEFAULT NULL,
 
-  `apply_subscriber_id` bigint unsigned DEFAULT NULL COMMENT 'apply対象 subscribers.id',
   `apply_action` varchar(50) DEFAULT NULL COMMENT 'insert/update/noop/review',
   `apply_diff_columns` json DEFAULT NULL COMMENT '差分列一覧',
   `identity_match_status` varchar(50) DEFAULT NULL COMMENT 'identity compare結果',
@@ -59,8 +65,9 @@ CREATE TABLE `dev_phr`.`staging_subscribers_hub` (
   KEY `idx_stghub_namekana` (`name_kana_full`),
   KEY `idx_stghub_identity_hash` (`identity_hash`),
   KEY `idx_stghub_hia_subscriber_id` (`hia_subscriber_id`),
+  KEY `idx_stghub_current_subscriber_id` (`current_subscriber_id`),
+  KEY `idx_stghub_current_lookup_status` (`current_lookup_status`),
   KEY `idx_stghub_apply_action` (`apply_action`),
-  KEY `idx_stghub_apply_subscriber_id` (`apply_subscriber_id`),
   KEY `idx_stghub_pending_apply` (`processed_run_id`, `apply_action`, `insurer_number`, `id`)
 )
 ENGINE=InnoDB

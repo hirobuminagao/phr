@@ -19,21 +19,28 @@ ADR-0021 以降は:
 ```text
 import
   ↓
+current snapshot update
+  ↓
 prepare / compare
   ↓
 apply
 ```
 
-の3段階へ分離する。
+の段階へ分離する。
 
 Import phase の役割は:
 
 ```text
 CSV → raw / norm / match / identity_hash を生成し、
 staging_subscribers_hub を構築すること
++
+current subscriber state snapshot を staging 側へ更新すること
 ```
 
-に限定する。
+とする。
+
+Import phase は本番 subscriber 系テーブルを参照するが、
+本番 subscriber / address / contact は更新しない。
 
 ---
 
@@ -57,6 +64,9 @@ normalize / match / hash
 staging_subscribers_hub
       │
       ▼
+current snapshot update
+      │
+      ▼
 prepare / compare phase
 ```
 
@@ -67,6 +77,7 @@ Import phase の責務:
 - 正規化処理
 - identity_hash 生成
 - staging テーブル登録
+- current subscriber state snapshot 更新
 - import_run_id 記録
 - 行エラー記録
 
@@ -81,6 +92,16 @@ review
 ```
 
 などの action 判定は prepare / compare phase が担当する。
+
+Import phase は current 状態の参照・snapshot 更新までは行う。
+
+ただし、以下は行わない。
+
+- subscribers 更新
+- subscriber_addresses 更新
+- subscriber_contacts 更新
+- apply_action 決定
+- audit 永続保存
 
 ---
 
@@ -294,7 +315,42 @@ identity_hash
 
 ---
 
-# 9. Date Normalize
+# 9. Current Snapshot Update
+
+import phase では、CSV import 後に本番 subscriber 系 current 状態を取得し、
+staging 側へ snapshot として保持する。
+
+目的:
+
+- import 完了時点で本番に既存 subscriber が存在するか確認可能にする
+- apply 前レビューを容易にする
+- prepare / compare phase の入力を固定化する
+
+snapshot 対象例:
+
+```text
+current_subscriber_id
+current_identity_hash
+current_name_kana_full_match
+current_address_id
+current_contact_id
+current_lookup_status
+current_lookup_checked_at
+```
+
+参照対象:
+
+```text
+subscribers
+subscriber_addresses current row
+subscriber_contacts current row
+```
+
+Import phase は current 状態を参照するが、本番側テーブルは更新しない。
+
+---
+
+# 10. Date Normalize
 
 関数:
 
@@ -323,7 +379,7 @@ NULL
 
 ---
 
-# 10. Staging Table
+# 11. Staging Table
 
 テーブル:
 
@@ -343,6 +399,13 @@ Insert列:
 person_id_custom
 hia_subscriber_id
 identity_hash
+current_subscriber_id
+current_identity_hash
+current_name_kana_full_match
+current_address_id
+current_contact_id
+current_lookup_status
+current_lookup_checked_at
 insurer_number
 
 insurance_symbol
@@ -386,7 +449,7 @@ loaded_at
 
 ---
 
-# 11. Run Management
+# 12. Run Management
 
 Import 実行は
 
@@ -414,7 +477,7 @@ errors
 
 ---
 
-# 12. Error Handling
+# 13. Error Handling
 
 正規化エラー:
 
@@ -444,7 +507,7 @@ Import は **fail-fast しない**。
 
 ---
 
-# 13. Import Output
+# 14. Import Output
 
 成功した行は
 
@@ -454,15 +517,12 @@ staging_subscribers_hub
 
 へ格納される。
 
-次フェーズ:
-
-```text
-prepare_subscriber_apply_actions.py
-```
+Import output には、CSV由来の正規化済み値に加え、
+本番 current snapshot が保持される。
 
 prepare / compare phase により:
 
-- subscriber compare
+- snapshot と staging 値の compare
 - identity_hash compare
 - address/contact compare
 - apply_action 作成
@@ -485,6 +545,8 @@ person_id generation
 identity_hash generation
  ↓
 staging_subscribers_hub
+ ↓
+current snapshot update
  ↓
 prepare / compare phase
 ```

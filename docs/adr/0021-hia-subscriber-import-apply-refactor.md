@@ -46,6 +46,8 @@ HIA 加入者同期処理を、以下の phase に分離する。
 ```text
 import
   ↓
+current snapshot update
+  ↓
 prepare / compare
   ↓
 apply
@@ -63,10 +65,10 @@ audit
 ```text
 scripts/hia/
 ├── import_subscribers_to_staging_hub.py
-├── prepare_subscriber_apply_actions.py
-├── apply_subscribers_from_staging_hub.py
+├── apply_hia_subscriber_sync.py
 └── script_lib/
     ├── hub_subscriber_import.py
+    ├── hub_subscriber_current_snapshot.py
     ├── hub_subscriber_prepare.py
     ├── hub_subscriber_apply.py
     ├── hub_subscriber_compare.py
@@ -81,6 +83,19 @@ scripts/hia/
 - 共通処理は既存 `scripts/lib/` を利用する
 - DB接続・identity normalize・audit 共通化を継続する
 
+運用方針:
+
+- `import_subscribers_to_staging_hub.py`
+  - CSV → staging import
+  - current subscriber state snapshot 更新
+  - 本番 subscriber 更新は行わない
+
+- `apply_hia_subscriber_sync.py`
+  - prepare / compare 実行
+  - apply_action 決定
+  - 本番 subscriber 更新
+  - audit 保存
+
 ---
 
 ## Import Phase
@@ -90,6 +105,7 @@ scripts/hia/
 - CSV 読み込み
 - raw / norm / match / hash 生成
 - staging insert
+- current subscriber state snapshot 更新
 - ETL run / error 管理
 
 非責務:
@@ -99,7 +115,40 @@ scripts/hia/
 - contact 更新
 - insert / update / noop 判定
 
-Import phase は「staging を作るだけ」とする。
+Import phase は:
+
+```text
+CSV → staging canonicalization
++ current state snapshot 更新
+```
+
+までを責務とする。
+
+本番 subscriber 更新は行わない。
+
+### Current Snapshot Policy
+
+import phase では、本番 subscriber 系 current 状態を staging 側へ snapshot として保持する。
+
+目的:
+
+- import 完了時点で「本番に既存 subscriber が存在するか」を人間が確認可能にする
+- apply 前レビューを容易にする
+- compare phase の入力を固定化する
+
+snapshot 対象例:
+
+```text
+current_subscriber_id
+current_identity_hash
+current_name_kana_full_match
+current_address_id
+current_contact_id
+current_lookup_status
+current_lookup_checked_at
+```
+
+import phase は current 状態を参照するが、本番 subscriber を更新しない。
 
 ---
 
@@ -107,13 +156,15 @@ Import phase は「staging を作るだけ」とする。
 
 責務:
 
-- staging と subscribers の照合
-- HIA subscriber ID による既存確認
+- staging snapshot と current state の比較
+- HIA subscriber ID 比較
 - identity_hash 比較
 - address 比較
 - contact 比較
 - diff columns 作成
 - apply_action 決定
+
+Prepare / compare phase は、import phase が staging 側へ保持した current snapshot を利用して比較を行う。
 
 比較結果は staging 側へ保持する。
 
@@ -147,6 +198,14 @@ review
 Apply phase は「判定済み action を実行するだけ」とする。
 
 Apply phase 自身は compare 判定を行わない。
+
+Apply phase は:
+
+```text
+prepare / compare 済み staging row
+```
+
+のみを入力とする。
 
 例:
 
@@ -248,6 +307,10 @@ parts クリア後は、後続 normalize / split により再生成する。
 - staging を比較結果保持レイヤとして利用可能
 - audit / tracing 強化
 - scripts/hia への責務整理
+- import 完了時点で current subscriber 状態を可視化可能
+- apply 前レビュー容易化
+- compare 入力の固定化
+- orchestration と実処理の責務分離
 
 一方で、以下の追加実装が必要となる。
 
