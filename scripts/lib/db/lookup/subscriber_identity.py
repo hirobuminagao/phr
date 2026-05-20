@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -14,6 +12,7 @@ Responsibility:
     - subscribers を identity 系キーで検索する
     - lightweight identity handle を返す
     - candidate / multiple match / not found を整理する
+    - person_id_custom など、原則ユニーク寄りだが複数候補があり得る検索軸を安全に扱う
 
 Non-goals:
     - subscribers 更新
@@ -74,10 +73,30 @@ class SubscriberIdentityLookupResult:
         return self.status == "matched" and len(self.rows) == 1
 
     @property
+    def is_multiple_match(self) -> bool:
+        return self.status == "multiple_match" and len(self.rows) > 1
+
+    @property
+    def candidate_count(self) -> int:
+        return len(self.rows)
+
+    @property
+    def subscriber_ids(self) -> list[int]:
+        ids: list[int] = []
+        for row in self.rows:
+            subscriber_id = row.get("subscriber_id")
+            if subscriber_id is not None:
+                ids.append(subscriber_id)
+        return ids
+
+    @property
     def subscriber_id(self) -> Optional[int]:
         if not self.is_single_match:
             return None
-        return self.rows[0].get("subscriber_id")
+        subscriber_id = self.rows[0].get("subscriber_id")
+        if subscriber_id is None:
+            return None
+        return int(subscriber_id)
 
 
 # ============================================================
@@ -136,7 +155,12 @@ def list_identity_handles_by_person_id_custom(
     *,
     person_id_custom: str | None,
 ) -> list[dict[str, Any]]:
-    """person_id_custom完全一致で軽量 identity handle を返す。"""
+    """
+    person_id_custom完全一致で軽量 identity handle を返す。
+
+    person_id_custom は原則ユニーク寄りの検索軸だが、
+    双子・同一生年月日・同一保険情報などにより複数候補が返る可能性を許容する。
+    """
     if not person_id_custom:
         return []
 
@@ -163,6 +187,13 @@ def _to_lookup_result(
     matched_by: MatchedBy,
     rows: list[dict[str, Any]],
 ) -> SubscriberIdentityLookupResult:
+    """
+    candidate件数を lookup result status に変換する。
+
+    0件: not_found
+    1件: matched
+    2件以上: multiple_match
+    """
     if len(rows) == 0:
         return SubscriberIdentityLookupResult(
             status="not_found",
@@ -203,6 +234,9 @@ def resolve_subscriber_identity(
         1. hia_subscriber_id
         2. identity_hash
         3. person_id_custom
+
+    いずれの検索軸でも複数候補が返る場合は multiple_match として返し、
+    後続処理で review / hydrate / compare に回せるよう rows を保持する。
 
     返却は lightweight identity handle のみ。
     address / contact / business attributes は hydrate layer で取得する。

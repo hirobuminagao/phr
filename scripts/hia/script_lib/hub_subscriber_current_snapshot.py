@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -37,6 +35,13 @@ from scripts.work_folder.lib.etl import (
     log_error,
 )
 
+from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
+from scripts.lib.db.lookup.subscriber_projection import (
+    load_subscriber_rows_for_hia_current_snapshot,
+    load_current_address_rows_for_hia_current_snapshot,
+    load_current_contact_rows_for_hia_current_snapshot,
+)
+
 
 # ============================================================
 # metrics
@@ -47,75 +52,12 @@ class CurrentSnapshotMetrics:
     rows_seen: int = 0
     hia_id_matched: int = 0
     identity_hash_matched: int = 0
+    person_id_custom_matched: int = 0
     not_found: int = 0
     multiple_match: int = 0
     review: int = 0
     updated: int = 0
     errors: int = 0
-
-
-# ============================================================
-# lookup helpers
-# ============================================================
-
-
-def lookup_subscriber_by_hia_subscriber_id(
-    cur,
-    *,
-    hia_subscriber_id: str,
-):
-    """
-    HIA subscriber ID で current subscriber を検索する。
-
-    TODO:
-        共通lib lookup helper へ寄せる。
-    """
-    raise NotImplementedError
-
-
-
-def lookup_subscriber_by_identity_hash(
-    cur,
-    *,
-    identity_hash: str,
-):
-    """
-    identity_hash で current subscriber を検索する。
-
-    TODO:
-        共通lib lookup helper へ寄せる。
-    """
-    raise NotImplementedError
-
-
-
-def lookup_current_address(
-    cur,
-    *,
-    subscriber_id: int,
-):
-    """
-    current subscriber_addresses を取得する。
-
-    TODO:
-        共通lib lookup helper へ寄せる。
-    """
-    raise NotImplementedError
-
-
-
-def lookup_current_contact(
-    cur,
-    *,
-    subscriber_id: int,
-):
-    """
-    current subscriber_contacts を取得する。
-
-    TODO:
-        共通lib lookup helper へ寄せる。
-    """
-    raise NotImplementedError
 
 
 # ============================================================
@@ -178,15 +120,16 @@ def update_current_snapshot(
     import_run_id 単位で current snapshot を付与する。
 
     Flow:
-        staging_subscribers_hub
+        staging_subscribers_hub(import_run_id)
             ↓
-        HIA subscriber ID lookup
+        subscriber_identity resolver
             ↓
-        identity_hash lookup
+        subscriber_id list
             ↓
-        current address lookup
-            ↓
-        current contact lookup
+        subscriber_projection
+          ├─ subscriber row
+          ├─ current address row
+          └─ current contact row
             ↓
         staging current_* update
     """
@@ -196,7 +139,8 @@ def update_current_snapshot(
         SELECT
             staging_subscriber_hub_id,
             hia_subscriber_id,
-            identity_hash
+            identity_hash,
+            person_id_custom
         FROM staging_subscribers_hub
         WHERE import_run_id = %s
         ORDER BY staging_subscriber_hub_id
@@ -213,30 +157,141 @@ def update_current_snapshot(
             staging_id = row["staging_subscriber_hub_id"]
             hia_subscriber_id = row["hia_subscriber_id"]
             identity_hash = row["identity_hash"]
+            person_id_custom = row["person_id_custom"]
 
             # ----------------------------------------------------
-            # 1. HIA subscriber ID lookup
+            # 1. subscriber identity resolve
             # ----------------------------------------------------
+            # このスクリプトでは複数候補は特定不能として staging current_* には採用しない。
+            # not_found も採用しない。
+            # 単一候補のみ projection に渡して current_* 更新対象にする。
+            resolve_result = resolve_subscriber_identity(
+                cur,
+                hia_subscriber_id=hia_subscriber_id,
+                identity_hash=identity_hash,
+                person_id_custom=person_id_custom,
+            )
 
-            # TODO
+            if resolve_result.status == "multiple_match":
+                update_staging_current_snapshot(
+                    cur,
+                    staging_id=staging_id,
+                    current_subscriber_id=None,
+                    current_identity_hash=None,
+                    current_name_kana_full_match=None,
+                    current_address_id=None,
+                    current_contact_id=None,
+                    current_lookup_status="multiple_match",
+                )
+                metrics.multiple_match += 1
+                metrics.updated += 1
+                continue
+
+            if resolve_result.status == "not_found":
+                update_staging_current_snapshot(
+                    cur,
+                    staging_id=staging_id,
+                    current_subscriber_id=None,
+                    current_identity_hash=None,
+                    current_name_kana_full_match=None,
+                    current_address_id=None,
+                    current_contact_id=None,
+                    current_lookup_status="not_found",
+                )
+                metrics.not_found += 1
+                metrics.updated += 1
+                continue
+
+            if not resolve_result.is_single_match or resolve_result.subscriber_id is None:
+                update_staging_current_snapshot(
+                    cur,
+                    staging_id=staging_id,
+                    current_subscriber_id=None,
+                    current_identity_hash=None,
+                    current_name_kana_full_match=None,
+                    current_address_id=None,
+                    current_contact_id=None,
+                    current_lookup_status="review",
+                )
+                metrics.review += 1
+                metrics.updated += 1
+                continue
+
+            if resolve_result.matched_by == "hia_subscriber_id":
+                current_lookup_status = "hia_id_matched"
+                metrics.hia_id_matched += 1
+            elif resolve_result.matched_by == "identity_hash":
+                current_lookup_status = "identity_hash_matched"
+                metrics.identity_hash_matched += 1
+            elif resolve_result.matched_by == "person_id_custom":
+                current_lookup_status = "person_id_custom_matched"
+                metrics.person_id_custom_matched += 1
+            else:
+                current_lookup_status = "review"
+                metrics.review += 1
 
             # ----------------------------------------------------
-            # 2. identity_hash lookup
+            # 2. projection
             # ----------------------------------------------------
+            projection_rows = load_subscriber_rows_for_hia_current_snapshot(
+                cur,
+                subscriber_ids=[resolve_result.subscriber_id],
+            )
 
-            # TODO
+            if len(projection_rows) != 1:
+                update_staging_current_snapshot(
+                    cur,
+                    staging_id=staging_id,
+                    current_subscriber_id=None,
+                    current_identity_hash=None,
+                    current_name_kana_full_match=None,
+                    current_address_id=None,
+                    current_contact_id=None,
+                    current_lookup_status="review",
+                )
+                metrics.review += 1
+                metrics.updated += 1
+                continue
+
+            current_row = projection_rows[0]
 
             # ----------------------------------------------------
-            # 3. current address/contact lookup
+            # 2-1. current address projection
             # ----------------------------------------------------
+            address_rows = load_current_address_rows_for_hia_current_snapshot(
+                cur,
+                subscriber_ids=[resolve_result.subscriber_id],
+            )
 
-            # TODO
+            current_address_id = None
+            if len(address_rows) == 1:
+                current_address_id = address_rows[0].get("current_address_id")
 
             # ----------------------------------------------------
-            # 4. staging update
+            # 2-2. current contact projection
             # ----------------------------------------------------
+            contact_rows = load_current_contact_rows_for_hia_current_snapshot(
+                cur,
+                subscriber_ids=[resolve_result.subscriber_id],
+            )
 
-            # TODO
+            current_contact_id = None
+            if len(contact_rows) == 1:
+                current_contact_id = contact_rows[0].get("current_contact_id")
+
+            # ----------------------------------------------------
+            # 3. staging update
+            # ----------------------------------------------------
+            update_staging_current_snapshot(
+                cur,
+                staging_id=staging_id,
+                current_subscriber_id=current_row["subscriber_id"],
+                current_identity_hash=current_row.get("identity_hash"),
+                current_name_kana_full_match=current_row.get("name_kana_full_match"),
+                current_address_id=current_address_id,
+                current_contact_id=current_contact_id,
+                current_lookup_status=current_lookup_status,
+            )
 
             metrics.updated += 1
 

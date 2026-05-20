@@ -15,6 +15,19 @@ CREATE TABLE `dev_phr`.`subscriber_addresses` (
   `building` varchar(190) DEFAULT NULL,
   `valid_from` datetime(3) DEFAULT NULL,
   `valid_to` datetime(3) DEFAULT NULL,
+  -- current address flag.
+  --
+  -- 1:
+  --   current active address row
+  --
+  -- 0:
+  --   historical address row
+  --
+  -- managed by:
+  --   apply_subscribers_from_staging_hub.py
+  --
+  -- current snapshot lookup uses:
+  --   subscriber_id + is_current = 1
   `is_current` tinyint(1) NOT NULL DEFAULT 1,
   `source` varchar(50) DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

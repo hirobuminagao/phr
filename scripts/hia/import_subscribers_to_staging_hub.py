@@ -25,8 +25,8 @@ V1.1.0 Contract:
         - `etl_runs` / `etl_errors`（start_run 直後に commit するため、dry-run / 失敗でも証跡は残る）
     - DB I/O (dev_phr):
         - READS:
-            - current snapshot update で `subscribers` / `subscriber_addresses` / `subscriber_contacts` を参照予定
-            - 現時点の import 本体は正規化ローカル処理のみ
+            - current snapshot update で `subscribers` / `subscriber_addresses` / `subscriber_contacts` を参照する
+            - current snapshot lookup は import_run_id 単位で staging 行を対象にする
         - WRITES:
             - `staging_subscribers_hub`（主成果物。dry-run 時は INSERT しない）
             - `staging_subscribers_hub.current_*`（current snapshot update で更新予定）
@@ -89,6 +89,10 @@ V1.1.0 Contract:
             - finish_run:
                 - 正常系: `finish_run` 実行後、dry-run は `conn.rollback()` / 本番は `conn.commit()`
                 - 異常系: 例外時は `conn.rollback()` → `finish_run(status=failed)` → `conn.commit()`
+            - current snapshot run:
+                - import run 成功後に別 etl_runs として start_run / finish_run する
+                - import_run_id の staging 行を対象に current_* を更新する
+                - dry-run 時は current snapshot update も実行しない
     - File I/O:
         - READS: `data/hia_export/input_subscribers_csv/<8桁保険者番号>/*.csv`
         - READS (config): 既存 `scripts/work_folder/mat/custom_id_config.json` + `custom_id_mapping.json` を継続利用
@@ -146,6 +150,10 @@ from scripts.lib.io.directory_discovery import (
 )
 
 from scripts.hia.script_lib.hub_subscriber_import import process_csv_dir
+from scripts.hia.script_lib.hub_subscriber_current_snapshot import (
+    CurrentSnapshotMetrics,
+    update_current_snapshot,
+)
 
 
 # ============================================================
@@ -163,8 +171,8 @@ DEFAULT_INPUT_BASE = BASE_DIR / "data" / "hia_export" / "input_subscribers_csv"
 # - 対象フォルダは 8桁ディレクトリを自動列挙。--input 指定時はそのディレクトリのみ
 # - run_id は start_run 後に即 commit（進捗/失敗の証跡を残す）
 # - 取込中の行エラーは etl_errors に記録し、行スキップで継続
-# - 最終的な run の状態は finish_run で確定する
-# main
+# - import run の状態は finish_run で確定する
+# - import run 成功後、dry-run でなければ current snapshot run を続けて実行する
 # ============================================================
 
 def main() -> int:
@@ -303,14 +311,95 @@ def main() -> int:
                 )
                 if args.dry_run:
                     conn.rollback()
+                    print(
+                        f"[DONE] import_run_id={run_id} total_files={metrics_all.files} "
+                        f"rows={metrics_all.rows_seen} inserted={metrics_all.rows_inserted} "
+                        f"skipped={metrics_all.rows_skipped} errors={metrics_all.errors} "
+                        f"current_snapshot=skipped(dry-run)"
+                    )
                 else:
                     conn.commit()
 
-                print(
-                    f"[DONE] run_id={run_id} total_files={metrics_all.files} "
-                    f"rows={metrics_all.rows_seen} inserted={metrics_all.rows_inserted} "
-                    f"skipped={metrics_all.rows_skipped} errors={metrics_all.errors}"
-                )
+                    current_metrics = CurrentSnapshotMetrics()
+                    current_run_metrics = RunMetrics()
+
+                    current_run_id = start_run(
+                        cur,
+                        phase="current_snapshot",
+                        source="hub_subscriber_current_snapshot",
+                        db_schema=schema_name,
+                        db_path=db_path_str,
+                        input_base=str(base_dir),
+                        input_file=run_input_file,
+                        insurer_number=run_insurer_number,
+                        dry_run=False,
+                        limit_rows=args.limit,
+                    )
+                    print(f"[INFO] current_snapshot_run_id = {current_run_id}")
+                    conn.commit()
+
+                    try:
+                        update_current_snapshot(
+                            cur,
+                            import_run_id=run_id,
+                            metrics=current_metrics,
+                            plog=None,
+                        )
+
+                        current_run_metrics.rows_seen = current_metrics.rows_seen
+                        current_run_metrics.rows_inserted = current_metrics.updated
+                        current_run_metrics.rows_skipped = (
+                            current_metrics.not_found
+                            + current_metrics.multiple_match
+                            + current_metrics.review
+                        )
+                        current_run_metrics.errors = current_metrics.errors
+
+                        finish_run(
+                            cur,
+                            current_run_id,
+                            current_run_metrics,
+                            extra_notes=(
+                                f"import_run_id={run_id}, "
+                                f"hia_id_matched={current_metrics.hia_id_matched}, "
+                                f"identity_hash_matched={current_metrics.identity_hash_matched}, "
+                                f"person_id_custom_matched={current_metrics.person_id_custom_matched}, "
+                                f"not_found={current_metrics.not_found}, "
+                                f"multiple_match={current_metrics.multiple_match}, "
+                                f"review={current_metrics.review}"
+                            ),
+                        )
+                        conn.commit()
+
+                    except Exception as e:
+                        conn.rollback()
+                        current_run_metrics.errors += 1
+                        finish_run(
+                            cur,
+                            current_run_id,
+                            current_run_metrics,
+                            status_override="failed",
+                            extra_notes=f"import_run_id={run_id}, error={e}",
+                        )
+                        conn.commit()
+                        raise
+
+                    print(
+                        f"[DONE] import_run_id={run_id} total_files={metrics_all.files} "
+                        f"rows={metrics_all.rows_seen} inserted={metrics_all.rows_inserted} "
+                        f"skipped={metrics_all.rows_skipped} errors={metrics_all.errors}"
+                    )
+                    print(
+                        f"[DONE] current_snapshot_run_id={current_run_id} "
+                        f"rows={current_metrics.rows_seen} updated={current_metrics.updated} "
+                        f"hia_id_matched={current_metrics.hia_id_matched} "
+                        f"identity_hash_matched={current_metrics.identity_hash_matched} "
+                        f"person_id_custom_matched={current_metrics.person_id_custom_matched} "
+                        f"not_found={current_metrics.not_found} "
+                        f"multiple_match={current_metrics.multiple_match} "
+                        f"review={current_metrics.review} "
+                        f"errors={current_metrics.errors}"
+                    )
 
             except Exception as e:
                 # staging への未確定 INSERT を取り消し。run/err の最終状態はこの後 commit する
