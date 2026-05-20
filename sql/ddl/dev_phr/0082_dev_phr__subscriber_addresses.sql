@@ -13,6 +13,7 @@ CREATE TABLE `dev_phr`.`subscriber_addresses` (
   `postal_code` varchar(10) DEFAULT NULL,
   `address_line` varchar(190) DEFAULT NULL,
   `building` varchar(190) DEFAULT NULL,
+  `address_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '住所値差分検知用 compare hash。apply時はstaging_subscribers_hubから反映。対象値更新時は再生成必須',
   `valid_from` datetime(3) DEFAULT NULL,
   `valid_to` datetime(3) DEFAULT NULL,
   -- current address flag.
@@ -39,6 +40,8 @@ CREATE TABLE `dev_phr`.`subscriber_addresses` (
   PRIMARY KEY (`address_id`),
   KEY `idx_addresses_subscriber` (`subscriber_id`),
   KEY `idx_addresses_subscriber_current` (`subscriber_id`, `is_current`),
+  KEY `idx_addresses_address_hash` (`address_hash`),
+  KEY `idx_addresses_subscriber_address_hash` (`subscriber_id`, `address_hash`),
 
   CONSTRAINT `chk_addresses_is_current`
     CHECK ((`is_current` IN (0, 1)))

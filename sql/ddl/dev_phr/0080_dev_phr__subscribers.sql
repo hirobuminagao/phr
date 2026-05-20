@@ -21,7 +21,9 @@ CREATE TABLE `dev_phr`.`subscribers` (
   `name_kanji_given_match` varchar(190) DEFAULT NULL COMMENT '名漢字（照合用）',
   `insurance_symbol_match` varchar(64) DEFAULT NULL COMMENT '保険証記号（正規化・照合用）',
   `insurance_number_match` varchar(64) DEFAULT NULL COMMENT '保険証番号（正規化・照合用）',
-  `identity_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '本人照合用ハッシュ（person_id_custom + name_kana_full_match + gender_code）',
+  `identity_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'subscriber resolve / join 用 identity hash（person_id_custom + name_kana_full_match + gender_code）',
+  `compare_identity_norm_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'identity登録値差分検知用 compare hash。apply時はstaging_subscribers_hubから反映。対象値更新時は再生成必須',
+  `compare_other_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT 'identity以外のsubscriber属性差分検知用 compare hash。apply時はstaging_subscribers_hubから反映。対象値更新時は再生成必須',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
@@ -56,6 +58,8 @@ CREATE TABLE `dev_phr`.`subscribers` (
   KEY `idx_subscribers_symbol_export` (`insurance_symbol_export`),
   KEY `idx_subscribers_number_match` (`insurance_number_match`),
   KEY `idx_subscribers_identity_hash` (`identity_hash`),
+  KEY `idx_subscribers_compare_identity_norm_hash` (`compare_identity_norm_hash`),
+  KEY `idx_subscribers_compare_other_hash` (`compare_other_hash`),
 
   CONSTRAINT `chk_subscribers_birth`
     CHECK ((`birth` >= DATE '1900-01-01') AND (`birth` <= DATE '2099-12-31')),

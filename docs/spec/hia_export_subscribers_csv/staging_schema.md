@@ -158,7 +158,9 @@ ORDER BY rowid ASC;
 |---|---|---|
 | `person_id_custom` | TEXT / VARCHAR | 加入者識別用の正規化ID |
 | `hia_subscriber_id` | TEXT / VARCHAR | HIA加入者ID。HIA上の同一加入者を追跡する最優先外部ID |
-| `identity_hash` | CHAR(64) | compare / join 用 identity hash |
+| `identity_hash` | CHAR(64) | subscriber resolve / join 用 identity hash |
+| `compare_identity_norm_hash` | CHAR(64) | identity登録値差分検知用 compare hash |
+| `compare_other_hash` | CHAR(64) | identity以外の subscriber属性差分検知用 compare hash |
 | `birth` | DATE / TEXT | 生年月日 |
 | `gender_code` | TEXT / INTEGER | 性別コード |
 
@@ -167,7 +169,104 @@ ORDER BY rowid ASC;
 - import phase で identity を生成する
 - prepare / compare phase で既存 subscriber を照合する
 - HIA subscriber ID を最優先外部IDとして利用する
-- identity_hash を compare / join 用 identity として利用する
+- identity_hash を subscriber resolve / join 用 identity として利用する
+- compare_identity_norm_hash を identity登録値差分検知に利用する
+- compare_other_hash を subscriber属性差分検知に利用する
+
+## compare_identity_norm_hash
+
+`compare_identity_norm_hash` は:
+
+```text
+identity登録値の差分検知用 compare hash
+```
+
+として扱う。
+
+対象値:
+
+```text
+insurance_symbol
+insurance_number
+name_kana_full
+name_kanji_full
+birth
+gender_code
+```
+
+重要:
+
+```text
+identity_hash と compare_identity_norm_hash は別用途
+```
+
+である。
+
+`identity_hash` は:
+
+```text
+subscriber resolve / join 用
+```
+
+compare_identity_norm_hash は:
+
+```text
+identity登録値差分検知用
+```
+
+として扱う。
+
+compare hash は:
+
+```text
+scripts/lib/hash/compare_hash.py
+```
+
+の `build_compare_hash()` を利用して生成する。
+
+固定手順:
+
+```text
+1. values list を受け取る
+2. 各値を base_norm に通す
+3. delimiter で連結する
+4. sha256 を生成する
+5. hex digest を返す
+```
+
+compare hash は標準用途として:
+
+```text
+match値ではなく norm値
+```
+
+を利用する。
+
+---
+
+## compare_other_hash
+
+`compare_other_hash` は:
+
+```text
+identity以外の subscriber属性差分検知用 compare hash
+```
+
+として扱う。
+
+対象候補:
+
+```text
+insured_attribute_name
+relationship_name
+qualification_acquired_date
+qualification_lost_date
+employer_code
+department_code
+distribution_code
+employee_code
+connect_id
+```
 
 参照:
 
@@ -233,6 +332,7 @@ prepare / compare phase で `name_kana_full_match` の変更を検知した場�
 | `postal_code` | 郵便番号 |
 | `address_line` | 住所本体 |
 | `building` | 建物名等 |
+| `address_hash` | 住所差分検知用 compare hash |
 
 ## Contact
 
@@ -246,7 +346,65 @@ prepare / compare phase で `name_kana_full_match` の変更を検知した場�
 用途:
 
 - apply phase で `subscriber_addresses` / `subscriber_contacts` に反映
+- address_hash により既存住所との比較を行う
 - 履歴差分判定の入力
+
+## address_hash
+
+`address_hash` は:
+
+```text
+住所値の存在確認・差分検知用 compare hash
+```
+
+として扱う。
+
+対象値:
+
+```text
+postal_code
+address_line
+building
+```
+
+compare では:
+
+```text
+staging_subscribers_hub.address_hash
+```
+
+と:
+
+```text
+subscriber_addresses.address_hash
+```
+
+を照合する。
+
+注意:
+
+```text
+address_hash 一致 = current address 一致
+```
+
+ではない。
+
+`subscriber_addresses` は 1:n の履歴型テーブルであり、
+同一住所値が historical row として存在する可能性がある。
+
+そのため compare では:
+
+```text
+same address_hash exists?
+  yes:
+    is_current = 1?
+      yes -> noop
+      no  -> current切替候補
+  no:
+    新住所 insert 候補
+```
+
+として扱う。
 
 ---
 
@@ -282,6 +440,9 @@ ADR-0021 以降、prepare / compare phase の結果を staging 側へ保持す�
 | `apply_action` | TEXT / VARCHAR | apply phase の実行 action |
 | `apply_diff_columns` | JSON / TEXT | 差分あり列の一覧 |
 | `identity_match_status` | TEXT / VARCHAR | identity compare 結果 |
+| `compare_identity_norm_hash` | CHAR(64) | identity登録値 compare hash |
+| `compare_other_hash` | CHAR(64) | subscriber属性 compare hash |
+| `address_hash` | CHAR(64) | address compare hash |
 | `address_diff_status` | TEXT / VARCHAR | current address との差分状態 |
 | `contact_diff_status` | TEXT / VARCHAR | current contact との差分状態 |
 | `apply_checked_at` | DATETIME / TEXT | prepare / compare 実行時刻 |
@@ -447,10 +608,43 @@ PHR v1.0.1 では、この staging を subscriber ingest pipeline の中心中�
 `staging_subscribers_hub` は、HIA export 加入者 CSV の **正規化済み受け皿** であり、
 
 - import / prepare / apply の分離
-- subscriber identity compare の入力
+- subscriber resolve / join の入力
+- compare hash による差分候補絞り込み
 - apply_action / diff / compare status の保持
 - 履歴反映の入力
 - run / source trace の保持
 - 未処理キュー管理
+
+identity_hash は:
+
+```text
+subscriber resolve / join 用
+```
+
+compare hash は:
+
+```text
+compare_identity_norm_hash
+compare_other_hash
+address_hash
+```
+
+を利用する。
+
+compare hash は full compare を完全に無くすためではなく、
+詳細compare候補を高速に絞るために利用する。
+
+標準用途では:
+
+```text
+match値ではなく norm値
+```
+
+を hash 化する。
+
+住所は `address_hash` と `is_current` を組み合わせて current 判定を行う。
+
+連絡先 compare は現行 `subscriber_contacts` の hash 比較を行わず、
+将来的な contact point 型への再設計を前提とする。
 
 を担うテーブルである。
