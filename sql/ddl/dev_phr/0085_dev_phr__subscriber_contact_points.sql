@@ -2,7 +2,7 @@
 
 CREATE TABLE `subscriber_contact_points` (
   `contact_point_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `subscriber_id` BIGINT UNSIGNED NOT NULL,
+  `subscriber_id` BIGINT UNSIGNED NOT NULL COMMENT '対象 subscribers.id',
 
   `contact_type` VARCHAR(50)
     CHARACTER SET utf8mb4
@@ -55,7 +55,7 @@ CREATE TABLE `subscriber_contact_points` (
 
   CONSTRAINT `fk_scp_subscriber_id`
     FOREIGN KEY (`subscriber_id`)
-    REFERENCES `subscribers` (`subscriber_id`)
+    REFERENCES `subscribers` (`id`)
     ON DELETE RESTRICT
     ON UPDATE RESTRICT
 )
