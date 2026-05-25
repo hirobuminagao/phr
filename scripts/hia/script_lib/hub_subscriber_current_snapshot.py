@@ -39,7 +39,7 @@ from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identit
 from scripts.lib.db.lookup.subscriber_projection import (
     load_subscriber_rows_for_hia_current_snapshot,
     load_current_address_rows_for_hia_current_snapshot,
-    load_current_contact_rows_for_hia_current_snapshot,
+    load_current_contact_point_rows_for_hia_current_snapshot,
 )
 
 
@@ -70,10 +70,15 @@ def update_staging_current_snapshot(
     *,
     staging_id: int,
     current_subscriber_id: Optional[int],
+    current_hia_subscriber_id: Optional[str],
     current_identity_hash: Optional[str],
+    current_compare_identity_norm_hash: Optional[str],
+    current_compare_other_hash: Optional[str],
     current_name_kana_full_match: Optional[str],
     current_address_id: Optional[int],
-    current_contact_id: Optional[int],
+    current_address_hash: Optional[str],
+    current_phone_contact_point_id: Optional[int],
+    current_email_contact_point_id: Optional[int],
     current_lookup_status: str,
 ):
     """
@@ -84,10 +89,15 @@ def update_staging_current_snapshot(
         UPDATE staging_subscribers_hub
         SET
             current_subscriber_id = %(current_subscriber_id)s,
+            current_hia_subscriber_id = %(current_hia_subscriber_id)s,
             current_identity_hash = %(current_identity_hash)s,
+            current_compare_identity_norm_hash = %(current_compare_identity_norm_hash)s,
+            current_compare_other_hash = %(current_compare_other_hash)s,
             current_name_kana_full_match = %(current_name_kana_full_match)s,
             current_address_id = %(current_address_id)s,
-            current_contact_id = %(current_contact_id)s,
+            current_address_hash = %(current_address_hash)s,
+            current_phone_contact_point_id = %(current_phone_contact_point_id)s,
+            current_email_contact_point_id = %(current_email_contact_point_id)s,
             current_lookup_status = %(current_lookup_status)s,
             current_lookup_checked_at = NOW()
         WHERE staging_subscriber_hub_id = %(staging_id)s
@@ -95,10 +105,15 @@ def update_staging_current_snapshot(
         {
             "staging_id": staging_id,
             "current_subscriber_id": current_subscriber_id,
+            "current_hia_subscriber_id": current_hia_subscriber_id,
             "current_identity_hash": current_identity_hash,
+            "current_compare_identity_norm_hash": current_compare_identity_norm_hash,
+            "current_compare_other_hash": current_compare_other_hash,
             "current_name_kana_full_match": current_name_kana_full_match,
             "current_address_id": current_address_id,
-            "current_contact_id": current_contact_id,
+            "current_address_hash": current_address_hash,
+            "current_phone_contact_point_id": current_phone_contact_point_id,
+            "current_email_contact_point_id": current_email_contact_point_id,
             "current_lookup_status": current_lookup_status,
         },
     )
@@ -129,7 +144,7 @@ def update_current_snapshot(
         subscriber_projection
           ├─ subscriber row
           ├─ current address row
-          └─ current contact row
+          └─ current contact point rows
             ↓
         staging current_* update
     """
@@ -177,10 +192,15 @@ def update_current_snapshot(
                     cur,
                     staging_id=staging_id,
                     current_subscriber_id=None,
+                    current_hia_subscriber_id=None,
                     current_identity_hash=None,
+                    current_compare_identity_norm_hash=None,
+                    current_compare_other_hash=None,
                     current_name_kana_full_match=None,
                     current_address_id=None,
-                    current_contact_id=None,
+                    current_address_hash=None,
+                    current_phone_contact_point_id=None,
+                    current_email_contact_point_id=None,
                     current_lookup_status="multiple_match",
                 )
                 metrics.multiple_match += 1
@@ -192,10 +212,15 @@ def update_current_snapshot(
                     cur,
                     staging_id=staging_id,
                     current_subscriber_id=None,
+                    current_hia_subscriber_id=None,
                     current_identity_hash=None,
+                    current_compare_identity_norm_hash=None,
+                    current_compare_other_hash=None,
                     current_name_kana_full_match=None,
                     current_address_id=None,
-                    current_contact_id=None,
+                    current_address_hash=None,
+                    current_phone_contact_point_id=None,
+                    current_email_contact_point_id=None,
                     current_lookup_status="not_found",
                 )
                 metrics.not_found += 1
@@ -207,10 +232,15 @@ def update_current_snapshot(
                     cur,
                     staging_id=staging_id,
                     current_subscriber_id=None,
+                    current_hia_subscriber_id=None,
                     current_identity_hash=None,
+                    current_compare_identity_norm_hash=None,
+                    current_compare_other_hash=None,
                     current_name_kana_full_match=None,
                     current_address_id=None,
-                    current_contact_id=None,
+                    current_address_hash=None,
+                    current_phone_contact_point_id=None,
+                    current_email_contact_point_id=None,
                     current_lookup_status="review",
                 )
                 metrics.review += 1
@@ -243,10 +273,15 @@ def update_current_snapshot(
                     cur,
                     staging_id=staging_id,
                     current_subscriber_id=None,
+                    current_hia_subscriber_id=None,
                     current_identity_hash=None,
+                    current_compare_identity_norm_hash=None,
+                    current_compare_other_hash=None,
                     current_name_kana_full_match=None,
                     current_address_id=None,
-                    current_contact_id=None,
+                    current_address_hash=None,
+                    current_phone_contact_point_id=None,
+                    current_email_contact_point_id=None,
                     current_lookup_status="review",
                 )
                 metrics.review += 1
@@ -264,20 +299,30 @@ def update_current_snapshot(
             )
 
             current_address_id = None
+            current_address_hash = None
             if len(address_rows) == 1:
                 current_address_id = address_rows[0].get("current_address_id")
+                current_address_hash = address_rows[0].get("current_address_hash")
 
             # ----------------------------------------------------
-            # 2-2. current contact projection
+            # 2-2. current contact point projection
             # ----------------------------------------------------
-            contact_rows = load_current_contact_rows_for_hia_current_snapshot(
+            contact_point_rows = load_current_contact_point_rows_for_hia_current_snapshot(
                 cur,
                 subscriber_ids=[resolve_result.subscriber_id],
             )
 
-            current_contact_id = None
-            if len(contact_rows) == 1:
-                current_contact_id = contact_rows[0].get("current_contact_id")
+            current_phone_contact_point_id = None
+            current_email_contact_point_id = None
+
+            for contact_point_row in contact_point_rows:
+                contact_type = contact_point_row.get("contact_type")
+                contact_point_id = contact_point_row.get("contact_point_id")
+
+                if contact_type == "phone" and current_phone_contact_point_id is None:
+                    current_phone_contact_point_id = contact_point_id
+                elif contact_type == "email" and current_email_contact_point_id is None:
+                    current_email_contact_point_id = contact_point_id
 
             # ----------------------------------------------------
             # 3. staging update
@@ -286,10 +331,15 @@ def update_current_snapshot(
                 cur,
                 staging_id=staging_id,
                 current_subscriber_id=current_row["subscriber_id"],
+                current_hia_subscriber_id=current_row.get("hia_subscriber_id"),
                 current_identity_hash=current_row.get("identity_hash"),
+                current_compare_identity_norm_hash=current_row.get("compare_identity_norm_hash"),
+                current_compare_other_hash=current_row.get("compare_other_hash"),
                 current_name_kana_full_match=current_row.get("name_kana_full_match"),
                 current_address_id=current_address_id,
-                current_contact_id=current_contact_id,
+                current_address_hash=current_address_hash,
+                current_phone_contact_point_id=current_phone_contact_point_id,
+                current_email_contact_point_id=current_email_contact_point_id,
                 current_lookup_status=current_lookup_status,
             )
 

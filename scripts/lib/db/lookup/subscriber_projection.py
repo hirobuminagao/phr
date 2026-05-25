@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -38,6 +36,8 @@ HIA_CURRENT_SNAPSHOT_COLUMNS = """
     id AS subscriber_id,
     hia_subscriber_id,
     identity_hash,
+    compare_identity_norm_hash,
+    compare_other_hash,
     person_id_custom,
     name_kana_full_match
 """
@@ -45,13 +45,15 @@ HIA_CURRENT_SNAPSHOT_COLUMNS = """
 
 HIA_CURRENT_ADDRESS_COLUMNS = """
     subscriber_id,
-    address_id AS current_address_id
+    address_id AS current_address_id,
+    address_hash AS current_address_hash
 """
 
 
-HIA_CURRENT_CONTACT_COLUMNS = """
+HIA_CURRENT_CONTACT_POINT_COLUMNS = """
     subscriber_id,
-    contact_id AS current_contact_id
+    contact_type,
+    contact_point_id
 """
 
 
@@ -104,7 +106,7 @@ def load_subscriber_rows_for_hia_current_snapshot(
         subscribers.id list
 
     Output:
-        current_snapshot 更新に必要な lightweight rows
+        current_snapshot 更新に必要な lightweight subscriber rows
 
     Notes:
         - 検索は行わない
@@ -132,7 +134,7 @@ def load_subscriber_rows_for_hia_current_snapshot(
 
 
 # ============================================================
-# current address/contact projection for HIA current snapshot
+# current address/contact point projection for HIA current snapshot
 # ============================================================
 
 
@@ -171,16 +173,17 @@ def load_current_address_rows_for_hia_current_snapshot(
 
 
 
-def load_current_contact_rows_for_hia_current_snapshot(
+def load_current_contact_point_rows_for_hia_current_snapshot(
     cur,
     *,
     subscriber_ids: Iterable[int],
 ) -> list[dict[str, Any]]:
     """
-    HIA current snapshot 用の current contact 行を取得する。
+    HIA current snapshot 用の current contact point 行を取得する。
 
     Notes:
-        - subscriber_contacts.is_current = 1 を current として扱う
+        - subscriber_contact_points.is_current = 1 を current として扱う
+        - contact_type は phone / email のみ対象にする
         - subscribers.id list のみを対象にする
         - lookup / resolve は行わない
     """
@@ -193,11 +196,12 @@ def load_current_contact_rows_for_hia_current_snapshot(
     cur.execute(
         f"""
         SELECT
-            {HIA_CURRENT_CONTACT_COLUMNS}
-        FROM subscriber_contacts
+            {HIA_CURRENT_CONTACT_POINT_COLUMNS}
+        FROM subscriber_contact_points
         WHERE subscriber_id IN ({placeholders})
+          AND contact_type IN ('phone', 'email')
           AND is_current = 1
-        ORDER BY contact_id DESC
+        ORDER BY contact_point_id DESC
         """,
         ids,
     )
