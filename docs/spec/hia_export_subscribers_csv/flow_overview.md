@@ -9,7 +9,13 @@ import orchestration
   = CSV import + current snapshot update
 
 apply orchestration
-  = prepare / compare + apply + audit
+  = prepare
+  + compare
+  + subscriber root apply
+  + address apply
+  + contact point apply
+  + audit
+  + processed mark
 ```
 
 ```
@@ -24,17 +30,25 @@ staging_subscribers_hub
       │
       │ (apply orchestration)
       ▼
-prepare / compare
+prepare
       │
       ▼
-apply / audit
+compare
       │
       ▼
-subscribers
-subscriber_addresses
-subscriber_contact_points (Hub apply target)
-subscriber_contacts (legacy source for backfill / temporary reference)
-subscriber_audit
+subscriber root apply
+      │
+      ▼
+address apply
+      │
+      ▼
+contact point apply
+      │
+      ▼
+audit
+      │
+      ▼
+processed mark
 ```
 
 ---
@@ -113,9 +127,13 @@ apply_hia_subscriber_sync.py
 役割
 
 ```
-prepare / compare
-apply
+prepare
+compare
+subscriber root apply
+address apply
+contact point apply
 subscriber_audit
+processed mark
 を orchestration する
 ```
 
@@ -125,8 +143,11 @@ subscriber_audit
 - compare hash による候補絞り込み
 - detailed compare
 - apply_action 決定
-- subscribers / address / contact point apply
+- subscriber root apply
+- address apply
+- contact point apply
 - subscriber_audit 生成
+- processed mark
 
 比較結果は staging 側へ保持する。
 
@@ -193,34 +214,33 @@ full compare を完全に無くすためではなく、
 Script
 
 ```
-apply_hia_subscriber_sync.py
+hub_subscriber_apply.py
 ```
 
 役割
 
 ```
-prepare / compare により生成された
-apply_action をもとに本番テーブルへ反映する
-```
-
-apply orchestration 内では:
-
-```text
-prepare / compare
+prepare
 ↓
-apply
+compare
+↓
+subscriber root apply
+↓
+address apply
+↓
+contact point apply
 ↓
 audit
+↓
+processed mark
 ```
-
-を順に実行する。
 
 ```text
 apply_action = insert
   → insert
 
 apply_action = update
-  → update
+  → subscriber root / address / contact point を必要に応じ更新
 
 apply_action = noop
   → skip
@@ -236,6 +256,30 @@ staging_subscribers_hub
 WHERE import_run_id = :import_run_id
   AND processed_run_id IS NULL
 ```
+
+現在の apply orchestration 実装:
+
+```text
+hub_subscriber_apply.py
+  = orchestration / dispatch
+
+apply_action_subscriber.py
+  = subscribers root apply
+
+apply_action_subscriber_address.py
+  = subscriber_addresses apply
+
+apply_action_subscriber_contact_point.py
+  = subscriber_contact_points apply
+
+apply_action_subscriber_audit.py
+  = subscriber_audit apply
+
+apply_action_staging_mark.py
+  = processed/error mark
+```
+
+1 staging row (= 1 subscriber) を最後まで処理してから次へ進む。
 
 ---
 
@@ -462,9 +506,8 @@ subscriber_audit
 
 ```text
 subscriber insert
-subscriber update
-compare_identity_norm_hash change
-compare_other_hash change
+subscriber identity update
+subscriber other update
 address current change
 contact point current change
 ```
@@ -502,6 +545,11 @@ staging_subscribers_hub
 ```
 processed_run_id
 processed_at
+```
+```
+apply_error_code
+apply_error_message
+apply_error_at
 ```
 
 これにより
@@ -554,8 +602,11 @@ contact point 化は、Hub 側を先に完走させる。
 2. Hub apply orchestration を完成させる
    - prepare
    - compare
-   - apply
+   - subscriber root apply
+   - address apply
+   - contact point apply
    - audit
+   - processed mark
    - dry-run / 小件数検証
 
 3. fund側は後で見直す
@@ -588,13 +639,15 @@ staging_subscribers_hub
   - import values
   - current snapshot values
  ↓
+prepare
+ ↓
 compare hash candidate filtering
  ↓
 detailed compare
  ↓
 apply_action decision
  ↓
-subscribers apply
+subscriber root apply
  ↓
 address apply
  ↓

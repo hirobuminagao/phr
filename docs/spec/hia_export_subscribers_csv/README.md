@@ -16,9 +16,14 @@ import orchestration
 staging_subscribers_hub
         ↓
 apply orchestration
-  - prepare / compare
-  - apply
-  - audit
+  - prepare
+  - compare
+  - apply orchestration
+    - subscriber root apply
+    - address apply
+    - contact point apply
+    - audit
+    - processed mark
         ↓
 subscribers
 subscriber_addresses
@@ -39,9 +44,14 @@ import orchestration
   + current snapshot を staging に反映
 
 apply orchestration
-  = prepare / compare
-  + subscribers / address / contact への反映
-  + audit
+  = prepare
+  + compare
+  + apply orchestration
+    - subscriber root apply
+    - address apply
+    - contact point apply
+    - audit
+    - processed mark
 ```
 
 旧実装・旧specの内容は、移行前の事実として残しつつ、
@@ -65,6 +75,7 @@ identity_policy.md
 compare_prepare_phase.md
    ↓
 subscriber_apply.md
+apply_orchestration.md
    ↓
 target_tables_schema.md
 subscriber_contact_points
@@ -91,11 +102,13 @@ HIA 側から提供される加入者 CSV（export）
    - Staging 保存
    - Current snapshot update
 2. Apply orchestration
-   - Prepare / Compare
-   - Subscriber Apply
+   - Prepare
+   - Compare
+   - Subscriber Root Apply
    - Address Apply
    - Contact Point Apply
-   - Subscriber Audit 生成
+   - Subscriber Audit
+   - Processed Mark
 
 ---
 
@@ -135,6 +148,8 @@ compare_prepare_phase.md
 
 subscriber_apply.md
     staging → subscribers 反映仕様
+apply_orchestration.md
+    apply orchestration と apply_action_* 分割構成
 
 target_tables_schema.md
     subscribers / addresses / contact point target schema
@@ -212,7 +227,7 @@ identity_hash は resolve / join 用、compare hash は detailed compare 候補�
 - audit 保存
 
 ADR-0021 以降は、staging を compare workspace として扱い、比較結果を staging 側へ保持する。
-apply は判定済み action を実行する。
+apply は判定済み action を orchestration として順番実行する。
 
 staging_subscribers_hub は:
 
@@ -231,9 +246,14 @@ import orchestration
   + current snapshot update
 
 apply orchestration
-  = prepare / compare
-  + apply
-  + audit
+  = prepare
+  + compare
+  + apply orchestration
+    - subscriber root apply
+    - address apply
+    - contact point apply
+    - audit
+    - processed mark
 ```
 
 ---
@@ -323,7 +343,12 @@ compare hash 導入後の実装順:
 2. current snapshot compare workspace を staging へ反映
 3. Hub側だけ subscriber_contact_points 前提へ移行
 4. apply orchestration 側で compare hash を利用する prepare / compare を実装
-5. subscribers / subscriber_addresses / contact point apply を実装
+5. apply orchestration を実装
+   - subscriber root apply
+   - address apply
+   - contact point apply
+   - audit
+   - processed mark
 6. 実装が固まった後に subscribers / subscriber_addresses の backfill を実行
 7. 最後に fund側 diff / projection を見直す
 ```
@@ -354,6 +379,10 @@ PHR v1.1.0
 ```text
 import orchestration
   ↓
+prepare
+  ↓
+compare
+  ↓
 apply orchestration
 ```
 
@@ -361,6 +390,8 @@ apply orchestration
 
 - `scripts/work_folder/scripts/` から `scripts/hia/` へ移設
 - orchestration と処理関数を分離
+- apply orchestration は 1 subscriber row 単位で順番実行する
+- apply_action_* モジュールへ責務分割する
 - current snapshot / compare status / apply_action を staging 側へ保持
 - HIA を最新正本として扱う
 - identity_hash は resolve / join 用として扱う
@@ -370,6 +401,59 @@ apply orchestration
 - Hub側は subscriber_contact_points を正本構造として先行導入する
 - subscriber_contacts は legacy / backfill source として一時保持する
 - fund側 contact diff は後工程で見直す
+
+### Current Apply Orchestration Structure
+
+現在の apply orchestration は、1 staging row (= 1 subscriber) を単位として順番処理する。
+
+```text
+staging row
+  ↓
+apply_action dispatch
+  ↓
+subscriber root apply
+  ↓
+address apply
+  ↓
+contact point apply
+  ↓
+audit
+  ↓
+processed mark
+```
+
+現在の責務分割:
+
+```text
+hub_subscriber_apply.py
+  = orchestration / dispatch
+
+apply_action_subscriber.py
+  = subscribers root apply
+
+apply_action_subscriber_address.py
+  = subscriber_addresses apply
+
+apply_action_subscriber_contact_point.py
+  = subscriber_contact_points apply
+
+apply_action_subscriber_audit.py
+  = subscriber_audit apply
+
+apply_action_staging_mark.py
+  = processed/error mark
+```
+
+apply orchestration は「1 subscriber を最後まで処理してから次へ進む」構造とする。
+
+理由:
+
+```text
+- subscribers.id を child apply に引き継ぐ必要がある
+- history/current 管理を transaction 単位で閉じやすい
+- audit と実更新の整合を取りやすい
+- エラー時の追跡が容易
+```
 
 ### v1.1.0 Changes (Subscriber Apply / Identity Handling)
 
