@@ -6,12 +6,14 @@
 
 ```
 import_subscribers_to_staging_hub.py
-apply_subscribers_from_staging_hub.py
+apply_hia_subscriber_sync.py
 ```
 
-このポリシーは主に apply phase で利用され、
-旧実装では apply phase 内で subscriber identity 判定を実施していたが、
-ADR-0021 以降は prepare / compare phase により compare 状態を staging 側へ保持する。
+このポリシーは主に apply orchestration の prepare / compare で利用される。
+
+旧実装では apply 内で subscriber identity 判定を実施していたが、
+ADR-0021 以降は import orchestration が current snapshot を staging 側へ保持し、
+prepare / compare が compare 状態を staging 側へ保持する。
 
 このポリシーは、
 `staging_subscribers_hub` の1行を既存 `subscribers` に結びつけ、
@@ -29,7 +31,7 @@ HIA 最新状態との比較・同期を行うための基準となる。
 subscriber identity は以下を目的とする。
 
 - 同一加入者を安定して再識別する
-- staging → subscribers apply 時の insert / update / noop 判定を行う
+- staging → subscribers apply 時の resolve / compare の基準とする
 - HIA export CSV の表記ゆれに対して過度に脆くならない
 - 住所や連絡先などの付随情報と、加入者本体の識別を分離する
 
@@ -51,10 +53,10 @@ name_kana_full_match
 gender_code
 ```
 
-を元に生成される compare / join 用 hash である。
+を元に生成される subscriber resolve / join 用 hash である。
 
 旧実装では3列を直接比較していたが、
-ADR-0021 以降は compare phase において `identity_hash` を中心に利用する。
+ADR-0021 以降は prepare / compare において `identity_hash` を subscriber resolve / join 用に利用する。
 
 ---
 
@@ -68,14 +70,15 @@ identity_hash は以下の3要素から構成される。
 | `name_kana_full_match` | 氏名照合補助 | 正規化済みカナ照合キー |
 | `gender_code` | 補助識別子 | 同名・近似データの誤結合抑止 |
 
-identity_hash は compare phase における:
+identity_hash は:
 
-- subscriber 同一性比較
-- diff 判定
-- identity change 検知
-- parts clear 判定
+- subscriber resolve
+- subscriber join
+- current snapshot lookup
 
 に利用する。
+
+identity_hash 自体を登録値差分検知の中心にはしない。
 
 ---
 
@@ -110,7 +113,7 @@ phr/lib/normalize/subscriber.py
 - subscriber master 内での「同一人物候補検索キー」として使用する
 - person_id_custom 単独ではなく、`name_kana_full_match` と `gender_code` を併用する
 
-ADR-0021 以降は、これらを combine した `identity_hash` を compare phase の主比較キーとして扱う。
+ADR-0021 以降は、これらを combine した `identity_hash` を subscriber resolve / join 用 hash として扱う。
 
 ---
 
@@ -170,7 +173,7 @@ NULL
 - `9` は不明・未設定系として扱う
 - SQL 上は `IS ?` を使い、`NULL` 同士も一致判定できるようにする
 
-apply script の検索イメージ:
+旧検索イメージ:
 
 ```sql
 SELECT *
@@ -202,95 +205,116 @@ HIA subscriber ID
 ↓
 identity_hash
 ↓
+current snapshot lookup
+↓
+compare hash candidate filtering
+↓
+detailed compare
+↓
 compare status
 ```
 
 HIA subscriber ID は、同一 subscriber を追跡する最優先の外部IDとして扱う。
 
-HIA subscriber ID が一致する場合、
-identity_hash が変更されていても、原則として:
+import orchestration は:
 
 ```text
-同一 HIA subscriber の情報更新
+current_hia_subscriber_id
 ```
 
-として扱う。
+を staging に保持し、review 時の重要な確認材料として利用する。
 
-ただし、identity_hash 変更内容は compare phase で確認する。
-
-特に:
+例:
 
 ```text
-name_kana_full_match changed
-```
-
-の場合は、既存 name parts をクリアし、
-後続 normalize / split により再生成する。
-
-## identity_hash same
-
-```text
-identity_hash same
+hia_subscriber_id != current_hia_subscriber_id
 ```
 
 の場合:
 
 ```text
-同一 subscriber
+- HIA側ID変更
+- 上流ID差し替え
+- 別人候補
 ```
 
-として扱う。
+などを review 対象として確認する。
 
-この場合は:
+---
+
+## compare hash policy
+
+登録値差分検知には:
 
 ```text
-address
-contact
-qualification
-employer/dept
+compare_identity_norm_hash
+compare_other_hash
 ```
 
-などの差分比較へ進む。
+を使用する。
 
-## identity_hash changed
+identity_hash は resolve / join 用であり、登録値差分検知の中心にはしない。
+
+### compare_identity_norm_hash
+
+対象値:
 
 ```text
-identity_hash changed
+insurance_symbol
+insurance_number
+name_kana_full
+name_kanji_full
+birth
+gender_code
 ```
 
-の場合:
+目的:
 
 ```text
-HIA 最新状態へ更新候補
+identity登録値差分検知
 ```
 
-として扱う。
+### insurance_branchnumber
 
-ただし差分内容を確認する。
+`insurance_branchnumber` は compare_identity_norm_hash 対象外とする。
 
-### name_kana_match changed
+理由:
 
 ```text
-name_kana_full_match changed
+枝番は健保・運用側が独自に採番する補助番号であり、
+本人/扶養/続柄/任意継続等の管理ルールが健保ごとに揺れるため。
 ```
 
-の場合:
+identity登録値差分の主軸として管理しない。
+
+### compare_other_hash
+
+対象候補:
 
 ```text
-既存 name parts をクリア
+insured_attribute_name
+relationship_name
+qualification_acquired_date
+qualification_lost_date
+employer_code
+department_code
+distribution_code
+employee_code
+connect_id
 ```
 
-し、後続 normalize / split により再生成する。
-
-### insurance_symbol / insurance_number changed only
-
-記号・番号のみ変更の場合:
+目的:
 
 ```text
-parts は維持
+subscriber属性差分検知
 ```
 
-する。
+compare hash は:
+
+```text
+full compare を完全に無くすためではなく、
+詳細compare候補を高速に絞るために利用する。
+```
 
 ---
 
@@ -318,7 +342,7 @@ parts は維持
 - 事後補正・更新があり得る
 - 本人識別ではなく属性情報だから
 
-これらは一致判定ではなく、apply 後の update / 履歴管理対象とする。
+これらは identity resolve 判定ではなく、compare_other_hash / address compare / contact point compare の対象として扱う。
 
 ---
 
@@ -329,23 +353,26 @@ parts は維持
 ADR-0021 以降は:
 
 ```text
-import
+import orchestration
   ↓
-prepare / compare
+current snapshot update
   ↓
-apply_action 作成
-  ↓
-apply
+apply orchestration
+  ├ prepare / compare
+  ├ apply_action 作成
+  ├ apply
+  └ audit
 ```
 
 へ分離する。
 
-compare phase では:
+prepare / compare では:
 
 ```text
-identity_hash
-address
-contact
+compare_identity_norm_hash
+compare_other_hash
+address_hash + is_current
+contact point
 qualification
 employer/dept
 ```
@@ -359,11 +386,10 @@ apply_action:
 - insert
 - update
 - noop
-- identity_changed
 - review
 ```
 
-apply phase は compare 結果をもとに insert / update / noop を実行する。
+apply orchestration 内の apply は compare 結果をもとに insert / update / noop を実行する。
 
 ---
 
@@ -374,6 +400,7 @@ apply phase は compare 結果をもとに insert / update / noop を実行す�
 想定外状態:
 
 - 同じ `identity_hash` を持つ subscriber が複数存在
+- `hia_subscriber_id != current_hia_subscriber_id`
 - 正規化前入力の異常により person_id_custom が生成不能
 - name_kana_full_match が空
 
@@ -387,13 +414,14 @@ apply phase は compare 結果をもとに insert / update / noop を実行す�
 この identity policy は、SQLite 版で運用していた以下の照合思想を MySQL / PHR v1.0.1 に引き継ぐものである。
 
 ```
-(person_id_custom, name_kana_full_match, gender_code)
+identity_hash
 ```
 
-過度に多くの列を identity に含めないことで、
+identity_hash を resolve / join 用へ限定し、
+登録値差分検知を compare hash へ分離することで:
 
 - 住所変更
-- 連絡先変更
+- contact point 変更
 - 続柄更新
 - 企業属性変更
 
@@ -417,27 +445,29 @@ gender_code
 identity_hash
 ```
 
-を中心に compare / apply を行う。
+を subscriber resolve / join 用として利用する。
 
 ADR-0021 以降は:
 
 ```text
-import
+import orchestration
   ↓
-prepare / compare
+current snapshot update
   ↓
-apply
+apply orchestration
 ```
 
 へ責務分離し、compare 状態と diff 情報を staging 側へ保持する。
 
-identity_hash changed の場合でも、
-HIA 側を最新正本として subscribers へ反映する。
-
-ただし:
+登録値差分検知には:
 
 ```text
-name_kana_full_match changed
+compare_identity_norm_hash
+compare_other_hash
 ```
 
-の場合は、既存 name parts をクリアし、後続 normalize / split により再生成する。
+を使用する。
+
+住所は `address_hash + is_current`、連絡先は `subscriber_contact_points` を利用して compare / apply を行う。
+
+`subscriber_contacts` は legacy / backfill source / temporary reference として扱う。

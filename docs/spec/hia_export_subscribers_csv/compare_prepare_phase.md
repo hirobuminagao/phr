@@ -2,7 +2,7 @@
 
 このドキュメントは、
 `staging_subscribers_hub` に保持された import 値と current snapshot を比較し、
-apply_action を生成する compare / prepare phase の仕様を定義する。
+apply_action を生成する apply orchestration 内の prepare / compare 処理仕様を定義する。
 
 関連ADR:
 
@@ -26,13 +26,14 @@ apply_action を確定すること
 ADR-0021 以降は:
 
 ```text
-import
+import orchestration
   ↓
 current snapshot update
   ↓
-prepare / compare
-  ↓
-apply
+apply orchestration
+  ├ prepare / compare
+  ├ apply
+  └ audit
 ```
 
 へ責務分離する。
@@ -41,7 +42,7 @@ apply
 
 # 2. Input Tables
 
-compare / prepare phase は、import phase により staging 側へ保持された current snapshot を主な入力として使用する。
+prepare / compare は、import orchestration により staging 側へ保持された current snapshot を主な入力として使用する。
 
 ## staging
 
@@ -54,10 +55,15 @@ staging には以下が保持されている前提とする。
 ```text
 import値
 current_subscriber_id
+current_hia_subscriber_id
 current_identity_hash
+current_compare_identity_norm_hash
+current_compare_other_hash
 current_name_kana_full_match
 current_address_id
-current_contact_id
+current_address_hash
+current_phone_contact_point_id
+current_email_contact_point_id
 current_lookup_status
 current_lookup_checked_at
 ```
@@ -66,16 +72,21 @@ current_lookup_checked_at
 
 ```text
 current_subscriber_id
+current_hia_subscriber_id
 current_identity_hash
+current_compare_identity_norm_hash
+current_compare_other_hash
 current_name_kana_full_match
 current_address_id
-current_contact_id
+current_address_hash
+current_phone_contact_point_id
+current_email_contact_point_id
 current_lookup_status
 ```
 
-current snapshot は import phase の後続処理で取得済みとする。
+current snapshot は import orchestration の current snapshot update で取得済みとする。
 
-prepare / compare phase は、原則として current snapshot と staging import 値を比較する。
+prepare / compare は、原則として current snapshot と staging import 値を比較する。
 
 ---
 
@@ -88,9 +99,9 @@ current snapshot確認
   ↓
 current_lookup_status確認
   ↓
-compare hash確認
+compare hash candidate filtering
   ↓
-必要な行のみ詳細compare
+必要な行のみ detailed compare
   ↓
 apply_action decision
 ```
@@ -99,7 +110,7 @@ apply_action decision
 
 # 4. Current Snapshot / HIA Subscriber ID
 
-HIA subscriber ID は、import phase の current snapshot update において、同一 subscriber を追跡する最優先外部IDとして利用する。
+HIA subscriber ID は、import orchestration の current snapshot update において、同一 subscriber を追跡する最優先外部IDとして利用する。
 
 prepare / compare phase では、その結果として staging に保持された:
 
@@ -108,7 +119,29 @@ current_subscriber_id
 current_lookup_status
 ```
 
-を利用する。
+加えて:
+
+```text
+current_hia_subscriber_id
+```
+
+も review 時の重要な確認材料として保持する。
+
+例:
+
+```text
+hia_subscriber_id != current_hia_subscriber_id
+```
+
+の場合:
+
+```text
+- HIA側ID変更
+- 上流ID差し替え
+- 別人候補
+```
+
+などを review 対象として確認する。
 
 ## current subscriber found
 
@@ -137,7 +170,7 @@ current_lookup_status = not_found
 
 として扱う。
 
-この場合、compare phase では insert 候補として扱う。
+この場合、prepare / compare では insert 候補として扱う。
 
 ---
 
@@ -192,13 +225,13 @@ full compare が必要な候補を高速に絞ること
 compare hash が一致する場合:
 
 ```text
-該当ブロックは詳細compare不要候補
+該当ブロックは detailed compare 不要候補
 ```
 
 compare hash が不一致の場合:
 
 ```text
-該当ブロックは詳細compare対象
+該当ブロックは detailed compare 対象
 ```
 
 として扱う。
@@ -355,9 +388,9 @@ same address_hash exists?
   yes:
     is_current = 1?
       yes -> noop
-      no  -> current切替候補
+      no  -> switch_current candidate
   no:
-    新住所insert + current切替候補
+    insert candidate
 ```
 
 として扱う。
@@ -417,8 +450,8 @@ compare では staging の `address_hash` を使い、既存 `subscriber_address
 
 # 7. Contact Compare
 
-連絡先は現行 `subscriber_contacts` の phone + email セット構造では、
-compare hash による差分判定を一旦行わない。
+連絡先は Hub apply では `subscriber_contact_points` を正本構造として扱い、
+現行 `subscriber_contacts` の phone + email セット構造では compare hash による差分判定を行わない。
 
 理由:
 
@@ -428,7 +461,7 @@ phoneのみ変更 / emailのみ変更 / 複数連絡先 / null時の current解�
 を安全に表現しづらい。
 ```
 
-今後、連絡先は以下のような contact point 型へ再設計する方針とする。
+Hub apply では以下の contact point 型を前提に compare / apply を行う。
 
 ```text
 subscriber_id
@@ -447,7 +480,7 @@ phone
 email
 ```
 
-staging_subscribers_hub からの apply は、新 contact 形式を前提に実装する。
+`subscriber_contacts` は legacy / backfill source / temporary reference として扱う。
 
 null の扱い:
 
@@ -516,7 +549,7 @@ AND
 - compare_identity_norm_hash mismatch
 - compare_other_hash mismatch
 - address_diff_status IN ('switch_current', 'insert')
-- contact新形式での差分あり
+- contact point での差分あり
 ```
 
 結果:
@@ -540,7 +573,7 @@ compare_other_hash一致
 AND
 address_diff_status = 'noop'
 AND
-contact新形式での差分なし
+contact point での差分なし
 ```
 
 結果:
@@ -556,6 +589,7 @@ apply_action = noop
 条件例:
 
 - current_lookup_status = 'multiple_match'
+- hia_subscriber_id != current_hia_subscriber_id
 - compare ambiguity
 - invalid normalize
 
@@ -577,10 +611,15 @@ compare / prepare phase の結果は staging 側へ保持する。
 
 ```text
 current_subscriber_id
+current_hia_subscriber_id
 current_identity_hash
+current_compare_identity_norm_hash
+current_compare_other_hash
 current_name_kana_full_match
 current_address_id
-current_contact_id
+current_address_hash
+current_phone_contact_point_id
+current_email_contact_point_id
 current_lookup_status
 compare_identity_norm_hash
 compare_other_hash
@@ -589,7 +628,7 @@ apply_action
 apply_diff_columns
 identity_match_status
 address_diff_status
-contact_diff_status
+contact_point_diff_status
 apply_checked_at
 ```
 
@@ -597,7 +636,7 @@ apply_checked_at
 
 # 10. Apply Phase Relationship
 
-apply phase は:
+apply orchestration 内の apply は:
 
 ```text
 判定済み apply_action を実行するだけ
@@ -605,7 +644,7 @@ apply phase は:
 
 とする。
 
-apply phase 自身は compare 判定を行わない。
+apply 本体自身は compare 判定を行わない。
 
 例:
 
@@ -635,7 +674,7 @@ compare / prepare phase では、staging import値と current snapshot の差分
 - compare_identity_norm_hash change
 - compare_other_hash change
 - address current switch / insert
-- contact新形式での current change
+- contact point current change
 - qualification change
 - employer / department change
 ```
@@ -665,6 +704,7 @@ identity_hash
 compare_identity_norm_hash
 compare_other_hash
 address_hash
+current_* compare hash
 ```
 
 を利用する。
@@ -675,5 +715,5 @@ address_hash
 住所は `address_hash` により同一住所値の存在を確認した上で、
 `is_current` を見て noop / current切替 / insert を判断する。
 
-連絡先は現行 `subscriber_contacts` の hash比較を行わず、
-新 contact 形式を前提に compare / apply を設計する。
+連絡先は `subscriber_contact_points` を正本構造として扱い、
+現行 `subscriber_contacts` は legacy / backfill source / temporary reference として扱う。

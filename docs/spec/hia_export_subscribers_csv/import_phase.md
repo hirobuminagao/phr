@@ -1,6 +1,6 @@
 # HIA Export Subscribers CSV – Import Phase
 
-このドキュメントは **HIA export 加入者 CSV → staging_subscribers_hub 取込処理**の仕様を定義する。
+このドキュメントは **HIA export 加入者 CSV → staging_subscribers_hub import orchestration** の仕様を定義する。
 
 対象スクリプト:
 
@@ -17,21 +17,19 @@ scripts/hia/script_lib/hub_subscriber_import.py
 ADR-0021 以降は:
 
 ```text
-import
+import orchestration
   ↓
 current snapshot update
   ↓
-prepare / compare
-  ↓
-apply
+apply orchestration
 ```
 
 の段階へ分離する。
 
-Import phase の役割は:
+Import orchestration の役割は:
 
 ```text
-CSV → raw / norm / match / identity_hash を生成し、
+CSV → raw / norm / identity_hash / compare hash を生成し、
 staging_subscribers_hub を構築すること
 +
 current subscriber state snapshot を staging 側へ更新すること
@@ -39,12 +37,12 @@ current subscriber state snapshot を staging 側へ更新すること
 
 とする。
 
-Import phase は本番 subscriber 系テーブルを参照するが、
-本番 subscriber / address / contact は更新しない。
+Import orchestration は本番 subscriber 系テーブルを参照するが、
+本番 subscriber / address / contact point は更新しない。
 
 ---
 
-# 1. Import Phase Overview
+# 1. Import Orchestration Overview
 
 処理全体フロー:
 
@@ -58,7 +56,7 @@ CSV reader
 column mapping
       │
       ▼
-normalize / match / hash
+normalize / identity_hash / compare hash
       │
       ▼
 staging_subscribers_hub
@@ -67,7 +65,7 @@ staging_subscribers_hub
 current snapshot update
       │
       ▼
-prepare / compare phase
+apply orchestration
 ```
 
 Import phase の責務:
@@ -76,30 +74,25 @@ Import phase の責務:
 - 列マッピング
 - 正規化処理
 - identity_hash 生成
+- compare_identity_norm_hash 生成
+- compare_other_hash 生成
+- address_hash 生成
 - staging テーブル登録
 - current subscriber state snapshot 更新
 - import_run_id 記録
 - 行エラー記録
 
-Import phase は compare / apply 判定を行わない。
+Import orchestration は compare / apply 判定を行わない。
 
-```text
-insert
-update
-noop
-identity_changed
-review
-```
+apply_action 判定は apply orchestration が担当する。
 
-などの action 判定は prepare / compare phase が担当する。
-
-Import phase は current 状態の参照・snapshot 更新までは行う。
+Import orchestration は current 状態の参照・snapshot 更新までは行う。
 
 ただし、以下は行わない。
 
 - subscribers 更新
 - subscriber_addresses 更新
-- subscriber_contacts 更新
+- subscriber_contact_points 更新
 - apply_action 決定
 - audit 永続保存
 
@@ -178,6 +171,7 @@ scripts/lib/normalize/
 ```
 identity/
 normalize/
+hash/
 subscriber/
 ```
 
@@ -187,6 +181,7 @@ subscriber/
 |------|------|
 | identity | identity_hash / person_id_custom |
 | normalize | 基本 normalize |
+| hash | compare hash generation |
 | subscriber | 氏名 / subscriber normalize |
 
 ---
@@ -283,13 +278,13 @@ ADR-0021 以降は、以下を combine した:
 identity_hash
 ```
 
-を compare / join 用 identity の中核として利用する。
+を subscriber resolve / join 用 identity の中核として利用する。
 
 ---
 
-# 8. identity_hash Generation
+# 8. identity_hash / compare hash Generation
 
-identity_hash は compare phase 用 join hash として生成する。
+identity_hash は subscriber resolve / join 用 hash として生成する。
 
 入力:
 
@@ -307,11 +302,54 @@ identity_hash
 
 利用目的:
 
-- compare phase join
-- subscriber identity compare
-- diff 判定
-- identity change 検知
-- apply_action 判定補助
+- current snapshot lookup
+- subscriber identity resolve
+- apply orchestration join
+
+---
+
+## compare hash generation
+
+Import orchestration では compare hash も生成する。
+
+対象:
+
+```text
+compare_identity_norm_hash
+compare_other_hash
+address_hash
+```
+
+compare hash は:
+
+```text
+scripts/lib/hash/compare_hash.py
+```
+
+の `build_compare_hash()` を利用して生成する。
+
+固定手順:
+
+```text
+1. values list を受け取る
+2. 各値を base_norm に通す
+3. delimiter で連結する
+4. sha256 を生成する
+5. hex digest を返す
+```
+
+重要:
+
+```text
+compare hash は match 値ではなく norm 値を前提にする
+```
+
+compare hash は:
+
+```text
+full compare を完全に無くすためではなく、
+詳細compare候補を高速に絞るために利用する。
+```
 
 ---
 
@@ -333,7 +371,7 @@ current_subscriber_id
 current_identity_hash
 current_name_kana_full_match
 current_address_id
-current_contact_id
+current_contact_point_ids
 current_lookup_status
 current_lookup_checked_at
 ```
@@ -343,7 +381,7 @@ current_lookup_checked_at
 ```text
 subscribers
 subscriber_addresses current row
-subscriber_contacts current row
+subscriber_contact_points current rows
 ```
 
 Import phase は current 状態を参照するが、本番側テーブルは更新しない。
@@ -399,11 +437,13 @@ Insert列:
 person_id_custom
 hia_subscriber_id
 identity_hash
+compare_identity_norm_hash
+compare_other_hash
 current_subscriber_id
 current_identity_hash
 current_name_kana_full_match
 current_address_id
-current_contact_id
+current_contact_point_ids
 current_lookup_status
 current_lookup_checked_at
 insurer_number
@@ -432,6 +472,7 @@ name_kana_given
 postal_code
 address_line
 building
+address_hash
 
 phone
 email
@@ -520,11 +561,11 @@ staging_subscribers_hub
 Import output には、CSV由来の正規化済み値に加え、
 本番 current snapshot が保持される。
 
-prepare / compare phase により:
+apply orchestration により:
 
-- snapshot と staging 値の compare
-- identity_hash compare
-- address/contact compare
+- compare hash candidate filtering
+- detailed compare
+- address/contact point compare
 - apply_action 作成
 
 を実施する。
@@ -538,15 +579,17 @@ CSV
  ↓
 column mapping
  ↓
-normalize / match
+normalize
  ↓
 person_id generation
  ↓
 identity_hash generation
  ↓
+compare hash generation
+ ↓
 staging_subscribers_hub
  ↓
 current snapshot update
  ↓
-prepare / compare phase
+apply orchestration
 ```

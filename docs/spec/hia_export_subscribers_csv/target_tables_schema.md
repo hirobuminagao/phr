@@ -1,7 +1,6 @@
 # HIA Export Subscribers CSV – Target Tables Schema
 
-このドキュメントは、HIA export 加入者CSVの apply 対象となる本番テーブル群のうち、
-compare / prepare / apply phase で参照・更新する列を定義する。
+このドキュメントは、HIA export 加入者CSVの apply orchestration の prepare / compare / apply で参照・更新する列を定義する。
 
 関連ADR:
 
@@ -22,11 +21,12 @@ compare / prepare / apply phase で参照・更新する列を定義する。
 
 本specの目的は、以下を明確化することである。
 
-- prepare / compare phase が参照する本番列
-- apply phase が更新する本番列
-- identity_hash 変更時の扱い
-- name parts clear 対象列
-- address / contact compare 対象列
+- apply orchestration の prepare / compare が参照する本番列
+- apply 本体が更新する本番列
+- identity_hash と compare hash の役割分離
+- compare_identity_norm_hash / compare_other_hash / address_hash の扱い
+- address_hash + is_current による住所判定
+- subscriber_contact_points による連絡先管理
 - audit 対象列
 
 HIA 側を最新正本として扱うため、差分が存在する場合は audit を必ず残したうえで本番テーブルへ反映する。
@@ -40,7 +40,8 @@ HIA 側を最新正本として扱うため、差分が存在する場合は aud
 ```text
 subscribers
 subscriber_addresses
-subscriber_contacts
+subscriber_contact_points
+subscriber_contacts (legacy / backfill source / temporary reference)
 subscriber_audit
 ```
 
@@ -53,7 +54,7 @@ subscriber_audit
 `subscribers` は加入者の現在状態を保持する業務参照用キャッシュである。
 
 HIA export subscribers CSV を最新正本として扱い、
-prepare / compare phase で差分を確定したうえで、apply phase が必要な列を更新する。
+apply orchestration の prepare / compare で差分を確定したうえで、apply 本体が必要な列を更新する。
 
 ---
 
@@ -65,9 +66,9 @@ prepare / compare phase で差分を確定したうえで、apply phase が必�
 
 方針:
 
-- HIA subscriber ID が一致する場合、原則として同一 HIA subscriber の情報更新とみなす
-- identity_hash が変わっていても、HIA subscriber ID 一致を優先する
-- identity_hash 変更内容は compare phase で確認する
+- HIA subscriber ID は review 時の重要な外部IDとして扱う
+- import時に `current_hia_subscriber_id` を staging に保持し、HIA側ID変更・別人候補・上流ID差し替え確認の足がかりにする
+- 自動 apply は current_lookup_status / compare hash / detailed compare の結果に従う
 
 ---
 
@@ -76,23 +77,46 @@ prepare / compare phase で差分を確定したうえで、apply phase が必�
 | column | 用途 |
 |---|---|
 | `person_id_custom` | 保険者番号・記号・番号・生年月日から生成する加入者識別キー |
-| `identity_hash` | compare / join 用 identity hash |
+| `identity_hash` | subscriber resolve / join 用 identity hash |
+| `compare_identity_norm_hash` | identity登録値差分検知用 compare hash |
+| `compare_other_hash` | identity以外の subscriber属性差分検知用 compare hash |
 | `name_kana_full_match` | identity_hash 構成要素 |
 | `gender_code` | identity_hash 構成要素 |
 
-identity_hash 構成:
+方針:
+
+- `identity_hash` は subscriber resolve / join 用であり、登録値差分検知の中心にはしない
+- 登録値差分検知には `compare_identity_norm_hash` / `compare_other_hash` を使用する
+- 同じ identity_hash を持つ subscribers が複数存在する場合は review とし、自動 apply しない
+- apply 時は staging 側の compare hash を subscribers 側へ反映する
+
+compare_identity_norm_hash 対象値:
 
 ```text
-person_id_custom
-name_kana_full_match
+insurance_symbol
+insurance_number
+name_kana_full
+name_kanji_full
+birth
 gender_code
 ```
 
-方針:
+`insurance_branchnumber` は compare_identity_norm_hash 対象外とする。
+枝番は健保・運用側が独自に採番する補助番号であり、本人/扶養/続柄/任意継続等の管理ルールが健保ごとに揺れるため、identity登録値差分の主軸として管理しない。
 
-- compare phase では `identity_hash` を中心に本番 subscriber と比較する
-- HIA subscriber ID が一致する場合、identity_hash changed でも HIA 最新状態へ同期する
-- 同じ identity_hash を持つ subscribers が複数存在する場合は review とし、自動 apply しない
+compare_other_hash 対象候補:
+
+```text
+insured_attribute_name
+relationship_name
+qualification_acquired_date
+qualification_lost_date
+employer_code
+department_code
+distribution_code
+employee_code
+connect_id
+```
 
 ---
 
@@ -128,34 +152,20 @@ gender_code
 
 ## 3.4 Name Parts Clear Policy
 
-`name_kana_full_match` が変更された場合、既存の name parts は clear 対象とする。
+HIA 由来データでは、name parts は分割できた場合のみ格納する。
+分割不能な parts へ暫定値を流し込まない。
 
-理由:
+`name_kana_full` / `name_kanji_full` などの identity登録値が更新される場合は、必要に応じて compare / apply 側で parts の扱いを判定する。
 
-```text
-旧 parts が新 full name と不整合になる可能性が高いため
-```
-
-clear は `NULL` へ戻すことを基本とする。
-
-clear 対象:
+基本方針:
 
 ```text
-name_kanji_family
-name_kanji_middle
-name_kanji_given
-name_kana_family
-name_kana_middle
-name_kana_given
-name_kanji_family_match
-name_kanji_middle_match
-name_kanji_given_match
-name_kana_family_match
-name_kana_middle_match
-name_kana_given_match
+full は正本として保持
+parts は分割済みの確定値のみ保持
+split不可時は parts を暫定補完しない
 ```
 
-記号・番号のみ変更の場合は、name parts は維持する。
+既存 parts を clear するかどうかは、`compare_identity_norm_hash` の差分内容と詳細compare結果をもとに apply 側で判断する。
 
 ---
 
@@ -175,8 +185,8 @@ name_kana_given_match
 方針:
 
 - HIA側を正として差分があれば更新する
-- 記号・番号変更により identity_hash が変わる場合でも、HIA subscriber ID が一致するなら更新候補とする
-- 記号・番号のみ変更の場合、name parts は維持する
+- 記号・番号は `compare_identity_norm_hash` の対象とする
+- 枝番は compare_identity_norm_hash 対象外とし、必要に応じて通常属性として扱う
 
 ---
 
@@ -193,8 +203,7 @@ name_kana_given_match
 
 方針:
 
-- HIA側を正として差分があれば更新する
-- identity_hash 構成要素に関わる差分は compare phase で identity change として記録する
+- relationship / insured attribute / qualification は `compare_other_hash` の対象候補として扱う
 
 ---
 
@@ -246,15 +255,15 @@ current address の取得条件:
 SELECT *
 FROM subscriber_addresses
 WHERE subscriber_id = :subscriber_id
-  AND is_current = 1
-LIMIT 1;
+  AND is_current = 1;
 ```
 
 方針:
 
-- current 行が存在しない場合は address insert 候補とする
-- current 行が存在し、住所差分がない場合は noop とする
-- current 行が存在し、住所差分がある場合は履歴更新対象とする
+- `is_current = 1` は current active address row として扱う
+- `is_current = 0` は historical address row として扱う
+- current row は原則1件、history row は複数保持する
+- address compare では current row だけでなく、subscriber に紐づく住所履歴全体を対象に確認する
 
 ---
 
@@ -267,38 +276,32 @@ DDL実態に合わせ、住所比較は以下の列で行う。
 | `postal_code` | 郵便番号 |
 | `address_line` | 住所本文 |
 | `building` | 建物名・部屋番号等 |
-| `prefecture` | 都道府県 |
-| `city` | 市区町村 |
-| `prefecture_code` | 都道府県コード |
-
-注意:
-
-旧spec上で `address1` / `address2` / `address3` と表現している箇所がある場合、
-本DDLでは `address_line` / `building` / `prefecture` / `city` 等に対応させて読み替える。
+| `address_hash` | 住所値の存在確認・差分検知用 compare hash |
 
 ---
 
 ## 4.3 Address Diff Policy
 
-prepare / compare phase で current address と staging address を比較する。
+住所 compare では、staging の `address_hash` を使い、既存 `subscriber_addresses.address_hash` と照合する。
 
-差分なし:
+判定:
 
-```text
-address_diff_status = noop
-```
+| status | 条件 | 意味 |
+|---|---|---|
+| `noop` | 同一 address_hash の行が存在し、かつ `is_current = 1` | 現在住所と一致 |
+| `switch_current` | 同一 address_hash の行が存在するが、`is_current = 0` | 既存住所へ current 切替候補 |
+| `insert` | 同一 address_hash の行が存在しない | 新住所 insert 候補 |
+| `review` | 同一 hash が複数 current 等、判定不能 | 自動apply不可 |
 
-差分あり:
-
-```text
-address_diff_status = changed
-```
-
-current 行なし:
+注意:
 
 ```text
-address_diff_status = insert
+address_hash 一致 = current address 一致
 ```
+
+ではない。
+
+subscriber_addresses は 1:n の履歴型テーブルであり、同一住所値が historical row として存在する可能性がある。
 
 ---
 
@@ -309,148 +312,151 @@ address に差分がある場合、既存 current 行を直接上書きせず、
 想定処理:
 
 ```text
-1. 既存 current 行を close
-2. 新しい address 行を insert
-3. 新しい行を is_current = 1 とする
+same address_hash exists and is_current = 1
+  -> noop
+
+same address_hash exists and is_current = 0
+  -> current切替
+     既存 current 行を is_current = 0
+     該当 existing address row を is_current = 1
+
+same address_hash not exists
+  -> insert
+     既存 current 行を is_current = 0
+     新 address row を insert
+     新 address row に address_hash = staging.address_hash
+     新 address row を is_current = 1
 ```
 
-差分なしの場合は address apply を行わない。
-
 ---
 
-## 4.5 Audit / History Policy
+# 5. subscriber_contact_points
 
-住所変更は audit / history 対象とする。
+Hub apply では、現行 `subscriber_contacts` ではなく、新しい contact point 型テーブルを正本構造として扱う。
 
-保持すべき情報:
+新テーブル:
 
-- 変更前住所
-- 変更後住所
-- apply_run_id
-- source staging row
-- changed_at
-
-HIA側を最新正本として扱うため、住所差分がある場合は、audit を残したうえで HIA 側値へ追従する。
-
----
-
-
-# 5. subscriber_contacts
-
-`subscriber_contacts` は加入者連絡先の履歴テーブルである。
-
-current 行は `is_current = 1` により管理する。
-
-compare / prepare phase では、`subscribers.id` に紐づく current contact を取得し、
-staging 側の連絡先情報と比較する。
-
----
-
-## 5.1 Current Row Condition
-
-current contact の取得条件:
-
-```sql
-SELECT *
-FROM subscriber_contacts
-WHERE subscriber_id = :subscriber_id
-  AND is_current = 1
-LIMIT 1;
+```text
+subscriber_contact_points
 ```
 
-方針:
-
-- current 行が存在しない場合は contact insert 候補とする
-- current 行が存在し、連絡先差分がない場合は noop とする
-- current 行が存在し、連絡先差分がある場合は履歴更新対象とする
-
----
-
-## 5.2 Compare Columns
-
-DDL実態に合わせ、連絡先比較は以下の列で行う。
+想定構造:
 
 | column | 用途 |
 |---|---|
-| `phone` | 電話番号 |
-| `email` | メールアドレス |
+| `contact_point_id` | contact point ID |
+| `subscriber_id` | 対象 subscribers.id |
+| `contact_type` | 連絡先種別。初期値は `phone` / `email` |
+| `contact_value` | 連絡先値 |
+| `is_current` | current flag |
+| `valid_from` | 有効開始日時 |
+| `valid_to` | 有効終了日時 |
+| `source` | データ由来 |
+| `created_at` | 作成日時 |
+| `updated_at` | 更新日時 |
 
-注意:
+現行 `subscriber_contacts` は:
 
-旧spec上で `mobile` を compare 対象としている箇所がある場合、
-現DDLでは `subscriber_contacts` に `mobile` 列は存在しない。
+```text
+phone + email 同居型
+```
+
+であり、phoneのみ変更 / emailのみ変更 / null時の current解除 / 複数連絡先管理を安全に扱いにくい。
+
+そのため Hub apply では `subscriber_contact_points` を正として実装する。
 
 ---
 
-## 5.3 Contact Diff Policy
+## 5.1 Legacy backfill
 
-prepare / compare phase で current contact と staging contact を比較する。
-
-差分なし:
+既存 `subscriber_contacts` から `subscriber_contact_points` へ backfill する。
 
 ```text
-contact_diff_status = noop
+subscriber_contacts
+  ↓
+phone が空でなければ subscriber_contact_points(contact_type='phone') へ insert
+email が空でなければ subscriber_contact_points(contact_type='email') へ insert
 ```
 
-差分あり:
+旧1行は最大2行へ分解される。
 
 ```text
-contact_diff_status = changed
+旧:
+subscriber_id + phone + email + is_current
+
+新:
+subscriber_id + contact_type='phone' + contact_value + is_current
+subscriber_id + contact_type='email' + contact_value + is_current
 ```
 
-current 行なし:
-
-```text
-contact_diff_status = insert
-```
+`subscriber_contacts` は legacy / backfill source / temporary reference として扱う。
 
 ---
 
-## 5.4 Apply Policy
+## 5.2 Apply Policy
 
-contact に差分がある場合、既存 current 行を直接上書きせず、履歴として扱う。
-
-想定処理:
+HIA CSV phoneあり:
 
 ```text
-1. 既存 current 行を close
-2. 新しい contact 行を insert
-3. 新しい行を is_current = 1 とする
+subscriber_id + contact_type='phone' + contact_value で既存確認
+  exists:
+    current切替
+  not exists:
+    insert + current化
 ```
 
-差分なしの場合は contact apply を行わない。
+HIA CSV phone null:
+
+```text
+subscriber_id に紐づく phone current を全て current から外す
+```
+
+HIA CSV emailあり:
+
+```text
+subscriber_id + contact_type='email' + contact_value で既存確認
+  exists:
+    current切替
+  not exists:
+    insert + current化
+```
+
+HIA CSV email null:
+
+```text
+subscriber_id に紐づく email current を全て current から外す
+```
+
+null は:
+
+```text
+何もしない
+```
+
+ではなく:
+
+```text
+HIA正本上、現在値なし
+```
+
+として扱う。
+
+現時点では contact compare hash は導入しない。
+contact は `contact_type + contact_value + is_current` を基準に compare / apply する。
 
 ---
 
-## 5.5 Source Policy
+## 5.3 Audit / History Policy
 
-`subscriber_contacts.source` は、連絡先データの由来を保持する。
-
-想定値例:
-
-```text
-hia_apply
-manual
-migration
-```
-
-HIA export subscribers CSV 由来の apply では、source に HIA apply 系値を設定する。
-
----
-
-## 5.6 Audit / History Policy
-
-連絡先変更は audit / history 対象とする。
+contact point current change は audit / history 対象とする。
 
 保持すべき情報:
 
-- 変更前連絡先
-- 変更後連絡先
+- 変更前 contact point
+- 変更後 contact point
 - apply_run_id
 - source staging row
 - changed_at
-
-HIA側を最新正本として扱うため、連絡先差分がある場合は、audit を残したうえで HIA 側値へ追従する。
 
 ---
 
@@ -492,10 +498,10 @@ DDL実態に合わせ、audit は以下の粒度で保存する。
 ```text
 subscriber insert
 subscriber update
-identity_hash change
-name parts clear
-address change
-contact change
+compare_identity_norm_hash change
+compare_other_hash change
+address current switch / insert
+contact point current change
 qualification change
 organization change
 ```
@@ -509,8 +515,8 @@ organization change
 subscribers 本体:
 
 ```text
-identity_hash
-name_kana_full_match
+compare_identity_norm_hash
+compare_other_hash
 insurance_symbol
 insurance_number
 qualification_acquired_date
@@ -524,16 +530,15 @@ address 変更:
 address.postal_code
 address.address_line
 address.building
-address.prefecture
-address.city
-address.prefecture_code
+address.address_hash
 ```
 
 contact 変更:
 
 ```text
-contact.phone
-contact.email
+contact_point.phone
+contact_point.email
+contact_point.current
 ```
 
 name parts clear:
@@ -609,22 +614,6 @@ change_run_id = <apply_run_id>
 
 ---
 
-## 6.7 Name Parts Clear Audit
-
-`name_kana_full_match` が変更され、既存 name parts を clear する場合も audit 対象とする。
-
-例:
-
-```text
-field = name_kana_family
-old_value = 旧姓カナparts
-new_value = NULL
-source = hia_apply
-note = name_kana_full_match changed; clear name parts
-```
-
----
-
 ## 6.8 Audit Timing
 
 compare / prepare phase では audit 用差分情報を生成する。
@@ -649,16 +638,19 @@ compare phase は以下を確認する。
 ```text
 HIA subscriber ID
 identity_hash
-name_kana_full_match
-insurance columns
+compare_identity_norm_hash
+compare_other_hash
+address_hash + is_current
+contact point
 qualification columns
 organization columns
-address
-contact
 ```
 
-apply phase は compare phase が確定した `apply_action` と diff 情報に従い、
-必要な列を更新する。
+apply orchestration は prepare / compare が確定した `apply_action` と diff 情報に従い、必要な列を更新する。
 
-`name_kana_full_match` が変更された場合は、既存 name parts を `NULL` へ clear し、
-後続 normalize / split により再生成可能な状態へ戻す。
+`identity_hash` は resolve / join 用であり、登録値差分検知の中心にはしない。
+登録値差分検知には `compare_identity_norm_hash` / `compare_other_hash` を使用する。
+
+住所は `address_hash` と `is_current` を組み合わせて noop / current切替 / insert を判定する。
+
+連絡先は `subscriber_contact_points` を正本構造として扱い、現行 `subscriber_contacts` は legacy / backfill source / temporary reference として扱う。

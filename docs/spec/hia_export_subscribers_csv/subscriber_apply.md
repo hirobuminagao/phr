@@ -42,9 +42,12 @@ HIA export 加入者 CSV を staging から **PHR subscriber マスターへ反�
 # 旧実装
 apply_subscribers_from_staging_hub.py
 
-# ADR-0021 以降の新構成予定
-scripts/hia/apply_subscribers_from_staging_hub.py
+# ADR-0021 以降の新構成
+scripts/hia/apply_hia_subscriber_sync.py
+scripts/hia/script_lib/hub_subscriber_prepare.py
+scripts/hia/script_lib/hub_subscriber_compare.py
 scripts/hia/script_lib/hub_subscriber_apply.py
+scripts/hia/script_lib/hub_subscriber_audit.py
 ```
 
 旧実装では apply phase 内で compare / update / audit を同時に実施していた。
@@ -52,50 +55,59 @@ scripts/hia/script_lib/hub_subscriber_apply.py
 ADR-0021 以降は:
 
 ```text
-import
+import orchestration
   ↓
-prepare / compare
-  ↓
-apply
+apply orchestration
 ```
 
 へ責務分離する。
 
-Apply phase は:
+Apply orchestration は:
 
 ```text
-prepare / compare phase により生成された
-apply_action を実行する反映エンジン
+prepare / compare
+↓
+apply
+↓
+audit
 ```
 
-として扱う。
+をまとめて実行する親処理として扱う。
+
+このうち `hub_subscriber_apply.py` は、prepare / compare により確定した `apply_action` を実行する反映エンジンとして扱う。
 
 ---
 
-# 1. Apply Phase Overview
+# 1. Apply Orchestration Overview
 
 処理対象:
 
 ```
 staging_subscribers_hub
-WHERE processed_run_id IS NULL
+WHERE import_run_id = :import_run_id
+  AND processed_run_id IS NULL
 ```
 
 フロー:
 
 staging_subscribers_hub
       │
-      │ apply_action
+      │ prepare / compare
+      ▼
+apply_action / diff status
+      │
+      │ apply
       ▼
 subscribers
       │
       ├ address apply
       │
-      ├ contact apply
+      ├ contact point apply
       │
       └ subscriber_audit
+```
 
-Apply phase 自身は compare 判定を行わない。
+apply orchestration は compare 判定を含むが、`hub_subscriber_apply.py` 自身は compare 判定を行わない。
 
 ```text
 apply_action = insert
@@ -125,23 +137,30 @@ apply_action = review
  gender_code)
 ```
 
-ADR-0021 以降は compare phase 側で:
+ADR-0021 以降は import orchestration 側で current snapshot を staging に反映し、apply orchestration 側で compare hash による候補絞り込みと詳細compareを行う。
 
 ```text
 HIA subscriber ID
 ↓
 identity_hash
 ↓
+current_subscriber_id
+↓
+compare hash
+↓
 compare status
 ```
 
 を生成する。
 
-Apply phase は compare phase により確定済みの:
+Apply orchestration は compare phase により生成された:
 
 ```text
-apply_subscriber_id
+current_subscriber_id
 apply_action
+compare_identity_norm_hash
+compare_other_hash
+address_hash
 compare status
 ```
 
@@ -220,6 +239,9 @@ employee_code
 connect_id
 
 person_id_custom
+identity_hash
+compare_identity_norm_hash
+compare_other_hash
 ```
 
 メタ列:
@@ -268,8 +290,10 @@ Apply phase は compare phase により生成された:
 ```text
 apply_diff_columns
 identity_match_status
+compare_identity_norm_hash
+compare_other_hash
 address_diff_status
-contact_diff_status
+contact_point_diff_status
 ```
 
 を参照して UPDATE を実行する。
@@ -283,22 +307,24 @@ updated_at = now()
 last_change_run_id = run_id
 ```
 
-identity_hash changed の場合でも、
-HIA 側を最新正本として subscribers へ反映する。
+`identity_hash` は subscriber resolve / join 用であり、登録値差分判定の中心にはしない。
 
-ただし:
-
-```text
-name_kana_full_match changed
-```
-
-の場合は:
+subscriber 本体の差分反映は以下を利用する。
 
 ```text
-既存 name parts を clear
+compare_identity_norm_hash
+compare_other_hash
 ```
 
-し、後続 normalize / split により再生成可能な状態へ戻す。
+apply 時は staging 側の compare hash を `subscribers` へ反映する。
+
+```text
+subscribers.compare_identity_norm_hash = staging.compare_identity_norm_hash
+subscribers.compare_other_hash = staging.compare_other_hash
+```
+
+`name_kana_full` 等の identity登録値が更新される場合は、必要に応じて parts の扱いを compare / apply 側で判定する。
+ただし HIA 由来データでは、分割不能な parts へ暫定値を流し込まない。
 
 ---
 
@@ -313,10 +339,11 @@ subscriber_addresses
 ポリシー:
 
 ```
-現用1件のみ
+current row は1件
+history row は複数保持
 ```
 
-compare / diff 判定は prepare / compare phase により実施済みとする。
+compare / diff 判定は apply orchestration の prepare / compare により実施済みとする。
 
 条件:
 
@@ -327,19 +354,23 @@ is_current = 1
 フロー:
 
 ```
-現在住所取得
-↓
-差分比較
-↓
-差分あり
-   ↓
-旧住所
-  is_current = 0
-  valid_to = now()
+staging.address_hash
+  ↓
+subscriber_addresses.address_hash を subscriber_id 単位で検索
+  ↓
+same address_hash exists?
+  yes:
+    is_current = 1?
+      yes -> noop
+      no  -> current切替
+  no:
+    新住所 insert + current化
+```
 
-新住所
-  INSERT
-  is_current = 1
+apply 時は staging 側の `address_hash` を `subscriber_addresses.address_hash` へ反映する。
+
+```text
+subscriber_addresses.address_hash = staging.address_hash
 ```
 
 ## Address Constraint Policy
@@ -367,40 +398,120 @@ apply_subscribers_from_staging_hub.py
 
 ---
 
-# 6. Contact History
+# 6. Contact Point History
 
-テーブル:
+Hub apply では、現行 `subscriber_contacts` ではなく、新しい contact point 型テーブルを正本構造として扱う。
 
-```
-subscriber_contacts
-```
+新テーブル:
 
-ポリシー:
-
-```
-現用1件のみ
+```text
+subscriber_contact_points
 ```
 
-compare / diff 判定は prepare / compare phase により実施済みとする。
+想定構造:
 
-差分あり:
-
+```text
+contact_point_id
+subscriber_id
+contact_type
+contact_value
+is_current
+valid_from
+valid_to
+source
+created_at
+updated_at
 ```
-旧連絡先
-  is_current = 0
-  valid_to = now()
 
-新連絡先
-  INSERT
-  is_current = 1
-```
+`contact_type` の初期値:
 
-対象:
-
-```
+```text
 phone
 email
 ```
+
+現行 `subscriber_contacts` は:
+
+```text
+phone + email 同居型
+```
+
+であり、phoneのみ変更 / emailのみ変更 / null時の current解除 / 複数連絡先管理を安全に扱いにくい。
+
+そのため Hub apply では `subscriber_contact_points` を正として実装する。
+
+## Legacy backfill
+
+既存 `subscriber_contacts` から `subscriber_contact_points` へ backfill する。
+
+```text
+subscriber_contacts
+  ↓
+phone が空でなければ subscriber_contact_points(contact_type='phone') へ insert
+email が空でなければ subscriber_contact_points(contact_type='email') へ insert
+```
+
+旧1行は最大2行へ分解される。
+
+```text
+旧:
+subscriber_id + phone + email + is_current
+
+新:
+subscriber_id + contact_type='phone' + contact_value + is_current
+subscriber_id + contact_type='email' + contact_value + is_current
+```
+
+## Apply policy
+
+HIA CSV phoneあり:
+
+```text
+subscriber_id + contact_type='phone' + contact_value で既存確認
+  exists:
+    current切替
+  not exists:
+    insert + current化
+```
+
+HIA CSV phone null:
+
+```text
+subscriber_id に紐づく phone current を全て current から外す
+```
+
+HIA CSV emailあり:
+
+```text
+subscriber_id + contact_type='email' + contact_value で既存確認
+  exists:
+    current切替
+  not exists:
+    insert + current化
+```
+
+HIA CSV email null:
+
+```text
+subscriber_id に紐づく email current を全て current から外す
+```
+
+null は:
+
+```text
+何もしない
+```
+
+ではなく:
+
+```text
+HIA正本上、現在値なし
+```
+
+として扱う。
+
+現時点では contact compare hash は導入しない。
+contact は `contact_type + contact_value + is_current` を基準に compare / apply する。
 
 ---
 
@@ -417,9 +528,10 @@ subscriber_audit
 ```text
 subscriber insert
 subscriber update
-identity_hash change
-address change
-contact change
+compare_identity_norm_hash change
+compare_other_hash change
+address current switch / insert
+contact point current change
 qualification change
 ```
 
@@ -524,7 +636,11 @@ etl_errors
 
 staging_subscribers_hub
       │
-      │ apply_action
+      │ prepare / compare
+      ▼
+apply_action / diff status
+      │
+      │ apply
       ▼
 subscriber apply
       │
@@ -540,7 +656,7 @@ subscriber apply
 address apply
       │
       ▼
-contact apply
+contact point apply
       │
       ▼
 subscriber audit

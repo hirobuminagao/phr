@@ -15,19 +15,26 @@ staging_subscribers_hub
 import_subscribers_to_staging_hub.py
 apply_subscribers_from_staging_hub.py
 
-# ADR-0021 以降の新構成予定
+# ADR-0021 以降の新構成
 scripts/hia/import_subscribers_to_staging_hub.py
-scripts/hia/prepare_subscriber_apply_actions.py
-scripts/hia/apply_subscribers_from_staging_hub.py
+scripts/hia/apply_hia_subscriber_sync.py
+scripts/hia/script_lib/hub_subscriber_import.py
+scripts/hia/script_lib/hub_subscriber_current_snapshot.py
+scripts/hia/script_lib/hub_subscriber_prepare.py
+scripts/hia/script_lib/hub_subscriber_compare.py
+scripts/hia/script_lib/hub_subscriber_apply.py
+scripts/hia/script_lib/hub_subscriber_audit.py
 ```
 
 旧実装ではこの staging は **CSV import phase と subscriber apply phase の間に置かれる受け皿**として利用していた。
 
-ADR-0021 以降は、`import → prepare / compare → apply` の3段階へ再整理し、
-この staging は以下の2つを保持する中間層として扱う。
+ADR-0021 以降は、実行単位を `import orchestration` と `apply orchestration` に分離する。
 
-- import phase により生成された raw / norm / match / identity_hash
-- prepare / compare phase により生成された apply_action / diff / compare status
+この staging は単なる CSV 一時置き場ではなく、以下を同一行に保持する compare workspace として扱う。
+
+- import orchestration により生成された raw / norm / match / identity_hash / compare hash
+- import orchestration により取得された current snapshot ID / hash / status
+- apply orchestration により生成された apply_action / diff / compare status
 
 関連spec:
 
@@ -46,6 +53,7 @@ ADR-0021 以降は、`import → prepare / compare → apply` の3段階へ再�
 - import と apply を分離する
 - apply 前の確認・再実行を可能にする
 - prepare / compare phase の結果を保持する
+- current snapshot の ID / hash / status を保持する
 - apply_action / diff / compare status を保持する
 - import run / apply run を追跡できるようにする
 - 行単位エラー時の切り分けをしやすくする
@@ -62,24 +70,28 @@ ADR-0021 以降は、`import → prepare / compare → apply` の3段階へ再�
 HIA Export CSV
       │
       ▼
-import phase
+import orchestration
+  - CSV import
+  - compare hash generation
+  - current snapshot update
       │
       ▼
 staging_subscribers_hub
+  - import values
+  - current snapshot values
+  - apply_action / diff / compare status
       │
       ▼
-prepare / compare phase
-      │
-      ▼
-apply_action / diff / compare status
-      │
-      ▼
-apply phase
+apply orchestration
+  - prepare / compare
+  - apply
+  - audit
       │
       ▼
 subscribers
 subscriber_addresses
-subscriber_contacts
+subscriber_contact_points
+subscriber_contacts (legacy / backfill source)
 subscriber_audit
 ```
 
@@ -92,7 +104,8 @@ staging は以下の状態を列で管理する。
 - apply 済
 
 旧実装では `processed_run_id IS NULL` を apply 未処理キューとして扱っていた。
-ADR-0021 以降は、prepare / compare phase により `apply_action` を生成し、apply phase は判定済み action を実行する。
+ADR-0021 以降は、apply orchestration が `import_run_id` 単位で prepare / compare を行い、`apply_action` を生成する。
+apply 本体は判定済み action を実行する。
 
 ---
 
@@ -128,9 +141,10 @@ ADR-0021 以降の apply 対象は `apply_action` を基準とする。
 ```sql
 SELECT *
 FROM staging_subscribers_hub
-WHERE processed_run_id IS NULL
+WHERE import_run_id = :import_run_id
+  AND processed_run_id IS NULL
   AND apply_action IN ('insert', 'update')
-ORDER BY rowid ASC;
+ORDER BY staging_subscriber_hub_id ASC;
 ```
 
 `apply_action = 'noop'` または `apply_action = 'review'` は自動更新しない。
@@ -146,9 +160,10 @@ ORDER BY rowid ASC;
 3. name columns
 4. address / contact columns
 5. qualification / organization columns
-6. prepare / compare columns
-7. source trace columns
-8. run management columns
+6. current snapshot columns
+7. prepare / compare columns
+8. source trace columns
+9. run management columns
 
 ---
 
@@ -316,10 +331,8 @@ connect_id
 
 用途:
 
-`name_kana_full_match` は identity_hash の構成要素として使用する。
-
-prepare / compare phase で `name_kana_full_match` の変更を検知した場合、
-既存 subscribers 側の name parts は clear 対象とする。
+`name_kana_full_match` は resolve / join 用 identity_hash の構成要素として扱う。
+登録値差分検知は `compare_identity_norm_hash` で行う。
 
 ---
 
@@ -345,7 +358,7 @@ prepare / compare phase で `name_kana_full_match` の変更を検知した場�
 
 用途:
 
-- apply phase で `subscriber_addresses` / `subscriber_contacts` に反映
+- apply orchestration で `subscriber_addresses` / `subscriber_contact_points` に反映
 - address_hash により既存住所との比較を行う
 - 履歴差分判定の入力
 
@@ -430,7 +443,84 @@ same address_hash exists?
 
 ---
 
-# 10. Prepare / Compare Columns
+# 10. Current Snapshot Columns
+
+import orchestration は、import_run_id 単位で staging 行に current snapshot を付与する。
+
+staging は current 実データを大量に複製するのではなく、review と compare candidate filtering に必要な ID / hash / status に絞って保持する。
+
+| column | type | meaning |
+|---|---|---|
+| `current_subscriber_id` | BIGINT / INTEGER | current subscribers 側 subscriber_id |
+| `current_hia_subscriber_id` | TEXT / VARCHAR | current subscribers 側に保持されている HIA加入者ID |
+| `current_identity_hash` | CHAR(64) | current subscribers 側 identity_hash |
+| `current_compare_identity_norm_hash` | CHAR(64) | current subscribers 側 identity登録値 compare hash |
+| `current_compare_other_hash` | CHAR(64) | current subscribers 側 subscriber属性 compare hash |
+| `current_name_kana_full_match` | TEXT / VARCHAR | current subscribers 側 name_kana_full_match |
+| `current_address_id` | BIGINT / INTEGER | current subscriber_addresses 側 address_id |
+| `current_address_hash` | CHAR(64) | current address 側 address_hash |
+| `current_phone_contact_point_id` | BIGINT / INTEGER | current phone contact point id |
+| `current_email_contact_point_id` | BIGINT / INTEGER | current email contact point id |
+| `current_lookup_status` | TEXT / VARCHAR | current lookup status |
+| `current_lookup_checked_at` | DATETIME / TEXT | current lookup checked timestamp |
+
+## current snapshot の保持方針
+
+import値側:
+
+```text
+hia_subscriber_id
+identity_hash
+compare_identity_norm_hash
+compare_other_hash
+address_hash
+phone
+email
+```
+
+current snapshot側:
+
+```text
+current_subscriber_id
+current_hia_subscriber_id
+current_identity_hash
+current_compare_identity_norm_hash
+current_compare_other_hash
+current_name_kana_full_match
+current_address_id
+current_address_hash
+current_phone_contact_point_id
+current_email_contact_point_id
+current_lookup_status
+current_lookup_checked_at
+```
+
+`current_hia_subscriber_id` は人間review時の重要な足がかりとして保持する。
+
+例:
+
+```text
+hia_subscriber_id != current_hia_subscriber_id
+```
+
+の場合、HIA側ID変更・別人候補・上流ID差し替えなどを確認する材料になる。
+
+compare hash も staging に保持することで、apply orchestration の prepare / compare 前に:
+
+```text
+compare_identity_norm_hash != current_compare_identity_norm_hash
+compare_other_hash != current_compare_other_hash
+address_hash != current_address_hash
+```
+
+を軽量に確認できる。
+
+ただし address は履歴型であるため、`address_hash != current_address_hash` のみで最終判定しない。
+詳細compareでは `subscriber_addresses` 全体に対して same address_hash の存在確認と `is_current` 判定を行う。
+
+---
+
+# 11. Prepare / Compare Columns
 
 ADR-0021 以降、prepare / compare phase の結果を staging 側へ保持する。
 
@@ -444,7 +534,7 @@ ADR-0021 以降、prepare / compare phase の結果を staging 側へ保持す�
 | `compare_other_hash` | CHAR(64) | subscriber属性 compare hash |
 | `address_hash` | CHAR(64) | address compare hash |
 | `address_diff_status` | TEXT / VARCHAR | current address との差分状態 |
-| `contact_diff_status` | TEXT / VARCHAR | current contact との差分状態 |
+| `contact_point_diff_status` | TEXT / VARCHAR | current contact point との差分状態 |
 | `apply_checked_at` | DATETIME / TEXT | prepare / compare 実行時刻 |
 
 想定 `apply_action`:
@@ -474,11 +564,12 @@ review
 - 再実行制御
 - audit生成補助
 
-apply phase は compare 判定を行わず、これらの列を参照して実行する。
+apply orchestration 内の prepare / compare がこれらの列を更新する。
+apply 本体は compare 判定を行わず、これらの列を参照して実行する。
 
 ---
 
-# 11. Source Trace Columns
+# 12. Source Trace Columns
 
 | column | meaning |
 |---|---|
@@ -497,7 +588,7 @@ apply phase は compare 判定を行わず、これらの列を参照して実�
 
 ---
 
-# 12. Run Management Columns
+# 13. Run Management Columns
 
 | column | meaning |
 |---|---|
@@ -516,7 +607,7 @@ apply phase は compare 判定を行わず、これらの列を参照して実�
 
 ---
 
-# 13. Row Lifecycle
+# 14. Row Lifecycle
 
 `staging_subscribers_hub` の1行は次のライフサイクルを持つ。
 
@@ -531,7 +622,7 @@ import_run_id = <run_id>
 processed_run_id = NULL
 ```
 
-## 2. Waiting for Compare
+## 2. Waiting for Apply Orchestration
 
 prepare / compare 待機状態。
 
@@ -541,7 +632,7 @@ prepare / compare 待機状態。
 compare未実行
 ```
 
-## 3. Compared
+## 3. Prepared / Compared
 
 prepare / compare phase により `apply_action` が生成される。
 
@@ -574,20 +665,20 @@ processed_at = now()
 
 ---
 
-# 14. Constraints and Expectations
+# 15. Constraints and Expectations
 
 期待する性質:
 
 - import 時点で列名揺れは吸収済み
 - 正規化済みデータのみを保持する
 - 1行は1加入者候補を表す
-- apply は `processed_run_id IS NULL` かつ `apply_action IN ('insert', 'update')` を前提に走る
+- apply は `import_run_id = :import_run_id` かつ `processed_run_id IS NULL` かつ `apply_action IN ('insert', 'update')` を前提に走る
 
 この staging は **長期マスタではなく処理中間層** である。
 
 ---
 
-# 15. Design Notes
+# 16. Design Notes
 
 staging を設ける理由は、CSV 直反映を避けて処理を分層するためである。
 
@@ -607,9 +698,10 @@ PHR v1.0.1 では、この staging を subscriber ingest pipeline の中心中�
 
 `staging_subscribers_hub` は、HIA export 加入者 CSV の **正規化済み受け皿** であり、
 
-- import / prepare / apply の分離
+- import orchestration / apply orchestration の分離
 - subscriber resolve / join の入力
 - compare hash による差分候補絞り込み
+- current snapshot ID / hash / status の保持
 - apply_action / diff / compare status の保持
 - 履歴反映の入力
 - run / source trace の保持
@@ -645,6 +737,13 @@ match値ではなく norm値
 住所は `address_hash` と `is_current` を組み合わせて current 判定を行う。
 
 連絡先 compare は現行 `subscriber_contacts` の hash 比較を行わず、
-将来的な contact point 型への再設計を前提とする。
+Hub apply では `subscriber_contact_points` を正本構造として扱う。
+
+`subscriber_contacts` は legacy / backfill source / temporary reference として扱う。
 
 を担うテーブルである。
+
+current snapshot 値は current実データそのものを大量に複製するためではなく、
+review と compare candidate filtering に必要な ID / hash / status に絞って保持する。
+
+特に `current_hia_subscriber_id` は、人間が「名前変更・HIA側ID変更・別人候補」を確認するための足がかりとして保持する。

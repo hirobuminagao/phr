@@ -8,22 +8,41 @@
 ```
 HIA export subscribers CSV
         ↓
-import phase
+import orchestration
+  - CSV import
+  - compare hash generation
+  - current snapshot update to staging
         ↓
 staging_subscribers_hub
         ↓
-prepare / compare phase
-        ↓
-apply phase
+apply orchestration
+  - prepare / compare
+  - apply
+  - audit
         ↓
 subscribers
 subscriber_addresses
-subscriber_contacts
+subscriber_contact_points (Hub apply target)
+subscriber_contacts (legacy source for backfill / temporary reference)
 subscriber_audit
 ```
 
 本spec群は旧版では `import → apply` の2段階を中心に記述していたが、
-ADR-0021 以降は `import → prepare / compare → apply` の3段階へ再整理する。
+ADR-0021 以降は、実行単位を `import orchestration` と `apply orchestration` に分離する。
+
+現在の責務分割:
+
+```text
+import orchestration
+  = CSV import
+  + compare hash generation
+  + current snapshot を staging に反映
+
+apply orchestration
+  = prepare / compare
+  + subscribers / address / contact への反映
+  + audit
+```
 
 旧実装・旧specの内容は、移行前の事実として残しつつ、
 本ディレクトリ内で新フローへ順次更新する。
@@ -47,10 +66,11 @@ compare_prepare_phase.md
    ↓
 subscriber_apply.md
    ↓
-subscribers
-subscriber_addresses
-subscriber_contacts
+target_tables_schema.md
+subscriber_contact_points
+subscriber_contacts (legacy)
 subscriber_audit
+contact_point_schema.md
 ```
 
 読み始めは `flow_overview.md`、詳細確認は各個別 spec を参照する。
@@ -66,12 +86,16 @@ HIA 側から提供される加入者 CSV（export）
 
 処理フェーズ:
 
-1. CSV Import
-2. Staging 保存
-3. Prepare / Compare
-4. Subscriber Apply
-5. Address / Contact Apply
-6. Subscriber Audit 生成
+1. Import orchestration
+   - CSV Import
+   - Staging 保存
+   - Current snapshot update
+2. Apply orchestration
+   - Prepare / Compare
+   - Subscriber Apply
+   - Address Apply
+   - Contact Point Apply
+   - Subscriber Audit 生成
 
 ---
 
@@ -107,10 +131,16 @@ identity_policy.md
     subscriber 同一人物判定ポリシー
 
 compare_prepare_phase.md
-    staging と subscribers / address / contact の比較・apply_action 作成仕様
+    staging と subscribers / address / contact point の比較・apply_action 作成仕様
 
 subscriber_apply.md
     staging → subscribers 反映仕様
+
+target_tables_schema.md
+    subscribers / addresses / contact point target schema
+
+contact_point_schema.md
+    subscriber_contact_points 設計
 ```
 
 ---
@@ -129,36 +159,44 @@ subscriber_apply.md
 
 ### 2. 履歴テーブルは audit 対象外
 
-以下は **履歴管理テーブルのため audit しない**
-
-```
-subscriber_addresses
-subscriber_contacts
-```
-
-変更履歴は
-
-```
-valid_from
-valid_to
-is_current
-```
-
-で管理する。
+以下は subscriber_audit の直接対象ではなく、history/current 管理を主目的とする。
 
 ---
 
 ### 3. Subscriber Identity
 
-subscriber の同一人物判定は以下の組み合わせを使用する。
+subscriber の同一人物 resolve / join には `identity_hash` を使用する。
 
 ```
 person_id_custom
-name_kana_full
+name_kana_full_match
 gender_code
 ```
 
-詳細は `ADR-0008` を参照。
+注意:
+
+```text
+identity_hash は resolve / join 用であり、登録値差分検知用 hash ではない。
+```
+
+登録値差分検知には以下の compare hash を使用する。
+
+```text
+compare_identity_norm_hash
+compare_other_hash
+address_hash
+```
+
+compare hash は `scripts/lib/hash/compare_hash.py` の `build_compare_hash()` で生成する。
+
+基本方針:
+
+```text
+- compare hash は norm 値を渡す
+- match 値は compare hash 化しない
+```
+
+identity_hash は resolve / join 用、compare hash は detailed compare 候補絞り込み用として扱う。
 
 ---
 
@@ -170,20 +208,32 @@ gender_code
 - 差分比較
 - insert / update / noop 判定
 - subscribers 更新
-- address / contact 同期
+- address / contact point 同期
 - audit 保存
 
-ADR-0021 以降は、比較結果を staging 側へ保持し、apply は判定済み action を実行するだけにする。
+ADR-0021 以降は、staging を compare workspace として扱い、比較結果を staging 側へ保持する。
+apply は判定済み action を実行する。
+
+staging_subscribers_hub は:
 
 ```text
-import
+- import values
+- current snapshot values
+- compare status
+- apply_action
+```
+
+を同一行へ保持する compare workspace として扱う。
+
+```text
+import orchestration
   = CSV → staging
+  + current snapshot update
 
-prepare / compare
-  = staging と本番テーブルを比較し、apply_action / diff を作成
-
-apply
-  = apply_action に従って insert / update / noop を実行
+apply orchestration
+  = prepare / compare
+  + apply
+  + audit
 ```
 
 ---
@@ -201,7 +251,7 @@ HIA export subscribers CSV を最新正本として扱う。
 
 HIA側値を正として反映するため、更新前後の差分は必ず audit に残す。
 
-identity_hash 変更、住所変更、連絡先変更も audit / 履歴管理対象とする。
+compare_identity_norm_hash / compare_other_hash による登録値変更、住所 current 切替・追加、contact point current 変更も audit / 履歴管理対象とする。
 
 ---
 
@@ -211,11 +261,85 @@ identity_hash 変更、住所変更、連絡先変更も audit / 履歴管理対
 scripts/work_folder/scripts/import_subscribers_to_staging_hub.py
 scripts/work_folder/scripts/apply_subscribers_from_staging_hub.py
 
-# 新構成予定（ADR-0021）
+# 新構成（ADR-0021）
 scripts/hia/import_subscribers_to_staging_hub.py
-scripts/hia/prepare_subscriber_apply_actions.py
-scripts/hia/apply_subscribers_from_staging_hub.py
+scripts/hia/apply_hia_subscriber_sync.py
 scripts/hia/script_lib/
+
+---
+
+## Current Implementation Status
+
+### Import orchestration
+
+現在実装済み:
+
+```text
+scripts/hia/import_subscribers_to_staging_hub.py
+  ↓
+scripts/hia/script_lib/hub_subscriber_import.py
+  ↓
+scripts/hia/script_lib/hub_subscriber_current_snapshot.py
+```
+
+責務:
+
+```text
+CSV import
+compare hash generation
+staging_subscribers_hub INSERT
+current snapshot update to staging
+```
+
+現在の Hub contact 方針:
+
+```text
+subscriber_contact_points を Hub apply の正本構造として導入予定
+subscriber_contacts は backfill元 / temporary reference として扱う
+```
+
+注意:
+
+```text
+compare hash generation は import orchestration 側へ統合予定。
+```
+
+今後追加する値:
+
+```text
+staging_subscribers_hub.compare_identity_norm_hash
+staging_subscribers_hub.compare_other_hash
+staging_subscribers_hub.address_hash
+```
+
+---
+
+### Compare hash / backfill order
+
+compare hash 導入後の実装順:
+
+```text
+1. import orchestration 側で staging_subscribers_hub の compare hash を生成
+2. current snapshot compare workspace を staging へ反映
+3. Hub側だけ subscriber_contact_points 前提へ移行
+4. apply orchestration 側で compare hash を利用する prepare / compare を実装
+5. subscribers / subscriber_addresses / contact point apply を実装
+6. 実装が固まった後に subscribers / subscriber_addresses の backfill を実行
+7. 最後に fund側 diff / projection を見直す
+```
+
+backfill 対象:
+
+```text
+subscribers.compare_identity_norm_hash
+subscribers.compare_other_hash
+subscriber_addresses.address_hash
+subscriber_contacts → subscriber_contact_points
+```
+
+backfill は、生成ロジックが確定してから実行する。
+
+contact point 移行は、Hub apply orchestration を先に完成させてから fund 側へ展開する。
 
 ---
 
@@ -228,21 +352,24 @@ PHR v1.1.0
 今後の実装では、旧 `import → apply` 構成を以下へ再整理する。
 
 ```text
-import
+import orchestration
   ↓
-prepare / compare
-  ↓
-apply
+apply orchestration
 ```
 
 主な変更方針:
 
 - `scripts/work_folder/scripts/` から `scripts/hia/` へ移設
 - orchestration と処理関数を分離
-- 比較結果を staging 側へ保持
+- current snapshot / compare status / apply_action を staging 側へ保持
 - HIA を最新正本として扱う
-- identity_hash 変更も audit 保存のうえ subscribers へ反映
-- name_kana_match 変更時は既存 name parts をクリアする
+- identity_hash は resolve / join 用として扱う
+- compare_identity_norm_hash / compare_other_hash / address_hash を差分候補絞り込みに使う
+- identity_hash は resolve / join 用として扱う
+- compare hash は detailed compare 候補絞り込み用として扱う
+- Hub側は subscriber_contact_points を正本構造として先行導入する
+- subscriber_contacts は legacy / backfill source として一時保持する
+- fund側 contact diff は後工程で見直す
 
 ### v1.1.0 Changes (Subscriber Apply / Identity Handling)
 
@@ -254,7 +381,7 @@ apply
 対応:
 - parts 列は「分割できた場合のみ格納」、それ以外は NULL を保持
 - 未設定判定を「NULL または空文字」に統一
-- identity 生成は parts に依存せず `name_kana_full` ベースで実施
+- identity 生成は parts に依存せず `name_kana_full_match` ベースで実施
 
 効果:
 - fund 側の高精度な name split が正しく反映される
