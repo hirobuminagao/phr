@@ -1,6 +1,7 @@
 
 
 # -*- coding: utf-8 -*-
+
 """
 ============================================================
 Module : hub_subscriber_import.py
@@ -15,6 +16,7 @@ Responsibility:
     - header mapping
     - canonical field generation
     - identity generation
+    - import-side compare hash generation
     - staging_subscribers_hub INSERT
     - per-folder metrics aggregation
 
@@ -23,6 +25,9 @@ Non-goals:
     - DB connection lifecycle
     - etl run start / finish
     - ProgressLogger lifecycle
+    - current snapshot lookup / hydrate
+    - apply_action decision
+    - detailed compare
 ============================================================
 """
 
@@ -45,6 +50,7 @@ from scripts.lib.csv.csv_loader import load_csv
 from scripts.lib.io.directory_discovery import list_files_by_suffix
 
 from scripts.lib.identity.generator import generate_identity_bundle
+from scripts.lib.hash.compare_hash import build_compare_hash
 
 from scripts.lib.identity.field.name_kana import (
     normalize_name_kana_full,
@@ -241,6 +247,11 @@ def process_csv_dir(
                     plog.tick()
                     continue
 
+                # compare hash 方針:
+                #   - import行から生成できる hash はここで作る
+                #   - DB current snapshot 由来の hash は current_snapshot 側で持つ
+                #   - apply_action 判定や detailed compare はここでは行わない
+                #   - compare hash は match値ではなく、staging格納用のnorm値を材料にする
                 # --- 4) identity生成（generator責務） ---
                 try:
                     identity_bundle = generate_identity_bundle(
@@ -288,9 +299,45 @@ def process_csv_dir(
                     line_no=line_no,
                 )
 
+                # --- 5) import-side compare hash生成 ---
+                compare_identity_norm_hash = build_compare_hash(
+                    [
+                        insurance_symbol_norm,
+                        insurance_number_text,
+                        kana_full_res["field_norm"],
+                        kanji_full_res["field_norm"],
+                        birth,
+                        gender_code,
+                    ]
+                )
+
+                compare_other_hash = build_compare_hash(
+                    [
+                        src.get("insured_attribute_name", ""),
+                        src.get("relationship_name", ""),
+                        qualification_acquired_date_iso,
+                        qualification_lost_date_iso,
+                        src.get("employer_code", ""),
+                        src.get("department_code", ""),
+                        src.get("distribution_code", ""),
+                        src.get("employee_code", ""),
+                        src.get("connect_id", ""),
+                    ]
+                )
+
+                address_hash = build_compare_hash(
+                    [
+                        src.get("postal_code", ""),
+                        src.get("address_line", ""),
+                        src.get("building", ""),
+                    ]
+                )
+
                 vals = {
                     "person_id_custom": person_id_custom,
                     "identity_hash": identity_hash,
+                    "compare_identity_norm_hash": compare_identity_norm_hash,
+                    "compare_other_hash": compare_other_hash,
                     "hia_subscriber_id": src.get("hia_subscriber_id", ""),
                     "name_kana_full": kana_full_res["field_norm"],
                     "name_kana_full_match": kana_full_res["match"],
@@ -316,6 +363,7 @@ def process_csv_dir(
                     "postal_code": src.get("postal_code", ""),
                     "address_line": src.get("address_line", ""),
                     "building": src.get("building", ""),
+                    "address_hash": address_hash,
                     "phone": src.get("phone", ""),
                     "email": src.get("email", ""),
                     "employer_code": src.get("employer_code", ""),
@@ -335,6 +383,8 @@ def process_csv_dir(
                         INSERT INTO staging_subscribers_hub (
                             person_id_custom,
                             identity_hash,
+                            compare_identity_norm_hash,
+                            compare_other_hash,
                             hia_subscriber_id,
                             name_kana_full_match,
                             name_kanji_full_match,
@@ -347,6 +397,7 @@ def process_csv_dir(
                             insurance_number, insurance_branchnumber,
                             qualification_acquired_date, qualification_lost_date,
                             postal_code, address_line, building,
+                            address_hash,
                             phone, email,
                             employer_code, department_code, distribution_code,
                             employee_code, connect_id,
@@ -356,6 +407,8 @@ def process_csv_dir(
                         VALUES (
                             %(person_id_custom)s,
                             %(identity_hash)s,
+                            %(compare_identity_norm_hash)s,
+                            %(compare_other_hash)s,
                             %(hia_subscriber_id)s,
                             %(name_kana_full_match)s,
                             %(name_kanji_full_match)s,
@@ -368,6 +421,7 @@ def process_csv_dir(
                             %(insurance_number)s, %(insurance_branchnumber)s,
                             %(qualification_acquired_date)s, %(qualification_lost_date)s,
                             %(postal_code)s, %(address_line)s, %(building)s,
+                            %(address_hash)s,
                             %(phone)s, %(email)s,
                             %(employer_code)s, %(department_code)s, %(distribution_code)s,
                             %(employee_code)s, %(connect_id)s,

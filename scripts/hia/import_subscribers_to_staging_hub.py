@@ -25,7 +25,7 @@ V1.1.0 Contract:
         - `etl_runs` / `etl_errors`（start_run 直後に commit するため、dry-run / 失敗でも証跡は残る）
     - DB I/O (dev_phr):
         - READS:
-            - current snapshot update で `subscribers` / `subscriber_addresses` / `subscriber_contacts` を参照する
+            - current snapshot update で `subscribers` / `subscriber_addresses` / `subscriber_contact_points` を参照する
             - current snapshot lookup は import_run_id 単位で staging 行を対象にする
         - WRITES:
             - `staging_subscribers_hub`（主成果物。dry-run 時は INSERT しない）
@@ -40,11 +40,18 @@ V1.1.0 Contract:
                 - columns:
                     - person_id_custom
                     - identity_hash
+                    - compare_identity_norm_hash
+                    - compare_other_hash
                     - current_subscriber_id
+                    - current_hia_subscriber_id
                     - current_identity_hash
+                    - current_compare_identity_norm_hash
+                    - current_compare_other_hash
                     - current_name_kana_full_match
                     - current_address_id
-                    - current_contact_id
+                    - current_address_hash
+                    - current_phone_contact_point_id
+                    - current_email_contact_point_id
                     - current_lookup_status
                     - current_lookup_checked_at
                     - hia_subscriber_id
@@ -72,6 +79,7 @@ V1.1.0 Contract:
                     - postal_code
                     - address_line
                     - building
+                    - address_hash
                     - phone
                     - email
                     - employer_code
@@ -92,6 +100,7 @@ V1.1.0 Contract:
             - current snapshot run:
                 - import run 成功後に別 etl_runs として start_run / finish_run する
                 - import_run_id の staging 行を対象に current_* を更新する
+                - current_* は current実データそのものではなく、review / compare candidate filtering 用の ID / hash / status に絞る
                 - dry-run 時は current snapshot update も実行しない
     - File I/O:
         - READS: `data/hia_export/input_subscribers_csv/<8桁保険者番号>/*.csv`
@@ -101,6 +110,8 @@ V1.1.0 Contract:
     - Identity / field policy:
         - DB格納用 canonical 値は `scripts.lib.identity.field.*` を利用する
         - `person_id_custom` / `identity_hash` は `scripts.lib.identity.generator` を利用する
+        - `compare_identity_norm_hash` / `compare_other_hash` / `address_hash` は import-side compare hash として生成し staging に保存する
+        - current snapshot 由来の hash は `hub_subscriber_current_snapshot` 側で staging.current_* に保存する
         - 同じ raw 値であっても、DB格納用 field normalize と identity generator は責務を分けて呼び出す
         - generator の `field_results` は identity 生成過程の内部結果であり、DB格納値の一次情報としては扱わない
     - Idempotency (v1.0 現状):
@@ -111,7 +122,7 @@ V1.1.0 Contract:
         - split 不可（1トークン）の場合、parts は空文字のままとし、full を正本として保持する
         - したがって、parts 列は「分割済みの確定値」のみを表し、暫定的に full を parts へ流し込まない
     - Non-goals (v1.1.0 対象外):
-        - fund 差分ロジック、喪失/異動の確定反映、名寄せ精度の改善、正本（subscribers）更新
+        - fund 差分ロジック、喪失/異動の確定反映、名寄せ精度の改善、apply_action 判定、正本（subscribers / addresses / contact points）更新
 ============================================================
 """
 
