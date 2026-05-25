@@ -462,169 +462,190 @@ contact point current change は audit / history 対象とする。
 
 # 6. subscriber_audit
 
-`subscriber_audit` は subscribers 系更新の差分を列単位で保持する audit テーブルである。
+`subscriber_audit` は subscribers 系 apply の監査イベントを保持する audit テーブルである。
 
-HIA側を最新正本として扱うため、apply phase で本番テーブルを更新する場合は、変更前後差分を必ず保存する。
+現在の Hub apply orchestration では、1 staging row (= 1 subscriber) の apply 単位で軽量 audit event を保存する。
+
+HIA側を最新正本として扱うため、apply orchestration で本番テーブルを更新した場合は、audit を保存してから processed mark する。
 
 ---
 
 ## 6.1 Row Model
 
-DDL実態に合わせ、audit は以下の粒度で保存する。
+現在の実装では、audit は以下の粒度で保存する。
 
 ```text
-1 changed field = 1 audit row
+1 staging row apply = 1 audit event
 ```
 
-主な列:
+想定列:
 
 | column | 用途 |
 |---|---|
 | `subscriber_id` | 対象 subscribers.id |
-| `field` | 変更フィールド名 |
-| `old_value` | 変更前値 |
-| `new_value` | 変更後値 |
-| `changed_at` | 変更日時 |
-| `source` | 変更元 |
-| `note` | 補足理由 |
-| `change_run_id` | apply run_id |
+| `event_type` | audit event type |
+| `event_source` | 変更元 |
+| `event_payload` | apply_action / diff/status summary JSON |
+| `run_id` | apply run_id |
+| `created_at` | 作成日時 |
+
+現在の payload には以下を含める。
+
+```text
+apply_run_id
+staging_subscriber_hub_id
+import_run_id
+subscriber_id
+apply_action
+apply_diff_columns
+identity_match_status
+address_diff_status
+contact_point_diff_status
+hia_subscriber_id
+current_subscriber_id
+```
+
+詳細な old_value / new_value の列単位 audit は、後続拡張として扱う。
 
 ---
 
 ## 6.2 Audit Required Events
 
-以下は audit 必須対象とする。
+以下は audit 対象とする。
 
 ```text
-subscriber insert
-subscriber update
-compare_identity_norm_hash change
-compare_other_hash change
-address current switch / insert
-contact point current change
-qualification change
-organization change
+apply_action = insert
+apply_action = update
 ```
 
----
+`apply_action = noop` は実変更がないため audit 対象外とする。
 
-## 6.3 Field Naming Policy
+`apply_action = review` は本番更新を行わないため audit 対象外とする。
 
-`field` には、変更対象が分かる名前を保持する。
+update の内訳は `event_payload.apply_diff_columns` に保持する。
 
-subscribers 本体:
+例:
 
 ```text
 compare_identity_norm_hash
 compare_other_hash
-insurance_symbol
-insurance_number
-qualification_acquired_date
-employer_code
-...
+address
+contact_point
 ```
 
-address 変更:
+---
+
+## 6.3 Event Payload Policy
+
+現在の audit は列単位ではなく、apply event payload として保存する。
+
+payload の `apply_diff_columns` には、更新対象ブロックを保持する。
+
+想定値:
 
 ```text
-address.postal_code
+compare_identity_norm_hash
+compare_other_hash
+address
+contact_point
+```
+
+意味:
+
+| diff column | 意味 |
+|---|---|
+| `compare_identity_norm_hash` | subscriber identity fields 更新 |
+| `compare_other_hash` | subscriber other fields 更新 |
+| `address` | subscriber_addresses current change / insert |
+| `contact_point` | subscriber_contact_points current change / insert / clear |
+
+旧来想定していた以下のような列単位 field 名は、詳細audit拡張時に再検討する。
+
+```text
 address.address_line
-address.building
-address.address_hash
-```
-
-contact 変更:
-
-```text
-contact_point.phone
 contact_point.email
-contact_point.current
-```
-
-name parts clear:
-
-```text
-name_kana_family
-name_kana_given
-name_kanji_family
-name_kanji_given
-...
+insurance_symbol
+qualification_acquired_date
 ```
 
 ---
 
 ## 6.4 Source Policy
 
-`source` は変更元を表す。
-
-想定値例:
-
-```text
-hia_apply
-manual
-migration
-backfill
-```
-
 HIA export subscribers CSV 由来の apply では、原則として:
 
 ```text
-source = hia_apply
+event_source = hia_apply_orchestration
 ```
 
 を使用する。
 
 ---
 
-## 6.5 change_run_id Policy
+## 6.5 run_id Policy
 
-`change_run_id` には apply phase の run_id を保持する。
+`run_id` には apply orchestration の run_id を保持する。
 
 方針:
 
 - import run_id ではなく、実際に本番更新を行った apply run_id を入れる
-- compare / prepare phase の判定結果は staging 側に保持する
-- 永続auditは apply 実行時に保存する
+- import_run_id は `event_payload` に保持する
+- prepare / compare の判定結果は staging 側に保持する
+- audit は apply 実行時に保存する
 
 ---
 
 ## 6.6 Address / Contact Audit
 
-`subscriber_audit.subscriber_id` は必須のため、address / contact の変更も subscriber 単位の audit として保存する。
+address / contact point の実更新は、それぞれ履歴テーブルにも残る。
 
-address / contact の変更は、履歴テーブル自体にも残るが、subscriber apply の監査性を高めるため、`subscriber_audit` にも変更概要を保存する。
+```text
+subscriber_addresses
+subscriber_contact_points
+```
+
+`subscriber_audit` には、1 subscriber apply event の payload として address / contact point の変更ブロックを記録する。
 
 例:
 
-```text
-field = address.address_line
-old_value = 旧住所
-new_value = 新住所
-source = hia_apply
-change_run_id = <apply_run_id>
+```json
+{
+  "apply_action": "update",
+  "apply_diff_columns": "address,contact_point",
+  "address_diff_status": "insert",
+  "contact_point_diff_status": "changed"
+}
 ```
 
-```text
-field = contact.email
-old_value = old@example.com
-new_value = new@example.com
-source = hia_apply
-change_run_id = <apply_run_id>
-```
+詳細な old/new value audit は後続拡張とする。
 
 ---
 
-## 6.8 Audit Timing
+## 6.7 Audit Timing
 
-compare / prepare phase では audit 用差分情報を生成する。
+現在の apply orchestration では、1 staging row (= 1 subscriber) を以下の順で処理する。
 
-実際の `subscriber_audit` 永続保存は apply phase で行う。
+```text
+subscriber root apply
+  ↓
+address apply
+  ↓
+contact point apply
+  ↓
+audit
+  ↓
+processed mark
+```
+
+`apply_action = insert/update` の場合のみ audit を保存する。
+
+`apply_action = noop` は本番更新がないため audit を保存しない。
 
 理由:
 
-- compare phase は判定フェーズであり、本番更新を確定しない
-- apply phase が本番更新と audit 保存を同一transactionで扱う
-- audit と本番更新の不整合を避ける
+- audit は変更履歴であり、変更されないものは記録しない
+- noop の確認は staging / current snapshot / 実テーブル側の seen 情報で確認する
+- audit と本番更新の不整合を避けるため、processed mark より前に audit を保存する
 
 ---
 
@@ -646,11 +667,13 @@ qualification columns
 organization columns
 ```
 
-apply orchestration は prepare / compare が確定した `apply_action` と diff 情報に従い、必要な列を更新する。
+apply orchestration は prepare / compare が確定した `apply_action` と diff 情報に従い、1 subscriber row 単位で必要な処理を順番に実行する。
 
 `identity_hash` は resolve / join 用であり、登録値差分検知の中心にはしない。
 登録値差分検知には `compare_identity_norm_hash` / `compare_other_hash` を使用する。
 
 住所は `address_hash` と `is_current` を組み合わせて noop / current切替 / insert を判定する。
+
+Audit は `apply_action = insert/update` の場合のみ保存し、`noop` は変更履歴として記録しない。
 
 連絡先は `subscriber_contact_points` を正本構造として扱い、現行 `subscriber_contacts` は legacy / backfill source / temporary reference として扱う。
