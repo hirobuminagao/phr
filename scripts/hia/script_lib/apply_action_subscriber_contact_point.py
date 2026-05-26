@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -14,13 +12,14 @@ Responsibility:
     - apply phone / email contact points for one subscriber
     - handle noop / switch_current / insert / clear_current
     - keep subscriber_contact_points as history table
+    - write field-level subscriber_audit rows for contact point changes
 
 Non-goals:
     - subscribers root apply
     - subscriber_addresses apply
-    - subscriber_audit insert
     - staging processed mark
     - prepare / compare decision
+    - JSON/event payload audit
 
 Notes:
     Contact point apply is based on compare result already written to staging.
@@ -29,12 +28,21 @@ Notes:
         current value does not exist in the HIA source of truth
 
     Therefore blank phone/email clears current rows for that contact_type.
+
+    Audit policy:
+        - 1 changed field = 1 subscriber_audit row
+        - field names are contact_point.phone / contact_point.email
 ============================================================
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+from scripts.hia.script_lib.apply_action_subscriber_audit import (
+    build_subscriber_audit_row,
+    insert_subscriber_audit_row,
+)
 
 
 # ============================================================
@@ -54,6 +62,81 @@ def _to_none_if_blank(value: Any) -> Any:
     return value
 
 
+def _field_name_for_contact_type(contact_type: str) -> str:
+    return f"contact_point.{contact_type}"
+
+
+# ============================================================
+# current row lookup
+# ============================================================
+
+
+def load_current_contact_point(
+    cur,
+    *,
+    subscriber_id: int,
+    contact_type: str,
+) -> dict[str, Any]:
+    """audit比較用に current contact point row を取得する。"""
+
+    cur.execute(
+        """
+        SELECT
+            contact_point_id,
+            subscriber_id,
+            contact_type,
+            contact_value,
+            is_current,
+            valid_from,
+            valid_to,
+            source
+        FROM subscriber_contact_points
+        WHERE subscriber_id = %(subscriber_id)s
+          AND contact_type = %(contact_type)s
+          AND is_current = 1
+        ORDER BY contact_point_id DESC
+        LIMIT 1
+        """,
+        {
+            "subscriber_id": subscriber_id,
+            "contact_type": contact_type,
+        },
+    )
+
+    row = cur.fetchone()
+    if not row:
+        return {}
+
+    return dict(row)
+
+
+# ============================================================
+# audit
+# ============================================================
+
+
+def build_contact_point_audit_row(
+    *,
+    subscriber_id: int,
+    contact_type: str,
+    old_value: Any,
+    new_value: Any,
+    apply_run_id: int,
+    note: str,
+) -> Any:
+    """contact point field単位の subscriber_audit row を生成する。"""
+
+    return build_subscriber_audit_row(
+        subscriber_id=subscriber_id,
+        field=_field_name_for_contact_type(contact_type),
+        old_value=old_value,
+        new_value=new_value,
+        source="hia_apply",
+        note=note,
+        change_run_id=apply_run_id,
+    )
+
+
 # ============================================================
 # current control
 # ============================================================
@@ -64,6 +147,7 @@ def clear_current_contact_points(
     *,
     subscriber_id: int,
     contact_type: str,
+    apply_run_id: int,
 ) -> None:
     """対象 subscriber/contact_type の current contact point を全て history 化する。"""
 
@@ -91,6 +175,7 @@ def switch_current_contact_point(
     subscriber_id: int,
     contact_type: str,
     contact_value: str,
+    apply_run_id: int,
 ) -> None:
     """
     既存 history contact point を current に戻す。
@@ -100,10 +185,26 @@ def switch_current_contact_point(
         - compare phase determined switch_current
     """
 
+    current_row = load_current_contact_point(
+        cur,
+        subscriber_id=subscriber_id,
+        contact_type=contact_type,
+    )
+
+    audit_row = build_contact_point_audit_row(
+        subscriber_id=subscriber_id,
+        contact_type=contact_type,
+        old_value=current_row.get("contact_value"),
+        new_value=contact_value,
+        apply_run_id=apply_run_id,
+        note="subscriber contact_point switch_current",
+    )
+
     clear_current_contact_points(
         cur,
         subscriber_id=subscriber_id,
         contact_type=contact_type,
+        apply_run_id=apply_run_id,
     )
 
     cur.execute(
@@ -127,6 +228,16 @@ def switch_current_contact_point(
         },
     )
 
+    if cur.rowcount == 0:
+        raise RuntimeError(
+            "subscriber_contact_points switch_current affected 0 rows: "
+            f"subscriber_id={subscriber_id}, contact_type={contact_type}, "
+            f"contact_value={contact_value}"
+        )
+
+    if audit_row is not None:
+        insert_subscriber_audit_row(cur, audit_row=audit_row)
+
 
 # ============================================================
 # insert
@@ -139,14 +250,31 @@ def insert_contact_point(
     subscriber_id: int,
     contact_type: str,
     contact_value: str,
+    apply_run_id: int,
     source: str = "hia_apply",
 ) -> None:
     """subscriber_contact_points に新しい current contact point row を INSERT する。"""
+
+    current_row = load_current_contact_point(
+        cur,
+        subscriber_id=subscriber_id,
+        contact_type=contact_type,
+    )
+
+    audit_row = build_contact_point_audit_row(
+        subscriber_id=subscriber_id,
+        contact_type=contact_type,
+        old_value=current_row.get("contact_value"),
+        new_value=contact_value,
+        apply_run_id=apply_run_id,
+        note="subscriber contact_point insert",
+    )
 
     clear_current_contact_points(
         cur,
         subscriber_id=subscriber_id,
         contact_type=contact_type,
+        apply_run_id=apply_run_id,
     )
 
     cur.execute(
@@ -182,6 +310,9 @@ def insert_contact_point(
         },
     )
 
+    if audit_row is not None:
+        insert_subscriber_audit_row(cur, audit_row=audit_row)
+
 
 # ============================================================
 # single contact apply
@@ -194,6 +325,7 @@ def apply_single_contact_point(
     subscriber_id: int,
     contact_type: str,
     contact_value: str | None,
+    apply_run_id: int,
 ) -> None:
     """
     1 contact_type の contact point を staging 値に合わせる。
@@ -208,11 +340,31 @@ def apply_single_contact_point(
     value = _as_text(contact_value)
 
     if not value:
-        clear_current_contact_points(
+        current_row = load_current_contact_point(
             cur,
             subscriber_id=subscriber_id,
             contact_type=contact_type,
         )
+
+        audit_row = build_contact_point_audit_row(
+            subscriber_id=subscriber_id,
+            contact_type=contact_type,
+            old_value=current_row.get("contact_value"),
+            new_value=None,
+            apply_run_id=apply_run_id,
+            note="subscriber contact_point cleared by HIA blank",
+        )
+
+        clear_current_contact_points(
+            cur,
+            subscriber_id=subscriber_id,
+            contact_type=contact_type,
+            apply_run_id=apply_run_id,
+        )
+
+        if audit_row is not None:
+            insert_subscriber_audit_row(cur, audit_row=audit_row)
+
         return
 
     cur.execute(
@@ -241,6 +393,7 @@ def apply_single_contact_point(
             subscriber_id=subscriber_id,
             contact_type=contact_type,
             contact_value=value,
+            apply_run_id=apply_run_id,
         )
         return
 
@@ -254,6 +407,7 @@ def apply_single_contact_point(
         subscriber_id=subscriber_id,
         contact_type=contact_type,
         contact_value=value,
+        apply_run_id=apply_run_id,
     )
 
 
@@ -267,6 +421,7 @@ def apply_subscriber_contact_points(
     *,
     row: dict[str, Any],
     subscriber_id: int | None,
+    apply_run_id: int,
 ) -> None:
     """
     1 staging row に対する subscriber_contact_points apply を行う。
@@ -288,6 +443,7 @@ def apply_subscriber_contact_points(
         subscriber_id=int(subscriber_id),
         contact_type="phone",
         contact_value=_to_none_if_blank(row.get("phone")),
+        apply_run_id=apply_run_id,
     )
 
     apply_single_contact_point(
@@ -295,4 +451,5 @@ def apply_subscriber_contact_points(
         subscriber_id=int(subscriber_id),
         contact_type="email",
         contact_value=_to_none_if_blank(row.get("email")),
+        apply_run_id=apply_run_id,
     )

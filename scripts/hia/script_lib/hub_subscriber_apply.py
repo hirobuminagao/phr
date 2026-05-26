@@ -38,10 +38,9 @@ Notes:
           ↓
         contact point apply
           ↓
-        audit
-          ↓
         processed mark
 
+    Field-level audit is written inside each apply_action_* module.
     Implementation details live in apply_action_* modules.
 ============================================================
 """
@@ -56,7 +55,6 @@ from scripts.hia.script_lib.apply_action_subscriber_address import apply_subscri
 from scripts.hia.script_lib.apply_action_subscriber_contact_point import (
     apply_subscriber_contact_points,
 )
-from scripts.hia.script_lib.apply_action_subscriber_audit import apply_subscriber_audit
 from scripts.hia.script_lib.apply_action_staging_mark import (
     mark_staging_apply_error,
     mark_staging_processed,
@@ -210,7 +208,7 @@ def apply_one_subscriber_row(
     dry_run: bool = False,
 ) -> str:
     """
-    1 staging row を subscriber root -> address -> contact point -> audit -> mark の順で処理する。
+    1 staging row を subscriber root -> address -> contact point -> mark の順で処理する。
 
     Returns:
         applied / noop / review / dry_run / error
@@ -248,15 +246,10 @@ def apply_one_subscriber_row(
             cur,
             row=row,
             subscriber_id=subscriber_id,
+            apply_run_id=apply_run_id,
         )
 
         apply_subscriber_contact_points(
-            cur,
-            row=row,
-            subscriber_id=subscriber_id,
-        )
-
-        apply_subscriber_audit(
             cur,
             row=row,
             subscriber_id=subscriber_id,
@@ -303,7 +296,8 @@ def apply_hia_subscriber_rows(
         - review は skip して processed mark しない
         - noop は processed mark する
         - dry_run は DB更新・processed mark・audit を一切行わない
-        - insert/update は subscriber -> address -> contact_points -> audit -> mark の順で処理する
+        - insert/update は subscriber -> address -> contact_points -> mark の順で処理する
+        - audit は各 apply_action_* module 内で field単位に保存する
     """
 
     metrics = ApplyMetrics()
