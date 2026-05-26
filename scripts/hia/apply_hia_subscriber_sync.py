@@ -86,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="DB更新を行わず、apply候補の処理確認のみ行う。prepare/compare/applyの更新も行わない。",
+        help="target tables の更新を行わず、apply候補の処理確認のみ行う。prepare/compare/applyによるDB変更は rollback される。",
     )
     parser.add_argument(
         "--skip-prepare",
