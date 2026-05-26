@@ -279,7 +279,54 @@ apply_action_staging_mark.py
   = processed/error mark
 ```
 
+
 1 staging row (= 1 subscriber) を最後まで処理してから次へ進む。
+
+---
+
+## Apply Batch Assumption
+
+現在の Hub apply orchestration は、以下を前提とした batch apply として扱う。
+
+```text
+import
+  ↓
+current snapshot update
+  ↓
+prepare
+  ↓
+compare
+  ↓
+apply
+```
+
+この一連を:
+
+```text
+1 batch run
+```
+
+として実行する。
+
+そのため current snapshot / compare 時点の old_value を基準として apply / audit を実施する。
+
+現時点では:
+
+```text
+同一 subscriber に対する並行 realtime 更新
+```
+
+は想定しない。
+
+そのため:
+
+```text
+compare時点 current value
+```
+
+を audit old_value として扱う。
+
+現段階では apply 直前の再SELECT / row lock は必須化しない。
 
 ---
 
@@ -562,7 +609,58 @@ apply_error_at
 
 ---
 
-# 10. Run Management
+# 10. Future Concurrency / Request Queue Policy
+
+将来的に realtime subscriber 更新が必要になった場合は、直接 subscribers 系テーブルを更新するのではなく:
+
+```text
+request queue
+```
+
+を経由する。
+
+想定フロー:
+
+```text
+realtime update request
+  ↓
+request queue
+  ↓
+run scheduler
+  ↓
+HIA apply running?
+  YES -> wait queue
+  NO  -> execute apply
+```
+
+目的:
+
+```text
+- compare snapshot と apply の整合維持
+- audit old_value の一貫性維持
+- current snapshot 競合回避
+- HIA batch apply と realtime apply の衝突回避
+```
+
+この段階になった場合、以下を再検討する。
+
+```text
+- apply直前 current再取得
+- SELECT ... FOR UPDATE
+- optimistic lock
+- request queue table
+- scheduler / worker
+```
+
+現段階では:
+
+```text
+single batch apply assumption
+```
+
+を採用する。
+
+# 11. Run Management
 
 apply 実行は
 
@@ -585,7 +683,7 @@ errors
 
 ---
 
-# 11. Contact Point Migration Order
+# 12. Contact Point Migration Order
 
 contact point 化は、Hub 側を先に完走させる。
 

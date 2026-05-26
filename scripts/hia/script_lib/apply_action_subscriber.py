@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -14,11 +12,11 @@ Responsibility:
     - apply subscribers root insert/update for one staging row
     - split subscriber root updates into identity fields and other fields
     - return target subscribers.id for child resources
+    - write field-level subscriber_audit rows for subscriber root changes
 
 Non-goals:
     - subscriber_addresses apply
     - subscriber_contact_points apply
-    - subscriber_audit insert
     - staging processed mark
     - prepare / compare decision
 
@@ -33,12 +31,20 @@ Notes:
     other fields:
         - insured / relationship / qualification / organization
         - compare_other_hash
+
+    Audit policy:
+        - 1 changed field = 1 subscriber_audit row
+        - audit rows are inserted after successful subscribers INSERT/UPDATE
 ============================================================
 """
 
 from __future__ import annotations
 
 from typing import Any
+from scripts.hia.script_lib.apply_action_subscriber_audit import (
+    build_subscriber_audit_rows_from_fields,
+    insert_subscriber_audit_rows,
+)
 
 
 # ============================================================
@@ -68,100 +74,53 @@ def _to_date_or_none(value: Any) -> Any:
 
 
 # ============================================================
-# column mapping
+# audit field definitions
 # ============================================================
 
 
-SUBSCRIBER_IDENTITY_COLUMNS = {
-    "hia_subscriber_id": "hia_subscriber_id",
-    "person_id_custom": "person_id_custom",
-    "identity_hash": "identity_hash",
-    "compare_identity_norm_hash": "compare_identity_norm_hash",
-    "insurer_number": "insurer_number",
-    "insurance_symbol": "insurance_symbol",
-    "insurance_symbol_digits": "insurance_symbol_digits",
-    "insurance_number": "insurance_number",
-    "insurance_branchnumber": "insurance_branchnumber",
-    "birth": "birth",
-    "gender_code": "gender_code",
-    "name_kana_full": "name_kana_full",
-    "name_kana_full_match": "name_kana_full_match",
-    "name_kanji_full": "name_kanji_full",
-    "name_full_match": "name_kanji_full_match",
-    "name_kana_family": "name_kana_family",
-    "name_kana_middle": "name_kana_middle",
-    "name_kana_given": "name_kana_given",
-    "name_kanji_family": "name_kanji_family",
-    "name_kanji_middle": "name_kanji_middle",
-    "name_kanji_given": "name_kanji_given",
-    "name_kana_family_match": "name_kana_family",
-    "name_kana_middle_match": "name_kana_middle",
-    "name_kana_given_match": "name_kana_given",
-    "name_kanji_family_match": "name_kanji_family",
-    "name_kanji_middle_match": "name_kanji_middle",
-    "name_kanji_given_match": "name_kanji_given",
-}
+IDENTITY_AUDIT_FIELDS = [
+    "hia_subscriber_id",
+    "person_id_custom",
+    "identity_hash",
+    "compare_identity_norm_hash",
+    "insurer_number",
+    "insurance_symbol",
+    "insurance_symbol_digits",
+    "insurance_number",
+    "insurance_branchnumber",
+    "birth",
+    "gender_code",
+    "name_kana_full",
+    "name_kana_full_match",
+    "name_kanji_full",
+    "name_full_match",
+    "name_kana_family",
+    "name_kana_middle",
+    "name_kana_given",
+    "name_kanji_family",
+    "name_kanji_middle",
+    "name_kanji_given",
+    "name_kana_family_match",
+    "name_kana_middle_match",
+    "name_kana_given_match",
+    "name_kanji_family_match",
+    "name_kanji_middle_match",
+    "name_kanji_given_match",
+]
 
 
-SUBSCRIBER_OTHER_COLUMNS = {
-    "compare_other_hash": "compare_other_hash",
-    "insured_attribute_name": "insured_attribute_name",
-    "relationship_name": "relationship_name",
-    "qualification_acquired_date": "qualification_acquired_date",
-    "qualification_lost_date": "qualification_lost_date",
-    "employer_code": "employer_code",
-    "department_code": "department_code",
-    "distribution_code": "distribution_code",
-    "employee_code": "employee_code",
-    "connect_id": "connect_id",
-}
-
-
-# ============================================================
-# value builders
-# ============================================================
-
-
-def build_subscriber_identity_values(row: dict[str, Any]) -> dict[str, Any]:
-    """staging row から subscribers identity fields の値を作る。"""
-
-    values: dict[str, Any] = {}
-
-    for target_column, source_key in SUBSCRIBER_IDENTITY_COLUMNS.items():
-        value = row.get(source_key)
-        if target_column == "birth":
-            value = _to_date_or_none(value)
-        values[target_column] = value
-
-    return values
-
-
-def build_subscriber_other_values(row: dict[str, Any]) -> dict[str, Any]:
-    """staging row から subscribers other fields の値を作る。"""
-
-    values: dict[str, Any] = {}
-
-    for target_column, source_key in SUBSCRIBER_OTHER_COLUMNS.items():
-        value = row.get(source_key)
-        if target_column in {"qualification_acquired_date", "qualification_lost_date"}:
-            value = _to_date_or_none(value)
-        values[target_column] = value
-
-    return values
-
-
-def build_subscriber_insert_values(
-    row: dict[str, Any],
-    *,
-    apply_run_id: int,
-) -> dict[str, Any]:
-    """subscribers INSERT 用 values を作る。"""
-
-    values: dict[str, Any] = {}
-    values.update(build_subscriber_identity_values(row))
-    values.update(build_subscriber_other_values(row))
-    values["last_change_run_id"] = apply_run_id
-    return values
+OTHER_AUDIT_FIELDS = [
+    "compare_other_hash",
+    "insured_attribute_name",
+    "relationship_name",
+    "qualification_acquired_date",
+    "qualification_lost_date",
+    "employer_code",
+    "department_code",
+    "distribution_code",
+    "employee_code",
+    "connect_id",
+]
 
 
 # ============================================================
@@ -177,7 +136,46 @@ def insert_subscriber_root(
 ) -> int:
     """subscribers に新規 root row を INSERT し、subscribers.id を返す。"""
 
-    values = build_subscriber_insert_values(row, apply_run_id=apply_run_id)
+    values = {
+        "hia_subscriber_id": row.get("hia_subscriber_id"),
+        "person_id_custom": row.get("person_id_custom"),
+        "identity_hash": row.get("identity_hash"),
+        "compare_identity_norm_hash": row.get("compare_identity_norm_hash"),
+        "compare_other_hash": row.get("compare_other_hash"),
+        "insurer_number": row.get("insurer_number"),
+        "insurance_symbol": row.get("insurance_symbol"),
+        "insurance_symbol_digits": row.get("insurance_symbol_digits"),
+        "insurance_number": row.get("insurance_number"),
+        "insurance_branchnumber": row.get("insurance_branchnumber"),
+        "birth": _to_date_or_none(row.get("birth")),
+        "gender_code": row.get("gender_code"),
+        "name_kana_full": row.get("name_kana_full"),
+        "name_kana_full_match": row.get("name_kana_full_match"),
+        "name_kanji_full": row.get("name_kanji_full"),
+        "name_full_match": row.get("name_kanji_full_match"),
+        "name_kana_family": row.get("name_kana_family"),
+        "name_kana_middle": row.get("name_kana_middle"),
+        "name_kana_given": row.get("name_kana_given"),
+        "name_kanji_family": row.get("name_kanji_family"),
+        "name_kanji_middle": row.get("name_kanji_middle"),
+        "name_kanji_given": row.get("name_kanji_given"),
+        "name_kana_family_match": row.get("name_kana_family"),
+        "name_kana_middle_match": row.get("name_kana_middle"),
+        "name_kana_given_match": row.get("name_kana_given"),
+        "name_kanji_family_match": row.get("name_kanji_family"),
+        "name_kanji_middle_match": row.get("name_kanji_middle"),
+        "name_kanji_given_match": row.get("name_kanji_given"),
+        "insured_attribute_name": row.get("insured_attribute_name"),
+        "relationship_name": row.get("relationship_name"),
+        "qualification_acquired_date": _to_date_or_none(row.get("qualification_acquired_date")),
+        "qualification_lost_date": _to_date_or_none(row.get("qualification_lost_date")),
+        "employer_code": row.get("employer_code"),
+        "department_code": row.get("department_code"),
+        "distribution_code": row.get("distribution_code"),
+        "employee_code": row.get("employee_code"),
+        "connect_id": row.get("connect_id"),
+        "last_change_run_id": apply_run_id,
+    }
 
     cur.execute(
         """
@@ -265,7 +263,49 @@ def insert_subscriber_root(
         values,
     )
 
-    return int(cur.lastrowid)
+    subscriber_id = int(cur.lastrowid)
+
+    audit_rows = build_subscriber_audit_rows_from_fields(
+        subscriber_id=subscriber_id,
+        fields=[*IDENTITY_AUDIT_FIELDS, *OTHER_AUDIT_FIELDS],
+        old_values={},
+        new_values=values,
+        source="hia_apply",
+        note="subscriber insert",
+        change_run_id=apply_run_id,
+    )
+
+    insert_subscriber_audit_rows(
+        cur,
+        audit_rows=audit_rows,
+    )
+
+    return subscriber_id
+
+
+def load_current_subscriber_values(
+    cur,
+    *,
+    subscriber_id: int,
+) -> dict[str, Any]:
+    """audit比較用に現在の subscribers row を取得する。"""
+
+    cur.execute(
+        """
+        SELECT *
+        FROM subscribers
+        WHERE id = %(subscriber_id)s
+        """,
+        {
+            "subscriber_id": subscriber_id,
+        },
+    )
+
+    row = cur.fetchone()
+    if not row:
+        return {}
+
+    return dict(row)
 
 
 def apply_subscriber_identity_fields(
@@ -277,9 +317,52 @@ def apply_subscriber_identity_fields(
 ) -> None:
     """既存 subscribers の identity fields を staging 値へ更新する。"""
 
-    values = build_subscriber_identity_values(row)
-    values["subscriber_id"] = subscriber_id
-    values["last_change_run_id"] = apply_run_id
+    current_values = load_current_subscriber_values(
+        cur,
+        subscriber_id=subscriber_id,
+    )
+
+    values = {
+        "subscriber_id": subscriber_id,
+        "hia_subscriber_id": row.get("hia_subscriber_id"),
+        "person_id_custom": row.get("person_id_custom"),
+        "identity_hash": row.get("identity_hash"),
+        "compare_identity_norm_hash": row.get("compare_identity_norm_hash"),
+        "insurer_number": row.get("insurer_number"),
+        "insurance_symbol": row.get("insurance_symbol"),
+        "insurance_symbol_digits": row.get("insurance_symbol_digits"),
+        "insurance_number": row.get("insurance_number"),
+        "insurance_branchnumber": row.get("insurance_branchnumber"),
+        "birth": _to_date_or_none(row.get("birth")),
+        "gender_code": row.get("gender_code"),
+        "name_kana_full": row.get("name_kana_full"),
+        "name_kana_full_match": row.get("name_kana_full_match"),
+        "name_kanji_full": row.get("name_kanji_full"),
+        "name_full_match": row.get("name_kanji_full_match"),
+        "name_kana_family": row.get("name_kana_family"),
+        "name_kana_middle": row.get("name_kana_middle"),
+        "name_kana_given": row.get("name_kana_given"),
+        "name_kanji_family": row.get("name_kanji_family"),
+        "name_kanji_middle": row.get("name_kanji_middle"),
+        "name_kanji_given": row.get("name_kanji_given"),
+        "name_kana_family_match": row.get("name_kana_family"),
+        "name_kana_middle_match": row.get("name_kana_middle"),
+        "name_kana_given_match": row.get("name_kana_given"),
+        "name_kanji_family_match": row.get("name_kanji_family"),
+        "name_kanji_middle_match": row.get("name_kanji_middle"),
+        "name_kanji_given_match": row.get("name_kanji_given"),
+        "last_change_run_id": apply_run_id,
+    }
+
+    audit_rows = build_subscriber_audit_rows_from_fields(
+        subscriber_id=subscriber_id,
+        fields=IDENTITY_AUDIT_FIELDS,
+        old_values=current_values,
+        new_values=values,
+        source="hia_apply",
+        note="subscriber identity update",
+        change_run_id=apply_run_id,
+    )
 
     cur.execute(
         """
@@ -318,6 +401,11 @@ def apply_subscriber_identity_fields(
         values,
     )
 
+    insert_subscriber_audit_rows(
+        cur,
+        audit_rows=audit_rows,
+    )
+
 
 def apply_subscriber_other_fields(
     cur,
@@ -328,9 +416,35 @@ def apply_subscriber_other_fields(
 ) -> None:
     """既存 subscribers の other fields を staging 値へ更新する。"""
 
-    values = build_subscriber_other_values(row)
-    values["subscriber_id"] = subscriber_id
-    values["last_change_run_id"] = apply_run_id
+    current_values = load_current_subscriber_values(
+        cur,
+        subscriber_id=subscriber_id,
+    )
+
+    values = {
+        "subscriber_id": subscriber_id,
+        "compare_other_hash": row.get("compare_other_hash"),
+        "insured_attribute_name": row.get("insured_attribute_name"),
+        "relationship_name": row.get("relationship_name"),
+        "qualification_acquired_date": _to_date_or_none(row.get("qualification_acquired_date")),
+        "qualification_lost_date": _to_date_or_none(row.get("qualification_lost_date")),
+        "employer_code": row.get("employer_code"),
+        "department_code": row.get("department_code"),
+        "distribution_code": row.get("distribution_code"),
+        "employee_code": row.get("employee_code"),
+        "connect_id": row.get("connect_id"),
+        "last_change_run_id": apply_run_id,
+    }
+
+    audit_rows = build_subscriber_audit_rows_from_fields(
+        subscriber_id=subscriber_id,
+        fields=OTHER_AUDIT_FIELDS,
+        old_values=current_values,
+        new_values=values,
+        source="hia_apply",
+        note="subscriber other update",
+        change_run_id=apply_run_id,
+    )
 
     cur.execute(
         """
@@ -350,6 +464,11 @@ def apply_subscriber_other_fields(
         WHERE id = %(subscriber_id)s
         """,
         values,
+    )
+
+    insert_subscriber_audit_rows(
+        cur,
+        audit_rows=audit_rows,
     )
 
 

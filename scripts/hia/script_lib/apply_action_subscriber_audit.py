@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -8,12 +6,12 @@ Path   : scripts/hia/script_lib/apply_action_subscriber_audit.py
 Project: PHR
 
 Purpose:
-    Write subscriber apply audit for one staging subscriber row.
+    Write subscriber audit rows for HIA apply.
 
 Responsibility:
-    - write lightweight audit event for one subscriber apply
-    - record staging row / apply_run_id / target subscribers.id
-    - record apply_action and diff/status summary
+    - provide field-level subscriber_audit insert helper
+    - keep audit granularity as 1 changed field = 1 audit row
+    - skip audit when old_value == new_value
 
 Non-goals:
     - subscribers root apply
@@ -21,25 +19,41 @@ Non-goals:
     - subscriber_contact_points apply
     - staging processed mark
     - prepare / compare decision
+    - event payload audit
 
 Notes:
-    This module records the fact that apply orchestration handled one row.
+    subscriber_audit must stay field-searchable.
 
-    Detailed before/after value audit can be expanded later.
-    For now, this keeps a compact trail that connects:
+    Required granularity:
 
-        staging row
-        apply run
-        subscribers.id
-        apply_action
-        diff/status summary
+        1 changed field = 1 audit row
+
+    Do not collapse changes into JSON payload events.
 ============================================================
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Iterable
+
+
+# ============================================================
+# data model
+# ============================================================
+
+
+@dataclass(frozen=True)
+class SubscriberAuditRow:
+    """subscriber_audit へINSERTする1 field分の監査行。"""
+
+    subscriber_id: int
+    field: str
+    old_value: Any
+    new_value: Any
+    source: str
+    note: str
+    change_run_id: int
 
 
 # ============================================================
@@ -47,49 +61,83 @@ from typing import Any
 # ============================================================
 
 
-def _as_text(value: Any) -> str:
+def _as_db_text(value: Any) -> str | None:
+    """subscriber_audit.old_value/new_value 用のDB文字列へ変換する。"""
+
     if value is None:
-        return ""
+        return None
     return str(value)
 
 
-def _json_dumps(payload: dict[str, Any]) -> str:
-    """JSON文字列を安定した形で作る。"""
+def _same_for_audit(old_value: Any, new_value: Any) -> bool:
+    """audit上で同値とみなすか判定する。"""
 
-    return json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        default=str,
+    return _as_db_text(old_value) == _as_db_text(new_value)
+
+
+# ============================================================
+# row builders
+# ============================================================
+
+
+def build_subscriber_audit_row(
+    *,
+    subscriber_id: int,
+    field: str,
+    old_value: Any,
+    new_value: Any,
+    source: str,
+    note: str,
+    change_run_id: int,
+) -> SubscriberAuditRow | None:
+    """
+    1 field分の audit row を作る。
+
+    old_value と new_value が同じ場合は None を返す。
+    """
+
+    if _same_for_audit(old_value, new_value):
+        return None
+
+    return SubscriberAuditRow(
+        subscriber_id=subscriber_id,
+        field=field,
+        old_value=old_value,
+        new_value=new_value,
+        source=source,
+        note=note,
+        change_run_id=change_run_id,
     )
 
 
-# ============================================================
-# payload builder
-# ============================================================
-
-
-def build_apply_audit_payload(
+def build_subscriber_audit_rows_from_fields(
     *,
-    row: dict[str, Any],
-    subscriber_id: int | None,
-    apply_run_id: int,
-) -> dict[str, Any]:
-    """subscriber_audit に保存する lightweight payload を作る。"""
+    subscriber_id: int,
+    fields: Iterable[str],
+    old_values: dict[str, Any],
+    new_values: dict[str, Any],
+    source: str,
+    note: str,
+    change_run_id: int,
+) -> list[SubscriberAuditRow]:
+    """field一覧と old/new dict から audit rows を作る。"""
 
-    return {
-        "apply_run_id": apply_run_id,
-        "staging_subscriber_hub_id": row.get("staging_subscriber_hub_id"),
-        "import_run_id": row.get("import_run_id"),
-        "subscriber_id": subscriber_id,
-        "apply_action": row.get("apply_action"),
-        "apply_diff_columns": row.get("apply_diff_columns"),
-        "identity_match_status": row.get("identity_match_status"),
-        "address_diff_status": row.get("address_diff_status"),
-        "contact_point_diff_status": row.get("contact_point_diff_status"),
-        "hia_subscriber_id": row.get("hia_subscriber_id"),
-        "current_subscriber_id": row.get("current_subscriber_id"),
-    }
+    rows: list[SubscriberAuditRow] = []
+
+    for field in fields:
+        audit_row = build_subscriber_audit_row(
+            subscriber_id=subscriber_id,
+            field=field,
+            old_value=old_values.get(field),
+            new_value=new_values.get(field),
+            source=source,
+            note=note,
+            change_run_id=change_run_id,
+        )
+        if audit_row is not None:
+            rows.append(audit_row)
+
+    return rows
 
 
 # ============================================================
@@ -97,84 +145,59 @@ def build_apply_audit_payload(
 # ============================================================
 
 
-def insert_subscriber_apply_audit(
+def insert_subscriber_audit_row(
     cur,
     *,
-    row: dict[str, Any],
-    subscriber_id: int | None,
-    apply_run_id: int,
+    audit_row: SubscriberAuditRow,
 ) -> None:
-    """
-    subscriber_audit に apply event を1件 INSERT する。
-
-    Expected subscriber_audit columns:
-        - subscriber_id
-        - event_type
-        - event_source
-        - event_payload
-        - run_id
-        - created_at
-
-    If the actual table differs, adjust only this INSERT layer.
-    """
-
-    payload = build_apply_audit_payload(
-        row=row,
-        subscriber_id=subscriber_id,
-        apply_run_id=apply_run_id,
-    )
+    """subscriber_audit に1 field分の audit row を INSERT する。"""
 
     cur.execute(
         """
         INSERT INTO subscriber_audit (
             subscriber_id,
-            event_type,
-            event_source,
-            event_payload,
-            run_id,
-            created_at
+            field,
+            old_value,
+            new_value,
+            changed_at,
+            source,
+            note,
+            change_run_id
         )
         VALUES (
             %(subscriber_id)s,
-            %(event_type)s,
-            %(event_source)s,
-            %(event_payload)s,
-            %(run_id)s,
-            NOW()
+            %(field)s,
+            %(old_value)s,
+            %(new_value)s,
+            NOW(),
+            %(source)s,
+            %(note)s,
+            %(change_run_id)s
         )
         """,
         {
-            "subscriber_id": subscriber_id,
-            "event_type": "hia_subscriber_apply",
-            "event_source": "hia_apply_orchestration",
-            "event_payload": _json_dumps(payload),
-            "run_id": apply_run_id,
+            "subscriber_id": audit_row.subscriber_id,
+            "field": audit_row.field,
+            "old_value": _as_db_text(audit_row.old_value),
+            "new_value": _as_db_text(audit_row.new_value),
+            "source": audit_row.source,
+            "note": audit_row.note,
+            "change_run_id": audit_row.change_run_id,
         },
     )
 
 
-# ============================================================
-# public entry
-# ============================================================
-
-
-def apply_subscriber_audit(
+def insert_subscriber_audit_rows(
     cur,
     *,
-    row: dict[str, Any],
-    subscriber_id: int | None,
-    apply_run_id: int,
-) -> None:
-    """1 staging row に対する subscriber apply audit を保存する。"""
+    audit_rows: Iterable[SubscriberAuditRow],
+) -> int:
+    """subscriber_audit に複数field分の audit row を INSERT する。"""
 
-    action = _as_text(row.get("apply_action"))
+    inserted = 0
 
-    if action in {"", "review"}:
-        return
+    for audit_row in audit_rows:
+        insert_subscriber_audit_row(cur, audit_row=audit_row)
+        inserted += 1
 
-    insert_subscriber_apply_audit(
-        cur,
-        row=row,
-        subscriber_id=subscriber_id,
-        apply_run_id=apply_run_id,
-    )
+    return inserted

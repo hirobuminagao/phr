@@ -269,9 +269,43 @@ HIA export subscribers CSV を最新正本として扱う。
 
 ### 6. audit は必ず保存する
 
-HIA側値を正として反映するため、更新前後の差分は必ず audit に残す。
+HIA側値を正として反映するため、実更新した内容は必ず audit に残す。
 
-compare_identity_norm_hash / compare_other_hash による登録値変更、住所 current 切替・追加、contact point current 変更も audit / 履歴管理対象とする。
+subscriber_audit の基本粒度:
+
+```text
+1 changed field = 1 audit row
+```
+
+例:
+
+```text
+insurance_symbol
+qualification_acquired_date
+address.address_hash
+contact_point.email
+```
+
+apply orchestration は 1 subscriber row を順番処理するが、audit は event 単位ではなく field 単位で保存する。
+
+理由:
+
+```text
+- field 単位検索を容易にする
+- 後追い調査を単純化する
+- JSON payload audit を避ける
+- ETL / 運用調査を SQL だけで追いやすくする
+```
+
+compare_identity_norm_hash / compare_other_hash による subscriber 更新、住所 current 切替・追加、contact point current 変更も audit / 履歴管理対象とする。
+
+ただし:
+
+```text
+apply_action = noop
+```
+
+は本番更新が存在しないため audit を保存しない。
 
 ---
 
