@@ -37,20 +37,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
 
-from scripts.work_folder.lib.etl import (
+from scripts.lib.etl import (
     RunMetrics,
     ProgressLogger,
     log_error,
-    log_normalize_error,
 )
-from scripts.work_folder.lib.errors import NormalizeError
-from scripts.work_folder.lib.normalize import common as ntypes
 
 from scripts.lib.csv.csv_loader import load_csv
 from scripts.lib.io.directory_discovery import list_files_by_suffix
 
 from scripts.lib.identity.generator import generate_identity_bundle
 from scripts.lib.hash.compare_hash import build_compare_hash
+from scripts.lib.identity.field.insurance_number import normalize_insurance_number
+from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
+from scripts.lib.identity.field.birthdate import normalize_birthdate
+from scripts.lib.identity.field.gender_code import normalize_gender_code
+from scripts.lib.identity.field.date_field import normalize_date_field
 
 from scripts.lib.identity.field.name_kana import (
     normalize_name_kana_full,
@@ -158,35 +160,78 @@ def process_csv_dir(
                 src = {MAP.get(k, k): (row.get(k, "") or "") for k in row.keys()}
 
                 # --- 2) 必須キーの正規化（insurance_number / birth / gender / symbol） ---
-                #     TODO: 保険証記号・番号・性別・日付も scripts.lib.identity.field.* へ寄せる
-                #     現時点では旧 ntypes を継続利用し、挙動変更を最小化する
+                # field normalize は dict を返す。
+                # DB保存・compare hash 用には field_norm を使う。
                 try:
-                    insurance_number_text = ntypes.normalize_insurance_number_required(
-                        src.get("insurance_number", ""),
+                    number_res = _require_field_ok(
+                        normalize_insurance_number(
+                            src.get("insurance_number", "")
+                        ),
                         field="insurance_number",
                         src=csv_path.name,
                         line_no=line_no,
                     )
-                    branchnum_text = ntypes.normalize_branchnumber_optional(
-                        src.get("insurance_branchnumber", "")
-                    )
-                    birth = ntypes.normalize_birth_yyyymmdd(
-                        src.get("birth", "") or row.get("生年月日", ""),
+
+                    symbol_res = _require_field_ok(
+                        normalize_insurance_symbol(
+                            src.get("insurance_symbol", "")
+                        ),
+                        field="insurance_symbol",
                         src=csv_path.name,
                         line_no=line_no,
                     )
-                    gender_code = ntypes.normalize_gender_code(
-                        src.get("gender_code", "") or row.get("性別", "")
+
+                    birth_res = _require_field_ok(
+                        normalize_birthdate(
+                            src.get("birth", "")
+                            or row.get("生年月日", "")
+                        ),
+                        field="birth",
+                        src=csv_path.name,
+                        line_no=line_no,
                     )
-                    insurance_symbol_norm, sym_digits = ntypes.normalize_insurance_symbol(
-                        src.get("insurance_symbol", "")
+
+                    gender_res = _require_field_ok(
+                        normalize_gender_code(
+                            src.get("gender_code", "")
+                            or row.get("性別", "")
+                        ),
+                        field="gender_code",
+                        src=csv_path.name,
+                        line_no=line_no,
                     )
-                except NormalizeError as ne:
+
+                    insurance_number_text = str(
+                        number_res.get("field_norm") or ""
+                    )
+
+                    branchnum_text = _normalize_optional_branch_number(
+                        src.get("insurance_branchnumber", "")
+                    )
+
+                    birth = str(
+                        birth_res.get("field_norm") or ""
+                    )
+
+                    gender_code = str(
+                        gender_res.get("field_norm") or ""
+                    )
+
+                    insurance_symbol_norm = str(
+                        symbol_res.get("field_norm") or ""
+                    )
+
+                    sym_digits = str(
+                        symbol_res.get("digits")
+                        or symbol_res.get("person_id_custom")
+                        or ""
+                    )
+                except Exception as e:
                     m.rows_skipped += 1
                     m.errors += 1
                     metrics_all.rows_skipped += 1
                     metrics_all.errors += 1
-                    log_normalize_error(
+                    log_error(
                         cur,
                         run_id,
                         phase="import",
@@ -195,7 +240,10 @@ def process_csv_dir(
                         src_file=csv_path.name,
                         row_no=csv_row_no,
                         line_no=line_no,
-                        err=ne,
+                        field=None,
+                        field_value=None,
+                        error_code=type(e).__name__,
+                        message=str(e),
                     )
                     plog.tick()
                     continue
@@ -211,14 +259,9 @@ def process_csv_dir(
                 ).strip()
 
                 if not kana_full_raw:
-                    raise NormalizeError(
-                        field="name_kana_full",
-                        code="required",
-                        raw_value="",
-                        message=(
-                            f"必須フィールド欠損: name_kana_full "
-                            f"file={csv_path.name} line={line_no}"
-                        ),
+                    raise ValueError(
+                        f"必須フィールド欠損: name_kana_full "
+                        f"file={csv_path.name} line={line_no}"
                     )
 
                 try:
@@ -228,12 +271,12 @@ def process_csv_dir(
                     kanji_full_res = normalize_name_kanji_full(kanji_full_raw)
                     kanji_parts_res = normalize_name_kanji_full_to_parts(kanji_full_raw)
 
-                except NormalizeError as ne:
+                except Exception as e:
                     m.rows_skipped += 1
                     m.errors += 1
                     metrics_all.rows_skipped += 1
                     metrics_all.errors += 1
-                    log_normalize_error(
+                    log_error(
                         cur,
                         run_id,
                         phase="import",
@@ -242,7 +285,10 @@ def process_csv_dir(
                         src_file=csv_path.name,
                         row_no=csv_row_no,
                         line_no=line_no,
-                        err=ne,
+                        field=None,
+                        field_value=None,
+                        error_code=type(e).__name__,
+                        message=str(e),
                     )
                     plog.tick()
                     continue
@@ -255,23 +301,23 @@ def process_csv_dir(
                 # --- 4) identity生成（generator責務） ---
                 try:
                     identity_bundle = generate_identity_bundle(
-                        insurer_number=f"{insurer_number:08d}",
-                        insurance_symbol=insurance_symbol_norm,
-                        insurance_number=insurance_number_text,
-                        birthdate=birth,
+                        birthdate=src.get("birth", "") or row.get("生年月日", ""),
+                        insurer_number_raw=f"{insurer_number:08d}",
+                        insurance_symbol_raw=src.get("insurance_symbol", ""),
+                        insurance_number_raw=src.get("insurance_number", ""),
                         gender_code=gender_code,
-                        name_kana_full=kana_full_raw,
+                        name_kana_full_raw=kana_full_raw,
                     )
 
                     person_id_custom = identity_bundle["person_id_custom"]
                     identity_hash = identity_bundle["identity_hash"]
 
-                except NormalizeError as ne:
+                except Exception as e:
                     m.rows_skipped += 1
                     m.errors += 1
                     metrics_all.rows_skipped += 1
                     metrics_all.errors += 1
-                    log_normalize_error(
+                    log_error(
                         cur,
                         run_id,
                         phase="import",
@@ -280,23 +326,26 @@ def process_csv_dir(
                         src_file=csv_path.name,
                         row_no=csv_row_no,
                         line_no=line_no,
-                        err=ne,
+                        field=None,
+                        field_value=None,
+                        error_code=type(e).__name__,
+                        message=str(e),
                     )
                     plog.tick()
                     continue
 
-                qualification_acquired_date_iso = ntypes.normalize_date_iso(
-                    src.get("qualification_acquired_date", ""),
-                    field="qualification_acquired_date",
-                    src=csv_path.name,
-                    line_no=line_no,
+                qualification_acquired_res = normalize_date_field(
+                    src.get("qualification_acquired_date", "")
+                )
+                qualification_lost_res = normalize_date_field(
+                    src.get("qualification_lost_date", "")
                 )
 
-                qualification_lost_date_iso = ntypes.normalize_date_iso(
-                    src.get("qualification_lost_date", ""),
-                    field="qualification_lost_date",
-                    src=csv_path.name,
-                    line_no=line_no,
+                qualification_acquired_date_iso = str(
+                    qualification_acquired_res.get("field_norm") or ""
+                )
+                qualification_lost_date_iso = str(
+                    qualification_lost_res.get("field_norm") or ""
                 )
 
                 # --- 5) import-side compare hash生成 ---
@@ -435,12 +484,12 @@ def process_csv_dir(
                 m.rows_inserted += 1
                 metrics_all.rows_inserted += 1
 
-            except NormalizeError as ne:
+            except ValueError as e:
                 m.rows_skipped += 1
                 m.errors += 1
                 metrics_all.rows_skipped += 1
                 metrics_all.errors += 1
-                log_normalize_error(
+                log_error(
                     cur,
                     run_id,
                     phase="import",
@@ -449,7 +498,10 @@ def process_csv_dir(
                     src_file=csv_path.name,
                     row_no=csv_row_no,
                     line_no=line_no,
-                    err=ne,
+                    field=None,
+                    field_value=None,
+                    error_code=type(e).__name__,
+                    message=str(e),
                 )
             except Exception as e:
                 m.rows_skipped += 1
@@ -484,3 +536,40 @@ def process_csv_dir(
             break
 
     return m
+
+# ============================================================
+# field normalize helpers
+# ============================================================
+
+
+def _require_field_ok(
+    result: dict,
+    *,
+    field: str,
+    src: str,
+    line_no: int,
+) -> dict:
+    """field normalize result の ok を検査し、NGなら ValueError に変換する。"""
+
+    if result.get("ok"):
+        return result
+
+    raise ValueError(
+        f"正規化失敗: {field} "
+        f"reason={result.get('reason')} "
+        f"raw={result.get('raw')} "
+        f"file={src} line={line_no}"
+    )
+
+
+def _normalize_optional_branch_number(raw: str) -> str:
+    """保険証枝番 optional canonical。空欄は空欄のまま扱う。"""
+
+    if raw is None or str(raw).strip() == "":
+        return ""
+
+    res = normalize_insurance_number(raw)
+    if not res.get("ok"):
+        return ""
+
+    return str(res.get("field_norm") or "")

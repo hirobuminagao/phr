@@ -85,12 +85,12 @@ def build_compare_identity_norm_hash(row: dict[str, Any]) -> str:
 
     return build_compare_hash(
         [
-            row.get("insurer_number"),
-            row.get("insurance_symbol_digits"),
+            row.get("insurance_symbol"),
             row.get("insurance_number"),
+            row.get("name_kana_full"),
+            row.get("name_kanji_full"),
             row.get("birth"),
             row.get("gender_code"),
-            row.get("name_kana_full_match"),
         ]
     )
 
@@ -131,12 +131,12 @@ def backfill_subscriber_compare_hashes(
             sql = """
             SELECT
                 id,
-                insurer_number,
-                insurance_symbol_digits,
+                insurance_symbol,
                 insurance_number,
+                name_kana_full,
+                name_kanji_full,
                 birth,
                 gender_code,
-                name_kana_full_match,
                 insured_attribute_name,
                 relationship_name,
                 qualification_acquired_date,

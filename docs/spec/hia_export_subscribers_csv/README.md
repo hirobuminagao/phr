@@ -204,6 +204,21 @@ address_hash
 
 compare hash は `scripts/lib/hash/compare_hash.py` の `build_compare_hash()` で生成する。
 
+compare hash の具体的な材料・順序定義は `identity_policy.md` の compare hash policy を正本とする。
+
+compare hash の材料・順序は import / backfill / apply / compare の全処理で一致させる。
+
+compare hash 定義変更時は:
+
+```text
+- staging_subscribers_hub を再importする
+- subscribers.compare_identity_norm_hash を再生成する
+- subscribers.compare_other_hash を再生成する
+- subscriber_addresses.address_hash を再生成する
+```
+
+compare hash は「同一ロジック・同一順序・同一normalize」を全処理で共有する。
+
 基本方針:
 
 ```text
@@ -383,8 +398,9 @@ compare hash 導入後の実装順:
    - contact point apply
    - audit
    - processed mark
-6. 実装が固まった後に subscribers / subscriber_addresses の backfill を実行
-7. 最後に fund側 diff / projection を見直す
+6. compare hash 定義変更時は subscribers.compare_identity_norm_hash / compare_other_hash を一旦削除または再生成対象として扱う
+7. 実装が固まった後に subscribers / subscriber_addresses の backfill を実行
+8. 最後に fund側 diff / projection を見直す
 ```
 
 backfill 対象:

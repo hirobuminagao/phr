@@ -10,7 +10,7 @@ Purpose:
       MySQL の staging_subscribers_hub に取り込む。
 
 Design:
-    - ETL ログは lib.etl（etl_runs / etl_errors）に一元化し、run の開始は先に commit する
+    - ETL ログは scripts.lib.etl（etl_runs / etl_errors）に一元化し、run の開始は先に commit する
     - 本体取込の成否は finish_run で確定し、成功時は staging への INSERT も含めて commit
     - 取込中の行エラー（NormalizeError 等）は etl_errors に記録し、処理は継続（行スキップ）
     - dry-run の場合は staging への INSERT を実行せず、最後に rollback（実質 no-op。run/err は残る）
@@ -128,32 +128,29 @@ V1.1.0 Contract:
 
 from __future__ import annotations
 
-import sys
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 #
 # sys.path 調整
 # - このスクリプトは scripts/hia 配下に置く
-# - 既存 `scripts.work_folder.*` import を直実行でも解決できるように、repo root を sys.path に追加する
+# - `scripts.lib.*` / `scripts.hia.*` import を直実行でも解決できるように、repo root を sys.path に追加する
 # ------------------------------------------------------------
 WORK_ROOT = Path(__file__).resolve().parents[2]
 if str(WORK_ROOT) not in sys.path:
     sys.path.insert(0, str(WORK_ROOT))
 
-from scripts.work_folder.lib.db.config import load_mysql_params
-from scripts.work_folder.lib.db.mysql import connect_ctx, dict_cursor, MySQLParams
-
-from scripts.work_folder.lib.etl import (
+from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.db.schemas import DEV_PHR
+from scripts.lib.etl import (
     RunMetrics,
     ProgressLogger,
     start_run,
     finish_run,
 )
-
-from scripts.work_folder.lib.normalize import common as ntypes
-
 from scripts.lib.io.directory_discovery import (
     list_target_directories,
     has_files_by_suffix,
@@ -175,6 +172,15 @@ JOB_NAME = "subscribers_hub"
 BASE_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT_BASE = BASE_DIR / "data" / "hia_export" / "input_subscribers_csv"
 
+
+def normalize_insurer_folder_name_to_int(folder: Path) -> int:
+    """8桁保険者番号フォルダ名を int に変換する。"""
+
+    name = folder.name.strip()
+    if not name.isdigit() or len(name) != 8:
+        raise ValueError(f"invalid insurer folder name: {folder}")
+
+    return int(name)
 
 
 # ============================================================
@@ -209,7 +215,7 @@ def main() -> int:
         if not has_csv:
             print(f"[INFO] skip folder (no CSV): {d.name}")
             continue
-        insurer_num = ntypes.normalize_insurer_folder_name_to_int(d)
+        insurer_num = normalize_insurer_folder_name_to_int(d)
         active_pairs.append((d, insurer_num))
 
     if not active_pairs:
@@ -228,16 +234,8 @@ def main() -> int:
 
     insurers_summary = ",".join(f"{i:08d}" for i in insurer_ids)
 
-    params_raw: MySQLParams = load_mysql_params()
-    schema_name = "dev_phr"
-    params = MySQLParams(
-        host=params_raw.host,
-        port=params_raw.port,
-        user=params_raw.user,
-        password=params_raw.password,
-        database=schema_name,
-    )
-
+    params = load_mysql_base_params()
+    schema_name = DEV_PHR
     db_path_str = f"{params.host}:{params.port}/{schema_name}"
 
     print(f"[INFO] BASE      = {base_dir}")
@@ -249,183 +247,187 @@ def main() -> int:
     print(f"[INFO] INSURERS  = {insurers_summary}")
 
     try:
-        with connect_ctx(params) as conn:
-            cur = dict_cursor(conn)
+        with connect_ctx(params, database=DEV_PHR) as conn:
+            with dict_cursor(conn) as cur:
+                metrics_all = RunMetrics()
 
-            metrics_all = RunMetrics()
-
-            total_rows = estimate_csv_rows_in_directories(
-                target_dirs,
-                header_count=1,
-                limit=args.limit,
-            )
-            plog = ProgressLogger(
-                total=total_rows,
-                metrics=metrics_all,
-                interval=args.progress_interval,
-                label="IMPORT",
-                logger=logging.getLogger(__name__),
-            )
-
-            run_id = start_run(
-                cur,
-                phase="import",
-                source="import_subscribers_to_staging_hub",
-                db_schema=schema_name,
-                db_path=db_path_str,
-                input_base=str(base_dir),
-                input_file=run_input_file,
-                insurer_number=run_insurer_number,
-                dry_run=args.dry_run,
-                limit_rows=args.limit,
-            )
-            print(f"[INFO] run_id = {run_id}")
-            conn.commit()
-
-            try:
-                for folder, insurer_number in active_pairs:
-                    if args.limit:
-                        remaining = args.limit - (metrics_all.rows_inserted + metrics_all.rows_skipped)
-                        if remaining <= 0:
-                            break
-                    else:
-                        remaining = 0
-
-                    f_metrics = process_csv_dir(
-                        cur,
-                        run_id=run_id,
-                        insurer_number=insurer_number,
-                        folder=folder,
-                        metrics_all=metrics_all,
-                        plog=plog,
-                        limit=remaining,
-                        dry_run=args.dry_run,
-                    )
-
-                    print(
-                        f"[OK] insurer={insurer_number:08d} folder={folder.name} "
-                        f"files={f_metrics.files} rows={f_metrics.rows_seen} "
-                        f"inserted={f_metrics.rows_inserted} skipped={f_metrics.rows_skipped} "
-                        f"errors={f_metrics.errors}"
-                    )
-
-                    if args.limit and (metrics_all.rows_inserted + metrics_all.rows_skipped) >= args.limit:
-                        break
-
-                plog.finalize()
-
-                finish_run(
-                    cur,
-                    run_id,
-                    metrics_all,
-                    extra_notes=f"insurers={insurers_summary}",
+                total_rows = estimate_csv_rows_in_directories(
+                    target_dirs,
+                    header_count=1,
+                    limit=args.limit,
                 )
-                if args.dry_run:
-                    conn.rollback()
-                    print(
-                        f"[DONE] import_run_id={run_id} total_files={metrics_all.files} "
-                        f"rows={metrics_all.rows_seen} inserted={metrics_all.rows_inserted} "
-                        f"skipped={metrics_all.rows_skipped} errors={metrics_all.errors} "
-                        f"current_snapshot=skipped(dry-run)"
-                    )
-                else:
-                    conn.commit()
-
-                    current_metrics = CurrentSnapshotMetrics()
-                    current_run_metrics = RunMetrics()
-
-                    current_run_id = start_run(
-                        cur,
-                        phase="current_snapshot",
-                        source="hub_subscriber_current_snapshot",
-                        db_schema=schema_name,
-                        db_path=db_path_str,
-                        input_base=str(base_dir),
-                        input_file=run_input_file,
-                        insurer_number=run_insurer_number,
-                        dry_run=False,
-                        limit_rows=args.limit,
-                    )
-                    print(f"[INFO] current_snapshot_run_id = {current_run_id}")
-                    conn.commit()
-
-                    try:
-                        update_current_snapshot(
-                            cur,
-                            import_run_id=run_id,
-                            metrics=current_metrics,
-                            plog=None,
-                        )
-
-                        current_run_metrics.rows_seen = current_metrics.rows_seen
-                        current_run_metrics.rows_inserted = current_metrics.updated
-                        current_run_metrics.rows_skipped = (
-                            current_metrics.not_found
-                            + current_metrics.multiple_match
-                            + current_metrics.review
-                        )
-                        current_run_metrics.errors = current_metrics.errors
-
-                        finish_run(
-                            cur,
-                            current_run_id,
-                            current_run_metrics,
-                            extra_notes=(
-                                f"import_run_id={run_id}, "
-                                f"hia_id_matched={current_metrics.hia_id_matched}, "
-                                f"identity_hash_matched={current_metrics.identity_hash_matched}, "
-                                f"person_id_custom_matched={current_metrics.person_id_custom_matched}, "
-                                f"not_found={current_metrics.not_found}, "
-                                f"multiple_match={current_metrics.multiple_match}, "
-                                f"review={current_metrics.review}"
-                            ),
-                        )
-                        conn.commit()
-
-                    except Exception as e:
-                        conn.rollback()
-                        current_run_metrics.errors += 1
-                        finish_run(
-                            cur,
-                            current_run_id,
-                            current_run_metrics,
-                            status_override="failed",
-                            extra_notes=f"import_run_id={run_id}, error={e}",
-                        )
-                        conn.commit()
-                        raise
-
-                    print(
-                        f"[DONE] import_run_id={run_id} total_files={metrics_all.files} "
-                        f"rows={metrics_all.rows_seen} inserted={metrics_all.rows_inserted} "
-                        f"skipped={metrics_all.rows_skipped} errors={metrics_all.errors}"
-                    )
-                    print(
-                        f"[DONE] current_snapshot_run_id={current_run_id} "
-                        f"rows={current_metrics.rows_seen} updated={current_metrics.updated} "
-                        f"hia_id_matched={current_metrics.hia_id_matched} "
-                        f"identity_hash_matched={current_metrics.identity_hash_matched} "
-                        f"person_id_custom_matched={current_metrics.person_id_custom_matched} "
-                        f"not_found={current_metrics.not_found} "
-                        f"multiple_match={current_metrics.multiple_match} "
-                        f"review={current_metrics.review} "
-                        f"errors={current_metrics.errors}"
-                    )
-
-            except Exception as e:
-                # staging への未確定 INSERT を取り消し。run/err の最終状態はこの後 commit する
-                conn.rollback()
-                print(f"[ERR] 取込中に例外発生: {e}")
-                metrics_all.errors += 1
-                finish_run(
-                    cur,
-                    run_id,
-                    metrics_all,
-                    status_override="failed",
-                    extra_notes=f"insurers={insurers_summary}, error={e}",
+                plog = ProgressLogger(
+                    total=total_rows,
+                    metrics=metrics_all,
+                    interval=args.progress_interval,
+                    label="IMPORT",
+                    logger=logging.getLogger(__name__),
                 )
+
+                run_id = start_run(
+                    cur,
+                    phase="import",
+                    source="import_subscribers_to_staging_hub",
+                    db_schema=schema_name,
+                    db_path=db_path_str,
+                    input_base=str(base_dir),
+                    input_file=run_input_file,
+                    insurer_number=run_insurer_number,
+                    dry_run=args.dry_run,
+                    limit_rows=args.limit,
+                )
+                print(f"[INFO] run_id = {run_id}")
                 conn.commit()
-                return 7
+
+                try:
+                    for folder, insurer_number in active_pairs:
+                        if args.limit:
+                            remaining = args.limit - (
+                                metrics_all.rows_inserted
+                                + metrics_all.rows_skipped
+                            )
+                            if remaining <= 0:
+                                break
+                        else:
+                            remaining = 0
+
+                        f_metrics = process_csv_dir(
+                            cur,
+                            run_id=run_id,
+                            insurer_number=insurer_number,
+                            folder=folder,
+                            metrics_all=metrics_all,
+                            plog=plog,
+                            limit=remaining,
+                            dry_run=args.dry_run,
+                        )
+
+                        print(
+                            f"[OK] insurer={insurer_number:08d} folder={folder.name} "
+                            f"files={f_metrics.files} rows={f_metrics.rows_seen} "
+                            f"inserted={f_metrics.rows_inserted} skipped={f_metrics.rows_skipped} "
+                            f"errors={f_metrics.errors}"
+                        )
+
+                        if args.limit and (
+                            metrics_all.rows_inserted + metrics_all.rows_skipped
+                        ) >= args.limit:
+                            break
+
+                    plog.finalize()
+
+                    finish_run(
+                        cur,
+                        run_id,
+                        metrics_all,
+                        extra_notes=f"insurers={insurers_summary}",
+                    )
+                    if args.dry_run:
+                        conn.rollback()
+                        print(
+                            f"[DONE] import_run_id={run_id} total_files={metrics_all.files} "
+                            f"rows={metrics_all.rows_seen} inserted={metrics_all.rows_inserted} "
+                            f"skipped={metrics_all.rows_skipped} errors={metrics_all.errors} "
+                            f"current_snapshot=skipped(dry-run)"
+                        )
+                    else:
+                        conn.commit()
+
+                        current_metrics = CurrentSnapshotMetrics()
+                        current_run_metrics = RunMetrics()
+
+                        current_run_id = start_run(
+                            cur,
+                            phase="import",
+                            source="hub_subscriber_current_snapshot",
+                            db_schema=schema_name,
+                            db_path=db_path_str,
+                            input_base=str(base_dir),
+                            input_file=run_input_file,
+                            insurer_number=run_insurer_number,
+                            dry_run=False,
+                            limit_rows=args.limit,
+                        )
+                        print(f"[INFO] current_snapshot_run_id = {current_run_id}")
+                        conn.commit()
+
+                        try:
+                            update_current_snapshot(
+                                cur,
+                                import_run_id=run_id,
+                                metrics=current_metrics,
+                                plog=None,
+                            )
+
+                            current_run_metrics.rows_seen = current_metrics.rows_seen
+                            current_run_metrics.rows_inserted = current_metrics.updated
+                            current_run_metrics.rows_skipped = (
+                                current_metrics.not_found
+                                + current_metrics.multiple_match
+                                + current_metrics.review
+                            )
+                            current_run_metrics.errors = current_metrics.errors
+
+                            finish_run(
+                                cur,
+                                current_run_id,
+                                current_run_metrics,
+                                extra_notes=(
+                                    f"import_run_id={run_id}, "
+                                    f"hia_id_matched={current_metrics.hia_id_matched}, "
+                                    f"identity_hash_matched={current_metrics.identity_hash_matched}, "
+                                    f"person_id_custom_matched={current_metrics.person_id_custom_matched}, "
+                                    f"not_found={current_metrics.not_found}, "
+                                    f"multiple_match={current_metrics.multiple_match}, "
+                                    f"review={current_metrics.review}"
+                                ),
+                            )
+                            conn.commit()
+
+                        except Exception as e:
+                            conn.rollback()
+                            current_run_metrics.errors += 1
+                            finish_run(
+                                cur,
+                                current_run_id,
+                                current_run_metrics,
+                                status_override="failed",
+                                extra_notes=f"import_run_id={run_id}, error={e}",
+                            )
+                            conn.commit()
+                            raise
+
+                        print(
+                            f"[DONE] import_run_id={run_id} total_files={metrics_all.files} "
+                            f"rows={metrics_all.rows_seen} inserted={metrics_all.rows_inserted} "
+                            f"skipped={metrics_all.rows_skipped} errors={metrics_all.errors}"
+                        )
+                        print(
+                            f"[DONE] current_snapshot_run_id={current_run_id} "
+                            f"rows={current_metrics.rows_seen} updated={current_metrics.updated} "
+                            f"hia_id_matched={current_metrics.hia_id_matched} "
+                            f"identity_hash_matched={current_metrics.identity_hash_matched} "
+                            f"person_id_custom_matched={current_metrics.person_id_custom_matched} "
+                            f"not_found={current_metrics.not_found} "
+                            f"multiple_match={current_metrics.multiple_match} "
+                            f"review={current_metrics.review} "
+                            f"errors={current_metrics.errors}"
+                        )
+
+                except Exception as e:
+                    # staging への未確定 INSERT を取り消し。run/err の最終状態はこの後 commit する
+                    conn.rollback()
+                    print(f"[ERR] 取込中に例外発生: {e}")
+                    metrics_all.errors += 1
+                    finish_run(
+                        cur,
+                        run_id,
+                        metrics_all,
+                        status_override="failed",
+                        extra_notes=f"insurers={insurers_summary}, error={e}",
+                    )
+                    conn.commit()
+                    return 7
 
     except Exception as e:
         # DB 接続失敗など start_run 前の致命。etl_runs にも残らない可能性がある
