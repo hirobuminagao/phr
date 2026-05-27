@@ -1,0 +1,248 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"get_connection\" は不明なインポート シンボルです",
+	"source": "Pylance",
+	"startLineNumber": 52,
+	"startColumn": 40,
+	"endLineNumber": 52,
+	"endColumn": 54
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"phase\", \"db_schema\", \"db_path\", \"input_base\", \"input_file\", \"insurer_number\", \"dry_run\", \"limit_rows\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 130,
+	"startColumn": 24,
+	"endLineNumber": 139,
+	"endColumn": 10
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"run_type\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 132,
+	"startColumn": 13,
+	"endLineNumber": 132,
+	"endColumn": 21
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"note\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 134,
+	"startColumn": 13,
+	"endLineNumber": 134,
+	"endColumn": 17
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"metrics\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 177,
+	"startColumn": 13,
+	"endLineNumber": 182,
+	"endColumn": 14
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"status\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 180,
+	"startColumn": 17,
+	"endLineNumber": 180,
+	"endColumn": 23
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"message\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 181,
+	"startColumn": 17,
+	"endLineNumber": 181,
+	"endColumn": 24
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"metrics\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 185,
+	"startColumn": 13,
+	"endLineNumber": 190,
+	"endColumn": 14
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"status\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 188,
+	"startColumn": 17,
+	"endLineNumber": 188,
+	"endColumn": 23
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"message\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 189,
+	"startColumn": 17,
+	"endLineNumber": 189,
+	"endColumn": 24
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "パラメーター \"metrics\" に引数がありません",
+	"source": "Pylance",
+	"startLineNumber": 200,
+	"startColumn": 13,
+	"endLineNumber": 205,
+	"endColumn": 14
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"status\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 203,
+	"startColumn": 17,
+	"endLineNumber": 203,
+	"endColumn": 23
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"message\" という名前のパラメーターがありません",
+	"source": "Pylance",
+	"startLineNumber": 204,
+	"startColumn": 17,
+	"endLineNumber": 204,
+	"endColumn": 24
+}]
