@@ -1,0 +1,28 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\hia\backfill_scripts\backfill_subscriber_compare_hashes.py", line 265, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\hia\backfill_scripts\backfill_subscriber_compare_hashes.py", line 250, in main
+    metrics = backfill_subscriber_compare_hashes(
+        limit=args.limit,
+        dry_run=args.dry_run,
+    )
+  File "c:\Users\1107858.KSMD\work\phr\scripts\hia\backfill_scripts\backfill_subscriber_compare_hashes.py", line 168, in backfill_subscriber_compare_hashes
+    new_identity_hash = build_compare_identity_norm_hash(row)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\hia\backfill_scripts\backfill_subscriber_compare_hashes.py", line 86, in build_compare_identity_norm_hash
+    return build_compare_hash(
+        [
+        ]
+    )
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\hash\compare_hash.py", line 92, in build_compare_hash
+    normalized_values = _normalize_values(values_list)
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\hash\compare_hash.py", line 58, in _normalize_values
+    normalized.append(base_normalize(value) or "")
+                      ~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\base_norm.py", line 24, in base_normalize
+    value = to_nfkc(raw)
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\identity\primitive\normalize.py", line 14, in to_nfkc
+    return unicodedata.normalize("NFKC", text)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+TypeError: normalize() argument 2 must be str, not datetime.date
