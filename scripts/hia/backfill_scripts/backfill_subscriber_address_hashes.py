@@ -33,7 +33,6 @@ Notes:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +46,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
+from scripts.lib.hash.compare_hash import build_compare_hash
 
 
 # ============================================================
@@ -72,11 +72,6 @@ def _as_text(value: Any) -> str:
     return str(value).strip()
 
 
-def _sha256_text(parts: list[str]) -> str:
-    joined = "|".join(parts)
-    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
-
-
 # ============================================================
 # hash builder
 # ============================================================
@@ -85,11 +80,11 @@ def _sha256_text(parts: list[str]) -> str:
 def build_address_hash(row: dict[str, Any]) -> str:
     """subscriber_addresses row から address_hash を生成する。"""
 
-    return _sha256_text(
+    return build_compare_hash(
         [
-            _as_text(row.get("postal_code")),
-            _as_text(row.get("address_line")),
-            _as_text(row.get("building")),
+            row.get("postal_code"),
+            row.get("address_line"),
+            row.get("building"),
         ]
     )
 

@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -29,7 +27,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Iterable
 
-from scripts.lib.identity.base_norm import base_norm
+from scripts.lib.identity.base_norm import base_normalize
 
 
 # ============================================================
@@ -57,7 +55,7 @@ def _normalize_values(values: Iterable[Any]) -> list[str]:
     normalized: list[str] = []
 
     for value in values:
-        normalized.append(base_norm(value))
+        normalized.append(base_normalize(value) or "")
 
     return normalized
 

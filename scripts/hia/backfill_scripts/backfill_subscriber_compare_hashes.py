@@ -36,7 +36,6 @@ Notes:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +49,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
+from scripts.lib.hash.compare_hash import build_compare_hash
 
 
 # ============================================================
@@ -75,11 +75,6 @@ def _as_text(value: Any) -> str:
     return str(value).strip()
 
 
-def _sha256_text(parts: list[str]) -> str:
-    joined = "|".join(parts)
-    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
-
-
 # ============================================================
 # hash builders
 # ============================================================
@@ -88,14 +83,14 @@ def _sha256_text(parts: list[str]) -> str:
 def build_compare_identity_norm_hash(row: dict[str, Any]) -> str:
     """subscribers row から compare_identity_norm_hash を生成する。"""
 
-    return _sha256_text(
+    return build_compare_hash(
         [
-            _as_text(row.get("insurer_number")),
-            _as_text(row.get("insurance_symbol_digits")),
-            _as_text(row.get("insurance_number")),
-            _as_text(row.get("birth")),
-            _as_text(row.get("gender_code")),
-            _as_text(row.get("name_kana_full_match")),
+            row.get("insurer_number"),
+            row.get("insurance_symbol_digits"),
+            row.get("insurance_number"),
+            row.get("birth"),
+            row.get("gender_code"),
+            row.get("name_kana_full_match"),
         ]
     )
 
@@ -103,17 +98,17 @@ def build_compare_identity_norm_hash(row: dict[str, Any]) -> str:
 def build_compare_other_hash(row: dict[str, Any]) -> str:
     """subscribers row から compare_other_hash を生成する。"""
 
-    return _sha256_text(
+    return build_compare_hash(
         [
-            _as_text(row.get("insured_attribute_name")),
-            _as_text(row.get("relationship_name")),
-            _as_text(row.get("qualification_acquired_date")),
-            _as_text(row.get("qualification_lost_date")),
-            _as_text(row.get("employer_code")),
-            _as_text(row.get("department_code")),
-            _as_text(row.get("distribution_code")),
-            _as_text(row.get("employee_code")),
-            _as_text(row.get("connect_id")),
+            row.get("insured_attribute_name"),
+            row.get("relationship_name"),
+            row.get("qualification_acquired_date"),
+            row.get("qualification_lost_date"),
+            row.get("employer_code"),
+            row.get("department_code"),
+            row.get("distribution_code"),
+            row.get("employee_code"),
+            row.get("connect_id"),
         ]
     )
 
