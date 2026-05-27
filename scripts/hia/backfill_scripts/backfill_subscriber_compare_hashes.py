@@ -129,99 +129,93 @@ def backfill_subscriber_compare_hashes(
     dry_run: bool,
 ) -> BackfillMetrics:
     metrics = BackfillMetrics()
-
     params = load_mysql_base_params()
 
     with connect_ctx(params, database=DEV_PHR) as conn:
         with dict_cursor(conn) as cur:
-            try:
-                        sql = """
-                        SELECT
-                            id,
-                            insurer_number,
-                            insurance_symbol_digits,
-                            insurance_number,
-                            birth,
-                            gender_code,
-                            name_kana_full_match,
-                            insured_attribute_name,
-                            relationship_name,
-                            qualification_acquired_date,
-                            qualification_lost_date,
-                            employer_code,
-                            department_code,
-                            distribution_code,
-                            employee_code,
-                            connect_id,
-                            compare_identity_norm_hash,
-                            compare_other_hash
-                        FROM subscribers
-                        ORDER BY id
+            sql = """
+            SELECT
+                id,
+                insurer_number,
+                insurance_symbol_digits,
+                insurance_number,
+                birth,
+                gender_code,
+                name_kana_full_match,
+                insured_attribute_name,
+                relationship_name,
+                qualification_acquired_date,
+                qualification_lost_date,
+                employer_code,
+                department_code,
+                distribution_code,
+                employee_code,
+                connect_id,
+                compare_identity_norm_hash,
+                compare_other_hash
+            FROM subscribers
+            ORDER BY id
+            """
+
+            if limit > 0:
+                sql += " LIMIT %(limit)s"
+                cur.execute(sql, {"limit": limit})
+            else:
+                cur.execute(sql)
+
+            rows = [dict(row) for row in cur.fetchall()]
+
+            for row in rows:
+                metrics.scanned += 1
+
+                subscriber_id = int(_as_text(row.get("id")) or "0")
+
+                new_identity_hash = build_compare_identity_norm_hash(row)
+                new_other_hash = build_compare_other_hash(row)
+
+                current_identity_hash = _as_text(
+                    row.get("compare_identity_norm_hash")
+                )
+                current_other_hash = _as_text(row.get("compare_other_hash"))
+
+                if (
+                    current_identity_hash == new_identity_hash
+                    and current_other_hash == new_other_hash
+                ):
+                    metrics.skipped += 1
+                    continue
+
+                print(
+                    f"[UPDATE] subscriber_id={subscriber_id} "
+                    f"identity_changed={current_identity_hash != new_identity_hash} "
+                    f"other_changed={current_other_hash != new_other_hash}"
+                )
+
+                if not dry_run:
+                    cur.execute(
                         """
+                        UPDATE subscribers
+                        SET
+                            compare_identity_norm_hash = %(compare_identity_norm_hash)s,
+                            compare_other_hash = %(compare_other_hash)s,
+                            updated_at = NOW()
+                        WHERE id = %(subscriber_id)s
+                        """,
+                        {
+                            "subscriber_id": subscriber_id,
+                            "compare_identity_norm_hash": new_identity_hash,
+                            "compare_other_hash": new_other_hash,
+                        },
+                    )
 
-                        if limit > 0:
-                            sql += " LIMIT %(limit)s"
-                            cur.execute(sql, {"limit": limit})
-                        else:
-                            cur.execute(sql)
+                metrics.updated += 1
 
-                        rows = list(cur.fetchall())
+            if dry_run:
+                conn.rollback()
+            else:
+                conn.commit()
 
-                        for row in rows:
-                            metrics.scanned += 1
-
-                            subscriber_id = int(row["id"])
-
-                            new_identity_hash = build_compare_identity_norm_hash(row)
-                            new_other_hash = build_compare_other_hash(row)
-
-                            current_identity_hash = _as_text(
-                                row.get("compare_identity_norm_hash")
-                            )
-                            current_other_hash = _as_text(
-                                row.get("compare_other_hash"))
-
-                            if (
-                                current_identity_hash == new_identity_hash
-                                and current_other_hash == new_other_hash
-                            ):
-                                metrics.skipped += 1
-                                continue
-
-                            print(
-                                f"[UPDATE] subscriber_id={subscriber_id} "
-                                f"identity_changed={current_identity_hash != new_identity_hash} "
-                                f"other_changed={current_other_hash != new_other_hash}"
-                            )
-
-                            if not dry_run:
-                                cur.execute(
-                                    """
-                                    UPDATE subscribers
-                                    SET
-                                        compare_identity_norm_hash = %(compare_identity_norm_hash)s,
-                                        compare_other_hash = %(compare_other_hash)s,
-                                        updated_at = NOW()
-                                    WHERE id = %(subscriber_id)s
-                                    """,
-                                    {
-                                        "subscriber_id": subscriber_id,
-                                        "compare_identity_norm_hash": new_identity_hash,
-                                        "compare_other_hash": new_other_hash,
-                                    },
-                                )
-
-                            metrics.updated += 1
-
-                        if dry_run:
-                            conn.rollback()
-                        else:
-                            conn.commit()
-
-                        return metrics
-
-            finally:
-                pass
+    return metrics
 
 
 # ============================================================

@@ -129,13 +129,17 @@ def backfill_subscriber_address_hashes(
                 else:
                     cur.execute(sql)
 
-                rows = list(cur.fetchall())
+                rows = [dict(row) for row in cur.fetchall()]
 
                 for row in rows:
                     metrics.scanned += 1
 
-                    address_id = int(row["address_id"])
-                    subscriber_id = int(row["subscriber_id"])
+                    address_id = int(
+                        _as_text(row.get("address_id")) or "0"
+                    )
+                    subscriber_id = int(
+                        _as_text(row.get("subscriber_id")) or "0"
+                    )
 
                     new_hash = build_address_hash(row)
                     current_hash = _as_text(row.get("address_hash"))
