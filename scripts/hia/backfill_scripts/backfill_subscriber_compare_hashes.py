@@ -40,7 +40,7 @@ import hashlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # repo root
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -163,7 +163,7 @@ def backfill_subscriber_compare_hashes(
             else:
                 cur.execute(sql)
 
-            rows = [dict(row) for row in cur.fetchall()]
+            rows = cast(list[dict[str, Any]], cur.fetchall())
 
             for row in rows:
                 metrics.scanned += 1
