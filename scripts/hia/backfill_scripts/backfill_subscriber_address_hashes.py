@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -46,7 +44,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.work_folder.lib.db import get_connection
+from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.db.schemas import DEV_PHR
 
 
 # ============================================================
@@ -106,75 +106,75 @@ def backfill_subscriber_address_hashes(
 ) -> BackfillMetrics:
     metrics = BackfillMetrics()
 
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    params = load_mysql_base_params()
 
-    try:
-        sql = """
-        SELECT
-            address_id,
-            subscriber_id,
-            postal_code,
-            address_line,
-            building,
-            address_hash
-        FROM subscriber_addresses
-        ORDER BY address_id
-        """
+    with connect_ctx(params, database=DEV_PHR) as conn:
+        with dict_cursor(conn) as cur:
+            try:
+                sql = """
+                SELECT
+                    address_id,
+                    subscriber_id,
+                    postal_code,
+                    address_line,
+                    building,
+                    address_hash
+                FROM subscriber_addresses
+                ORDER BY address_id
+                """
 
-        if limit > 0:
-            sql += " LIMIT %(limit)s"
-            cur.execute(sql, {"limit": limit})
-        else:
-            cur.execute(sql)
+                if limit > 0:
+                    sql += " LIMIT %(limit)s"
+                    cur.execute(sql, {"limit": limit})
+                else:
+                    cur.execute(sql)
 
-        rows = list(cur.fetchall())
+                rows = list(cur.fetchall())
 
-        for row in rows:
-            metrics.scanned += 1
+                for row in rows:
+                    metrics.scanned += 1
 
-            address_id = int(row["address_id"])
-            subscriber_id = int(row["subscriber_id"])
+                    address_id = int(row["address_id"])
+                    subscriber_id = int(row["subscriber_id"])
 
-            new_hash = build_address_hash(row)
-            current_hash = _as_text(row.get("address_hash"))
+                    new_hash = build_address_hash(row)
+                    current_hash = _as_text(row.get("address_hash"))
 
-            if current_hash == new_hash:
-                metrics.skipped += 1
-                continue
+                    if current_hash == new_hash:
+                        metrics.skipped += 1
+                        continue
 
-            print(
-                f"[UPDATE] address_id={address_id} "
-                f"subscriber_id={subscriber_id}"
-            )
+                    print(
+                        f"[UPDATE] address_id={address_id} "
+                        f"subscriber_id={subscriber_id}"
+                    )
 
-            if not dry_run:
-                cur.execute(
-                    """
-                    UPDATE subscriber_addresses
-                    SET
-                        address_hash = %(address_hash)s,
-                        updated_at = NOW()
-                    WHERE address_id = %(address_id)s
-                    """,
-                    {
-                        "address_id": address_id,
-                        "address_hash": new_hash,
-                    },
-                )
+                    if not dry_run:
+                        cur.execute(
+                            """
+                            UPDATE subscriber_addresses
+                            SET
+                                address_hash = %(address_hash)s,
+                                updated_at = NOW()
+                            WHERE address_id = %(address_id)s
+                            """,
+                            {
+                                "address_id": address_id,
+                                "address_hash": new_hash,
+                            },
+                        )
 
-            metrics.updated += 1
+                    metrics.updated += 1
 
-        if dry_run:
-            conn.rollback()
-        else:
-            conn.commit()
+                if dry_run:
+                    conn.rollback()
+                else:
+                    conn.commit()
 
-        return metrics
+                return metrics
 
-    finally:
-        cur.close()
-        conn.close()
+            finally:
+                pass
 
 
 # ============================================================

@@ -65,7 +65,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.work_folder.lib.db import get_connection
+from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.db.schemas import DEV_PHR
 
 
 # ============================================================
@@ -361,66 +363,65 @@ def backfill_subscriber_contact_points(
 ) -> BackfillMetrics:
     metrics = BackfillMetrics()
 
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    params = load_mysql_base_params()
 
-    try:
-        rows = load_legacy_contacts(cur, limit=limit)
+    with connect_ctx(params, database=DEV_PHR) as conn:
+        with dict_cursor(conn) as cur:
+            try:
+                rows = load_legacy_contacts(cur, limit=limit)
 
-        for row in rows:
-            metrics.scanned += 1
+                for row in rows:
+                    metrics.scanned += 1
 
-            subscriber_id = int(row["subscriber_id"])
-            phone_value = _legacy_value(row, "phone")
-            email_value = _legacy_value(row, "email")
+                    subscriber_id = int(row["subscriber_id"])
+                    phone_value = _legacy_value(row, "phone")
+                    email_value = _legacy_value(row, "email")
 
-            phone_result = backfill_one_contact_type(
-                cur,
-                subscriber_id=subscriber_id,
-                contact_type="phone",
-                contact_value=phone_value,
-            )
-            email_result = backfill_one_contact_type(
-                cur,
-                subscriber_id=subscriber_id,
-                contact_type="email",
-                contact_value=email_value,
-            )
+                    phone_result = backfill_one_contact_type(
+                        cur,
+                        subscriber_id=subscriber_id,
+                        contact_type="phone",
+                        contact_value=phone_value,
+                    )
+                    email_result = backfill_one_contact_type(
+                        cur,
+                        subscriber_id=subscriber_id,
+                        contact_type="email",
+                        contact_value=email_value,
+                    )
 
-            if phone_result == "inserted":
-                metrics.phone_inserted += 1
-            elif phone_result == "switched":
-                metrics.phone_switched += 1
-            elif phone_result == "cleared":
-                metrics.phone_cleared += 1
-            else:
-                metrics.phone_skipped += 1
+                    if phone_result == "inserted":
+                        metrics.phone_inserted += 1
+                    elif phone_result == "switched":
+                        metrics.phone_switched += 1
+                    elif phone_result == "cleared":
+                        metrics.phone_cleared += 1
+                    else:
+                        metrics.phone_skipped += 1
 
-            if email_result == "inserted":
-                metrics.email_inserted += 1
-            elif email_result == "switched":
-                metrics.email_switched += 1
-            elif email_result == "cleared":
-                metrics.email_cleared += 1
-            else:
-                metrics.email_skipped += 1
+                    if email_result == "inserted":
+                        metrics.email_inserted += 1
+                    elif email_result == "switched":
+                        metrics.email_switched += 1
+                    elif email_result == "cleared":
+                        metrics.email_cleared += 1
+                    else:
+                        metrics.email_skipped += 1
 
-            if phone_result != "skipped" or email_result != "skipped":
-                print(
-                    f"[UPDATE] subscriber_id={subscriber_id} "
-                    f"phone={phone_result} email={email_result}"
-                )
+                    if phone_result != "skipped" or email_result != "skipped":
+                        print(
+                            f"[UPDATE] subscriber_id={subscriber_id} "
+                            f"phone={phone_result} email={email_result}"
+                        )
 
-        if dry_run:
-            conn.rollback()
-        else:
-            conn.commit()
+                if dry_run:
+                    conn.rollback()
+                else:
+                    conn.commit()
 
-        return metrics
-
-    finally:
-        cur.close()
-        conn.close()
+                return metrics
+            finally:
+                pass
 
 
 # ============================================================
