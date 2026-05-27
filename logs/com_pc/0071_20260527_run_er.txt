@@ -1,0 +1,8 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\hia\backfill_scripts\backfill_subscriber_compare_hashes.py", line 52, in <module>
+    from scripts.lib.hash.compare_hash import build_compare_hash
+  File "C:\Users\1107858.KSMD\work\phr\scripts\lib\hash\compare_hash.py", line 36
+    from __future__ import annotations
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: from __future__ imports must occur at the beginning of the file
