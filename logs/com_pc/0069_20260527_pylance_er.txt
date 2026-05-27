@@ -1,0 +1,374 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 173,
+	"startColumn": 49,
+	"endLineNumber": 173,
+	"endColumn": 58,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 173,
+	"startColumn": 49,
+	"endLineNumber": 173,
+	"endColumn": 58
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 173,
+	"startColumn": 49,
+	"endLineNumber": 173,
+	"endColumn": 58
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 173,
+	"startColumn": 49,
+	"endLineNumber": 173,
+	"endColumn": 58
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType]\" の引数を、関数 \"build_compare_identity_norm_hash\" の型 \"dict[str, Any]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType]\" は型 \"dict[str, Any]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"dict[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 175,
+	"startColumn": 82,
+	"endLineNumber": 175,
+	"endColumn": 85
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType]\" の引数を、関数 \"build_compare_other_hash\" の型 \"dict[str, Any]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType]\" は型 \"dict[str, Any]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"dict[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 176,
+	"startColumn": 71,
+	"endLineNumber": 176,
+	"endColumn": 74
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 179,
+	"startColumn": 37,
+	"endLineNumber": 179,
+	"endColumn": 40
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_compare_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 182,
+	"startColumn": 37,
+	"endLineNumber": 182,
+	"endColumn": 40
+}]
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 137,
+	"startColumn": 38,
+	"endLineNumber": 137,
+	"endColumn": 55,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['address_id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['address_id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 137,
+	"startColumn": 38,
+	"endLineNumber": 137,
+	"endColumn": 55
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 137,
+	"startColumn": 38,
+	"endLineNumber": 137,
+	"endColumn": 55
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 137,
+	"startColumn": 38,
+	"endLineNumber": 137,
+	"endColumn": 55
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__getitem__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 138,
+	"startColumn": 41,
+	"endLineNumber": 138,
+	"endColumn": 61,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1032,
+			"startColumn": 9,
+			"endLineNumber": 1032,
+			"endColumn": 20,
+			"message": "オーバーロード 2 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Literal['subscriber_id']\" の引数を、関数 \"__getitem__\" の型 \"slice[Any, Any, Any]\" のパラメーター \"key\" に割り当てることはできません\n  \"Literal['subscriber_id']\" は \"slice[Any, Any, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 138,
+	"startColumn": 41,
+	"endLineNumber": 138,
+	"endColumn": 61
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 138,
+	"startColumn": 41,
+	"endLineNumber": 138,
+	"endColumn": 61
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowItemType | Unknown\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"RowItemType | Unknown\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"date\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"date\" は \"str\" に割り当てできません\n      \"date\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"date\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"date\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 138,
+	"startColumn": 41,
+	"endLineNumber": 138,
+	"endColumn": 61
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType]\" の引数を、関数 \"build_address_hash\" の型 \"dict[str, Any]\" のパラメーター \"row\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType]\" は型 \"dict[str, Any]\" に割り当てできません\n    \"Tuple[RowItemType, ...]\" は \"dict[str, Any]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 140,
+	"startColumn": 51,
+	"endLineNumber": 140,
+	"endColumn": 54
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/backfill_scripts/backfill_subscriber_address_hashes.py",
+	"owner": "Pylance4",
+	"code": {
+		"value": "reportAttributeAccessIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportAttributeAccessIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "クラス \"RowType\" の属性 \"get\" にアクセスできません\n  属性 \"get\" が不明です",
+	"source": "Pylance",
+	"startLineNumber": 141,
+	"startColumn": 49,
+	"endLineNumber": 141,
+	"endColumn": 52
+}]
