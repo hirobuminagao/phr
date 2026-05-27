@@ -1,3 +1,14 @@
+# ============================================================
+# value-to-text helper
+# ============================================================
+
+def _value_to_text(value: Any) -> str | None:
+    """compare hash 用に任意値を文字列へ変換する。"""
+
+    if value is None:
+        return None
+
+    return str(value)
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -55,7 +66,8 @@ def _normalize_values(values: Iterable[Any]) -> list[str]:
     normalized: list[str] = []
 
     for value in values:
-        normalized.append(base_normalize(value) or "")
+        text = _value_to_text(value)
+        normalized.append(base_normalize(text) or "")
 
     return normalized
 
