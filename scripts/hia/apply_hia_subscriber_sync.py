@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -49,8 +47,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.work_folder.lib.db import get_connection
-from scripts.work_folder.lib.etl import finish_run, start_run
+from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.db.schemas import DEV_PHR
+
+from scripts.lib.etl import RunMetrics, finish_run, start_run
 
 from scripts.hia.script_lib.hub_subscriber_prepare import (
     prepare_hia_subscriber_apply_actions,
@@ -121,97 +122,107 @@ def print_metrics(label: str, metrics) -> None:
 def main() -> int:
     args = parse_args()
 
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    params = load_mysql_base_params()
 
     apply_run_id = None
+    metrics_all = RunMetrics()
 
-    try:
-        apply_run_id = start_run(
-            cur,
-            run_type="hia_subscriber_apply",
-            source="apply_hia_subscriber_sync",
-            note=(
-                f"import_run_id={args.import_run_id}; "
-                f"limit={args.limit}; dry_run={args.dry_run}; "
-                f"skip_prepare={args.skip_prepare}; skip_compare={args.skip_compare}"
-            ),
-        )
-        conn.commit()
+    with connect_ctx(params, database=DEV_PHR) as conn:
+        with dict_cursor(conn) as cur:
+            try:
+                apply_run_id = start_run(
+                    cur,
+                    phase="hia_subscriber_apply",
+                    source="apply_hia_subscriber_sync",
+                    db_schema=DEV_PHR,
+                    db_path=None,
+                    input_base=None,
+                    input_file=None,
+                    insurer_number=None,
+                    dry_run=args.dry_run,
+                    limit_rows=args.limit if args.limit > 0 else None,
+                )
+                conn.commit()
 
-        print("=== HIA subscriber apply start ===")
-        print(f"apply_run_id  : {apply_run_id}")
-        print(f"import_run_id : {args.import_run_id}")
-        print(f"limit         : {args.limit}")
-        print(f"dry_run       : {args.dry_run}")
+                print("=== HIA subscriber apply start ===")
+                print(f"apply_run_id  : {apply_run_id}")
+                print(f"import_run_id : {args.import_run_id}")
+                print(f"limit         : {args.limit}")
+                print(f"dry_run       : {args.dry_run}")
 
-        if not args.skip_prepare:
-            prepare_metrics = prepare_hia_subscriber_apply_actions(
-                cur,
-                import_run_id=args.import_run_id,
-                limit=args.limit,
-                dry_run=args.dry_run,
-            )
-            print_metrics("prepare", prepare_metrics)
+                if not args.skip_prepare:
+                    prepare_metrics = prepare_hia_subscriber_apply_actions(
+                        cur,
+                        import_run_id=args.import_run_id,
+                        limit=args.limit,
+                        dry_run=args.dry_run,
+                    )
+                    metrics_all.rows_seen += getattr(prepare_metrics, "rows_seen", 0)
+                    metrics_all.rows_inserted += getattr(prepare_metrics, "rows_updated", 0)
+                    metrics_all.rows_skipped += getattr(prepare_metrics, "rows_skipped", 0)
+                    metrics_all.errors += getattr(prepare_metrics, "rows_error", 0)
+                    print_metrics("prepare", prepare_metrics)
 
-        if not args.skip_compare:
-            compare_metrics = compare_hia_subscriber_apply_actions(
-                cur,
-                import_run_id=args.import_run_id,
-                limit=args.limit,
-                dry_run=args.dry_run,
-            )
-            print_metrics("compare", compare_metrics)
+                if not args.skip_compare:
+                    compare_metrics = compare_hia_subscriber_apply_actions(
+                        cur,
+                        import_run_id=args.import_run_id,
+                        limit=args.limit,
+                        dry_run=args.dry_run,
+                    )
+                    metrics_all.rows_seen += getattr(compare_metrics, "rows_seen", 0)
+                    metrics_all.rows_inserted += getattr(compare_metrics, "rows_updated", 0)
+                    metrics_all.rows_skipped += getattr(compare_metrics, "rows_skipped", 0)
+                    metrics_all.errors += getattr(compare_metrics, "rows_error", 0)
+                    print_metrics("compare", compare_metrics)
 
-        apply_metrics = apply_hia_subscriber_rows(
-            cur,
-            import_run_id=args.import_run_id,
-            apply_run_id=apply_run_id,
-            limit=args.limit,
-            dry_run=args.dry_run,
-        )
-        print_metrics("apply", apply_metrics)
+                apply_metrics = apply_hia_subscriber_rows(
+                    cur,
+                    import_run_id=args.import_run_id,
+                    apply_run_id=apply_run_id,
+                    limit=args.limit,
+                    dry_run=args.dry_run,
+                )
+                metrics_all.rows_seen += getattr(apply_metrics, "rows_seen", 0)
+                metrics_all.rows_inserted += getattr(apply_metrics, "rows_applied", 0)
+                metrics_all.rows_skipped += getattr(apply_metrics, "rows_noop", 0) + getattr(apply_metrics, "rows_review_skipped", 0)
+                metrics_all.errors += getattr(apply_metrics, "rows_error", 0)
+                print_metrics("apply", apply_metrics)
 
-        if args.dry_run:
-            conn.rollback()
-            finish_run(
-                cur,
-                apply_run_id,
-                status="dry_run",
-                message="dry-run completed; rolled back",
-            )
-            conn.commit()
-        else:
-            finish_run(
-                cur,
-                apply_run_id,
-                status="success",
-                message="apply completed",
-            )
-            conn.commit()
+                if args.dry_run:
+                    conn.rollback()
+                    finish_run(
+                        cur,
+                        apply_run_id,
+                        metrics_all,
+                        status_override="success",
+                        extra_notes="dry-run completed; rolled back",
+                    )
+                    conn.commit()
+                else:
+                    finish_run(cur, apply_run_id, metrics_all)
+                    conn.commit()
 
-        print("\n=== HIA subscriber apply finished ===")
-        return 0
+                print("\n=== HIA subscriber apply finished ===")
+                return 0
 
-    except Exception as exc:
-        conn.rollback()
+            except Exception as exc:
+                conn.rollback()
 
-        if apply_run_id is not None:
-            finish_run(
-                cur,
-                apply_run_id,
-                status="error",
-                message=f"{type(exc).__name__}: {exc}",
-            )
-            conn.commit()
+                if apply_run_id is not None:
+                    metrics_all.errors += 1
+                    finish_run(
+                        cur,
+                        apply_run_id,
+                        metrics_all,
+                        status_override="failed",
+                        extra_notes=f"{type(exc).__name__}: {exc}",
+                    )
+                    conn.commit()
 
-        print("\n[ERROR] HIA subscriber apply failed")
-        print(f"{type(exc).__name__}: {exc}")
-        return 1
-
-    finally:
-        cur.close()
-        conn.close()
+                print("\n[ERROR] HIA subscriber apply failed")
+                print(f"{type(exc).__name__}: {exc}")
+                return 1
 
 
 if __name__ == "__main__":
