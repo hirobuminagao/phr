@@ -1,0 +1,3 @@
+[IMPORT] 50413/50413 (100.00%) ins=6808 upd=0 unchg=0 skp=43605 err=43605 rate=43.7/s
+[INFO] current_snapshot_run_id = 156
+[ERR] 取込中に例外発生: 1054 (42S22): Unknown column 'staging_subscriber_hub_id' in 'field list'
