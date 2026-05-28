@@ -334,6 +334,13 @@ def main() -> int:
 
                         current_metrics = CurrentSnapshotMetrics()
                         current_run_metrics = RunMetrics()
+                        snapshot_plog = ProgressLogger(
+                            total=metrics_all.rows_inserted,
+                            metrics=current_run_metrics,
+                            interval=args.progress_interval,
+                            label="SNAPSHOT",
+                            logger=logging.getLogger(__name__),
+                        )
 
                         current_run_id = start_run(
                             cur,
@@ -355,8 +362,9 @@ def main() -> int:
                                 cur,
                                 import_run_id=run_id,
                                 metrics=current_metrics,
-                                plog=None,
+                                plog=snapshot_plog,
                             )
+                            snapshot_plog.finalize()
 
                             current_run_metrics.rows_seen = current_metrics.rows_seen
                             current_run_metrics.rows_inserted = current_metrics.updated
