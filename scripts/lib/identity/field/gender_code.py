@@ -36,7 +36,7 @@ def normalize_gender_code(raw: str | None) -> Dict[str, Any]:
     - 不明値は invalid とする
     """
 
-    base = base_normalize(raw)
+    base = base_normalize(None if raw is None else str(raw))
 
     if base is None:
         return {
