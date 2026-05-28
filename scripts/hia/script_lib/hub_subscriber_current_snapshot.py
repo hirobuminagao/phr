@@ -363,4 +363,12 @@ def update_current_snapshot(
             )
 
         if plog:
+            plog.metrics.rows_seen = metrics.rows_seen
+            plog.metrics.rows_inserted = metrics.updated
+            plog.metrics.rows_skipped = (
+                metrics.not_found
+                + metrics.multiple_match
+                + metrics.review
+            )
+            plog.metrics.errors = metrics.errors
             plog.tick()
