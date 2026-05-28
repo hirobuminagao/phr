@@ -54,7 +54,7 @@ from scripts.lib.identity.field.insurance_number import normalize_insurance_numb
 from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
 from scripts.lib.identity.field.birthdate import normalize_birthdate
 from scripts.lib.identity.field.gender_code import normalize_gender_code
-from scripts.lib.identity.field.date_field import normalize_date_field
+from scripts.lib.identity.field.date_field import normalize_date_to_ymd_and_compact
 from scripts.lib.identity.field.name_kana import normalize_name_kana_full
 from scripts.lib.identity.field.name_kanji import normalize_name_kanji_full
 
@@ -114,7 +114,12 @@ def _normalize_compare_identity_values(row: dict[str, Any]) -> list[str]:
 def _normalize_date_field_norm(value: Any) -> str:
     """import側と同じ date_field field_norm を返す。"""
 
-    return _field_norm(normalize_date_field(value))
+    return _field_norm(
+        normalize_date_to_ymd_and_compact(
+            value,
+            purpose="qualification_date",
+        )
+    )
 
 
 # ============================================================

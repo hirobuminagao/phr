@@ -52,7 +52,7 @@ from scripts.lib.identity.field.insurance_number import normalize_insurance_numb
 from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
 from scripts.lib.identity.field.birthdate import normalize_birthdate
 from scripts.lib.identity.field.gender_code import normalize_gender_code
-from scripts.lib.identity.field.date_field import normalize_date_field
+from scripts.lib.identity.field.date_field import normalize_date_to_ymd_and_compact
 
 from scripts.lib.identity.field.name_kana import (
     normalize_name_kana_full,
@@ -110,6 +110,42 @@ class FolderMetrics:
     rows_skipped: int = 0
     errors: int = 0
 
+# ============================================================
+# field normalize helpers
+# ============================================================
+
+
+def _require_field_ok(
+    result: dict,
+    *,
+    field: str,
+    src: str,
+    line_no: int,
+) -> dict:
+    """field normalize result の ok を検査し、NGなら ValueError に変換する。"""
+
+    if result.get("ok"):
+        return result
+
+    raise ValueError(
+        f"正規化失敗: {field} "
+        f"reason={result.get('reason')} "
+        f"raw={result.get('raw')} "
+        f"file={src} line={line_no}"
+    )
+
+
+def _normalize_optional_branch_number(raw: str) -> str:
+    """保険証枝番 optional canonical。空欄は空欄のまま扱う。"""
+
+    if raw is None or str(raw).strip() == "":
+        return ""
+
+    res = normalize_insurance_number(raw)
+    if not res.get("ok"):
+        return ""
+
+    return str(res.get("field_norm") or "")
 
 # ============================================================
 # import
@@ -334,11 +370,13 @@ def process_csv_dir(
                     plog.tick()
                     continue
 
-                qualification_acquired_res = normalize_date_field(
-                    src.get("qualification_acquired_date", "")
+                qualification_acquired_res = normalize_date_to_ymd_and_compact(
+                    src.get("qualification_acquired_date", ""),
+                    purpose="qualification_date",
                 )
-                qualification_lost_res = normalize_date_field(
-                    src.get("qualification_lost_date", "")
+                qualification_lost_res = normalize_date_to_ymd_and_compact(
+                    src.get("qualification_lost_date", ""),
+                    purpose="qualification_date",
                 )
 
                 qualification_acquired_date_iso = str(
@@ -537,39 +575,3 @@ def process_csv_dir(
 
     return m
 
-# ============================================================
-# field normalize helpers
-# ============================================================
-
-
-def _require_field_ok(
-    result: dict,
-    *,
-    field: str,
-    src: str,
-    line_no: int,
-) -> dict:
-    """field normalize result の ok を検査し、NGなら ValueError に変換する。"""
-
-    if result.get("ok"):
-        return result
-
-    raise ValueError(
-        f"正規化失敗: {field} "
-        f"reason={result.get('reason')} "
-        f"raw={result.get('raw')} "
-        f"file={src} line={line_no}"
-    )
-
-
-def _normalize_optional_branch_number(raw: str) -> str:
-    """保険証枝番 optional canonical。空欄は空欄のまま扱う。"""
-
-    if raw is None or str(raw).strip() == "":
-        return ""
-
-    res = normalize_insurance_number(raw)
-    if not res.get("ok"):
-        return ""
-
-    return str(res.get("field_norm") or "")
