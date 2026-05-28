@@ -378,12 +378,22 @@ def process_csv_dir(
                     src.get("qualification_lost_date", ""),
                     purpose="qualification_date",
                 )
-
-                qualification_acquired_date_iso = str(
+                qualification_acquired_date_hash = str(
                     qualification_acquired_res.get("field_norm") or ""
                 )
-                qualification_lost_date_iso = str(
+                qualification_lost_date_hash = str(
                     qualification_lost_res.get("field_norm") or ""
+                )
+
+                qualification_acquired_date_insert = (
+                    qualification_acquired_res.get("field_norm")
+                    if qualification_acquired_res.get("ok")
+                    else None
+                )
+                qualification_lost_date_insert = (
+                    qualification_lost_res.get("field_norm")
+                    if qualification_lost_res.get("ok")
+                    else None
                 )
 
                 # --- 5) import-side compare hash生成 ---
@@ -402,8 +412,8 @@ def process_csv_dir(
                     [
                         src.get("insured_attribute_name", ""),
                         src.get("relationship_name", ""),
-                        qualification_acquired_date_iso,
-                        qualification_lost_date_iso,
+                        qualification_acquired_date_hash,
+                        qualification_lost_date_hash,
                         src.get("employer_code", ""),
                         src.get("department_code", ""),
                         src.get("distribution_code", ""),
@@ -445,8 +455,8 @@ def process_csv_dir(
                     "insurance_symbol_digits": sym_digits,
                     "insurance_number": insurance_number_text,
                     "insurance_branchnumber": branchnum_text,
-                    "qualification_acquired_date": qualification_acquired_date_iso,
-                    "qualification_lost_date": qualification_lost_date_iso,
+                    "qualification_acquired_date": qualification_acquired_date_insert,
+                    "qualification_lost_date": qualification_lost_date_insert,
                     "postal_code": src.get("postal_code", ""),
                     "address_line": src.get("address_line", ""),
                     "building": src.get("building", ""),

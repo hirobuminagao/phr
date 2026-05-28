@@ -99,7 +99,7 @@ def update_staging_current_snapshot(
             current_email_contact_point_id = %(current_email_contact_point_id)s,
             current_lookup_status = %(current_lookup_status)s,
             current_lookup_checked_at = NOW()
-        WHERE staging_subscriber_hub_id = %(staging_id)s
+        WHERE id = %(staging_id)s
         """,
         {
             "staging_id": staging_id,
@@ -151,13 +151,13 @@ def update_current_snapshot(
     cur.execute(
         """
         SELECT
-            staging_subscriber_hub_id,
+            id AS staging_subscriber_hub_id,
             hia_subscriber_id,
             identity_hash,
             person_id_custom
         FROM staging_subscribers_hub
         WHERE import_run_id = %s
-        ORDER BY staging_subscriber_hub_id
+        ORDER BY id
         """,
         (import_run_id,),
     )
