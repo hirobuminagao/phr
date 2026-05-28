@@ -336,7 +336,7 @@ def main() -> int:
                         current_run_metrics = RunMetrics()
                         snapshot_plog = ProgressLogger(
                             total=metrics_all.rows_inserted,
-                            metrics=current_run_metrics,
+                            metrics=current_metrics,
                             interval=args.progress_interval,
                             label="SNAPSHOT",
                             logger=logging.getLogger(__name__),
