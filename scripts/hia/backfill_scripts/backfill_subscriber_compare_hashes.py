@@ -50,6 +50,13 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
 from scripts.lib.hash.compare_hash import build_compare_hash
+from scripts.lib.identity.field.insurance_number import normalize_insurance_number
+from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
+from scripts.lib.identity.field.birthdate import normalize_birthdate
+from scripts.lib.identity.field.gender_code import normalize_gender_code
+from scripts.lib.identity.field.date_field import normalize_date_field
+from scripts.lib.identity.field.name_kana import normalize_name_kana_full
+from scripts.lib.identity.field.name_kanji import normalize_name_kanji_full
 
 
 # ============================================================
@@ -75,6 +82,41 @@ def _as_text(value: Any) -> str:
     return str(value).strip()
 
 
+def _field_norm(result: dict[str, Any]) -> str:
+    """field normalize result から field_norm を取り出す。"""
+
+    if not result.get("ok"):
+        return ""
+
+    return _as_text(result.get("field_norm"))
+
+
+def _normalize_compare_identity_values(row: dict[str, Any]) -> list[str]:
+    """import側と同じ field_norm 材料で identity compare hash values を作る。"""
+
+    symbol_res = normalize_insurance_symbol(row.get("insurance_symbol"))
+    number_res = normalize_insurance_number(row.get("insurance_number"))
+    kana_res = normalize_name_kana_full(row.get("name_kana_full"))
+    kanji_res = normalize_name_kanji_full(row.get("name_kanji_full"))
+    birth_res = normalize_birthdate(row.get("birth"))
+    gender_res = normalize_gender_code(row.get("gender_code"))
+
+    return [
+        _field_norm(symbol_res),
+        _field_norm(number_res),
+        _field_norm(kana_res),
+        _field_norm(kanji_res),
+        _field_norm(birth_res),
+        _field_norm(gender_res),
+    ]
+
+
+def _normalize_date_field_norm(value: Any) -> str:
+    """import側と同じ date_field field_norm を返す。"""
+
+    return _field_norm(normalize_date_field(value))
+
+
 # ============================================================
 # hash builders
 # ============================================================
@@ -83,16 +125,7 @@ def _as_text(value: Any) -> str:
 def build_compare_identity_norm_hash(row: dict[str, Any]) -> str:
     """subscribers row から compare_identity_norm_hash を生成する。"""
 
-    return build_compare_hash(
-        [
-            row.get("insurance_symbol"),
-            row.get("insurance_number"),
-            row.get("name_kana_full"),
-            row.get("name_kanji_full"),
-            row.get("birth"),
-            row.get("gender_code"),
-        ]
-    )
+    return build_compare_hash(_normalize_compare_identity_values(row))
 
 
 def build_compare_other_hash(row: dict[str, Any]) -> str:
@@ -102,8 +135,8 @@ def build_compare_other_hash(row: dict[str, Any]) -> str:
         [
             row.get("insured_attribute_name"),
             row.get("relationship_name"),
-            row.get("qualification_acquired_date"),
-            row.get("qualification_lost_date"),
+            _normalize_date_field_norm(row.get("qualification_acquired_date")),
+            _normalize_date_field_norm(row.get("qualification_lost_date")),
             row.get("employer_code"),
             row.get("department_code"),
             row.get("distribution_code"),

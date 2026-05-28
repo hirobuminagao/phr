@@ -72,6 +72,16 @@ def _as_text(value: Any) -> str:
     return str(value).strip()
 
 
+def _normalize_address_hash_values(row: dict[str, Any]) -> list[Any]:
+    """import側と同じ材料・順序で address_hash values を作る。"""
+
+    return [
+        row.get("postal_code"),
+        row.get("address_line"),
+        row.get("building"),
+    ]
+
+
 # ============================================================
 # hash builder
 # ============================================================
@@ -80,13 +90,7 @@ def _as_text(value: Any) -> str:
 def build_address_hash(row: dict[str, Any]) -> str:
     """subscriber_addresses row から address_hash を生成する。"""
 
-    return build_compare_hash(
-        [
-            row.get("postal_code"),
-            row.get("address_line"),
-            row.get("building"),
-        ]
-    )
+    return build_compare_hash(_normalize_address_hash_values(row))
 
 
 # ============================================================
