@@ -24,7 +24,7 @@ V1.0 Freeze (Scope / Contract):
     - rows_inserted: INSERT 実行件数
     - rows_updated: UPDATE 実行件数
     - rows_unchanged: 突合の結果、変更なし件数
-    - rows_skipped: 行スキップ件数（NormalizeError 等）
+    - rows_skipped: 行スキップ件数（validation error / row error 等）
     - errors: 行単位エラー件数（etl_errors へ記録された数）
 
 Invariants:

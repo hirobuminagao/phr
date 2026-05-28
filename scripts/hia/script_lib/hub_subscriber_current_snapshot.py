@@ -29,8 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from scripts.work_folder.lib.etl import (
-    RunMetrics,
+from scripts.lib.etl import (
     ProgressLogger,
     log_error,
 )
@@ -351,7 +350,7 @@ def update_current_snapshot(
             log_error(
                 cur,
                 run_id=import_run_id,
-                phase="current_snapshot",
+                phase="import",
                 source="hub_subscriber_current_snapshot",
                 insurer_number=None,
                 src_file=None,

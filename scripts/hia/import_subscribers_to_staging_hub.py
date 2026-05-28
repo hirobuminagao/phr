@@ -12,7 +12,7 @@ Purpose:
 Design:
     - ETL ログは scripts.lib.etl（etl_runs / etl_errors）に一元化し、run の開始は先に commit する
     - 本体取込の成否は finish_run で確定し、成功時は staging への INSERT も含めて commit
-    - 取込中の行エラー（NormalizeError 等）は etl_errors に記録し、処理は継続（行スキップ）
+    - 取込中の行エラーは log_error 経由で etl_errors に記録し、処理は継続（行スキップ）
     - dry-run の場合は staging への INSERT を実行せず、最後に rollback（実質 no-op。run/err は残る）
     - 対象フォルダは `data/hia_export/input_subscribers_csv/<8桁保険者番号>/` をデフォルトとする
     - 進捗ログは ProgressLogger（RunMetrics参照専用）を利用（rows_seen が真実）
@@ -34,8 +34,7 @@ V1.1.0 Contract:
         - DB Actions (Fact):
             - start_run: `etl_runs` に INSERT → 直後に `conn.commit()`（dry-run/失敗でも run_id の証跡を残す）
             - per-row error:
-                - 正規化エラー: `log_normalize_error` → `etl_errors` に INSERT（行スキップで継続）
-                - 例外: `log_error` → `etl_errors` に INSERT（行スキップで継続）
+                - 正規化エラー / 例外: `log_error` → `etl_errors` に INSERT（行スキップで継続）
             - staging insert: `staging_subscribers_hub` に明示カラム指定 INSERT（dry-run 時は実行しない）
                 - columns:
                     - person_id_custom
@@ -104,9 +103,9 @@ V1.1.0 Contract:
                 - dry-run 時は current snapshot update も実行しない
     - File I/O:
         - READS: `data/hia_export/input_subscribers_csv/<8桁保険者番号>/*.csv`
-        - READS (config): 既存 `scripts/work_folder/mat/custom_id_config.json` + `custom_id_mapping.json` を継続利用
+        - READS (config): `scripts.lib.identity.generator` 側の設定解決に従う
     - Key generation:
-        - `person_id_custom` は mat 配下の JSON（config + mapping）を一次情報として生成する（py 内ハードコード無し）
+        - `person_id_custom` / `identity_hash` は `scripts.lib.identity.generator.generate_identity_bundle()` で生成する
     - Identity / field policy:
         - DB格納用 canonical 値は `scripts.lib.identity.field.*` を利用する
         - `person_id_custom` / `identity_hash` は `scripts.lib.identity.generator` を利用する

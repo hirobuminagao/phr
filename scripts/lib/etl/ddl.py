@@ -86,7 +86,7 @@ COLLATE = utf8mb4_0900_ai_ci;
 
 # v1.0: 行単位エラー台帳
 # - 1 error = 1 行の失敗
-# - NormalizeError や想定内例外はここに記録
+# - validation error / row error 等の行単位失敗をここに記録
 # - run_id は基本的に etl_runs と紐付く
 _ETL_ERRORS_DDL = """
 CREATE TABLE IF NOT EXISTS etl_errors (
