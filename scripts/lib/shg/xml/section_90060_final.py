@@ -58,28 +58,33 @@ def find_outcome_total_entry_relationship(
     section = find_section_by_code(root, "90060")
     if section is None:
         return None
-    for entry in section.findall("cda:entry", NS):
-        for entry_rel in entry.findall("cda:entryRelationship", NS):
-            obs = entry_rel.find("cda:observation", NS)
-            if obs is None:
-                continue
+    parent_map = {child: parent for parent in section.iter() for child in list(parent)}
 
-            code_elem = obs.find("cda:code", NS)
-            if code_elem is None:
-                continue
+    for entry_rel in section.findall(".//cda:entryRelationship", NS):
+        obs = entry_rel.find("cda:observation", NS)
+        if obs is None:
+            continue
 
-            code = (code_elem.attrib.get("code") or "").strip()
-            if code != "1042001060":
-                continue
+        code_elem = obs.find("cda:code", NS)
+        if code_elem is None:
+            continue
 
-            type_code = (entry_rel.attrib.get("typeCode") or "").strip()
-            if type_code != "COMP":
-                continue
+        code = (code_elem.attrib.get("code") or "").strip()
+        if code != "1042001060":
+            continue
 
-            return OutcomeTotalPointDeleteLocation(
-                parent=entry,
-                target=entry_rel,
-            )
+        type_code = (entry_rel.attrib.get("typeCode") or "").strip()
+        if type_code != "COMP":
+            continue
+
+        parent = parent_map.get(entry_rel)
+        if parent is None:
+            return None
+
+        return OutcomeTotalPointDeleteLocation(
+            parent=parent,
+            target=entry_rel,
+        )
 
     return None
 
