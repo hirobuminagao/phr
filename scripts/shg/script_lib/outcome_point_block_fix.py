@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -36,12 +34,13 @@ from scripts.lib.xml.delete import (
     XmlDeleteTarget,
     delete_xml_element,
 )
-from scripts.shg.script_lib.outcome_policy import is_motivation_guidance
 
 
 OUTCOME_TOTAL_POINT_CODE = "1042001060"
 OUTCOME_TOTAL_POINT_LABEL = "90060_outcome_total_point_entry_relationship"
 OUTCOME_TOTAL_POINT_DELETE_REASON = "final動機づけ支援のアウトカム合計ポイント0 block削除"
+
+MOTIVATION_GUIDANCE_CODE = "2"
 
 
 @dataclass(frozen=True)
@@ -57,21 +56,21 @@ class OutcomePointBlockFixResult:
 def should_delete_outcome_total_point_block(
     *,
     report_code: str | None,
-    level_text: str | None,
+    level_code: str | None,
     outcome_total_points: int | None,
 ) -> tuple[bool, str]:
     """アウトカム合計ポイント0 block削除fixの実行可否を判定する。
 
     条件:
     - report_code = 22
-    - 保健指導区分が動機づけ支援
+    - 90010 section の observation/code = 1020000001 の value code が 2（動機づけ支援）
     - アウトカム合計ポイント値が 0
     """
     if (report_code or "").strip() != "22":
         return False, "report_codeが22ではありません"
 
-    if not is_motivation_guidance(level_text):
-        return False, "保健指導区分が動機づけ支援ではありません"
+    if (level_code or "").strip() != MOTIVATION_GUIDANCE_CODE:
+        return False, "90010保健指導区分コードが動機づけ支援ではありません"
 
     if outcome_total_points != 0:
         return False, "アウトカム合計ポイントが0ではありません"
@@ -83,7 +82,7 @@ def apply_outcome_total_point_block_fix(
     *,
     root: ET.Element,
     report_code: str | None,
-    level_text: str | None,
+    level_code: str | None,
     outcome_total_points: int | None,
 ) -> OutcomePointBlockFixResult:
     """条件に合致する場合、アウトカム合計ポイント0 blockを削除する。
@@ -93,7 +92,7 @@ def apply_outcome_total_point_block_fix(
     """
     should_delete, reason = should_delete_outcome_total_point_block(
         report_code=report_code,
-        level_text=level_text,
+        level_code=level_code,
         outcome_total_points=outcome_total_points,
     )
 
