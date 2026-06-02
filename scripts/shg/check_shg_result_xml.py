@@ -93,6 +93,8 @@ from scripts.lib.shg.xml.outcome_checks import (
     compute_duration_days,
 )
 
+from scripts.lib.shg.xml.update import save_xml
+
 # ------------------------------------------------------------
 # Use shared XML I/O helpers
 # ------------------------------------------------------------
@@ -131,6 +133,13 @@ from scripts.shg.script_lib.xml_ticket_writer import (
 # ------------------------------------------------------------
 from scripts.shg.script_lib.outcome_policy import (
     apply_final_only_motivation_conflict_policy,
+)
+
+# ------------------------------------------------------------
+# Outcome point block fix import
+# ------------------------------------------------------------
+from scripts.shg.script_lib.outcome_point_block_fix import (
+    apply_outcome_total_point_block_fix,
 )
 
 # ------------------------------------------------------------
@@ -364,6 +373,19 @@ def main() -> None:
             process_events = extract_process_events(root)
             guidance = extract_90010_guidance(root)
 
+            outcome_point_block_fix_result = apply_outcome_total_point_block_fix(
+                root=root,
+                report_code=str(basic.get("report_code") or ""),
+                level_text=str(guidance.get("guidance_type_name") or "") if guidance else "",
+                outcome_total_points=outcome_pts,
+            )
+            outcome_point_block_fix_save_result: dict[str, Any] | None = None
+            if outcome_point_block_fix_result.applied:
+                outcome_point_block_fix_save_result = save_xml(
+                    xml_path=xml_path,
+                    root=root,
+                )
+
             if identity_hash:
                 bucket = people.setdefault(
                     str(identity_hash),
@@ -393,6 +415,8 @@ def main() -> None:
                     "final_weight_kg": final_weight_kg,
                     "support_summary": support_summary,
                     "process_events": process_events,
+                    "outcome_point_block_fix_result": outcome_point_block_fix_result,
+                    "outcome_point_block_fix_save_result": outcome_point_block_fix_save_result,
                 }
 
                 if role == "initial":
@@ -429,6 +453,19 @@ def main() -> None:
                     "ticket_update_reason": ticket_update_result.reason,
                     "guidance_type_code": guidance.get("guidance_type_code") if guidance else "",
                     "guidance_type_name": guidance.get("guidance_type_name") if guidance else "",
+                    "outcome_point_block_fix_applied": "Yes" if outcome_point_block_fix_result.applied else "No",
+                    "outcome_point_block_fix_status": outcome_point_block_fix_result.status,
+                    "outcome_point_block_fix_reason": outcome_point_block_fix_result.reason,
+                    "outcome_point_block_fix_save_status": (
+                        outcome_point_block_fix_save_result.get("status", "")
+                        if outcome_point_block_fix_save_result
+                        else ""
+                    ),
+                    "outcome_point_block_fix_save_message": (
+                        outcome_point_block_fix_save_result.get("message", "")
+                        if outcome_point_block_fix_save_result
+                        else ""
+                    ),
                 }
             )
         except Exception as e:
@@ -458,6 +495,11 @@ def main() -> None:
                     "ticket_update_reason": "",
                     "guidance_type_code": "",
                     "guidance_type_name": "",
+                    "outcome_point_block_fix_applied": "",
+                    "outcome_point_block_fix_status": "",
+                    "outcome_point_block_fix_reason": "",
+                    "outcome_point_block_fix_save_status": "",
+                    "outcome_point_block_fix_save_message": "",
                 }
             )
 

@@ -17,6 +17,7 @@ CDA Section 90060（最終評価 / アウトカム）抽出
 - extract_final_measurements(root) -> tuple[Optional[float], Optional[float]]
 """
 
+from dataclasses import dataclass
 from typing import Optional, Dict
 import xml.etree.ElementTree as ET
 
@@ -29,6 +30,63 @@ from scripts.lib.shg.xml.common import (
     get_value_code,
     get_value_display_name,
 )
+
+
+@dataclass(frozen=True)
+class OutcomeTotalPointDeleteLocation:
+    """アウトカム合計ポイント block 削除対象 location。"""
+
+    parent: ET.Element
+    target: ET.Element
+# ------------------------------------------------------------
+# 90060 抽出
+# ------------------------------------------------------------
+#
+# ------------------------------------------------------------
+# 90060 block location
+# ------------------------------------------------------------
+def find_outcome_total_entry_relationship(
+    root: ET.Element,
+) -> Optional[OutcomeTotalPointDeleteLocation]:
+    """90060 section 内のアウトカム合計ポイント entryRelationship を特定する。
+
+    対象:
+    - observation/code = 1042001060
+    - entryRelationship[typeCode="COMP"]
+
+    Returns:
+        OutcomeTotalPointDeleteLocation | None
+    """
+
+    section = find_section_by_code(root, "90060")
+    if section is None:
+        return None
+
+    for entry in section.findall("entry"):
+        for entry_rel in entry.findall("entryRelationship"):
+            obs = entry_rel.find("observation")
+            if obs is None:
+                continue
+
+            code_elem = obs.find("code")
+            if code_elem is None:
+                continue
+
+            code = (code_elem.attrib.get("code") or "").strip()
+            if code != "1042001060":
+                continue
+
+            type_code = (entry_rel.attrib.get("typeCode") or "").strip()
+            if type_code != "COMP":
+                continue
+
+            return OutcomeTotalPointDeleteLocation(
+                parent=entry,
+                target=entry_rel,
+            )
+
+    return None
+
 
 
 # ------------------------------------------------------------
