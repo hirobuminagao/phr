@@ -22,6 +22,7 @@ from typing import Optional, Dict
 import xml.etree.ElementTree as ET
 
 from scripts.lib.shg.xml.common import (
+    NS,
     find_observation_in_section,
     find_section_by_code,
     get_int_value,
@@ -38,10 +39,6 @@ class OutcomeTotalPointDeleteLocation:
 
     parent: ET.Element
     target: ET.Element
-# ------------------------------------------------------------
-# 90060 抽出
-# ------------------------------------------------------------
-#
 # ------------------------------------------------------------
 # 90060 block location
 # ------------------------------------------------------------
@@ -61,14 +58,13 @@ def find_outcome_total_entry_relationship(
     section = find_section_by_code(root, "90060")
     if section is None:
         return None
-
-    for entry in section.findall("entry"):
-        for entry_rel in entry.findall("entryRelationship"):
-            obs = entry_rel.find("observation")
+    for entry in section.findall("cda:entry", NS):
+        for entry_rel in entry.findall("cda:entryRelationship", NS):
+            obs = entry_rel.find("cda:observation", NS)
             if obs is None:
                 continue
 
-            code_elem = obs.find("code")
+            code_elem = obs.find("cda:code", NS)
             if code_elem is None:
                 continue
 
