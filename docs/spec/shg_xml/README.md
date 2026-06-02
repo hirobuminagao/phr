@@ -6,9 +6,11 @@
 
 本仕様は、以下の責務を対象とする。
 
+- XML / ZIP入力からの対象XML収集
 - XMLからの値抽出（basic / role / CDAセクション別抽出）
 - XML構造の理解と項目マッピング
-- スクリプト処理（check_shg_result_xml.py）の設計方針
+- スクリプト処理（check_shg_result_xml.py）の現行仕様
+- 利用券fix / outcome判定 / CSV出力の責務境界
 
 ## スコープ
 
@@ -26,29 +28,32 @@
 ```text
 data/hia_export_shg/
 ├── input/
-│   └── <root_folder_name>/
-│       ├── ix08_V08.xml
-│       ├── su08_V08.xml
-│       ├── DATA/*.xml
-│       ├── CLAIMS/
-│       └── XSD/
+│   ├── <root_folder_name>/
+│   │   ├── ix08_V08.xml
+│   │   ├── su08_V08.xml
+│   │   ├── DATA/*.xml
+│   │   ├── CLAIMS/
+│   │   └── XSD/
+│   └── *.zip
 └── output/
     └── <yyyymmdd_hhmmss>/
+        ├── _work_zip_extract/
         ├── export_shg_report.csv
         └── export_outcome_report.csv
 ```
 
 ### 入力仕様
 
-- `input/<root_folder_name>/` 配下は厚生労働省の「送付用ファイルアーカイブ仕様」に準拠する
-- ZIP解凍後のルートフォルダ構造をそのまま配置する
-- 本スクリプトは `DATA/*.xml` のみを解析対象とする
-- `ix08_V08.xml`、`su08_V08.xml`、`CLAIMS/`、`XSD/` は保持するが、fase1.0では解析対象外とする
+- `input/` 配下には、ZIPファイルまたはZIP解凍後のルートフォルダ構造を配置できる
+- ZIPファイルは `output/<yyyymmdd_hhmmss>/_work_zip_extract/` 配下へ展開してから対象XMLを収集する
+- 本スクリプトは `DATA/*.xml` 相当の特定保健指導結果XMLのみを解析対象とする
+- `ix08_V08.xml`、`su08_V08.xml`、`CLAIMS/`、`XSD/` は保持・展開される場合があるが、解析対象外とする
 
 ### 出力仕様
 
 - 実行ごとに timestamp フォルダを生成
 - 同一入力でも複数回実行した結果を保持する
+- ZIP由来XMLの作業フォルダは `_work_zip_extract/` 配下で管理し、fix有無に応じて保持/削除する
 
 ```text
 scripts/lib/shg/xml/
@@ -148,20 +153,25 @@ scripts/lib/shg/xml/
 - person単位集約やCSV列マッピングは持たない
 
 ### orchestration層（check_shg_result_xml.py）
-- XML列挙
+- XML / ZIP入力収集
+- XML読込
 - DB取得
 - identity生成
+- 利用券fix判定
+- 利用券XML更新
 - person単位集約
+- outcome判定
 - CSV出力
 
-### 現行 orchestration フロー（2026-05確認時点）
+### 現行 orchestration フロー（2026-06確認時点）
 
 現行 `check_shg_result_xml.py` の処理フローは、以下の順序を基本とする。
 
 ```text
 DB読込
-→ XML収集
+→ XML / ZIP収集
 → XML単位抽出
+→ 利用券fix判定 / 必要時XML更新
 → people集約
 → outcome判定
 → CSV出力
@@ -171,12 +181,17 @@ DB読込
 
 ```text
 1. DBから shg_result 読込
-2. ZIP展開 / XML収集
+2. XML / ZIP入力収集
+   - ZIPは作業フォルダへ展開
+   - 展開済みXMLも直接収集
 3. XML単位ループ
    - basic抽出
    - role判定
    - section抽出
    - DB行取得
+   - identity_bundle生成
+   - 利用券fix判定
+   - 必要時、利用券XML更新
    - peopleへ格納
    - XML単位CSV行生成
 
@@ -192,7 +207,7 @@ DB読込
 
 補足:
 
-- 上記は推察ではなく、2026-05時点の現行 `check_shg_result_xml.py` 実装確認ベースである
+- 上記は推察ではなく、2026-06時点の現行 `check_shg_result_xml.py` 実装確認ベースである
 - 今後の改修では、この幹フローを維持しながら必要箇所のみを外出しする
 - fix処理追加時も、現行フローを破壊しないことを優先する
 
@@ -264,20 +279,20 @@ XML内の利用券整理番号・利用券有効期限をDB値と比較し、差
 
 - `docs/spec/shg_xml/fix_workflow.md`
 
-## フェーズ設計
+## バージョン位置づけ
 
-### fase1.0
-- 旧スクリプトからの横移行
-- 展開済みXMLを入力とする
-- CSV構造を維持
+### 現行 v1
+- 旧スクリプトの単純移植フェーズは終了
+- `check_shg_result_xml.py` を現行 SHG XMLチェック本体として扱う
+- XML / ZIP入力に対応する
+- `identity_hash` を主束ねキーとして initial / final を集約する
+- 利用券fix、outcome判定、腹囲体重チェック、継続判定、processポイント集計、CSV出力を行う
 
-### fase1.1
-- ZIP直読みに変更
-- DATA/*.xml を対象
-
-### fase2
-- チェックロジック整理
+### 後続改修
+- チェックロジックの整理
 - 比較・判定列の強化
+- CSV列の追加・表示整理
+- DB/event管理への発展
 
 ## 設計方針
 
@@ -302,9 +317,9 @@ XML内の利用券整理番号・利用券有効期限をDB値と比較し、差
 - fix運用・禁止事項・ZIP保持ルールの詳細は `docs/spec/shg_xml/fix_workflow.md` を参照する
 
 
-## 現状ギャップ / 現在位置（2026-05時点）
+## 現状ギャップ / 現在位置（2026-06時点）
 
-本specは、2026-05 時点の SHG XMLチェック改修状況を反映している。
+本specは、2026-06 時点の SHG XMLチェック改修状況を反映している。
 
 以前存在していた「利用券fix詳細」「禁止事項」「ZIP保持ルール」は、`fix_workflow.md` へ分離済みである。
 
@@ -321,16 +336,15 @@ XML内の利用券整理番号・利用券有効期限をDB値と比較し、差
 - finalのみ動機づけ支援時の outcome 判定除外方針
 - 腹囲体重チェックの「実測差分優先」方針
 - orchestration層 / XML抽出層 / outcome判定層 の責務分離方針
+- XML / ZIP入力対応済みとする方針
+- `xml_io.py` によるXML収集・ZIP展開・XML読込の責務分離
+- `ticket_fix.py` / `xml_ticket_writer.py` / `outcome_policy.py` への orchestration 補助処理外出し方針
 
 ### 現時点で未完成・今後調整予定のもの
 
 - 初回面談方式の取得精度確認
 - 動機づけ支援の `計_*` 系目標取得漏れ対応
-- ZIP展開後フォルダ削除処理
-- ZIP単位 fix 判定と作業フォルダ保持処理
 - フォルダ名 / ZIP名 のCSV出力
-- 利用券fix処理の orchestration 分離
-- outcome conflict policy の外出し
 - `結_腹囲体重` の表示整理（`目標なし` / `-` など）
 - outcome矛盾判定の最終ルール整理
 
@@ -344,10 +358,11 @@ XML内の利用券整理番号・利用券有効期限をDB値と比較し、差
 
 現行 `check_shg_result_xml.py` の幹フローは維持する。
 
-本フェーズでは全面的な再設計は行わず、追加改修により肥大化する責務のみを段階的に外出しする。
+本フェーズでは全面的な再設計は行わず、追加改修により肥大化した責務を段階的に外出ししている。
 
 外出し対象は以下に限定する。
 
+- XML I/O
 - 利用券fix判定
 - 利用券XML書き換え
 - outcome矛盾判定ポリシー
@@ -366,6 +381,7 @@ XML内の利用券整理番号・利用券有効期限をDB値と比較し、差
 
 ```text
 scripts/shg/script_lib/
+  ├ xml_io.py              # XML収集・ZIP展開・XML読込
   ├ ticket_fix.py          # 利用券差異判定・fix候補作成
   ├ xml_ticket_writer.py   # 利用券ノードのXML書き換え
   └ outcome_policy.py      # outcome矛盾判定の除外ポリシー
@@ -398,7 +414,8 @@ scripts/shg/script_lib/xml_io.py
 
 補足:
 
-- orchestration の前半に集中している「ファイルシステム責務」を分離する
+- orchestration の前半に集中していた「ファイルシステム責務」を分離済み
+- ZIP入力と展開済みXML入力の両方に対応する
 - XML抽出ロジックそのものは `scripts/lib/shg/xml/` 側へ残す
 
 #### shg_result_loader 系
@@ -499,7 +516,6 @@ scripts/shg/script_lib/outcome_policy.py
 以下は現フェーズでは orchestration 側に残す。
 
 - DB読込
-- XML収集
 - XML単位ループ
 - people集約
 - CSV出力
@@ -510,8 +526,9 @@ scripts/shg/script_lib/outcome_policy.py
 
 ```text
 DB読込
-→ XML収集
+→ XML / ZIP収集
 → XML単位抽出
+→ 利用券fix判定 / 必要時XML更新
 → people集約
 → outcome判定
 → CSV出力
@@ -724,23 +741,17 @@ grand_total_points は XMLの集計済み値をそのまま使用せず、チェ
 - 初回面談方式が正しく取得できていない
 - 動機づけ支援で `計_*` 系の目標が取り切れていないケースがある
 - `結_腹囲体重` は将来的に `目標なし` や `-` を明示する必要がある
-- ZIP展開後の作業フォルダ削除が未実装
 - 元のフォルダ名 / ZIP名をCSVに出していない
 - 一部の矛盾判定はまだ暫定実装であり、完全な最終仕様ではない
 
 ### 今後の修正優先順位
 
-1. 現行 `check_shg_result_xml.py` の実行順序・処理手順を確認し、現行フローとして書き出す
-2. 現行フローのどの処理を維持し、どの処理を外出しするかを決める
-3. 利用券整理番号・利用券有効期限について、XML値とDB値の差異チェックを実装する
-4. 差異がある利用券整理番号・利用券有効期限を、DB側の値でXML修正する
-5. `report_code = 22` かつ動機づけ支援かつ finalのみの場合、腹囲体重以外の outcome 矛盾判定を除外する
-6. 上記2改修のため、利用券fix処理とoutcome判定ポリシーを外出しする
-7. 初回面談方式の取得位置と条件を実XMLで再確認して修正する
-8. 動機づけ支援で取れていない目標値の取得ロジックを修正する
-9. フォルダ名 / ZIP名をCSVに出力する
-10. ZIP展開後の作業フォルダ削除を実装する
-11. `結_腹囲体重` の表示ルール（`目標なし` / `-` を含む）を整理する
+1. 初回面談方式の取得位置と条件を実XMLで再確認して修正する
+2. 動機づけ支援で取れていない目標値の取得ロジックを修正する
+3. フォルダ名 / ZIP名をCSVに出力する
+4. `結_腹囲体重` の表示ルール（`目標なし` / `-` を含む）を整理する
+5. outcome矛盾判定の最終ルールを整理する
+6. 必要に応じて、DB/event管理へ発展させる
 
 ### fixロジック検討時の前提
 
@@ -754,4 +765,4 @@ grand_total_points は XMLの集計済み値をそのまま使用せず、チェ
 
 ### 再開時の合言葉
 
-- 「SHGチェックは最低限動作済み。XML role / pairing / fix境界は固定済み。直近改修は利用券番号・期限のDB値fixと、finalのみ動機づけ支援のoutcome矛盾除外。ただし実装前に現行 check_shg_result_xml.py の実行順序・処理手順を写し取り、現行フローを壊さない形で外出しする」
+- 「SHGチェックは現行 v1 本体として運用。XML / ZIP入力、identity_hash pairing、利用券番号・期限のDB値fix、finalのみ動機づけ支援のoutcome矛盾除外は実装済み。次は初回面談方式、動機づけ支援の目標取得、フォルダ名/ZIP名CSV出力、腹囲体重表示、outcome最終ルールを順に整理する」

@@ -6,35 +6,53 @@
 """
 check_shg_result_xml.py
 
-SHG結果XMLチェック（fase1.0: 旧スクリプトからの横移行）
+SHG結果XMLチェック / outcome集計スクリプト
 
 目的:
-- 旧 `scripts/tokuho_xml_check/check_tokuho_xml.py` の構造をベースに、
-  新実行環境 `scripts/shg/` へ移行する。
-- fase1.0 では入力方式は旧前提（展開済みXML）とし、
-  まずは新キー体系・新DB定義・新CSV出力方針へ載せ替える。
-  - 入出力の固定パスは `data/hia_export_shg/` を使用する。
-- fase1.1 で ZIP 直読みに改修する。
+- SHG結果XMLを収集し、初回/最終情報を抽出する
+- identity_hash単位で初回XML・最終XMLを束ねる
+- 利用券情報の整合確認および必要最小限の自動補正を行う
+- outcome判定 / 腹囲体重判定 / 継続日数判定を生成する
+- CSVレポートを出力する
 
-fase1.0 方針:
-- `export_shg_report`
-  - 既存列は維持
-  - `identity_hash` を追加
-- `export_outcome_report`
-  - `person_id` 列は `identity_hash` に変更
-  - 他の既存列は維持
-- `person_id_custom` / `identity_hash` は新 generator で生成
-- `shg_result` は新定義を参照
-  - `shg_year`
-  - `exam_waist_cm`
-  - `exam_weight_kg`
-  - `identity_hash`
-- 内部束ねキーは `identity_hash` を優先
-- `person_key` は CSV の目視確認用として保持する
+現在の主な処理:
+- XML収集
+- XML読込
+- basic情報抽出
+- identity_bundle生成
+  - person_id_custom
+  - identity_hash
+- shg_result 参照
+- 利用券fix判定
+- 利用券XML更新
+- 90010 指導情報抽出
+- 90030 初回面談/目標抽出
+- 90040 支援イベント抽出
+- 90060 最終評価抽出
+- 90070 支援集計抽出
+- initial/final 集約
+- outcome判定
+- 腹囲体重チェック
+- 継続期間チェック
+- processポイント集計
+- CSV出力
+
+出力:
+- export_shg_report.csv
+  - XML単位チェック結果
+- export_outcome_report.csv
+  - identity_hash単位 outcome集計結果
+
+内部キー方針:
+- identity_hash を主束ねキーとして使用
+- person_id_custom は補助識別子として保持
+- person_key は目視確認用として保持
 
 注意:
-- このファイルは fase1.0 用の骨格であり、旧スクリプトの全ロジックはまだ移植していない。
-- 旧スクリプトの XML 抽出関数群を順次移植する前提。
+- 本スクリプトは現行 SHG XMLチェック本体として運用する
+- 旧 tokuho_xml_check は参照用アーカイブ扱いとする
+- XML補正は「機械的に確定できる内容のみ」を対象とする
+- 推定補正は禁止
 """
 
 from __future__ import annotations
@@ -116,7 +134,7 @@ from scripts.shg.script_lib.outcome_policy import (
 )
 
 # ------------------------------------------------------------
-# XML namespace / OID constants (fase1.0)
+# XML namespace / OID constants
 # ------------------------------------------------------------
 NS = {
     "cda": "urn:hl7-org:v3",
@@ -125,30 +143,25 @@ NS = {
 
 
 # ------------------------------------------------------------
-# phase1.0 migration memo
+# Current implementation memo
 # ------------------------------------------------------------
-# 旧スクリプトから移植対象（XML抽出系）:
-# - read_xml
-# - _text_or
-# - _get_number
-# - scan_xmls（fase1.0では旧前提の展開済みXML、fase1.1でZIP直読みに置換）
-# - extract_basic
-# - extract_initial_interview_mode
-# - extract_initial_goals
-# - extract_motivation_goals_from_final
-# - extract_final_outcomes
-# - extract_final_measurements
-# - extract_process_aggregate_final
-# - extract_process_events
-# - compute_duration_verdict
+# 現行実装:
+# - XML / ZIP入力対応
+# - identity_hash 集約
+# - 利用券fix
+# - outcome判定
+# - 腹囲体重チェック
+# - 継続期間チェック
+# - processポイント集計
+# - export_shg_report 出力
+# - export_outcome_report 出力
 #
-# fase1.0 で旧仕様から差し替える箇所:
-# - gen_custom_id_external → generate_identity_bundle
-# - load_shg_result_from_mysql → 新 shg_result 定義対応
-# - people[...] の内部束ねキー → identity_hash 優先
-# - export_shg_report → identity_hash 追加
-# - export_outcome_report → person_id を identity_hash へ変更
-# - 健診時腹囲 / 健診時体重 → shg_result.exam_waist_cm / exam_weight_kg を反映
+# 現在の主な共通化:
+# - XML I/O → script_lib/xml_io.py
+# - 利用券fix → script_lib/ticket_fix.py
+# - XML更新 → script_lib/xml_ticket_writer.py
+# - outcome policy → script_lib/outcome_policy.py
+# - identity生成 → scripts.lib.identity.generator
 
 
 # ------------------------------------------------------------
@@ -156,12 +169,12 @@ NS = {
 # ------------------------------------------------------------
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="SHG結果XMLチェック（fase1.0: 新実行環境への横移行）"
+        description="SHG結果XMLチェック / outcome集計"
     )
     parser.add_argument(
         "--input-dir",
         required=True,
-        help="展開済みXML入力ディレクトリ（fase1.0）",
+        help="XML / ZIP入力ディレクトリ",
     )
     parser.add_argument(
         "--out-dir",
@@ -208,8 +221,7 @@ def make_person_key(
 def build_xml_identity_from_basic(basic: dict[str, Any]) -> dict[str, Any]:
     """XMLの basic 情報から person_id_custom / identity_hash を生成する。
 
-    旧スクリプトの gen_custom_id_external 置換。
-    fase1.0 では generator を正とする。
+    identity生成は scripts.lib.identity.generator を正とする。
     """
     return generate_identity_bundle(
         birthdate=basic.get("birth"),
@@ -295,15 +307,9 @@ def main() -> None:
     work_dir = out_dir / "_work_zip_extract"
 
     # NOTE:
-    # ここから下は fase1.0 の骨格のみ。
-    # 旧スクリプトの以下を順次移植する前提:
-    # - XML列挙
-    # - read_xml
-    # - extract_basic
-    # - 初回/最終の集約
-    # - 旧CSV列の再現
-    #
-    # 現時点では、shg_result 参照と generator 置換の入口だけを固定する。
+    # 現行 SHG XMLチェック本体。
+    # XML / ZIP収集、section抽出、利用券fix、
+    # outcome判定、CSV出力までを実装済み。
 
     export_shg_rows: list[dict[str, Any]] = []
     export_outcome_rows: list[dict[str, Any]] = []
@@ -311,9 +317,8 @@ def main() -> None:
 
     xml_paths, _xml_to_extract_dir = collect_input_xml_paths(input_root_dir, work_dir)
 
-    # fase1.0:
-    # - XML単位の report を先に組み立てる
-    # - people 集約 / outcome_report 本体は次段で移植する
+    # XML単位 report を構築しつつ、
+    # identity_hash 単位で people 集約を行う。
     for xml_path in xml_paths:
         try:
             root = read_xml(xml_path)
@@ -713,7 +718,7 @@ def main() -> None:
         export_outcome_rows,
     )
 
-    print("[OK] fase1.0 skeleton ready")
+    print("[OK] SHG XML check completed")
     print(f"[INFO] input_root_dir={input_root_dir}")
     print(f"[INFO] out_dir={out_dir}")
     print(f"[INFO] shg_result loaded={len(shg_result_map)}")
