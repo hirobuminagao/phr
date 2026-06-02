@@ -376,7 +376,7 @@ def main() -> None:
             outcome_point_block_fix_result = apply_outcome_total_point_block_fix(
                 root=root,
                 report_code=str(basic.get("report_code") or ""),
-                level_text=str(guidance.get("guidance_type_name") or "") if guidance else "",
+                level_code=str(guidance.get("guidance_type_code") or "") if guidance else "",
                 outcome_total_points=outcome_pts,
             )
             outcome_point_block_fix_save_result: dict[str, Any] | None = None
