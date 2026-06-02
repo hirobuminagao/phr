@@ -31,6 +31,7 @@ from scripts.lib.db.schemas import WORK_OTHER
 
 SHG_RESULT_SELECT_SQL = """
 SELECT
+    shg_year,
     identity_hash,
     usage_ticket_number,
     expiration_date,
@@ -38,6 +39,7 @@ SELECT
     exam_weight_kg
 FROM shg_result
 WHERE identity_hash IS NOT NULL
+ORDER BY identity_hash, shg_year ASC
 """
 
 
@@ -87,6 +89,7 @@ def normalize_db_row(row: Any) -> dict[str, Any]:
         row_dict = {}
 
     return {
+        "shg_year": row_dict.get("shg_year"),
         "identity_hash": (row_dict.get("identity_hash") or "").strip(),
         "usage_ticket_number": (row_dict.get("usage_ticket_number") or "").strip(),
         "expiration_date": format_xml_yyyymmdd(row_dict.get("expiration_date")),
@@ -101,6 +104,7 @@ def load_shg_result_from_mysql() -> dict[str, dict[str, Any]]:
     方針:
     - DB接続は既存共通libを使用する
     - 返却キーは identity_hash 優先
+    - 同一 identity_hash が複数年度に存在する場合は最新 shg_year を採用する
     - person_id_custom / person_key はCSV表示・橋渡し用途で別途保持可
     - ここでは最低限、CSV出力と突合に必要な項目を返す
 
@@ -122,6 +126,7 @@ def load_shg_result_from_mysql() -> dict[str, dict[str, Any]]:
         if not identity_hash:
             continue
 
+        # SQL側で shg_year ASC にしているため、同一 identity_hash は最新年度で上書きされる。
         result[identity_hash] = normalized
 
     return result
