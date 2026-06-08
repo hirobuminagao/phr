@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -12,9 +10,8 @@ Purpose:
 
 Responsibility:
     - mark staging_subscribers_hub processed
-    - mark staging_subscribers_hub apply error
-    - store apply run linkage
-    - store lightweight apply error summary
+    - store apply run linkage on staging_subscribers_hub
+    - store apply errors in etl_errors
 
 Non-goals:
     - subscribers root apply
@@ -32,9 +29,7 @@ Notes:
             -> processed mark
 
         apply failure
-            -> error mark
-
-    Review rows are intentionally not processed here.
+            -> etl_errors insert
 ============================================================
 """
 
@@ -71,7 +66,6 @@ def mark_staging_processed(
     Effects:
         - processed_run_id set
         - processed_at set
-        - apply_error_* cleared
     """
 
     cur.execute(
@@ -79,11 +73,8 @@ def mark_staging_processed(
         UPDATE staging_subscribers_hub
         SET
             processed_run_id = %(apply_run_id)s,
-            processed_at = NOW(),
-            apply_error_code = NULL,
-            apply_error_message = NULL,
-            updated_at = NOW()
-        WHERE staging_subscriber_hub_id = %(staging_id)s
+            processed_at = NOW()
+        WHERE id = %(staging_id)s
         """,
         {
             "staging_id": staging_id,
@@ -106,23 +97,42 @@ def mark_staging_apply_error(
     error_message: str,
 ) -> None:
     """
-    staging_subscribers_hub row に apply error を記録する。
+    apply error を etl_errors に記録する。
 
     Notes:
-        - processed_at は更新しない
+        - staging_subscribers_hub.processed_at は更新しない
         - retry 可能な状態を維持する
     """
 
     cur.execute(
         """
-        UPDATE staging_subscribers_hub
-        SET
-            apply_error_code = %(error_code)s,
-            apply_error_message = %(error_message)s,
-            apply_error_at = NOW(),
-            apply_error_run_id = %(apply_run_id)s,
-            updated_at = NOW()
-        WHERE staging_subscriber_hub_id = %(staging_id)s
+        INSERT INTO etl_errors (
+            run_id,
+            phase,
+            source,
+            insurer_number,
+            src_file,
+            src_row_no,
+            src_line_no,
+            staging_rowid,
+            person_id_custom,
+            error_code,
+            message
+        )
+        SELECT
+            %(apply_run_id)s,
+            'apply',
+            'staging_subscribers_hub',
+            insurer_number,
+            src_file,
+            src_row_no,
+            src_line_no,
+            id,
+            person_id_custom,
+            %(error_code)s,
+            %(error_message)s
+        FROM staging_subscribers_hub
+        WHERE id = %(staging_id)s
         """,
         {
             "staging_id": staging_id,
@@ -143,18 +153,14 @@ def reset_staging_apply_error(
     *,
     staging_id: int,
 ) -> None:
-    """staging row の apply error 情報をクリアする。"""
+    """staging row に紐づく apply error 情報を etl_errors から削除する。"""
 
     cur.execute(
         """
-        UPDATE staging_subscribers_hub
-        SET
-            apply_error_code = NULL,
-            apply_error_message = NULL,
-            apply_error_at = NULL,
-            apply_error_run_id = NULL,
-            updated_at = NOW()
-        WHERE staging_subscriber_hub_id = %(staging_id)s
+        DELETE FROM etl_errors
+        WHERE phase = 'apply'
+          AND source = 'staging_subscribers_hub'
+          AND staging_rowid = %(staging_id)s
         """,
         {
             "staging_id": staging_id,

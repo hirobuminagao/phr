@@ -87,7 +87,7 @@ class ApplyMetrics:
 
 
 APPLY_ROW_COLUMNS = """
-    staging_subscriber_hub_id,
+    id AS staging_subscriber_hub_id,
     import_run_id,
 
     apply_action,
@@ -175,7 +175,7 @@ def load_staging_rows_for_apply(
         WHERE import_run_id = %(import_run_id)s
           AND processed_run_id IS NULL
           AND apply_action IS NOT NULL
-        ORDER BY staging_subscriber_hub_id ASC
+        ORDER BY id ASC
         {limit_sql}
         """,
         params,

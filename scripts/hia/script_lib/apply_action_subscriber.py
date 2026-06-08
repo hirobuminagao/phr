@@ -73,6 +73,16 @@ def _to_date_or_none(value: Any) -> Any:
     return value
 
 
+def _name_part_or_none(*, full_value: Any, part_value: Any) -> Any:
+    """全文と同じ値しか入っていない name part は未分割扱いとして None にする。"""
+
+    if part_value in (None, ""):
+        return None
+    if _as_text(full_value) == _as_text(part_value):
+        return None
+    return part_value
+
+
 # ============================================================
 # audit field definitions
 # ============================================================
@@ -153,18 +163,27 @@ def insert_subscriber_root(
         "name_kana_full_match": row.get("name_kana_full_match"),
         "name_kanji_full": row.get("name_kanji_full"),
         "name_full_match": row.get("name_kanji_full_match"),
-        "name_kana_family": row.get("name_kana_family"),
-        "name_kana_middle": row.get("name_kana_middle"),
-        "name_kana_given": row.get("name_kana_given"),
+        "name_kana_family": _name_part_or_none(
+            full_value=row.get("name_kana_full"),
+            part_value=row.get("name_kana_family"),
+        ),
+        "name_kana_middle": _name_part_or_none(
+            full_value=row.get("name_kana_full"),
+            part_value=row.get("name_kana_middle"),
+        ),
+        "name_kana_given": _name_part_or_none(
+            full_value=row.get("name_kana_full"),
+            part_value=row.get("name_kana_given"),
+        ),
         "name_kanji_family": row.get("name_kanji_family"),
         "name_kanji_middle": row.get("name_kanji_middle"),
         "name_kanji_given": row.get("name_kanji_given"),
-        "name_kana_family_match": row.get("name_kana_family"),
-        "name_kana_middle_match": row.get("name_kana_middle"),
-        "name_kana_given_match": row.get("name_kana_given"),
-        "name_kanji_family_match": row.get("name_kanji_family"),
-        "name_kanji_middle_match": row.get("name_kanji_middle"),
-        "name_kanji_given_match": row.get("name_kanji_given"),
+        "name_kana_family_match": None,
+        "name_kana_middle_match": None,
+        "name_kana_given_match": None,
+        "name_kanji_family_match": None,
+        "name_kanji_middle_match": None,
+        "name_kanji_given_match": None,
         "insured_attribute_name": row.get("insured_attribute_name"),
         "relationship_name": row.get("relationship_name"),
         "qualification_acquired_date": _to_date_or_none(row.get("qualification_acquired_date")),
@@ -339,18 +358,27 @@ def apply_subscriber_identity_fields(
         "name_kana_full_match": row.get("name_kana_full_match"),
         "name_kanji_full": row.get("name_kanji_full"),
         "name_full_match": row.get("name_kanji_full_match"),
-        "name_kana_family": row.get("name_kana_family"),
-        "name_kana_middle": row.get("name_kana_middle"),
-        "name_kana_given": row.get("name_kana_given"),
+        "name_kana_family": _name_part_or_none(
+            full_value=row.get("name_kana_full"),
+            part_value=row.get("name_kana_family"),
+        ),
+        "name_kana_middle": _name_part_or_none(
+            full_value=row.get("name_kana_full"),
+            part_value=row.get("name_kana_middle"),
+        ),
+        "name_kana_given": _name_part_or_none(
+            full_value=row.get("name_kana_full"),
+            part_value=row.get("name_kana_given"),
+        ),
         "name_kanji_family": row.get("name_kanji_family"),
         "name_kanji_middle": row.get("name_kanji_middle"),
         "name_kanji_given": row.get("name_kanji_given"),
-        "name_kana_family_match": row.get("name_kana_family"),
-        "name_kana_middle_match": row.get("name_kana_middle"),
-        "name_kana_given_match": row.get("name_kana_given"),
-        "name_kanji_family_match": row.get("name_kanji_family"),
-        "name_kanji_middle_match": row.get("name_kanji_middle"),
-        "name_kanji_given_match": row.get("name_kanji_given"),
+        "name_kana_family_match": None,
+        "name_kana_middle_match": None,
+        "name_kana_given_match": None,
+        "name_kanji_family_match": None,
+        "name_kanji_middle_match": None,
+        "name_kanji_given_match": None,
         "last_change_run_id": apply_run_id,
     }
 

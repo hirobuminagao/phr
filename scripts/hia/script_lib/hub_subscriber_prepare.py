@@ -80,7 +80,7 @@ class PrepareDecision:
 
 
 PREPARE_ROW_COLUMNS = """
-    staging_subscriber_hub_id,
+    id AS staging_subscriber_hub_id,
     import_run_id,
 
     hia_subscriber_id,
@@ -136,7 +136,7 @@ def load_staging_rows_for_prepare(
         FROM staging_subscribers_hub
         WHERE import_run_id = %(import_run_id)s
           AND processed_run_id IS NULL
-        ORDER BY staging_subscriber_hub_id ASC
+        ORDER BY id ASC
         {limit_sql}
         """,
         params,
@@ -280,7 +280,7 @@ def update_staging_prepare_result(
             address_diff_status = %(address_diff_status)s,
             contact_point_diff_status = %(contact_point_diff_status)s,
             apply_checked_at = NOW()
-        WHERE staging_subscriber_hub_id = %(staging_id)s
+        WHERE id = %(staging_id)s
         """,
         {
             "staging_id": staging_id,
