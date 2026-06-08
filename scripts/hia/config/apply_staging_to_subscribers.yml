@@ -1,0 +1,15 @@
+# HIA apply
+# auto = staging_subscribers_hub の未処理(processed_run_id IS NULL)最新 import_run_id を使う
+import_run_id: auto
+
+# dry-run時は target table を更新しない
+dry_run: true
+
+# 0 = 全件
+limit: 0
+
+# prepare済みなら true
+skip_prepare: false
+
+# compare済みなら true
+skip_compare: false
