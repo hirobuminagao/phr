@@ -48,6 +48,10 @@ scripts/hia/script_lib/hub_subscriber_prepare.py
 scripts/hia/script_lib/hub_subscriber_compare.py
 scripts/hia/script_lib/hub_subscriber_apply.py
 scripts/hia/script_lib/hub_subscriber_audit.py
+scripts/hia/script_lib/apply_action_subscriber.py
+scripts/hia/script_lib/apply_action_subscriber_address.py
+scripts/hia/script_lib/apply_action_subscriber_contact_point.py
+scripts/hia/script_lib/apply_action_staging_mark.py
 ```
 
 旧実装では apply phase 内で compare / update / audit を同時に実施していた。
@@ -76,6 +80,40 @@ audit
 
 このうち `hub_subscriber_apply.py` は、prepare / compare により確定した `apply_action` を実行する反映エンジンとして扱う。
 
+## Current Implementation Notes
+
+2026-06 時点の実装では、VSCode の RUN ボタン実行を前提として、以下の設定ファイルを読む。
+
+```text
+scripts/hia/config/apply_staging_to_subscribers.yml
+```
+
+基本設定:
+
+```yaml
+import_run_id: auto
+dry_run: true
+limit: 0
+skip_prepare: false
+skip_compare: false
+```
+
+`import_run_id: auto` の場合、`staging_subscribers_hub` 内の未処理行から最新の `import_run_id` を取得する。
+
+```sql
+SELECT import_run_id
+FROM staging_subscribers_hub
+WHERE processed_run_id IS NULL
+  AND import_run_id IS NOT NULL
+GROUP BY import_run_id
+ORDER BY import_run_id DESC
+LIMIT 1;
+```
+
+`etl_runs` 全体の最新 run_id は参照しない。理由は、`etl_runs` は他処理でも採番されるためである。
+
+VSCode RUN では config の値を使い、CLI 引数を指定した場合は CLI 側の値で上書きできる。
+
 ---
 
 # 1. Apply Orchestration Overview
@@ -87,6 +125,9 @@ staging_subscribers_hub
 WHERE import_run_id = :import_run_id
   AND processed_run_id IS NULL
 ```
+
+`staging_subscribers_hub` の主キーは `id` である。
+実装上、既存の処理名との互換のため `SELECT id AS staging_subscriber_hub_id` として扱う箇所があるが、実DDL上の列名は `id` で統一する。
 
 フロー:
 
@@ -191,6 +232,30 @@ parts 列を前提にしてはならない。
 
 ---
 
+# 2.5 HIA Duplicate ID / Retired-like Record Policy
+
+HIA 側で長音符ゆれ等により同一人物が複数 HIA加入者ID として存在する場合がある。
+HIA に物理削除がない、または削除運用できないケースでは、片方の記号を `99999` などに変更して別人化退避する。
+
+この `99999` は削除フラグではない。
+HIA からDLされる限り、データとしては存在する加入者レコードとして扱う。
+
+したがって apply では:
+
+```text
+正しいHIA ID側
+  → 既存 subscribers.hia_subscriber_id に紐づける
+
+99999退避側
+  → identity_hash / person_id_custom が変わる
+  → not_found
+  → insert対象
+```
+
+HIA 側で物理削除または論理削除が行われた場合に、`subscribers` 側で削除フラグ・inactive・retired 等を立てる処理は別フローとする。
+
+---
+
 # 3. Subscriber Insert
 
 条件:
@@ -272,6 +337,19 @@ name_kana_family / middle / given は格納しない（NULL のまま）
 
 これは、後続でより正確な split 情報（例: 健保受領CSV由来）が得られたときに、
 `subscribers` の parts 列を矛盾なく補完可能にするためである。
+
+実装上は、HIA由来の `name_kana_family` / `name_kana_middle` / `name_kana_given` について、`name_kana_full` と同じ値しか入っていない場合は未分割扱いとして `NULL` を登録する。
+
+また、parts 用の match列は HIA apply では使用しない。
+
+```text
+name_kana_family_match = NULL
+name_kana_middle_match = NULL
+name_kana_given_match = NULL
+name_kanji_family_match = NULL
+name_kanji_middle_match = NULL
+name_kanji_given_match = NULL
+```
 
 ---
 
@@ -530,8 +608,8 @@ subscriber insert
 subscriber update
 compare_identity_norm_hash change
 compare_other_hash change
-address current switch / insert
-contact point current change
+address current switch / insert（実装対象。subscriber_audit または将来の address audit で扱う）
+contact point current change（実装対象。subscriber_audit または将来の contact audit で扱う）
 qualification change
 ```
 
@@ -559,24 +637,36 @@ subscriber-audit-implementation
 
 ---
 
-# 8. Processed Mark
+# 8. Processed Mark / Apply Check State
+
+prepare / compare 実行時:
+
+```text
+staging_subscribers_hub.apply_checked_at
+```
+
+を更新する。
 
 apply_action 実行成功後:
 
-```
+```sql
 UPDATE staging_subscribers_hub
 SET
-  processed_run_id = run_id
+  processed_run_id = :run_id,
   processed_at = now()
+WHERE id = :staging_id;
 ```
 
 これにより staging は
 
-```
-未処理キュー
+```text
+processed_run_id IS NULL = 未処理キュー
+processed_run_id IS NOT NULL = apply処理済み
 ```
 
 として機能する。
+
+staging には apply error 詳細を保持しない。
 
 ---
 
@@ -607,6 +697,20 @@ finished_at
 ```
 etl_errors
 ```
+
+apply 失敗時は `staging_subscribers_hub` に `apply_error_*` を持たせず、`etl_errors` へ記帳する。
+
+```text
+run_id = apply_run_id
+phase = 'apply'
+source = 'staging_subscribers_hub'
+staging_rowid = staging_subscribers_hub.id
+person_id_custom = staging_subscribers_hub.person_id_custom
+error_code
+message
+```
+
+apply失敗行は `processed_run_id` を更新しないため、再実行対象として残る。
 
 ---
 
@@ -660,6 +764,9 @@ contact point apply
       │
       ▼
 subscriber audit
+      │
+      ├ apply failure
+      │    └ etl_errors
       │
       ▼
 processed mark

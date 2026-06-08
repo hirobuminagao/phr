@@ -14,8 +14,9 @@ apply orchestration
   + subscriber root apply
   + address apply
   + contact point apply
-  + audit
+  + subscriber audit
   + processed mark
+  + etl_errors on failure
 ```
 
 ```
@@ -45,7 +46,7 @@ address apply
 contact point apply
       │
       ▼
-audit
+subscriber audit
       │
       ▼
 processed mark
@@ -146,7 +147,7 @@ processed mark
 - subscriber root apply
 - address apply
 - contact point apply
-- subscriber_audit 生成
+- subscriber root 変更の subscribers_audit 生成
 - processed mark
 
 比較結果は staging 側へ保持する。
@@ -230,7 +231,7 @@ address apply
 ↓
 contact point apply
 ↓
-audit
+subscriber audit
 ↓
 processed mark
 ```
@@ -276,7 +277,7 @@ apply_action_subscriber_audit.py
   = subscriber_audit apply
 
 apply_action_staging_mark.py
-  = processed/error mark
+  = processed mark / etl_errors insert
 ```
 
 
@@ -425,8 +426,9 @@ subscriber_addresses
 ポリシー
 
 ```
-current row は1件
+current row は1件を期待
 history row は複数保持
+複数currentはreview対象
 ```
 
 差分があれば
@@ -555,9 +557,10 @@ subscriber_audit
 subscriber insert
 subscriber identity update
 subscriber other update
-address current change
-contact point current change
 ```
+
+address / contact point は履歴型テーブルで current / history を保持する。
+現時点では address / contact point 専用 audit テーブルは持たず、`subscribers_audit` への必須記帳対象にもしていない。
 
 実装
 
@@ -593,11 +596,6 @@ staging_subscribers_hub
 processed_run_id
 processed_at
 ```
-```
-apply_error_code
-apply_error_message
-apply_error_at
-```
 
 これにより
 
@@ -606,6 +604,8 @@ apply_error_at
 ```
 
 として扱える。
+
+apply 失敗時は staging に apply_error_* を保持せず、`etl_errors` へ記帳する。
 
 ---
 
@@ -754,4 +754,8 @@ contact point apply
 subscriber audit
  ↓
 processed mark
+
+apply failure
+ ↓
+etl_errors
 ```

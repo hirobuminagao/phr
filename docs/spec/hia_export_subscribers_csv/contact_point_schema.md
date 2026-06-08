@@ -383,17 +383,69 @@ fund側を同時に触ると、contact再設計とdiff設計が並行して中�
 
 # 10. Audit / History Policy
 
-contact point current change は audit 対象とする。
+contact point は履歴型テーブルとして保持する。
 
-保持対象:
+履歴管理は:
 
 ```text
-- 変更前 contact point
-- 変更後 contact point
-- apply_run_id
-- source staging row
-- changed_at
+is_current
+valid_from
+valid_to
 ```
+
+により行う。
+
+例:
+
+```text
+旧電話番号
+  is_current = 0
+  valid_to = 更新日時
+
+新電話番号
+  is_current = 1
+  valid_from = 更新日時
+```
+
+現時点では:
+
+```text
+subscriber_contact_point_audit
+```
+
+のような専用 audit テーブルは持たない。
+
+また contact point の変更は:
+
+```text
+subscriber_audit
+```
+
+へ必須記帳とはしていない。
+
+したがって現在の実装では:
+
+```text
+contact point
+  → 履歴あり
+  → auditなし
+```
+
+として扱う。
+
+将来的に:
+
+```text
+subscriber_contact_point_audit
+```
+
+または
+
+```text
+subscriber_audit
+```
+
+への記帳を追加する場合は、本ドキュメントを更新する。
 
 ---
 

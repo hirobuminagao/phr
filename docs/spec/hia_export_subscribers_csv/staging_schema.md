@@ -397,10 +397,10 @@ subscriber_addresses.address_hash
 注意:
 
 ```text
-address_hash 一致 = current address 一致
+address_hash 一致 = 同一住所値の存在
 ```
 
-ではない。
+であり、current address 一致とは限らない。
 
 `subscriber_addresses` は 1:n の履歴型テーブルであり、
 同一住所値が historical row として存在する可能性がある。

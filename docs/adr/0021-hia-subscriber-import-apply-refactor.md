@@ -1,5 +1,3 @@
-
-
 # ADR-0021: HIA加入者 import / compare / apply フロー再設計
 
 ## Status
@@ -52,7 +50,13 @@ prepare / compare
   ↓
 apply
   ↓
-audit
+subscriber audit
+  ↓
+processed mark
+
+apply failure
+  ↓
+etl_errors
 ```
 
 また、既存の `scripts/work_folder/scripts/` 起点の構造を整理し、
@@ -73,6 +77,10 @@ scripts/hia/
     ├── hub_subscriber_apply.py
     ├── hub_subscriber_compare.py
     ├── hub_subscriber_audit.py
+    ├── apply_action_subscriber.py
+    ├── apply_action_subscriber_address.py
+    ├── apply_action_subscriber_contact_point.py
+    ├── apply_action_staging_mark.py
     └── ...
 ```
 
@@ -93,8 +101,42 @@ scripts/hia/
 - `apply_hia_subscriber_sync.py`
   - prepare / compare 実行
   - apply_action 決定
-  - 本番 subscriber 更新
-  - audit 保存
+  - subscribers / address / contact point 反映
+  - subscriber root 変更の subscribers_audit 保存
+  - apply成功時の processed mark
+  - apply失敗時の etl_errors 記帳
+
+### Current Implementation Notes
+
+2026-06 時点では、`apply_hia_subscriber_sync.py` は VSCode RUN ボタンで実行できるように、以下の YAML config を読む。
+
+```text
+scripts/hia/config/apply_staging_to_subscribers.yml
+```
+
+基本設定:
+
+```yaml
+import_run_id: auto
+dry_run: true
+limit: 0
+skip_prepare: false
+skip_compare: false
+```
+
+`import_run_id: auto` の場合、`staging_subscribers_hub` 内の未処理行から最新の `import_run_id` を取得する。
+
+```sql
+SELECT import_run_id
+FROM staging_subscribers_hub
+WHERE processed_run_id IS NULL
+  AND import_run_id IS NOT NULL
+GROUP BY import_run_id
+ORDER BY import_run_id DESC
+LIMIT 1;
+```
+
+`etl_runs` 全体の最新 run_id は参照しない。
 
 ---
 
@@ -140,10 +182,15 @@ snapshot 対象例:
 
 ```text
 current_subscriber_id
+current_hia_subscriber_id
 current_identity_hash
+current_compare_identity_norm_hash
+current_compare_other_hash
 current_name_kana_full_match
 current_address_id
-current_contact_id
+current_address_hash
+current_phone_contact_point_id
+current_email_contact_point_id
 current_lookup_status
 current_lookup_checked_at
 ```
@@ -171,13 +218,12 @@ Prepare / compare phase は、import phase が staging 側へ保持した curren
 想定カラム例:
 
 ```text
-matched_subscriber_id
-apply_subscriber_id
+current_subscriber_id
 apply_action
 apply_diff_columns
 identity_match_status
 address_diff_status
-contact_diff_status
+contact_point_diff_status
 apply_checked_at
 ```
 
@@ -187,7 +233,6 @@ apply_action 例:
 insert
 update
 noop
-identity_changed
 review
 ```
 
@@ -218,6 +263,9 @@ apply_action = update
 
 apply_action = noop
   → skip
+
+apply_action = review
+  → skip
 ```
 
 ---
@@ -239,6 +287,30 @@ subscribers
 
 ---
 
+## HIA Duplicate ID / 99999 Policy
+
+HIA 側で長音符ゆれ等により同一人物が複数 HIA加入者ID として存在する場合がある。
+HIA に物理削除がない、または削除運用できないケースでは、片方の記号を `99999` などに変更して別人化退避する。
+
+この `99999` は削除フラグではない。
+HIA からDLされる限り、データとしては存在する加入者レコードとして扱う。
+
+したがって apply では:
+
+```text
+正しいHIA ID側
+  → 既存 subscribers.hia_subscriber_id に紐づける
+
+99999退避側
+  → identity_hash / person_id_custom が変わる
+  → not_found
+  → insert対象
+```
+
+HIA 側で物理削除または論理削除が行われた場合に、`subscribers` 側で削除フラグ・inactive・retired 等を立てる処理は別フローとする。
+
+---
+
 ## Audit Policy
 
 audit は必ず保存する。
@@ -249,9 +321,12 @@ audit は必ず保存する。
 - compare 判定
 - apply 実行
 - subscribers 更新前後差分
-- address 更新前後差分
-- contact 更新前後差分
 - identity_hash 変更
+
+address / contact point は履歴型テーブルで current / history を保持する。
+現時点では address / contact point 専用 audit テーブルは持たず、`subscribers_audit` への必須記帳対象にもしていない。
+
+apply失敗は staging に `apply_error_*` を保持せず、`etl_errors` へ記帳する。
 
 ---
 
@@ -293,6 +368,10 @@ name_kana_match changed
 
 parts クリア後は、後続 normalize / split により再生成する。
 
+なお、HIA由来のカナ parts は原則として信用しない。
+`name_kana_full` と `name_kana_family` 等が同じ値しか入っていない場合は未分割扱いとして parts は `NULL` にする。
+また、parts 用 match列は HIA apply では使用しない。
+
 ---
 
 ## Consequences
@@ -311,6 +390,11 @@ parts クリア後は、後続 normalize / split により再生成する。
 - apply 前レビュー容易化
 - compare 入力の固定化
 - orchestration と実処理の責務分離
+- VSCode RUN ボタン前提の YAML config 運用が可能
+- `import_run_id: auto` により、未処理 staging の最新 import_run_id を自動選択可能
+- apply失敗を `etl_errors` で追跡可能
+- address / contact point は履歴型テーブルとして管理し、subscriber audit と責務分離可能
+- HIA重複IDの別人化退避（例: 記号99999）を削除扱いせず insert 対象として扱える
 
 一方で、以下の追加実装が必要となる。
 

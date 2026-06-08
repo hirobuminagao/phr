@@ -373,10 +373,10 @@ subscriber_addresses.address_hash
 注意:
 
 ```text
-address_hash 一致 = current address 一致
+address_hash 一致 = 同一住所値の存在
 ```
 
-ではない。
+であり、current address 一致とは限らない。
 
 `subscriber_addresses` は subscriber に対して 1:n の履歴型テーブルであり、
 同一住所値が過去行として存在する可能性がある。
@@ -673,11 +673,12 @@ compare / prepare phase では、staging import値と current snapshot の差分
 ```md
 - compare_identity_norm_hash change
 - compare_other_hash change
-- address current switch / insert
-- contact point current change
 - qualification change
 - employer / department change
 ```
+
+address / contact point は履歴型テーブルで current / history を保持する。
+現時点では address / contact point 専用 audit テーブルは持たず、`subscribers_audit` への必須記帳対象にもしていない。
 
 audit は apply phase 側で永続保存する。
 

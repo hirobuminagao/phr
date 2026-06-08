@@ -247,6 +247,7 @@ staging 側の住所情報と比較する。
 
 ---
 
+
 ## 4.1 Current Row Condition
 
 current address の取得条件:
@@ -262,7 +263,8 @@ WHERE subscriber_id = :subscriber_id
 
 - `is_current = 1` は current active address row として扱う
 - `is_current = 0` は historical address row として扱う
-- current row は原則1件、history row は複数保持する
+- current row は1件を期待し、history row は複数保持する
+- current row が複数存在する場合は review 対象とする
 - address compare では current row だけでなく、subscriber に紐づく住所履歴全体を対象に確認する
 
 ---
@@ -296,10 +298,10 @@ DDL実態に合わせ、住所比較は以下の列で行う。
 注意:
 
 ```text
-address_hash 一致 = current address 一致
+address_hash 一致 = 同一住所値の存在
 ```
 
-ではない。
+であり、current address 一致とは限らない。
 
 subscriber_addresses は 1:n の履歴型テーブルであり、同一住所値が historical row として存在する可能性がある。
 
@@ -329,6 +331,46 @@ same address_hash not exists
 ```
 
 ---
+
+## 4.5 Audit / History Policy
+
+address は履歴型テーブルとして保持する。
+
+履歴管理は:
+
+```text
+is_current
+valid_from
+valid_to
+```
+
+により行う。
+
+現時点では:
+
+```text
+subscriber_address_audit
+```
+
+のような専用 audit テーブルは持たない。
+
+また住所変更は:
+
+```text
+subscriber_audit
+```
+
+への必須記帳対象ではない。
+
+したがって現在の実装では:
+
+```text
+address
+  → 履歴あり
+  → auditなし
+```
+
+として扱う。
 
 # 5. subscriber_contact_points
 
@@ -448,15 +490,43 @@ contact は `contact_type + contact_value + is_current` を基準に compare / a
 
 ## 5.3 Audit / History Policy
 
-contact point current change は audit / history 対象とする。
+contact point は履歴型テーブルとして保持する。
 
-保持すべき情報:
+履歴管理は:
 
-- 変更前 contact point
-- 変更後 contact point
-- apply_run_id
-- source staging row
-- changed_at
+```text
+is_current
+valid_from
+valid_to
+```
+
+により行う。
+
+現時点では:
+
+```text
+subscriber_contact_point_audit
+```
+
+のような専用 audit テーブルは持たない。
+
+また contact point の変更は:
+
+```text
+subscriber_audit
+```
+
+への必須記帳対象ではない。
+
+したがって現在の実装では:
+
+```text
+contact point
+  → 履歴あり
+  → auditなし
+```
+
+として扱う。
 
 ---
 

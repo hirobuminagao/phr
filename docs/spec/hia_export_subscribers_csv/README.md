@@ -22,7 +22,7 @@ apply orchestration
     - subscriber root apply
     - address apply
     - contact point apply
-    - audit
+    - subscriber audit
     - processed mark
         ↓
 subscribers
@@ -50,7 +50,7 @@ apply orchestration
     - subscriber root apply
     - address apply
     - contact point apply
-    - audit
+    - subscriber audit
     - processed mark
 ```
 
@@ -176,6 +176,9 @@ contact_point_schema.md
 
 以下は subscriber_audit の直接対象ではなく、history/current 管理を主目的とする。
 
+- subscriber_addresses
+- subscriber_contact_points
+
 ---
 
 ### 3. Subscriber Identity
@@ -267,7 +270,7 @@ apply orchestration
     - subscriber root apply
     - address apply
     - contact point apply
-    - audit
+    - subscriber audit
     - processed mark
 ```
 
@@ -297,8 +300,8 @@ subscriber_audit の基本粒度:
 ```text
 insurance_symbol
 qualification_acquired_date
-address.address_hash
-contact_point.email
+department_code
+employee_code
 ```
 
 apply orchestration は 1 subscriber row を順番処理するが、audit は event 単位ではなく field 単位で保存する。
@@ -312,7 +315,9 @@ apply orchestration は 1 subscriber row を順番処理するが、audit は ev
 - ETL / 運用調査を SQL だけで追いやすくする
 ```
 
-compare_identity_norm_hash / compare_other_hash による subscriber 更新、住所 current 切替・追加、contact point current 変更も audit / 履歴管理対象とする。
+compare_identity_norm_hash / compare_other_hash による subscriber 更新は subscribers_audit 対象とする。
+
+address / contact point は履歴型テーブルとして current / history を管理し、現時点では subscribers_audit の必須対象とはしない。
 
 ただし:
 
@@ -396,7 +401,7 @@ compare hash 導入後の実装順:
    - subscriber root apply
    - address apply
    - contact point apply
-   - audit
+   - subscriber audit
    - processed mark
 6. compare hash 定義変更時は subscribers.compare_identity_norm_hash / compare_other_hash を一旦削除または再生成対象として扱う
 7. 実装が固まった後に subscribers / subscriber_addresses の backfill を実行
@@ -467,7 +472,7 @@ address apply
   ↓
 contact point apply
   ↓
-audit
+subscriber audit
   ↓
 processed mark
 ```
@@ -491,7 +496,7 @@ apply_action_subscriber_audit.py
   = subscriber_audit apply
 
 apply_action_staging_mark.py
-  = processed/error mark
+  = processed mark / etl_errors insert
 ```
 
 apply orchestration は「1 subscriber を最後まで処理してから次へ進む」構造とする。
