@@ -41,6 +41,8 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+import yaml
+
 # repo root を import path に追加する。
 # scripts/hia/apply_hia_subscriber_sync.py -> repo root は parents[2]
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -62,41 +64,99 @@ from scripts.hia.script_lib.hub_subscriber_compare import (
 from scripts.hia.script_lib.hub_subscriber_apply import apply_hia_subscriber_rows
 
 
+def load_apply_config() -> dict:
+    config_path = REPO_ROOT / "scripts" / "hia" / "config" / "apply_staging_to_subscribers.yml"
+
+    if not config_path.exists():
+        return {}
+
+    with config_path.open("r", encoding="utf-8") as fp:
+        return yaml.safe_load(fp) or {}
+
+
+def get_config_value(config: dict, key: str, default):
+    value = config.get(key, default)
+    return default if value is None else value
+
+
+def resolve_import_run_id(cur, import_run_id_value) -> int:
+    """import_run_id: auto の場合、未処理 staging の最新 import_run_id を使う。"""
+
+    text = str(import_run_id_value).strip().lower()
+
+    if text in ("", "0", "auto", "latest"):
+        cur.execute(
+            """
+            SELECT import_run_id
+            FROM staging_subscribers_hub
+            WHERE processed_run_id IS NULL
+              AND import_run_id IS NOT NULL
+            GROUP BY import_run_id
+            ORDER BY import_run_id DESC
+            LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError(
+                "No unprocessed staging_subscribers_hub rows found for auto import_run_id."
+            )
+        return int(row["import_run_id"])
+
+    try:
+        import_run_id = int(text)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid import_run_id: {import_run_id_value!r}. Use a positive integer or 'auto'."
+        ) from exc
+
+    if import_run_id <= 0:
+        raise ValueError(
+            f"Invalid import_run_id: {import_run_id_value!r}. Use a positive integer or 'auto'."
+        )
+
+    return import_run_id
+
+
 # ============================================================
 # args
 # ============================================================
 
 
 def parse_args() -> argparse.Namespace:
+    config = load_apply_config()
+
     parser = argparse.ArgumentParser(
         description="Apply HIA subscriber staging rows to target tables."
     )
 
     parser.add_argument(
         "--import-run-id",
-        type=int,
-        required=True,
-        help="対象の import_run_id。staging_subscribers_hub.import_run_id を指定する。",
+        default=get_config_value(config, "import_run_id", "auto"),
+        help="対象の import_run_id。数値または auto。auto の場合は未処理 staging の最新 import_run_id を使う。",
     )
     parser.add_argument(
         "--limit",
         type=int,
-        default=0,
+        default=get_config_value(config, "limit", 0),
         help="処理件数上限。0 の場合は無制限。",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
+        default=get_config_value(config, "dry_run", False),
         help="target tables の更新を行わず、apply候補の処理確認のみ行う。prepare/compare/applyによるDB変更は rollback される。",
     )
     parser.add_argument(
         "--skip-prepare",
         action="store_true",
+        default=get_config_value(config, "skip_prepare", False),
         help="prepare phase をスキップする。既にprepare済みの場合に使用する。",
     )
     parser.add_argument(
         "--skip-compare",
         action="store_true",
+        default=get_config_value(config, "skip_compare", False),
         help="compare phase をスキップする。既にcompare済みの場合に使用する。",
     )
 
@@ -130,6 +190,8 @@ def main() -> int:
     with connect_ctx(params, database=DEV_PHR) as conn:
         with dict_cursor(conn) as cur:
             try:
+                import_run_id = resolve_import_run_id(cur, args.import_run_id)
+
                 apply_run_id = start_run(
                     cur,
                     phase="hia_subscriber_apply",
@@ -146,14 +208,14 @@ def main() -> int:
 
                 print("=== HIA subscriber apply start ===")
                 print(f"apply_run_id  : {apply_run_id}")
-                print(f"import_run_id : {args.import_run_id}")
+                print(f"import_run_id : {import_run_id}")
                 print(f"limit         : {args.limit}")
                 print(f"dry_run       : {args.dry_run}")
 
                 if not args.skip_prepare:
                     prepare_metrics = prepare_hia_subscriber_apply_actions(
                         cur,
-                        import_run_id=args.import_run_id,
+                        import_run_id=import_run_id,
                         limit=args.limit,
                         dry_run=args.dry_run,
                     )
@@ -166,7 +228,7 @@ def main() -> int:
                 if not args.skip_compare:
                     compare_metrics = compare_hia_subscriber_apply_actions(
                         cur,
-                        import_run_id=args.import_run_id,
+                        import_run_id=import_run_id,
                         limit=args.limit,
                         dry_run=args.dry_run,
                     )
@@ -178,7 +240,7 @@ def main() -> int:
 
                 apply_metrics = apply_hia_subscriber_rows(
                     cur,
-                    import_run_id=args.import_run_id,
+                    import_run_id=import_run_id,
                     apply_run_id=apply_run_id,
                     limit=args.limit,
                     dry_run=args.dry_run,
