@@ -31,7 +31,7 @@ prepare/apply flow
 lookup layer は:
 
 ```text
-軽量な identity-ish values を返す
+DBから特定キーでよく使う値を取得する
 ```
 
 ことを基本方針とする。
@@ -56,27 +56,25 @@ lightweight identity handle を返す。
 }
 ```
 
-lightweight identity handle は:
+lookup layer は、用途に応じて以下を返す。
 
 ```text
-検索
-compare
-hydrate
-resolver chaining
+- lightweight identity handle
+- current snapshot values
+- compare / export / apply でよく使うDB値
 ```
 
-などの後続処理で再利用できる lightweight key set を意図する。
+ただし、業務判断・apply action decision・ETL orchestration は行わない。
 
-lookup layer は:
+つまり本ディレクトリの責務は:
 
 ```text
-住所
-電話
-メール
-業務詳細データ
+DBから値を取得する
+取得単位を共通化する
+呼び出し側が扱いやすい形に整える
 ```
 
-などの重い hydrate data は返さない。
+までとする。
 
 ---
 
@@ -108,6 +106,8 @@ lightweight identity handle retrieval
 
 ```text
 lightweight identity handle
+current snapshot values
+well-known DB values
 ```
 
 例:
@@ -173,6 +173,13 @@ subscriber_id
 current snapshot data load
 ```
 
+補足:
+
+```text
+hydrate は、IDやキーだけでは足りない後続処理のために、
+関連する実データを読み込んで usable な形にすることを指す。
+```
+
 hydrate は:
 
 ```text
@@ -180,6 +187,11 @@ address
 contact
 current snapshot
 ```
+
+現在実装:
+
+- subscriber_addresses.py
+- subscriber_contact_points.py
 
 などの実データ取得を担当する。
 
@@ -330,6 +342,66 @@ apply_subscribers_from_staging_hub.py
 ```
 
 を一次情報として扱う。
+
+---
+
+## subscriber_addresses.py
+
+current address lookup helper。
+
+役割:
+
+- subscribers.id list を入力にする
+- current address を取得する
+- compare / current snapshot 用に利用する
+
+返却例:
+
+```python
+{
+    "subscriber_id": 123,
+    "postal_code": "1000001",
+    "address_line": "東京都...",
+    "building": "サンプルビル101",
+}
+```
+
+特徴:
+
+```text
+- identity resolve は行わない
+- 検索は行わない
+- current address hydrate のみ担当する
+```
+
+## subscriber_contact_points.py
+
+current contact point lookup helper。
+
+役割:
+
+- subscribers.id list を入力にする
+- current contact point を取得する
+- compare / current snapshot 用に利用する
+
+返却例:
+
+```python
+{
+    "subscriber_id": 123,
+    "phone": "090xxxx",
+    "email": "sample@example.com",
+}
+```
+
+特徴:
+
+```text
+- identity resolve は行わない
+- 検索は行わない
+- current contact hydrate のみ担当する
+- 将来 contact_type 追加に対応可能
+```
 
 ---
 

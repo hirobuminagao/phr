@@ -37,6 +37,12 @@ from scripts.from_fund.script_lib.major_candidate_finder import find_major_candi
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
+from scripts.lib.db.lookup.subscriber_addresses import (
+    get_current_addresses_by_subscriber_ids,
+)
+from scripts.lib.db.lookup.subscriber_contact_points import (
+    get_current_contact_points_by_subscriber_ids,
+)
 
 from datetime import datetime
 
@@ -127,6 +133,13 @@ def _placeholders(values: list[Any]) -> str:
     return ",".join(["%s"] * len(values))
 
 
+def _build_current_address_match(address_line: Any, building: Any) -> str | None:
+    address_line_text = "" if address_line is None else str(address_line)
+    building_text = "" if building is None else str(building)
+    value = f"{address_line_text}{building_text}"
+    return value or None
+
+
 def fetch_target_staging_rows(
     conn: Any,
     *,
@@ -164,18 +177,8 @@ def fetch_current_subscribers_by_ids(
         cursor.execute(
             f"""
             SELECT
-              s.*,
-              a.postal_code AS postal_code,
-              a.address_line AS address_line,
-              c.phone AS phone,
-              c.email AS email
+              s.*
             FROM {DEV_PHR}.subscribers s
-            LEFT JOIN {DEV_PHR}.subscriber_addresses a
-              ON a.subscriber_id = s.id
-             AND a.is_current = 1
-            LEFT JOIN {DEV_PHR}.subscriber_contacts c
-              ON c.subscriber_id = s.id
-             AND c.is_current = 1
             WHERE s.id IN ({_placeholders(subscriber_ids)})
             """,
             tuple(subscriber_ids),
@@ -184,7 +187,34 @@ def fetch_current_subscribers_by_ids(
     finally:
         cursor.close()
     normalized_rows = [dict(cast(Mapping[str, Any], row)) for row in rows]
-    return {int(row["id"]): row for row in normalized_rows}
+    subscribers_by_id = {int(row["id"]): row for row in normalized_rows}
+
+    addresses_by_id = get_current_addresses_by_subscriber_ids(
+        conn,
+        subscriber_ids,
+    )
+    contact_points_by_id = get_current_contact_points_by_subscriber_ids(
+        conn,
+        subscriber_ids,
+    )
+
+    for subscriber_id, subscriber_row in subscribers_by_id.items():
+        address = addresses_by_id.get(subscriber_id, {})
+        address_line = address.get("address_line")
+        building = address.get("building")
+        subscriber_row["postal_code"] = address.get("postal_code")
+        subscriber_row["address_line"] = address_line
+        subscriber_row["building"] = building
+        subscriber_row["address_match"] = _build_current_address_match(
+            address_line,
+            building,
+        )
+
+        contact_points = contact_points_by_id.get(subscriber_id, {})
+        subscriber_row["phone"] = contact_points.get("phone")
+        subscriber_row["email"] = contact_points.get("email")
+
+    return subscribers_by_id
 
 
 def fetch_current_subscribers_for_candidate_search(

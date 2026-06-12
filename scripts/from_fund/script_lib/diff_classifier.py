@@ -70,7 +70,7 @@ def classify_staging_row(
         ("gender_code", staging_row.get("gender_code_norm"), subscriber.get("gender_code")),
         ("relationship_name", staging_row.get("relationship_name_norm"), subscriber.get("relationship_name")),
         ("postal_code_match", staging_row.get("postal_code_match"), subscriber.get("postal_code")),
-        ("address_match", staging_row.get("address_match"), subscriber.get("address_line")),
+        ("address_match", staging_row.get("address_match"), subscriber.get("address_match")),
         ("phone", staging_row.get("phone_norm"), subscriber.get("phone")),
         ("email", staging_row.get("email_norm"), subscriber.get("email")),
         ("employer_code", staging_row.get("mapped_employer_code"), subscriber.get("employer_code")),

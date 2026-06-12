@@ -1,5 +1,3 @@
-
-
 # Operation Flow
 
 ## Purpose
@@ -94,6 +92,20 @@ name parts 補完
 比較品質向上および加入者管理情報維持のための限定的な補完を行う。
 ```
 
+現行実装:
+
+```text
+Import
+(import_staging_subscribers_fund.py)
+↓ 自動実行
+Apply
+(apply_staging_subscribers_fund_to_subscribers.py)
+```
+
+Apply フェーズでは name parts 補完を実施する。
+
+本フェーズは Import 実行時に自動起動される。
+
 ---
 
 ## Phase 3: Compare
@@ -129,6 +141,21 @@ major_candidate
 運用確認対象:
 
 missing_from_new
+```
+
+実行方法:
+
+```text
+update_staging_subscriber_diff_status.py
+```
+
+補足:
+
+```text
+Compare フェーズは Import / Apply から自動起動されない。
+
+運用担当者が対象 import_run_id を確認後、
+明示的に実行する。
 ```
 
 関連spec:
