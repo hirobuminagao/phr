@@ -252,12 +252,14 @@ staging 取り込み後、以下の4分類を付与する。
   - `qualification_acquired_date`
   - `qualification_lost_date`
 
-- 住所・連絡先
+- 住所・連絡先（root minor更新対象からは除外）
   - `postal_code`
   - `address_line`
   - `building`
   - `phone`
   - `email`
+
+※ 住所・連絡先は `subscribers` 本体の minor 更新対象ではなく、履歴型テーブル側の compare / apply 対象とする。
 
 - 会社・部署・外部ID
   - `employer_code`
@@ -265,6 +267,38 @@ staging 取り込み後、以下の4分類を付与する。
   - `distribution_code`
   - `employee_code`
   - `connect_id`
+
+### 住所・連絡先の扱い（HUB apply構造への追従）
+
+HUB側では、住所・連絡先を `subscribers` 本体の更新項目として扱わず、以下の履歴型テーブルを正本として扱う。
+
+```text
+住所
+  → subscriber_addresses
+
+連絡先
+  → subscriber_contact_points
+```
+
+したがって fund側の差分ファイルチェックでも、住所・連絡先は identity / root minor 更新とは分離する。
+
+本specでは、住所・連絡先を `subscribers` root更新から分離する方針までを定義する。
+具体的な compare / apply 手順は未確定であり、別途設計する。
+
+現時点の対象範囲:
+
+住所については、HUB側では以下の考え方を採用している。
+
+```text
+address_hash 一致 = 同一住所値の存在
+```
+
+ただし、fund側で同じ比較手順を採用するかは未確定とする。
+
+連絡先についても、HUB側では `contact_type` ごとに current / history を管理する。
+
+現時点では、住所・連絡先の変更を `subscribers_audit` の必須対象とはしない方針に寄せる。
+ただし、fund側での詳細な履歴管理・比較・反映手順は別途設計する。
 
 ---
 
@@ -279,9 +313,10 @@ staging 取り込み後、以下の4分類を付与する。
 
 2. 同一人物の場合（identity一致）
    - major項目は基本的に一致している前提
-   - minor項目のみ比較する
+   - root minor項目のみ比較する
      - 差分なし → `no_change`
-     - 差分あり → `update`（minor更新）
+     - 差分あり → `update`（subscribers root minor更新）
+   - 住所・連絡先は root minorとは別扱いとし、具体的な差分判定・反映手順は別途設計する
 
 ※ identity一致後に major差分が出るケースは基本的に想定外（データ不整合として扱う）
 
@@ -435,4 +470,4 @@ staging に以下を記録する。
 
 ## 一文まとめ
 
-> 2026差分判定は、2025固定基準に対する identity 主体の比較により初期分類を行い、取得日・補助キーで意味付けを行う二段階判定とする
+> 2026差分判定は、2025固定基準に対する identity 主体の比較により初期分類を行い、取得日・補助キーで意味付けを行う二段階判定とする。住所・連絡先は subscribers root 更新から分離し、具体的な compare / apply 手順は別途設計する。

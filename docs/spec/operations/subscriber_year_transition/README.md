@@ -27,6 +27,8 @@
 
 そのため、本ディレクトリでは「年度比較運用」という観点で、比較前補完、一次分類、二次判定、年度末記帳の流れを扱う。
 
+なお、健保受領 → HIA反映 → HIA export → subscribers反映までを含む加入者更新全体フローについては、`docs/spec/from_fund_subscribers` 側で管理する。
+
 ## スコープ
 
 本ディレクトリで扱う内容は以下とする。
@@ -37,6 +39,26 @@
 - 転籍候補等の二次判定方針
 - `hia_dashboard_year_end_status` による年度末状態管理方針
 - 各運用ステップと既存 system spec との対応関係
+
+### 本specの位置付け
+
+本specは、加入者更新業務全体を定義する親仕様ではない。
+
+加入者更新業務全体のフローは:
+
+```text
+docs/spec/from_fund_subscribers
+```
+
+を参照する。
+
+本specは、その中の:
+
+```text
+年度更新（year transition）
+```
+
+を扱う派生仕様として位置付ける。
 
 ## 非スコープ
 
@@ -197,3 +219,19 @@
 
 - 2025年度を基準とした差分抽出（comparison）までを完了させる
 - 更新反映（apply）は次フェーズとする
+
+### 将来的な位置付け
+
+年度更新は、加入者更新業務全体の一実施パターンとして整理する。
+
+加入者更新の親仕様:
+
+```text
+docs/spec/from_fund_subscribers
+```
+
+年度更新仕様:
+
+```text
+docs/spec/operations/subscriber_year_transition
+```
