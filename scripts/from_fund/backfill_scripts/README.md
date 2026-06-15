@@ -117,6 +117,54 @@
 - `name_kanji_*`
 - `*_parts`
 
-補足:
-- 「不正 parts を一旦捨てる」用途
-- 後続 backfill / apply により再補完する前提
+
+---
+
+## backfill_name_parts_after_hub_apply.py
+
+Hub apply 後の新規加入者向け name parts 補完 backfill。
+
+目的:
+- import 時点では subscribers に存在しなかった加入者を対象とする
+- Hub apply 後に作成された subscribers を再探索する
+- staging_subscribers_fund の name parts を後追い補完する
+
+想定フロー:
+
+```text
+fund import
+↓
+staging_subscribers_fund
+
+↓
+
+HIA登録
+↓
+HIA export
+↓
+Hub apply
+↓
+subscribers 作成
+
+↓
+
+backfill_name_parts_after_hub_apply
+↓
+parts_apply_subscriber_id 解決
+↓
+name parts 補完
+```
+
+対象:
+- staging_subscribers_fund
+- subscribers
+
+主な更新対象:
+- parts_apply_subscriber_id
+- parts_apply_status
+- parts_apply_reason
+- subscribers.name_*_parts
+
+状態:
+- planned
+- 未実装

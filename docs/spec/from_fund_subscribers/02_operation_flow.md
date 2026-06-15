@@ -125,6 +125,14 @@ address
 contact
 ```
 
+比較基準:
+
+subscribers
+subscriber_addresses
+subscriber_contact_points
+
+を現在状態として利用する。
+
 判定結果例:
 
 ```text
@@ -162,6 +170,33 @@ Compare フェーズは Import / Apply から自動起動されない。
 
 ```text
 04_compare_policy.md
+```
+
+---
+
+## Current Migration Phase
+
+現行運用では、前回年度の加入者更新結果が subscribers へ反映完了していない。
+
+HIA export → Hub apply が未完了であるため、
+現在の subscribers を比較基準として利用し、
+
+```text
+年度更新差分確認
+name parts 補完
+HIA反映CSV生成確認
+```
+
+を実施できる。
+
+補足:
+
+```text
+HIA反映CSV は生成するが、
+現時点では HIA へのアップロードおよび反映は実施しない。
+
+本フェーズの目的は、
+年度更新差分の確認および比較品質向上のための事前整備である。
 ```
 
 ---
@@ -278,11 +313,57 @@ given_name_kana
 
 ```text
 IDENTITY_MATCHED
-subscriber 側が空欄
+subscriber 側が NULL または空文字
 staging 側に値あり
 ```
 
 補完内容は audit に記録する。
+
+本補完は差分判定結果を条件としない。
+
+### Deferred Apply for New Subscribers
+
+新規加入者は import 時点では subscribers に存在しない場合がある。
+
+その場合、name parts 補完は実施できない。
+
+対応フロー:
+
+```text
+fund import
+↓
+staging_subscribers_fund
+
+↓
+
+HIA登録
+↓
+HIA export
+↓
+Hub apply
+↓
+subscribers 作成
+
+↓
+
+parts_apply_refresh
+↓
+parts_apply_subscriber_id 再解決
+
+↓
+
+apply_subscribers_fund_name_parts
+↓
+name parts 補完
+```
+
+補足:
+
+```text
+matched_subscriber_id は import 時点の判定結果を保持する。
+
+parts_apply_subscriber_id は補完実行時点の subscribers 状態を基準として再解決する。
+```
 
 ---
 

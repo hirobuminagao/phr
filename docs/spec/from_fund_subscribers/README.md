@@ -147,7 +147,137 @@ subscriber_addresses
 subscriber_contact_points
 ```
 
-年度更新は、この加入者更新業務フローを利用した大規模更新案件の一例として扱う。
+
+---
+
+## Name Parts Enrichment / Backfill Flow
+
+name parts 補完は、差分判定・HIA反映CSV生成とは独立した補助処理として扱う。
+
+目的:
+
+```text
+HIA が保持しない name parts を、fund 由来の分割済み値で補完する。
+```
+
+処理は以下の2段階に分ける。
+
+```text
+1. parts_apply_subscriber_id 解決
+2. 共通 apply による subscribers 更新
+```
+
+---
+
+### Common Apply
+
+実際の name parts 比較・更新は共通処理に委譲する。
+
+```text
+apply_subscribers_fund_name_parts.py
+```
+
+共通 apply の入力条件:
+
+```text
+parts_apply_subscriber_id IS NOT NULL
+parts_apply_status が補完許可状態
+```
+
+共通 apply の責務:
+
+```text
+staging_subscribers_fund の name parts
+↓
+subscribers の name parts 空欄確認
+↓
+subscribers 更新
+↓
+subscribers_audit 記録
+```
+
+つまり、通常 import 後補完と Hub apply 後 backfill は、
+補完先IDの解決方法だけが異なり、実際の更新処理は共通化する。
+
+---
+
+### Normal Import Path
+
+通常 import 時点で既存 subscribers に一致した加入者は、`matched_subscriber_id` を起点に補完先を確認する。
+
+```text
+fund import
+↓
+staging_subscribers_fund
+↓
+matched_subscriber_id 解決
+↓
+parts_apply refresh
+↓
+parts_apply_subscriber_id 設定
+↓
+parts_apply_status = IDENTITY_MATCHED
+↓
+common apply
+```
+
+補足:
+
+```text
+matched_subscriber_id
+  = import 時点の照合結果
+
+parts_apply_subscriber_id
+  = name parts 補完用の確定ID
+```
+
+---
+
+### After Hub Apply Backfill Path
+
+fund import 時点では subscribers に存在しない加入者が存在する。
+
+そのため、通常 import 後の name parts 補完では対象外となる場合がある。
+
+この場合は、HIA登録および Hub apply 後に、identity_hash から補完先 subscribers を再解決する。
+
+```text
+fund import
+↓
+staging_subscribers_fund
+
+↓
+
+HIA登録
+↓
+HIA export
+↓
+staging_subscribers_hub
+↓
+Hub apply
+↓
+subscribers 作成
+
+↓
+
+backfill_name_parts_after_hub_apply
+↓
+identity_hash 一致確認
+↓
+parts_apply_subscriber_id 解決
+↓
+parts_apply_status = IDENTITY_MATCHED
+↓
+common apply
+```
+
+補足:
+
+```text
+後追い補完では matched_subscriber_id を更新しない。
+
+parts_apply_subscriber_id は、補完実行時点の subscribers 状態を基準として解決する。
+```
 
 ---
 
