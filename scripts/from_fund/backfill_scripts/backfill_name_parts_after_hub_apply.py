@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
@@ -45,7 +43,10 @@ if __package__ in (None, ""):
 from scripts.from_fund.script_lib.apply_subscribers_fund_name_parts import (
     apply_name_parts_from_staging_subscribers_fund,
 )
-from scripts.lib.db.lookup.subscriber import list_subscribers_by_identity_hash
+from scripts.from_fund.script_lib.parts_apply_refresh import (
+    REFRESH_MODE_IDENTITY_HASH,
+    refresh_parts_apply_rows,
+)
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
@@ -54,24 +55,17 @@ DEFAULT_CONFIG_PATH = (
     Path(__file__).resolve().parents[1] / "config" / "parts_apply_refresh.yml"
 )
 
-# 既存 apply lib の対象条件に合わせる。
-# spec 上の名称整理は別途行うが、現行実装の再利用を優先する。
-STATUS_IDENTITY_MATCHED = "IDENTITY_MATCHED"
-REASON_IDENTITY_HASH_MATCHED_AFTER_HUB_APPLY = "identity_hash matched after hub apply"
-
 
 @dataclass(frozen=True)
 class BackfillConfig:
+    use_import_run_ids: bool
     import_run_ids: list[int]
     dry_run: bool
 
 
 @dataclass
 class BackfillMetrics:
-    target_rows: int = 0
-    id_matched: int = 0
-    no_match: int = 0
-    multiple_match: int = 0
+    refresh_result: dict[str, Any] | None = None
     apply_result: Any = None
 
 
@@ -97,37 +91,50 @@ def load_config(path: str | Path, *, dry_run_override: bool = False) -> Backfill
         raw_data = yaml.safe_load(f) or {}
 
     data = cast(Mapping[str, Any], raw_data)
+    use_import_run_ids = bool(data.get("use_import_run_ids", False))
     import_run_ids = [int(v) for v in data.get("import_run_ids", [])]
-    if not import_run_ids:
-        raise ValueError("import_run_ids is empty")
+    if use_import_run_ids and not import_run_ids:
+        raise ValueError("use_import_run_ids is true but import_run_ids is empty")
 
     dry_run = bool(data.get("dry_run", True)) or dry_run_override
 
     return BackfillConfig(
+        use_import_run_ids=use_import_run_ids,
         import_run_ids=sorted(import_run_ids),
         dry_run=dry_run,
     )
 
 
-def fetch_backfill_target_rows(conn: Any, *, import_run_id: int) -> list[dict[str, Any]]:
-    """parts_apply_* 未設定で identity_hash を持つ staging 行を取得する。"""
+def fetch_backfill_target_rows(
+    conn: Any,
+    *,
+    import_run_id: int | None,
+) -> list[dict[str, Any]]:
+    """identity_hash 起点 refresh の対象 staging 行を取得する。"""
     cursor = dict_cursor(conn)
     try:
+        where_clauses = [
+            "identity_hash IS NOT NULL",
+            "identity_hash <> ''",
+            "(parts_apply_subscriber_id IS NULL OR parts_apply_status IS NULL)",
+        ]
+        params: list[Any] = []
+        if import_run_id is not None:
+            where_clauses.insert(0, "import_run_id = %s")
+            params.append(import_run_id)
+
         cursor.execute(
             f"""
             SELECT
               id,
               import_run_id,
-              identity_hash
+              identity_hash,
+              matched_subscriber_id
             FROM {DEV_PHR}.staging_subscribers_fund
-            WHERE import_run_id = %s
-              AND parts_apply_subscriber_id IS NULL
-              AND parts_apply_status IS NULL
-              AND identity_hash IS NOT NULL
-              AND identity_hash <> ''
-            ORDER BY id
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY import_run_id, id
             """,
-            (import_run_id,),
+            tuple(params),
         )
         rows = cursor.fetchall()
     finally:
@@ -136,80 +143,10 @@ def fetch_backfill_target_rows(conn: Any, *, import_run_id: int) -> list[dict[st
     return [dict(cast(Mapping[str, Any], row)) for row in rows]
 
 
-
-
-def update_parts_apply_identity_matched(
-    conn: Any,
-    *,
-    staging_id: int,
-    subscriber_id: int,
-) -> int:
-    """identity_hash で一意に解決した補完先 subscriber id を staging に保持する。"""
-    cursor = dict_cursor(conn)
-    try:
-        cursor.execute(
-            f"""
-            UPDATE {DEV_PHR}.staging_subscribers_fund
-            SET
-              parts_apply_subscriber_id = %s,
-              parts_apply_status = %s,
-              parts_apply_reason = %s,
-              parts_apply_checked_at = NOW()
-            WHERE id = %s
-              AND parts_apply_subscriber_id IS NULL
-              AND parts_apply_status IS NULL
-            """,
-            (
-                subscriber_id,
-                STATUS_IDENTITY_MATCHED,
-                REASON_IDENTITY_HASH_MATCHED_AFTER_HUB_APPLY,
-                staging_id,
-            ),
-        )
-        return int(cursor.rowcount or 0)
-    finally:
-        cursor.close()
-
-
-def resolve_parts_apply_subscriber_ids(
-    conn: Any,
-    *,
-    import_run_id: int,
-) -> BackfillMetrics:
-    metrics = BackfillMetrics()
-    rows = fetch_backfill_target_rows(conn, import_run_id=import_run_id)
-    metrics.target_rows = len(rows)
-
-    for row in rows:
-        identity_hash = str(row["identity_hash"])
-        subscriber_rows = list_subscribers_by_identity_hash(
-            conn,
-            identity_hash,
-        )
-
-        if len(subscriber_rows) == 0:
-            metrics.no_match += 1
-            continue
-
-        if len(subscriber_rows) > 1:
-            metrics.multiple_match += 1
-            continue
-
-        subscriber_id = int(subscriber_rows[0]["id"])
-        updated = update_parts_apply_identity_matched(
-            conn,
-            staging_id=int(row["id"]),
-            subscriber_id=subscriber_id,
-        )
-        metrics.id_matched += updated
-
-    return metrics
-
-
 def call_apply_name_parts(
     conn: Any,
     *,
-    import_run_id: int,
+    import_run_id: int | None,
     dry_run: bool,
 ) -> Any:
     """既存 apply lib の引数差異を吸収して呼び出す。"""
@@ -231,17 +168,31 @@ def call_apply_name_parts(
     return apply_name_parts_from_staging_subscribers_fund(conn, import_run_id)
 
 
-def run(config: BackfillConfig) -> dict[int, BackfillMetrics]:
+def run(config: BackfillConfig) -> dict[int | None, BackfillMetrics]:
     params = load_mysql_base_params()
-    results: dict[int, BackfillMetrics] = {}
+    results: dict[int | None, BackfillMetrics] = {}
 
     with connect_ctx(params, database=DEV_PHR, autocommit=False) as conn:
-        for import_run_id in config.import_run_ids:
-            print(f"[backfill_name_parts_after_hub_apply] run_id={import_run_id}")
+        target_import_run_ids: list[int | None]
+        if config.use_import_run_ids:
+            target_import_run_ids = list(config.import_run_ids)
+        else:
+            target_import_run_ids = [None]
 
-            metrics = resolve_parts_apply_subscriber_ids(
+        for import_run_id in target_import_run_ids:
+            run_label = import_run_id if import_run_id is not None else "ALL"
+            print(f"[backfill_name_parts_after_hub_apply] run_id={run_label}")
+
+            target_rows = fetch_backfill_target_rows(
                 conn,
                 import_run_id=import_run_id,
+            )
+            metrics = BackfillMetrics()
+            metrics.refresh_result = refresh_parts_apply_rows(
+                conn=conn,
+                rows=target_rows,
+                dry_run=config.dry_run,
+                mode=REFRESH_MODE_IDENTITY_HASH,
             )
             metrics.apply_result = call_apply_name_parts(
                 conn,
@@ -252,10 +203,7 @@ def run(config: BackfillConfig) -> dict[int, BackfillMetrics]:
 
             print(
                 "[backfill_name_parts_after_hub_apply] "
-                f"target_rows={metrics.target_rows} "
-                f"id_matched={metrics.id_matched} "
-                f"no_match={metrics.no_match} "
-                f"multiple_match={metrics.multiple_match} "
+                f"refresh_result={metrics.refresh_result} "
                 f"apply_result={metrics.apply_result}"
             )
 

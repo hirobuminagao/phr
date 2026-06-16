@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 
 from scripts.lib.db.config import load_mysql_base_params
-from scripts.lib.db.mysql import connect_ctx
+from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
 from scripts.lib.etl.metrics import RunMetrics
 from scripts.lib.etl.runs import finish_run, start_run
@@ -14,8 +14,44 @@ from scripts.from_fund.script_lib.apply_subscribers_fund_name_parts import (
     apply_name_parts_from_staging_subscribers_fund,
 )
 
+from scripts.from_fund.script_lib.parts_apply_refresh import (
+    REFRESH_MODE_MATCHED,
+    refresh_parts_apply_rows,
+)
+
 ETL_PHASE = "apply"
 ETL_SOURCE = "staging_subscribers_fund"
+
+
+def fetch_matched_parts_apply_target_rows(conn: object, *, import_run_id: int) -> list[dict[str, object]]:
+    """通常 import 後の parts_apply refresh 対象行を取得する。
+
+    対象選定は呼び元責務。
+    本処理では import 時点で matched_subscriber_id が解決済みの行だけを
+    parts_apply_subscriber_id 解決候補にする。
+    """
+    cursor = dict_cursor(conn)
+    try:
+        cursor.execute(
+            f"""
+            SELECT
+              id,
+              identity_hash,
+              matched_subscriber_id
+            FROM {DEV_PHR}.staging_subscribers_fund
+            WHERE import_run_id = %s
+              AND matched_subscriber_id IS NOT NULL
+              AND parts_apply_subscriber_id IS NULL
+              AND parts_apply_status IS NULL
+            ORDER BY id
+            """,
+            (import_run_id,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    return [dict(row) for row in rows]
 
 
 
@@ -51,6 +87,17 @@ def main() -> None:
 
         status = "success"
         try:
+            refresh_rows = fetch_matched_parts_apply_target_rows(
+                conn,
+                import_run_id=run_id,
+            )
+            refresh_result = refresh_parts_apply_rows(
+                conn=conn,
+                rows=refresh_rows,
+                dry_run=False,
+                mode=REFRESH_MODE_MATCHED,
+            )
+            print(f"parts_apply_refresh: {refresh_result}")
             result = apply_name_parts_from_staging_subscribers_fund(
                 conn,
                 run_id,

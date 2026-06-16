@@ -7,13 +7,15 @@ parts_apply_refresh.py
 staging_subscribers_fund の parts_apply_* 再確認処理。
 
 責務:
-- import_run_id 単位で対象 staging 行を取得する
-- parts_apply_* を初期化する
-- matched_subscriber_id と identity_hash を再確認する
+- 呼び元から渡された staging 行を処理する
+- mode="matched" では matched_subscriber_id と identity_hash を再確認する
+- mode="identity_hash" では identity_hash から現在の subscribers.id を再探索する
 - parts_apply_subscriber_id / status / reason を更新する
 - dry_run 時はDB更新を行わず、判定metricsのみ返す
 
 非責務:
+- 対象 staging 行の選定
+- parts_apply_* 初期化対象の判断
 - subscribers の name parts 更新
 - import 時点の matched_subscriber_id 判定
 - identity_hash 生成
@@ -25,8 +27,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from scripts.lib.db.lookup.subscriber import list_subscribers_by_identity_hash
 from scripts.lib.db.mysql import dict_cursor
 
+
+REFRESH_MODE_MATCHED = "matched"
+REFRESH_MODE_IDENTITY_HASH = "identity_hash"
 
 STATUS_IDENTITY_MATCHED = "IDENTITY_MATCHED"
 STATUS_IDENTITY_CHANGED = "IDENTITY_CHANGED"
@@ -35,42 +41,45 @@ STATUS_MISSING_IDENTITY_HASH = "MISSING_IDENTITY_HASH"
 STATUS_MISSING_MATCHED_SUBSCRIBER = "MISSING_MATCHED_SUBSCRIBER"
 
 
-def clear_parts_apply_columns(
+def build_parts_apply_result_from_identity_hash(
     *,
-    cur: Any,
-    import_run_id: int,
-) -> int:
-    """対象 run の parts_apply_* を初期化する。"""
-    sql = """
-    UPDATE staging_subscribers_fund
-    SET
-      parts_apply_subscriber_id = NULL,
-      parts_apply_status = NULL,
-      parts_apply_reason = NULL,
-      parts_apply_checked_at = NULL
-    WHERE import_run_id = %s
-    """
-    cur.execute(sql, (import_run_id,))
-    return int(cur.rowcount)
+    row: dict[str, Any],
+    subscriber_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """identity_hash 起点の parts apply 解決結果を構築する。"""
+    identity_hash = str(row.get("identity_hash") or "").strip()
 
+    if not identity_hash:
+        return {
+            "parts_apply_subscriber_id": None,
+            "parts_apply_status": None,
+            "parts_apply_reason": None,
+            "result_kind": "missing_identity_hash",
+        }
 
-def fetch_target_rows(
-    *,
-    cur: Any,
-    import_run_id: int,
-) -> list[dict[str, Any]]:
-    """parts apply 再確認対象を取得する。"""
-    sql = """
-    SELECT
-      id,
-      identity_hash,
-      matched_subscriber_id
-    FROM staging_subscribers_fund
-    WHERE import_run_id = %s
-    ORDER BY id
-    """
-    cur.execute(sql, (import_run_id,))
-    return list(cur.fetchall())
+    if not subscriber_rows:
+        return {
+            "parts_apply_subscriber_id": None,
+            "parts_apply_status": None,
+            "parts_apply_reason": None,
+            "result_kind": "identity_hash_no_match",
+        }
+
+    if len(subscriber_rows) > 1:
+        return {
+            "parts_apply_subscriber_id": None,
+            "parts_apply_status": None,
+            "parts_apply_reason": None,
+            "result_kind": "identity_hash_multiple_match",
+        }
+
+    subscriber_row = subscriber_rows[0]
+    return {
+        "parts_apply_subscriber_id": int(subscriber_row["id"]),
+        "parts_apply_status": STATUS_IDENTITY_MATCHED,
+        "parts_apply_reason": "identity_hash matched",
+        "result_kind": "identity_matched",
+    }
 
 
 def fetch_subscriber_identity(
@@ -171,57 +180,60 @@ def update_parts_apply_result(
     return int(cur.rowcount)
 
 
-def refresh_parts_apply_targets(
+def refresh_parts_apply_rows(
     *,
     conn: Any,
-    import_run_id: int,
+    rows: list[dict[str, Any]],
     dry_run: bool,
+    mode: str = REFRESH_MODE_MATCHED,
 ) -> dict[str, Any]:
-    """parts apply 再確認を実行する。"""
+    """呼び元から渡された staging 行に対して parts apply 再確認を実行する。"""
     metrics = {
-        "import_run_id": import_run_id,
-        "cleared_rows": 0,
-        "target_rows": 0,
+        "mode": mode,
+        "target_rows": len(rows),
         "identity_matched": 0,
         "identity_changed": 0,
         "subscriber_not_found": 0,
         "missing_identity_hash": 0,
         "missing_matched_subscriber": 0,
+        "identity_hash_no_match": 0,
+        "identity_hash_multiple_match": 0,
         "updated_rows": 0,
         "dry_run": dry_run,
     }
 
+    if mode not in (REFRESH_MODE_MATCHED, REFRESH_MODE_IDENTITY_HASH):
+        raise ValueError(f"unsupported parts apply refresh mode: {mode}")
+
     cur = dict_cursor(conn)
     try:
-        if not dry_run:
-            metrics["cleared_rows"] = clear_parts_apply_columns(
-                cur=cur,
-                import_run_id=import_run_id,
-            )
-
-        rows = fetch_target_rows(
-            cur=cur,
-            import_run_id=import_run_id,
-        )
-
-        metrics["target_rows"] = len(rows)
-
         for row in rows:
-            matched_subscriber_id = row.get("matched_subscriber_id")
+            if mode == REFRESH_MODE_MATCHED:
+                matched_subscriber_id = row.get("matched_subscriber_id")
 
-            subscriber_row = None
-            if matched_subscriber_id:
-                subscriber_row = fetch_subscriber_identity(
-                    cur=cur,
-                    subscriber_id=int(matched_subscriber_id),
+                subscriber_row = None
+                if matched_subscriber_id:
+                    subscriber_row = fetch_subscriber_identity(
+                        cur=cur,
+                        subscriber_id=int(matched_subscriber_id),
+                    )
+
+                result = build_parts_apply_result(
+                    row=row,
+                    subscriber_row=subscriber_row,
+                )
+            else:
+                subscriber_rows = list_subscribers_by_identity_hash(
+                    conn,
+                    row.get("identity_hash"),
+                )
+                result = build_parts_apply_result_from_identity_hash(
+                    row=row,
+                    subscriber_rows=subscriber_rows,
                 )
 
-            result = build_parts_apply_result(
-                row=row,
-                subscriber_row=subscriber_row,
-            )
-
-            status = result["parts_apply_status"]
+            status = result.get("parts_apply_status")
+            result_kind = result.get("result_kind")
 
             if status == STATUS_IDENTITY_MATCHED:
                 metrics["identity_matched"] += 1
@@ -229,12 +241,16 @@ def refresh_parts_apply_targets(
                 metrics["identity_changed"] += 1
             elif status == STATUS_SUBSCRIBER_NOT_FOUND:
                 metrics["subscriber_not_found"] += 1
-            elif status == STATUS_MISSING_IDENTITY_HASH:
+            elif status == STATUS_MISSING_IDENTITY_HASH or result_kind == "missing_identity_hash":
                 metrics["missing_identity_hash"] += 1
             elif status == STATUS_MISSING_MATCHED_SUBSCRIBER:
                 metrics["missing_matched_subscriber"] += 1
+            elif result_kind == "identity_hash_no_match":
+                metrics["identity_hash_no_match"] += 1
+            elif result_kind == "identity_hash_multiple_match":
+                metrics["identity_hash_multiple_match"] += 1
 
-            if not dry_run:
+            if not dry_run and result.get("parts_apply_status") is not None:
                 metrics["updated_rows"] += update_parts_apply_result(
                     cur=cur,
                     staging_id=int(row["id"]),
@@ -244,3 +260,17 @@ def refresh_parts_apply_targets(
         cur.close()
 
     return metrics
+
+
+def refresh_parts_apply_targets(
+    *,
+    conn: Any,
+    import_run_id: int,
+    dry_run: bool,
+    mode: str = REFRESH_MODE_MATCHED,
+) -> dict[str, Any]:
+    """Deprecated compatibility wrapper. Prefer caller-selected rows + refresh_parts_apply_rows."""
+    raise RuntimeError(
+        "refresh_parts_apply_targets is deprecated. "
+        "Caller must select target rows and call refresh_parts_apply_rows."
+    )

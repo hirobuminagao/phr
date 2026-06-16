@@ -1,16 +1,15 @@
-
-
 # parts補完用 apply_subscriber_id 再確認設定
 #
+# use_import_run_ids:
+#   true:
+#     import_run_ids に指定した run_id のみ対象にする
+#   false:
+#     run_id では絞らず、parts_apply_subscriber_id または parts_apply_status が NULL の全行を対象にする
+#
 # import_run_ids:
-#   parts_apply_* を再確認・更新する対象run_id
+#   use_import_run_ids: true の場合に対象とする run_id
 #
-# mode:
-#   refresh_only:
-#     parts_apply_* の再確認だけ行う
-#
-#   refresh_and_apply:
-#     再確認後に parts 補完 apply まで実行する
+use_import_run_ids: false
 
 import_run_ids:
   - 144
