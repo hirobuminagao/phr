@@ -18,9 +18,9 @@
 insurer_number: "06139463"
 fund_id: 2
 import_run_ids:
-  - 110
-  - 112
-  - 114
+  - 144
+  - 146
+  - 148
 
 # --- 実行モード設定 ---
 diff_mode: true
