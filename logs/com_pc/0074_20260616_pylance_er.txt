@@ -1,0 +1,87 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"object\" の引数を、関数 \"dict_cursor\" の型 \"Connection\" のパラメーター \"conn\" に割り当てることはできません\n  型 \"object\" は型 \"Connection\" に割り当てできません\n    \"object\" は \"MySQLConnectionAbstract\" に割り当てできません\n    \"object\" は \"PooledMySQLConnection\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 33,
+	"startColumn": 26,
+	"endLineNumber": 33,
+	"endColumn": 30
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportReturnType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportReturnType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"list[dict[bytes, bytes]]\" は戻り値の型 \"list[dict[str, object]]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 54,
+	"startColumn": 12,
+	"endLineNumber": 54,
+	"endColumn": 39
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportCallIssue",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportCallIssue.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "指定された引数に一致する \"__init__\" のオーバーロードがありません",
+	"source": "Pylance",
+	"startLineNumber": 54,
+	"startColumn": 13,
+	"endLineNumber": 54,
+	"endColumn": 22,
+	"relatedInformation": [
+		{
+			"startLineNumber": 1187,
+			"startColumn": 9,
+			"endLineNumber": 1187,
+			"endColumn": 17,
+			"message": "オーバーロード 8 が最も近い一致です",
+			"resource": "/c:/Users/1107858.KSMD/.vscode/extensions/ms-python.vscode-pylance-2025.10.2/dist/typeshed-fallback/stdlib/builtins.pyi"
+		}
+	]
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_fund/apply_staging_subscribers_fund_to_subscribers.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"RowType | Dict[str, RowItemType]\" の引数を、関数 \"__init__\" の型 \"Iterable[list[bytes]]\" のパラメーター \"iterable\" に割り当てることはできません\n  型 \"RowType | Dict[str, RowItemType]\" は型 \"Iterable[list[bytes]]\" に割り当てできません\n    \"Dict[str, RowItemType]\" は \"Iterable[list[bytes]]\" に割り当てできません\n      型パラメーター \"_T_co@Iterable\" は共変ですが、\"str\" は \"list[bytes]\" のサブタイプではありません\n        \"str\" は \"list[bytes]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 54,
+	"startColumn": 18,
+	"endLineNumber": 54,
+	"endColumn": 21
+}]
