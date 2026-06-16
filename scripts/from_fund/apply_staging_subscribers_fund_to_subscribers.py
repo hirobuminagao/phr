@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from typing import Any, Mapping, cast
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -23,7 +24,7 @@ ETL_PHASE = "apply"
 ETL_SOURCE = "staging_subscribers_fund"
 
 
-def fetch_matched_parts_apply_target_rows(conn: object, *, import_run_id: int) -> list[dict[str, object]]:
+def fetch_matched_parts_apply_target_rows(conn: Any, *, import_run_id: int) -> list[dict[str, Any]]:
     """通常 import 後の parts_apply refresh 対象行を取得する。
 
     対象選定は呼び元責務。
@@ -51,7 +52,7 @@ def fetch_matched_parts_apply_target_rows(conn: object, *, import_run_id: int) -
     finally:
         cursor.close()
 
-    return [dict(row) for row in rows]
+    return [dict(cast(Mapping[str, Any], row)) for row in rows]
 
 
 
