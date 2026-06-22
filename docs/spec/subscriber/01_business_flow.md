@@ -1,5 +1,3 @@
-
-
 # Subscriber Business Flow
 
 ## Purpose
@@ -23,11 +21,17 @@ staging_subscribers_fund
   ↓
 差分判定
   ↓
-限定的な補完
-  ↓
 HIA反映CSV生成
   ↓
 HIA
+
+staging_subscribers_fund
+  ↓
+matched_subscriber_id
+  ↓
+name parts補完
+  ↓
+subscribers
   ↓
 HIA export
   ↓
@@ -43,6 +47,32 @@ subscriber_contact_points
   ↓
 dashboard
 ```
+
+補足:
+
+```text
+健保受領データからは2系統の処理が発生する。
+
+① HIA反映系
+staging_subscribers_fund
+ ↓
+差分判定
+ ↓
+HIA反映CSV生成
+ ↓
+HIA
+
+② subscribers補完系
+staging_subscribers_fund
+ ↓
+matched_subscriber_id
+ ↓
+name parts補完
+ ↓
+subscribers
+```
+
+name parts補完は subscribers の氏名parts情報を限定的に補完する処理であり、加入者本体更新とは分離して管理する。
 
 ---
 
@@ -133,6 +163,30 @@ HIA反映CSV生成
 ```
 
 差分判定結果を基に、HIAへ投入するためのデータを生成する。
+
+---
+
+## Step 5.5. name parts補完
+
+```text
+staging_subscribers_fund
+  ↓
+matched_subscriber_id
+  ↓
+name parts補完
+  ↓
+subscribers
+```
+
+matched_subscriber_id が解決済みの加入者について、subscribers の氏名parts情報を限定的に補完する。
+
+この処理は HIA反映CSV生成とは独立して実行される。
+
+関連仕様:
+
+```text
+docs/spec/from_fund_subscribers/06_name_parts_after_hub_apply.md
+```
 
 ---
 
