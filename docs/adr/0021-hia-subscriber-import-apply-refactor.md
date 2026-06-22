@@ -256,16 +256,20 @@ prepare / compare 済み staging row
 
 ```text
 apply_action = insert
-  → insert
+  → subscriber root / address / contact point を insert
+  → processed mark
 
 apply_action = update
-  → update
+  → subscriber root / address / contact point を必要に応じて update
+  → processed mark
 
 apply_action = noop
-  → skip
+  → subscriber root / address / contact point は更新しない
+  → processed mark
 
 apply_action = review
-  → skip
+  → 自動更新しない
+  → processed mark しない
 ```
 
 ---
@@ -311,20 +315,74 @@ HIA 側で物理削除または論理削除が行われた場合に、`subscribe
 
 ---
 
+## Contact Point Compare / Apply Policy
+
+contact point は `subscriber_contact_points` を正本構造として扱う。
+
+contact point は compare hash を持たず、current snapshot の contact point id を比較起点とする。
+
+```text
+current_phone_contact_point_id
+current_email_contact_point_id
+```
+
+compare phase では、current snapshot の contact point id から current 値を取得し、HIA CSV の phone / email と contact_type ごとに比較する。
+
+```text
+current値と同じ
+  → noop
+
+HIA CSV値がNULL、かつcurrentあり
+  → clear_current
+
+HIA CSV値がcurrent値と異なる
+  → 同じ contact_value の history 行を検索
+      exists     → switch_current
+      not exists → insert
+
+判定不能
+  → review
+```
+
+history検索は current 値との差分がある場合にのみ行う。
+
+これにより、compare / apply の基準となる current 値を snapshot 時点に固定しつつ、過去連絡先への switch_current も可能にする。
+
+---
+
 ## Audit Policy
 
-audit は必ず保存する。
+audit は、更新または current 状態変更が発生した場合に保存する。
 
-以下は必須保持対象とする。
+`subscribers_audit` の必須保持対象:
+
+- subscriber root 変更
+- subscribers 更新前後差分
+- identity_hash 変更
+- address current switch / insert
+- contact point current change / insert / clear_current / switch_current
+
+以下は `subscribers_audit` ではなく ETL trace / staging status として保持する。
 
 - import 実行
 - compare 判定
 - apply 実行
-- subscribers 更新前後差分
-- identity_hash 変更
+- processed mark
+- apply失敗
 
 address / contact point は履歴型テーブルで current / history を保持する。
-現時点では address / contact point 専用 audit テーブルは持たず、`subscribers_audit` への必須記帳対象にもしていない。
+
+現時点では address / contact point 専用 audit テーブルは持たず、`subscribers_audit` へ記帳する。
+
+記帳対象:
+
+```text
+- subscriber root 変更
+- address current switch / insert
+- contact point current change / insert / clear_current / switch_current
+```
+
+contact point は履歴行だけでは current 変更の文脈を追いづらいため、contact_type 単位で old current / new current を `subscribers_audit` に記録する。
 
 apply失敗は staging に `apply_error_*` を保持せず、`etl_errors` へ記帳する。
 
@@ -337,38 +395,37 @@ HIA 側を正として subscribers.identity_hash を更新する。
 
 ただし、parts 系は差分内容に応じて扱いを変更する。
 
-### 記号・番号変更のみ
+### Name Parts Policy
+
+identity_hash が変更されても、必ず parts をクリアするわけではない。
+
+name parts は氏名 full 値に対する補助情報として扱い、記号・番号・枝番変更のみでは維持する。
+
+| ケース | name parts | name parts match |
+|----------|----------|----------|
+| 新規加入者 | 分割可能なら登録 | HIA apply では NULL |
+| identity系変更なし | 維持 | 維持 |
+| 記号変更のみ | 維持 | 維持 |
+| 番号変更のみ | 維持 | 維持 |
+| 枝番変更のみ | 維持 | 維持 |
+| 漢字氏名変更 | 漢字partsをクリア | 漢字parts matchをクリア |
+| カナ氏名変更 | カナpartsをクリア | カナparts matchをクリア |
+| 漢字氏名・カナ氏名変更 | 両方クリア | 両方クリア |
+
+補足:
 
 ```text
-insurance_symbol
-insurance_number
+identity系変更 = partsクリア
+ではない。
+
+氏名fullが変更された場合のみ、対応する parts グループをクリアする。
+
+記号・番号・枝番のみの変更では parts を変更しない。
 ```
 
-のみ変更の場合:
+クリア後の parts 再補完は fund 側補完フローの責務とする。
 
-```text
-parts は維持する
-```
-
-### 氏名カナ match 変更
-
-```text
-name_kana_match changed
-```
-
-の場合:
-
-```text
-既存 parts をクリアする
-```
-
-理由:
-
-旧 parts が新 full name と不整合になる可能性が高いため。
-
-parts クリア後は、後続 normalize / split により再生成する。
-
-なお、HIA由来のカナ parts は原則として信用しない。
+HIA由来のカナ parts は原則として信用しない。
 `name_kana_full` と `name_kana_family` 等が同じ値しか入っていない場合は未分割扱いとして parts は `NULL` にする。
 また、parts 用 match列は HIA apply では使用しない。
 
@@ -393,7 +450,7 @@ parts クリア後は、後続 normalize / split により再生成する。
 - VSCode RUN ボタン前提の YAML config 運用が可能
 - `import_run_id: auto` により、未処理 staging の最新 import_run_id を自動選択可能
 - apply失敗を `etl_errors` で追跡可能
-- address / contact point は履歴型テーブルとして管理し、subscriber audit と責務分離可能
+- address / contact point は履歴型テーブルとして管理しつつ、current変更は subscribers_audit に記録可能
 - HIA重複IDの別人化退避（例: 記号99999）を削除扱いせず insert 対象として扱える
 
 一方で、以下の追加実装が必要となる。
@@ -401,5 +458,5 @@ parts クリア後は、後続 normalize / split により再生成する。
 - prepare / compare phase 新規実装
 - staging compare 系カラム追加
 - apply_action 管理
-- address/contact compare 設計見直し
+- address/contact compare 設計見直し（contact point は current snapshot id 起点で比較）
 - orchestration 再構築

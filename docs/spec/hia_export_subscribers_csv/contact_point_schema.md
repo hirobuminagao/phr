@@ -407,45 +407,63 @@ valid_to
   valid_from = 更新日時
 ```
 
-現時点では:
+contact point の変更は、履歴行だけでなく audit としても記録する。
+
+現時点では専用の:
 
 ```text
 subscriber_contact_point_audit
 ```
 
-のような専用 audit テーブルは持たない。
+は作成しない。
 
-また contact point の変更は:
+contact point の変更履歴は:
 
 ```text
 subscriber_audit
 ```
 
-へ必須記帳とはしていない。
+へ記帳する。
 
-したがって現在の実装では:
+記帳対象:
+
+```text
+- phone current 変更
+- email current 変更
+- current解除
+- history row からの switch_current
+- 新規 contact point insert
+```
+
+記帳方針:
+
+```text
+contact_type 単位で old/current と new/current を記録する。
+
+例:
+phone: 旧current値 → 新current値
+email: 旧current値 → 新current値
+phone: 旧current値 → NULL
+email: 旧current値 → NULL
+```
+
+したがって Hub apply では:
 
 ```text
 contact point
   → 履歴あり
-  → auditなし
+  → subscriber_audit あり
 ```
 
 として扱う。
 
-将来的に:
+将来的に専用の:
 
 ```text
 subscriber_contact_point_audit
 ```
 
-または
-
-```text
-subscriber_audit
-```
-
-への記帳を追加する場合は、本ドキュメントを更新する。
+を作成する場合は、本ドキュメントを更新する。
 
 ---
 
@@ -471,6 +489,7 @@ subscriber_contact_points
 - null current解除
 - 複数連絡先保持
 - 過去連絡先への戻り
+- current変更履歴のaudit記録
 ```
 
 を安全に扱えるようにする。

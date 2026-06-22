@@ -152,16 +152,20 @@ apply orchestration は compare 判定を含むが、`hub_subscriber_apply.py` �
 
 ```text
 apply_action = insert
-  → insert
+  → subscriber root / address / contact point を insert
+  → processed mark
 
 apply_action = update
-  → update
+  → subscriber root / address / contact point を必要に応じて update
+  → processed mark
 
 apply_action = noop
-  → skip
+  → subscriber root / address / contact point は更新しない
+  → processed mark
 
 apply_action = review
-  → skip
+  → 自動更新しない
+  → processed mark しない
 ```
 
 ---
@@ -404,6 +408,36 @@ subscribers.compare_other_hash = staging.compare_other_hash
 `name_kana_full` 等の identity登録値が更新される場合は、必要に応じて parts の扱いを compare / apply 側で判定する。
 ただし HIA 由来データでは、分割不能な parts へ暫定値を流し込まない。
 
+## Name Parts Update / Clear Policy
+
+name parts は subscriber identity の補助情報として扱う。
+
+以下のルールで管理する。
+
+| ケース | name parts | name parts match |
+|----------|----------|----------|
+| 新規加入者 | 分割可能なら登録 | HIA apply では NULL |
+| identity系変更なし | 維持 | 維持 |
+| 記号変更のみ | 維持 | 維持 |
+| 番号変更のみ | 維持 | 維持 |
+| 枝番変更のみ | 維持 | 維持 |
+| 漢字氏名変更 | 漢字partsをクリア | 漢字parts matchをクリア |
+| カナ氏名変更 | カナpartsをクリア | カナparts matchをクリア |
+| 漢字氏名・カナ氏名変更 | 両方クリア | 両方クリア |
+
+補足:
+
+```text
+identity系変更 = partsクリア
+ではない。
+
+氏名fullが変更された場合のみ、対応する parts グループをクリアする。
+
+記号・番号・枝番のみの変更では parts を変更しない。
+```
+
+クリア後の parts 再補完は fund 側補完フローの責務とする。
+
 ---
 
 # 5. Address History
@@ -589,7 +623,26 @@ HIA正本上、現在値なし
 として扱う。
 
 現時点では contact compare hash は導入しない。
-contact は `contact_type + contact_value + is_current` を基準に compare / apply する。
+
+compare では、current snapshot の `current_phone_contact_point_id` / `current_email_contact_point_id` を起点に current 値を取得し、HIA CSV の phone / email と contact_type ごとに比較する。
+
+```text
+current値と同じ
+  → noop
+
+HIA CSV値がNULL、かつcurrentあり
+  → clear_current
+
+HIA CSV値がcurrent値と異なる
+  → 同じ contact_value の history 行を検索
+      exists     → switch_current
+      not exists → insert
+
+判定不能
+  → review
+```
+
+apply は compare 結果に従って insert / switch_current / clear_current を実行する。
 
 ---
 
@@ -608,8 +661,8 @@ subscriber insert
 subscriber update
 compare_identity_norm_hash change
 compare_other_hash change
-address current switch / insert（実装対象。subscriber_audit または将来の address audit で扱う）
-contact point current change（実装対象。subscriber_audit または将来の contact audit で扱う）
+address current switch / insert（subscriber_audit に記帳する）
+contact point current change / insert / clear_current / switch_current（subscriber_audit に記帳する）
 qualification change
 ```
 
@@ -752,9 +805,9 @@ subscriber apply
       │
       ├ update
       │
-      ├ noop
+      ├ noop(processed mark)
       │
-      └ review(skip)
+      └ review(auto applyなし / processed markなし)
       │
       ▼
 address apply

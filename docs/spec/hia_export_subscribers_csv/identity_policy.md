@@ -287,6 +287,15 @@ identity登録値差分検知
 
 identity登録値差分の主軸として管理しない。
 
+name parts 管理にも利用しない。
+
+枝番変更のみでは:
+
+- name parts をクリアしない
+- name parts match をクリアしない
+
+氏名変更判定の条件には使用しない。
+
 ### compare_other_hash
 
 対象候補:
@@ -389,6 +398,11 @@ apply_action:
 - review
 ```
 
+noop は subscriber 更新を行わないが processed mark 対象とする。
+
+review は自動更新を行わず、processed mark もしない。
+```
+
 apply orchestration 内の apply は compare 結果をもとに insert / update / noop を実行する。
 
 ---
@@ -405,7 +419,12 @@ apply orchestration 内の apply は compare 結果をもとに insert / update 
 - name_kana_full_match が空
 
 これらは正常 apply 対象ではなく、
-インポートまたは apply のエラーとして扱う。
+これらは正常 apply 対象ではない。
+
+実装上は staging 側へ review / multiple_match / projection_error 等の状態を保持し、
+自動 apply 対象から除外する。
+
+即時エラー終了を意味するものではなく、運用確認対象として残す場合がある。
 
 ---
 

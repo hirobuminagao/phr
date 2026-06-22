@@ -8,13 +8,13 @@
 # 旧実装
 scripts/work_folder/scripts/import_subscribers_to_staging_hub.py
 
-# ADR-0021 以降の新構成予定
+# ADR-0021 以降の現行構成
 scripts/hia/import_subscribers_to_staging_hub.py
 scripts/hia/script_lib/hub_subscriber_import.py
 ```
 
 旧実装では import 後に apply phase を直接起動していたが、
-ADR-0021 以降は:
+ADR-0021 以降の現行構成では:
 
 ```text
 import orchestration
@@ -364,7 +364,7 @@ staging 側へ snapshot として保持する。
 - apply 前レビューを容易にする
 - prepare / compare phase の入力を固定化する
 
-snapshot 対象例:
+snapshot 保持項目（代表例）:
 
 ```text
 current_subscriber_id

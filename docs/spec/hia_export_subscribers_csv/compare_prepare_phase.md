@@ -202,6 +202,15 @@ current_lookup_status = not_found
 - compare / apply phase における current_subscriber_id の前提確認
 ```
 
+実装上の補足:
+
+```text
+prepare phase では identity_hash mismatch も apply_diff_columns に記録する。
+
+ただし identity_hash は詳細な登録値差分の説明用ではなく、
+同一 subscriber の前提確認・追跡用の差分として扱う。
+```
+
 ---
 
 ## compare hash の位置づけ
@@ -450,8 +459,11 @@ compare では staging の `address_hash` を使い、既存 `subscriber_address
 
 # 7. Contact Compare
 
-連絡先は Hub apply では `subscriber_contact_points` を正本構造として扱い、
-現行 `subscriber_contacts` の phone + email セット構造では compare hash による差分判定を行わない。
+連絡先は Hub apply では `subscriber_contact_points` を正本構造として扱う。
+
+contact point は compare hash による差分判定を行わない。
+
+current snapshot update で staging に保持した current contact point id を比較起点とする。
 
 理由:
 
@@ -506,8 +518,34 @@ HIA正本上、現在値なし
 
 として扱う。
 
-現行 `subscriber_contacts` は current snapshot 取得の暫定用途に留め、
-compare / apply の本実装では新 contact 形式へ移行する。
+現行 `subscriber_contacts` は legacy / backfill source / temporary reference として扱う。
+
+compare / apply の本実装では `subscriber_contact_points` を利用する。
+
+## Contact Compare Procedure
+
+contact point compare は以下の順で行う。
+
+```text
+1. current snapshot の current_phone_contact_point_id / current_email_contact_point_id を起点に current 値を取得する
+2. staging の phone / email と current 値を contact_type ごとに比較する
+3. current 値と同じ場合は noop
+4. staging 値が NULL で current が存在する場合は clear_current
+5. staging 値が current と異なる場合のみ、同じ contact_value の history 行を検索する
+6. history 行が存在する場合は switch_current
+7. history 行が存在しない場合は insert
+8. current 複数等で判定不能な場合は review
+```
+
+補足:
+
+```text
+current比較の起点は current snapshot の contact point id とする。
+
+history検索は、current 値との差分がある場合にのみ行う。
+
+これにより、compare / apply の基準となる current 値を snapshot 時点に固定しつつ、過去連絡先への switch_current も可能にする。
+```
 
 ---
 
@@ -589,6 +627,8 @@ apply_action = noop
 条件例:
 
 - current_lookup_status = 'multiple_match'
+- current_lookup_status = 'review'
+- current_lookup_status = 'projection_error'
 - hia_subscriber_id != current_hia_subscriber_id
 - compare ambiguity
 - invalid normalize
@@ -600,6 +640,32 @@ apply_action = review
 ```
 
 review 行は apply phase で自動更新しない。
+
+---
+
+# 8.5. identity_match_status
+
+prepare phase では、current lookup / identity確認結果を `identity_match_status` として staging に保持する。
+
+実装上の主な値:
+
+| value | 意味 |
+|---|---|
+| `multiple_match` | current lookup が複数候補になった |
+| `review` | current lookup が review 扱いになった |
+| `projection_error` | current projection 取得・構築に失敗した |
+| `not_found` | current subscriber が存在しない |
+| `hia_subscriber_id_mismatch` | HIA加入者ID が current と一致しない |
+| `identity_hash_matched` | identity_hash が一致した |
+| `identity_hash_mismatch` | identity_hash が一致しない |
+
+補足:
+
+```text
+identity_match_status は apply_action そのものではない。
+
+apply_action は current_lookup_status、HIA加入者ID一致、compare hash、address/contact compare の結果から決定する。
+```
 
 ---
 
@@ -632,6 +698,8 @@ contact_point_diff_status
 apply_checked_at
 ```
 
+contact point compare では、`current_phone_contact_point_id` / `current_email_contact_point_id` を current 値取得の起点として使用する。
+
 ---
 
 # 10. Apply Phase Relationship
@@ -650,23 +718,29 @@ apply 本体自身は compare 判定を行わない。
 
 ```text
 apply_action = insert
-  → insert
+  → subscriber root / address / contact point を insert
+  → processed mark
 
 apply_action = update
-  → update
+  → subscriber root / address / contact point を必要に応じて update
+  → processed mark
 
 apply_action = noop
-  → skip
+  → subscriber root / address / contact point は更新しない
+  → processed mark
 
 apply_action = review
-  → skip
+  → 自動更新しない
+  → processed mark しない
 ```
 
 ---
 
 # 11. Audit Policy
 
-compare / prepare phase では、staging import値と current snapshot の差分から audit 用差分情報を生成する。
+compare / prepare phase では、audit 対象候補となる差分情報を staging に保持する。
+
+実際の audit row 生成・永続化は apply phase 側で行う。
 
 対象:
 
@@ -681,6 +755,8 @@ address / contact point は履歴型テーブルで current / history を保持�
 現時点では address / contact point 専用 audit テーブルは持たず、`subscribers_audit` への必須記帳対象にもしていない。
 
 audit は apply phase 側で永続保存する。
+
+apply phase 側では、更新対象 field の old_value / new_value を比較し、同値の場合は audit row を作成しない。
 
 ---
 
@@ -705,16 +781,15 @@ identity_hash
 compare_identity_norm_hash
 compare_other_hash
 address_hash
-current_* compare hash
 ```
 
 を利用する。
 
-`compare_identity_norm_hash` は norm値ベースで生成し、
-小書き文字や漢字表記など、match値では吸収される登録値差分も検知できるようにする。
+contact point は compare hash を持たず、current snapshot の contact point id を起点に contact_type ごとに比較する。
 
 住所は `address_hash` により同一住所値の存在を確認した上で、
 `is_current` を見て noop / current切替 / insert を判断する。
 
 連絡先は `subscriber_contact_points` を正本構造として扱い、
+current snapshot の contact point id から current 値を取得して比較する。
 現行 `subscriber_contacts` は legacy / backfill source / temporary reference として扱う。
