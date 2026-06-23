@@ -463,6 +463,16 @@ compare では staging の `address_hash` を使い、既存 `subscriber_address
 
 contact point は compare hash による差分判定を行わない。
 
+理由:
+
+- staging に current連絡先値や履歴情報を持ちすぎない
+- contact point は履歴型テーブルであり switch_current 判定が必要
+- current値比較と履歴検索を分離したい
+- current snapshot 時点の状態を比較基準として固定したい
+
+そのため contact point は compare hash ではなく、
+current_phone_contact_point_id / current_email_contact_point_id を起点に current値を取得して比較する。
+
 current snapshot update で staging に保持した current contact point id を比較起点とする。
 
 理由:
@@ -752,7 +762,10 @@ compare / prepare phase では、audit 対象候補となる差分情報を stag
 ```
 
 address / contact point は履歴型テーブルで current / history を保持する。
-現時点では address / contact point 専用 audit テーブルは持たず、`subscribers_audit` への必須記帳対象にもしていない。
+
+現時点では address / contact point 専用 audit テーブルは持たない。
+
+ただし address current switch / insert、および contact point current change / insert / clear_current / switch_current は `subscribers_audit` に記帳する。
 
 audit は apply phase 側で永続保存する。
 

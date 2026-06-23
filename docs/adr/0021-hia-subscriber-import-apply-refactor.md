@@ -172,6 +172,21 @@ CSV → staging canonicalization
 
 import phase では、本番 subscriber 系 current 状態を staging 側へ snapshot として保持する。
 
+snapshot では、比較に必要な current 情報をすべて展開して保持するのではなく、必要最小限の参照情報を保持する。
+
+特に address と contact point は以下の方針で扱う。
+
+```text
+address
+  current_address_id と current_address_hash を保持する
+  address_hash により比較候補を軽量に判定する
+
+contact point
+  current_phone_contact_point_id と current_email_contact_point_id を保持する
+  phone / email の current値そのものや compare hash は保持しない
+  compare phase で contact point id から current値を取得して比較する
+```
+
 目的:
 
 - import 完了時点で「本番に既存 subscriber が存在するか」を人間が確認可能にする
@@ -321,6 +336,10 @@ contact point は `subscriber_contact_points` を正本構造として扱う。
 
 contact point は compare hash を持たず、current snapshot の contact point id を比較起点とする。
 
+この方針は、staging に連絡先の current値や履歴情報を持ちすぎないための設計である。
+
+住所は `address_hash` により比較しやすいが、contact point は phone / email を contact_type ごとに履歴型で管理するため、hash比較ではなく current id 起点の直接比較とする。
+
 ```text
 current_phone_contact_point_id
 current_email_contact_point_id
@@ -345,6 +364,8 @@ HIA CSV値がcurrent値と異なる
 ```
 
 history検索は current 値との差分がある場合にのみ行う。
+
+apply phase は compare phase の結果に従って insert / switch_current / clear_current / noop / review を処理し、current判定を再実行しない。
 
 これにより、compare / apply の基準となる current 値を snapshot 時点に固定しつつ、過去連絡先への switch_current も可能にする。
 
