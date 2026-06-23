@@ -36,6 +36,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from scripts.lib.db.lookup.subscriber_contact_points import get_contact_point_by_id
+
 
 # ============================================================
 # metrics / result
@@ -162,6 +164,15 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
+def _to_int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return int(text)
+
+
 def _same(left: Any, right: Any) -> bool:
     return _as_text(left) == _as_text(right)
 
@@ -247,9 +258,13 @@ def compare_single_contact_point(
     subscriber_id: int | None,
     contact_type: str,
     contact_value: str | None,
+    current_contact_point_id: int | None,
 ) -> ContactPointCompareResult:
     """
     subscriber_contact_points に対して単一 contact_type の比較を行う。
+
+    current snapshot の contact point id を起点に current 値を取得し、
+    import value と比較する。
 
     null / blank import value は current解除候補として扱う。
     """
@@ -258,28 +273,35 @@ def compare_single_contact_point(
         return ContactPointCompareResult(status="insert", reason="no_current_subscriber")
 
     value = _as_text(contact_value)
+    conn = cur.connection
+    current_row = get_contact_point_by_id(conn, current_contact_point_id)
+
+    if current_row is not None:
+        current_subscriber_id = _to_int_or_none(current_row.get("subscriber_id"))
+        current_contact_type = _as_text(current_row.get("contact_type"))
+        current_is_current = int(current_row.get("is_current") or 0)
+
+        if current_subscriber_id != int(subscriber_id):
+            return ContactPointCompareResult(status="review", reason="current_contact_point_subscriber_mismatch")
+
+        if current_contact_type != contact_type:
+            return ContactPointCompareResult(status="review", reason="current_contact_point_type_mismatch")
+
+        if current_is_current != 1:
+            return ContactPointCompareResult(status="review", reason="current_contact_point_not_current")
+
+    elif current_contact_point_id is not None:
+        return ContactPointCompareResult(status="review", reason="current_contact_point_id_not_found")
+
+    current_value = _as_text(current_row.get("contact_value")) if current_row else ""
 
     if not value:
-        cur.execute(
-            """
-            SELECT
-                contact_point_id
-            FROM subscriber_contact_points
-            WHERE subscriber_id = %(subscriber_id)s
-              AND contact_type = %(contact_type)s
-              AND is_current = 1
-            """,
-            {
-                "subscriber_id": subscriber_id,
-                "contact_type": contact_type,
-            },
-        )
-        current_rows = list(cur.fetchall())
-
-        if not current_rows:
+        if not current_value:
             return ContactPointCompareResult(status="noop", reason="no_import_value_no_current")
-
         return ContactPointCompareResult(status="clear_current", reason="import_value_null")
+
+    if current_value == value:
+        return ContactPointCompareResult(status="noop", reason="same_current_contact_value")
 
     cur.execute(
         """
@@ -306,11 +328,8 @@ def compare_single_contact_point(
 
     current_rows = [row for row in rows if int(row.get("is_current") or 0) == 1]
 
-    if len(current_rows) == 1:
-        return ContactPointCompareResult(status="noop", reason="same_current_contact_value")
-
-    if len(current_rows) > 1:
-        return ContactPointCompareResult(status="review", reason="multiple_current_same_contact_value")
+    if current_rows:
+        return ContactPointCompareResult(status="review", reason="same_contact_value_current_changed_after_snapshot")
 
     return ContactPointCompareResult(status="switch_current", reason="same_contact_value_in_history")
 
@@ -321,6 +340,8 @@ def compare_contact_points(
     subscriber_id: int | None,
     phone: str | None,
     email: str | None,
+    current_phone_contact_point_id: int | None,
+    current_email_contact_point_id: int | None,
 ) -> ContactPointCompareResult:
     """
     phone / email の detailed compare を行い、集約statusを返す。
@@ -331,12 +352,14 @@ def compare_contact_points(
         subscriber_id=subscriber_id,
         contact_type="phone",
         contact_value=phone,
+        current_contact_point_id=current_phone_contact_point_id,
     )
     email_result = compare_single_contact_point(
         cur,
         subscriber_id=subscriber_id,
         contact_type="email",
         contact_value=email,
+        current_contact_point_id=current_email_contact_point_id,
     )
 
     statuses = {phone_result.status, email_result.status}
@@ -503,6 +526,8 @@ def compare_hia_subscriber_apply_actions(
             subscriber_id=current_subscriber_id,
             phone=row.get("phone"),
             email=row.get("email"),
+            current_phone_contact_point_id=_to_int_or_none(row.get("current_phone_contact_point_id")),
+            current_email_contact_point_id=_to_int_or_none(row.get("current_email_contact_point_id")),
         )
 
         decision = decide_compare_action(

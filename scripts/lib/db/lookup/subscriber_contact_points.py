@@ -4,8 +4,51 @@ from scripts.lib.db.mysql import dict_cursor
 from scripts.lib.db.schemas import DEV_PHR
 
 
+
 class SubscriberContactPointLookupError(RuntimeError):
     pass
+
+
+# Simple PK lookup helper for subscriber_contact_points
+def get_contact_point_by_id(
+    conn,
+    contact_point_id: int | None,
+) -> Dict[str, Any] | None:
+    """Return one subscriber_contact_points row by contact_point_id.
+
+    This is a simple PK lookup helper.
+    It does not validate expected contact_type because the caller already knows
+    whether the id came from current_phone_contact_point_id or
+    current_email_contact_point_id.
+    """
+    if contact_point_id is None:
+        return None
+
+    sql = f"""
+        SELECT
+            contact_point_id,
+            subscriber_id,
+            contact_type,
+            contact_value,
+            is_current,
+            valid_from,
+            valid_to,
+            source,
+            created_at,
+            updated_at
+        FROM {DEV_PHR}.subscriber_contact_points
+        WHERE contact_point_id = %s
+        LIMIT 1
+    """
+
+    cur = dict_cursor(conn)
+    try:
+        cur.execute(sql, (contact_point_id,))
+        row = cast(Mapping[str, Any] | None, cur.fetchone())
+    finally:
+        cur.close()
+
+    return dict(row) if row else None
 
 
 def get_current_contact_points_by_subscriber_ids(
