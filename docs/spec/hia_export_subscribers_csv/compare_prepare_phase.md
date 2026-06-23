@@ -475,13 +475,6 @@ current_phone_contact_point_id / current_email_contact_point_id を起点に cur
 
 current snapshot update で staging に保持した current contact point id を比較起点とする。
 
-理由:
-
-```text
-phone と email が同一レコードに同居しているため、
-phoneのみ変更 / emailのみ変更 / 複数連絡先 / null時の current解除
-を安全に表現しづらい。
-```
 
 Hub apply では以下の contact point 型を前提に compare / apply を行う。
 
@@ -555,6 +548,64 @@ current比較の起点は current snapshot の contact point id とする。
 history検索は、current 値との差分がある場合にのみ行う。
 
 これにより、compare / apply の基準となる current 値を snapshot 時点に固定しつつ、過去連絡先への switch_current も可能にする。
+
+## Contact Compare Result Columns
+
+contact point は集約ステータスと contact_type 別ステータスを分けて保持する。
+
+```text
+contact_point_diff_status
+  contact point 全体の集約ステータス
+
+phone_diff_status
+phone_target_contact_point_id
+  phone の apply 処理種別と対象 contact_point_id
+
+email_diff_status
+email_target_contact_point_id
+  email の apply 処理種別と対象 contact_point_id
+```
+
+`contact_point_diff_status` は、contact point 系の処理が必要かを判断するための集約フラグとして扱う。
+
+```text
+noop
+  phone / email ともに変更なし
+
+changed
+  phone / email のいずれかに apply 対象あり
+
+review
+  phone / email のいずれかが自動判定不能
+```
+
+実際の apply 内容は `phone_diff_status` / `email_diff_status` を参照する。
+
+```text
+noop
+  更新なし
+  target_contact_point_id は current contact point id または NULL
+
+insert
+  新規 contact point を current として追加
+  target_contact_point_id は NULL
+
+switch_current
+  既存 history row を current に戻す
+  target_contact_point_id は history contact_point_id
+
+clear_current
+  current row を history 化する
+  target_contact_point_id は current contact_point_id
+
+review
+  自動更新しない
+  target_contact_point_id は NULL
+```
+
+compare phase は phone / email それぞれについて、上記 status と target id を staging に記録する。
+
+apply phase は `phone_diff_status` / `email_diff_status` と target id に従って処理し、contact point の current 判定を再実行しない。
 ```
 
 ---
@@ -705,10 +756,25 @@ apply_diff_columns
 identity_match_status
 address_diff_status
 contact_point_diff_status
+phone_diff_status
+phone_target_contact_point_id
+email_diff_status
+email_target_contact_point_id
 apply_checked_at
 ```
 
 contact point compare では、`current_phone_contact_point_id` / `current_email_contact_point_id` を current 値取得の起点として使用する。
+
+contact point compare 結果として、以下も staging に保持する。
+
+```text
+phone_diff_status
+phone_target_contact_point_id
+email_diff_status
+email_target_contact_point_id
+```
+
+`contact_point_diff_status` は集約ステータスとして残し、実際の phone / email apply は contact_type 別の status / target id を利用する。
 
 ---
 

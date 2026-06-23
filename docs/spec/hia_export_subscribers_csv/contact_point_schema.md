@@ -238,53 +238,103 @@ contact compare hash
 
 は導入しない。
 
-compare は:
+compare では、current snapshot で staging に保持した contact point id を起点に current 値を取得する。
 
 ```text
-subscriber_id
-contact_type
-contact_value
-is_current
+current_phone_contact_point_id
+current_email_contact_point_id
 ```
 
-を利用する。
+理由:
+
+```text
+- staging に current連絡先値や履歴情報を持ちすぎない
+- phone / email は contact_type ごとの履歴型テーブルで管理する
+- current値比較と history 検索を分離する
+- 過去連絡先への switch_current 判定が必要
+```
 
 ## phone compare
 
 ```text
-subscriber_id
-+ contact_type='phone'
-+ contact_value
+1. current_phone_contact_point_id から current phone 値を取得する
+2. staging.phone と current phone 値を比較する
+3. 同じなら noop
+4. staging.phone が NULL で current phone が存在する場合は clear_current
+5. staging.phone が current phone と異なる場合のみ、同一 subscriber_id + contact_type='phone' + contact_value で history 行を検索する
+6. history 行があれば switch_current
+7. history 行がなければ insert
+8. 判定不能なら review
 ```
-
-で既存確認する。
-
-判定:
-
-| status | 条件 |
-|---|---|
-| `noop` | 同一値 current 存在 |
-| `switch_current` | 同一値 history 存在 |
-| `insert` | 同一値なし |
-| `review` | current複数等 |
 
 ## email compare
 
-email も同様。
+email も `current_email_contact_point_id` を起点に同様に判定する。
+
+## Compare Result Columns
+
+contact point は、集約ステータスと contact_type 別ステータスを分けて staging に保持する。
+
+```text
+contact_point_diff_status
+  contact point 全体の集約ステータス
+
+phone_diff_status
+phone_target_contact_point_id
+  phone の処理種別と対象 contact_point_id
+
+email_diff_status
+email_target_contact_point_id
+  email の処理種別と対象 contact_point_id
+```
+
+`contact_point_diff_status` は `noop` / `changed` / `review` の集約判定に利用する。
+
+| status | 意味 |
+|---|---|
+| `noop` | phone / email ともに変更なし |
+| `changed` | phone / email のいずれかに apply 対象あり |
+| `review` | phone / email のいずれかが自動判定不能 |
+
+`phone_diff_status` / `email_diff_status` は apply 実処理に利用する。
+
+| status | target_contact_point_id | 意味 |
+|---|---|---|
+| `noop` | current contact_point_id または NULL | 更新なし |
+| `insert` | NULL | 新規 contact point を current として追加 |
+| `switch_current` | history contact_point_id | 既存 history row を current に戻す |
+| `clear_current` | current contact_point_id | current row を history 化する |
+| `review` | NULL | 自動更新しない |
 
 ---
 
 # 7. Apply Policy
 
-## same value current exists
+apply は `contact_point_diff_status` を集約フラグとして確認し、実処理は contact_type 別の status / target id に従う。
 
 ```text
-noop
+contact_point_diff_status
+  noop / changed / review
+
+phone_diff_status
+phone_target_contact_point_id
+
+email_diff_status
+email_target_contact_point_id
 ```
 
-何もしない。
+apply phase は contact point の current 判定を再実行しない。
 
-## same value exists but history
+## noop
+
+```text
+phone_diff_status = noop
+email_diff_status = noop
+```
+
+該当 contact_type は何もしない。
+
+## switch_current
 
 ```text
 switch_current
@@ -298,7 +348,7 @@ existing history row
   is_current = 1
 ```
 
-## same value not exists
+## insert
 
 ```text
 insert
@@ -311,6 +361,15 @@ insert
 新row insert
   is_current = 1
 ```
+
+## clear_current
+
+```text
+current row
+  is_current = 0
+```
+
+HIA CSV 上で phone / email が NULL の場合、該当 contact_type の current を解除する。
 
 ---
 
@@ -489,6 +548,7 @@ subscriber_contact_points
 - null current解除
 - 複数連絡先保持
 - 過去連絡先への戻り
+- phone / email 別の apply status 管理
 - current変更履歴のaudit記録
 ```
 

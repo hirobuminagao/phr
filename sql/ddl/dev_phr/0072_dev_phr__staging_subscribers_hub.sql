@@ -59,7 +59,11 @@ CREATE TABLE `dev_phr`.`staging_subscribers_hub` (
   `apply_diff_columns` json DEFAULT NULL COMMENT '差分列一覧',
   `identity_match_status` varchar(50) DEFAULT NULL COMMENT 'identity compare結果',
   `address_diff_status` varchar(50) DEFAULT NULL COMMENT 'address compare結果',
-  `contact_point_diff_status` varchar(50) DEFAULT NULL COMMENT 'contact point compare結果',
+  `contact_point_diff_status` varchar(50) DEFAULT NULL COMMENT 'contact point compare集約結果',
+  `phone_diff_status` varchar(50) DEFAULT NULL COMMENT 'phone contact point compare結果: noop/insert/switch_current/clear_current/review',
+  `phone_target_contact_point_id` bigint unsigned DEFAULT NULL COMMENT 'phone contact point apply対象 subscriber_contact_points.contact_point_id',
+  `email_diff_status` varchar(50) DEFAULT NULL COMMENT 'email contact point compare結果: noop/insert/switch_current/clear_current/review',
+  `email_target_contact_point_id` bigint unsigned DEFAULT NULL COMMENT 'email contact point apply対象 subscriber_contact_points.contact_point_id',
   `apply_checked_at` datetime(3) DEFAULT NULL COMMENT 'prepare/compare 実行時刻',
 
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -84,6 +88,10 @@ CREATE TABLE `dev_phr`.`staging_subscribers_hub` (
   KEY `idx_stghub_current_lookup_status` (`current_lookup_status`),
   KEY `idx_stghub_apply_action` (`apply_action`),
   KEY `idx_stghub_contact_point_diff_status` (`contact_point_diff_status`),
+  KEY `idx_stghub_phone_diff_status` (`phone_diff_status`),
+  KEY `idx_stghub_email_diff_status` (`email_diff_status`),
+  KEY `idx_stghub_phone_target_contact_point` (`phone_target_contact_point_id`),
+  KEY `idx_stghub_email_target_contact_point` (`email_target_contact_point_id`),
   KEY `idx_stghub_pending_apply` (`processed_run_id`, `apply_action`, `insurer_number`, `id`)
 )
 ENGINE=InnoDB
