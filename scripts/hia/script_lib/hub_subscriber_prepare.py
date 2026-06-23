@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -72,6 +70,10 @@ class PrepareDecision:
     identity_match_status: str
     address_diff_status: str
     contact_point_diff_status: str
+    phone_diff_status: str
+    phone_target_contact_point_id: int | None
+    email_diff_status: str
+    email_target_contact_point_id: int | None
 
 
 # ============================================================
@@ -186,6 +188,10 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
             identity_match_status=current_lookup_status,
             address_diff_status="not_checked",
             contact_point_diff_status="not_checked",
+            phone_diff_status="not_checked",
+            phone_target_contact_point_id=None,
+            email_diff_status="not_checked",
+            email_target_contact_point_id=None,
         )
 
     if current_lookup_status == "not_found" or current_subscriber_id is None:
@@ -195,6 +201,10 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
             identity_match_status="not_found",
             address_diff_status="insert",
             contact_point_diff_status="insert",
+            phone_diff_status="insert",
+            phone_target_contact_point_id=None,
+            email_diff_status="insert",
+            email_target_contact_point_id=None,
         )
 
     hia_subscriber_id = _as_text(row.get("hia_subscriber_id"))
@@ -207,6 +217,10 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
             identity_match_status="hia_subscriber_id_mismatch",
             address_diff_status="not_checked",
             contact_point_diff_status="not_checked",
+            phone_diff_status="not_checked",
+            phone_target_contact_point_id=None,
+            email_diff_status="not_checked",
+            email_target_contact_point_id=None,
         )
 
     diff_columns: list[str] = []
@@ -239,6 +253,11 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
         address_diff_status = "changed"
         diff_columns.append("address")
 
+    phone_diff_status = "pending_compare"
+    phone_target_contact_point_id = row.get("current_phone_contact_point_id")
+    email_diff_status = "pending_compare"
+    email_target_contact_point_id = row.get("current_email_contact_point_id")
+
     contact_point_diff_status = "pending_compare"
     if _as_text(row.get("phone")) or _as_text(row.get("email")):
         diff_columns.append("contact_point")
@@ -254,6 +273,10 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
         identity_match_status=identity_match_status,
         address_diff_status=address_diff_status,
         contact_point_diff_status=contact_point_diff_status,
+        phone_diff_status=phone_diff_status,
+        phone_target_contact_point_id=phone_target_contact_point_id,
+        email_diff_status=email_diff_status,
+        email_target_contact_point_id=email_target_contact_point_id,
     )
 
 
@@ -279,6 +302,10 @@ def update_staging_prepare_result(
             identity_match_status = %(identity_match_status)s,
             address_diff_status = %(address_diff_status)s,
             contact_point_diff_status = %(contact_point_diff_status)s,
+            phone_diff_status = %(phone_diff_status)s,
+            phone_target_contact_point_id = %(phone_target_contact_point_id)s,
+            email_diff_status = %(email_diff_status)s,
+            email_target_contact_point_id = %(email_target_contact_point_id)s,
             apply_checked_at = NOW()
         WHERE id = %(staging_id)s
         """,
@@ -289,6 +316,10 @@ def update_staging_prepare_result(
             "identity_match_status": decision.identity_match_status,
             "address_diff_status": decision.address_diff_status,
             "contact_point_diff_status": decision.contact_point_diff_status,
+            "phone_diff_status": decision.phone_diff_status,
+            "phone_target_contact_point_id": decision.phone_target_contact_point_id,
+            "email_diff_status": decision.email_diff_status,
+            "email_target_contact_point_id": decision.email_target_contact_point_id,
         },
     )
 

@@ -65,6 +65,12 @@ class CompareDecision:
     address_diff_status: str
     contact_point_diff_status: str
 
+    phone_diff_status: str
+    phone_target_contact_point_id: int | None
+
+    email_diff_status: str
+    email_target_contact_point_id: int | None
+
 
 @dataclass(frozen=True)
 class AddressCompareResult:
@@ -74,11 +80,25 @@ class AddressCompareResult:
     reason: str = ""
 
 
+
 @dataclass(frozen=True)
-class ContactPointCompareResult:
-    """contact point詳細compare結果。"""
+class SingleContactPointCompareResult:
+    """1 contact_type の compare結果。"""
 
     status: str
+    target_contact_point_id: int | None = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class ContactPointCompareResult:
+    """contact point詳細compare集約結果。"""
+
+    status: str
+    phone_status: str
+    phone_target_contact_point_id: int | None
+    email_status: str
+    email_target_contact_point_id: int | None
     reason: str = ""
 
 
@@ -107,7 +127,14 @@ COMPARE_ROW_COLUMNS = """
     email,
     current_phone_contact_point_id,
     current_email_contact_point_id,
+
     contact_point_diff_status,
+
+    phone_diff_status,
+    phone_target_contact_point_id,
+
+    email_diff_status,
+    email_target_contact_point_id,
 
     apply_action,
     apply_diff_columns,
@@ -259,7 +286,7 @@ def compare_single_contact_point(
     contact_type: str,
     contact_value: str | None,
     current_contact_point_id: int | None,
-) -> ContactPointCompareResult:
+) -> SingleContactPointCompareResult:
     """
     subscriber_contact_points に対して単一 contact_type の比較を行う。
 
@@ -270,7 +297,11 @@ def compare_single_contact_point(
     """
 
     if subscriber_id is None:
-        return ContactPointCompareResult(status="insert", reason="no_current_subscriber")
+        return SingleContactPointCompareResult(
+            status="insert",
+            target_contact_point_id=None,
+            reason="no_current_subscriber",
+        )
 
     value = _as_text(contact_value)
     conn = cur.connection
@@ -282,26 +313,54 @@ def compare_single_contact_point(
         current_is_current = int(current_row.get("is_current") or 0)
 
         if current_subscriber_id != int(subscriber_id):
-            return ContactPointCompareResult(status="review", reason="current_contact_point_subscriber_mismatch")
+            return SingleContactPointCompareResult(
+                status="review",
+                target_contact_point_id=None,
+                reason="current_contact_point_subscriber_mismatch",
+            )
 
         if current_contact_type != contact_type:
-            return ContactPointCompareResult(status="review", reason="current_contact_point_type_mismatch")
+            return SingleContactPointCompareResult(
+                status="review",
+                target_contact_point_id=None,
+                reason="current_contact_point_type_mismatch",
+            )
 
         if current_is_current != 1:
-            return ContactPointCompareResult(status="review", reason="current_contact_point_not_current")
+            return SingleContactPointCompareResult(
+                status="review",
+                target_contact_point_id=None,
+                reason="current_contact_point_not_current",
+            )
 
     elif current_contact_point_id is not None:
-        return ContactPointCompareResult(status="review", reason="current_contact_point_id_not_found")
+        return SingleContactPointCompareResult(
+            status="review",
+            target_contact_point_id=None,
+            reason="current_contact_point_id_not_found",
+        )
 
     current_value = _as_text(current_row.get("contact_value")) if current_row else ""
 
     if not value:
         if not current_value:
-            return ContactPointCompareResult(status="noop", reason="no_import_value_no_current")
-        return ContactPointCompareResult(status="clear_current", reason="import_value_null")
+            return SingleContactPointCompareResult(
+                status="noop",
+                target_contact_point_id=None,
+                reason="no_import_value_no_current",
+            )
+        return SingleContactPointCompareResult(
+            status="clear_current",
+            target_contact_point_id=current_contact_point_id,
+            reason="import_value_null",
+        )
 
     if current_value == value:
-        return ContactPointCompareResult(status="noop", reason="same_current_contact_value")
+        return SingleContactPointCompareResult(
+            status="noop",
+            target_contact_point_id=current_contact_point_id,
+            reason="same_current_contact_value",
+        )
 
     cur.execute(
         """
@@ -324,14 +383,26 @@ def compare_single_contact_point(
     rows = list(cur.fetchall())
 
     if not rows:
-        return ContactPointCompareResult(status="insert", reason="contact_value_not_found")
+        return SingleContactPointCompareResult(
+            status="insert",
+            target_contact_point_id=None,
+            reason="contact_value_not_found",
+        )
 
     current_rows = [row for row in rows if int(row.get("is_current") or 0) == 1]
 
     if current_rows:
-        return ContactPointCompareResult(status="review", reason="same_contact_value_current_changed_after_snapshot")
+        return SingleContactPointCompareResult(
+            status="review",
+            target_contact_point_id=None,
+            reason="same_contact_value_current_changed_after_snapshot",
+        )
 
-    return ContactPointCompareResult(status="switch_current", reason="same_contact_value_in_history")
+    return SingleContactPointCompareResult(
+        status="switch_current",
+        target_contact_point_id=_to_int_or_none(rows[0].get("contact_point_id")),
+        reason="same_contact_value_in_history",
+    )
 
 
 def compare_contact_points(
@@ -367,17 +438,36 @@ def compare_contact_points(
     if "review" in statuses:
         return ContactPointCompareResult(
             status="review",
+            phone_status=phone_result.status,
+            phone_target_contact_point_id=phone_result.target_contact_point_id,
+            email_status=email_result.status,
+            email_target_contact_point_id=email_result.target_contact_point_id,
             reason=f"phone={phone_result.reason};email={email_result.reason}",
         )
 
     if statuses == {"noop"}:
         return ContactPointCompareResult(
             status="noop",
+            phone_status=phone_result.status,
+            phone_target_contact_point_id=phone_result.target_contact_point_id,
+            email_status=email_result.status,
+            email_target_contact_point_id=email_result.target_contact_point_id,
             reason=f"phone={phone_result.reason};email={email_result.reason}",
         )
 
+    if phone_result.status != "noop" and email_result.status != "noop":
+        aggregate_status = "both"
+    elif phone_result.status != "noop":
+        aggregate_status = "phone_only"
+    else:
+        aggregate_status = "email_only"
+
     return ContactPointCompareResult(
-        status="changed",
+        status=aggregate_status,
+        phone_status=phone_result.status,
+        phone_target_contact_point_id=phone_result.target_contact_point_id,
+        email_status=email_result.status,
+        email_target_contact_point_id=email_result.target_contact_point_id,
         reason=f"phone={phone_result.status};email={email_result.status}",
     )
 
@@ -403,14 +493,38 @@ def decide_compare_action(
             apply_diff_columns=_as_text(row.get("apply_diff_columns")),
             address_diff_status=row.get("address_diff_status") or "not_checked",
             contact_point_diff_status=row.get("contact_point_diff_status") or "not_checked",
+            phone_diff_status=row.get("phone_diff_status") or "not_checked",
+            phone_target_contact_point_id=_to_int_or_none(row.get("phone_target_contact_point_id")),
+            email_diff_status=row.get("email_diff_status") or "not_checked",
+            email_target_contact_point_id=_to_int_or_none(row.get("email_target_contact_point_id")),
         )
 
     if original_action == "insert":
+        phone_status = "insert" if _as_text(row.get("phone")) else "noop"
+        email_status = "insert" if _as_text(row.get("email")) else "noop"
+
+        if phone_status == "insert" and email_status == "insert":
+            contact_point_status = "both"
+        elif phone_status == "insert":
+            contact_point_status = "phone_only"
+        elif email_status == "insert":
+            contact_point_status = "email_only"
+        else:
+            contact_point_status = "noop"
+
+        diff_columns = {"subscriber", "address"}
+        if contact_point_status in {"phone_only", "email_only", "both"}:
+            diff_columns.add("contact_point")
+
         return CompareDecision(
             apply_action="insert",
-            apply_diff_columns="subscriber,address,contact_point",
+            apply_diff_columns=_join_diff_columns(diff_columns),
             address_diff_status="insert",
-            contact_point_diff_status="insert",
+            contact_point_diff_status=contact_point_status,
+            phone_diff_status=phone_status,
+            phone_target_contact_point_id=None,
+            email_diff_status=email_status,
+            email_target_contact_point_id=None,
         )
 
     diff_columns = _split_diff_columns(row.get("apply_diff_columns"))
@@ -422,6 +536,10 @@ def decide_compare_action(
             apply_diff_columns=_join_diff_columns(diff_columns),
             address_diff_status=address_result.status,
             contact_point_diff_status=contact_result.status,
+            phone_diff_status=contact_result.phone_status,
+            phone_target_contact_point_id=contact_result.phone_target_contact_point_id,
+            email_diff_status=contact_result.email_status,
+            email_target_contact_point_id=contact_result.email_target_contact_point_id,
         )
 
     if address_result.status in {"insert", "switch_current"}:
@@ -429,7 +547,7 @@ def decide_compare_action(
     elif address_result.status == "noop":
         diff_columns.discard("address")
 
-    if contact_result.status == "changed":
+    if contact_result.status in {"phone_only", "email_only", "both"}:
         diff_columns.add("contact_point")
     elif contact_result.status == "noop":
         diff_columns.discard("contact_point")
@@ -450,6 +568,10 @@ def decide_compare_action(
         apply_diff_columns=_join_diff_columns(diff_columns),
         address_diff_status=address_result.status,
         contact_point_diff_status=contact_result.status,
+        phone_diff_status=contact_result.phone_status,
+        phone_target_contact_point_id=contact_result.phone_target_contact_point_id,
+        email_diff_status=contact_result.email_status,
+        email_target_contact_point_id=contact_result.email_target_contact_point_id,
     )
 
 
@@ -474,6 +596,10 @@ def update_staging_compare_result(
             apply_diff_columns = %(apply_diff_columns)s,
             address_diff_status = %(address_diff_status)s,
             contact_point_diff_status = %(contact_point_diff_status)s,
+            phone_diff_status = %(phone_diff_status)s,
+            phone_target_contact_point_id = %(phone_target_contact_point_id)s,
+            email_diff_status = %(email_diff_status)s,
+            email_target_contact_point_id = %(email_target_contact_point_id)s,
             apply_checked_at = NOW()
         WHERE id = %(staging_id)s
         """,
@@ -483,6 +609,10 @@ def update_staging_compare_result(
             "apply_diff_columns": decision.apply_diff_columns,
             "address_diff_status": decision.address_diff_status,
             "contact_point_diff_status": decision.contact_point_diff_status,
+            "phone_diff_status": decision.phone_diff_status,
+            "phone_target_contact_point_id": decision.phone_target_contact_point_id,
+            "email_diff_status": decision.email_diff_status,
+            "email_target_contact_point_id": decision.email_target_contact_point_id,
         },
     )
 
