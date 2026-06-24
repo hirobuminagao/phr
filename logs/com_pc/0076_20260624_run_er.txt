@@ -1,0 +1,17 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py
+=== HIA subscriber apply start ===
+apply_run_id  : 190
+import_run_id : 188
+limit         : 0
+dry_run       : True
+
+[prepare]
+  rows_seen: 50414
+  rows_prepared: 50414
+  insert_candidates: 45
+  update_candidates: 30769
+  noop_candidates: 19600
+  review_candidates: 0
+
+[ERROR] HIA subscriber apply failed
+AttributeError: 'CMySQLCursorDict' object has no attribute 'connection'
