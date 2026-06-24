@@ -197,15 +197,25 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
         )
 
     if current_lookup_status == "not_found" or current_subscriber_id is None:
+        address_diff_status = "insert" if _as_text(row.get("address_hash")) else "noop"
+        phone_diff_status = "insert" if _as_text(row.get("phone")) else "noop"
+        email_diff_status = "insert" if _as_text(row.get("email")) else "noop"
+        contact_point_diff_status = "insert" if phone_diff_status == "insert" or email_diff_status == "insert" else "noop"
+        diff_columns = ["subscriber"]
+        if address_diff_status == "insert":
+            diff_columns.append("address")
+        if contact_point_diff_status == "insert":
+            diff_columns.append("contact_point")
+
         return PrepareDecision(
             apply_action="insert",
-            apply_diff_columns=_join_diff_columns(["subscriber", "address", "contact_point"]),
+            apply_diff_columns=_join_diff_columns(diff_columns),
             identity_match_status="not_found",
-            address_diff_status="insert",
-            contact_point_diff_status="insert",
-            phone_diff_status="insert",
+            address_diff_status=address_diff_status,
+            contact_point_diff_status=contact_point_diff_status,
+            phone_diff_status=phone_diff_status,
             phone_target_contact_point_id=None,
-            email_diff_status="insert",
+            email_diff_status=email_diff_status,
             email_target_contact_point_id=None,
         )
 
@@ -246,8 +256,12 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
         diff_columns.append("compare_other_hash")
 
     current_address_id = row.get("current_address_id")
-    if current_address_id is None:
-        address_diff_status = "insert"
+    address_hash = _as_text(row.get("address_hash"))
+
+    if not address_hash:
+        address_diff_status = "noop"
+    elif current_address_id is None:
+        address_diff_status = "changed"
         diff_columns.append("address")
     elif _same(row.get("address_hash"), row.get("current_address_hash")):
         address_diff_status = "noop"

@@ -441,14 +441,42 @@ building
 
 compare では staging の `address_hash` を使い、既存 `subscriber_addresses.address_hash` と照合する。
 
+## Address Null / Empty Policy
+
+`postal_code` / `address_line` / `building` が全て空の場合は、住所削除ではなく住所未提供として扱う。
+
+- current address なし + staging address なし → noop
+- current address なし + staging address あり → insert
+- current address あり + staging address なし → noop
+- current address あり + current一致 → noop
+- current address あり + history一致 → switch_current
+- current address あり + 未登録住所 → insert
+- 判定不能 → review
+
+current address あり + staging address なしの場合、current解除しない。
+
 判定:
 
 | status | 条件 | 意味 |
 |---|---|---|
 | `noop` | 同一 address_hash の行が存在し、かつ `is_current = 1` | 現在住所と一致 |
 | `switch_current` | 同一 address_hash の行が存在するが、`is_current = 0` | 既存住所へ current 切替候補 |
-| `insert` | 同一 address_hash の行が存在しない | 新住所 insert 候補 |
+| `insert` | staging address_hash が存在し、同一 address_hash の行が存在しない | 新住所 insert 候補 |
 | `review` | 同一 hash が複数 current 等、判定不能 | 自動apply不可 |
+
+## Compare Implementation Policy
+
+compare は current row のみを比較対象にしてはならない。
+
+判定順序:
+
+1. staging address が存在するか
+2. current address と一致するか
+3. `subscriber_addresses` 履歴に同一 `address_hash` が存在するか
+4. 存在する場合 switch_current
+5. 存在しない場合 insert
+
+`current_address_id IS NULL` のみを理由に insert 判定してはならない。
 
 注意:
 

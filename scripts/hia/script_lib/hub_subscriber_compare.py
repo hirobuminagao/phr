@@ -526,6 +526,7 @@ def decide_compare_action(
         )
 
     if original_action == "insert":
+        address_status = "insert" if _as_text(row.get("address_hash")) else "noop"
         phone_status = "insert" if _as_text(row.get("phone")) else "noop"
         email_status = "insert" if _as_text(row.get("email")) else "noop"
 
@@ -538,14 +539,16 @@ def decide_compare_action(
         else:
             contact_point_status = "noop"
 
-        diff_columns = {"subscriber", "address"}
+        diff_columns = {"subscriber"}
+        if address_status == "insert":
+            diff_columns.add("address")
         if contact_point_status in {"phone_only", "email_only", "both"}:
             diff_columns.add("contact_point")
 
         return CompareDecision(
             apply_action="insert",
             apply_diff_columns=_join_diff_columns(diff_columns),
-            address_diff_status="insert",
+            address_diff_status=address_status,
             contact_point_diff_status=contact_point_status,
             phone_diff_status=phone_status,
             phone_target_contact_point_id=None,
