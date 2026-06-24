@@ -87,6 +87,15 @@ def _to_date_or_none(value: Any) -> Any:
     return value
 
 
+def _to_branch_number_or_none(value: Any) -> Any:
+    """保険証枝番。空文字は None として扱う。"""
+
+    if value in (None, ""):
+        return None
+
+    return value
+
+
 def _name_part_or_none(*, full_value: Any, part_value: Any) -> Any:
     """全文と同じ値しか入っていない name part は未分割扱いとして None にする。"""
 
@@ -170,7 +179,9 @@ def insert_subscriber_root(
         "insurance_symbol": row.get("insurance_symbol"),
         "insurance_symbol_digits": row.get("insurance_symbol_digits"),
         "insurance_number": row.get("insurance_number"),
-        "insurance_branchnumber": row.get("insurance_branchnumber"),
+        "insurance_branchnumber": _to_branch_number_or_none(
+            row.get("insurance_branchnumber")
+        ),
         "birth": _to_date_or_none(row.get("birth")),
         "gender_code": row.get("gender_code"),
         "name_kana_full": row.get("name_kana_full"),
@@ -372,7 +383,9 @@ def apply_subscriber_identity_fields(
         "insurance_symbol": row.get("insurance_symbol"),
         "insurance_symbol_digits": row.get("insurance_symbol_digits"),
         "insurance_number": row.get("insurance_number"),
-        "insurance_branchnumber": row.get("insurance_branchnumber"),
+        "insurance_branchnumber": _to_branch_number_or_none(
+            row.get("insurance_branchnumber")
+        ),
         "birth": _to_date_or_none(row.get("birth")),
         "gender_code": row.get("gender_code"),
         "name_kana_full": row.get("name_kana_full"),
