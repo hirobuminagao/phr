@@ -45,7 +45,7 @@ import yaml
 
 # repo root を import path に追加する。
 # scripts/hia/apply_hia_subscriber_sync.py -> repo root は parents[2]
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT: Path = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -71,7 +71,12 @@ def load_apply_config() -> dict:
         return {}
 
     with config_path.open("r", encoding="utf-8") as fp:
-        return yaml.safe_load(fp) or {}
+        data = yaml.safe_load(fp)
+
+    if not isinstance(data, dict):
+        return {}
+
+    return data
 
 
 def get_config_value(config: dict, key: str, default):
