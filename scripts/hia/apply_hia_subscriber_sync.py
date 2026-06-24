@@ -199,7 +199,7 @@ def main() -> int:
 
                 apply_run_id = start_run(
                     cur,
-                    phase="hia_subscriber_apply",
+                    phase="apply",
                     source="apply_hia_subscriber_sync",
                     db_schema=DEV_PHR,
                     db_path=None,
