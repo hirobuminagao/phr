@@ -388,7 +388,8 @@ def apply_hia_subscriber_rows(
             metrics.rows_dry_run += 1
         elif result == "noop":
             metrics.rows_noop += 1
-            metrics.processed_marked += 1
+            if not dry_run:
+                metrics.processed_marked += 1
         elif result == "review":
             metrics.rows_review_skipped += 1
         elif result == "error":
