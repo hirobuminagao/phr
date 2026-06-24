@@ -150,7 +150,7 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         default=get_config_value(config, "dry_run", False),
-        help="target tables の更新を行わず、apply候補の処理確認のみ行う。prepare/compare/applyによるDB変更は rollback される。",
+        help="prepare/compare は staging を更新し、apply は target tables / processed mark / audit を更新しない。",
     )
     parser.add_argument(
         "--skip-prepare",
@@ -222,7 +222,7 @@ def main() -> int:
                         cur,
                         import_run_id=import_run_id,
                         limit=args.limit,
-                        dry_run=args.dry_run,
+                        dry_run=False,
                     )
                     metrics_all.rows_seen += getattr(prepare_metrics, "rows_seen", 0)
                     metrics_all.rows_inserted += getattr(prepare_metrics, "rows_updated", 0)
@@ -235,7 +235,7 @@ def main() -> int:
                         cur,
                         import_run_id=import_run_id,
                         limit=args.limit,
-                        dry_run=args.dry_run,
+                        dry_run=False,
                     )
                     metrics_all.rows_seen += getattr(compare_metrics, "rows_seen", 0)
                     metrics_all.rows_inserted += getattr(compare_metrics, "rows_updated", 0)
@@ -257,13 +257,12 @@ def main() -> int:
                 print_metrics("apply", apply_metrics)
 
                 if args.dry_run:
-                    conn.rollback()
                     finish_run(
                         cur,
                         apply_run_id,
                         metrics_all,
                         status_override="success",
-                        extra_notes="dry-run completed; rolled back",
+                        extra_notes="dry-run completed; staging prepare/compare committed; apply skipped target updates",
                     )
                     conn.commit()
                 else:
