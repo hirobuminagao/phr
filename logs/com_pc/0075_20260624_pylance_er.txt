@@ -1,0 +1,58 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportGeneralTypeIssues",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportGeneralTypeIssues.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"Path\" のクラス定義は、それ自体に依存します",
+	"source": "Pylance",
+	"startLineNumber": 48,
+	"startColumn": 13,
+	"endLineNumber": 48,
+	"endColumn": 27
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportGeneralTypeIssues",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportGeneralTypeIssues.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "\"Path\" のクラス定義は、それ自体に依存します",
+	"source": "Pylance",
+	"startLineNumber": 48,
+	"startColumn": 28,
+	"endLineNumber": 48,
+	"endColumn": 35
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/hia/apply_hia_subscriber_sync.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportReturnType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportReturnType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"Unknown | dict[Unknown, Unknown] | list[Unknown]\" は戻り値の型 \"dict[Unknown, Unknown]\" に割り当てできません\n  型 \"Unknown | dict[Unknown, Unknown] | list[Unknown]\" は型 \"dict[Unknown, Unknown]\" に割り当てできません\n    \"list[Unknown]\" は \"dict[Unknown, Unknown]\" に割り当てできません",
+	"source": "Pylance",
+	"startLineNumber": 74,
+	"startColumn": 16,
+	"endLineNumber": 74,
+	"endColumn": 40
+}]
