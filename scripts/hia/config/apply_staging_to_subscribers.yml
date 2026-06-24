@@ -3,10 +3,10 @@
 import_run_id: auto
 
 # dry-run時は target table を更新しない
-dry_run: true
+dry_run: false
 
 # 0 = 全件
-limit: 0
+limit: 1000
 
 # prepare済みなら true
 skip_prepare: false
