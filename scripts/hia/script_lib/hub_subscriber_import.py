@@ -422,13 +422,24 @@ def process_csv_dir(
                     ]
                 )
 
-                address_hash = build_compare_hash(
-                    [
-                        src.get("postal_code", ""),
-                        src.get("address_line", ""),
-                        src.get("building", ""),
-                    ]
-                )
+                postal_code = src.get("postal_code", "")
+                address_line = src.get("address_line", "")
+                building = src.get("building", "")
+
+                if (
+                    not str(postal_code).strip()
+                    and not str(address_line).strip()
+                    and not str(building).strip()
+                ):
+                    address_hash = None
+                else:
+                    address_hash = build_compare_hash(
+                        [
+                            postal_code,
+                            address_line,
+                            building,
+                        ]
+                    )
 
                 vals = {
                     "person_id_custom": person_id_custom,
@@ -457,9 +468,9 @@ def process_csv_dir(
                     "insurance_branchnumber": branchnum_text,
                     "qualification_acquired_date": qualification_acquired_date_insert,
                     "qualification_lost_date": qualification_lost_date_insert,
-                    "postal_code": src.get("postal_code", ""),
-                    "address_line": src.get("address_line", ""),
-                    "building": src.get("building", ""),
+                    "postal_code": postal_code,
+                    "address_line": address_line,
+                    "building": building,
                     "address_hash": address_hash,
                     "phone": src.get("phone", ""),
                     "email": src.get("email", ""),
