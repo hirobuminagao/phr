@@ -95,6 +95,10 @@ APPLY_ROW_COLUMNS = """
     identity_match_status,
     address_diff_status,
     contact_point_diff_status,
+    phone_diff_status,
+    phone_target_contact_point_id,
+    email_diff_status,
+    email_target_contact_point_id,
 
     current_subscriber_id,
 
@@ -195,6 +199,50 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
+UNRESOLVED_DIFF_STATUSES = {"not_checked", "pending_compare", "changed"}
+APPLY_TARGET_ACTIONS = {"insert", "update", "noop"}
+DIFF_STATUS_COLUMNS = (
+    "address_diff_status",
+    "contact_point_diff_status",
+    "phone_diff_status",
+    "email_diff_status",
+)
+
+
+def validate_apply_ready_rows(rows: list[dict[str, Any]]) -> None:
+    """
+    apply phase に入る前に、未確定statusが残っていないことを確認する。
+
+    prepare phase の仮statusは apply 入力として扱わない。
+    未確定statusが残っている場合は compare 未完了または skip_compare 誤用とみなし、
+    apply 全体を開始しない。
+    """
+
+    violations: list[str] = []
+
+    for row in rows:
+        action = _as_text(row.get("apply_action"))
+        if action not in APPLY_TARGET_ACTIONS:
+            continue
+
+        staging_id = row.get("staging_subscriber_hub_id")
+        for column in DIFF_STATUS_COLUMNS:
+            status = _as_text(row.get(column))
+            if status in UNRESOLVED_DIFF_STATUSES:
+                violations.append(
+                    f"id={staging_id}, apply_action={action}, {column}={status}"
+                )
+
+    if violations:
+        preview = "; ".join(violations[:10])
+        remaining = len(violations) - 10
+        suffix = f"; ... and {remaining} more" if remaining > 0 else ""
+        raise RuntimeError(
+            "apply phase blocked because unresolved compare statuses remain: "
+            f"{preview}{suffix}"
+        )
+
+
 # ============================================================
 # one-row orchestration
 # ============================================================
@@ -232,9 +280,13 @@ def apply_one_subscriber_row(
     if action not in {"insert", "update"}:
         return "review"
 
+    savepoint_name = f"apply_subscriber_row_{staging_id}"
+
     try:
         if dry_run:
             return "dry_run"
+
+        cur.execute(f"SAVEPOINT {savepoint_name}")
 
         subscriber_id = apply_subscriber_root(
             cur,
@@ -262,10 +314,13 @@ def apply_one_subscriber_row(
             apply_run_id=apply_run_id,
         )
 
+        cur.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+
         return "applied"
 
     except Exception as exc:
         if not dry_run:
+            cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
             mark_staging_apply_error(
                 cur,
                 staging_id=staging_id,
@@ -273,6 +328,7 @@ def apply_one_subscriber_row(
                 error_code=type(exc).__name__,
                 error_message=str(exc),
             )
+            cur.execute(f"RELEASE SAVEPOINT {savepoint_name}")
         return "error"
 
 
@@ -307,6 +363,8 @@ def apply_hia_subscriber_rows(
         import_run_id=import_run_id,
         limit=limit,
     )
+
+    validate_apply_ready_rows(rows)
 
     for row in rows:
         metrics.rows_seen += 1

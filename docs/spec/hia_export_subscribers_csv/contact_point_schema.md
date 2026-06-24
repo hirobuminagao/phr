@@ -1,5 +1,3 @@
-
-
 # contact_point_schema.md
 
 ## Purpose
@@ -288,12 +286,14 @@ email_target_contact_point_id
   email の処理種別と対象 contact_point_id
 ```
 
-`contact_point_diff_status` は `noop` / `changed` / `review` の集約判定に利用する。
+`contact_point_diff_status` は `noop` / `phone_only` / `email_only` / `both` / `review` の集約判定に利用する。
 
 | status | 意味 |
 |---|---|
 | `noop` | phone / email ともに変更なし |
-| `changed` | phone / email のいずれかに apply 対象あり |
+| `phone_only` | phone のみ apply 対象あり |
+| `email_only` | email のみ apply 対象あり |
+| `both` | phone / email の両方に apply 対象あり |
 | `review` | phone / email のいずれかが自動判定不能 |
 
 `phone_diff_status` / `email_diff_status` は apply 実処理に利用する。
@@ -314,7 +314,7 @@ apply は `contact_point_diff_status` を集約フラグとして確認し、実
 
 ```text
 contact_point_diff_status
-  noop / changed / review
+  noop / phone_only / email_only / both / review
 
 phone_diff_status
 phone_target_contact_point_id

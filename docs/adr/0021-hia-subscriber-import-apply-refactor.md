@@ -330,6 +330,38 @@ HIA 側で物理削除または論理削除が行われた場合に、`subscribe
 
 ---
 
+## Contact Table Migration History
+
+PHR 初期実装では、連絡先は subscriber_contacts を利用していた。
+
+その後、phone / email を同一レコードで保持する構造では、以下の扱いが難しくなった。
+
+- phone のみ変更
+- email のみ変更
+- phone / email それぞれの current 管理
+- NULL による current 解除
+- 過去連絡先への current 戻し
+- contact_type 単位の audit
+
+そのため、連絡先正本を subscriber_contact_points へ移行した。
+
+新構造では、以下を基本単位とする。
+
+- 1 contact point = 1 row
+- contact_type = phone / email
+- is_current による current 管理
+- history row の保持
+
+subscriber_contacts は legacy table として保持する。
+
+subscriber_contacts から subscriber_contact_points への backfill は実施済みであり、2026-06 時点の HIA subscriber sync では subscriber_contact_points を連絡先の正本として扱う。
+
+現行の import / current snapshot / prepare / compare / apply は subscriber_contact_points を参照する。
+
+新規実装では subscriber_contacts を連絡先正本として参照しない。
+
+---
+
 ## Contact Point Compare / Apply Policy
 
 contact point は `subscriber_contact_points` を正本構造として扱う。

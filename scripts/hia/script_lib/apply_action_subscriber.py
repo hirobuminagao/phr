@@ -40,6 +40,8 @@ Notes:
 
 from __future__ import annotations
 
+import json
+
 from typing import Any
 from scripts.hia.script_lib.apply_action_subscriber_audit import (
     build_subscriber_audit_rows_from_fields,
@@ -59,9 +61,21 @@ def _as_text(value: Any) -> str:
 
 
 def _split_diff_columns(value: Any) -> set[str]:
-    text = _as_text(value)
+    text = _as_text(value).strip()
     if not text:
         return set()
+
+    if text.startswith("["):
+        try:
+            loaded = json.loads(text)
+        except json.JSONDecodeError:
+            return {part.strip() for part in text.split(",") if part.strip()}
+
+        if isinstance(loaded, list):
+            return {str(part).strip() for part in loaded if str(part).strip()}
+
+        return set()
+
     return {part.strip() for part in text.split(",") if part.strip()}
 
 
@@ -341,6 +355,13 @@ def apply_subscriber_identity_fields(
         subscriber_id=subscriber_id,
     )
 
+    name_kana_full_changed = not _as_text(current_values.get("name_kana_full")) == _as_text(
+        row.get("name_kana_full")
+    )
+    name_kanji_full_changed = not _as_text(current_values.get("name_kanji_full")) == _as_text(
+        row.get("name_kanji_full")
+    )
+
     values = {
         "subscriber_id": subscriber_id,
         "hia_subscriber_id": row.get("hia_subscriber_id"),
@@ -358,27 +379,75 @@ def apply_subscriber_identity_fields(
         "name_kana_full_match": row.get("name_kana_full_match"),
         "name_kanji_full": row.get("name_kanji_full"),
         "name_full_match": row.get("name_kanji_full_match"),
-        "name_kana_family": _name_part_or_none(
-            full_value=row.get("name_kana_full"),
-            part_value=row.get("name_kana_family"),
+        "name_kana_family": (
+            _name_part_or_none(
+                full_value=row.get("name_kana_full"),
+                part_value=row.get("name_kana_family"),
+            )
+            if name_kana_full_changed
+            else current_values.get("name_kana_family")
         ),
-        "name_kana_middle": _name_part_or_none(
-            full_value=row.get("name_kana_full"),
-            part_value=row.get("name_kana_middle"),
+        "name_kana_middle": (
+            _name_part_or_none(
+                full_value=row.get("name_kana_full"),
+                part_value=row.get("name_kana_middle"),
+            )
+            if name_kana_full_changed
+            else current_values.get("name_kana_middle")
         ),
-        "name_kana_given": _name_part_or_none(
-            full_value=row.get("name_kana_full"),
-            part_value=row.get("name_kana_given"),
+        "name_kana_given": (
+            _name_part_or_none(
+                full_value=row.get("name_kana_full"),
+                part_value=row.get("name_kana_given"),
+            )
+            if name_kana_full_changed
+            else current_values.get("name_kana_given")
         ),
-        "name_kanji_family": row.get("name_kanji_family"),
-        "name_kanji_middle": row.get("name_kanji_middle"),
-        "name_kanji_given": row.get("name_kanji_given"),
-        "name_kana_family_match": None,
-        "name_kana_middle_match": None,
-        "name_kana_given_match": None,
-        "name_kanji_family_match": None,
-        "name_kanji_middle_match": None,
-        "name_kanji_given_match": None,
+        "name_kanji_family": (
+            row.get("name_kanji_family")
+            if name_kanji_full_changed
+            else current_values.get("name_kanji_family")
+        ),
+        "name_kanji_middle": (
+            row.get("name_kanji_middle")
+            if name_kanji_full_changed
+            else current_values.get("name_kanji_middle")
+        ),
+        "name_kanji_given": (
+            row.get("name_kanji_given")
+            if name_kanji_full_changed
+            else current_values.get("name_kanji_given")
+        ),
+        "name_kana_family_match": (
+            None
+            if name_kana_full_changed
+            else current_values.get("name_kana_family_match")
+        ),
+        "name_kana_middle_match": (
+            None
+            if name_kana_full_changed
+            else current_values.get("name_kana_middle_match")
+        ),
+        "name_kana_given_match": (
+            None
+            if name_kana_full_changed
+            else current_values.get("name_kana_given_match")
+        ),
+        "name_kanji_family_match": (
+            None
+            if name_kanji_full_changed
+            else current_values.get("name_kanji_family_match")
+        ),
+        "name_kanji_middle_match": (
+            None
+            if name_kanji_full_changed
+            else current_values.get("name_kanji_middle_match")
+        ),
+        "name_kanji_given_match": (
+            None
+            if name_kanji_full_changed
+            else current_values.get("name_kanji_given_match")
+        ),
         "last_change_run_id": apply_run_id,
     }
 

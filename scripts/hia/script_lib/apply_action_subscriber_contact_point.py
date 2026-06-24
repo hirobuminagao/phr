@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from scripts.lib.db.lookup.subscriber_contact_points import get_contact_point_by_id
 from scripts.hia.script_lib.apply_action_subscriber_audit import (
     build_subscriber_audit_row,
     insert_subscriber_audit_row,
@@ -56,10 +57,23 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
+
 def _to_none_if_blank(value: Any) -> Any:
     if value in (None, ""):
         return None
     return value
+
+
+# Helper to normalize IDs to int or None
+def _to_int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    return int(text)
 
 
 def _field_name_for_contact_type(contact_type: str) -> str:
@@ -174,7 +188,7 @@ def switch_current_contact_point(
     *,
     subscriber_id: int,
     contact_type: str,
-    contact_value: str,
+    target_contact_point_id: int,
     apply_run_id: int,
 ) -> None:
     """
@@ -191,11 +205,30 @@ def switch_current_contact_point(
         contact_type=contact_type,
     )
 
+    target_row = get_contact_point_by_id(cur.connection, target_contact_point_id)
+    if not target_row:
+        raise RuntimeError(
+            "subscriber_contact_points switch_current target not found: "
+            f"contact_point_id={target_contact_point_id}"
+        )
+
+    if int(target_row.get("subscriber_id") or 0) != int(subscriber_id):
+        raise RuntimeError(
+            "subscriber_contact_points switch_current target subscriber mismatch: "
+            f"contact_point_id={target_contact_point_id}, subscriber_id={subscriber_id}"
+        )
+
+    if _as_text(target_row.get("contact_type")) != contact_type:
+        raise RuntimeError(
+            "subscriber_contact_points switch_current target contact_type mismatch: "
+            f"contact_point_id={target_contact_point_id}, contact_type={contact_type}"
+        )
+
     audit_row = build_contact_point_audit_row(
         subscriber_id=subscriber_id,
         contact_type=contact_type,
         old_value=current_row.get("contact_value"),
-        new_value=contact_value,
+        new_value=target_row.get("contact_value"),
         apply_run_id=apply_run_id,
         note="subscriber contact_point switch_current",
     )
@@ -215,24 +248,19 @@ def switch_current_contact_point(
             valid_from = NOW(),
             valid_to = NULL,
             updated_at = NOW()
-        WHERE subscriber_id = %(subscriber_id)s
-          AND contact_type = %(contact_type)s
-          AND contact_value = %(contact_value)s
+        WHERE contact_point_id = %(target_contact_point_id)s
         ORDER BY contact_point_id DESC
         LIMIT 1
         """,
         {
-            "subscriber_id": subscriber_id,
-            "contact_type": contact_type,
-            "contact_value": contact_value,
+            "target_contact_point_id": target_contact_point_id,
         },
     )
 
     if cur.rowcount == 0:
         raise RuntimeError(
             "subscriber_contact_points switch_current affected 0 rows: "
-            f"subscriber_id={subscriber_id}, contact_type={contact_type}, "
-            f"contact_value={contact_value}"
+            f"contact_point_id={target_contact_point_id}"
         )
 
     if audit_row is not None:
@@ -325,21 +353,31 @@ def apply_single_contact_point(
     subscriber_id: int,
     contact_type: str,
     contact_value: str | None,
+    diff_status: str,
+    target_contact_point_id: int | None,
     apply_run_id: int,
 ) -> None:
     """
-    1 contact_type の contact point を staging 値に合わせる。
+    1 contact_type の contact point apply を実行する。
 
-    Rules:
-        - blank -> clear current
-        - same current exists -> noop
-        - same history exists -> switch current
-        - not exists -> insert
+    Preconditions:
+        - compare phase has already determined diff_status
+        - compare phase has already determined target_contact_point_id
+          for switch_current
+
+    Apply behavior:
+        - noop
+        - clear_current
+        - insert
+        - switch_current
     """
 
     value = _as_text(contact_value)
 
-    if not value:
+    if diff_status in {"", "noop"}:
+        return
+
+    if diff_status == "clear_current":
         current_row = load_current_contact_point(
             cur,
             subscriber_id=subscriber_id,
@@ -367,27 +405,11 @@ def apply_single_contact_point(
 
         return
 
-    cur.execute(
-        """
-        SELECT
-            contact_point_id,
-            is_current
-        FROM subscriber_contact_points
-        WHERE subscriber_id = %(subscriber_id)s
-          AND contact_type = %(contact_type)s
-          AND contact_value = %(contact_value)s
-        ORDER BY is_current DESC, contact_point_id DESC
-        """,
-        {
-            "subscriber_id": subscriber_id,
-            "contact_type": contact_type,
-            "contact_value": value,
-        },
-    )
-
-    rows = list(cur.fetchall())
-
-    if not rows:
+    if diff_status == "insert":
+        if not value:
+            raise RuntimeError(
+                f"insert contact point requires value: {contact_type}"
+            )
         insert_contact_point(
             cur,
             subscriber_id=subscriber_id,
@@ -397,17 +419,23 @@ def apply_single_contact_point(
         )
         return
 
-    current_rows = [row for row in rows if int(row.get("is_current") or 0) == 1]
+    if diff_status == "switch_current":
+        if target_contact_point_id is None:
+            raise RuntimeError(
+                f"switch_current requires target_contact_point_id: {contact_type}"
+            )
 
-    if current_rows:
+        switch_current_contact_point(
+            cur,
+            subscriber_id=subscriber_id,
+            contact_type=contact_type,
+            target_contact_point_id=target_contact_point_id,
+            apply_run_id=apply_run_id,
+        )
         return
 
-    switch_current_contact_point(
-        cur,
-        subscriber_id=subscriber_id,
-        contact_type=contact_type,
-        contact_value=value,
-        apply_run_id=apply_run_id,
+    raise RuntimeError(
+        f"unsupported contact point diff_status={diff_status} for {contact_type}"
     )
 
 
@@ -438,11 +466,23 @@ def apply_subscriber_contact_points(
     if contact_point_diff_status == "review":
         return
 
+    phone_diff_status = _as_text(row.get("phone_diff_status"))
+    phone_target_contact_point_id = _to_int_or_none(
+        row.get("phone_target_contact_point_id")
+    )
+
+    email_diff_status = _as_text(row.get("email_diff_status"))
+    email_target_contact_point_id = _to_int_or_none(
+        row.get("email_target_contact_point_id")
+    )
+
     apply_single_contact_point(
         cur,
         subscriber_id=int(subscriber_id),
         contact_type="phone",
         contact_value=_to_none_if_blank(row.get("phone")),
+        diff_status=phone_diff_status,
+        target_contact_point_id=phone_target_contact_point_id,
         apply_run_id=apply_run_id,
     )
 
@@ -451,5 +491,7 @@ def apply_subscriber_contact_points(
         subscriber_id=int(subscriber_id),
         contact_type="email",
         contact_value=_to_none_if_blank(row.get("email")),
+        diff_status=email_diff_status,
+        target_contact_point_id=email_target_contact_point_id,
         apply_run_id=apply_run_id,
     )

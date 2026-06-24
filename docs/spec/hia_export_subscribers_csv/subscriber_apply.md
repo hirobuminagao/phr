@@ -642,7 +642,75 @@ HIA CSV値がcurrent値と異なる
   → review
 ```
 
+
 apply は compare 結果に従って insert / switch_current / clear_current を実行する。
+
+### Contact Point Compare Status Policy
+
+compare phase は contact_type ごとに詳細判定を行う。
+
+保持列:
+
+```text
+phone_diff_status
+phone_target_contact_point_id
+
+email_diff_status
+email_target_contact_point_id
+```
+
+詳細status:
+
+```text
+noop
+insert
+switch_current
+clear_current
+review
+```
+
+`phone_target_contact_point_id` / `email_target_contact_point_id` は、
+`switch_current` 実行時に current 化する対象の
+`subscriber_contact_points.contact_point_id` を保持する。
+
+また apply orchestration 全体の制御用として、集約statusを保持する。
+
+```text
+contact_point_diff_status
+```
+
+値:
+
+```text
+noop
+phone_only
+email_only
+both
+review
+```
+
+意味:
+
+```text
+noop
+  → phone / email とも変更なし
+
+phone_only
+  → phone のみ apply 対象
+
+email_only
+  → email のみ apply 対象
+
+both
+  → phone / email 両方 apply 対象
+
+review
+  → 自動反映不可
+```
+
+apply phase は再比較を行わず、compare phase により確定した
+`phone_diff_status` / `email_diff_status` と
+`target_contact_point_id` に従って処理を実行する。
 
 ---
 
@@ -678,8 +746,39 @@ Python apply script
 - ETL context を保持できる
 - DB trigger 依存を避ける
 
+
 HIA 側を最新正本として同期するため、
 変更前後差分は必ず audit として永続保存する。
+
+## Contact Point Audit Policy
+
+subscriber_audit は `subscriber_contact_points` の物理操作履歴ではなく、
+加入者属性としての論理変更履歴を記録する。
+
+そのため、history再利用や current切替が発生しても、
+audit は利用者視点の変更値として記録する。
+
+例:
+
+```text
+電話番号新規登録
+  old = NULL
+  new = 09033334444
+
+電話番号削除（clear_current）
+  old = 09011112222
+  new = NULL
+
+履歴電話番号へ切替（switch_current）
+  old = 09011112222
+  new = 09033334444
+```
+
+`subscriber_contact_points` 内部では、
+current解除・history再利用・current切替等が行われるが、
+それらの物理操作内容を subscriber_audit へ直接表現しない。
+
+subscriber_audit は加入者視点の before / after を記録する。
 
 参照:
 

@@ -33,6 +33,8 @@ Notes:
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -205,14 +207,26 @@ def _same(left: Any, right: Any) -> bool:
 
 
 def _split_diff_columns(value: Any) -> set[str]:
-    text = _as_text(value)
+    text = _as_text(value).strip()
     if not text:
         return set()
+
+    if text.startswith("["):
+        try:
+            loaded = json.loads(text)
+        except json.JSONDecodeError:
+            return {part.strip() for part in text.split(",") if part.strip()}
+
+        if isinstance(loaded, list):
+            return {str(part).strip() for part in loaded if str(part).strip()}
+
+        return set()
+
     return {part.strip() for part in text.split(",") if part.strip()}
 
 
 def _join_diff_columns(columns: set[str]) -> str:
-    return ",".join(sorted(columns))
+    return json.dumps(sorted(columns), ensure_ascii=False)
 
 
 # ============================================================

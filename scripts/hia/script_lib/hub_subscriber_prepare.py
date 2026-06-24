@@ -40,6 +40,8 @@ Notes:
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -163,7 +165,7 @@ def _same(left: Any, right: Any) -> bool:
 
 
 def _join_diff_columns(columns: list[str]) -> str:
-    return ",".join(columns)
+    return json.dumps(sorted(set(columns)), ensure_ascii=False)
 
 
 def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
