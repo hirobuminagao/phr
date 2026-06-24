@@ -193,6 +193,18 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
+def _cursor_connection(cur):
+    conn = getattr(cur, "connection", None)
+    if conn is not None:
+        return conn
+
+    conn = getattr(cur, "_connection", None)
+    if conn is not None:
+        return conn
+
+    raise AttributeError("cursor does not expose connection")
+
+
 def _to_int_or_none(value: Any) -> int | None:
     if value is None:
         return None
@@ -318,7 +330,7 @@ def compare_single_contact_point(
         )
 
     value = _as_text(contact_value)
-    conn = cur.connection
+    conn = _cursor_connection(cur)
     current_row = get_contact_point_by_id(conn, current_contact_point_id)
 
     if current_row is not None:

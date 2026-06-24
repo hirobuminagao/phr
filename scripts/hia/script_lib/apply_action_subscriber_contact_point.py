@@ -57,6 +57,18 @@ def _as_text(value: Any) -> str:
     return str(value)
 
 
+def _cursor_connection(cur):
+    conn = getattr(cur, "connection", None)
+    if conn is not None:
+        return conn
+
+    conn = getattr(cur, "_connection", None)
+    if conn is not None:
+        return conn
+
+    raise AttributeError("cursor does not expose connection")
+
+
 
 def _to_none_if_blank(value: Any) -> Any:
     if value in (None, ""):
@@ -205,7 +217,7 @@ def switch_current_contact_point(
         contact_type=contact_type,
     )
 
-    target_row = get_contact_point_by_id(cur.connection, target_contact_point_id)
+    target_row = get_contact_point_by_id(_cursor_connection(cur), target_contact_point_id)
     if not target_row:
         raise RuntimeError(
             "subscriber_contact_points switch_current target not found: "
