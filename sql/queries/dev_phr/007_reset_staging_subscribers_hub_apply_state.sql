@@ -17,7 +17,6 @@ SET
     identity_match_status = NULL,
 
     address_diff_status = NULL,
-    address_target_address_id = NULL,
 
     contact_point_diff_status = NULL,
 
@@ -30,11 +29,7 @@ SET
     apply_checked_at = NULL,
 
     processed_run_id = NULL,
-    processed_at = NULL,
-
-    apply_error_code = NULL,
-    apply_error_message = NULL,
-    apply_error_at = NULL
+    processed_at = NULL
 WHERE import_run_id = @import_run_id;
 
 SELECT
