@@ -186,7 +186,7 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
     if current_lookup_status in {"multiple_match", "review", "projection_error"}:
         return PrepareDecision(
             apply_action="review",
-            apply_diff_columns="current_lookup_status",
+            apply_diff_columns=_join_diff_columns(["current_lookup_status"]),
             identity_match_status=current_lookup_status,
             address_diff_status="not_checked",
             contact_point_diff_status="not_checked",
@@ -199,7 +199,7 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
     if current_lookup_status == "not_found" or current_subscriber_id is None:
         return PrepareDecision(
             apply_action="insert",
-            apply_diff_columns="subscriber,address,contact_point",
+            apply_diff_columns=_join_diff_columns(["subscriber", "address", "contact_point"]),
             identity_match_status="not_found",
             address_diff_status="insert",
             contact_point_diff_status="insert",
@@ -215,7 +215,7 @@ def decide_prepare_action(row: dict[str, Any]) -> PrepareDecision:
     if hia_subscriber_id and current_hia_subscriber_id and hia_subscriber_id != current_hia_subscriber_id:
         return PrepareDecision(
             apply_action="review",
-            apply_diff_columns="hia_subscriber_id",
+            apply_diff_columns=_join_diff_columns(["hia_subscriber_id"]),
             identity_match_status="hia_subscriber_id_mismatch",
             address_diff_status="not_checked",
             contact_point_diff_status="not_checked",
