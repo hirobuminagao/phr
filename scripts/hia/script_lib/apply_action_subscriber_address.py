@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 """
 ============================================================
@@ -368,6 +366,4 @@ def apply_subscriber_address(
         )
         return
 
-    # Unknown status is intentionally ignored here.
-    # compare phase should route ambiguous rows to review.
-    return
+    raise RuntimeError(f"unsupported address_diff_status: {address_diff_status}")
