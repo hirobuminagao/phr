@@ -6,7 +6,7 @@ import_run_id: auto
 dry_run: false
 
 # 0 = 全件
-limit: 1000
+limit: 0
 
 # prepare済みなら true
 skip_prepare: false

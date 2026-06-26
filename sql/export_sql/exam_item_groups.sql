@@ -1,0 +1,1 @@
+INSERT INTO `exam_item_groups` (`group_code`, `group_name`, `description`, `created_at`, `updated_at`) VALUES ('LSIO_Legal_Item', 'Labor Standards Inspection Office: Regular Health Checkups: Legal Items', '安衛則44条 等の定期健康診断における法定項目。presence_keyは実施有無判定、result_valueは値、auxは補助情報。', '2026-01-20 12:26:57.509288', NULL);
