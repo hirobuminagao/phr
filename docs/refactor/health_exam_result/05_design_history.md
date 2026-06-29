@@ -546,3 +546,188 @@ v2の中心構造は、物理ファイル単位の `file_receipts`、受診者/�
 - `01_register_files.py` の探索仕様への反映。
 - `file_receipts` のパス系カラム整理。
 - 設定ファイルに保持するフォルダ名定義の整理。
+---
+
+## DH-20260629-03 / 2026-06-29 14:00 JST
+
+### テーマ
+旧medi系テーブルからv2テーブルへのカラム棚卸しの進め方
+
+### 背景
+v2の主要テーブル責務が整理されてきたため、次の段階として旧 `medi_*` 系テーブルのカラムをv2へどう扱うかを整理する必要が出てきた。
+
+既にCodexによる旧DDL要約として `08_table_ddl_summary_codex.md` が存在するため、これを辞書として参照しながら、v2側のカラム判断を進める方針とした。
+
+### 議論
+- 当初は影響範囲の大きい `medi_xml_ledger` から確認する案もあった。
+- ただし、人間が設計を理解・レビューしやすい順番としては、データの入口であるファイル台帳から順に整理する方が自然であると判断した。
+- 旧DDLをそのまま移植するのではなく、旧カラムごとに以下の扱いを判断する。
+  - v2へ移行する
+  - v2では廃止する
+  - 名称変更して移行する
+  - 別テーブルへ再配置する
+  - 参照テーブル側へ寄せる
+  - v2で新規追加する
+- 旧 `medi_*` 系テーブルは、v2の責務に合わせて `file_receipts`、`xml_ledger`、`exam_item_values`、`exam_check_results`、`etl_runs`、`etl_errors` へ再配置する。
+- `etl_runs` / `etl_errors` は ADR-0023 に従うため、旧medi系の個別実行管理・エラー管理カラムは共通ETL仕様へ寄せる。
+
+### 現時点の考え
+カラム整理は、影響範囲の大きさではなく、データの流れに沿って入口から順に行う。
+
+旧DDL要約は変更せず、v2への判断結果は別メモとして作成する。
+
+### 決定事項
+- 旧medi系カラム棚卸しは、`08_table_ddl_summary_codex.md` を元資料として進める。
+- カラム整理用の判断メモとして `15_medi_to_v2_column_mapping.md` を作成する。
+- 旧カラムは「移行」「廃止」「追加」「名称変更」「再配置」「参照化」の観点で整理する。
+- 棚卸しはデータの入口から順に行う。
+- 最初は `medi_shared_files` / `medi_zip_receipts` から `file_receipts` への対応を整理する。
+
+### 棚卸し順序
+1. `medi_shared_files` / `medi_zip_receipts` → `file_receipts`
+2. `medi_xml_receipts` / `medi_xml_ledger` → `xml_ledger`
+3. `medi_xml_item_values` / `medi_exam_result_item_values` → `exam_item_values`
+4. `judge_*` / `lsio_legal_*` / `medi_lsio_*` → `exam_check_results`
+5. `medi_import_runs` / `runs` / `process_errors` 相当 → ADR-0023準拠の `etl_runs` / `etl_errors`
+
+### 保留事項
+- `15_medi_to_v2_column_mapping.md` の正式フォーマット。
+- 旧medi系のどのテーブルを棚卸し対象に含めるか。
+- 旧カラムの廃止理由をどの粒度で記録するか。
+- v2で新規追加するカラムの根拠を、05・12・15のどこに記録するか。
+
+### 根拠
+- 旧実装の意図を失わずにv2へ移行するため。
+- DDL作成前に、旧カラムの移行・廃止・再配置を判断しておく必要があるため。
+- データの入口から順に整理した方が、人間がレビューしやすく、設計の流れも追いやすいため。
+
+### 次回検討
+- `15_medi_to_v2_column_mapping.md` を作成する。
+- `medi_shared_files` / `medi_zip_receipts` から `file_receipts` へのカラム対応を整理する。
+- カラム整理結果をもとに `12_v2_ddl_design_notes.md` のカラム候補を精査する。
+---
+
+## DH-20260629-04 / 2026-06-29 14:35 JST
+
+### テーマ
+file_receipts のファイル種別共通化と処理対象件数の保持方針
+
+### 背景
+`file_receipts` のカラム棚卸しを進める中で、旧 `medi_shared_files` / `medi_zip_receipts` に存在する ZIP専用の判定項目を v2 でどう扱うかを整理した。
+
+旧設計では ZIP を中心に、`is_zip`、`zip_has_xml`、`zip_xml_count`、`zip_xml_checked_at` のような項目を持つ方向が考えられていた。しかし v2 では、ZIP・XML・将来のCSVなど複数のファイル種別を同じ `file_receipts` で扱うため、ZIP専用の項目名をそのまま採用するとCSV対応時に責務が歪む可能性がある。
+
+### 議論
+- `file_receipts` は物理ファイルの正台帳であり、`work` 側コピーは一時処理領域であって正台帳ではない。
+- `file_receipts` には、`02_健診結果（編集）` 配下でシステム投入対象となったファイル情報、処理時の作業パス、現在の処理状態を保持する必要がある。
+- 医療機関からの受領時点では、拡張子・ファイル名・中身の形式に揺れがあり得る。
+- ただし、人が `01_健診結果（元データ）` から `02_健診結果（編集）` へコピー・編集する過程で、システム投入可能な形へ整える運用とする。
+- そのため、v2のシステムは `02_健診結果（編集）` を入力境界とし、受領時点の不揃いは運用側の前処理で吸収する。
+- `file_type` は `02_健診結果（編集）` に配置された時点のファイル種別として判定する。
+- `file_type` と実際の中身が一致しない場合や、`processable_count = 0` となる場合は、システム側のエラーチェック対象とする。
+- `is_zip` は `file_type` で判定できるため、独立カラムとしては不要と整理した。
+- `zip_has_xml` は ZIP 専用の表現だが、本質的には「処理対象データを持つか」という意味である。
+- CSVの場合は、データ行が0件、またはヘッダーしかない場合は処理対象なしとしてエラー扱いにする。
+- CSVにはヘッダーあり・ヘッダーなしが健診機関ごとに存在し得るため、CSV件数の算出方法はテーブル側ではなく、設定またはスクリプト側の責務とする。
+- ZIPの場合はXML件数、XML単体の場合は1件、CSVの場合は設定に従って算出したデータ行数を、共通して `processable_count` に記録する方向とした。
+- `processable_count = 0` は処理対象なしとしてエラー扱いにする。
+- ファイルの中身を確認した日時は、ZIP専用の `zip_xml_checked_at` ではなく、汎用的な `content_checked_at` として保持する方向とした。
+- `stage_status` は廃止ではなく、v2では `file_receipts.status` として再設計し、ファイル単位の総合ステータスを持たせる方向とした。
+- `run_id` は共通ETL仕様に従い、`etl_run_id` や `first_seen_run_id` / `last_seen_run_id` など、`etl_runs` への参照として整理する方向とした。
+
+### 現時点の考え
+`file_receipts` はZIP専用台帳ではなく、ファイル種別に依存しない物理ファイル台帳とする。
+
+ファイルの中身に処理対象が何件あるかは、ファイル種別ごとの専用カラムではなく、共通概念である `processable_count` として保持する。
+
+受領時点のファイル揺れは `01_健診結果（元データ）` から `02_健診結果（編集）` へ移す人手運用で吸収し、システムは `02_健診結果（編集）` を投入境界として `file_type` と `processable_count` を判定する。
+
+### 決定事項
+- `is_zip` は独立カラムとして採用しない。
+- `zip_has_xml` は採用せず、処理対象件数は `processable_count` に一般化する。
+- `zip_xml_count` は `processable_count` に置き換える。
+- `zip_xml_checked_at` は `content_checked_at` に置き換える。
+- `file_type` で ZIP / XML / CSV などのファイル種別を表現する。
+- `file_type` は `02_健診結果（編集）` に配置された時点の投入ファイル種別とする。
+- 受領時点の拡張子・ファイル名・形式の揺れは、`02_健診結果（編集）` へ配置する前の運用で整える。
+- `processable_count` は「処理対象として認識したデータ件数」とする。
+- `processable_count = 0` はエラー扱いとする。
+- `file_type` と中身の不一致、または処理対象件数0件は、システム側のエラーチェック対象とする。
+- ZIPの場合、`processable_count` はXML件数とする。
+- XML単体の場合、`processable_count` は通常1とする。
+- CSVの場合、`processable_count` は設定に従って算出したデータ行数とする。
+- CSVのヘッダー有無など、件数算出方法はテーブルではなく設定・スクリプト側の責務とする。
+- `stage_status` は `file_receipts.status` として再設計し、ファイル単位の総合ステータスを保持する。
+- `run_id` 系は ADR-0023 に従い、`etl_runs` への参照として整理する。
+
+### 保留事項
+- `file_receipts.status` の具体的な値。
+- `etl_run_id` / `first_seen_run_id` / `last_seen_run_id` の正式な持ち方。
+- `content_checked_at` の更新タイミング。
+- `processable_count = 0` の場合に設定する `error_code` / `error_message` の設計。
+- CSV件数算出設定をどこに持つか。
+
+### 根拠
+- ZIP・XML・CSVを同じ `file_receipts` で扱えるようにするため。
+- ZIP専用カラムを採用すると、CSV対応時にカラム責務が歪むため。
+- 物理ファイル台帳として、人が一覧で処理可否・件数・状態を確認できる必要があるため。
+- 受領時点の不揃いをDBで吸収しようとするとテーブル責務が膨らむため、`02_健診結果（編集）` をシステム投入境界として運用とシステムの責務を分けるため。
+- CSVのヘッダー有無などは健診機関ごとに異なるため、テーブルではなく設定・スクリプト側で吸収する方が自然であるため。
+
+### 次回検討
+- `15_medi_to_v2_column_mapping.md` に `medi_shared_files` / `medi_zip_receipts` から `file_receipts` へのカラム対応を反映する。
+- `12_v2_ddl_design_notes.md` の `file_receipts` カラム候補を `file_type` / `processable_count` / `content_checked_at` に寄せる。
+- `file_receipts.status` の具体値を整理する。
+# New Design History Entry
+
+---
+
+## DH-20260629-05 / 2026-06-29 14:56 JST
+
+### テーマ
+業務台帳に総合判定を保持する方針
+
+### 背景
+`xml_ledger` のカラム整理に入る前に、XMLとしてOK/NGか、健診内容チェックとしてOK/NGかをどのテーブルで見えるようにするかを整理した。
+
+正規化だけを考えれば、XMLチェック結果や健診内容チェック結果は `etl_errors` や `exam_check_results` などの詳細テーブルをJOINすれば確認できる。しかし、実運用では人がSQLや一覧画面で状態確認・検索を行うため、詳細根拠を見に行かなくても台帳上で総合判定が確認できる必要がある。
+
+### 議論
+- `xml_ledger` はXML単位の基本情報Ledgerであり、XMLそのものの情報、受診者基本情報、加入者照合結果、処理状態を持つ。
+- XMLとして読めるか、XML構造としてNGかは `xml_ledger` 上で確認できるようにしたい。
+- 健診内容チェックの詳細根拠は `exam_check_results` に保持する。
+- ただし、`xml_ledger` だけを見ても、そのXMLが健診内容チェックとしてOKかNGかの結論は分かるようにしたい。
+- これは、正規化のためではなく、人が運用調査・障害解析・一覧確認をしやすくするためである。
+- `file_receipts.status` と同様に、`xml_ledger` にも総合ステータスやサマリー判定を保持する。
+- 詳細根拠は別テーブルに保持し、台帳側には結論のみを冗長保持する。
+- これにより、通常確認は台帳単体で行い、詳細調査時のみ `exam_check_results` や `etl_errors` を参照する構造とする。
+
+### 現時点の考え
+業務台帳は詳細根拠をすべて保持する場所ではないが、人が最初に確認する入口である。
+
+そのため、`file_receipts` や `xml_ledger` には、詳細根拠ではなく総合判定・現在状態・検索しやすいキーを保持する。
+
+### 決定事項
+- `xml_ledger` にはXMLとしての処理可否を示すステータスを保持する。
+- `xml_ledger` には健診内容チェックの総合判定を保持する。
+- 健診内容チェックの詳細根拠は `exam_check_results` に保持する。
+- XML処理エラーや詳細エラーは `etl_errors` などの詳細テーブルに保持する。
+- 台帳側には詳細根拠ではなく、人が一覧確認・検索するための結論を冗長保持する。
+- 詳細調査時は、`xml_ledger` から `exam_check_results` / `etl_errors` へ辿る。
+
+### 保留事項
+- `xml_ledger` に持つXML処理ステータスの正式カラム名。
+- `xml_ledger` に持つ健診内容チェック総合判定の正式カラム名。
+- `xml_ledger` に保持するエラー件数・警告件数・サマリー文言の有無。
+- `file_receipts.status` と `xml_ledger` のステータス値の関係。
+- `exam_check_results` の総合判定と `xml_ledger` 側の総合判定をどのタイミングで同期するか。
+
+### 根拠
+- 人がSQLや一覧画面で状態確認する際、毎回JOINが必要になると運用負荷が高くなるため。
+- 障害解析時に、まず台帳だけでOK/NGの切り分けができる方が調査しやすいため。
+- 詳細根拠と一覧用結論を分けることで、正規化と運用性のバランスを取るため。
+
+### 次回検討
+- `xml_ledger` のカラム棚卸しで、XML処理ステータス・健診内容チェック総合判定・エラーサマリー系カラムを整理する。
+- `15_medi_to_v2_column_mapping.md` に `medi_xml_ledger` から `xml_ledger` へのカラム対応を記録する。
+- `12_v2_ddl_design_notes.md` の `xml_ledger` カラム候補へ反映する。
