@@ -678,7 +678,6 @@ file_receipts のファイル種別共通化と処理対象件数の保持方針
 - `15_medi_to_v2_column_mapping.md` に `medi_shared_files` / `medi_zip_receipts` から `file_receipts` へのカラム対応を反映する。
 - `12_v2_ddl_design_notes.md` の `file_receipts` カラム候補を `file_type` / `processable_count` / `content_checked_at` に寄せる。
 - `file_receipts.status` の具体値を整理する。
-# New Design History Entry
 
 ---
 
@@ -731,3 +730,160 @@ file_receipts のファイル種別共通化と処理対象件数の保持方針
 - `xml_ledger` のカラム棚卸しで、XML処理ステータス・健診内容チェック総合判定・エラーサマリー系カラムを整理する。
 - `15_medi_to_v2_column_mapping.md` に `medi_xml_ledger` から `xml_ledger` へのカラム対応を記録する。
 - `12_v2_ddl_design_notes.md` の `xml_ledger` カラム候補へ反映する。
+
+---
+
+## DH-20260629-06 / 2026-06-29 15:39 JST
+
+### テーマ
+identity_hash を唯一の加入者照合キーとする方針
+
+### 背景
+`xml_ledger` のカラム棚卸しを進める中で、加入者照合に使用するキーと、照合できなかった場合の扱いを整理した。
+
+### 議論
+- `xml_ledger` は XML から生成した `identity_hash` を保持する。
+- 加入者照合は `identity_hash` を唯一の照合キーとする。
+- `identity_hash` に一致する `subscribers.id` を取得し、その結果を `subscriber_id` として保持する。
+- `hia_subscriber_id` は `subscriber_id` から取得し、検索・運用性向上のための冗長保持とする。
+- 記号・番号・氏名カナなどの個別項目による代替照合は行わない。
+- 必要項目不足などにより `identity_hash` を生成できない場合、または `identity_hash` が一致しない場合は、加入者照合NGとして扱う。
+- 加入者照合NGとなった場合は、XML・加入者情報・正規化ルール等のいずれかを修正する別工程で対応する。
+- 修正の実施主体や実施方法は本設計では定義せず、運用・スクリプト設計側で整理する。
+
+### 現時点の考え
+加入者照合ロジックは単純で再現可能であることを優先する。
+
+照合の入口は `identity_hash` のみとし、照合結果として `subscriber_id` と `hia_subscriber_id` を保持する。
+
+### 決定事項
+- 加入者照合は `identity_hash` を唯一の照合キーとする。
+- `subscriber_id` は `identity_hash` に一致した `subscribers.id` を保持する。
+- `hia_subscriber_id` は `subscriber_id` から取得し、検索用の補助キーとして保持する。
+- 必要項目不足や `identity_hash` 不一致は加入者照合NGとする。
+- 代替照合は行わず、必要なデータ修正は別工程で対応する。
+
+### 保留事項
+- `identity_hash` の生成に必要な必須項目一覧。
+- 加入者照合NG時の `match_status` や `xml_status` の正式値。
+- 修正依頼フロー（医療機関・健保・運用担当）の詳細。
+- スクリプト側での照合処理手順。
+
+### 根拠
+- 加入者照合ロジックを一意かつ再現可能に保つため。
+- 代替照合を許容すると判定基準が複雑化し、運用ごとの差異や誤紐付けの原因となるため。
+- データ品質の問題は照合ロジックではなく、元データまたは正規化ルールの修正で解決する方針とするため。
+
+### 次回検討
+- `identity_hash` の生成必須項目を確定する。
+- `xml_ledger` の照合関連カラムをDDLへ反映する。
+- スクリプト設計へ照合フローを反映する。
+
+---
+
+## DH-20260629-07 / 2026-06-29 16:10 JST
+
+### テーマ
+xml_ledger の責務・照合方針・項目境界の整理
+
+### 背景
+`15_medi_to_v2_column_mapping.md` の棚卸しを進める中で、`xml_ledger` に保持する情報と、スクリプト・チェックテーブルへ委譲する責務を整理した。
+
+### 議論
+- `xml_ledger` は XML単位の業務台帳として、人が最初に確認する情報を保持する。
+- `identity_hash` は identity共通仕様に従って生成し、加入者照合は `identity_hash` を唯一の照合キーとする。
+- `subscriber_id` は `identity_hash` に一致した `subscribers.id` を保持する。
+- `hia_subscriber_id` は `subscriber_id` から取得し、検索・運用性向上のため冗長保持する。
+- `identity_hash` を生成できない場合、または一致しない場合は加入者照合NGとする。
+- 保険者番号、`event_id`、健診医療機関情報など、XML全体に関わる情報は `xml_ledger` に保持する。
+- `exam_item_values` は entry単位の健診項目値のみを保持する。
+- XML全体・受診者・健診イベントに関わる情報と、個別健診項目値の責務を分離する。
+- XML処理結果は `status` と `reason` を基本として管理し、詳細内容は `etl_errors` や `exam_check_results` に保持する方向とした。
+- XML伝送方式に関する判定（Namespace・XSD・ix08等）はスクリプト側の責務とし、必要に応じて理由コードを追加できる設計とする。
+
+### 現時点の考え
+`xml_ledger` は XML全体の状態・検索キー・業務上の結論を保持する台帳とし、詳細判定や処理ロジックは専用テーブルおよびスクリプト側へ分離する。
+
+### 決定事項
+- `xml_ledger` は XML全体・受診者・健診イベントに関わる情報を保持する。
+- `exam_item_values` は entry単位の健診項目値のみを保持する。
+- 加入者照合は `identity_hash` のみを使用する。
+- `subscriber_id` と `hia_subscriber_id` を `xml_ledger` に保持する。
+- XML全体に関わる検索キーは冗長保持を許容する。
+- XML処理結果は `status` と `reason` を基本として管理する。
+- XML伝送方式の詳細判定はスクリプト側の責務とする。
+- `status` は `OK`・`WARNING`・`NG` の3状態で管理する。
+- `reason` は `status` が `WARNING` または `NG` となった理由を保持する。
+
+### 保留事項
+- `reason` の具体的なコード一覧。
+- 必須項目不足時の `reason` 一覧。
+- XML伝送方式の `reason` 一覧。
+- DDLへの正式反映。
+
+### 根拠
+- 人がJOINせずに状態確認・検索できる台帳とするため。
+- XML全体情報と健診項目値の責務を明確に分離するため。
+- 照合ロジックと運用判断を単純かつ再現可能に保つため。
+
+### 次回検討
+- `xml_ledger` のDDLへ反映。
+- `exam_item_values` のカラム棚卸し。
+- `status` / `reason` のコード設計。
+- スクリプト設計への反映。
+
+---
+
+## DH-20260629-08 / 2026-06-29 17:09 JST
+
+### テーマ
+xml_ledger の出力可否と手動承認の分離
+
+### 背景
+`xml_ledger` はXML（受診者1人）単位の台帳であるため、HIAアップロード用に出力できるかどうかもXML単位で判断する必要がある。
+
+当初は `hia_ready_status` のような名称で、HIAアップロード待ち・出力済みを表現する案もあった。しかし、HIA側から返ってきた状態に見える可能性があるため、v2ではXML単位の出力可否を表す名称として `xml_export_status` を検討する。
+
+### 議論
+- `xml_ledger` はXML（受診者1人）単位であるため、ZIP内の一部NG・全件NGといった集計状態は `xml_ledger` ではなく、`file_receipts` や出力集計側で扱う。
+- XML単位では、基本的に「出力対象にできるか / できないか」を管理すればよい。
+- 法定健診・特定健診などのチェックでNGとなっても、医療機関確認により正当な理由が確認できた場合は、HIAアップロード用に出力してよいケースがある。
+  - 例：失明により視力検査結果が存在しない場合など。
+- この場合、`check_status` はシステム判定としてNGのまま保持する。
+- 一方で、業務確認済みのため出力可否はOKへ変更できる必要がある。
+- そのため、制度チェック結果（`check_status` / `check_reason`）と、最終的なXML出力可否（`xml_export_status`）は分離する。
+- 手動で出力OKに変更したことが分かるように、手動承認フラグと理由欄を持つ方向とする。
+- 再生成スクリプトは、この手動承認フラグや `xml_export_status` をターゲットにして、個別XMLを再出力できるようにする。
+
+### 現時点の考え
+`check_status` は制度・内容チェックのシステム判定結果であり、業務判断によって改変しない。
+
+`xml_export_status` は、最終的にHIAアップロード用XMLとして出力してよいかを表す業務上の出力可否とする。
+
+### 決定事項
+- `hia_ready_status` という名称は採用せず、XML単位の出力可否として `xml_export_status` を検討する。
+- `xml_export_status` はXML単位で `OK` / `NG` を基本とする。
+- `check_status` が `NG` でも、医療機関確認等により正当理由が確認できた場合は、手動承認により `xml_export_status = OK` とできる。
+- `check_status` はシステム判定結果として保持し、手動承認によって変更しない。
+- 手動承認を示すフラグを `xml_ledger` に持つ。
+- 手動承認理由を `xml_ledger` に持つ。
+- 再生成・再エクスポート処理は、手動承認済みXMLを対象にできるようにする。
+
+### 保留事項
+- `xml_export_status` の正式名称。
+- 手動承認フラグの正式カラム名。
+- 手動承認理由カラムの正式名称。
+- 承認者・承認日時を `xml_ledger` に持つか、監査テーブルに寄せるか。
+- 再生成スクリプトの対象条件。
+- 出力済み状態を `xml_ledger` に保持するか、出力台帳側に保持するか。
+
+### 根拠
+- 制度チェックNGと業務上の出力可否は別概念であるため。
+- 医療機関確認済みの正当理由がある場合、チェックNGであっても出力対象にする必要があるため。
+- `check_status` を手動でOKに変えると、システム判定の証跡が失われるため。
+- 手動承認フラグと理由を持つことで、なぜNG判定のXMLが出力されたかを後から説明できるため。
+
+### 次回検討
+- `15_medi_to_v2_column_mapping.md` の `xml_ledger` 追加カラム候補へ反映する。
+- `12_v2_ddl_design_notes.md` の `xml_ledger` カラム候補へ反映する。
+- 手動承認後の再生成・再エクスポートスクリプト設計を整理する。
