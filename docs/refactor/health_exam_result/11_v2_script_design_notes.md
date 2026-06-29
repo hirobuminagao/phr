@@ -494,3 +494,33 @@ exam_check_results 登録
   ↓
 xml_ledger / file_receipts へサマリー集約
 ```
+
+
+---
+
+## 10. スクリプト・テーブル責務マトリクス
+
+### 更新責務
+
+| テーブル | 作成 | 更新 | 主な参照 |
+| --- | --- | --- | --- |
+| `health_exam_result.file_receipts` | `01_register_files.py` | `02_import_xml_files.py`<br>`05_check_exam_results.py`<br>`06_export_hia_ready.py(予定)` | 各エントリースクリプト |
+| `health_exam_result.xml_ledger` | `02_import_xml_files.py` | `03_match_subscribers.py`<br>`04_extract_item_values.py`<br>`05_check_exam_results.py`<br>`06_export_hia_ready.py(予定)` | 全処理 |
+| `health_exam_result.item_values` | `04_extract_item_values.py` | 原則なし | `05_check_exam_results.py` |
+| `health_exam_result.exam_check_results` | `05_check_exam_results.py` | 原則なし | HIA出力・集計 |
+| `health_exam_result.process_errors` | `05_check_exam_results.py` | 必要に応じ追記 | 運用・調査 |
+
+### dev_phr 参照責務
+
+| テーブル | 参照スクリプト | 用途 |
+| --- | --- | --- |
+| `subscribers` | `03_match_subscribers.py` | 加入者照合 |
+| `exam_item_master` | `04_extract_item_values.py`<br>`05_check_exam_results.py` | 項目定義 |
+| `exam_item_groups` 系 | `05_check_exam_results.py` | 法定・特定健診判定 |
+
+### 更新責務の原則
+
+- 作成(Create)を担当するスクリプトは原則1つとする。
+- 更新(Update)は必要最小限のスクリプトのみが担当する。
+- `dev_phr` は原則参照専用とし、共通マスタ・加入者情報を提供する。
+- 処理系・台帳系の更新は `health_exam_result` に集約する。

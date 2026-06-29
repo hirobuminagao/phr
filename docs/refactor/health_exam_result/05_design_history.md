@@ -359,3 +359,50 @@ v2初期実装では、処理はXML/受診者単位で一気通貫に進める�
 - `xml_ledger.status` / `process_status` / `business_status` の具体値
 - `exam_check_results` のステータス値定義
 - 03_decisions.md への決定事項反映
+
+---
+
+## DH-20260626-04 / 2026-06-26 18:15 JST
+
+### テーマ
+ETL実行管理・エラー管理テーブルの共通仕様化
+
+### 背景
+`12_v2_ddl_design_notes.md` の骨子では `runs` や `process_errors` が health_exam_result 固有のテーブル候補として記載されていた。しかし、過去の協議では ETL 実行管理・エラー管理は各システムで独自に作るのではなく、共通ルールで扱う方向としていたため、改めて整理した。
+
+### 議論
+- `runs` は取込・チェック処理の実行単位を管理するテーブルとして記載されていたため、実質的には `etl_runs` 相当であると整理した。
+- `process_errors` も処理中に発生したエラーを記録するテーブルであり、実質的には `etl_errors` 相当であると整理した。
+- ETL実行管理・エラー管理は、`health_exam_result` 専用の独自テーブルとして作るのではなく、全DBで共通仕様とする方向で確認した。
+- 共通DBを新たに作成する案も考えられるが、現時点では各業務DBに同じテーブル名・同じテーブル構造・同じ運用方法で持つ方針とする。
+- つまり、`health_exam_result` では `health_exam_result.etl_runs`、`health_exam_result.etl_errors` を持つ。
+- 将来的に `dev_phr` や別DBで ETL 管理が必要になった場合も、同じ名称・同じDDL・同じ運用ルールで持つ。
+- これにより、DBごとの独自 `runs` / `errors` / `job_logs` の乱立を防ぐ。
+
+### 現時点の考え
+ETL実行管理・エラー管理は業務固有の台帳ではなく、全システム共通の運用基盤として扱う。物理的には共通DBへ集約せず、各DBに同名・同構造のテーブルを配置する。
+
+### 決定事項
+- `health_exam_result` 独自の `runs` テーブルは作成しない。
+- `health_exam_result` 独自の `process_errors` テーブル名は採用せず、共通仕様の `etl_errors` に寄せる。
+- ETL実行管理は `etl_runs` とする。
+- ETLエラー管理は `etl_errors` とする。
+- `etl_runs` / `etl_errors` は全DBで同じテーブル名・同じテーブル構造・同じ運用方法に揃える。
+- 現時点では共通DBは作成せず、各DBに共通仕様のテーブルを配置する。
+
+### 保留事項
+- `etl_runs` の正式DDL。
+- `etl_errors` の正式DDL。
+- `etl_run_metrics` を分離するか、`etl_runs` に集約するか。
+- 各スクリプトで `etl_run_id` をどの単位で発行するか。
+- ファイル単位の `file_receipts.id` と ETL実行単位の `etl_runs.id` の関係。
+
+### 根拠
+- dev_phr / medi 関連調査時の共通ETL管理方針
+- v2 DDL設計メモの見直し
+- テーブル名・責務の乱立を避ける設計方針
+
+### 次回検討
+- `12_v2_ddl_design_notes.md` の `runs` / `process_errors` 記載を `etl_runs` / `etl_errors` へ修正する。
+- `03_decisions.md` へ共通ETL管理方針を反映する。
+- 必要であれば ADR として「ETL管理テーブル共通仕様」を作成する。
