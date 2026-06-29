@@ -1,5 +1,3 @@
-
-
 # health_exam_result v2 DDL設計メモ
 
 このドキュメントは、`health_exam_result v2` のDB・テーブル設計を整理するためのメモである。
@@ -153,6 +151,7 @@ file_name
 file_ext
 source_path
 work_path
+relative_path
 output_path
 file_sha256
 file_size
@@ -185,7 +184,7 @@ XML単位の品質・突合・処理状態を管理する中心台帳。
 
 ### 責務
 
-- XML原本の証跡。
+- XML由来の基本情報Ledger（受診者/文書単位）。
 - `event_id` と `subscriber_id` の保持。
 - XML基本情報の保持。
 - 加入者突合結果の保持。
@@ -200,6 +199,7 @@ id
 event_id
 file_receipt_id
 subscriber_id
+hia_subscriber_id
 xml_filename
 xml_path
 xml_sha256
@@ -238,18 +238,21 @@ updated_at
 
 - 現行 `medi_xml_ledger` の `lsio_legal_*` は、v2では命名を再整理する。
 - `xml_sha256` は証跡として保持するが、v2内の主参照は `xml_ledger.id` を基本とする。
+- `hia_subscriber_id` は正ではなく、HIA加入者IDで調査・検索するための運用補助キーとして冗長保持する。
 
 ---
 
-## 4.3 item_values
+## 4.3 exam_item_values
 
 ### 役割
 
-XMLに実際に存在した健診値を保持する。
+健診結果値の共通基盤。初期実装ではXML由来を対象とし、将来的にCSV由来も受け入れる。
 
 ### 責務
 
 - XMLから抽出した健診値の事実データを保持する。
+- 初期実装ではXML由来を対象とする。
+- 将来的にはCSV由来も同じ構造で保持する。
 - 不足項目は保持しない。
 - raw値と正規化値を必要な重複として保持する。
 
@@ -257,9 +260,11 @@ XMLに実際に存在した健診値を保持する。
 
 ```text
 id
-xml_ledger_id
+source_type
+source_id
 event_id
 subscriber_id
+hia_subscriber_id
 namecode
 item_code
 item_name
@@ -287,6 +292,13 @@ updated_at
 
 - `item_values` は「存在した値」だけを持つ。
 - 法定健診・特定健診の不足判定結果は `item_values` に持たない。
+- source_type/source_id により由来Ledgerへ接続する。
+- XML由来では source_id は xml_ledger.id を指す。
+- CSV由来を追加する場合は csv_row_ledger.id を指す。
+- xml_sha256 や row_hash は由来Ledger側で保持する。
+- `event_id`、`subscriber_id`、`hia_subscriber_id` は、正規化のためではなく、SQLによる運用調査・障害解析・検索性向上のために冗長保持する。
+- `hia_subscriber_id` は正ではなく、HIA加入者IDで調査・検索するための運用補助キーとして扱う。
+- 正は `subscriber_id` とし、`hia_subscriber_id` は加入者照合後に検索用キャッシュとして設定する。
 
 ---
 
@@ -439,6 +451,14 @@ v2では、まず `item_values` とルールマスタから直接 `xml_ledger`�
 
 必要になった場合のみ、不足項目明細テーブルを追加する。
 
+### 5.3 csv_row_ledger
+
+初期実装では作成しない。
+
+CSV直取込を行う場合は、CSV1行=1受診者単位の基本情報Ledgerとして追加する。
+
+CSVや紙データは、初期実装では別プロジェクト・別スクリプトでXMLへ変換し、`02_健診結果（編集）` へ投入する運用とする。
+
 ---
 
 ## 6. DDL設計で決めること
@@ -463,8 +483,8 @@ v2では、`dev_phr` の既存マスタ・加入者・event系テーブルを活
 ```text
 file_receipts
 xml_ledger
-item_values
+exam_item_values
 exam_check_results
 ```
 
-`zip_receipts` や法定健診presence/missing中間テーブルは、初期実装では独立テーブル化せず、必要になった段階で追加検討する。
+将来的にはCSV直取込に対応する場合、`csv_row_ledger` を追加し、`file_receipts → xml_ledger / csv_row_ledger → exam_item_values` の菱形構造で基本情報Ledgerと健診値を分離する。
