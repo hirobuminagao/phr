@@ -315,15 +315,17 @@ updated_at
 - 法定健診項目のOK/NGステータス保持。
 - 特定健診項目のOK/NGステータス保持。
 - 法定健診・特定健診の reason を日本語TEXTで保持。
-- `xml_ledger` とJOINしてエクスポート・集計に利用する。
+- 由来Ledger（初期は `xml_ledger`、将来は `csv_row_ledger`）と接続してエクスポート・集計に利用する。
 
 ### 主なカラム候補
 
 ```text
 id
-xml_ledger_id
+source_type
+source_id
 event_id
 subscriber_id
+hia_subscriber_id
 legal_status
 specific_status
 legal_reason
@@ -378,6 +380,10 @@ reason は項目別カラムではなく、法定健診で1カラム、特定健
 
 - 現行の `medi_lsio_identity_presence` や `medi_lsio_missing_items` のような縦持ち中間テーブルは、初期実装では必須としない。
 - 必要であれば、不足項目だけを保持する明細テーブルを後続で追加する。
+- 従来の `xml_ledger_id` の役割は、`source_type` + `source_id` に一般化する。
+- 初期実装では `source_type = XML`、`source_id = xml_ledger.id` として扱う。
+- 将来的にCSV直取込へ対応する場合は、`source_type = CSV`、`source_id = csv_row_ledger.id` として同じ構造を利用する。
+- `event_id`、`subscriber_id`、`hia_subscriber_id` は、SQLによる運用調査・障害解析・検索性向上のために冗長保持する。
 
 ---
 
