@@ -153,6 +153,7 @@ result_root_path
 - source/work/output パス管理。
 - ファイルSHA256管理。
 - 格納フォルダやファイル名から取得できる保険者番号・健診機関番号・健診機関名の保持。
+- 処理対象件数と中身確認日時の保持。
 - 処理結果サマリーの保持。
 
 ### 主なカラム候補
@@ -170,13 +171,18 @@ relative_path
 output_path
 file_sha256
 file_size
+processable_count
 insurer_number
 submitter_facility_code
-medical_institution_code
-medical_institution_name
+facility_code
+facility_name
 storage_folder_type
 status
 summary_message
+etl_run_id
+first_seen_at
+last_seen_at
+content_checked_at
 received_at
 copied_at
 processed_at
@@ -188,6 +194,9 @@ updated_at
 
 - `zip_receipts` は初期実装では独立テーブルにしない。
 - ZIPは `file_type = ZIP` の処理分岐として扱う。
+- `facility_code` / `facility_name` は健診機関コード・名称として保持する。
+- `processable_count` はZIPならXML件数、XML単体なら通常1、CSVなら設定に従って算出したデータ行数を保持する。
+- `content_checked_at` はファイル種別に依存しない中身確認日時として保持する。
 
 ---
 
@@ -397,8 +406,8 @@ check_run_id
 checked_at
 created_at
 updated_at
-<item_code>_status
-<item_code>_reason
+status_<item_code>
+reason_<item_code>
 ```
 
 ### 横持ち項目の生成元
@@ -419,17 +428,17 @@ updated_at
 項目別カラムは、同一性項目コード単位で以下の2カラムを持つ。
 
 ```text
-<item_code>_status
-<item_code>_reason
+status_<item_code>
+reason_<item_code>
 ```
 
 例:
 
 ```text
-9N001_status
-9N001_reason
-9N006_status
-9N006_reason
+status_9N001
+reason_9N001
+status_9N006
+reason_9N006
 ```
 
 ### reason形式
@@ -452,7 +461,7 @@ updated_at
 - 項目別の値あり/なしや値有効/不正は、`present` / `valid` ではなく `status` / `reason` に集約する。
 - 法定健診・特定健診で値の事実を二重管理しない。
 - 法定健診・特定健診で分けるのは総合評価と reason summary のみとする。
-- 項目別 `status` の正式コード一覧と、カラム命名規則はDDL作成前に確定する。
+- 項目別 `status` の正式コード一覧はDDL作成前に確定する。カラム命名規則は `status_<item_code>` / `reason_<item_code>` とする。
 - 判定ルール自体は `exam_check_results` に保持しない。既存 `dev_phr.exam_item_group_*` 系マスタを利用する。
 - 法定健診ルールマスタは現行内容を棚卸しし、`02_exam_check_item_spec_v2_0_0.md` との差分確認を行う。
 - 特定健診ルールマスタは、スクリプト方針が固まった後に `02_exam_check_item_spec_v2_0_0.md` を元に新規作成する。
@@ -592,7 +601,7 @@ CSVや紙データは、初期実装では別プロジェクト・別スクリ�
 9. `exam_check_results` の横持ち72項目の正式カラム名。
 10. `exam_check_results` の項目別 `status` の正式コード一覧。
 11. 法定健診・特定健診 reason summary の区切り文字と出力形式。
-12. `etl_errors` と `etl_runs` を独自に持つか、既存ETL系に寄せるか。
+12. 共通ETL仕様に従い、`etl_runs` / `etl_errors` を利用する。
 13. `dev_phr.exam_item_master` に異常値 min/max を追加するか。
 14. 既存法定健診ルールマスタが `02_exam_check_item_spec_v2_0_0.md` に耐えられるか。
 
