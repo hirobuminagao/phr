@@ -446,7 +446,7 @@ v2 の `exam_check_results` は、制度チェック結果を人が検索・集�
 | medi_xml_ledger | lsio_legal_missing_methods | exam_check_results | legal_reason_summary | 再配置 | 法定健診の不足理由summaryとして保持する。 |
 | medi_xml_ledger | lsio_legal_judged_run_id | exam_check_results | check_run_id | 再配置 | 制度別runカラムは持たず、法定健診・特定健診で共通の `check_run_id` に統一する。 |
 | medi_xml_ledger | lsio_legal_judged_at | exam_check_results | checked_at | 再配置 | 制度別日時カラムは持たず、法定健診・特定健診で共通の `checked_at` に統一する。 |
-| docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md | 同一性項目コード一覧72項目 | exam_check_results | `<item_code>_status` / `<item_code>_reason` | 追加 | 制度チェック対象項目を同一性項目コード単位で横持ちする。 |
+| docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md | 同一性項目コード一覧72項目 | exam_check_results | `status_<item_code>` / `reason_<item_code>` | 追加 | 制度チェック対象項目を同一性項目コード単位で横持ちする。 |
 
 ## v2で新規追加するカラム候補
 
@@ -465,8 +465,8 @@ v2 の `exam_check_results` は、制度チェック結果を人が検索・集�
 | check_run_id | 制度チェックを実行した `etl_runs` を参照する。 |
 | checked_at | 制度チェック実施日時。 |
 | created_at / updated_at | 台帳管理用監査項目。 |
-| `<item_code>_status` | 同一性項目コード単位の項目状態を保持する。例: `9N001_status`。 |
-| `<item_code>_reason` | 同一性項目コード単位の理由を保持する。例: `9N001_reason`。 |
+| `status_<item_code>` | 同一性項目コード単位の項目状態を保持する。例: `status_9N001`。 |
+| `reason_<item_code>` | 同一性項目コード単位の理由を保持する。例: `reason_9N001`。 |
 
 ## 横持ち項目の生成元
 
@@ -481,6 +481,8 @@ v2 の `exam_check_results` は、制度チェック結果を人が検索・集�
 1. 区分番号 昇順
 2. 同一性項目コード 昇順
 
+横持ちカラム名は、項目状態を `status_<item_code>`、理由を `reason_<item_code>` とする。
+
 ## 現時点の設計メモ
 
 - `exam_check_results` は制度チェック結果台帳であり、実値テーブルではない。
@@ -492,7 +494,8 @@ v2 の `exam_check_results` は、制度チェック結果を人が検索・集�
 - 法定健診・特定健診で値の事実を二重管理しない。
 - 法定健診・特定健診で分けるのは総合評価と reason summary のみとする。
 - `reason` は `項目コード:理由|項目コード:理由` のsummary形式を想定する。
-- 項目別 `status` の正式コード一覧と、カラム命名規則はDDL作成前に確定する。
+- 項目別 `status` の正式コード一覧はDDL作成前に確定する。
+- 項目別カラム命名規則は `status_<item_code>` / `reason_<item_code>` とする。
 - `judge_score` / `legal_required_count` / `legal_present_count` は独立カラムとして持たない。
 - `legal_check_run_id` / `legal_checked_at` のような制度別run日時は持たず、共通の `check_run_id` / `checked_at` に統一する。
 - 判定ルール自体は `exam_check_results` に保持しない。既存 `dev_phr.exam_item_group_*` 系マスタを利用する。
