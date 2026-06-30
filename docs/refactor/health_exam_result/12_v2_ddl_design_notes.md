@@ -68,14 +68,29 @@ health_exam_result
 
 ### 扱い
 
-参照。
+参照。一部Migrationで拡張する。
 
 v2初期実装では、設定YAMLから固定 `event_id` を指定して処理を実行する。
+
+2026年度 v2.0.0 では `event_id = 2` を対象イベントとして扱う。
 
 ### 用途
 
 - `event_id` によって、対象年度・健診イベント・保険者を識別する。
-- `xml_ledger.event_id` に保持する。
+- `event.result_root_path` によって、対象イベントの健診結果ルートフォルダを識別する。
+- `file_receipts.event_id`、`xml_file_links.event_id`、`xml_ledger.event_id`、`exam_item_values.event_id`、`exam_check_results.event_id` に冗長保持する。
+
+### 追加カラム候補
+
+```text
+result_root_path
+```
+
+### メモ
+
+- `result_root_path` は医療機関フォルダの親ディレクトリまでを保持する。
+- 医療機関ごとのフォルダ名は `health_exam_result` 側の event対応フォルダエイリアステーブルで管理する。
+- 旧 `work_other.medi_shared_folder_aliases` は event 非対応のため、v2では利用しない。
 
 ---
 
@@ -180,28 +195,28 @@ updated_at
 
 ### 役割
 
-XML単位の品質・突合・処理状態を管理する中心台帳。
+XML内容の品質・突合・処理状態を管理する一意台帳。
 
 ### 責務
 
-- XML由来の基本情報Ledger（受診者/文書単位）。
+- XML内容由来の基本情報Ledger（受診者/文書単位）。
 - `event_id` と `subscriber_id` の保持。
-- XML基本情報の保持。
+- `hia_subscriber_id` の検索用冗長保持。
+- XML基本情報の raw値 / match値の保持。
+- `xml_sha256` によるXML内容の一意管理。
 - 加入者突合結果の保持。
-- item_values抽出状態の保持。
-- 法定健診・特定健診チェックのサマリー保持。
-- HIAアップロード可否の判断材料保持。
+- XMLとしての処理状態と理由の保持。
+- 健診内容チェックの総合判定サマリー保持。
+- XML単位のHIAアップロード用出力可否の保持。
+- チェックNG後に業務確認で出力OKとした手動承認情報の保持。
 
 ### 主なカラム候補
 
 ```text
 id
 event_id
-file_receipt_id
 subscriber_id
 hia_subscriber_id
-xml_filename
-xml_path
 xml_sha256
 document_id
 insurer_number
@@ -217,32 +232,73 @@ insurance_number_match
 birthdate
 gender_code
 identity_hash
+person_id_custom
 subscriber_match_status
-xml_parse_status
-item_extract_status
-legal_required_count
-legal_present_count
-legal_is_complete
-specific_required_count
-specific_present_count
-specific_is_complete
+subscriber_match_method
+subscriber_match_reason
+xml_status
+xml_reason
 check_status
-hia_ready_status
-status
-error_count
+check_reason
+xml_export_status
+manual_export_approved
+manual_export_reason
 created_at
 updated_at
 ```
 
 ### メモ
 
-- 現行 `medi_xml_ledger` の `lsio_legal_*` は、v2では命名を再整理する。
-- `xml_sha256` は証跡として保持するが、v2内の主参照は `xml_ledger.id` を基本とする。
+- `xml_status` はXMLとしての処理状態を保持する。
+- `xml_reason` は固定enumではなく、スクリプト実装・チェック追加に応じて理由コードを追加できる文字列カラムとする。
+- `check_status` / `check_reason` は健診内容チェックの総合判定サマリーとして保持する。
+- `xml_export_status` はHIAアップロード用XMLとして出力してよいかをXML単位で保持する。基本は `OK` / `NG`。
+- `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = OK` とできる。
+- `check_status` はシステム判定結果として保持し、手動承認によって変更しない。
+- `item_extract_status`、`hia_ready_status`、`xsd_valid`、`is_exam_result`、`error_count`、`warning_count` は独立カラムとしては持たない。
+- `xml_sha256` はXML内容の一意キーとして保持する。v2内の主参照は `xml_ledger.id` を基本とする。
+- `file_receipt_id` は `xml_ledger` に持たず、物理ファイルとの関係は `xml_file_links` で管理する。
+- `first_seen_run_id`、`last_seen_run_id`、`first_seen_at`、`last_seen_at` は `xml_ledger` には持たず、物理受領履歴は `file_receipts` と `xml_file_links` 側で管理する。
+- 別ZIP等で同一 `xml_sha256` のXMLを受領した場合は、`xml_ledger` を重複作成せず、`xml_file_links` のみ追加する。
 - `hia_subscriber_id` は正ではなく、HIA加入者IDで調査・検索するための運用補助キーとして冗長保持する。
+- 出力済み状態（`exported_at` / `export_run_id` 等）を `xml_ledger` に持つか、出力台帳側に持つかは、exportスクリプト設計時に決定する。
 
 ---
 
-## 4.3 exam_item_values
+## 4.3 xml_file_links
+
+### 役割
+
+物理ファイル受領台帳 `file_receipts` と、XML内容の一意台帳 `xml_ledger` の対応台帳。
+
+### 責務
+
+- 物理ファイルとXML内容の対応を保持する。
+- ZIP内XMLパスなど、物理ファイル内でのXML位置を保持する。
+- 別ZIP等で同一XMLを受領した場合に、同じ `xml_ledger` へ複数の受領リンクを保持する。
+- `xml_ledger` を物理受領履歴で重複させない。
+
+### 主なカラム候補
+
+```text
+id
+event_id
+file_receipt_id
+xml_ledger_id
+xml_inner_path
+created_at
+```
+
+### メモ
+
+- `file_receipts` は物理ファイルの正台帳、`xml_ledger` はXML内容の正台帳とする。
+- `xml_file_links` は物理ファイルとXML内容の対応台帳とする。
+- 単体XMLの場合、`xml_inner_path` はNULL可とする。
+- 同一 `xml_sha256` のXMLを別ZIP等で受領した場合は、既存 `xml_ledger` を参照する `xml_file_links` を追加する。
+
+---
+
+## 4.4 exam_item_values
 
 ### 役割
 
@@ -250,59 +306,63 @@ updated_at
 
 ### 責務
 
-- XMLから抽出した健診値の事実データを保持する。
-- 初期実装ではXML由来を対象とする。
-- 将来的にはCSV由来も同じ構造で保持する。
-- 不足項目は保持しない。
-- raw値と正規化値を必要な重複として保持する。
+- XML / CSV 由来の健診項目値を共通形式で保持する。
+- 由来Ledgerを `ledger_type` / `ledger_id` で表現する。
+- 検索性向上のため `event_id` / `subscriber_id` / `hia_subscriber_id` を冗長保持する。
+- 実際に存在した健診値のみを保持する。
+- raw値と正規化値を保持する。
+- 正規化状態・正規化理由を保持する。
+- 項目値としての妥当性（範囲外・形式不正等）を保持する。
 
 ### 主なカラム候補
 
 ```text
 id
-source_type
-source_id
 event_id
+ledger_type
+ledger_id
 subscriber_id
 hia_subscriber_id
 namecode
-item_code
-item_name
-identity_item_code
-value_type
-value_raw
-value_text
-value_numeric
-unit_raw
-unit_normalized
-code_value
+occurrence_no
+raw_value
+raw_value_type
+raw_unit
+normalized_value
+normalized_unit
+nullflavor
 code_system
-method_code
-null_flavor
-effective_time
-source_xpath
+code_value
+code_display
+identity_item_code
+jun_no
 normalize_status
-normalize_error
-abnormal_check_status
+normalize_reason
+validation_status
+validation_reason
+extracted_run_id
+extracted_at
+normalized_at
 created_at
 updated_at
 ```
 
 ### メモ
 
-- `item_values` は「存在した値」だけを持つ。
-- 法定健診・特定健診の不足判定結果は `item_values` に持たない。
-- source_type/source_id により由来Ledgerへ接続する。
-- XML由来では source_id は xml_ledger.id を指す。
-- CSV由来を追加する場合は csv_row_ledger.id を指す。
-- xml_sha256 や row_hash は由来Ledger側で保持する。
+- `exam_item_values` はXML専用ではなく、XML / CSV 共通の健診値テーブルとする。
+- `ledger_type` は現時点では `XML` / `CSV` を採用し、それ以外の入力元は現時点では決定しない。
+- `ledger_id` は `ledger_type` と組み合わせて由来Ledgerを表現する。
+- `exam_item_values` は実際に存在した健診値のみを保持する。
+- 制度チェックは、`exam_item_values` に存在する値だけでなく「存在しない項目」も判定材料とするため、`exam_check_results` 側の責務とする。
+- 項目値としての妥当性（範囲外・形式不正等）は `validation_status` / `validation_reason` で保持する。
+- `validation_status` は制度チェックではなく、値そのものの妥当性を表す。
+- CSVからHIAアップロード用XMLを生成する場合も、`exam_item_values` の正規化済み値を利用する。
 - `event_id`、`subscriber_id`、`hia_subscriber_id` は、正規化のためではなく、SQLによる運用調査・障害解析・検索性向上のために冗長保持する。
 - `hia_subscriber_id` は正ではなく、HIA加入者IDで調査・検索するための運用補助キーとして扱う。
-- 正は `subscriber_id` とし、`hia_subscriber_id` は加入者照合後に検索用キャッシュとして設定する。
 
 ---
 
-## 4.4 exam_check_results
+## 4.5 exam_check_results
 
 ### 役割
 
@@ -312,82 +372,94 @@ updated_at
 
 ### 責務
 
-- 法定健診項目のOK/NGステータス保持。
-- 特定健診項目のOK/NGステータス保持。
-- 法定健診・特定健診の reason を日本語TEXTで保持。
-- 由来Ledger（初期は `xml_ledger`、将来は `csv_row_ledger`）と接続してエクスポート・集計に利用する。
+- 1受診者・1Ledger単位の制度チェック結果を保持する。
+- `exam_item_values` に存在する値、および存在しない項目を判定材料として保持する。
+- 制度チェック対象項目を同一性項目コード単位で横持ちする。
+- 各チェック対象項目の状態を `status` / `reason` で保持する。
+- 法定健診・特定健診の総合判定を保持する。
+- 法定健診・特定健診の reason summary を保持する。
+- 検索性向上のため `event_id` / `subscriber_id` / `hia_subscriber_id` を冗長保持する。
 
 ### 主なカラム候補
 
 ```text
 id
-source_type
-source_id
 event_id
+ledger_type
+ledger_id
 subscriber_id
 hia_subscriber_id
 legal_status
+legal_reason_summary
 specific_status
-legal_reason
-specific_reason
-legal_required_count
-legal_present_count
-specific_required_count
-specific_present_count
+specific_reason_summary
+check_run_id
+checked_at
 created_at
 updated_at
+<item_code>_status
+<item_code>_reason
 ```
 
-### 法定健診項目ステータス例
+### 横持ち項目の生成元
+
+横持ち対象項目は、以下の仕様書を正とする。
+
+- `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md`
+
+仕様書には、`付属2_制度整理` シート由来の制度チェック対象72項目を保持している。
+
+並び順は以下とする。
+
+1. 区分番号 昇順
+2. 同一性項目コード 昇順
+
+### 項目別カラム形式
+
+項目別カラムは、同一性項目コード単位で以下の2カラムを持つ。
 
 ```text
-legal_9N001_status
-legal_9N006_status
-legal_9N011_status
-legal_9N016_status
-legal_9A750_status
-legal_9A760_status
-legal_1A010_status
-legal_1A020_status
-legal_2A020_status
-legal_2A030_status
-legal_3B035_status
-legal_3B045_status
-legal_3B090_status
-legal_3B339_status
-legal_3F015_status
-legal_3F070_status
-legal_3F077_status
-legal_3D010_status
-legal_3D046_status
-legal_9A110_status
-legal_9N206_status
-legal_9D100_status
-legal_9E160_status
+<item_code>_status
+<item_code>_reason
 ```
-
-### reason形式
-
-reason は項目別カラムではなく、法定健診で1カラム、特定健診で1カラムとする。
 
 例:
 
 ```text
-胸部X線：項目なし｜聴力：値なし｜視力：値なし
+9N001_status
+9N001_reason
+9N006_status
+9N006_reason
+```
+
+### reason形式
+
+法定健診・特定健診の reason summary は、項目別 `status` / `reason` から集約して保持する。
+
+例:
+
+```text
+9N206:項目なし|9D100:値なし|9E160:値なし
 ```
 
 ### メモ
 
-- 現行の `medi_lsio_identity_presence` や `medi_lsio_missing_items` のような縦持ち中間テーブルは、初期実装では必須としない。
-- 必要であれば、不足項目だけを保持する明細テーブルを後続で追加する。
-- 従来の `xml_ledger_id` の役割は、`source_type` + `source_id` に一般化する。
-- 初期実装では `source_type = XML`、`source_id = xml_ledger.id` として扱う。
-- 将来的にCSV直取込へ対応する場合は、`source_type = CSV`、`source_id = csv_row_ledger.id` として同じ構造を利用する。
-- `event_id`、`subscriber_id`、`hia_subscriber_id` は、SQLによる運用調査・障害解析・検索性向上のために冗長保持する。
+- `exam_check_results` は制度チェック結果台帳であり、実値テーブルではない。
+- 実値は `exam_item_values` に縦持ちで保持する。
+- 制度チェックでは、`exam_item_values` に存在する値だけでなく「存在しない項目」も判定材料とする。
+- 横持ち項目は同一性項目コード単位で作成する。
+- 検査方法、左右、裸眼/矯正などではカラムを分けない。
+- 項目別の値あり/なしや値有効/不正は、`present` / `valid` ではなく `status` / `reason` に集約する。
+- 法定健診・特定健診で値の事実を二重管理しない。
+- 法定健診・特定健診で分けるのは総合評価と reason summary のみとする。
+- 項目別 `status` の正式コード一覧と、カラム命名規則はDDL作成前に確定する。
+- 判定ルール自体は `exam_check_results` に保持しない。既存 `dev_phr.exam_item_group_*` 系マスタを利用する。
+- 法定健診ルールマスタは現行内容を棚卸しし、`02_exam_check_item_spec_v2_0_0.md` との差分確認を行う。
+- 特定健診ルールマスタは、スクリプト方針が固まった後に `02_exam_check_item_spec_v2_0_0.md` を元に新規作成する。
 
 ---
 
-## 4.5 process_errors
+## 4.6 etl_errors
 
 ### 役割
 
@@ -412,7 +484,7 @@ resolved_at
 
 ---
 
-## 4.6 runs
+## 4.7 etl_runs
 
 ### 役割
 
@@ -431,6 +503,46 @@ summary_message
 created_at
 updated_at
 ```
+
+---
+
+## 4.8 medical_folder_aliases
+
+### 役割
+
+イベント単位の医療機関フォルダ名変換台帳。
+
+`event.result_root_path` 配下に存在する実フォルダ名と、システム内部で扱う正規フォルダ名の対応を保持する。
+
+### 責務
+
+- event単位の共有フォルダ名対応を保持する。
+- ネットワーク共有上の実フォルダ名を `src_folder_raw` として保持する。
+- システム内部で利用する正規フォルダ名を `dst_folder_norm` として保持する。
+- フォルダ名変更や仮名称の確定名称化を吸収する。
+- 初期投入では原則 `src_folder_raw = dst_folder_norm` とする。
+
+### 主なカラム候補
+
+```text
+alias_id
+event_id
+src_folder_raw
+dst_folder_norm
+manual_judgement
+note
+is_active
+created_at
+updated_at
+```
+
+### メモ
+
+- 旧 `work_other.medi_shared_folder_aliases` は event 非対応のため、v2では利用しない。
+- v2では `health_exam_result` 側に event対応版として新規作成する。
+- このテーブルは医療機関マスタではなく、イベント単位のフォルダ名変換台帳である。
+- `file_receipts` には、実際に読み込んだ共有フォルダ名を保持する。
+- 初期投入データは `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md` を正とする。
 
 ---
 
@@ -453,7 +565,7 @@ medi_lsio_identity_presence
 medi_lsio_missing_items
 ```
 
-v2では、まず `item_values` とルールマスタから直接 `xml_ledger`・`exam_check_results` へ集約する。
+v2では、まず `exam_item_values` とルールマスタから直接 `xml_ledger`・`exam_check_results` へ集約する。
 
 必要になった場合のみ、不足項目明細テーブルを追加する。
 
@@ -470,13 +582,19 @@ CSVや紙データは、初期実装では別プロジェクト・別スクリ�
 ## 6. DDL設計で決めること
 
 1. 新規DB名を `health_exam_result` とするか。
-2. `file_receipts` の file_role / file_type / storage_folder_type の値定義。
-3. `xml_ledger` のステータス体系。
-4. `item_values` の raw値・正規化値の保持範囲。
-5. `exam_check_results` の横持ちカラム一覧。
-6. 法定健診・特定健診 reason の区切り文字と出力形式。
-7. `process_errors` と `runs` を独自に持つか、既存ETL系に寄せるか。
-8. `dev_phr.exam_item_master` に異常値 min/max を追加するか。
+2. `dev_phr.event` へ `result_root_path` を追加するMigration。
+3. event対応版 `medical_folder_aliases` の正式テーブル名とDDL。
+4. `file_receipts` の file_role / file_type / storage_folder_type の値定義。
+5. `xml_file_links` の一意制約と再取込時のリンク追加ルール。
+6. `xml_ledger` の `xml_status` / `check_status` / `xml_export_status` の値定義。
+7. `exam_item_values` の raw値・正規化値の保持範囲。
+8. `exam_item_values.validation_status` の値定義。
+9. `exam_check_results` の横持ち72項目の正式カラム名。
+10. `exam_check_results` の項目別 `status` の正式コード一覧。
+11. 法定健診・特定健診 reason summary の区切り文字と出力形式。
+12. `etl_errors` と `etl_runs` を独自に持つか、既存ETL系に寄せるか。
+13. `dev_phr.exam_item_master` に異常値 min/max を追加するか。
+14. 既存法定健診ルールマスタが `02_exam_check_item_spec_v2_0_0.md` に耐えられるか。
 
 ---
 
@@ -484,13 +602,17 @@ CSVや紙データは、初期実装では別プロジェクト・別スクリ�
 
 v2では、`dev_phr` の既存マスタ・加入者・event系テーブルを活かしつつ、処理系・台帳系は新規DB `health_exam_result` に分離する方向とする。
 
-初期実装の中心は以下の4テーブルとする。
+初期実装の中心は以下の6テーブルとする。
 
 ```text
 file_receipts
+xml_file_links
 xml_ledger
 exam_item_values
 exam_check_results
+medical_folder_aliases
 ```
 
-将来的にはCSV直取込に対応する場合、`csv_row_ledger` を追加し、`file_receipts → xml_ledger / csv_row_ledger → exam_item_values` の菱形構造で基本情報Ledgerと健診値を分離する。
+XML取込の基本フローは、`file_receipts → xml_file_links → xml_ledger / exam_item_values / exam_check_results` とし、物理受領台帳・XML内容台帳・健診値/チェック結果を分離する。
+
+将来的にはCSV直取込に対応する場合、`csv_row_ledger` を追加し、`file_receipts → xml_file_links / csv_row_ledger → xml_ledger / exam_item_values / exam_check_results` の構造で基本情報Ledgerと健診値を分離する。

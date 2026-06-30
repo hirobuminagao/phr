@@ -1258,3 +1258,96 @@ exam_check_results 更新
 - 現行法定健診マスタの棚卸し。
 - 特定健診ルールマスタ設計。
 - チェックルールDDL作成。
+
+---
+
+## DH-20260630-05 / 2026-06-30 13:35 JST
+
+### テーマ
+XML内容一意台帳と xml_file_links 採用方針
+
+### 背景
+別ZIP等から同一内容のXMLを再受領した場合の扱いを整理した。
+
+当初は `xml_ledger` に `duplicate_of_xml_ledger_id` を持たせ、同一内容XMLでも `xml_ledger` を新規作成して重複関係を表現する案を検討した。
+
+しかし、`xml_ledger` をXML内容の台帳と考える場合、同一 `xml_sha256` のXMLを重複登録する必要はない。そのため、物理ファイル受領とXML内容を分離する設計へ見直した。
+
+### 議論
+- `file_receipts` は物理ファイルの受領台帳とする。
+- `xml_ledger` はXML内容の一意台帳とする。
+- 同一 `xml_sha256` のXMLは `xml_ledger` に重複作成しない。
+- 別ZIP等で同一内容XMLを再受領した場合は、`xml_ledger` を増やさず、物理ファイルとXML内容の対応だけを追加する。
+- 物理ファイルとXML内容の対応は、新規中間テーブル `xml_file_links` で管理する。
+- `xml_ledger` に `file_receipt_id` のリストを持たせる案も検討したが、検索性・外部キー制約・将来拡張を考慮し、中間テーブル方式を採用する。
+- `duplicate_of_xml_ledger_id` は採用しない。
+- ZIP全体の `zip_sha256` が一致する場合は、同一ファイルとしてZIP単位で処理をスキップする。
+- `zip_sha256` が一致せず、XML単位の `xml_sha256` が一致する場合は、`xml_file_links` のみ追加し、item抽出・制度チェックは再実行しない。
+
+### 現時点の考え
+v2では以下の責務分離とする。
+
+```text
+file_receipts
+= 物理ファイル受領台帳
+
+xml_ledger
+= XML内容の一意台帳
+
+xml_file_links
+= 物理ファイルとXML内容の対応台帳
+```
+
+処理フローは以下を基本とする。
+
+```text
+ZIP受領
+  ↓
+zip_sha256確認
+  ├─ 一致あり
+  │    └─ ZIP単位で処理スキップ
+  ↓
+file_receipts 登録
+  ↓
+ZIP展開 / XML検出
+  ↓
+xml_sha256確認
+  ├─ 一致あり
+  │    └─ xml_file_links のみ追加
+  └─ 一致なし
+       ├─ xml_ledger 新規作成
+       ├─ xml_file_links 追加
+       ├─ exam_item_values 登録
+       └─ exam_check_results 更新
+```
+
+### 決定事項
+- `xml_ledger` はXML内容の一意台帳とする。
+- `xml_ledger` は `xml_sha256` を一意性判定の基準とする。
+- 同一 `xml_sha256` のXMLは `xml_ledger` に重複作成しない。
+- `xml_ledger.file_receipt_id` は持たない。
+- `duplicate_of_xml_ledger_id` は採用しない。
+- 物理ファイルとXML内容の対応は `xml_file_links` で管理する。
+- 別ZIP等で同一XMLを再受領した場合は、`xml_file_links` のみ追加する。
+- 同一XML再受領時は、item抽出・制度チェックを再実行しない。
+- ZIP全体の重複は `zip_sha256` で判定し、同一ZIPは処理対象外とする。
+
+### 保留事項
+- `xml_file_links` の正式DDL。
+- `xml_file_links.xml_inner_path` の保持内容。
+- ZIP単位スキップ時に、重複受領を `file_receipts` に残すかどうか。
+- `xml_sha256` のUNIQUE制約を event単位にするか、全体一意にするか。
+- 同一XMLを別eventで受領した場合の扱い。
+- `file_receipts` と `xml_file_links` の件数集計方法。
+
+### 根拠
+- 同一内容XMLを `xml_ledger` に複数行登録すると、健診値・チェック結果も重複しやすくなるため。
+- 物理受領履歴とXML内容台帳は責務が異なるため。
+- 中間テーブルにすることで、1つのXML内容が複数の物理ファイルに含まれる関係を自然に表現できるため。
+- `file_receipt_id` のリストを `xml_ledger` に持たせるより、検索・JOIN・制約・将来拡張に強いため。
+
+### 次回検討
+- `12_v2_ddl_design_notes.md` の `xml_file_links` DDL候補を精査する。
+- `15_medi_to_v2_column_mapping.md` の `xml_file_links` 棚卸し内容を確認する。
+- `01_register_files.py` のZIP/XML重複判定フローへ反映する。
+- ZIP重複時の `file_receipts` 登録有無を決定する。
