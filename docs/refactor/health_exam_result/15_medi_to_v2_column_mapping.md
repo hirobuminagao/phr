@@ -316,3 +316,111 @@ v2 の `exam_item_values` は、入力元に依存しない健診値共通基盤
 - `validation_status` は制度チェックではなく、値そのものの妥当性を表す。
 - 正規化値・正規化状態は `exam_item_values` の責務とする。
 - CSVからHIAアップロード用XMLを生成する場合も、`exam_item_values` の正規化済み値を利用する。
+# 4. exam_check_results
+
+対象旧カラム・旧責務
+
+- `medi_xml_ledger.judge_*`
+- `medi_xml_ledger.lsio_legal_*`
+- 旧スクリプト上の法定健診・特定健診チェック結果
+- `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の制度チェック対象72項目
+
+## 責務整理
+
+v2 の `exam_check_results` は、制度チェック結果を人が検索・集計しやすい形で保持する業務台帳とする。
+
+保持する責務
+
+- 1受診者・1Ledger単位の制度チェック結果を保持する
+- `exam_item_values` に存在する値、および存在しない項目を判定材料として保持する
+- 制度チェック対象項目を同一性項目コード単位で横持ちする
+- 各チェック対象項目の状態を `status` / `reason` で保持する
+- 法定健診・特定健診の総合判定を保持する
+- 法定健診・特定健診の reason summary を保持する
+- 検索性向上のため `event_id` / `subscriber_id` / `hia_subscriber_id` を冗長保持する
+
+保持しない責務
+
+- 実際に存在した健診値そのもの（→ exam_item_values）
+- XML全体の処理状態（→ xml_ledger）
+- XML単位のHIAアップロード用出力可否（→ xml_ledger.xml_export_status）
+- XML解析・ETLエラー詳細（→ etl_errors）
+- 検査方法、左右、裸眼/矯正などの粒度別カラム
+
+## 設計方針
+
+- `exam_item_values` は実値を縦持ちで保持する。
+- `exam_check_results` は制度チェック対象項目を横持ちで保持する。
+- 横持ち対象は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の同一性項目コード一覧を正とする。
+- 横持ち項目は同一性項目コード単位で作成する。
+- 検査方法、左右、裸眼/矯正などではカラムを分けない。
+- 項目ごとに `present` / `valid` を分けず、`status` / `reason` で表現する。
+- `status` は、値あり・算出・代替・不足・不正などの状態を表す。
+- `reason` は、算出元、代替元、不足理由、不正理由などを保持する。
+- 法定健診・特定健診の総合判定は、項目別 `status` / `reason` とは別に保持する。
+- 法定健診・特定健診の reason summary は、項目別 `status` / `reason` から集約して保持する。
+- `exam_check_results` は正規化を優先するテーブルではなく、人がSQLや一覧で確認しやすいことを優先する。
+
+## カラム棚卸し
+
+| 旧テーブル | 旧カラム | v2テーブル | v2カラム | 判定 | 理由・備考 |
+|------------|-----------|------------|-----------|------|------------|
+| medi_xml_ledger | judge_status | exam_check_results / xml_ledger | legal_status / specific_status / check_status | 再配置 | 制度別の総合判定は `exam_check_results` に保持し、XML単位の総合判定サマリーは `xml_ledger.check_status` に保持する。 |
+| medi_xml_ledger | judge_score | exam_check_results | check_score / summary | 再配置 | 旧判定スコア・集計値はチェック結果側へ寄せる。正式採用するかはDDL時に確認する。 |
+| medi_xml_ledger | judge_note | exam_check_results | legal_reason_summary / specific_reason_summary | 再配置 | 人が確認する制度別reason summaryとして保持する。詳細理由は項目別reasonにも分解する。 |
+| medi_xml_ledger | judged_run_id | exam_check_results | check_run_id | 名称変更 | 制度チェックを実行した `etl_runs` を参照する。 |
+| medi_xml_ledger | judged_at | exam_check_results | checked_at | 名称変更 | 制度チェック実施日時として保持する。 |
+| medi_xml_ledger | is_legal_exam | exam_check_results | legal_status | 再配置 | 法定健診としての判定は `legal_status` に統合する。独立フラグは持たない。 |
+| medi_xml_ledger | lsio_legal_is_complete | exam_check_results | legal_status | 再配置 | 法定健診のOK/NG総合判定として保持する。 |
+| medi_xml_ledger | lsio_legal_required_count | exam_check_results | legal_required_count | 再配置 | 法定健診の必要項目数として保持する。横持ち項目から算出可能なため正式採用はDDL時に確認する。 |
+| medi_xml_ledger | lsio_legal_present_count | exam_check_results | legal_present_count | 再配置 | 法定健診の実施項目数として保持する。横持ち項目から算出可能なため正式採用はDDL時に確認する。 |
+| medi_xml_ledger | lsio_legal_missing_methods | exam_check_results | legal_reason_summary | 再配置 | 法定健診の不足理由summaryとして保持する。 |
+| medi_xml_ledger | lsio_legal_judged_run_id | exam_check_results | legal_check_run_id / check_run_id | 再配置 | 法定健診チェックrun。制度別runを分けるか共通 `check_run_id` にするかはDDL時に確認する。 |
+| medi_xml_ledger | lsio_legal_judged_at | exam_check_results | legal_checked_at / checked_at | 再配置 | 法定健診チェック日時。制度別日時を分けるか共通 `checked_at` にするかはDDL時に確認する。 |
+| docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md | 同一性項目コード一覧72項目 | exam_check_results | `<item_code>_status` / `<item_code>_reason` | 追加 | 制度チェック対象項目を同一性項目コード単位で横持ちする。 |
+
+## v2で新規追加するカラム候補
+
+| v2カラム | 理由 |
+|-----------|------|
+| id | `exam_check_results` の主キー。 |
+| event_id | イベント単位で制度チェック結果を検索・集計するため。 |
+| ledger_type | 由来Ledger種別を表す。現時点では `XML` / `CSV` を採用する。 |
+| ledger_id | 由来LedgerのIDを保持する。`ledger_type = XML` の場合は `xml_ledger.id`。 |
+| subscriber_id | `dev_phr.subscribers.id` で制度チェック結果を直接検索するため冗長保持する。 |
+| hia_subscriber_id | HIA加入者IDで制度チェック結果を直接検索するため冗長保持する。 |
+| legal_status | 法定健診としての総合判定を `OK` / `WARNING` / `NG` で保持する。 |
+| legal_reason_summary | 法定健診のNG/WARNING理由を `項目コード:理由|項目コード:理由` のsummary形式で保持する。 |
+| specific_status | 特定健診としての総合判定を `OK` / `WARNING` / `NG` で保持する。 |
+| specific_reason_summary | 特定健診のNG/WARNING理由を `項目コード:理由|項目コード:理由` のsummary形式で保持する。 |
+| check_run_id | 制度チェックを実行した `etl_runs` を参照する。 |
+| checked_at | 制度チェック実施日時。 |
+| created_at / updated_at | 台帳管理用監査項目。 |
+| `<item_code>_status` | 同一性項目コード単位の項目状態を保持する。例: `9N001_status`。 |
+| `<item_code>_reason` | 同一性項目コード単位の理由を保持する。例: `9N001_reason`。 |
+
+## 横持ち項目の生成元
+
+横持ち対象項目は、以下の仕様書を正とする。
+
+- `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md`
+
+仕様書には、`付属2_制度整理` シート由来の制度チェック対象72項目を保持している。
+
+並び順は以下とする。
+
+1. 区分番号 昇順
+2. 同一性項目コード 昇順
+
+## 現時点の設計メモ
+
+- `exam_check_results` は制度チェック結果台帳であり、実値テーブルではない。
+- 実値は `exam_item_values` に縦持ちで保持する。
+- 制度チェックでは、`exam_item_values` に存在する値だけでなく「存在しない項目」も判定材料とする。
+- 横持ち項目は同一性項目コード単位で作成する。
+- 検査方法、左右、裸眼/矯正などではカラムを分けない。
+- 項目別の値あり/なしや値有効/不正は、`present` / `valid` ではなく `status` / `reason` に集約する。
+- 法定健診・特定健診で値の事実を二重管理しない。
+- 法定健診・特定健診で分けるのは総合評価と reason summary のみとする。
+- `reason` は `項目コード:理由|項目コード:理由` のsummary形式を想定する。
+- 項目別 `status` の正式コード一覧と、カラム命名規則はDDL作成前に確定する。
