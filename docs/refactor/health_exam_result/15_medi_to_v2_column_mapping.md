@@ -229,3 +229,90 @@ v2 の `xml_ledger` は XML 単位の業務台帳とする。
 - `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = OK` とできる。
 - 出力済み状態（`exported_at` / `export_run_id` 等）を `xml_ledger` に持つか、出力台帳側に持つかは、exportスクリプト設計時に決定する。
 - `error_count` / `warning_count`、`xsd_valid`、`item_extract_status`、`is_exam_result` は独立カラムとしては持たず、詳細テーブル・実データ有無・`xml_status` / `xml_reason` へ集約する。
+# 3. exam_item_values
+
+対象旧テーブル
+
+- medi_xml_item_values
+- medi_exam_result_item_values
+
+## 責務整理
+
+v2 の `exam_item_values` は、入力元に依存しない健診値共通基盤とする。
+
+保持する責務
+
+- XML / CSV 由来の健診項目値を共通形式で保持する
+- 由来Ledgerを `ledger_type` / `ledger_id` で表現する
+- 検索性向上のため `event_id` / `subscriber_id` / `hia_subscriber_id` を冗長保持する
+- 実際に存在した健診値のみを保持する
+- raw値と正規化値を保持する
+- 正規化状態・正規化理由を保持する
+- 項目値としての妥当性（範囲外・形式不正等）を保持する
+
+保持しない責務
+
+- XML全体・受診者・健診イベントの状態（→ xml_ledger）
+- 法定健診・特定健診など制度チェック結果（→ exam_check_results）
+- 制度チェック上の不足項目そのもの（→ exam_check_results）
+- ETLエラー詳細（→ etl_errors）
+
+## カラム棚卸し
+
+| 旧テーブル | 旧カラム | v2テーブル | v2カラム | 判定 | 理由・備考 |
+|------------|-----------|------------|-----------|------|------------|
+| medi_xml_item_values | xml_item_value_id | exam_item_values | id | 名称変更 | v2の健診項目値主キーとして整理する。 |
+| medi_xml_item_values | xml_sha256 | exam_item_values | ledger_id | 再配置 | v2ではXMLそのものではなく、`ledger_type = XML` / `ledger_id = xml_ledger.id` で由来を表現する。 |
+| medi_xml_item_values | zip_sha256 | file_receipts | file_sha256 | 再配置 | 由来ファイル情報は `file_receipts` 側を正とする。 |
+| medi_xml_item_values | zip_inner_path_sha256 | xml_ledger | xml_inner_path_sha256 | 再配置 | ZIP内XML識別補助は `xml_ledger` 側へ寄せる。 |
+| medi_xml_item_values | zip_inner_path | xml_ledger | xml_inner_path | 再配置 | ZIP内XMLパスは `xml_ledger` 側へ寄せる。 |
+| medi_xml_item_values | namecode | exam_item_values | namecode | 移行 | 健診項目コードとして保持する。 |
+| medi_xml_item_values | occurrence_no | exam_item_values | occurrence_no | 移行 | 同一項目が複数出現した場合の出現順として保持する。 |
+| medi_xml_item_values | value_raw | exam_item_values | raw_value | 名称変更 | 入力元由来の未加工値として保持する。 |
+| medi_xml_item_values | value_type | exam_item_values | raw_value_type | 名称変更 | 入力元由来の値型として保持する。 |
+| medi_xml_item_values | unit | exam_item_values | raw_unit | 名称変更 | 入力元由来の単位として保持する。 |
+| medi_xml_item_values | code_system | exam_item_values | code_system | 移行 | コード値のOID等として保持する。 |
+| medi_xml_item_values | code_value | exam_item_values | code_value | 移行 | コード値として保持する。 |
+| medi_xml_item_values | code_display | exam_item_values | code_display | 移行 | コード表示名として保持する。 |
+| medi_xml_item_values | extracted_run_id | exam_item_values | extracted_run_id | 移行 | 項目抽出を実行した `etl_runs` を参照する。 |
+| medi_xml_item_values | extracted_at | exam_item_values | extracted_at | 移行 | 項目抽出日時として保持する。 |
+| medi_exam_result_item_values | item_value_id | exam_item_values | id | 名称変更 | v2の健診項目値主キーへ統合する。 |
+| medi_exam_result_item_values | ledger_id | exam_item_values | ledger_id | 名称変更 | v2では `ledger_type` と組み合わせて由来Ledgerを表現する。 |
+| medi_exam_result_item_values | namecode | exam_item_values | namecode | 移行 | 健診項目コードとして保持する。 |
+| medi_exam_result_item_values | value_seq | exam_item_values | occurrence_no | 名称変更 | 同一項目内の値順として `occurrence_no` へ寄せる。 |
+| medi_exam_result_item_values | raw_value | exam_item_values | raw_value | 移行 | 入力元由来の未加工値として保持する。 |
+| medi_exam_result_item_values | value | exam_item_values | normalized_value | 名称変更 | 正規化後の値として保持する。 |
+| medi_exam_result_item_values | nullflavor | exam_item_values | nullflavor | 移行 | XML上のnullFlavor、または未実施等の表現として保持する。 |
+| medi_exam_result_item_values | identity_item_code | exam_item_values | identity_item_code | 移行 | 同一性項目コードとして保持する。項目マスタ参照に使う。 |
+| medi_exam_result_item_values | jun_no | exam_item_values | jun_no | 移行 | 制度資料上の順序・項目並びの補助として保持する。 |
+| medi_exam_result_item_values | normalize_status | exam_item_values | normalize_status | 移行 | 正規化結果の状態として保持する。 |
+| medi_exam_result_item_values | normalize_error | exam_item_values | normalize_reason | 名称変更 | 正規化NG/WARNINGの理由コードとして保持する。詳細は `etl_errors`。 |
+| medi_exam_result_item_values | normalized_at | exam_item_values | normalized_at | 移行 | 正規化日時として保持する。 |
+| medi_exam_result_item_values | created_at / updated_at | exam_item_values | created_at / updated_at | 移行 | 台帳管理用監査項目。 |
+
+## v2で新規追加するカラム候補
+
+| v2カラム | 理由 |
+|-----------|------|
+| event_id | イベント単位で健診値を検索・集計するため。 |
+| ledger_type | 由来Ledger種別を表す。現時点では `XML` / `CSV` を採用する。 |
+| ledger_id | 由来LedgerのIDを保持する。`ledger_type = XML` の場合は `xml_ledger.id`。 |
+| subscriber_id | `dev_phr.subscribers.id` で健診値を直接検索するため冗長保持する。 |
+| hia_subscriber_id | HIA加入者IDで健診値を直接検索するため冗長保持する。 |
+| normalized_unit | 正規化後の単位を保持する。 |
+| validation_status | 項目値としての妥当性を `OK` / `WARNING` / `NG` で保持する。 |
+| validation_reason | `validation_status` が `WARNING` / `NG` となった理由コードを保持する。 |
+
+## 現時点の設計メモ
+
+- `exam_item_values` はXML専用ではなく、XML / CSV 共通の健診値テーブルとする。
+- `ledger_type` は現時点では `XML` / `CSV` を採用し、それ以外の入力元は現時点では決定しない。
+- 将来入力元が追加された場合の拡張方法は、その時点で検討する。
+- `ledger_id` は `ledger_type` と組み合わせて由来Ledgerを表現する。
+- `event_id` / `subscriber_id` / `hia_subscriber_id` は検索性向上のため冗長保持する。
+- `exam_item_values` は実際に存在した健診値のみを保持する。
+- 制度チェックは、`exam_item_values` に存在する値だけでなく「存在しない項目」も判定材料とするため、`exam_check_results` 側の責務とする。
+- 項目値としての妥当性（範囲外・形式不正等）は `validation_status` / `validation_reason` で保持する。
+- `validation_status` は制度チェックではなく、値そのものの妥当性を表す。
+- 正規化値・正規化状態は `exam_item_values` の責務とする。
+- CSVからHIAアップロード用XMLを生成する場合も、`exam_item_values` の正規化済み値を利用する。
