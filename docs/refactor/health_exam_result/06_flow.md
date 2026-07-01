@@ -12,8 +12,9 @@
 
 - 設定YAMLの `event_id` から `event.result_root_path` を取得する。
 - `medical_folder_aliases` を参照し、イベント配下の医療機関フォルダを探索する。
-- 受領・編集済みファイルを `file_receipts` に登録する。
-- `zip_sha256` が既存と同一のZIPは処理対象外としてスキップし、ETL実行ログ側でスキップ件数・理由を確認できるようにする。
+- 受領・編集済みファイルを毎回フルスキャンし、未登録ファイルのみ `file_receipts` に登録する。
+- `01_scan_files.py` では `work` へのコピーを行わない。
+- 登録済みファイルは処理対象外としてスキップし、ETL実行ログ側でスキップ件数・理由を確認できるようにする。
 - ZIPまたはXMLファイルからXMLを検出する。
 - XML内容は `xml_sha256` で一意判定し、`xml_ledger` に登録する。
 - 物理ファイルとXML内容の対応を `xml_file_links` に登録する。
@@ -22,7 +23,7 @@
 - XMLに実際に存在した健診値を `exam_item_values` に登録する。
 - 法定健診・特定健診・異常値チェックを行い、`exam_check_results` に登録する。
 - `xml_ledger` と `file_receipts` に処理結果を集約する。
-- `xml_export_status` により、HIAアップロード用XMLとして出力可能かを整理する。
+- `xml_export_status` により、HIAアップロード用XMLの出力状態を整理する。
 
 ---
 
@@ -41,47 +42,52 @@ A2 --> A3[(health_exam_result.medical_folder_aliases 参照)]
 A3 --> B[02_健診結果（編集）\n投入対象ファイル探索]
 
 %% ===== File receipt =====
-B --> C[01_register_files.py\nfile_receipts 登録]
-C --> C1[(health_exam_result.file_receipts)]
+B --> C[01_scan_files.py\nフルスキャン\nworkコピーなし]
 
 %% ===== Duplicate ZIP branch =====
-C1 --> Z{zip_sha256 既存一致?}
-Z -->|Yes| Z1[同一ZIPとして処理スキップ\netl_runs / etl_errors で記録]
-Z1 --> U
-Z -->|No / ZIP以外| D{file_type}
+C --> Z{登録済みファイル?}
+Z -->|Yes| Z1[処理スキップ\netl_runs / etl_errors で記録]
+Z1 --> END
+Z -->|No| C1[file_receipts 登録\netl_run_id 保持]
+C1 --> C2[(health_exam_result.file_receipts)]
+C2 --> D[02_import_xml.py\n処理直前にworkへ一時コピー]
 
 %% ===== File type branch =====
-D -->|ZIP| E[ZIP展開\nXML検出]
-D -->|XML| F[XML検出]
-D -->|CSV| G[CSV取込\n将来対応]
+D --> D1{file_type}
+D1 -->|ZIP| E[ZIP展開\nXML検出]
+D1 -->|XML| F[XML検出]
+D1 -->|CSV| G[CSV取込\n将来対応]
 G --> G1[初期実装では対象外]
+G1 --> WDEL
 
 %% ===== XML sha branch =====
 E --> X[xml_sha256 計算]
 F --> X
 X --> X1{xml_sha256 既存一致?}
 
-X1 -->|Yes| X2[xml_file_links 追加のみ\nxml_ledger / item抽出 / チェックは再実行しない]
+X1 -->|Yes| X2[xml_file_links 追加のみ\nxml_ledger / exam_item_values は重複作成しない]
 X2 --> X3[(health_exam_result.xml_file_links)]
+X2 --> WDEL[work削除\n--keep-work時のみ保持]
 
-X1 -->|No| H[02_import_xml_files.py\nxml_ledger 登録]
+X1 -->|No| H[02_import_xml.py\nxml_ledger 登録]
 H --> H1[(health_exam_result.xml_ledger)]
 H --> X4[xml_file_links 追加]
 X4 --> X3
 
 %% ===== XML per person =====
 H1 --> I[XML基本情報抽出\n保険者番号・記号・番号・氏名カナ・生年月日・性別・健診日]
-I --> J[04_match_subscribers.py\n加入者照合]
+I --> J[02_import_xml.py\n加入者照合]
 J --> J1[(dev_phr.subscribers 参照)]
 J --> K[xml_ledger 更新\nsubscriber_id / identity_hash / match_status]
 
 %% ===== Item extraction =====
-K --> L[03_extract_item_values.py\n健診項目抽出]
+K --> L[02_import_xml.py\n健診項目抽出]
 L --> L1[(dev_phr.exam_item_master 参照)]
 L --> M[(health_exam_result.exam_item_values)]
+M --> M1[work削除\n--keep-work時のみ保持]
 
 %% ===== Checks =====
-M --> N[05_check_exam_results.py\n項目単位チェック]
+M1 --> N[03_check_exam_results.py\nDB上の値で項目単位チェック\nXML再読込なし]
 N --> N1[(dev_phr.exam_item_group_* 系 参照)]
 N --> O[法定健診チェック]
 N --> P[特定健診チェック]
@@ -92,17 +98,15 @@ P --> R
 Q --> R
 
 R --> S[(health_exam_result.exam_check_results)]
-R --> T[xml_ledger 更新\ncheck_status / xml_export_status / summary]
-T --> H1
+R --> T[xml_ledger 更新\ncheck_status / xml_export_status READY等 / summary]
+T --> U
 
 %% ===== File summary =====
-X3 --> U[全XML処理完了後\nfile_receipts サマリー更新]
-H1 --> U
-U --> C1
+WDEL --> U[全XML処理完了後\nfile_receipts サマリー更新]
 
 %% ===== Result =====
-U --> V{HIAアップロード用XMLとして出力可能?}
-V -->|Yes| W[XML出力待ち]
+U --> V{xml_export_status = READY?}
+V -->|Yes| W[04_export_hia_xml.py\nHIAアップロード用XML生成]
 V -->|No| Y[エラー / 確認対象]
 
 W --> END([終了])
@@ -115,15 +119,16 @@ Y --> END
 
 | 処理 | 主担当スクリプト | 主な更新テーブル | 主な参照テーブル |
 | --- | --- | --- | --- |
-| イベント・医療機関フォルダ探索 | `01_register_files.py` | なし | `dev_phr.event`, `health_exam_result.medical_folder_aliases` |
-| ファイル検出・登録 | `01_register_files.py` | `health_exam_result.file_receipts`, `etl_runs` / `etl_errors` | なし |
-| ZIP重複判定 | `01_register_files.py` | `etl_runs` / `etl_errors` | `health_exam_result.file_receipts` |
-| ZIP展開・XML検出 | `02_import_xml_files.py` | `health_exam_result.xml_file_links`, `health_exam_result.file_receipts` | `health_exam_result.xml_ledger` |
-| XML内容台帳登録 | `02_import_xml_files.py` | `health_exam_result.xml_ledger`, `health_exam_result.xml_file_links` | `health_exam_result.file_receipts` |
-| 健診項目抽出 | `03_extract_item_values.py` | `health_exam_result.exam_item_values`, `health_exam_result.xml_ledger` | `dev_phr.exam_item_master` |
-| 加入者照合 | `04_match_subscribers.py` | `health_exam_result.xml_ledger` | `dev_phr.subscribers` |
-| 法定・特定・異常値チェック | `05_check_exam_results.py` | `health_exam_result.exam_check_results`, `health_exam_result.xml_ledger` | `dev_phr.exam_item_master`, `dev_phr.exam_item_group_*` 系 |
-| XML出力可否整理 | `05_check_exam_results.py` または後続スクリプト | `health_exam_result.xml_ledger`, `health_exam_result.file_receipts` | `health_exam_result.exam_check_results` |
+| イベント・医療機関フォルダ探索 | `01_scan_files.py` | なし | `dev_phr.event`, `health_exam_result.medical_folder_aliases` |
+| ファイル検出・登録 | `01_scan_files.py` | `health_exam_result.file_receipts`, `etl_runs` / `etl_errors` | `health_exam_result.file_receipts` |
+| work一時コピー | `02_import_xml.py` | なし | `health_exam_result.file_receipts` |
+| ZIP展開・XML検出 | `02_import_xml.py` | `health_exam_result.file_receipts` | `health_exam_result.file_receipts` |
+| XML内容台帳登録 | `02_import_xml.py` | `health_exam_result.xml_ledger`, `health_exam_result.xml_file_links` | `health_exam_result.file_receipts`, `health_exam_result.xml_ledger` |
+| XML基本情報抽出・加入者照合 | `02_import_xml.py` | `health_exam_result.xml_ledger` | `dev_phr.subscribers` |
+| 健診項目抽出 | `02_import_xml.py` | `health_exam_result.exam_item_values`, `health_exam_result.xml_ledger` | `dev_phr.exam_item_master` |
+| 法定・特定・異常値チェック | `03_check_exam_results.py` | `health_exam_result.exam_check_results`, `health_exam_result.xml_ledger` | `health_exam_result.exam_item_values`, `dev_phr.exam_item_group_*` 系 |
+| XML出力状態整理 | `03_check_exam_results.py` | `health_exam_result.xml_ledger` | `health_exam_result.exam_check_results` |
+| HIAアップロード用XML生成 | `04_export_hia_xml.py` | 出力ファイル、`health_exam_result.xml_ledger` | `health_exam_result.xml_ledger`, `health_exam_result.exam_item_values`, `health_exam_result.exam_check_results` |
 
 ---
 
@@ -146,10 +151,16 @@ Y --> END
 
 `file_receipts` は物理ファイル受領台帳、`xml_ledger` はXML内容の一意台帳、`xml_file_links` は物理ファイルとXML内容の対応台帳とする。
 
-同一 `zip_sha256` のZIPは処理対象外としてスキップする。同一ZIPは、共有フォルダ上で `02_健診結果（編集）` へコピーする段階でも上書き確認が発生するため、初期実装では処理が必要かどうかを重視し、ETL実行ログ側でスキップしたことが確認できればよい。
+登録済みファイルは処理対象外としてスキップする。同一ZIPは、共有フォルダ上で `02_健診結果（編集）` へコピーする段階でも上書き確認が発生するため、初期実装では処理が必要かどうかを重視し、ETL実行ログ側でスキップしたことが確認できればよい。
 
 同一 `xml_sha256` のXMLを別ZIP等で再受領した場合、`xml_ledger` は新規作成せず、`xml_file_links` のみ追加する。
 
 ファイル単位のサマリーは、個別XML処理完了後に `file_receipts` へ集約する。
+
+`work` 領域は恒久保存領域ではなく、`02_import_xml.py` が処理直前に一時コピー・展開するためだけに使う。通常は処理完了後に削除し、デバッグ時のみ `--keep-work` のような明示オプションで保持する。
+
+`04_export_hia_xml.py` は、医療機関フォルダ配下の `03_健診結果（アップロード）` にRun単位ディレクトリを作成し、`<event.result_root_path>/<医療機関フォルダ>/03_健診結果（アップロード）/yyyymmdd_hhmmss_<run_id>/<xxx.zip>` へ出力する。既存出力ファイルは上書きせず、出力済みファイルの削除・整理は運用側の責務とする。
+
+`file_receipts` は物理ファイル単位、`xml_ledger` はXML内容単位の機械的状態を管理する。人＋イベント単位の最終完了状態は将来の人＋イベント台帳で扱う前提とし、機械的な処理状態と人間の業務確認状態は混在させない。
 
 `zip_receipts` は独立テーブルとしては作成せず、ZIPは `file_receipts.file_type` による処理分岐として扱う。

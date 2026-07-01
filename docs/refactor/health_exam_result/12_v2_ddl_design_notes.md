@@ -116,7 +116,7 @@ result_root_path
 ### 用途
 
 - `namecode` から項目名・値型・単位・代表項目コードを解決する。
-- `item_values` 登録時の項目辞書として利用する。
+- `exam_item_values` 登録時の項目辞書として利用する。
 - 異常値チェックの min/max を追加する候補。
 
 ---
@@ -125,15 +125,46 @@ result_root_path
 
 ### 扱い
 
-参照。
+参照。一部Migrationで追加・差分更新・拡張する。
+
+旧法定健診チェックで利用していた `LSIO_Legal_Item` は、完成済みの制度チェック機能ではなく、実データから法定健診項目の存在を逆引き確認するための簡易presenceチェック・エビデンス用途として扱う。
+
+v2では、旧マスタをそのまま正とせず、既存構造を参考にしながら制度チェック機能として必要なカラム・役割を再設計する。
 
 ### 用途
 
-- 法定健診・特定健診などの項目グループ定義。
+- 法定健診・特定健診などの制度チェックルールマスタとして利用する。
 - 現行では `LSIO_Legal_Item` が法定健診項目グループとして使われている。
-- `exam_item_group_identity_members` は代表項目・必須フラグ・presence判定ルールを持つ。
+- 法定健診ルールは、既存 `LSIO_Legal_Item` を `02_exam_check_item_spec_v2_0_0.md` と突き合わせて差分確認し、必要な差分のみMigrationで追加・修正する。
+- 特定健診ルールは、法定健診側の仕組みを参考に新規groupとして追加する。
+- `exam_item_group_identity_members` は、同一性項目コード単位の必須区分・presence判定ルール・算出/代替/条件付き必須の表現を担う候補とする。
 - `exam_item_group_members` は nameCode ベースのグループ所属を持つ。
 - `exam_item_group_method_members` は methodCode ベースの presence 判定補助を持つ。
+- `exam_check_results` の `status_<item_code>` / `reason_<item_code>` は、`exam_item_values` と `dev_phr.exam_item_group_*` 系マスタから生成する。
+
+### v2拡張候補
+
+既存カラムで表現しきれない場合、`exam_item_group_identity_members` を中心に以下のような拡張を検討する。
+
+```text
+required_type
+presence_rule_type
+status_policy
+missing_status
+reason_code
+allow_calculated
+allow_alternative
+calculation_rule_code
+alternative_group_code
+```
+
+### メモ
+
+- 旧法定チェックは主に「対象namecode行が存在するか」を見ており、値の意味・nullFlavor・代替・算出・条件付き必須までは十分に扱っていない。
+- 旧 `ANY_NONEMPTY` は、実装上は「非空値」ではなく「行が存在するか」に近い可能性があるため、v2で再定義する。
+- 法定健診チェックは、健診機関確認・再提出フローに耐える制度チェック機能として設計する。
+- 特定健診チェックは、同じ仕組みに載せるが、運用上は warning / 参考判定を基本とする。
+- v2では `dev_phr.exam_item_group_*` 系マスタをMigration対象とし、必要な差分のみ追加・修正する。
 
 ---
 
@@ -150,11 +181,12 @@ result_root_path
 ### 責務
 
 - ファイル種別管理。
-- source/work/output パス管理。
+- source/output パス管理。
 - ファイルSHA256管理。
 - 格納フォルダやファイル名から取得できる保険者番号・健診機関番号・健診機関名の保持。
 - 処理対象件数と中身確認日時の保持。
 - 処理結果サマリーの保持。
+- 物理ファイル単位の機械的な処理状態の保持。
 
 ### 主なカラム候補
 
@@ -166,7 +198,6 @@ file_type
 file_name
 file_ext
 source_path
-work_path
 relative_path
 output_path
 file_sha256
@@ -184,7 +215,6 @@ first_seen_at
 last_seen_at
 content_checked_at
 received_at
-copied_at
 processed_at
 created_at
 updated_at
@@ -197,6 +227,9 @@ updated_at
 - `facility_code` / `facility_name` は健診機関コード・名称として保持する。
 - `processable_count` はZIPならXML件数、XML単体なら通常1、CSVなら設定に従って算出したデータ行数を保持する。
 - `content_checked_at` はファイル種別に依存しない中身確認日時として保持する。
+- `work` は `02_import_xml.py` が処理中だけ利用する一時領域であり、`file_receipts` では恒久的な `work_path` を保持しない。
+- `file_receipts` は人＋イベント単位の最終完了状態を管理しない。
+- 人間の業務確認状態を持つ場合は、機械的な `status` と混ぜず、将来の `operation_status` として分離する。
 
 ---
 
@@ -216,7 +249,7 @@ XML内容の品質・突合・処理状態を管理する一意台帳。
 - 加入者突合結果の保持。
 - XMLとしての処理状態と理由の保持。
 - 健診内容チェックの総合判定サマリー保持。
-- XML単位のHIAアップロード用出力可否の保持。
+- XML単位のHIA出力状態の保持。
 - チェックNG後に業務確認で出力OKとした手動承認情報の保持。
 
 ### 主なカラム候補
@@ -258,19 +291,24 @@ updated_at
 
 ### メモ
 
-- `xml_status` はXMLとしての処理状態を保持する。
+- `xml_status` は `02_import_xml.py` のXML取込状態を保持する。値は `PENDING` / `IMPORTED` / `ERROR` / `SKIPPED` とする。
 - `xml_reason` は固定enumではなく、スクリプト実装・チェック追加に応じて理由コードを追加できる文字列カラムとする。
-- `check_status` / `check_reason` は健診内容チェックの総合判定サマリーとして保持する。
-- `xml_export_status` はHIAアップロード用XMLとして出力してよいかをXML単位で保持する。基本は `OK` / `NG`。
-- `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = OK` とできる。
+- `check_status` は `03_check_exam_results.py` の制度チェック状態を保持する。値は `PENDING` / `OK` / `WARNING` / `NG` とする。
+- `check_reason` は制度チェック状態の理由コードを保持する。
+- `xml_export_status` は `04_export_hia_xml.py` のHIA出力状態をXML単位で保持する。値は `PENDING` / `READY` / `EXPORTED` / `ERROR` / `SKIPPED` とする。
+- `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = READY` とできる。
 - `check_status` はシステム判定結果として保持し、手動承認によって変更しない。
-- `item_extract_status`、`hia_ready_status`、`xsd_valid`、`is_exam_result`、`error_count`、`warning_count` は独立カラムとしては持たない。
+- `item_extract_status`、旧HIA ready系ステータス、`xsd_valid`、`is_exam_result`、`error_count`、`warning_count` は独立カラムとしては持たない。
 - `xml_sha256` はXML内容の一意キーとして保持する。v2内の主参照は `xml_ledger.id` を基本とする。
 - `file_receipt_id` は `xml_ledger` に持たず、物理ファイルとの関係は `xml_file_links` で管理する。
 - `first_seen_run_id`、`last_seen_run_id`、`first_seen_at`、`last_seen_at` は `xml_ledger` には持たず、物理受領履歴は `file_receipts` と `xml_file_links` 側で管理する。
 - 別ZIP等で同一 `xml_sha256` のXMLを受領した場合は、`xml_ledger` を重複作成せず、`xml_file_links` のみ追加する。
 - `hia_subscriber_id` は正ではなく、HIA加入者IDで調査・検索するための運用補助キーとして冗長保持する。
-- 出力済み状態（`exported_at` / `export_run_id` 等）を `xml_ledger` に持つか、出力台帳側に持つかは、exportスクリプト設計時に決定する。
+- v2初期では `xml_export_status` を `xml_ledger` に保持し、XML単位の最新出力状態を管理する。
+- 出力履歴はRun単位の出力フォルダを証跡とする。
+- 将来、出力履歴の検索・監査・再出力履歴管理が必要になった場合のみ `xml_export_logs` 等の出力台帳を追加する。
+- `xml_ledger` は人＋イベント単位の最終完了状態を管理しない。
+- 人間の業務確認状態を持つ場合は、機械的な `xml_status` / `check_status` / `xml_export_status` と混ぜず、将来の `operation_status` として分離する。
 
 ---
 
@@ -302,7 +340,8 @@ created_at
 
 - `file_receipts` は物理ファイルの正台帳、`xml_ledger` はXML内容の正台帳とする。
 - `xml_file_links` は物理ファイルとXML内容の対応台帳とする。
-- 単体XMLの場合、`xml_inner_path` はNULL可とする。
+- ZIP内XMLの場合、`xml_inner_path` はZIP内相対パスを保持する。
+- 単体XMLの場合、`xml_inner_path` は `NULL` とする。
 - 同一 `xml_sha256` のXMLを別ZIP等で受領した場合は、既存 `xml_ledger` を参照する `xml_file_links` を追加する。
 
 ---
@@ -555,6 +594,29 @@ updated_at
 
 ---
 
+## 4.9 HIA出力状態・出力先
+
+### 扱い
+
+v2初期では、XML単位の最新出力状態を `xml_ledger.xml_export_status` に保持する。
+
+`04_export_hia_xml.py` は、医療機関フォルダ配下の `03_健診結果（アップロード）` にRun単位ディレクトリを作成して出力する。
+
+出力先形式:
+
+```text
+<event.result_root_path>/<医療機関フォルダ>/03_健診結果（アップロード）/yyyymmdd_hhmmss_<run_id>/<xxx.zip>
+```
+
+### メモ
+
+- 既存出力ファイルは上書きしない。
+- 出力済みファイルの削除・整理は運用側の責務とする。
+- 出力履歴はRun単位の出力フォルダを証跡とする。
+- 将来、出力履歴の検索・監査・再出力履歴管理が必要になった場合のみ `xml_export_logs` 等の出力台帳を追加する。
+
+---
+
 ## 5. 初期実装で作らない候補
 
 ### 5.1 zip_receipts
@@ -588,6 +650,20 @@ CSVや紙データは、初期実装では別プロジェクト・別スクリ�
 
 ---
 
+### 5.4 人＋イベント単位の状態管理台帳
+
+最終的には、人＋イベント単位の状態管理台帳を追加する方向とする。
+
+v2初期で本格実装するかは別途判断する。
+
+この台帳では、その人の健診イベントが最終的にOKか、確認中か、再提出依頼中か、完了かを管理する。
+
+`file_receipts` は物理ファイル単位、`xml_ledger` はXML内容単位の機械的状態を管理し、人＋イベント単位の最終完了状態は持たない。
+
+人間の業務確認状態は、将来的には `operation_status` として機械的な `xml_status` / `check_status` / `xml_export_status` から分離する。
+
+---
+
 ## 6. DDL設計で決めること
 
 1. 新規DB名を `health_exam_result` とするか。
@@ -595,15 +671,24 @@ CSVや紙データは、初期実装では別プロジェクト・別スクリ�
 3. event対応版 `medical_folder_aliases` の正式テーブル名とDDL。
 4. `file_receipts` の file_role / file_type / storage_folder_type の値定義。
 5. `xml_file_links` の一意制約と再取込時のリンク追加ルール。
-6. `xml_ledger` の `xml_status` / `check_status` / `xml_export_status` の値定義。
+6. `xml_status` / `check_status` / `xml_export_status` のreason code詳細。
 7. `exam_item_values` の raw値・正規化値の保持範囲。
 8. `exam_item_values.validation_status` の値定義。
-9. `exam_check_results` の横持ち72項目の正式カラム名。
+9. `exam_check_results` の横持ち対象は `02_exam_check_item_spec_v2_0_0.md` の72項目を正とする。
 10. `exam_check_results` の項目別 `status` の正式コード一覧。
 11. 法定健診・特定健診 reason summary の区切り文字と出力形式。
 12. 共通ETL仕様に従い、`etl_runs` / `etl_errors` を利用する。
 13. `dev_phr.exam_item_master` に異常値 min/max を追加するか。
-14. 既存法定健診ルールマスタが `02_exam_check_item_spec_v2_0_0.md` に耐えられるか。
+14. `dev_phr.exam_item_group_*` 系マスタのMigration対象と拡張方針。
+15. 既存 `LSIO_Legal_Item` と `02_exam_check_item_spec_v2_0_0.md` の法定項目差分をどう反映するか。
+16. `exam_item_group_identity_members` に追加すべき v2制度チェック用カラム。
+17. `ANY_NONEMPTY` をv2でどう定義し直すか。
+18. 特定健診用 group_code と初期登録データ。
+19. 人＋イベント台帳の正式名称。
+20. v2初期スコープに人＋イベント台帳を含めるか。
+21. 人＋イベント台帳に保持する `operation_status` の正式値。
+22. 再提出XMLをどの旧XMLの解決として扱うかの紐付け方法。
+23. HIA出力履歴台帳を将来追加するか。
 
 ---
 
@@ -622,6 +707,8 @@ exam_check_results
 medical_folder_aliases
 ```
 
-XML取込の基本フローは、`file_receipts → xml_file_links → xml_ledger / exam_item_values / exam_check_results` とし、物理受領台帳・XML内容台帳・健診値/チェック結果を分離する。
+XML取込の基本フローは、`file_receipts → xml_file_links → xml_ledger → exam_item_values → exam_check_results` とし、物理受領台帳・XML内容台帳・健診値/チェック結果を分離する。
 
 将来的にはCSV直取込に対応する場合、`csv_row_ledger` を追加し、`file_receipts → xml_file_links / csv_row_ledger → xml_ledger / exam_item_values / exam_check_results` の構造で基本情報Ledgerと健診値を分離する。
+
+将来的には人＋イベント単位の状態管理台帳を追加する方向とし、`file_receipts` / `xml_ledger` には人単位の最終完了状態を背負わせない。

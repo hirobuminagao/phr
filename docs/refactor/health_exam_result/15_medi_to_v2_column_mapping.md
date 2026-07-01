@@ -102,7 +102,7 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 - `xml_sha256` によるXML内容の一意管理
 - XML処理の総合判定（`xml_status` / `xml_reason`）
 - 健診内容チェックの総合判定（`check_status` / `check_reason`）
-- XML単位の出力可否（`xml_export_status`）
+- XML単位のHIA出力状態（`xml_export_status`）
 - チェックNG後に業務確認で出力OKとした手動承認情報
 
 保持しない責務
@@ -122,7 +122,7 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 | medi_xml_receipts | xml_receipt_id | xml_ledger | id | 名称変更 | v2では XML内容の一意台帳の主キーとして整理する。 |
 | medi_xml_receipts | xml_sha256 | xml_ledger | xml_sha256 | 移行 | XML原本識別子として保持する。 |
 | medi_xml_receipts | document_id | xml_ledger | document_id | 移行 | XML追跡用として保持する。 |
-| medi_xml_receipts | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスは物理ファイル内の位置情報として `xml_file_links` に保持する。単体XMLではNULL可。 |
+| medi_xml_receipts | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスは物理ファイル内の位置情報として `xml_file_links` にZIP内相対パスを保持する。単体XMLではNULL。 |
 | medi_xml_receipts | file_size | xml_ledger | xml_file_size | 名称変更 | XML単位のファイルサイズとして保持する。 |
 | medi_xml_receipts | file_mtime | xml_ledger | xml_file_mtime | 名称変更 | XML単位のmtimeとして保持する。 |
 | medi_xml_receipts | facility_code | xml_ledger | facility_code | 移行 | 医療機関コード。 |
@@ -131,8 +131,8 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 | medi_xml_receipts | patient_name_kana | xml_ledger | name_kana_raw | 名称変更 | XML由来の氏名カナ原本値として保持する。 |
 | medi_xml_receipts | birthdate | xml_ledger | birthdate | 移行 | XML由来の生年月日として保持する。 |
 | medi_xml_receipts | exam_date | xml_ledger | exam_date | 名称変更 | 健診実施日として保持する。 |
-| medi_xml_receipts | status | xml_ledger | xml_status | 名称変更 | XML処理の総合判定として `OK` / `WARNING` / `NG` で保持する。 |
-| medi_xml_receipts | error_code | xml_ledger | xml_reason | 名称変更 | XML処理が `WARNING` / `NG` となった理由コードとして保持する。 |
+| medi_xml_receipts | status | xml_ledger | xml_status | 名称変更 | `02_import_xml.py` のXML取込状態として `PENDING` / `IMPORTED` / `ERROR` / `SKIPPED` で保持する。 |
+| medi_xml_receipts | error_code | xml_ledger | xml_reason | 名称変更 | XML取込状態が `ERROR` / `SKIPPED` となった理由コードとして保持する。 |
 | medi_xml_receipts | error_message | etl_errors | error_message | 再配置 | 詳細メッセージは詳細エラー台帳へ分離する。台帳側にはreasonのみ保持する。 |
 | medi_xml_receipts | items_extract_status | exam_item_values / etl_runs / etl_errors | 廃止 | 廃止 | item抽出の詳細状態は `exam_item_values` の有無、`xml_status` / `xml_reason`、および `etl_runs` / `etl_errors` で確認する。 |
 | medi_xml_receipts | extracted_run_id | etl_runs / etl_errors | run_id | 再配置 | XML基本情報抽出runは `xml_ledger` には持たず、実行単位は `etl_runs`、XML別の異常・詳細は `etl_errors` で確認する。 |
@@ -153,7 +153,7 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 | medi_xml_ledger | facility_name | xml_ledger | facility_name | 移行 | 医療機関名として保持する。 |
 | medi_xml_ledger | zip_name | file_receipts | file_name | 再配置 | 由来ファイル名は物理ファイル台帳 `file_receipts` 側を正とする。 |
 | medi_xml_ledger | xml_filename | xml_file_links / file_receipts | 廃止 | 廃止 | XMLファイル名は独立カラムとして持たず、ZIP内XMLでは `xml_file_links.xml_inner_path`、単体XMLでは `file_receipts.file_name` から確認する。 |
-| medi_xml_ledger | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスは物理ファイル内の位置情報として `xml_file_links` に保持する。 |
+| medi_xml_ledger | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスは物理ファイル内の位置情報として `xml_file_links` にZIP内相対パスで保持する。 |
 | medi_xml_ledger | insurer_number | xml_ledger | insurer_number | 移行 | 加入者照合・検索用として保持する。 |
 | medi_xml_ledger | insurance_symbol | xml_ledger | insurance_symbol_raw | 名称変更 | XML由来の保険証記号原本値として保持する。 |
 | medi_xml_ledger | insurance_number | xml_ledger | insurance_number_raw | 名称変更 | XML由来の保険証番号原本値として保持する。 |
@@ -176,8 +176,8 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 | medi_xml_ledger | person_id_custom | xml_ledger | person_id_custom | 移行 | identity共通仕様に従って生成した人物識別補助キーとして保持する。 |
 | medi_xml_ledger | identity_hash | xml_ledger | identity_hash | 移行 | identity共通仕様に従って生成し、`subscribers.id` を引く唯一の加入者照合キーとして保持する。 |
 | medi_xml_ledger | xsd_valid | xml_ledger | xml_status / xml_reason | 再配置 | XSD判定は `xml_status` / `xml_reason` に吸収する。XSD詳細は `etl_errors` 側で確認する。 |
-| medi_xml_ledger | error_content | xml_ledger | xml_reason | 名称変更 | XML処理が `WARNING` / `NG` となった理由コードへ整理する。詳細は `etl_errors`。 |
-| medi_xml_ledger | judge_status | xml_ledger | check_status | 再配置 | 健診内容チェックの総合判定として `OK` / `WARNING` / `NG` で保持する。 |
+| medi_xml_ledger | error_content | xml_ledger | xml_reason | 名称変更 | XML取込状態が `ERROR` / `SKIPPED` となった理由コードへ整理する。詳細は `etl_errors`。 |
+| medi_xml_ledger | judge_status | xml_ledger | check_status | 再配置 | `03_check_exam_results.py` の制度チェック状態として `PENDING` / `OK` / `WARNING` / `NG` で保持する。 |
 | medi_xml_ledger | judge_score | exam_check_results | 廃止 | 廃止 | 旧判定スコアは独立カラムとして持たない。必要な集計は項目別 `status` / `reason` と reason summary から確認する。 |
 | medi_xml_ledger | judge_note | exam_check_results | check_reason / reason | 再配置 | チェック詳細理由は `exam_check_results` 側へ寄せる。台帳側には `check_reason` のみ保持する。 |
 | medi_xml_ledger | judged_run_id | exam_check_results / etl_runs | check_run_id | 再配置 | 総合チェックrunは `xml_ledger` には持たず、チェック結果側の共通 `check_run_id` と `etl_runs` で追跡する。 |
@@ -199,12 +199,12 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 | event_id | イベント単位で検索するため。 |
 | subscriber_id | `identity_hash` で一致した `subscribers.id` を保持する。 |
 | hia_subscriber_id | `subscriber_id` から取得し、運用検索性向上のため冗長保持する。 |
-| xml_status | XML処理の総合判定を `OK` / `WARNING` / `NG` で保持する。 |
-| xml_reason | `xml_status` が `WARNING` / `NG` となった理由コードを保持する。 |
-| check_status | 健診内容チェックの総合判定を `OK` / `WARNING` / `NG` で保持する。 |
+| xml_status | `02_import_xml.py` のXML取込状態を `PENDING` / `IMPORTED` / `ERROR` / `SKIPPED` で保持する。 |
+| xml_reason | `xml_status` が `ERROR` / `SKIPPED` となった理由コードを保持する。 |
+| check_status | `03_check_exam_results.py` の制度チェック状態を `PENDING` / `OK` / `WARNING` / `NG` で保持する。 |
 | check_reason | `check_status` が `WARNING` / `NG` となった理由コードを保持する。 |
-| xml_export_status | HIAアップロード用XMLとして出力してよいかをXML単位で保持する。基本は `OK` / `NG`。 |
-| manual_export_approved | `check_status = NG` でも業務確認により出力OKとしたことを示す手動承認フラグ。 |
+| xml_export_status | `04_export_hia_xml.py` のHIA出力状態を `PENDING` / `READY` / `EXPORTED` / `ERROR` / `SKIPPED` で保持する。 |
+| manual_export_approved | `check_status = NG` でも業務確認により出力可能としたことを示す手動承認フラグ。 |
 | manual_export_reason | 手動承認により出力OKとした理由を保持する。 |
 
 ## 現時点の設計メモ
@@ -212,8 +212,9 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 - `xml_ledger` は XML内容の一意台帳とする。
 - 同一 `xml_sha256` のXMLは `xml_ledger` に重複作成しない。
 - 物理ファイルとの関係は `xml_file_links` で管理し、`xml_ledger` に `file_receipt_id` は持たない。
-- `status` は `OK` / `WARNING` / `NG` の3状態を基本とする。
-- `reason` は `status` が `WARNING` / `NG` となった理由コードとして保持する。
+- 機械的な処理状態は `xml_status` / `check_status` / `xml_export_status` に分ける。
+- 人間の業務確認状態は、将来的には `operation_status` として分離する。
+- `reason` は各ステータスが異常・対象外等になった理由コードとして保持する。
 - `reason` は固定enumではなく、スクリプト実装・チェック追加に応じて理由コードを追加できる文字列カラムとする。
 - `person_id_custom` / `identity_hash` は identity 共通仕様の説明書に従い、既存の共通生成処理を利用して生成する。
 - raw値を直接独自ロジックで組み立てず、identity共通仕様に従う。
@@ -228,9 +229,11 @@ v2 の `xml_ledger` は XML内容の一意台帳とする。
 - 詳細な根拠は `exam_check_results`・`exam_item_values`・`etl_errors` に分離する。
 - 台帳側には結論のみを冗長保持し、人がJOINせず状況確認できることを優先する。
 - `check_status` は制度・内容チェックのシステム判定結果として保持し、手動承認によって変更しない。
-- `xml_export_status` は最終的にHIAアップロード用XMLとして出力してよいかを表すXML単位の出力可否とする。
-- `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = OK` とできる。
-- 出力済み状態（`exported_at` / `export_run_id` 等）を `xml_ledger` に持つか、出力台帳側に持つかは、exportスクリプト設計時に決定する。
+- `xml_export_status` は `04_export_hia_xml.py` のHIA出力状態を表す。
+- `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = READY` とできる。
+- v2初期では `xml_export_status` を `xml_ledger` に保持し、XML単位の最新出力状態を管理する。
+- 出力履歴はRun単位の出力フォルダを証跡とし、将来必要になった場合のみ `xml_export_logs` 等の出力台帳を追加する。
+- `xml_ledger` は人＋イベント単位の最終完了状態を管理しない。
 - `error_count` / `warning_count`、`xsd_valid`、`item_extract_status`、`is_exam_result` は独立カラムとしては持たず、詳細テーブル・実データ有無・`xml_status` / `xml_reason` へ集約する。
 - `extracted_run_id` / `items_extracted_run_id` / `extracted_at` / `items_extracted_at` は `xml_ledger` に持たず、`etl_runs` / `etl_errors` 側で追跡する。
 - `check_run_id` / `checked_at` は `xml_ledger` に持たず、`exam_check_results` / `etl_runs` 側で追跡する。
@@ -269,10 +272,10 @@ v2 の `xml_file_links` は、物理ファイルとXML内容の対応台帳と�
 | 旧テーブル | 旧カラム | v2テーブル | v2カラム | 判定 | 理由・備考 |
 |------------|-----------|------------|-----------|------|------------|
 | medi_xml_receipts | xml_receipt_id | xml_file_links | id | 追加 | 旧主キーをそのまま移行するのではなく、物理ファイルとXML内容の対応行として新規採番する。 |
-| medi_xml_receipts | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスを物理ファイル内の位置情報として保持する。単体XMLではNULL可。 |
-| medi_xml_ledger | zip_receipt_id | xml_file_links | file_receipt_id | 再配置 | 物理ファイル台帳 `file_receipts` への参照として保持する。 |
+| medi_xml_receipts | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスを物理ファイル内の位置情報としてZIP内相対パスで保持する。単体XMLではNULL。 |
+| medi_xml_ledger | zip_receipt_id | xml_file_links | file_receipt_id | 再配置 | `xml_ledger` には直接持たず、物理ファイル台帳 `file_receipts` への参照を `xml_file_links` に保持する。 |
 | medi_xml_ledger | xml_ledger_id | xml_file_links | xml_ledger_id | 再配置 | XML内容の一意台帳 `xml_ledger` への参照として保持する。 |
-| medi_xml_ledger | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスを物理ファイル内の位置情報として保持する。 |
+| medi_xml_ledger | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスを物理ファイル内の位置情報としてZIP内相対パスで保持する。 |
 
 ## v2で新規追加するカラム候補
 
@@ -282,7 +285,7 @@ v2 の `xml_file_links` は、物理ファイルとXML内容の対応台帳と�
 | event_id | イベント単位で受領ファイルとXML内容の対応を検索するため。 |
 | file_receipt_id | 物理ファイル台帳 `file_receipts` を参照する。 |
 | xml_ledger_id | XML内容の一意台帳 `xml_ledger` を参照する。 |
-| xml_inner_path | ZIP内XMLパス。単体XMLではNULL可。 |
+| xml_inner_path | ZIP内相対XMLパス。単体XMLではNULL。 |
 | created_at | 対応行の作成日時。 |
 
 ## 現時点の設計メモ
@@ -330,7 +333,7 @@ v2 の `exam_item_values` は、入力元に依存しない健診値共通基盤
 | medi_xml_item_values | xml_sha256 | xml_ledger | xml_sha256 | 再配置 | XML原本識別子の正は `xml_ledger.xml_sha256` とする。`exam_item_values` は `ledger_type = XML` / `ledger_id = xml_ledger.id` で由来を表現する。 |
 | medi_xml_item_values | zip_sha256 | file_receipts | file_sha256 | 再配置 | 由来ファイル情報は `file_receipts` 側を正とする。 |
 | medi_xml_item_values | zip_inner_path_sha256 | xml_file_links | 廃止 | 廃止 | ZIP内XMLパスは `xml_file_links.xml_inner_path` で保持し、パスSHAは独立カラムとしては持たない。 |
-| medi_xml_item_values | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスは物理ファイル内の位置情報として `xml_file_links` に保持する。 |
+| medi_xml_item_values | zip_inner_path | xml_file_links | xml_inner_path | 再配置 | ZIP内XMLパスは物理ファイル内の位置情報として `xml_file_links` にZIP内相対パスで保持する。 |
 | medi_xml_item_values | namecode | exam_item_values | namecode | 移行 | 健診項目コードとして保持する。 |
 | medi_xml_item_values | occurrence_no | exam_item_values | occurrence_no | 移行 | 同一項目が複数出現した場合の出現順として保持する。 |
 | medi_xml_item_values | value_raw | exam_item_values | raw_value | 名称変更 | 入力元由来の未加工値として保持する。 |
@@ -412,7 +415,7 @@ v2 の `exam_check_results` は、制度チェック結果を人が検索・集�
 
 - 実際に存在した健診値そのもの（→ exam_item_values）
 - XML全体の処理状態（→ xml_ledger）
-- XML単位のHIAアップロード用出力可否（→ xml_ledger.xml_export_status）
+- XML単位のHIA出力状態（→ xml_ledger.xml_export_status）
 - XML解析・ETLエラー詳細（→ etl_errors）
 - 検査方法、左右、裸眼/矯正などの粒度別カラム
 
