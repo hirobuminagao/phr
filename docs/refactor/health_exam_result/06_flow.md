@@ -46,7 +46,7 @@ B --> C[01_scan_files.py\nフルスキャン\nworkコピーなし]
 
 %% ===== Duplicate ZIP branch =====
 C --> Z{登録済みファイル?}
-Z -->|Yes| Z1[処理スキップ\netl_runs / etl_errors で記録]
+Z -->|Yes| Z1[処理スキップ\netl_runs の実行サマリーで記録]
 Z1 --> END
 Z -->|No| C1[file_receipts 登録\netl_run_id 保持]
 C1 --> C2[(health_exam_result.file_receipts)]
@@ -98,7 +98,7 @@ P --> R
 Q --> R
 
 R --> S[(health_exam_result.exam_check_results)]
-R --> T[xml_ledger 更新\ncheck_status / xml_export_status READY等 / summary]
+R --> T[xml_ledger 更新\ncheck_status / xml_export_status / summary]
 T --> U
 
 %% ===== File summary =====

@@ -1845,24 +1845,37 @@ v2初期スコープでは、`file_receipts` と `xml_ledger` を中心に処理
 
 ---
 
-## DH-20260702-01（2026-07-02 10:29）
+## DH-20260702-01 / 2026-07-02 10:29 JST
 
-### 議題
-設計更新の管理方法を整理する。
+### テーマ
+設計文書更新順序とチェックリスト非作成の運用方針
 
-### 協議
-設計更新のたびに専用のチェックリストや管理ファイルを増やす案を検討したが、
-管理対象が増えることで、かえって運用コストが増加するという懸念があった。
+### 背景
+設計議論が進む中で、`05_design_history.md` に協議・決定を記録したあと、`03_decisions.md` へ正式決定事項を反映する前に `11_v2_script_design_notes.md` や `12_v2_ddl_design_notes.md` を更新してしまうことがあった。
 
-### 決定
+そのため、設計文書の同期漏れを防ぐためのチェックリストを新規作成する案を検討した。
+
+### 議論
+- 専用のチェックリストファイルを作成すると、設計文書とは別に管理対象が増える。
+- 管理対象を増やすと、チェックリスト自体の更新漏れや形骸化が発生する可能性がある。
+- 既に `05_design_history.md` に議論・協議・決定経緯を蓄積しているため、さらにチェック用ファイルを増やす必要はないと判断した。
+- `05_design_history.md` は議論・経緯の履歴として扱い、正式に採用された決定事項は `03_decisions.md` へ反映する運用とする。
+- `03_decisions.md` を設計の正とし、スクリプト設計・DDL設計・実装は `03_decisions.md` を基準に更新する。
+- 今後は、05で決定事項が増えた場合、まず03への反映有無を確認し、その後に11・12・実装へ反映する。
+
+### 現時点の考え
+設計更新用のチェックリスト専用ファイルは作らず、設計文書の役割分担と更新順序を明確にすることで、管理対象を増やさずに同期漏れを防ぐ。
+
+### 決定事項
 - チェックリスト専用ファイルは作成しない。
 - 議論・協議内容は引き続き `05_design_history.md` に蓄積する。
 - 正式に採用された内容は `03_decisions.md` に反映する。
 - `03_decisions.md` を設計の正（Single Source of Truth）とする。
 - 実装ドキュメントやその他の設計資料は `03_decisions.md` を基準に更新する。
+- 設計文書の更新順序は、`05_design_history.md` → `03_decisions.md` → 各設計資料・実装とする。
 
 ### 運用フロー
-```
+```text
 05_design_history.md
     ↓（協議・決定）
 03_decisions.md
@@ -1870,6 +1883,123 @@ v2初期スコープでは、`file_receipts` と `xml_ledger` を中心に処理
 各設計資料・実装
 ```
 
-### 理由
-設計情報を複数箇所で管理することを避け、管理対象を最小限に保つ。
-議論の履歴は 05、正式な設計は 03 という役割を明確に分離する。
+### 保留事項
+- なし。
+
+### 根拠
+- 設計情報を複数箇所で管理することを避け、管理対象を最小限に保つため。
+- 議論の履歴は 05、正式な設計は 03 という役割を明確に分離するため。
+- チェックリスト専用ファイルを作ると、更新漏れや管理負荷が増えるため。
+- `03_decisions.md` を正本にすることで、11・12・実装の反映元を一本化できるため。
+
+### 次回検討
+- 05で新しい決定事項が追加された場合、03への反映有無を先に確認する。
+- 03反映後に、11・12・06・13など関連設計資料との差分を確認する。
+
+---
+
+## DH-20260702-02 / 2026-07-02 11:58 JST
+
+### テーマ
+from_medical 配下のスクリプト・設定・script_lib 配置方針
+
+### 背景
+core DDL と `01_scan_files.py` / `02_import_xml.py` の実装に進む前に、作成物の配置・ファイル形式・命名規則を整理した。
+
+DB名は業務領域を表す `health_exam_result` とする一方で、スクリプト配置は入力元・処理起点を表す単位で分ける方針を確認した。
+
+### 議論
+- DB名は `health_exam_result` とし、健診結果処理の台帳・処理結果を管理する業務DB名として扱う。
+- スクリプト配置はDB名ではなく、入力元・処理起点で分ける方が自然であると整理した。
+- 医療機関から受領した健診結果を処理するスクリプトは `scripts/from_medical/` 配下に配置する方向とした。
+- `scripts/from_medical/health_exam_result/` のようにさらに階層を深くすると、人が直接実行するスクリプトの場所が分かりづらくなるため、初期実装では `from_medical` 直下にオーケストラスクリプトを配置する方針とした。
+- `from_medical` 配下には、人が直接実行する `01_scan_files.py`、`02_import_xml.py`、`03_check_exam_results.py`、`04_export_hia_xml.py` を置く。
+- `config` は `scripts/from_medical/config/` 配下に置き、医療機関取込処理専用の設定として管理する。
+- 医療機関取込処理内で共通化する処理は、`scripts/from_medical/script_lib/` 配下に置く。
+- `script_lib` は全プロジェクト共通ではなく、`from_medical` 内の業務固有共通処理を置く場所とする。
+- 全プロジェクト共通のDB接続・ログ・ETL共通処理などは、既存共通基盤側へ置く方針とする。
+
+### 現時点の考え
+スクリプトは、DB名ではなく入力元・処理起点で整理する。
+
+`from_medical` は医療機関から受領した健診結果をローカルシステムへ取り込む処理群とし、人が実行するオーケストラスクリプト、設定ファイル、医療機関取込処理内の共通処理を同じ配下で管理する。
+
+### 決定事項
+- DB名は `health_exam_result` とする。
+- 医療機関から受領した健診結果処理のスクリプトは `scripts/from_medical/` 配下に配置する。
+- `scripts/from_medical/` 直下には、人が直接実行するオーケストラスクリプトを配置する。
+- `scripts/from_medical/config/` を医療機関取込処理用の設定ファイル配置先とする。
+- `scripts/from_medical/script_lib/` を医療機関取込処理内の業務固有共通処理の配置先とする。
+- `script_lib` は全プロジェクト共通ライブラリではなく、`from_medical` 内で再利用する処理を置く場所とする。
+- 全プロジェクト共通処理は、既存の共通基盤側へ寄せる。
+
+### 保留事項
+- `scripts/from_medical/config/` 配下に置く設定ファイルの正式名称。
+- `scripts/from_medical/script_lib/` に最初から切り出す処理範囲。
+- 既存共通基盤と `from_medical/script_lib` の具体的な責務境界。
+- `from_fund`、`hia`、将来の `from_hia` との命名統一方針。
+
+### 根拠
+- DB名は業務領域、スクリプト配置は入力元・処理起点を表すため、同じ名前に揃える必要はないため。
+- 階層を深くしすぎると、人が実行するスクリプトの所在が分かりづらくなるため。
+- `from_medical` 配下で完結する共通処理と、全プロジェクト共通処理を分けることで、先回りした共通化を避けられるため。
+- 既存の `from_fund` や `hia` の処理単位と同じく、入力元別にスクリプトを整理した方が運用上分かりやすいため。
+
+### 次回検討
+- `03_decisions.md` へ配置方針を反映する。
+- `11_v2_script_design_notes.md` へ `scripts/from_medical/` 配置方針を反映する。
+- DDL / migration の配置・命名規則を確認する。
+- `01_scan_files.py` / `02_import_xml.py` の作成場所を確定する。
+
+---
+
+## DH-20260702-03 / 2026-07-02 12:12 JST
+
+### テーマ
+DDL / migration ファイルの配置・命名規則
+
+### 背景
+core DDL と `01_scan_files.py` / `02_import_xml.py` の実装に進む前に、DDL と migration の配置場所・命名規則を整理した。
+
+`health_exam_result` は新規DBであるため、初期テーブル作成SQLを migration として扱うのではなく、新規DB作成用DDLとして管理する必要がある。一方、`dev_phr` など既存DBへマスタ拡張やカラム追加を行う場合は、既存DBへの変更として migration 管理する。
+
+### 議論
+- 新規DBの初期DDLと、既存DBへの変更SQLは役割を分ける。
+- `health_exam_result` は新規DBのため、初期テーブル作成SQLは `sql/migrations/` ではなく `sql/ddl/health_exam_result/` 配下に配置する。
+- migration は「どの機能のためか」ではなく、「どのDBへ適用するか」を基準に配置する。
+- 既存DBである `dev_phr` や `work_other` を変更する場合は、それぞれ `sql/migrations/dev_phr/`、`sql/migrations/work_other/` 配下に配置する。
+- migration ファイル名は、適用順が分かるように日付と連番を含める。
+- 日付は厳密な作成日であることより、適用順を人が追えることを優先する。
+- ファイル名には、対象DB名、変更種別、内容概要を含める。
+
+### 現時点の考え
+DDL は新規DB作成用、migration は既存DB変更用として分ける。
+
+配置先は業務機能ではなく、対象DB名を基準にする。これにより、後から「このSQLはどのDBへ適用するものか」を迷わず確認できる。
+
+### 決定事項
+- 新規DBの初期DDLは `sql/ddl/<db_name>/` 配下へ配置する。
+- 既存DBへの変更SQLは `sql/migrations/<target_db_name>/` 配下へ配置する。
+- migration の配置先は機能名ではなく、変更対象DB名を基準とする。
+- migration ファイル名は `YYYYMMDD_NNN_<target_db_name>_<action>_<summary>.sql` を基本とする。
+- `health_exam_result` は新規DBのため、初期テーブル作成SQLは migration ではなく `sql/ddl/health_exam_result/` 配下へ配置する。
+- `dev_phr` のマスタ拡張や event カラム追加は `sql/migrations/dev_phr/` 配下へ配置する。
+- `work_other` を変更する場合は `sql/migrations/work_other/` 配下へ配置する。
+- migration の日付は厳密な作成日ではなく、適用順を把握するための管理日として扱う。
+
+### 保留事項
+- `sql/ddl/health_exam_result/` 配下を1ファイルにまとめるか、テーブル単位に分けるか。
+- 初期DDLファイルの正式命名規則。
+- `dev_phr.exam_item_group_*` 系マスタ拡張の migration ファイル名。
+- `event.result_root_path` を追加する場合の migration ファイル名。
+
+### 根拠
+- 新規DB作成用DDLと既存DB変更用migrationは役割が異なるため。
+- 既存の `sql/migrations/dev_phr/`、`sql/migrations/work_other/` の構成に合わせるため。
+- migration の配置先を対象DB名で統一すると、適用先を誤りにくいため。
+- 日付と連番を含めることで、適用順を人が確認しやすいため。
+
+### 次回検討
+- `03_decisions.md` へ DDL / migration 配置・命名規則を反映する。
+- `12_v2_ddl_design_notes.md` へ DDL / migration 配置方針を反映する。
+- `sql/ddl/health_exam_result/` の初期DDLファイル構成を決める。

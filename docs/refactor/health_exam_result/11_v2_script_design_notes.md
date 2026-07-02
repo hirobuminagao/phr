@@ -1,6 +1,6 @@
 # health_exam_result v2 スクリプト設計メモ
 
-このドキュメントは、`health_exam_result v2` のスクリプト構成・責務・実行順序を整理するためのメモである。
+このドキュメントは、`health_exam_result v2` のスクリプト構成・責務・実行順序を整理するためのメモである。`03_decisions.md` を正本として作成・更新する設計メモであり、正式決定事項はそこに従って反映する。
 
 DDL側の骨子は `12_v2_ddl_design_notes.md` を参照する。
 
@@ -10,7 +10,7 @@ DDL側の骨子は `12_v2_ddl_design_notes.md` を参照する。
 
 v2 初期実装で人間が実行するオーケストラスクリプトを4本に整理し、各スクリプトの目的・入出力・更新/参照テーブル・処理順・再実行方針・エラー記録方針を明確にする。
 
-実処理は可能な限り `scripts/lib/` または `scripts/medical/script_lib/` に切り出し、エントリースクリプトは処理順を表す薄いオーケストレーターとする。
+実処理は可能な限り既存の共通基盤または `scripts/from_medical/script_lib/` に切り出し、オーケストラスクリプトは処理順を表す薄いオーケストレーターとする。
 
 ---
 
@@ -19,11 +19,14 @@ v2 初期実装で人間が実行するオーケストラスクリプトを4本�
 ### 2.1 スクリプト配置
 
 ```text
-scripts/medical/
-  人が実行するエントリースクリプトのみ配置する。
+scripts/from_medical/
+  人が実行するオーケストラスクリプトのみ配置する。
 
-scripts/medical/script_lib/
-  health_exam_result 固有の業務ロジックを配置する。
+scripts/from_medical/config/
+  医療機関取込処理用の設定ファイルを配置する。
+
+scripts/from_medical/script_lib/
+  医療機関取込処理内で再利用する業務固有共通処理を配置する。
 
 scripts/lib/
   全システム共通ライブラリを配置する。
@@ -40,15 +43,16 @@ scripts/lib/
 
 ### 2.3 責務分離
 
-- `01_scan_files.py` は対象フォルダを毎回フルスキャンし、未登録ファイルのみ `file_receipts` に登録する。
+- `01_scan_files.py` は対象フォルダを毎回フルスキャンし、未登録ファイルのみ `file_receipts` に登録する。重複ファイルは新規登録せず、スキップ件数としてRunサマリーに集約する。登録時の `file_receipts.status` は `DISCOVERED` とする。
 - `01_scan_files.py` は `work` へのコピーを行わない。
-- `02_import_xml.py` は指定 `etl_run_id` の未処理 `file_receipts` を対象にする。
+- `02_import_xml.py` は指定 `etl_run_id` の未処理 `file_receipts` を対象にする。処理開始時に `file_receipts.status = IMPORTING`、成功時に `IMPORTED`、失敗時に `ERROR` とする。
 - `02_import_xml.py` はRun単位で複数の `file_receipts` を処理し、DBトランザクションは `file_receipt` 単位とする。
 - `work` への一時コピー、ZIP展開、XMLファイル読込は `02_import_xml.py` に集約する。
 - `02_import_xml.py` はXML基本情報抽出、加入者照合、健診項目値抽出、`xml_file_links` / `xml_ledger` / `exam_item_values` 登録を一括で行う。
 - `03_check_exam_results.py` はXMLファイルを再読込せず、DB上の `xml_ledger` / `exam_item_values` を入力にする。
 - `04_export_hia_xml.py` はDB上のチェック結果・出力状態を参照し、HIAアップロード用XMLを生成する。
 - `work` 領域は恒久保存領域ではなく、処理中だけ利用する一時作業領域とする。
+- 既に取り込み済みの重複ファイルは `file_receipts` に新規登録せず、重複件数は `etl_runs` のスキップ件数・実行サマリーで管理する。
 - 機械的な処理状態は `xml_status` / `check_status` / `xml_export_status` で表し、人間の業務確認状態は将来の `operation_status` として分離する。
 - `file_receipts` / `xml_ledger` には、人＋イベント単位の最終完了状態を背負わせない。
 
@@ -101,7 +105,7 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 
 ---
 
-## 4. エントリースクリプト
+## 4. オーケストラスクリプト
 
 ## 4.1 `01_scan_files.py`
 
@@ -360,15 +364,14 @@ DB上のチェック結果・出力状態を参照し、HIAアップロード用
 
 ---
 
-## 5. 共通libへ切り出す候補
+## 5. 共通基盤へ寄せる候補
 
-`scripts/lib/` に置く候補。
+既存の共通基盤側へ寄せる候補。
 
 | 候補 | 主な責務 |
 | --- | --- |
 | DB接続 / transaction | DB接続、トランザクション、リトライ、接続設定 |
 | ETL run/error記録 | `etl_runs` / `etl_errors` の登録・終了更新・標準エラー形式 |
-| SHA256 | ファイル・バイト列・ストリームのSHA256算出 |
 | ZIP展開 | ZIP安全展開、文字コード対応、展開先管理 |
 | XML parse基礎 | XML parser、名前空間処理、共通XPath補助 |
 | 設定読込 | YAML読込、環境別設定、必須項目検証 |
@@ -377,9 +380,9 @@ DB上のチェック結果・出力状態を参照し、HIAアップロード用
 
 ---
 
-## 6. health_exam_result固有libへ置く候補
+## 6. from_medical固有libへ置く候補
 
-`scripts/medical/script_lib/` に置く候補。
+`scripts/from_medical/script_lib/` に置く候補。
 
 | 候補 | 主な責務 |
 | --- | --- |
@@ -410,7 +413,7 @@ DB上のチェック結果・出力状態を参照し、HIAアップロード用
 
 ## 8. 現時点の結論
 
-v2のエントリースクリプトは、`01_scan_files.py`、`02_import_xml.py`、`03_check_exam_results.py`、`04_export_hia_xml.py` の4本構成とする。
+v2のオーケストラスクリプトは、`01_scan_files.py`、`02_import_xml.py`、`03_check_exam_results.py`、`04_export_hia_xml.py` の4本構成とする。
 
 `01_scan_files.py` はファイル検出と `file_receipts` 登録のみを担当し、`work` へコピーしない。
 
@@ -430,13 +433,13 @@ v2のエントリースクリプトは、`01_scan_files.py`、`02_import_xml.py`
 
 | テーブル | 作成 | 更新 | 主な参照 |
 | --- | --- | --- | --- |
-| `health_exam_result.file_receipts` | `01_scan_files.py` | `02_import_xml.py` | 全エントリースクリプト |
+| `health_exam_result.file_receipts` | `01_scan_files.py` | `02_import_xml.py` | 全オーケストラスクリプト |
 | `health_exam_result.xml_file_links` | `02_import_xml.py` | 原則なし | `04_export_hia_xml.py` |
 | `health_exam_result.xml_ledger` | `02_import_xml.py` | `02_import_xml.py`<br>`03_check_exam_results.py`<br>`04_export_hia_xml.py` | `03_check_exam_results.py`<br>`04_export_hia_xml.py` |
 | `health_exam_result.exam_item_values` | `02_import_xml.py` | 原則なし | `03_check_exam_results.py`<br>`04_export_hia_xml.py` |
 | `health_exam_result.exam_check_results` | `03_check_exam_results.py` | `03_check_exam_results.py` | `04_export_hia_xml.py` |
-| `etl_runs` | 各エントリースクリプト | 各エントリースクリプト | 運用・調査 |
-| `etl_errors` | 各エントリースクリプト | 必要に応じ追記 | 運用・調査 |
+| `etl_runs` | 各オーケストラスクリプト | 各オーケストラスクリプト | 運用・調査 |
+| `etl_errors` | 各オーケストラスクリプト | 必要に応じ追記 | 運用・調査 |
 
 ### dev_phr 参照責務
 

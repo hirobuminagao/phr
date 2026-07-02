@@ -24,13 +24,15 @@
 
 ### scripts
 
-- 健診結果処理システムは `scripts/medical/` とする。
+- 医療機関から受領した健診結果処理のスクリプトは `scripts/from_medical/` 配下に配置する。
 - `scripts/lib/` は全システム共通ライブラリとする。
-- `scripts/medical/script_lib/` は medical 専用ライブラリとする。
-- `scripts/medical/` 直下には人が実行するエントリースクリプトのみ配置する。
+- `scripts/from_medical/script_lib/` は医療機関取込処理内の業務固有共通処理の配置先とする。
+- `scripts/from_medical/config/` は医療機関取込処理用の設定ファイル配置先とする。
+- `scripts/from_medical/` 直下には人が実行するオーケストラスクリプトのみ配置する。
 - 実処理は `script_lib` に実装する。
 - `script_lib` 配下は直接実行しない。
-- `script_lib` は `scripts/medical/` 配下のエントリースクリプトからのみ利用する。
+- `script_lib` は全プロジェクト共通ライブラリではなく、`from_medical` 内で再利用する処理を置く場所とする。
+- 全プロジェクト共通処理は、既存の共通基盤側へ寄せる。
 
 ---
 
@@ -67,7 +69,17 @@
 - ファイル単位の件数・エラー数・サマリー更新は、XML/受診者単位処理の完了後に集約する。
 - 将来的にCSV直取込へ対応する場合は、`csv_row_ledger` を追加し、基本情報Ledgerと健診結果値を分離した構造とする。
 - status はシステム処理ステータスと業務フローステータスを分けて設計する。
+- `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / ERROR` の4状態で管理する。
+- 重複ファイルは、同一物理ファイルまたは同一 `file_sha256` のファイルを再検出した場合を指す。
+- 重複ファイルは `file_receipts` に新規登録しない。
+- 重複件数は `etl_runs` のスキップ件数・実行サマリーで管理する。
+- 医療機関から再提出された修正版ファイルは、同一人物・同一健診結果に関係する場合でも、別の受領ファイルとして `file_receipts` に新規登録する。
+- 元ファイルと再提出ファイルの親子関係・世代管理は将来フェーズで検討する。
+- `exam_item_values.normalized_value` / `normalized_unit` は `02_import_xml.py` の登録処理内で生成する。
+- SHA256計算は共通ライブラリ化せず、各処理内で実装する。
 - ETL実行管理は共通仕様とし、`etl_runs`・`etl_errors` は ADR-0023 に従う。
+- 設計の正式決定事項は `03_decisions.md` に集約し、`05_design_history.md` は議論・経緯の履歴として扱う。
+- 実装・設計資料は `03_decisions.md` を基準に更新し、チェックリスト専用ファイルは作成しない。
 
 ---
 
@@ -82,7 +94,7 @@
 
 ## 保留
 
-- `file_receipts` / `xml_ledger` の status 値定義
+- `xml_status` / `check_status` / `xml_export_status` の詳細値定義
 - システム処理ステータスと業務フローステータスの設計
 - `person_event` を初期実装に含めるかの最終判断
 - `exam_subject_status` 等の管理テーブル設計

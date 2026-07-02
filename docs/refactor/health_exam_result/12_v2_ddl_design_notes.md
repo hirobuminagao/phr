@@ -187,6 +187,9 @@ alternative_group_code
 - 処理対象件数と中身確認日時の保持。
 - 処理結果サマリーの保持。
 - 物理ファイル単位の機械的な処理状態の保持。
+- `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / ERROR` の4状態で管理する。
+- 既に取り込み済みの重複ファイルは `file_receipts` に新規登録せず、重複件数は `etl_runs` のスキップ件数・実行サマリーで管理する。
+- `01_scan_files.py` が発見・登録、`02_import_xml.py` が状態遷移を更新する。
 
 ### 主なカラム候補
 
@@ -230,6 +233,7 @@ updated_at
 - `work` は `02_import_xml.py` が処理中だけ利用する一時領域であり、`file_receipts` では恒久的な `work_path` を保持しない。
 - `file_receipts` は人＋イベント単位の最終完了状態を管理しない。
 - 人間の業務確認状態を持つ場合は、機械的な `status` と混ぜず、将来の `operation_status` として分離する。
+- `person_event` / `operation_status` 系は、03 の保留事項のため、初期DDLでは未定のままとする。
 
 ---
 
@@ -291,11 +295,11 @@ updated_at
 
 ### メモ
 
-- `xml_status` は `02_import_xml.py` のXML取込状態を保持する。値は `PENDING` / `IMPORTED` / `ERROR` / `SKIPPED` とする。
-- `xml_reason` は固定enumではなく、スクリプト実装・チェック追加に応じて理由コードを追加できる文字列カラムとする。
-- `check_status` は `03_check_exam_results.py` の制度チェック状態を保持する。値は `PENDING` / `OK` / `WARNING` / `NG` とする。
-- `check_reason` は制度チェック状態の理由コードを保持する。
-- `xml_export_status` は `04_export_hia_xml.py` のHIA出力状態をXML単位で保持する。値は `PENDING` / `READY` / `EXPORTED` / `ERROR` / `SKIPPED` とする。
+- `xml_status` は `02_import_xml.py` のXML取込状態を保持する。
+- `check_status` は `03_check_exam_results.py` の制度チェック状態を保持する。
+- `xml_export_status` は `04_export_hia_xml.py` のHIA出力状態をXML単位で保持する。
+- `xml_reason` / `check_reason` は固定enumではなく、スクリプト実装・チェック追加に応じて理由コードを追加できる文字列カラムとする。
+- `xml_status` / `check_status` / `xml_export_status` の詳細値は、03 では未決事項のため、DDLでは正式決定のように固定しない。
 - `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = READY` とできる。
 - `check_status` はシステム判定結果として保持し、手動承認によって変更しない。
 - `item_extract_status`、旧HIA ready系ステータス、`xsd_valid`、`is_exam_result`、`error_count`、`warning_count` は独立カラムとしては持たない。
@@ -536,7 +540,7 @@ resolved_at
 
 ### 役割
 
-取込・チェック処理の実行単位を管理する。
+取込・チェック処理の実行単位を管理する。実行サマリーとして、件数・スキップ件数・エラー件数などを保持する。
 
 ### 主なカラム候補
 
