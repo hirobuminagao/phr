@@ -1801,6 +1801,8 @@ v2初期スコープでは、`file_receipts` と `xml_ledger` を中心に処理
 
 ### 議論
 - `file_receipts.status` は `02_import_xml.py` の対象抽出に関わるため、DDL前に具体値を決める必要がある。
+- `file_receipts.status` は最小限の状態管理とし、重複ファイルのためだけに新たなステータスは追加しない方向とした。
+- 既に取り込み済みの重複ファイルは `file_receipts` に登録せず、`etl_runs` の実行サマリーで管理する方向とした。
 - `xml_status` の `PENDING` は、現行フローではXML登録と取込が同一処理内で完了するため、実際に使う場面が少ない可能性がある。
 - `exam_item_values.normalized_value` / `normalized_unit` は、XML取込時に値登録と合わせて生成する方針とする。
 - SHA256計算は標準ライブラリで十分なため、共通ライブラリ化しない。
@@ -1809,53 +1811,26 @@ v2初期スコープでは、`file_receipts` と `xml_ledger` を中心に処理
 実装前レビューで確定できるものはDDL・スクリプト設計へ反映し、`xml_status` の `PENDING` のように実装直前確認が必要なものだけ保留として残す。
 
 ### 決定事項
-
-#### 1. file_receipts.status を正式化
-
-`file_receipts.status` は以下の4状態を採用する。
+- `file_receipts.status` は以下の4状態を採用する。
 
 | Status | 説明 |
 |--------|------|
-| DISCOVERED | 01_scan_files.py により未登録ファイルを検出・登録した状態 |
-| IMPORTING | 02_import_xml.py が取込処理中の状態 |
+| DISCOVERED | `01_scan_files.py` により未登録ファイルを検出・登録した状態 |
+| IMPORTING | `02_import_xml.py` が取込処理中の状態 |
 | IMPORTED | XML取込が正常終了した状態 |
 | ERROR | スキャンまたは取込処理でエラーとなった状態 |
 
-今後の取込スクリプトはこの状態遷移を前提として実装する。
-
-#### 2. 重複ファイルの扱い
-
-既に取り込み済みのファイルは `file_receipts` に新規登録しない。
-
-重複件数は `etl_runs` のスキップ件数・実行サマリーとして管理する。
-
-#### 3. exam_item_values の正規化
-
-`normalized_value` および `normalized_unit` は、
-`02_import_xml.py` の登録処理内で生成する方針とする。
-
-実装詳細（変換ロジック・共通ライブラリ化）は設計時に再度整理する。
-
-#### 4. 共通ライブラリ方針
-
-SHA256 計算については共通ライブラリ化しない。
-
-ファイルSHA256・XML SHA256 はそれぞれ処理内で実装する方針とする。
+- 既に取り込み済みの重複ファイルは `file_receipts` に新規登録しない。
+- 重複件数は `etl_runs` のスキップ件数・実行サマリーとして管理する。
+- `exam_item_values.normalized_value` および `normalized_unit` は、`02_import_xml.py` の登録処理内で生成する。
+- SHA256計算は共通ライブラリ化せず、それぞれの処理内で実装する。
 
 ### 保留事項
-
-#### xml_status の PENDING 状態
-
-現時点では、処理フロー上 `PENDING` を経由する場面は想定していない。
-
-実装時に新たな待機状態が必要にならない限り、
-`xml_status` は以下3状態で運用する方針とする。
-
-- IMPORTED
-- ERROR
-- SKIPPED
-
-実装開始時に最終確認を行う。
+- `xml_status` に `PENDING` を残すかどうかは、実装開始時に最終確認する。
+- `xml_status` は、待機状態が不要と判断した場合、以下の3状態で運用する。
+  - IMPORTED
+  - ERROR
+  - SKIPPED
 
 ### 根拠
 - `file_receipts.status` は後続の `02_import_xml.py` の対象抽出条件になるため。
@@ -1863,8 +1838,38 @@ SHA256 計算については共通ライブラリ化しない。
 - `exam_item_values` の正規化値は、値登録時に生成した方が処理責務が分かりやすいため。
 - SHA256計算は標準ライブラリ呼び出しで実装差が出にくいため。
 
-### 次回確認
-
+### 次回検討
 - `02_import_xml.py` の詳細処理フロー
 - script本体 / script_lib / 既存common / 将来common の責務整理
 - フォルダ構成への反映
+
+---
+
+## DH-20260702-01（2026-07-02 10:29）
+
+### 議題
+設計更新の管理方法を整理する。
+
+### 協議
+設計更新のたびに専用のチェックリストや管理ファイルを増やす案を検討したが、
+管理対象が増えることで、かえって運用コストが増加するという懸念があった。
+
+### 決定
+- チェックリスト専用ファイルは作成しない。
+- 議論・協議内容は引き続き `05_design_history.md` に蓄積する。
+- 正式に採用された内容は `03_decisions.md` に反映する。
+- `03_decisions.md` を設計の正（Single Source of Truth）とする。
+- 実装ドキュメントやその他の設計資料は `03_decisions.md` を基準に更新する。
+
+### 運用フロー
+```
+05_design_history.md
+    ↓（協議・決定）
+03_decisions.md
+    ↓（正式反映）
+各設計資料・実装
+```
+
+### 理由
+設計情報を複数箇所で管理することを避け、管理対象を最小限に保つ。
+議論の履歴は 05、正式な設計は 03 という役割を明確に分離する。
