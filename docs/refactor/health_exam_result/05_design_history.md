@@ -2003,3 +2003,202 @@ DDL は新規DB作成用、migration は既存DB変更用として分ける。
 - `03_decisions.md` へ DDL / migration 配置・命名規則を反映する。
 - `12_v2_ddl_design_notes.md` へ DDL / migration 配置方針を反映する。
 - `sql/ddl/health_exam_result/` の初期DDLファイル構成を決める。
+
+---
+
+## DH-20260702-04 / 2026-07-02 12:19 JST
+
+### テーマ
+health_exam_result 初期DDLのファイル分割・命名規則
+
+### 背景
+DDL / migration の配置・命名規則を整理した結果、`health_exam_result` は新規DBであるため、初期テーブル作成SQLは `sql/ddl/health_exam_result/` 配下に配置する方針となった。
+
+実際にDDL作成へ進む前に、初期DDLを1ファイルにまとめるか、テーブル単位に分けるか、および既存DDLと命名規則を揃えるかを確認した。
+
+### 議論
+- 初期DDLは、新規DBの現時点のテーブル構成を再現するためのCREATE文として扱う。
+- 既存の `sql/ddl/dev_phr/` は、テーブル単位ファイルで管理されている。
+- 初期DDLをテーブル単位に分けることで、各テーブルの構成をファイル単位で確認しやすくなる。
+- Git差分やレビュー時にも、テーブル単位ファイルの方が変更対象を追いやすい。
+- `health_exam_result` 側も既存 `sql/ddl/dev_phr/` の形式に合わせ、連番・DB名・テーブル名が分かる命名にする。
+- 制度チェック詳細が未確定のため、`exam_check_results` はcore DDL作成対象から一旦外し、制度チェック方針を再確認した後にDDL化する方向とした。
+- まずは `01_scan_files.py` / `02_import_xml.py` の実装に必要なcore DDLを作成対象とする。
+
+### 現時点の考え
+`health_exam_result` の初期DDLは、現状のテーブル構成を人がファイル単位で確認できるように、テーブル単位で作成する。
+
+命名規則は既存DDLに合わせ、連番・DB名・テーブル名を含める。
+
+### 決定事項
+- `health_exam_result` の初期DDLはテーブル単位ファイルとする。
+- 初期DDLは `sql/ddl/health_exam_result/` 配下に配置する。
+- 初期DDLファイル名は `NNNN_health_exam_result__<table_name>.sql` を基本とする。
+- 連番は既存 `sql/ddl/dev_phr/` の形式に合わせ、作成順・依存順が分かるように付与する。
+- core DDLの初期作成対象は以下とする。
+  - `etl_runs`
+  - `etl_errors`
+  - `medical_folder_aliases`
+  - `file_receipts`
+  - `xml_ledger`
+  - `xml_file_links`
+  - `exam_item_values`
+- `exam_check_results` は制度チェック方針を再確認した後にDDL化する。
+
+### 保留事項
+- `exam_check_results` の正式DDL。
+- 制度チェック項目別 `status` / `reason` の正式コード・命名規則。
+- `dev_phr.exam_item_group_*` 系マスタのMigration対象・拡張内容。
+- `ANY_NONEMPTY` のv2定義。
+
+### 根拠
+- 既存 `sql/ddl/dev_phr/` がテーブル単位ファイルで管理されているため。
+- テーブル単位ファイルの方が、現状DDL確認・差分レビュー・影響範囲確認を行いやすいため。
+- `health_exam_result` は新規DBであり、初期DDLはmigrationではなく現在スキーマのCREATE一式として扱うため。
+- 制度チェック詳細が未確定のまま `exam_check_results` を先に作ると、DDL手戻りが大きくなる可能性があるため。
+
+### 次回検討
+- 制度チェック方針を再確認し、`exam_check_results` / `03_check_exam_results.py` / 関連MigrationのGO可否を判断する。
+- `03_decisions.md` へ初期DDLファイル分割・命名規則を反映する。
+- `12_v2_ddl_design_notes.md` へ初期DDLファイル構成を反映する。
+
+---
+
+## DH-20260702-05 / 2026-07-02 15:19 JST
+
+### テーマ
+exam_check_results の各項目 status / reason の運用方針
+
+### 背景
+制度チェックでは、各項目がどのような状態で要件を満たしたかを保持したい。
+
+また、XML処理結果ログや医療機関向けメッセージへそのまま利用できる情報を残したい。
+
+### 議論
+- 各項目の状態は `status` として定型化する。
+- `reason` は全項目に常に入れるのではなく、ログや医療機関向けメッセージに利用する特記事項として扱う。
+- XML処理結果ログおよび医療機関向けメッセージは、`reason` が `NULL` ではない項目を集約して生成する。
+
+### 現時点の考え
+`exam_check_results` の各項目 `status` は、制度チェック上の充足状態を表す。
+
+`reason` は、XML処理結果ログおよび医療機関向けメッセージへ転用できる、人が読める特記事項として保持する。
+
+### 決定事項
+- 各項目 `status` は以下の5種類とする。
+  - `OK`: 実値が存在し要件を満たす。
+  - `CALCULATED`: 実値は存在しないが計算で補完した。
+  - `ALTERNATIVE`: 実値は存在しないが代替項目で充足した。
+  - `MISSING`: 必要項目が存在せず要件を満たさない。
+  - `INVALID`: 値不正・計算元不足などで判定できない。
+- 法定健診・特定健診全体の `OK` / `WARNING` / `NG` は各項目 `status` を集計して判定する。
+- `reason` は特記事項のみ保持する。
+
+| status | reason |
+|--------|--------|
+| `OK` | `NULL` |
+| `CALCULATED` | `<同一性項目名>：計算で補完` |
+| `ALTERNATIVE` | `<同一性項目名>：代替あり（代替項目名）` |
+| `MISSING` | `<同一性項目名>：なし` |
+| `INVALID` | `<同一性項目名>：不正理由` |
+
+- XML処理結果ログおよび医療機関向けメッセージは、`reason` が `NULL` ではない項目を集約して生成する。
+
+### 保留事項
+- 各 `status` を法定健診・特定健診全体の `OK` / `WARNING` / `NG` へ集計する詳細ルール。
+- `INVALID` に入れる不正理由の詳細表現。
+
+### 根拠
+- 制度チェック結果を項目単位で検索・集計・確認できるようにするため。
+- XML処理結果ログや医療機関向けメッセージを、チェック結果から一貫して生成できるようにするため。
+
+### 次回検討
+- `03_decisions.md` へ各項目 `status` / `reason` の運用方針を反映する。
+- `12_v2_ddl_design_notes.md` へ `exam_check_results` の `status` / `reason` 方針を反映する。
+
+---
+
+## DH-20260702-06 / 2026-07-02 19:00 JST
+
+### テーマ
+制度チェックの status / reason・presence判定・ルール実装方針
+
+### 背景
+`exam_check_results` の正式DDL化と `03_check_exam_results.py` の実装前に、制度チェックで未確定だった以下の論点を整理した。
+
+1. `status_<code>` の正式コード
+2. `reason_<code>` の記録形式
+3. `ANY_NONEMPTY` の v2 定義
+4. 算出・代替・条件付き必須・複合項目をマスタで表すかスクリプトで補うか
+5. `exam_item_group_identity_members` の追加カラム要否
+
+### 議論
+- 項目別 `status` は、制度上の単純なOK/NGではなく、各項目がどのような状態で充足したかを表す。
+- `status` は `OK` / `CALCULATED` / `ALTERNATIVE` / `MISSING` / `INVALID` の5種類とする。
+- `reason` は正常時の説明ではなく、補完・代替・不足・不正などの特記事項のみ保持する。
+- `OK` の場合は `reason = NULL` とする。
+- XML処理結果ログおよび医療機関向けメッセージは、`reason` が `NULL` ではない項目を集約して生成する。
+- `ANY_NONEMPTY` は presence 判定ルールとして扱う。
+- `ANY_NONEMPTY` は、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
+- 行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
+- 特記事項ありなのに内容がない、計算元不足、代替元不正などの整合性チェックは、`ANY_NONEMPTY` ではなく別の詳細判定として扱う。
+- 制度チェックでは、DBから対象項目とルールを読み込み、最終判定は `03_check_exam_results.py` 側のルール関数で行う。
+- `03_check_exam_results.py` は、制度チェック対象の同一性項目をループし、各項目のルールに応じた判定関数へ処理を委譲する。
+- DBは「どのルールを使うか」を管理し、スクリプトは「そのルールをどう判定するか」を実装する。
+- 既存の `exam_item_group_identity_members` には `required_flag`、`condition_expr`、`required_presence_namecodes`、`presence_value_mode` があり、presence判定と条件付き必須の入口は保持できる。
+- v2初期では `exam_item_group_identity_members` への追加カラムは行わず、既存カラムを利用する。
+- 追加カラムが必要になった場合は、実装上の不足が明確になった時点で将来拡張として検討する。
+
+### 処理イメージ
+
+```text
+03_check_exam_results.py
+│
+├─ spec（72項目）を取得
+├─ dev_phr.exam_item_group_identity_members を取得
+├─ 72項目ループ
+│
+│   rule = value_check_rule / presence_value_mode 等
+│
+│   identity_item_check(rule, identity_item_code)
+│
+│      ↓
+│      namecode一覧取得
+│
+│      ↓
+│      exam_item_values取得
+│
+│      ↓
+│      rule毎の関数実行
+│
+│      check_any_nonempty()
+│      check_all_required()
+│      check_calc_bmi()
+│      check_alt_blood_glucose()
+│      ...
+│
+│      ↓
+│      status
+│      reason
+│
+│   exam_check_resultsへ記帳
+│
+└─ 法定健診・特定健診の全体status集計
+```
+
+### 実装方針（v2）
+
+- 制度チェックの判定ロジックは `03_check_exam_results.py` に集約する。
+- 判定関数はルール単位で実装し、各制度項目から共通利用する。
+- 新しい制度ルールを追加する場合は、既存処理へ条件分岐を追加するのではなく、新しい判定関数を追加して対応する。
+- 判定関数は DB スキーマに依存しすぎず、必要な値を受け取って結果を返す純粋なルール関数として実装する。
+- `status`・`reason` の生成責務は各判定関数が持ち、呼び出し側は結果をそのまま `exam_check_results` へ記帳する。
+- 制度別の総合判定（特定健診・法定健診）は各項目の `status` を集計して決定する。
+
+### 今後の拡張方針
+
+- v2では制度チェックで必要なルールのみ実装する。
+- 将来、制度改定や施設独自チェックが追加された場合でも、DBへルールを追加し、対応する判定関数を実装することで拡張できる構成とする。
+- `exam_item_group_identity_members` の追加カラムは、既存カラムでは表現できない要件が明確になった場合のみ追加を検討する。
+- `status` の種類は現時点では5種類で固定とし、新しい状態が制度上必要になった場合のみ拡張する。
+- `reason` は項目別の特記事項として保持し、XML処理結果ログ・医療機関向けメッセージの生成材料として利用する。

@@ -2,15 +2,15 @@
 
 ## 1. 全体方針
 
-本ドキュメントは、health_exam_result v2 のDDL作成・migration作成・スクリプト実装に入るため、既存設計メモから `01` から `04` のオーケストラスクリプト責務を実装粒度で整理したものである。
+本ドキュメントは、health_exam_result v2 のDDL作成・migration作成・スクリプト実装に入るため、`03_decisions.md` を正本として `01` から `04` のオーケストラスクリプト責務を実装粒度で整理したものである。
 
-正とする主な資料:
+正本:
+
+- `03_decisions.md`
+
+参照資料:
 
 - `05_design_history.md`
-  - `DH-20260701-01`
-  - `DH-20260701-02`
-  - `DH-20260701-03`
-  - `DH-20260701-04`
 - `06_flow.md`
 - `11_v2_script_design_notes.md`
 - `12_v2_ddl_design_notes.md`
@@ -18,6 +18,7 @@
 - `16_legacy_legal_check_rule_summary.md`
 - `17_legal_check_rule_diff.md`
 - `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md`
+- `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md`
 - `docs/spec/common_lib/00_inventory.md`
 
 ### v2初期スコープ
@@ -30,8 +31,23 @@
 - 物理ファイルとXML内容の対応は `xml_file_links` に保持する。
 - XML内容の正台帳は `xml_ledger` とし、同一 `xml_sha256` は重複作成しない。
 - XMLに実際に存在した健診値を `exam_item_values` に縦持ち登録する。
-- DB上の `xml_ledger` / `exam_item_values` と `dev_phr.exam_item_group_*` 系マスタから制度チェックを実行し、`exam_check_results` を生成する。
+- DB上の `xml_ledger` / `exam_item_values` と `dev_phr.exam_item_group_*` 系マスタから制度チェックを実行し、`exam_check_results` を生成する方針とする。
 - HIAアップロード用XMLをRun単位ディレクトリへ出力する。
+
+### 初期DDL方針
+
+- 初期DDLは `sql/ddl/health_exam_result/` 配下にテーブル単位で作成する。
+- DDLファイル名は `NNNN_health_exam_result__<table_name>.sql` を基本とする。
+- core DDLの初期作成対象は以下の7テーブルとする。
+  - `etl_runs`
+  - `etl_errors`
+  - `medical_folder_aliases`
+  - `file_receipts`
+  - `xml_ledger`
+  - `xml_file_links`
+  - `exam_item_values`
+- `exam_check_results` はcore DDLから一旦外し、制度チェック方針確認後にDDL化する。
+- `exam_check_results` の対象72項目、項目別 `status` / `reason` 方針、判定ルールをマスタに持たせる方針は設計済みとして扱う。
 
 初期スコープ外:
 
@@ -79,8 +95,16 @@
 | `xml_file_links` | `file_receipts` と `xml_ledger` の対応台帳。ZIP内XMLパスを保持する。 |
 | `xml_ledger` | XML内容単位の一意台帳。XML取込状態、加入者照合結果、制度チェック集約、XML単位の最新HIA出力状態を持つ。`file_receipt_id` は持たない。 |
 | `exam_item_values` | 実際に存在した健診値の縦持ち。XML/CSV共通の将来拡張を想定し、`ledger_type` / `ledger_id` で由来を表す。 |
-| `exam_check_results` | 制度チェック結果の横持ち台帳。対象72項目の `status_<item_code>` / `reason_<item_code>` と制度別総合判定を持つ。 |
+| `exam_check_results` | 制度チェック結果の横持ち台帳。対象72項目の `status_<item_code>` / `reason_<item_code>` と制度別総合判定を持つ。core DDLからは一旦外す。 |
 | `medical_folder_aliases` | event単位の医療機関フォルダ名変換台帳。 |
+
+### medical_folder_aliases 初期データ
+
+- `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md` を `medical_folder_aliases` 初期データの参照資料とする。
+- 同資料には `event_id = 2` の医療機関フォルダ188件が初期データ候補として整理されている。
+- 初期投入時点では原則 `src_folder_raw = dst_folder_norm` とする。
+- `202604開院_福岡労働衛生研究所　健診スクエア博多` は仮フォルダ名の可能性があるため、初期データ投入時の注意事項として扱う。
+- 上記の仮フォルダ名注意は初期実装のブロッカーではない。
 
 ## 2. `01_scan_files.py`
 
@@ -155,8 +179,8 @@
 ### status更新
 
 - `file_receipts.status` は物理ファイル単位の機械的状態として使う。
-- 具体的な値定義はDDL前に要確定。
-- 登録直後は、後続 `02_import_xml.py` の対象であることが分かる状態にする。
+- 値は `DISCOVERED` / `IMPORTING` / `IMPORTED` / `ERROR` とする。
+- 登録直後は `DISCOVERED` とする。
 - 登録済みスキップは原則エラーではなく、Runサマリーに残す。
 
 ### etl_runs / etl_errors の使い方
@@ -558,27 +582,20 @@ XMLファイルを再読込せず、DB上の `xml_ledger` / `exam_item_values` �
 - システム判定結果として保持し、手動承認で変更しない。
 - `check_reason` の詳細コードは未決。
 
-### xml_export_status = READY / NG の判定
-
-矛盾/要確認:
-
-- 正式な `xml_export_status` 値は `PENDING` / `READY` / `EXPORTED` / `ERROR` / `SKIPPED` であり、`NG` は含まれない。
-- そのため「`xml_export_status = READY / NG` の判定」は、実装上は `READY` / `SKIPPED` / `PENDING` / `ERROR` 等への振り分けとして扱う必要がある。
-
-現時点の整理:
+### xml_export_status の判定
 
 - 出力可能なXMLは `xml_export_status = READY`。
-- 出力対象外は `SKIPPED` または `PENDING` のどちらにするか要確認。
-- チェック処理例外により出力可否が決められない場合は `ERROR` の候補。
+- 出力対象外は `SKIPPED` または `PENDING` へ振り分ける。
+- チェック処理例外により出力可否が決められない場合は `ERROR` の候補とする。
 - `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = READY` とできる。
 
 ### exam_check_results.status_<item_code> / reason_<item_code> の扱い
 
 - 対象項目は `02_exam_check_item_spec_v2_0_0.md` の72項目を正とする。
 - カラム名は `status_<item_code>` / `reason_<item_code>` とする。
-- 正式な項目別statusコード一覧は未決。
-- 代表例は、値あり、算出、代替、不足、不正。
-- reasonには算出元、代替元、不足理由、不正理由、条件付き省略理由などを保持する。
+- 項目別statusは `OK` / `CALCULATED` / `ALTERNATIVE` / `MISSING` / `INVALID` とする。
+- reasonは特記事項のみ保持し、`OK` の場合は `NULL` とする。
+- reasonには算出元、代替元、不足理由、不正理由などを保持する。
 - 判定ルール自体は `exam_check_results` に保持せず、`dev_phr.exam_item_group_*` 系マスタを利用する。
 
 ### etl_runs / etl_errors の使い方
@@ -753,21 +770,13 @@ DB上のチェック結果・出力可否を参照し、HIAアップロード用
 - identity生成: `scripts/lib/identity/generator.py`, `scripts/lib/identity/field/*`, `scripts/lib/identity/builder/*`
 - ETL run/error基盤: `scripts/lib/etl/*`
 
-### 整備して使うもの
+### 既存common_lib側の確認が必要なもの
 
 - `scripts/lib/db/schemas.py`
   - `HEALTH_EXAM_RESULT = "health_exam_result"` の追加候補。
 - ETL run/error common
   - `scan` / `import_xml` / `check` / `export` に合うRun種別・phase定義が必要。
   - `02_import_xml.py` のRun単位処理＋file_receipt単位transaction例外をspecへ追記する。
-- file/XML SHA256 common
-  - `file_receipts.file_sha256` と `xml_ledger.xml_sha256` の正になるため、先にspec化推奨。
-- ZIP extract common
-  - safe extract、ZIP内相対パス、文字コード、パスtraversal防止、cleanup方針をspec化推奨。
-- XML parse basic common
-  - XML読込、namespace、parse error、原本bytes hash 方針をspec化推奨。
-- directory discovery common
-  - `01_scan_files.py` のフルスキャンに使う共通範囲をspec化する。
 
 ### 新規common_lib化しないもの
 
@@ -782,8 +791,13 @@ DB上のチェック結果・出力可否を参照し、HIAアップロード用
 - 特定健診チェック
 - 異常値チェック
 - HIA出力
+- SHA256計算
+- ZIP対象XML列挙
+- XML解析
+- directory discovery
 
 これらは health_exam_result のDDL・業務状態・運用フォルダ構造に依存するため、固有 `script_lib` に置く。
+SHA256計算は標準ライブラリ呼び出しで足りるため、共通ライブラリ化しない。
 
 ### health_exam_result固有script_libに置くもの
 
@@ -814,29 +828,32 @@ DB上のチェック結果・出力可否を参照し、HIAアップロード用
 | 対象 | 必要になる主なカラム | 12記載 | 足りなそうなもの / 要確認 |
 | --- | --- | --- | --- |
 | `dev_phr.event` | `result_root_path` | あり | migration対象として確定が必要。 |
-| `medical_folder_aliases` | `event_id`, `src_folder_raw`, `dst_folder_norm`, `is_active` | あり | 正式テーブル名、初期投入方法。 |
-| `file_receipts` | `event_id`, `file_role`, `file_type`, `source_path`, `relative_path`, `file_sha256`, `status`, `etl_run_id`, `processable_count`, `content_checked_at` | あり | `status` 値定義、重複判定の一意制約、登録済みスキップの扱い。 |
+| `medical_folder_aliases` | `event_id`, `src_folder_raw`, `dst_folder_norm`, `is_active` | あり | 初期投入データは `03_medical_folder_aliases_initial_data_v2_0_0.md` を参照する。 |
+| `file_receipts` | `event_id`, `file_role`, `file_type`, `source_path`, `relative_path`, `file_sha256`, `status`, `etl_run_id`, `processable_count`, `content_checked_at` | あり | 重複判定の一意制約、登録済みスキップの扱い。 |
 | `xml_file_links` | `event_id`, `file_receipt_id`, `xml_ledger_id`, `xml_inner_path` | あり | 一意制約。例: `file_receipt_id + xml_inner_path`、または `file_receipt_id + xml_ledger_id + xml_inner_path`。 |
 | `xml_ledger` | `xml_sha256`, 基本情報, subscriber照合結果, `xml_status`, `check_status`, `xml_export_status`, `manual_export_approved` | あり | `xml_sha256` unique、reason code、出力対象外時の `xml_export_status`。 |
 | `exam_item_values` | `ledger_type`, `ledger_id`, `namecode`, raw/normalized値, `identity_item_code`, `validation_status` | あり | `ledger_type` enum、重複防止キー、値型別カラム範囲。 |
-| `exam_check_results` | `ledger_type`, `ledger_id`, `legal_status`, `specific_status`, 72項目分の `status_` / `reason_` | あり | 項目別status正式コード、72項目カラム一覧のDDL確定。 |
+| `exam_check_results` | `ledger_type`, `ledger_id`, `legal_status`, `specific_status`, 72項目分の `status_` / `reason_` | あり | core DDLからは一旦外す。72項目・status/reason方針は設計済み。 |
 | `etl_runs` | `run_type`, `event_id`, `started_at`, `finished_at`, `status`, `summary_message` | あり | ADR-0023の既存DDL/APIとの整合。`phase` enumが狭い可能性。 |
 | `etl_errors` | `run_id`, `file_receipt_id`, `xml_ledger_id`, `item_value_id`, `error_type`, `error_code`, `error_message` | あり | `resolved_by_xml_ledger_id` は再提出解決との関係が未決。 |
-| `dev_phr.exam_item_group_*` | 制度チェック用 group / identity member / presence rule | あり | Migration対象、拡張カラム、特定健診group_code、`ANY_NONEMPTY` 定義。 |
+| `dev_phr.exam_item_group_*` | 制度チェック用 group / identity member / presence rule | あり | Migration対象、特定健診group_code。v2初期では `exam_item_group_identity_members` への追加カラムは作成しない。 |
 | `dev_phr.exam_item_master` | `identity_item_code`, namecode対応, 異常値min/max候補 | あり | min/max追加有無。 |
 
 ### 今回のスクリプト設計から必要になるテーブル
 
-初期実装で中心となるテーブル:
+core DDLの初期作成対象:
 
-- `health_exam_result.file_receipts`
-- `health_exam_result.xml_file_links`
-- `health_exam_result.xml_ledger`
-- `health_exam_result.exam_item_values`
-- `health_exam_result.exam_check_results`
+- `health_exam_result.etl_runs`
+- `health_exam_result.etl_errors`
 - `health_exam_result.medical_folder_aliases`
-- `etl_runs`
-- `etl_errors`
+- `health_exam_result.file_receipts`
+- `health_exam_result.xml_ledger`
+- `health_exam_result.xml_file_links`
+- `health_exam_result.exam_item_values`
+
+制度チェック方針確認後にDDL化するテーブル:
+
+- `health_exam_result.exam_check_results`
 
 参照する既存テーブル:
 
@@ -853,9 +870,7 @@ DB上のチェック結果・出力可否を参照し、HIAアップロード用
 ### 未決として残すもの
 
 - `xml_status` / `check_status` / `xml_export_status` のreason code詳細。
-- `file_receipts.status` の正式値。
 - `exam_item_values.validation_status` の正式値。
-- `exam_check_results.status_<item_code>` の正式コード一覧。
 - `dev_phr.exam_item_group_*` 系マスタのMigration対象・拡張内容。
 - 人＋イベント台帳の正式名称。
 - v2初期スコープに人＋イベント台帳を含めるか。
@@ -870,27 +885,24 @@ DB上のチェック結果・出力可否を参照し、HIAアップロード用
 - `02_import_xml.py` の既存XML再受領時に、既存 `xml_ledger.xml_status` を変更しないか、`SKIPPED` をどこに記録するか。
 - `02_import_xml.py` の失敗済み `file_receipt` 再実行条件。
 - `03_check_exam_results.py` の `exam_check_results` 再計算方式。upsertか削除再作成か。
-- `03_check_exam_results.py` が `xml_export_status` を `READY` 以外へ振り分ける条件。正式値に `NG` はない。
+- `03_check_exam_results.py` が `xml_export_status` を `READY` / `SKIPPED` / `PENDING` / `ERROR` へ振り分ける条件。
 - `04_export_hia_xml.py` で `EXPORTED` 済みを再出力するオプション有無。
 - `04_export_hia_xml.py` の出力単位失敗時にRun全体を継続するか。
 - `etl_errors` に登録済みスキップを記録するか、Runサマリーに留めるか。
 
 ### DDL前に決めるべき
 
-- 新規DB名を `health_exam_result` とするか。
-- `file_receipts.status`、`file_role`、`file_type`、`storage_folder_type` の値定義。
+- `file_receipts.file_role`、`file_type`、`storage_folder_type` の値定義。
 - `file_receipts` の登録済み判定キーと一意制約。
 - `xml_file_links` の一意制約。
 - `xml_ledger.xml_sha256` のunique制約。
 - `xml_status` / `check_status` / `xml_export_status` のreason code詳細。
 - `exam_item_values` の `ledger_type` enum、重複防止キー、raw/normalized保持範囲。
 - `exam_item_values.validation_status` の正式値。
-- `exam_check_results.status_<item_code>` の正式コード一覧。
 - 72項目分の `status_` / `reason_` カラムDDL。
 - 法定健診・特定健診 reason summary の区切り文字と形式。
 - `dev_phr.event.result_root_path` migration。
 - `dev_phr.exam_item_group_*` 系マスタのMigration対象・拡張方針。
-- `ANY_NONEMPTY` のv2正式定義。
 - 特定健診用 group_code と初期登録データ。
 
 ### 実装しながら決めてよい
@@ -914,11 +926,10 @@ DB上のチェック結果・出力可否を参照し、HIAアップロード用
 - HIA出力履歴台帳 `xml_export_logs` 等。
 - legal presence / missing 中間テーブル。
 
-## 9. 矛盾 / 要確認
+## 9. 注意 / 要確認
 
-- `03_check_exam_results.py` の出力可否で「`xml_export_status = READY / NG`」という表現があるが、正式な `xml_export_status` 値に `NG` はない。実装では `READY` / `SKIPPED` / `PENDING` / `ERROR` 等に置き換える必要がある。
 - 旧 `LSIO_Legal_Item` は29件、v2仕様の法定健診対象は35件、`exam_check_results` 横持ち対象は72項目であり、粒度が異なる。DDL上の横持ちは72項目で確定だが、法定健診主判定に含める項目集合とマスタmigrationは要確認。
-- `LSIO_Legal_Item` の `ANY_NONEMPTY` は名前と異なり、旧実装では「行存在」に近い。v2で非空値、nullFlavor、コード値妥当性まで含めるか要確認。
+- `ANY_NONEMPTY` は、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。旧実装は行存在に近いため、v2実装では旧挙動をそのまま正としない。
 - `file_receipts` に `output_path` 候補があるが、v2初期のHIA出力履歴はRun単位フォルダを証跡とする。出力ファイルを `file_receipts` に登録するかは要確認。
 - `etl_runs` / `etl_errors` は既存共通libにあるが、現在のphase enumやライフサイクルspecがhealth_exam_resultの4本構成・file_receipt単位transactionにそのまま合わない可能性がある。
-- `scripts/medical/script_lib/` は現時点で未存在。実装時に新規作成する必要がある。
+- `scripts/from_medical/script_lib/` は現時点で未存在。実装時に新規作成する必要がある。
