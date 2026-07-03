@@ -2202,3 +2202,53 @@ exam_check_results の各項目 status / reason の運用方針
 - `exam_item_group_identity_members` の追加カラムは、既存カラムでは表現できない要件が明確になった場合のみ追加を検討する。
 - `status` の種類は現時点では5種類で固定とし、新しい状態が制度上必要になった場合のみ拡張する。
 - `reason` は項目別の特記事項として保持し、XML処理結果ログ・医療機関向けメッセージの生成材料として利用する。
+
+---
+
+## DH-20260703-01 / 2026-07-03 11:19 JST
+
+### テーマ
+check_result の責務整理と判定結果の保持方針
+
+### 背景
+制度チェックの設計を進める中で、`check_result` が保持すべき情報と、`exam_check_results` の役割を整理する必要があった。
+
+また、制度判定・ログ出力・医療機関向けメッセージ生成まで一貫して利用できる構成にしたい。
+
+### 議論
+- `check_result` は制度全体（特定健診・法定健診）の判定結果を保持する。
+- 項目単位の判定は `exam_check_results` が保持する。
+- `exam_check_results` の `status` を集計し、制度全体の `check_result` を算出する。
+- 詳細理由は項目側 (`reason`) に保持し、必要に応じて集約利用する。
+- `check_result` 自体には人が読む詳細メッセージは保持しない。
+
+### 現時点の考え
+制度全体の判定と項目単位の判定は責務を分離する。
+
+- `check_result`
+  - 制度単位の最終判定
+- `exam_check_results`
+  - 項目ごとの充足状況 (`status`)
+  - 必要に応じた特記事項 (`reason`)
+
+とすることで、検索・集計・ログ生成の責務が明確になる。
+
+### 決定事項
+- `check_result` は制度単位（法定健診・特定健診）の最終判定のみ保持する。
+- 項目ごとの判定は `exam_check_results.status` が保持する。
+- `check_result` は `exam_check_results.status` の集計結果から算出する。
+- 詳細内容は `exam_check_results.reason` を利用する。
+- XML処理結果ログおよび医療機関向けメッセージは、`reason` が `NULL` ではない項目を集約して生成する。
+
+### 保留事項
+- `exam_check_results.status` から `check_result`（OK / WARNING / NG）への集計ルール詳細。
+- 制度別（法定健診・特定健診）の判定優先順位。
+
+### 根拠
+- 制度全体の判定と項目単位の判定を分離することで責務が明確になる。
+- 項目単位の情報をそのままログ・通知へ転用できる。
+- 制度判定ロジックを変更しても、項目判定結果を変更せず再集計できる構成となる。
+
+### 次回検討
+- `03_decisions.md` へ `check_result` の責務を反映する。
+- `12_v2_ddl_design_notes.md` へ `check_result` と `exam_check_results` の役割分担を反映する。

@@ -110,16 +110,26 @@
 - 法定健診・特定健診の不足判定結果は `exam_item_values` に保持せず、`exam_check_results` で管理する。
 - `exam_check_results` は同一性項目コード単位の横持ちとする。
 - `exam_check_results` は項目ごとに `status` / `reason` を持つ。
+- 制度チェックは、項目単位の判定と制度単位の総合判定を分離する。
 - `exam_check_results` は結果のみ保持し、判定ルールはマスタで管理する。
 - `exam_check_results` の横持ち対象は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の72項目を正とする。
+- まず統合された制度チェック対象72項目について、同一性項目コード単位で `exam_check_results` に横持ちの `status` / `reason` を記録する。
+- 72項目の項目別 `status` / `reason` は、法定健診・特定健診で二重に持たない。
 - `exam_check_results` の項目別 `status` は `OK`、`CALCULATED`、`ALTERNATIVE`、`MISSING`、`INVALID` の5種類とする。
 - `exam_check_results` の項目別 `reason` は特記事項のみ保持し、`OK` の場合は `NULL` とする。
 - XML処理結果ログおよび医療機関向けメッセージは、`reason` が `NULL` ではない項目を集約して生成する。
-- 法定健診・特定健診全体の `OK` / `WARNING` / `NG` は各項目 `status` を集計して判定する。
+- 法定健診・特定健診の総合判定は、72項目の `status` をもとに、それぞれの制度グループ定義に従って `OK` / `WARNING` / `NG` を集計する。
+- 法定健診・特定健診の総合判定は `exam_check_results` を唯一の入力として算出し、XML や `exam_item_values` を直接参照しない。
+- 項目ごとの判定結果は `exam_check_results` の項目別 `status` / `reason` が保持する。
+- `check_result` は `exam_check_results` の項目別 `status` を制度グループ単位で集計した最終判定とする。
 - `ANY_NONEMPTY` は presence 判定ルールとして扱い、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
 - `ANY_NONEMPTY` は行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
 - 旧 `LSIO_Legal_Item` は v2 の正ではなく、差分確認・参考資料として扱う。
 - `dev_phr.exam_item_group_*` は migration 対象とし、必要差分のみ追加・修正する。
+- マスタ構成としては、共通72項目用グループ、法定健診判定用グループ、特定健診判定用グループを分けて扱う方針とする。
+- 共通72項目用グループは、`exam_check_results` の項目別 `status` / `reason` を生成するために利用する。
+- 法定健診判定用グループと特定健診判定用グループは、制度単位の `check_result` を集計するために利用する。
+- 特定健診用グループは、初期実装ではマスタ未投入でも動作可能な構成とし、後でマスタを投入すれば判定できるようにする。
 - v2初期では `exam_item_group_identity_members` への追加カラムは行わず、既存カラムを利用する。
 - 制度チェックの判定ロジックは `03_check_exam_results.py` に集約する。
 - DBはどのルールを使うかを管理し、スクリプトはそのルールをどう判定するかを実装する。
@@ -190,7 +200,8 @@
 ## 保留
 
 - `xml_status` / `check_status` / `xml_export_status` の reason code 詳細
-- `exam_check_results.status_<item_code>` を法定健診・特定健診全体の `OK` / `WARNING` / `NG` へ集計する詳細ルール
+- `exam_check_results.status_<item_code>` を制度単位の `check_result`（OK / WARNING / NG）へ集計する詳細ルール
+- 法定健診・特定健診の判定優先順位
 - `INVALID` に入れる不正理由の詳細表現
 - `person_event` を初期実装に含めるかの最終判断
 - 人＋イベント単位の状態管理台帳の正式名称・初期実装範囲・状態値
