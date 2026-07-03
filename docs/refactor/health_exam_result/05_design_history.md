@@ -2252,3 +2252,387 @@ check_result の責務整理と判定結果の保持方針
 ### 次回検討
 - `03_decisions.md` へ `check_result` の責務を反映する。
 - `12_v2_ddl_design_notes.md` へ `check_result` と `exam_check_results` の役割分担を反映する。
+
+---
+
+## DH-20260703-02 / 2026-07-03 15:46 JST
+
+### テーマ
+CALCULATEルールの評価順および共通計算ライブラリの責務整理
+
+### 背景
+制度チェックルールの実装に向け、CALCULATEルールの評価順と計算処理の責務を明確にする必要があった。
+
+また、CALCULATEとALTERNATIVEの責務が混在しないよう整理し、実装時の判定フローを確定することを目的として協議した。
+
+### 議論
+- CALCULATEは対象項目に値が存在しない場合のみ評価する。
+- 対象項目に値が存在する場合は、その値を採用し計算処理は実施しない。
+- 計算処理は制度チェックスクリプトへ実装せず、共通ライブラリへ集約する。
+- 制度チェックスクリプトは、必要項目取得・計算ライブラリ呼び出し・status決定のみを担当する。
+- CALCULATEとALTERNATIVEは異なるルールであり、同一の概念として扱わない。
+- 同一性項目コードとname_code（検査方法）は役割が異なるため、代替ルールの管理単位も分けて考える必要がある。
+
+### 現時点の考え
+CALCULATEは実値が存在しない場合のみ評価するルールとし、計算そのものは共通ライブラリへ集約する。
+
+制度チェック側は計算ロジックを持たず、必要項目の取得、計算ライブラリの呼び出し、およびstatus決定のみを担当する。
+
+### 決定事項
+- CALCULATEルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
+- 対象同一性項目に有効値が存在する場合は、その値を採用し `status = OK` とする。
+- CALCULATEに必要な同一性項目がすべて揃う場合は、共通計算ライブラリを利用して値を生成し `status = CALCULATED` とする。
+- CALCULATEに必要な同一性項目が不足する場合は `status = MISSING` とする。
+- 計算ロジックは共通ライブラリ（`common/examination/calc.py` を想定）へ実装し、制度チェック側は計算ライブラリを呼び出して `status` を決定する。
+- CALCULATEとALTERNATIVEは別ルールとして扱い、同一の処理フローへ混在させない。
+
+### 保留事項
+- ALTERNATIVEルールを同一性項目単位で管理するか、name_code（検査方法）単位で管理するか。
+- ALTERNATIVEルールのDB設計および保持方法。
+
+### 根拠
+- 実値が存在する場合は実測値を最優先とし、不必要な計算を実施しないため。
+- 計算ロジックを共通ライブラリへ集約することで、制度チェック以外からも再利用可能にするため。
+- CALCULATEとALTERNATIVEの責務を分離することで、判定フローおよび実装責務を単純化するため。
+
+### 次回検討
+- `03_decisions.md` へCALCULATEルールの評価順および共通計算ライブラリの責務を反映する。
+- ALTERNATIVEルールの管理単位（同一性項目単位／name_code単位）を協議し、設計を決定する。
+- 決定内容を `03_decisions.md` および関連設計書へ反映する。
+
+---
+
+
+## DH-20260703-3 / 2026-07-03 16:19 JST
+
+### テーマ
+Alternative（代替候補）の管理方針
+
+### 背景
+設計協議の過程で検討した代替案（Alternative）をどのように設計履歴として残すかを整理した。最終決定のみを残すのではなく、なぜその設計になったかを後から追跡できる形にすることを目的として議論した。
+
+### 議論
+- Alternativeは、採用されなかった案も設計判断の根拠として重要である。
+- ただし、すべてを03_decisionsへ反映すると決定事項と未採用案が混在してしまう。
+- Alternativeは設計履歴（05_design_history）で管理し、最終的な決定事項のみ03_decisionsへ反映する構成が望ましい。
+- 将来的に設計変更が発生した場合でも、過去にどの案を比較したかを05から追跡できるようにする。
+
+### 判定フロー
+
+```text
+① 対象同一性項目に値がある？
+    YES → OK
+
+    NO
+     ↓
+② CALCULATEルールがある？
+    YES
+      ↓
+    計算可能？
+      YES → CALCULATED
+      NO
+        ↓
+
+③ ALTERNATIVEルールがある？
+    YES
+      ↓
+    代替項目に値がある？
+      YES
+        ↓
+    対象項目 = ALTERNATIVE
+    代替項目 = OK
+
+      NO
+        ↓
+    MISSING
+
+    NO（ALTERNATIVEルールなし）
+        ↓
+    MISSING
+```
+
+
+### 現時点の考え
+Alternativeは「設計時に比較・検討した候補」を記録するための情報として扱い、設計履歴（05）に残す。03は採用された設計のみを管理する役割とする。
+
+### 決定事項
+- Alternative（未採用案・比較案）は05_design_historyで管理する。
+- 03_decisions.mdには採用された最終決定のみを記載する。
+- Alternativeは設計判断の経緯を残す目的で保持し、決定事項とは分離する。
+
+### 保留事項
+- Alternativeの記載粒度（簡潔な列挙とするか、比較理由まで記載するか）は今後運用しながら必要に応じて調整する。
+
+### 根拠
+- 決定事項と未採用案を同一レイヤーで管理すると、現在有効な設計と検討履歴の区別が曖昧になるため。
+- 設計変更時に過去の比較内容を追跡できるよう、設計履歴へ残す価値があるため。
+- 対象同一性項目に値が存在する場合は、その値を優先して採用する。
+- 対象項目が空の場合のみ、CALCULATEによる補完を試みる。
+- CALCULATEでも補完できない場合のみ、ALTERNATIVEによる代替項目を評価する。
+- ALTERNATIVEが成立した場合は、対象項目は `ALTERNATIVE`、代替項目は `OK` と判定する。
+- いずれの方法でも値を確定できない場合は `MISSING` とする。
+
+### 次回検討
+- 05_design_historyへAlternativeをどの粒度で記録するかの運用を必要に応じて整理する。
+- 03_decisions.mdには今回採用した最終設計のみを反映する。
+
+---
+
+---
+
+## DH-20260703-4 / 2026-07-03 JST
+
+### テーマ
+ALTERNATIVE項目の処理方式
+
+### 背景
+健診結果チェック処理において、ALTERNATIVE（代替項目）の実装方法を検討した。
+既存の項目判定ロジックとの整合性を保ちつつ、共通化できる構成を目指して協議した。
+
+### 議論
+- ALTERNATIVE専用の分岐を各所へ実装すると処理が分散し、保守性が低下する。
+- identity項目コードを利用した既存の判定フローをそのまま活用できる構成が望ましい。
+- ALTERNATIVE固有の判定は共通ライブラリへ集約する案を検討した。
+- 共通ライブラリ内ではケース判定と実際の処理関数を分離し、追加・修正しやすい構成とする。
+
+### 現時点の考え
+ALTERNATIVEは既存のidentity項目コードベースの処理フローへ組み込み、固有ロジックのみ共通ライブラリへ集約する構成とする。この方針により既存フローとの一貫性を維持しながら、保守性・拡張性を確保できる。
+
+### 決定事項
+- ALTERNATIVEは既存のidentity項目コードによる処理フローを利用する。
+- ALTERNATIVE共通処理は `scripts/lib/examination/alternative.py` に実装する。
+- ライブラリ内でケース判定と実処理関数を分離する構成とする。
+
+### 保留事項
+- ALTERNATIVEで必要となるケース種別の洗い出し。
+- 各ケースに対応する処理関数の実装内容。
+
+### 根拠
+- 既存フローを流用することで新たな分岐を増やさず、一貫した実装とできるため。
+- 共通ライブラリへ集約することで、今後のケース追加や修正を局所化できるため。
+
+### 次回検討
+- `alternative.py` のケース分類と関数構成を設計する。
+- 本決定内容を `03_decisions.md` の実装方針へ反映する。
+
+---
+
+---
+
+## DH-20260703-5 / 2026-07-03 17:00 JST
+
+### テーマ
+XML単位のチェック結果保持と制度チェック総合判定
+
+### 背景
+初期実装において、XML構造・基本情報チェックの結果をどこまで細かく保持するか、および制度チェック結果からXML単位の総合判定をどう生成するかを整理する必要があった。
+
+### 議論
+- XML構造や基本情報チェックについては、初期実装では細かなステータスを増やさない。
+- XML単位の判定結果は運用上必要になるため、`xml_ledger` に `xml_status` / `xml_reason` を保持する。
+- `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラー、基本情報不足、加入者照合不可、その他XML単位で出力対象外となる理由をまとめて扱う。
+- XML単位の個別詳細ステータスは、運用しながら必要性が出た場合に追加を判断する。
+- 制度チェック総合判定は、`exam_check_results` の制度判定結果から `xml_ledger.check_status` を生成する。
+- 法定健診が `OK` で特定健診も `OK` の場合は `check_status = OK` とする。
+- 法定健診が `OK` で特定健診が `WARNING` の場合は `check_status = WARNING` とする。
+- 法定健診が `NG` の場合は、特定健診の結果にかかわらず `check_status = NG` とする。
+- 法定健診不足は `NG`、特定健診不足は `WARNING` として扱う。
+
+### 現時点の考え
+初期実装では、XML単位の処理結果は `xml_status` / `xml_reason` に集約し、詳細ステータスの増設は行わない。
+
+制度チェックの総合判定は、法定健診を主判定、特定健診を warning / 参考判定として扱い、`xml_ledger.check_status` へ集約する。
+
+### 決定事項
+- `xml_ledger` に `xml_status` / `xml_reason` を保持する。
+- XML単位の詳細ステータスは初期実装では持たない。
+- `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラー、基本情報不足、加入者照合不可、その他XML単位で出力対象外となる理由をまとめて扱う。
+- 制度チェック総合判定は、`exam_check_results` の制度判定結果から `xml_ledger.check_status` を生成する。
+- 制度チェック総合判定は以下とする。
+  - 法定OK・特定OK → `OK`
+  - 法定OK・特定WARNING → `WARNING`
+  - 法定NG → `NG`
+- 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
+
+### 保留事項
+- XML単位の詳細ステータス（項目別・工程別）の追加要否は、運用開始後に判断する。
+
+### 根拠
+- XML単位の判定結果は運用上必要だが、初期実装で詳細ステータスを増やすと状態管理が複雑化するため。
+- 法定健診不足は再提出要求に直結し得る主判定であり、特定健診不足は warning / 参考判定として扱う方針のため。
+
+### 次回検討
+- `03_decisions.md` へ XML単位のチェック結果保持と制度チェック総合判定方針を反映する。
+- 必要に応じて `11_v2_script_design_notes.md`、`12_v2_ddl_design_notes.md`、`19_implementation_ready_summary.md`、`20_implementation_plan.md` へ同期する。
+
+---
+
+## DH-20260703-6 / 2026-07-03 17:30 JST
+
+### テーマ
+Phase1 Core DDL の実装前詳細方針
+
+### 背景
+`21_dry_run_review.md` の再レビューにより、Phase1 Core DDL は条件付きGOとなった。
+
+条件として、core 7テーブルの型・NULL可否・UNIQUE・INDEX・FK方針を実装前に確定する必要があるため、`23_phase1_core_ddl_detail.md` の洗い出し結果をもとに、Phase1 DDLへ反映する実務上の判断を整理した。
+
+### 議論
+- `status` 系カラムは、将来の状態追加や運用変更に備え、DB enum ではなく `varchar` で保持する方針とした。
+- FK は DB 内部整合性を守るため `health_exam_result` 内のテーブル間には張る一方、`dev_phr` など外部DB・外部スキーマへの cross schema FK は張らない方針とした。
+- `dev_phr` 由来の `event_id` や `subscriber_id` は、参照・検索・JOIN 用に保持するが、外部FKではなく INDEX に留める。
+- `file_receipts.file_sha256` 単独UNIQUEは、同一内容ファイルの再受領・別配置で詰まる可能性があるため採用しない。
+- `file_receipts` の一意性は、同一イベント内の同一相対パス・同一内容ファイルを重複登録しない観点で設計する。
+- `xml_file_links` は、物理ファイルとXML内容の対応関係を一意に管理するため、`file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
+- `exam_item_values.normalized_value` は、数値だけでなく ST 型など文字列値も入るため、数値型ではなく `text` とする。
+
+### 現時点の考え
+Phase1 Core DDL では、DB制約で守る範囲とアプリケーション側で担保する範囲を分ける。
+
+`health_exam_result` 内の台帳間整合性はFKで守り、`dev_phr` など外部参照先との整合性は、FKではなくアプリケーション処理・JOIN確認・INDEXで扱う。
+
+また、status や normalized_value は制度・運用変更の影響を受けやすいため、初期実装では拡張しやすい型を採用する。
+
+### 決定事項
+- `status` 系カラムは DB enum ではなく `varchar` で定義する。
+- `health_exam_result` 内のテーブル間FKは張る。
+- `dev_phr` など外部DB・外部スキーマへの cross schema FK は張らない。
+- `event_id`、`subscriber_id`、`hia_subscriber_id` など外部参照・検索用カラムは、必要に応じて INDEX を付与する。
+- `file_receipts.file_sha256` 単独UNIQUEは採用しない。
+- `file_receipts` の重複防止は、`event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+- `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
+- `exam_item_values.normalized_value` は `text` とする。
+
+### 保留事項
+- `file_receipts` の正式UNIQUE制約名。
+- `xml_file_links` の正式UNIQUE制約名。
+- `status` 系カラムの具体的な `varchar` 長。
+- `event_id`、`subscriber_id` など外部参照カラムへ付与するINDEXの正式範囲。
+
+### 根拠
+- DB enum は状態追加時にDDL変更が必要になりやすく、v2初期では変更耐性を優先するため。
+- cross schema FK を張ると、既存DB側の変更、dump/restore、テスト、再取込時の適用順で詰まりやすいため。
+- 同一内容ファイルが再受領・別配置される可能性があるため、`file_sha256` 単独UNIQUEでは運用実態に合わないため。
+- `xml_file_links` は同じ物理ファイル内の同じXML内容・同じ内部パスの重複を防げればよいため。
+- `exam_item_values.normalized_value` には数値以外の文字列値も入り得るため。
+
+### 次回検討
+- `03_decisions.md` へPhase1 Core DDLの制約・型方針を反映する。
+- `23_phase1_core_ddl_detail.md` へ今回の決定事項を反映する。
+- 反映後、Phase1 Core DDL作成指示へ進む。
+
+---
+
+## DH-20260703-7 / 2026-07-03 18:26 JST
+
+### テーマ
+Phase2 `medical_folder_aliases` DDL設計方針
+
+### 背景
+Phase2設計レビューにおいて、`medical_folder_aliases` テーブルの制約・初期値・インデックス方針について、実装前に決定しておく必要があった。
+
+実運用時のフォルダ名正規化、再受領、将来の名称変更への対応を考慮し、DDLレベルで担保する範囲とアプリケーション側で担保する範囲を整理した。
+
+### 議論
+- 同一イベント内で同じフォルダ名を重複登録しないよう、一意制約を設ける。
+- 正規化後フォルダ名は、複数の実フォルダ名が同じ名称へ集約されるケースを許容する。
+- インデックスは初期実装では必要最小限とし、運用実績を見て追加する。
+- `is_active` は初期投入データをすべて有効として登録する。
+- `manual_judgement` は初期投入では使用せず、運用上必要になった場合のみ利用する。
+- `note` は仮名称や補足情報を保持する用途とし、`manual_judgement` の判定条件とはしない。
+
+### 現時点の考え
+初期実装ではシンプルな制約とし、実運用で得られた知見に応じてインデックスや判定フラグを拡張する方針とする。
+
+実フォルダ名と正規化後フォルダ名は役割を分離し、複数の実フォルダ名を1つの正規化名称へ集約できる設計とする。
+
+### 決定事項
+- `medical_folder_aliases` の一意制約は `UNIQUE(event_id, src_folder_raw)` とする。
+- `dst_folder_norm` は一意制約を設けず、複数の実フォルダ名から同一名称への集約を許可する。
+- インデックスは初期実装では `event_id` および `UNIQUE(event_id, src_folder_raw)` によるものを基本とする。
+- `is_active` の初期値は `1` とする。
+- `manual_judgement` の初期値は `0` とする。
+- 仮名称等の補足情報は `note` に保持し、`manual_judgement` の判定条件とはしない。
+
+### 保留事項
+- 初期データSQLの配置場所および命名規則。
+- 初期データ投入SQLの再実行方針（冪等性）の詳細。
+- `dev_phr.events.result_root_path` 追加用 migration の詳細設計。
+
+### 根拠
+- 同一イベント内で同一実フォルダ名を重複登録する必要はないため。
+- 複数の実フォルダ名を1つの正規化名称へ統合する運用を許容するため。
+- 初期実装では必要最小限のインデックスとし、運用実績に応じて最適化するため。
+- 仮名称は補足情報であり、初期実装では手動判定対象とはしないため。
+
+### 次回検討
+- `03_decisions.md` へ今回の決定事項を反映する。
+- `24_phase2_design_review.md` へDDL設計方針を反映する。
+- 初期データ投入SQLの配置・命名・再実行方針について協議する。
+
+---
+
+## DH-20260703-8 / 2026-07-03 JST
+
+### テーマ
+Phase2 初期データSQLと event.result_root_path migration 方針
+
+### 背景
+Phase2 では、`01_scan_files.py` が医療機関フォルダを探索できるように、`medical_folder_aliases` の初期データと `dev_phr.event.result_root_path` を準備する必要がある。
+
+`24_phase2_design_review.md` のレビューで残っていた、migration 要否、初期データSQLの配置・命名、再実行方針、`note` の扱い、`alias_id` の採番方法について、Phase2 実装前に決定した。
+
+### 議論
+- `dev_phr.event.result_root_path` は、イベントごとの健診結果ルートパスを保持するために必要であり、migration で追加する。
+- 既存イベントへの影響を避けるため、`result_root_path` は `NULL` 許可とする。
+- v2処理では、対象 `event_id` の `result_root_path` が未設定の場合は実行時エラーとする。
+- `medical_folder_aliases` 初期データは、仕様書 `03_medical_folder_aliases_initial_data_v2_0_0.md` を元に seed SQL として作成する。
+- 初期データは `event_id = 2` の医療機関フォルダ188件を投入対象とする。
+- 初期データ投入SQLは再実行可能にし、手戻りや仕様修正時に安全に再適用できるようにする。
+- `note` は補足情報がある場合のみ値を入れ、補足なしは `NULL` とする。
+- `alias_id` は内部IDであり、seed SQLでは明示せず自動採番に任せる。
+
+### 現時点の考え
+Phase2 では、イベントごとの結果格納ルートを `dev_phr.event.result_root_path` で管理し、医療機関フォルダ名の変換は `health_exam_result.medical_folder_aliases` の seed データで管理する。
+
+初期データSQLは、再実行可能な seed として扱い、`event_id` と `src_folder_raw` の一意性を正として更新できる構成にする。
+
+### 決定事項
+- `dev_phr.event.result_root_path` を migration で追加する。
+- `result_root_path` の型は `text` とする。
+- `result_root_path` は `NULL` 許可とする。
+- v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
+- `medical_folder_aliases` 初期データSQLを作成する。
+- 初期データの元資料は `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md` とする。
+- 初期データは `event_id = 2` の188件を投入対象とする。
+- 初期データでは原則 `src_folder_raw = dst_folder_norm` とする。
+- 初期データの `is_active` は `1` とする。
+- 初期データの `manual_judgement` は `0` とする。
+- 補足がある行のみ `note` に値を入れ、補足なしは `NULL` とする。
+- 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
+- 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
+- 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
+- 再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
+- `created_at` は初回INSERT時のみ設定する。
+- `alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
+
+### 保留事項
+- `dev_phr.event.result_root_path` migration の正式ファイル名。
+- `result_root_path` の初期値を既存 `event_id = 2` へ設定するか、別途手動更新とするか。
+- seed SQL 内の188件データの最終確認。
+
+### 根拠
+- イベントごとに健診結果ルートパスが異なるため、`event` 側でルートパスを保持する必要があるため。
+- 既存イベントに影響を与えず段階的に導入するため、`result_root_path` は `NULL` 許可とするため。
+- `event_id = 2` の医療機関フォルダ一覧は、Phase2 初期探索処理に必要な初期データであるため。
+- seed SQLを再実行可能にすることで、フォルダ名修正や補足情報更新時に安全に反映できるため。
+- `alias_id` を明示投入すると、環境差や再実行時の衝突要因になりやすいため。
+- 補足なしを空文字ではなく `NULL` とすることで、補足の有無を明確に判定できるため。
+
+### 次回検討
+- `03_decisions.md` へPhase2のmigration・seed方針を反映する。
+- `24_phase2_design_review.md` へ今回の決定事項を反映する。
+- `dev_phr.event.result_root_path` migration のファイル名と内容を確定する。
+- `medical_folder_aliases` seed SQL 作成へ進む。
+
+---

@@ -14,15 +14,17 @@ v2で必要になるDB・テーブル・既存dev_phrテーブルの利用方針
 
 ## 2. DB方針
 
-### 2.1 新規DB候補
+### 2.1 新規DB
 
-v2の処理系・台帳系は、既存 `dev_phr` へ混在させず、新しいDBを作成する方向で検討する。
+v2の処理系・台帳系は、既存 `dev_phr` へ混在させず、新しいDB `health_exam_result` に配置する。
 
-DB名候補:
+DB名:
 
 ```text
 health_exam_result
 ```
+
+初期DDLは `sql/ddl/health_exam_result/` 配下にテーブル単位で作成する。DDLファイル名は `NNNN_health_exam_result__<table_name>.sql` を基本とする。
 
 ### 2.2 DB責務分離
 
@@ -33,6 +35,13 @@ dev_phr
 health_exam_result
   = v2の取込・XML Ledger・健診値・チェック結果・処理ログ
 ```
+
+### 2.3 DDL制約方針
+
+- status系カラムはDB enumではなく `varchar` で定義する。
+- `health_exam_result` 内のテーブル間FKは張る。
+- `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
+- `event_id`、`subscriber_id`、`hia_subscriber_id` など外部参照・検索用カラムは必要に応じてINDEXを付与する。
 
 ---
 
@@ -80,7 +89,7 @@ v2初期実装では、設定YAMLから固定 `event_id` を指定して処理�
 - `event.result_root_path` によって、対象イベントの健診結果ルートフォルダを識別する。
 - `file_receipts.event_id`、`xml_file_links.event_id`、`xml_ledger.event_id`、`exam_item_values.event_id`、`exam_check_results.event_id` に冗長保持する。
 
-### 追加カラム候補
+### 追加カラム
 
 ```text
 result_root_path
@@ -89,6 +98,9 @@ result_root_path
 ### メモ
 
 - `result_root_path` は医療機関フォルダの親ディレクトリまでを保持する。
+- `result_root_path` の型は `text` とする。
+- `result_root_path` は既存イベントへの影響を避けるため `NULL` 許可とする。
+- v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
 - 医療機関ごとのフォルダ名は `health_exam_result` 側の event対応フォルダエイリアステーブルで管理する。
 - 旧 `work_other.medi_shared_folder_aliases` は event 非対応のため、v2では利用しない。
 
@@ -125,50 +137,79 @@ result_root_path
 
 ### 扱い
 
-参照。一部Migrationで追加・差分更新・拡張する。
+参照。一部Migrationで追加・差分更新する。
 
 旧法定健診チェックで利用していた `LSIO_Legal_Item` は、完成済みの制度チェック機能ではなく、実データから法定健診項目の存在を逆引き確認するための簡易presenceチェック・エビデンス用途として扱う。
 
-v2では、旧マスタをそのまま正とせず、既存構造を参考にしながら制度チェック機能として必要なカラム・役割を再設計する。
+v2では、旧マスタをそのまま正とせず、既存構造を参考にしながら制度チェックに必要なマスタデータを追加・修正する。
 
 ### 用途
 
-- 法定健診・特定健診などの制度チェックルールマスタとして利用する。
+- 共通72項目用グループ、法定健診判定用グループ、特定健診判定用グループを分けて扱う。
+- 共通72項目用グループは、`exam_check_results` の項目別 `status` / `reason` を生成するために利用する。
+- 法定健診判定用グループと特定健診判定用グループは、制度単位の `check_result` を集計するために利用する。
 - 現行では `LSIO_Legal_Item` が法定健診項目グループとして使われている。
 - 法定健診ルールは、既存 `LSIO_Legal_Item` を `02_exam_check_item_spec_v2_0_0.md` と突き合わせて差分確認し、必要な差分のみMigrationで追加・修正する。
-- 特定健診ルールは、法定健診側の仕組みを参考に新規groupとして追加する。
-- `exam_item_group_identity_members` は、同一性項目コード単位の必須区分・presence判定ルール・算出/代替/条件付き必須の表現を担う候補とする。
+- 特定健診用グループは、初期実装ではマスタ未投入でも動作可能な構成とし、後でマスタを投入すれば判定できるようにする。
+- `exam_item_group_identity_members` は、同一性項目コード単位の必須区分・presence判定ルール管理として利用する。
 - `exam_item_group_members` は nameCode ベースのグループ所属を持つ。
 - `exam_item_group_method_members` は methodCode ベースの presence 判定補助を持つ。
 - `exam_check_results` の `status_<item_code>` / `reason_<item_code>` は、`exam_item_values` と `dev_phr.exam_item_group_*` 系マスタから生成する。
 
-### v2拡張候補
+### v2初期で利用する既存カラム
 
-既存カラムで表現しきれない場合、`exam_item_group_identity_members` を中心に以下のような拡張を検討する。
+v2初期では `exam_item_group_identity_members` への追加カラムは作成せず、既存カラムを利用する。
 
 ```text
-required_type
-presence_rule_type
-status_policy
-missing_status
-reason_code
-allow_calculated
-allow_alternative
-calculation_rule_code
-alternative_group_code
+required_flag
+condition_expr
+required_presence_namecodes
+presence_value_mode
 ```
+
+### 将来拡張候補
+
+既存カラムで表現しきれない詳細判定が必要になった場合は、制度チェックルールの拡張を別途検討する。
 
 ### メモ
 
 - 旧法定チェックは主に「対象namecode行が存在するか」を見ており、値の意味・nullFlavor・代替・算出・条件付き必須までは十分に扱っていない。
-- 旧 `ANY_NONEMPTY` は、実装上は「非空値」ではなく「行が存在するか」に近い可能性があるため、v2で再定義する。
+- `ANY_NONEMPTY` は presence 判定のみを担当する。
+- `ANY_NONEMPTY` は、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
+- `ANY_NONEMPTY` は行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
+- 値の整合性チェック、付帯情報チェック、条件付き必須などの詳細判定は別ルールとして扱う。
+- `CALCULATE` ルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
+- 対象同一性項目に有効値が存在する場合は、その値を採用し、項目別 `status = OK` とする。
+- `CALCULATE` に必要な同一性項目がすべて揃う場合は、共通計算ライブラリを利用して値を生成し、項目別 `status = CALCULATED` とする。
+- `CALCULATE` で値を確定できない場合のみ、`ALTERNATIVE` ルールを評価する。
+- `ALTERNATIVE` が成立した場合は、対象項目を項目別 `status = ALTERNATIVE`、代替項目を項目別 `status = OK` とする。
+- `CALCULATE` と `ALTERNATIVE` のいずれでも値を確定できない場合は、項目別 `status = MISSING` とする。
+- 計算ロジックは共通ライブラリ `scripts/lib/examination/calc.py` へ実装し、制度チェック側は計算ライブラリを呼び出して `status` を決定する。
+- `CALCULATE` と `ALTERNATIVE` は別ルールとして扱い、同一の処理フローへ混在させない。
+- `ALTERNATIVE` は既存の identity 項目コードによる処理フローを利用する。
+- `ALTERNATIVE` 共通処理は `scripts/lib/examination/alternative.py` に実装する。
+- `ALTERNATIVE` 共通処理では、ケース判定と実処理関数を分離する。
 - 法定健診チェックは、健診機関確認・再提出フローに耐える制度チェック機能として設計する。
 - 特定健診チェックは、同じ仕組みに載せるが、運用上は warning / 参考判定を基本とする。
-- v2では `dev_phr.exam_item_group_*` 系マスタをMigration対象とし、必要な差分のみ追加・修正する。
+- v2では `dev_phr.exam_item_group_*` 系マスタをMigration対象とし、72項目対応に必要な初期データを追加・修正する。これはDDL追加ではなくデータ不足として扱う。
 
 ---
 
 ## 4. health_exam_result側で作成するテーブル候補
+
+core DDLの初期作成対象は以下の7テーブルとする。
+
+```text
+etl_runs
+etl_errors
+medical_folder_aliases
+file_receipts
+xml_ledger
+xml_file_links
+exam_item_values
+```
+
+`exam_check_results` はcore DDLから一旦外し、制度チェックDDLとして後続で作成する。
 
 ## 4.1 file_receipts
 
@@ -230,6 +271,8 @@ updated_at
 - `facility_code` / `facility_name` は健診機関コード・名称として保持する。
 - `processable_count` はZIPならXML件数、XML単体なら通常1、CSVなら設定に従って算出したデータ行数を保持する。
 - `content_checked_at` はファイル種別に依存しない中身確認日時として保持する。
+- `file_receipts.file_sha256` 単独UNIQUEは採用しない。
+- `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
 - `work` は `02_import_xml.py` が処理中だけ利用する一時領域であり、`file_receipts` では恒久的な `work_path` を保持しない。
 - `file_receipts` は人＋イベント単位の最終完了状態を管理しない。
 - 人間の業務確認状態を持つ場合は、機械的な `status` と混ぜず、将来の `operation_status` として分離する。
@@ -252,7 +295,7 @@ XML内容の品質・突合・処理状態を管理する一意台帳。
 - `xml_sha256` によるXML内容の一意管理。
 - 加入者突合結果の保持。
 - XMLとしての処理状態と理由の保持。
-- 健診内容チェックの総合判定サマリー保持。
+- XML単位の制度チェック状態の保持。
 - XML単位のHIA出力状態の保持。
 - チェックNG後に業務確認で出力OKとした手動承認情報の保持。
 
@@ -285,7 +328,6 @@ subscriber_match_reason
 xml_status
 xml_reason
 check_status
-check_reason
 xml_export_status
 manual_export_approved
 manual_export_reason
@@ -298,9 +340,11 @@ updated_at
 - `xml_status` は `02_import_xml.py` のXML取込状態を保持する。
 - `check_status` は `03_check_exam_results.py` の制度チェック状態を保持する。
 - `xml_export_status` は `04_export_hia_xml.py` のHIA出力状態をXML単位で保持する。
-- `xml_reason` / `check_reason` は固定enumではなく、スクリプト実装・チェック追加に応じて理由コードを追加できる文字列カラムとする。
-- `xml_status` / `check_status` / `xml_export_status` の詳細値は、03 では未決事項のため、DDLでは正式決定のように固定しない。
-- `check_status = NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = READY` とできる。
+- `xml_reason` は固定enumではなく、スクリプト実装に応じて理由コードを追加できる文字列カラムとする。
+- `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラー、基本情報不足、加入者照合不可、その他XML単位で出力対象外となる理由をまとめて扱う。
+- XML単位の詳細ステータスは初期実装では持たない。
+- `xml_status` / `check_status` / `xml_export_status` の値定義は確定済みとし、reason code詳細は未決として残す。
+- 制度単位の判定が `NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = READY` とできる。
 - `check_status` はシステム判定結果として保持し、手動承認によって変更しない。
 - `item_extract_status`、旧HIA ready系ステータス、`xsd_valid`、`is_exam_result`、`error_count`、`warning_count` は独立カラムとしては持たない。
 - `xml_sha256` はXML内容の一意キーとして保持する。v2内の主参照は `xml_ledger.id` を基本とする。
@@ -347,6 +391,7 @@ created_at
 - ZIP内XMLの場合、`xml_inner_path` はZIP内相対パスを保持する。
 - 単体XMLの場合、`xml_inner_path` は `NULL` とする。
 - 同一 `xml_sha256` のXMLを別ZIP等で受領した場合は、既存 `xml_ledger` を参照する `xml_file_links` を追加する。
+- `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
 
 ---
 
@@ -411,6 +456,7 @@ updated_at
 - CSVからHIAアップロード用XMLを生成する場合も、`exam_item_values` の正規化済み値を利用する。
 - `event_id`、`subscriber_id`、`hia_subscriber_id` は、正規化のためではなく、SQLによる運用調査・障害解析・検索性向上のために冗長保持する。
 - `hia_subscriber_id` は正ではなく、HIA加入者IDで調査・検索するための運用補助キーとして扱う。
+- `normalized_value` は、数値だけでなく ST 型など文字列値も入るため `text` とする。
 
 ---
 
@@ -418,7 +464,7 @@ updated_at
 
 ### 役割
 
-法定健診・特定健診のチェック結果台帳。
+制度チェック対象72項目の項目別チェック結果台帳。
 
 人が確認・エクスポート・集計しやすいよう、横持ちを基本とする。
 
@@ -426,10 +472,9 @@ updated_at
 
 - 1受診者・1Ledger単位の制度チェック結果を保持する。
 - `exam_item_values` に存在する値、および存在しない項目を判定材料として保持する。
-- 制度チェック対象項目を同一性項目コード単位で横持ちする。
+- 統合された制度チェック対象72項目を同一性項目コード単位で横持ちする。
 - 各チェック対象項目の状態を `status` / `reason` で保持する。
-- 法定健診・特定健診の総合判定を保持する。
-- 法定健診・特定健診の reason summary を保持する。
+- 法定健診・特定健診で項目別 `status` / `reason` を二重に持たない。
 - 検索性向上のため `event_id` / `subscriber_id` / `hia_subscriber_id` を冗長保持する。
 
 ### 主なカラム候補
@@ -441,10 +486,6 @@ ledger_type
 ledger_id
 subscriber_id
 hia_subscriber_id
-legal_status
-legal_reason_summary
-specific_status
-specific_reason_summary
 check_run_id
 checked_at
 created_at
@@ -486,13 +527,25 @@ reason_9N006
 
 ### reason形式
 
-法定健診・特定健診の reason summary は、項目別 `status` / `reason` から集約して保持する。
+`reason_<item_code>` は特記事項のみ保持し、`OK` の場合は `NULL` とする。
 
 例:
 
 ```text
-9N206:項目なし|9D100:値なし|9E160:値なし
+算出元:9N206
 ```
+
+XML処理結果ログおよび医療機関向けメッセージは、`reason` が `NULL` ではない項目を集約して生成する。
+
+### check_result
+
+`check_result` は制度単位の最終判定を表す。
+
+- `check_result` は `exam_check_results` の項目別 `status` を制度グループ単位で集計して算出する。
+- 法定健診・特定健診の総合判定は `exam_check_results` を唯一の入力として算出し、XMLや `exam_item_values` を直接参照しない。
+- 制度チェック総合判定は `xml_ledger.check_status` に保持する。
+- 法定OK・特定OKの場合は `OK`、法定OK・特定WARNINGの場合は `WARNING`、法定NGの場合は `NG` とする。
+- 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
 
 ### メモ
 
@@ -502,12 +555,12 @@ reason_9N006
 - 横持ち項目は同一性項目コード単位で作成する。
 - 検査方法、左右、裸眼/矯正などではカラムを分けない。
 - 項目別の値あり/なしや値有効/不正は、`present` / `valid` ではなく `status` / `reason` に集約する。
-- 法定健診・特定健診で値の事実を二重管理しない。
-- 法定健診・特定健診で分けるのは総合評価と reason summary のみとする。
-- 項目別 `status` の正式コード一覧はDDL作成前に確定する。カラム命名規則は `status_<item_code>` / `reason_<item_code>` とする。
+- 法定健診・特定健診で値の事実や項目別 `status` / `reason` を二重管理しない。
+- 項目別 `status` は `OK` / `CALCULATED` / `ALTERNATIVE` / `MISSING` / `INVALID` とする。カラム命名規則は `status_<item_code>` / `reason_<item_code>` とする。
+- `CALCULATE` による算出結果は項目別 `status = CALCULATED` として表現し、`CALCULATE` と `ALTERNATIVE` のいずれでも値を確定できない場合は項目別 `status = MISSING` として表現する。
 - 判定ルール自体は `exam_check_results` に保持しない。既存 `dev_phr.exam_item_group_*` 系マスタを利用する。
 - 法定健診ルールマスタは現行内容を棚卸しし、`02_exam_check_item_spec_v2_0_0.md` との差分確認を行う。
-- 特定健診ルールマスタは、スクリプト方針が固まった後に `02_exam_check_item_spec_v2_0_0.md` を元に新規作成する。
+- 特定健診用グループは、初期実装ではマスタ未投入でも動作可能な構成とし、後でマスタを投入すれば判定できるようにする。
 
 ---
 
@@ -595,6 +648,21 @@ updated_at
 - このテーブルは医療機関マスタではなく、イベント単位のフォルダ名変換台帳である。
 - `file_receipts` には、実際に読み込んだ共有フォルダ名を保持する。
 - 初期投入データは `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md` を正とする。
+- 一意制約は `UNIQUE(event_id, src_folder_raw)` とする。
+- `dst_folder_norm` には一意制約を設けず、複数の実フォルダ名から同一名称への集約を許可する。
+- 初期実装のインデックスは `event_id` および `UNIQUE(event_id, src_folder_raw)` によるものを基本とする。
+- 初期データは `event_id = 2` の188件を投入対象とする。
+- 初期データでは原則 `src_folder_raw = dst_folder_norm` とする。
+- 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
+- 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
+- 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
+- 初期データSQL再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
+- `created_at` は初回INSERT時のみ設定する。
+- `alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
+- `is_active` の初期値は `1` とする。
+- `manual_judgement` の初期値は `0` とする。
+- 補足がある行のみ `note` に値を入れ、補足なしは `NULL` とする。
+- 仮名称等の補足情報は `note` に保持し、`manual_judgement` の判定条件とはしない。
 
 ---
 
@@ -640,7 +708,7 @@ medi_lsio_identity_presence
 medi_lsio_missing_items
 ```
 
-v2では、まず `exam_item_values` とルールマスタから直接 `xml_ledger`・`exam_check_results` へ集約する。
+v2では、まず `exam_item_values` とルールマスタから直接 `exam_check_results` を生成し、制度単位の `check_result` は `exam_check_results` から集計する。
 
 必要になった場合のみ、不足項目明細テーブルを追加する。
 
@@ -670,48 +738,85 @@ v2初期で本格実装するかは別途判断する。
 
 ## 6. DDL設計で決めること
 
-1. 新規DB名を `health_exam_result` とするか。
-2. `dev_phr.event` へ `result_root_path` を追加するMigration。
-3. event対応版 `medical_folder_aliases` の正式テーブル名とDDL。
+### 決定済み
+
+1. 新規DB名は `health_exam_result` とする。
+2. 初期DDLは `sql/ddl/health_exam_result/` 配下にテーブル単位で作成する。
+3. DDLファイル名は `NNNN_health_exam_result__<table_name>.sql` とする。
+4. core DDL対象は `etl_runs`、`etl_errors`、`medical_folder_aliases`、`file_receipts`、`xml_ledger`、`xml_file_links`、`exam_item_values` の7テーブルとする。
+5. `exam_check_results` はcore DDLから一旦外し、制度チェックDDLとして後続で作成する。
+6. `exam_check_results` の横持ち対象は `02_exam_check_item_spec_v2_0_0.md` の72項目を正とする。
+7. `exam_check_results` の項目別 `status` は `OK` / `CALCULATED` / `ALTERNATIVE` / `MISSING` / `INVALID` とする。
+8. `reason_<item_code>` は特記事項のみ保持し、`OK` 時は `NULL` とする。
+9. `ANY_NONEMPTY` は presence 判定のみを担当し、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
+10. v2初期では `exam_item_group_identity_members` への追加カラムは作成しない。
+11. `dev_phr.exam_item_group_*` 系マスタは migration / 初期データ追加で72項目対応する。DDL追加ではなくデータ不足として扱う。
+12. `medical_folder_aliases` の初期投入データは `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md` を正とする。
+13. `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
+14. `medical_folder_aliases` の一意制約は `UNIQUE(event_id, src_folder_raw)` とする。
+15. `medical_folder_aliases.dst_folder_norm` には一意制約を設けず、複数の実フォルダ名から同一名称への集約を許可する。
+16. `medical_folder_aliases` のインデックスは、初期実装では `event_id` および `UNIQUE(event_id, src_folder_raw)` によるものを基本とする。
+17. `medical_folder_aliases.is_active` の初期値は `1` とする。
+18. `medical_folder_aliases.manual_judgement` の初期値は `0` とする。
+19. 仮名称等の補足情報は `medical_folder_aliases.note` に保持し、`manual_judgement` の判定条件とはしない。
+20. status系カラムはDB enumではなく `varchar` で定義する。
+21. `health_exam_result` 内のテーブル間FKは張る。
+22. `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
+23. `file_receipts.file_sha256` 単独UNIQUEは採用しない。
+24. `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+25. `exam_item_values.normalized_value` は `text` とする。
+26. `dev_phr.event.result_root_path` は migration で追加する。
+27. `dev_phr.event.result_root_path` の型は `text` とし、`NULL` 許可とする。
+28. v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
+29. `medical_folder_aliases` 初期データは `event_id = 2` の188件を投入対象とする。
+30. `medical_folder_aliases` 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
+31. `medical_folder_aliases` 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
+32. `medical_folder_aliases` 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
+33. 初期データSQL再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
+34. `medical_folder_aliases.created_at` は初回INSERT時のみ設定する。
+35. `medical_folder_aliases.alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
+36. `medical_folder_aliases.note` は、補足がある行のみ値を入れ、補足なしは `NULL` とする。
+
+### 未決として残す
+
+1. `dev_phr.event.result_root_path` migration の正式ファイル名。
+2. `result_root_path` の初期値を既存 `event_id = 2` へ設定するか、別途手動更新とするか。
+3. seed SQL 内の188件データの最終確認。
 4. `file_receipts` の file_role / file_type / storage_folder_type の値定義。
-5. `xml_file_links` の一意制約と再取込時のリンク追加ルール。
-6. `xml_status` / `check_status` / `xml_export_status` のreason code詳細。
-7. `exam_item_values` の raw値・正規化値の保持範囲。
-8. `exam_item_values.validation_status` の値定義。
-9. `exam_check_results` の横持ち対象は `02_exam_check_item_spec_v2_0_0.md` の72項目を正とする。
-10. `exam_check_results` の項目別 `status` の正式コード一覧。
-11. 法定健診・特定健診 reason summary の区切り文字と出力形式。
-12. 共通ETL仕様に従い、`etl_runs` / `etl_errors` を利用する。
-13. `dev_phr.exam_item_master` に異常値 min/max を追加するか。
-14. `dev_phr.exam_item_group_*` 系マスタのMigration対象と拡張方針。
-15. 既存 `LSIO_Legal_Item` と `02_exam_check_item_spec_v2_0_0.md` の法定項目差分をどう反映するか。
-16. `exam_item_group_identity_members` に追加すべき v2制度チェック用カラム。
-17. `ANY_NONEMPTY` をv2でどう定義し直すか。
-18. 特定健診用 group_code と初期登録データ。
-19. 人＋イベント台帳の正式名称。
-20. v2初期スコープに人＋イベント台帳を含めるか。
-21. 人＋イベント台帳に保持する `operation_status` の正式値。
-22. 再提出XMLをどの旧XMLの解決として扱うかの紐付け方法。
-23. HIA出力履歴台帳を将来追加するか。
+5. `xml_status` / `check_status` / `xml_export_status` のreason code詳細。
+6. `exam_item_values` の raw値・正規化値の保持範囲。
+7. `exam_item_values.validation_status` の値定義。
+8. XML単位の詳細ステータス（項目別・工程別）の追加要否。
+9. reason集約の詳細。
+10. `dev_phr.exam_item_master` に異常値 min/max を追加するか。
+11. 既存 `LSIO_Legal_Item` と `02_exam_check_item_spec_v2_0_0.md` の法定項目差分をどう反映するか。
+12. 人＋イベント台帳の正式名称。
+13. v2初期スコープに人＋イベント台帳を含めるか。
+14. 人＋イベント台帳に保持する `operation_status` の正式値。
+15. 再提出XMLをどの旧XMLの解決として扱うかの紐付け方法。
+16. HIA出力履歴台帳を将来追加するか。
 
 ---
 
 ## 7. 現時点の結論
 
-v2では、`dev_phr` の既存マスタ・加入者・event系テーブルを活かしつつ、処理系・台帳系は新規DB `health_exam_result` に分離する方向とする。
+v2では、`dev_phr` の既存マスタ・加入者・event系テーブルを活かしつつ、処理系・台帳系は新規DB `health_exam_result` に分離する。
 
-初期実装の中心は以下の6テーブルとする。
+core DDLの初期作成対象は以下の7テーブルとする。
 
 ```text
-file_receipts
-xml_file_links
-xml_ledger
-exam_item_values
-exam_check_results
+etl_runs
+etl_errors
 medical_folder_aliases
+file_receipts
+xml_ledger
+xml_file_links
+exam_item_values
 ```
 
-XML取込の基本フローは、`file_receipts → xml_file_links → xml_ledger → exam_item_values → exam_check_results` とし、物理受領台帳・XML内容台帳・健診値/チェック結果を分離する。
+`exam_check_results` はcore DDLから一旦外し、制度チェックDDLとして後続で作成する。
+
+XML取込から制度チェックまでの基本フローは、`file_receipts → xml_file_links → xml_ledger → exam_item_values → exam_check_results → xml_ledger.check_status` とし、物理受領台帳・XML内容台帳・健診値・項目別チェック結果・制度単位総合判定を分離する。
 
 将来的にはCSV直取込に対応する場合、`csv_row_ledger` を追加し、`file_receipts → xml_file_links / csv_row_ledger → xml_ledger / exam_item_values / exam_check_results` の構造で基本情報Ledgerと健診値を分離する。
 

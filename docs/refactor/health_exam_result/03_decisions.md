@@ -45,6 +45,7 @@
 
 - 新規DBの初期DDLは `sql/ddl/<db_name>/` 配下へ配置する。
 - 既存DBへの変更SQLは `sql/migrations/<target_db_name>/` 配下へ配置する。
+- 初期データSQLは `sql/seed/<db_name>/` 配下へ配置する。
 - migration の配置先は機能名ではなく、変更対象DB名を基準とする。
 - migration ファイル名は `YYYYMMDD_NNN_<target_db_name>_<action>_<summary>.sql` を基本とする。
 - `health_exam_result` は新規DBのため、初期テーブル作成SQLは migration ではなく `sql/ddl/health_exam_result/` 配下へ配置する。
@@ -53,6 +54,34 @@
 - 初期DDLの連番は既存 `sql/ddl/dev_phr/` の形式に合わせ、作成順・依存順が分かるように付与する。
 - core DDLの初期作成対象は `etl_runs`、`etl_errors`、`medical_folder_aliases`、`file_receipts`、`xml_ledger`、`xml_file_links`、`exam_item_values` とする。
 - `exam_check_results` は制度チェック方針を再確認した後にDDL化する。
+- status系カラムはDB enumではなく `varchar` で定義する。
+- `health_exam_result` 内のテーブル間FKは張る。
+- `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
+- `event_id`、`subscriber_id`、`hia_subscriber_id` など外部参照・検索用カラムは必要に応じてINDEXを付与する。
+- `file_receipts.file_sha256` 単独UNIQUEは採用しない。
+- `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+- `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
+- `exam_item_values.normalized_value` は `text` とする。
+- `medical_folder_aliases` の一意制約は `UNIQUE(event_id, src_folder_raw)` とする。
+- `medical_folder_aliases.dst_folder_norm` には一意制約を設けず、複数の実フォルダ名から同一名称への集約を許可する。
+- `medical_folder_aliases` のインデックスは、初期実装では `event_id` および `UNIQUE(event_id, src_folder_raw)` によるものを基本とする。
+- `medical_folder_aliases.is_active` の初期値は `1` とする。
+- `medical_folder_aliases.manual_judgement` の初期値は `0` とする。
+- 仮名称等の補足情報は `medical_folder_aliases.note` に保持し、`manual_judgement` の判定条件とはしない。
+- `medical_folder_aliases` 初期データSQLを作成する。
+- `medical_folder_aliases` 初期データの元資料は `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md` とする。
+- `medical_folder_aliases` 初期データは `event_id = 2` の188件を投入対象とする。
+- `medical_folder_aliases` 初期データでは原則 `src_folder_raw = dst_folder_norm` とする。
+- `medical_folder_aliases` 初期データでは、補足がある行のみ `note` に値を入れ、補足なしは `NULL` とする。
+- `medical_folder_aliases` 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
+- `medical_folder_aliases` 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
+- `medical_folder_aliases` 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
+- 初期データSQL再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
+- `medical_folder_aliases.created_at` は初回INSERT時のみ設定する。
+- `medical_folder_aliases.alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
+- `dev_phr.event.result_root_path` は migration で追加する。
+- `dev_phr.event.result_root_path` の型は `text` とする。
+- `dev_phr.event.result_root_path` は `NULL` 許可とする。
 - `dev_phr` のマスタ拡張や event カラム追加は `sql/migrations/dev_phr/` 配下へ配置する。
 - `work_other` を変更する場合は `sql/migrations/work_other/` 配下へ配置する。
 - migration の日付は厳密な作成日ではなく、適用順を把握するための管理日として扱う。
@@ -122,8 +151,26 @@
 - 法定健診・特定健診の総合判定は `exam_check_results` を唯一の入力として算出し、XML や `exam_item_values` を直接参照しない。
 - 項目ごとの判定結果は `exam_check_results` の項目別 `status` / `reason` が保持する。
 - `check_result` は `exam_check_results` の項目別 `status` を制度グループ単位で集計した最終判定とする。
+- 制度チェック総合判定は、`exam_check_results` の制度判定結果から `xml_ledger.check_status` を生成する。
+- 法定健診・特定健診の制度チェック総合判定は以下とする。
+  - 法定OK・特定OK → `OK`
+  - 法定OK・特定WARNING → `WARNING`
+  - 法定NG → `NG`
+- 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
 - `ANY_NONEMPTY` は presence 判定ルールとして扱い、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
 - `ANY_NONEMPTY` は行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
+- `CALCULATE` ルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
+- 対象同一性項目に有効値が存在する場合は、その値を採用し、項目別 `status = OK` とする。
+- `CALCULATE` に必要な同一性項目がすべて揃う場合は、共通計算ライブラリを利用して値を生成し、項目別 `status = CALCULATED` とする。
+- `CALCULATE` で値を確定できない場合のみ、`ALTERNATIVE` ルールを評価する。
+- `ALTERNATIVE` が成立した場合は、対象項目を項目別 `status = ALTERNATIVE`、代替項目を項目別 `status = OK` とする。
+- `CALCULATE` と `ALTERNATIVE` のいずれでも値を確定できない場合は、項目別 `status = MISSING` とする。
+- 計算ロジックは共通ライブラリ `scripts/lib/examination/calc.py` へ実装し、制度チェック側は計算ライブラリを呼び出して `status` を決定する。
+- `CALCULATE` と `ALTERNATIVE` は別ルールとして扱い、同一の処理フローへ混在させない。
+- `ALTERNATIVE` は既存の identity 項目コードによる処理フローを利用する。
+- `ALTERNATIVE` 共通処理は `scripts/lib/examination/alternative.py` に実装する。
+- `ALTERNATIVE` 共通処理では、ケース判定と実処理関数を分離する。
+- 採用されなかった案・比較案としての Alternative は `05_design_history.md` で管理し、`03_decisions.md` には採用された最終決定のみを記載する。
 - 旧 `LSIO_Legal_Item` は v2 の正ではなく、差分確認・参考資料として扱う。
 - `dev_phr.exam_item_group_*` は migration 対象とし、必要差分のみ追加・修正する。
 - マスタ構成としては、共通72項目用グループ、法定健診判定用グループ、特定健診判定用グループを分けて扱う方針とする。
@@ -140,6 +187,7 @@
 - 手動承認で出力可にしても `check_status` は変更しない。
 - `event` の概念は v2 初期から利用する。
 - 初期実装では設定ファイルから `event_id` を指定して処理を実行する。
+- v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
 - 新規DB名は `health_exam_result` とする。
 - `dev_phr` は原則参照とする。ただし、人・イベント・共通マスタなど `dev_phr` が正となるテーブルは、必要に応じてテーブル単位で書き込みを許容する。
 - 処理系・台帳系テーブルは `health_exam_result` に配置する。
@@ -150,10 +198,13 @@
 - status はシステム処理ステータスと業務フローステータスを分けて設計する。
 - `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / ERROR` の4状態で管理する。
 - `xml_status` は `02_import_xml.py` のXML取込状態を表し、`PENDING / IMPORTED / ERROR / SKIPPED` の4状態で管理する。
+- `xml_ledger` に `xml_status` / `xml_reason` を保持する。
+- `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラー、基本情報不足、加入者照合不可、その他XML単位で出力対象外となる理由をまとめて扱う。
+- XML単位の詳細ステータスは初期実装では持たない。
 - `check_status` は `03_check_exam_results.py` の制度チェック状態を表し、`PENDING / OK / WARNING / NG` の4状態で管理する。
 - `xml_export_status` は `04_export_hia_xml.py` のHIA出力状態を表し、`PENDING / READY / EXPORTED / ERROR / SKIPPED` の5状態で管理する。
 - v2初期では `xml_export_status` を `xml_ledger` に保持し、XML単位の最新出力状態を管理する。
-- 重複ファイルは、同一物理ファイルまたは同一 `file_sha256` のファイルを再検出した場合を指す。
+- 重複ファイルは、同一物理ファイルを再検出した場合を指す。
 - 重複ファイルは `file_receipts` に新規登録しない。
 - 重複件数は `etl_runs` のスキップ件数・実行サマリーで管理する。
 - 医療機関から再提出された修正版ファイルは、同一人物・同一健診結果に関係する場合でも、別の受領ファイルとして `file_receipts` に新規登録する。
@@ -200,9 +251,11 @@
 ## 保留
 
 - `xml_status` / `check_status` / `xml_export_status` の reason code 詳細
-- `exam_check_results.status_<item_code>` を制度単位の `check_result`（OK / WARNING / NG）へ集計する詳細ルール
-- 法定健診・特定健診の判定優先順位
+- XML単位の詳細ステータス（項目別・工程別）の追加要否
 - `INVALID` に入れる不正理由の詳細表現
+- `dev_phr.event.result_root_path` migration の正式ファイル名
+- `result_root_path` の初期値を既存 `event_id = 2` へ設定するか、別途手動更新とするか
+- seed SQL 内の188件データの最終確認
 - `person_event` を初期実装に含めるかの最終判断
 - 人＋イベント単位の状態管理台帳の正式名称・初期実装範囲・状態値
 - 欠損XML・再提出XML・最終採用XMLの関係の表現方法

@@ -50,6 +50,10 @@ scripts/lib/
 - `work` への一時コピー、ZIP展開、XMLファイル読込は `02_import_xml.py` に集約する。
 - `02_import_xml.py` はXML基本情報抽出、加入者照合、健診項目値抽出、`xml_file_links` / `xml_ledger` / `exam_item_values` 登録を一括で行う。
 - `03_check_exam_results.py` はXMLファイルを再読込せず、DB上の `xml_ledger` / `exam_item_values` を入力にする。
+- `03_check_exam_results.py` は統合された制度チェック対象72項目について、同一性項目コード単位で項目別 `status` / `reason` を生成し、`exam_check_results` に横持ちで保持する。
+- 法定健診・特定健診で項目別 `status` / `reason` を二重に持たない。
+- 制度単位の `check_result` は `exam_check_results` の項目別 `status` を制度グループ単位で集計する。
+- 法定健診・特定健診の総合判定は `exam_check_results` を唯一の入力とし、XMLや `exam_item_values` を直接参照しない。
 - `04_export_hia_xml.py` はDB上のチェック結果・出力状態を参照し、HIAアップロード用XMLを生成する。
 - `work` 領域は恒久保存領域ではなく、処理中だけ利用する一時作業領域とする。
 - 既に取り込み済みの重複ファイルは `file_receipts` に新規登録せず、重複件数は `etl_runs` のスキップ件数・実行サマリーで管理する。
@@ -83,9 +87,10 @@ scripts/lib/
 03_check_exam_results.py
   xml_ledger / exam_item_values を入力
   dev_phr.exam_item_group_* 系マスタを参照
-  法定健診・特定健診・異常値チェック
+  統合された制度チェック対象72項目の項目別 status / reason を生成
   exam_check_results 登録・更新
-  xml_ledger.check_status / xml_export_status へ集約
+  exam_check_results から xml_ledger.check_status を生成
+  xml_export_status へ反映
   ↓
 04_export_hia_xml.py
   xml_ledger.xml_export_status とチェック結果を参照
@@ -102,6 +107,8 @@ scripts/lib/
 | `xml_export_status` | `04_export_hia_xml.py` | HIA出力状態 | `PENDING` / `READY` / `EXPORTED` / `ERROR` / `SKIPPED` |
 
 reason code の詳細は未決とし、機械的ステータスと人間の業務確認ステータスは混在させない。
+
+`xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラー、基本情報不足、加入者照合不可、その他XML単位で出力対象外となる理由をまとめて扱う。XML単位の詳細ステータスは初期実装では持たない。
 
 ---
 
@@ -143,12 +150,13 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 1. `etl_runs` にスキャンRunを開始登録する。
 2. 設定YAMLから `event_id` を取得する。
 3. `dev_phr.event` から `result_root_path` を取得する。
-4. `medical_folder_aliases` を参照し、イベント配下の医療機関フォルダを解決する。
-5. 各医療機関フォルダの `02_健診結果（編集）` 配下をフルスキャンする。
-6. ファイル種別、相対パス、ファイルサイズ、SHA256、医療機関フォルダ情報を取得する。
-7. 登録済みファイルはスキップし、必要に応じて `etl_errors` またはRunサマリーに記録する。
-8. 未登録ファイルのみ `file_receipts` に追加し、登録時の `etl_run_id` を保持する。
-9. `etl_runs` に件数サマリーと終了状態を記録する。
+4. 対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
+5. `medical_folder_aliases` を参照し、イベント配下の医療機関フォルダを解決する。
+6. 各医療機関フォルダの `02_健診結果（編集）` 配下をフルスキャンする。
+7. ファイル種別、相対パス、ファイルサイズ、SHA256、医療機関フォルダ情報を取得する。
+8. 登録済みファイルはスキップし、必要に応じて `etl_errors` またはRunサマリーに記録する。
+9. 未登録ファイルのみ `file_receipts` に追加し、登録時の `etl_run_id` を保持する。
+10. `etl_runs` に件数サマリーと終了状態を記録する。
 
 ### 再実行方針
 
@@ -159,6 +167,7 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 ### エラー記録方針
 
 - フォルダ参照不可、ファイル属性取得不可、SHA256算出不可などは `etl_errors` に記録する。
+- 対象 `event_id` の `result_root_path` 未設定はエラーとして記録する。
 - 登録済みスキップは原則エラーではなく、Runサマリーまたはスキップ理由として記録する。
 
 ---
@@ -245,20 +254,23 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 
 ### 目的
 
-DB上の `xml_ledger` / `exam_item_values` を入力に、法定健診・特定健診・異常値チェックを実施し、`exam_check_results` と `xml_ledger` のチェック集約状態を更新する。
+DB上の `xml_ledger` / `exam_item_values` を入力に、統合された制度チェック対象72項目の項目別 `status` / `reason` を生成し、`exam_check_results` に横持ちで保持する。
+
+制度チェックは「項目単位の判定」と「制度単位の総合判定」を分離する。制度単位の `check_result` は `exam_check_results` の項目別 `status` を制度グループ単位で集計する。
 
 ### 入力
 
 - チェック対象の `event_id` または対象Run条件
 - `health_exam_result.xml_ledger`
 - `health_exam_result.exam_item_values`
+- `dev_phr.exam_item_master`
 - `dev_phr.exam_item_group_*` 系マスタ
 
 ### 出力
 
 - `exam_check_results`
 - `xml_ledger.check_status`
-- `xml_ledger.check_reason`
+- `xml_ledger.xml_export_status`
 - `etl_runs` / `etl_errors`
 
 ### 更新テーブル
@@ -281,13 +293,41 @@ DB上の `xml_ledger` / `exam_item_values` を入力に、法定健診・特定�
 2. チェック対象の `xml_ledger` を取得する。
 3. 対象XMLに紐づく `exam_item_values` を取得する。
 4. `dev_phr.exam_item_group_*` 系マスタから制度チェックルールを取得する。
-5. 法定健診チェックを実行する。
-6. 特定健診チェックを実行する。
-7. 異常値チェックを実行する。
-8. `exam_check_results` を登録・更新する。
-9. 法定健診を主判定、特定健診を warning / 参考判定として、`xml_ledger.check_status` / `check_reason` に集約する。
-10. チェック結果をもとに、出力候補は `xml_ledger.xml_export_status = READY`、出力対象外は必要に応じて `SKIPPED` へ更新する。
-11. `etl_runs` に件数サマリーと終了状態を記録する。
+5. `exam_item_master` で `namecode` と `identity_item_code` の対応を解決する。
+6. 共通72項目用グループに従って、項目別 `status` / `reason` を生成する。
+7. `exam_check_results` を登録・更新する。
+8. 制度単位の総合判定を行う場合は、法定健診判定用グループ・特定健診判定用グループに従って、`exam_check_results` の項目別 `status` を集計し、`xml_ledger.check_status` を生成する。
+9. チェック結果をもとに、出力候補は `xml_ledger.xml_export_status = READY`、出力対象外は必要に応じて `SKIPPED` へ更新する。
+10. `etl_runs` に件数サマリーと終了状態を記録する。
+
+### 制度チェック総合判定
+
+- 法定OK・特定OKの場合は、`xml_ledger.check_status = OK` とする。
+- 法定OK・特定WARNINGの場合は、`xml_ledger.check_status = WARNING` とする。
+- 法定NGの場合は、特定健診の結果にかかわらず `xml_ledger.check_status = NG` とする。
+- 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
+
+### 制度チェックルール方針
+
+- `ANY_NONEMPTY` は presence 判定のみを担当する。
+- 対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
+- `ANY_NONEMPTY` は行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
+- 値の整合性チェック、付帯情報チェック、条件付き必須などの詳細判定は別ルールとして扱う。
+- `CALCULATE` ルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
+- 対象同一性項目に有効値が存在する場合は、その値を採用し、項目別 `status = OK` とする。
+- `CALCULATE` に必要な同一性項目がすべて揃う場合は、共通計算ライブラリを利用して値を生成し、項目別 `status = CALCULATED` とする。
+- `CALCULATE` で値を確定できない場合のみ、`ALTERNATIVE` ルールを評価する。
+- `ALTERNATIVE` が成立した場合は、対象項目を項目別 `status = ALTERNATIVE`、代替項目を項目別 `status = OK` とする。
+- `CALCULATE` と `ALTERNATIVE` のいずれでも値を確定できない場合は、項目別 `status = MISSING` とする。
+- 計算ロジックは共通ライブラリ `scripts/lib/examination/calc.py` へ実装し、制度チェック側は計算ライブラリを呼び出して `status` を決定する。
+- `CALCULATE` と `ALTERNATIVE` は別ルールとして扱い、同一の処理フローへ混在させない。
+- `ALTERNATIVE` は既存の identity 項目コードによる処理フローを利用する。
+- `ALTERNATIVE` 共通処理は `scripts/lib/examination/alternative.py` に実装する。
+- `ALTERNATIVE` 共通処理では、ケース判定と実処理関数を分離する。
+- 制度チェックはルール種別をキーとして、対応する判定関数へディスパッチする。
+- DBはどのルールを使うかを管理し、スクリプトはそのルールをどう判定するかを実装する。
+- v2初期では `exam_item_group_identity_members` への追加カラムは作成しない。
+- 特定健診用グループは初期マスタ未投入でも動作可能とし、後からマスタ投入すれば判定可能にする。
 
 ### 再実行方針
 
@@ -298,7 +338,7 @@ DB上の `xml_ledger` / `exam_item_values` を入力に、法定健診・特定�
 ### エラー記録方針
 
 - マスタ不足、想定外値、チェック処理例外は `etl_errors` に記録する。
-- チェック不能なXMLは `xml_ledger.check_status` / `check_reason` に集約する。
+- チェック不能なXMLは `xml_ledger.check_status` / `check_reason` または `xml_export_status` に反映し、詳細は `etl_errors` に記録する。
 
 ---
 
@@ -392,8 +432,8 @@ DB上のチェック結果・出力状態を参照し、HIAアップロード用
 | xml_ledger登録 | XML内容一意判定、基本情報登録、照合結果・状態更新 |
 | exam_item_values抽出 | XML entry/observation 解析、健診値抽出、項目辞書解決 |
 | subscriber照合 | XML基本情報から加入者を照合し、台帳へ反映 |
-| 制度チェック | 法定健診・特定健診・異常値チェック、reason生成 |
-| exam_check_results登録 | 横持ちチェック結果のupsert、summary生成 |
+| 制度チェック | 72項目の項目別 `status` / `reason` 生成、制度単位の `check_result` 集計 |
+| exam_check_results登録 | 横持ちチェック結果のupsert、reason生成 |
 | HIA出力 | DB上の正規化済みデータからHIAアップロード用XMLを生成 |
 
 ---

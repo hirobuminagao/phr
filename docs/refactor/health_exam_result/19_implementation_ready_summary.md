@@ -577,8 +577,11 @@ XMLファイルを再読込せず、DB上の `xml_ledger` / `exam_item_values` �
 - 総合判定は `exam_check_results` を唯一の入力とし、XML や `exam_item_values` を直接参照しない。
 - 法定健診チェックは主判定とする。
 - 特定健診チェックは原則warning / 参考判定とする。
+- 制度チェック総合判定は、`exam_check_results` の制度判定結果から `xml_ledger.check_status` を生成する。
+- 法定OK・特定OKの場合は `OK`、法定OK・特定WARNINGの場合は `WARNING`、法定NGの場合は `NG` とする。
+- 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
 - システム判定結果として保持し、手動承認で変更しない。
-- `check_result` の物理的な保持先、制度単位の集計条件、判定優先順位、reason集約の詳細は未決として残す。
+- reason集約の詳細は未決として残す。
 
 ### xml_export_status の判定
 
@@ -604,6 +607,17 @@ XMLファイルを再読込せず、DB上の `xml_ledger` / `exam_item_values` �
 - 対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
 - 行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
 - 値の整合性チェック、付帯情報チェック、条件付き必須などの詳細判定は別ルールとして扱う。
+- `CALCULATE` ルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
+- 対象同一性項目に有効値が存在する場合は、その値を採用し、項目別 `status = OK` とする。
+- `CALCULATE` に必要な同一性項目がすべて揃う場合は、共通計算ライブラリを利用して値を生成し、項目別 `status = CALCULATED` とする。
+- `CALCULATE` で値を確定できない場合のみ、`ALTERNATIVE` ルールを評価する。
+- `ALTERNATIVE` が成立した場合は、対象項目を項目別 `status = ALTERNATIVE`、代替項目を項目別 `status = OK` とする。
+- `CALCULATE` と `ALTERNATIVE` のいずれでも値を確定できない場合は、項目別 `status = MISSING` とする。
+- 計算ロジックは共通ライブラリ `scripts/lib/examination/calc.py` へ実装し、制度チェック側は計算ライブラリを呼び出して `status` を決定する。
+- `CALCULATE` と `ALTERNATIVE` は別ルールとして扱い、同一の処理フローへ混在させない。
+- `ALTERNATIVE` は既存の identity 項目コードによる処理フローを利用する。
+- `ALTERNATIVE` 共通処理は `scripts/lib/examination/alternative.py` に実装する。
+- `ALTERNATIVE` 共通処理では、ケース判定と実処理関数を分離する。
 - 制度チェックはルール種別をキーとして、対応する判定関数へディスパッチする構成とする。
 - 新しい制度ルールは既存処理へ条件分岐を追加するのではなく、判定関数を追加して拡張できる構成とする。
 - v2初期では `exam_item_group_identity_members` への追加カラムは作成しない。
@@ -836,7 +850,7 @@ SHA256計算は標準ライブラリ呼び出しで足りるため、共通ラ�
 | `medical_folder_aliases` | `event_id`, `src_folder_raw`, `dst_folder_norm`, `is_active` | あり | 初期投入データは `03_medical_folder_aliases_initial_data_v2_0_0.md` を参照する。 |
 | `file_receipts` | `event_id`, `file_role`, `file_type`, `source_path`, `relative_path`, `file_sha256`, `status`, `etl_run_id`, `processable_count`, `content_checked_at` | あり | 重複判定の一意制約、登録済みスキップの扱い。 |
 | `xml_file_links` | `event_id`, `file_receipt_id`, `xml_ledger_id`, `xml_inner_path` | あり | 一意制約。例: `file_receipt_id + xml_inner_path`、または `file_receipt_id + xml_ledger_id + xml_inner_path`。 |
-| `xml_ledger` | `xml_sha256`, 基本情報, subscriber照合結果, `xml_status`, `check_status`, `xml_export_status`, `manual_export_approved` | あり | `xml_sha256` unique、reason code、出力対象外時の `xml_export_status`。制度単位 `check_result` の物理的な保持先は未決。 |
+| `xml_ledger` | `xml_sha256`, 基本情報, subscriber照合結果, `xml_status`, `check_status`, `xml_export_status`, `manual_export_approved` | あり | `xml_sha256` unique、reason code、出力対象外時の `xml_export_status`。制度チェック総合判定は `check_status` に保持する。 |
 | `exam_item_values` | `ledger_type`, `ledger_id`, `namecode`, raw/normalized値, `identity_item_code`, `validation_status` | あり | `ledger_type` enum、重複防止キー、値型別カラム範囲。 |
 | `exam_check_results` | `ledger_type`, `ledger_id`, 72項目分の `status_` / `reason_` | あり | core DDLからは一旦外す。72項目・status/reason方針は設計済み。 |
 | `etl_runs` | `run_type`, `event_id`, `started_at`, `finished_at`, `status`, `summary_message` | あり | ADR-0023の既存DDL/APIとの整合。`phase` enumが狭い可能性。 |
@@ -876,9 +890,7 @@ core DDLから一旦外し、制度チェックDDLとして別途DDL化するテ
 
 - `xml_status` / `check_status` / `xml_export_status` のreason code詳細。
 - `exam_item_values.validation_status` の正式値。
-- `check_result` の物理的な保持先。
-- 制度単位の `OK` / `WARNING` / `NG` 集計条件。
-- 法定健診・特定健診の判定優先順位。
+- XML単位の詳細ステータス（項目別・工程別）の追加要否。
 - reason集約の詳細。
 - `dev_phr.exam_item_group_*` 系マスタの72項目対応migration / 初期データ追加。
 - `dev_phr.event.result_root_path` の既存DDL / migration確認。
@@ -895,9 +907,6 @@ core DDLから一旦外し、制度チェックDDLとして別途DDL化するテ
 - `02_import_xml.py` の既存XML再受領時に、既存 `xml_ledger.xml_status` を変更しないか、`SKIPPED` をどこに記録するか。
 - `02_import_xml.py` の失敗済み `file_receipt` 再実行条件。
 - `03_check_exam_results.py` の `exam_check_results` 再計算方式。upsertか削除再作成か。
-- `check_result` の物理的な保持先。
-- 制度単位の `OK` / `WARNING` / `NG` 集計条件。
-- 法定健診・特定健診の判定優先順位。
 - reason集約の詳細。
 - `03_check_exam_results.py` が `xml_export_status` を `READY` / `SKIPPED` / `PENDING` / `ERROR` へ振り分ける条件。
 - `04_export_hia_xml.py` で `EXPORTED` 済みを再出力するオプション有無。
@@ -947,7 +956,7 @@ core DDLから一旦外し、制度チェックDDLとして別途DDL化するテ
 | `01_scan_files.py` | OK | `dev_phr.event.result_root_path` の既存DDL / migration確認は必要。 |
 | `02_import_xml.py` | OK寄り | `exam_item_values.validation_status` の正式値は未決として残す。 |
 | `03_check_exam_results.py` の72項目別 `status` / `reason` 生成 | OK寄り | dev_phrマスタの72項目対応migration / 初期データ追加が必要。 |
-| 法定健診・特定健診の `check_result` 総合判定 | 要確認 | 物理的な保持先、集計条件、判定優先順位、reason集約の詳細が未決。 |
+| 法定健診・特定健診の `check_result` 総合判定 | OK寄り | `xml_ledger.check_status` への集約条件は確定済み。reason集約の詳細は未決。 |
 | `04_export_hia_xml.py` | 後続でよい | v2初期では出力履歴台帳を作らず、Run単位フォルダを証跡とする。 |
 
 ## 10. 注意 / 要確認
