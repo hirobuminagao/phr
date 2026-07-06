@@ -2828,7 +2828,7 @@ DDLとの差分は設計上の重要な判断材料であり、DDLのみを正�
 
 ---
 
-## DH-20260706-01 / 2026-07-06 15:08 JST
+## DH-20260706-4 / 2026-07-06 15:08 JST
 
 ### テーマ
 ETL実績テーブルに対する外部キー制約の適用方針
@@ -2873,7 +2873,7 @@ ETL実績テーブルは監査・履歴を記録することを主目的とし�
 
 ---
 
-## DH-20260706-01 / 2026-07-06 17:02 JST
+## DH-20260706-5 / 2026-07-06 17:02 JST
 
 ### テーマ
 Phase3レビュー後の積み残し管理方針
@@ -2909,3 +2909,112 @@ Phase3の設計・DDL・スクリプト整理を進める中で、実装や設�
 - 設計判断が確定したものは必要に応じて `03_decisions.md` へ反映する。
 
 ---
+
+## DH-20260706-6 / 2026-07-06 18:49 JST
+
+### テーマ
+Phase4（XML取込）の入力条件・再受領・エラー管理方針
+
+### 背景
+Phase4（`02_import_xml.py`）の実装着手前レビューを行い、入力条件、XML再受領時の扱い、エラー記録方針について整理した。
+
+### 当初の考え
+- Phase4は `etl_run_id` を指定して実行する案を考えていた。
+- ZIP内で一部XMLのみ失敗した場合のファイル状態や、既存XMLの定義が曖昧だった。
+- `etl_errors` の最小構成も未整理だった。
+
+### 議論
+- 通常運用ではイベント単位で未処理ファイルを処理できる方が運用しやすい。
+- 一方で、障害解析や再実行では特定Runのみを対象にしたいケースもある。
+- そのため、設定ファイルでは `event_id` と `file_receipts.status = DISCOVERED` を基本条件とし、CLIから `etl_run_id` を指定した場合のみ対象を上書きする方針とした。
+- Phase4設定ファイルは `scripts/from_medical/config/import_xml.yml` とし、イベント・入力条件・ZIP設定・実行設定を管理する。
+- ZIP内で対象XMLの一部のみ正常処理できた場合は、ZIP全体として失敗ではなく一部成功と扱う。
+- 一部成功時は `file_receipts.status = WARNING` とし、正常XMLのみ `xml_ledger` を登録する。
+- 失敗したXMLは `xml_ledger` を作成せず、詳細は `etl_errors` に記録する。
+- `file_receipts` はファイル全体の総合状態、`xml_ledger` は正常取込済みXML、`etl_errors` は処理失敗詳細という責務分離を維持する。
+- 「既存XML」は同一人物ではなく、`xml_sha256` が一致するXMLを指すものとした。
+- 同一人物でもXML内容が変更されれば `xml_sha256` は変わるため、新しい `xml_ledger` を登録する。
+- 同一 `xml_sha256` のXMLを再受領した場合は `xml_ledger` を増やさず、`xml_file_links` のみ追加する。
+- Phase4の `etl_errors` は最小構成とし、`field`・`error_code`・`message` を基本として管理する。
+
+### 現時点の考え
+Phase4はイベント単位で未処理ファイルを処理する通常運用を基本とし、必要時のみ `etl_run_id` 指定による限定実行を行う。
+
+ファイル・XML・エラーの責務を分離し、ファイル全体の状態は `file_receipts`、正常XMLは `xml_ledger`、失敗内容は `etl_errors` で管理する。
+
+### 決定事項
+- 通常実行は `event_id + file_receipts.status = DISCOVERED` を入力条件とする。
+- CLIから `etl_run_id` を指定した場合のみ対象を限定する。
+- Phase4設定ファイルは `scripts/from_medical/config/import_xml.yml` とする。
+- ZIP内で一部成功した場合は `file_receipts.status = WARNING` とする。
+- 正常XMLのみ `xml_ledger` を登録する。
+- 失敗XMLは `xml_ledger` を作成せず、`etl_errors` に記録する。
+- `file_receipts` は総合状態、`xml_ledger` は正常XML、`etl_errors` は失敗詳細を管理する。
+- 「既存XML」は `xml_sha256` 一致で判定する。
+- 同一 `xml_sha256` の再受領時は `xml_ledger` を増やさず、`xml_file_links` のみ追加する。
+- `etl_errors` は `field`・`error_code`・`message` を基本構成とする。
+
+### 保留事項
+- `import_xml.yml` の正式な設定項目一覧。
+- `file_receipts.status` の正式コード一覧。
+- `etl_errors.error_code` の正式コード一覧。
+- `xml_status`・`check_status`・`xml_export_status` の詳細コード設計。
+
+### 根拠
+- 通常運用ではイベント単位の未処理ファイルを対象とする方が再実行・日常運用ともに扱いやすいため。
+- `xml_ledger` はXML内容の一意台帳であり、同一内容XMLを重複登録しない設計であるため。
+- ファイル状態・XML状態・エラー詳細を分離することで、一覧性・検索性・障害解析性を維持できるため。
+
+### 次回検討
+- `import_xml.yml` の正式仕様作成。
+- `02_import_xml.py` の詳細設計。
+- Phase4 DDL・Migration・実装レビュー。
+
+---
+
+## DH-20260706-7 / 2026-07-06 19:31 JST
+
+### テーマ
+Phase4におけるidentity生成失敗時のXML台帳登録方針
+
+### 背景
+Phase4（`02_import_xml.py`）の設計レビューを進める中で、XML自体は正常に読めるものの、identity生成に必要な情報不足や正規化失敗により加入者照合へ進めないケースの扱いを整理した。
+
+### 当初の考え
+- identity生成に失敗した場合、`xml_ledger` を作成するか、`etl_errors` のみ記録するかが未決だった。
+- XML構文エラー（parse不能）と同じ扱いにする案もあった。
+
+### 議論
+- XMLとして正常に読める場合は、XML内容・健診結果・基本情報の大部分を取得できている。
+- identity生成失敗はXML自体の異常ではなく、加入者照合に必要な情報が不足・不正である状態と整理した。
+- XMLとして管理可能な以上、`xml_ledger` を作成し、調査・修正対象として一覧に表示できる方が運用しやすい。
+- 一方、XML構文エラーなどparse不能の場合は、XML内容そのものを取得できないため、`xml_ledger` は作成しない。
+- identity生成失敗の詳細は `etl_errors` にも記録し、原因調査できるようにする。
+
+### 現時点の考え
+XMLとして読み込み可能かどうかと、加入者照合可能かどうかは別問題として扱う。
+
+XMLとして読み込み可能であれば、identity生成に失敗しても `xml_ledger` は作成する。
+
+### 決定事項
+- XMLとして正常に読み込み可能な場合は、identity生成に失敗しても `xml_ledger` を作成する。
+- identity生成失敗時は `identity_hash`、`person_id_custom`、`subscriber_id`、`hia_subscriber_id` は未設定とする。
+- 加入者照合状態は未照合（NG）として保持する。
+- identity生成失敗の詳細は `etl_errors` に記録する。
+- XML構文エラーなどparse不能の場合は `xml_ledger` を作成せず、`etl_errors` のみ記録する。
+- XML読込失敗とidentity生成失敗は別種のエラーとして扱う。
+
+### 保留事項
+- `subscriber_match_status` の正式コード一覧。
+- `xml_status` および `xml_reason` の正式コード一覧。
+- identity生成失敗時に保持するraw基本情報の範囲。
+
+### 根拠
+- XMLとして読めるデータまで台帳から失うと、調査・再提出・修正対象の管理が困難になるため。
+- XML読込失敗と加入者照合失敗は責務・原因が異なるため。
+- `xml_ledger` はXML単位の業務台帳として、正常読込済みXMLを管理する責務を持つため。
+
+### 次回検討
+- `03_decisions.md` へ決定事項を同期する。
+- `26_phase4_import_xml_design_review.md` へ反映する。
+- Phase4実装時の `xml_status`・`subscriber_match_status` 更新仕様を整理する。

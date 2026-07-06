@@ -218,7 +218,8 @@
 - ファイル単位の件数・エラー数・サマリー更新は、XML/受診者単位処理の完了後に集約する。
 - 将来的にCSV直取込へ対応する場合は、`csv_row_ledger` を追加し、基本情報Ledgerと健診結果値を分離した構造とする。
 - status はシステム処理ステータスと業務フローステータスを分けて設計する。
-- `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / ERROR` の4状態で管理する。
+- `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / ERROR` を基本状態として管理する。
+- Phase4でZIP内の対象XMLが一部のみ正常処理できた場合は `file_receipts.status = WARNING` とする。
 - `xml_status` は `02_import_xml.py` のXML取込状態を表し、`PENDING / IMPORTED / ERROR / SKIPPED` の4状態で管理する。
 - `xml_ledger` に `xml_status` / `xml_reason` を保持する。
 - `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラー、基本情報不足、加入者照合不可、その他XML単位で出力対象外となる理由をまとめて扱う。
@@ -264,10 +265,17 @@
 - 共通ETL構造にない `run_type`、`summary_message`、`etl_errors.status`、`etl_errors.error_type` は採用しない。
 - Phase3のscan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` に人間が読みやすい短いテキストとして記録する。
 - `01_scan_files.py` は未登録ファイルに `etl_run_id` を付与し、そのRunを `02_import_xml.py` の入力とする。
-- `02_import_xml.py` は指定 `etl_run_id` の未処理 `file_receipts` を対象に、Run単位で処理する。
+- `02_import_xml.py` の通常実行は `event_id` と `file_receipts.status = DISCOVERED` を入力条件とする。
+- `02_import_xml.py` はCLIから `etl_run_id` を指定した場合のみ対象を当該Runに限定する。
+- Phase4の実行設定は `scripts/from_medical/config/import_xml.yml` を正本とし、CLI引数は指定時のみ一時的な上書き用途とする。
 - `02_import_xml.py` のDBトランザクションは `file_receipt` 単位とする。
 - 1ファイル失敗してもRun全体は止めず、失敗分を `etl_errors` に記録して次のファイルへ進む。
 - ZIP展開、XML読込、XML基本情報抽出、加入者照合、健診項目値抽出、`xml_ledger`・`xml_file_links`・`exam_item_values` 登録は `02_import_xml.py` で一括実施する。
+- Phase4でZIP内の対象XMLが一部のみ正常処理できた場合は、正常XMLのみ `xml_ledger` を登録し、失敗XMLは `xml_ledger` を作成せず `etl_errors` に記録する。
+- `file_receipts` はファイル全体の総合状態、`xml_ledger` は正常XML、`etl_errors` は失敗詳細を管理する。
+- 既存XMLは同一人物ではなく `xml_sha256` 一致で判定する。
+- 同一 `xml_sha256` のXMLを再受領した場合、`xml_ledger` は新規作成せず `xml_file_links` のみ追加する。
+- Phase4の `etl_errors` は `field`、`error_code`、`message` を基本構成として記録する。
 - `03_check_exam_results.py` はXMLファイルを再読込せず、`xml_ledger`・`exam_item_values` を入力として制度チェックを実施する。
 - `03_check_exam_results.py` は `exam_check_results` を更新し、その結果を `xml_ledger` へ集約する。
 - `04_export_hia_xml.py` はDB上のチェック結果・出力可否を参照してHIAアップロード用XMLを生成する。
