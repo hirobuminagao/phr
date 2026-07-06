@@ -1,0 +1,77 @@
+[{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_medical/01_scan_files.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"int | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"int | None\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 447,
+	"startColumn": 28,
+	"endLineNumber": 447,
+	"endColumn": 34
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_medical/01_scan_files.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"int | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"int | None\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 447,
+	"startColumn": 28,
+	"endLineNumber": 447,
+	"endColumn": 34
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_medical/01_scan_files.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"int | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"int | None\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません\n  ...",
+	"source": "Pylance",
+	"startLineNumber": 457,
+	"startColumn": 28,
+	"endLineNumber": 457,
+	"endColumn": 34
+},{
+	"resource": "/c:/Users/1107858.KSMD/work/phr/scripts/from_medical/01_scan_files.py",
+	"owner": "Pylance6",
+	"code": {
+		"value": "reportArgumentType",
+		"target": {
+			"$mid": 1,
+			"path": "/microsoft/pylance-release/blob/main/docs/diagnostics/reportArgumentType.md",
+			"scheme": "https",
+			"authority": "github.com"
+		}
+	},
+	"severity": 8,
+	"message": "型 \"int | None\" の引数を、関数 \"__new__\" の型 \"ConvertibleToInt\" のパラメーター \"x\" に割り当てることはできません\n  型 \"int | None\" は型 \"ConvertibleToInt\" に割り当てできません\n    型 \"None\" は型 \"ConvertibleToInt\" に割り当てできません\n      \"None\" は \"str\" に割り当てできません\n      \"None\" はプロトコル \"Buffer\" と互換性がありません\n        \"__buffer__\" が存在しません\n      \"None\" はプロトコル \"SupportsInt\" と互換性がありません\n        \"__int__\" が存在しません\n      \"None\" はプロトコル \"SupportsIndex\" と互換性がありません",
+	"source": "Pylance",
+	"startLineNumber": 457,
+	"startColumn": 28,
+	"endLineNumber": 457,
+	"endColumn": 34
+}]
