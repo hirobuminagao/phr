@@ -239,12 +239,17 @@
 - Phase3 `01_scan_files.py` の初期登録対象ファイルは ZIP / XML とする。
 - CSVは初期実装では `file_receipts` に登録しない。
 - CSVは将来対応時にスキャン対象へ追加し、その時点から `file_receipts` へ登録する。
+- Phase3の実行設定は `scripts/from_medical/config/scan_files.yml` を正本とし、CLI引数は指定時のみ一時的な上書き用途とする。
 - `file_sha256` はPhase3スキャン時に計算する。
 - `processable_count` はPhase3では設定せず `NULL` とする。
 - Phase3登録時の `file_role` は `FROM_MEDICAL` とする。
 - Phase3初期実装で登録対象とする `file_type` は `ZIP / XML` とする。
 - `file_type = OTHER` は初期実装では登録対象としない。
 - CSV対応時に `file_type = CSV` を追加する。
+- Phase3の単体XMLは `h*.xml` のみ `file_receipts` へ登録する。
+- Phase3では `ix08*.xml`、`su08*.xml`、schema関連、XSD関連の単体XMLは登録対象外とする。
+- Phase3の対象外XMLは `file_receipts` に登録せず、`etl_errors` にも記録しない。
+- Phase3ではZIPの中身を確認せず、ZIPファイル自体を `file_receipts` へ登録する。
 - Phase3登録時の `storage_folder_type` は `MEDICAL_RESULT_ROOT` とする。
 - `relative_path` は `event.result_root_path` からの相対パスとする。
 - Phase3の重複判定は `event_id`、`relative_path`、`file_sha256` を基準とする。
@@ -253,12 +258,11 @@
 - 対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。
 - Phase3の `etl_errors` は運用上対応が必要な事象のみ記録する。
 - Phase3の `etl_errors` 記録対象は、未知フォルダ、無効alias、`manual_judgement = 1` alias などを基本とする。
-- Phase3の `etl_errors.error_type` / `error_code` は必要最小限のみ定義し、将来必要に応じて拡張する。
-- Phase3の `etl_runs.run_type` は `SCAN_FILES` とする。
-- Phase3の `etl_runs.status` は `RUNNING / SUCCESS / WARNING / ERROR` とする。
-- `etl_errors.status` は `OPEN / RESOLVED` とする。
-- Phase3のscan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。
-- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+- Phase3のETL記帳は `scripts/lib/etl` の共通APIを利用し、`phase = SCAN_FILES`、`source = FROM_MEDICAL` として記録する。
+- Phase3のRun状態は共通ETL仕様の `running / success / partial / failed` を利用する。
+- `etl_errors` は共通ETL構造に合わせ、Phase3固有の分類は `field` と `error_code` に記録する。
+- 共通ETL構造にない `run_type`、`summary_message`、`etl_errors.status`、`etl_errors.error_type` は採用しない。
+- Phase3のscan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` に人間が読みやすい短いテキストとして記録する。
 - `01_scan_files.py` は未登録ファイルに `etl_run_id` を付与し、そのRunを `02_import_xml.py` の入力とする。
 - `02_import_xml.py` は指定 `etl_run_id` の未処理 `file_receipts` を対象に、Run単位で処理する。
 - `02_import_xml.py` のDBトランザクションは `file_receipt` 単位とする。

@@ -26,6 +26,8 @@ health_exam_result
 
 初期DDLは `sql/ddl/health_exam_result/` 配下にテーブル単位で作成する。DDLファイル名は `NNNN_health_exam_result__<table_name>.sql` を基本とする。
 
+DDLは固定せず、設計変更に合わせて更新する。新規環境は最新DDLから構築し、既存環境はMigrationで追従する。DDLを変更した場合、既存DBが対象となる変更についてはMigrationを同時に作成する。設計変更は、設計書更新後にDDL・Migration・スクリプトへ反映する。
+
 ### 2.2 DB責務分離
 
 ```text
@@ -39,7 +41,10 @@ health_exam_result
 ### 2.3 DDL制約方針
 
 - status系カラムはDB enumではなく `varchar` で定義する。
-- `health_exam_result` 内のテーブル間FKは張る。
+- `health_exam_result` 内の業務データ同士のFKは維持する。
+- `etl_runs` は監査・実行履歴であり、業務データの親として扱わない。
+- 業務テーブルおよび `etl_errors` から `etl_runs` へのFK制約は原則張らない。
+- run_id系カラムには参照・検索用INDEXを付与する。
 - `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
 - `event_id`、`subscriber_id`、`hia_subscriber_id` など外部参照・検索用カラムは必要に応じてINDEXを付与する。
 
@@ -586,25 +591,29 @@ XML処理結果ログおよび医療機関向けメッセージは、`reason` �
 ### 主なカラム候補
 
 ```text
-id
+error_id
 run_id
-file_receipt_id
-xml_ledger_id
-item_value_id
-error_type
+phase
+source
+insurer_number
+src_file
+src_row_no
+src_line_no
+staging_rowid
+person_id_custom
+field
+field_value
 error_code
-error_message
-status
-resolved_by_xml_ledger_id
+message
 created_at
-resolved_at
 ```
 
 ### メモ
 
-- `etl_errors.status` は `OPEN / RESOLVED` とする。
+- `etl_errors` は既存 `scripts/lib/etl` の共通構造に合わせる。
+- `file_receipt_id`、`xml_ledger_id`、`item_value_id`、`error_type`、`status`、`resolved_by_xml_ledger_id` はhealth_exam_result独自ETL構造になるため採用しない。
 - Phase3の `etl_errors` は運用上対応が必要な事象のみ記録する。
-- Phase3の `etl_errors.error_type` / `error_code` は必要最小限のみ定義し、将来必要に応じて拡張する。
+- Phase3固有の分類は共通ETL構造の `field` / `error_code` に寄せ、将来必要に応じて拡張する。
 
 ---
 
@@ -617,23 +626,33 @@ resolved_at
 ### 主なカラム候補
 
 ```text
-id
-run_type
-event_id
+run_id
+phase
+source
+db_schema
 started_at
 finished_at
 status
-summary_message
+input_base
+input_file
+total_rows
+processed_rows
+ok_rows
+warning_rows
+error_rows
+skipped_rows
+notes
+admin_note
 created_at
-updated_at
 ```
 
 ### メモ
 
-- Phase3 `01_scan_files.py` の `run_type` は `SCAN_FILES` とする。
-- Phase3 `01_scan_files.py` の `status` は `RUNNING / SUCCESS / WARNING / ERROR` とする。
-- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。
-- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+- `etl_runs` は既存 `scripts/lib/etl` の共通構造に合わせる。
+- Phase3 `01_scan_files.py` は `phase = SCAN_FILES`、`source = FROM_MEDICAL` として記録する。
+- Phase3 `01_scan_files.py` の `status` は共通ETL仕様の `running / success / partial / failed` を利用する。
+- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` に記録する。
+- `notes` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
 
 ---
 
@@ -788,14 +807,15 @@ v2初期で本格実装するかは別途判断する。
 20. `medical_folder_aliases.manual_judgement` の初期値は `0` とする。
 21. 仮名称等の補足情報は `medical_folder_aliases.note` に保持し、`manual_judgement` の判定条件とはしない。
 22. status系カラムはDB enumではなく `varchar` で定義する。
-23. `health_exam_result` 内のテーブル間FKは張る。
-24. `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
-25. `file_receipts.file_sha256` 単独UNIQUEは採用しない。
-26. `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
-27. `exam_item_values.normalized_value` は `text` とする。
-28. `dev_phr.event.result_root_path` は migration で追加する。
-29. `dev_phr.event.result_root_path` の型は `text` とし、`NULL` 許可とする。
-30. v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
+23. `health_exam_result` 内の業務データ同士のFKは維持する。
+24. `etl_runs` へのFK制約は原則張らず、run_id系カラムとINDEXで参照・検索性を確保する。
+25. `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
+26. `file_receipts.file_sha256` 単独UNIQUEは採用しない。
+27. `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+28. `exam_item_values.normalized_value` は `text` とする。
+29. `dev_phr.event.result_root_path` は migration で追加する。
+30. `dev_phr.event.result_root_path` の型は `text` とし、`NULL` 許可とする。
+31. v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
 31. `medical_folder_aliases` 初期データは `event_id = 2` の188件を投入対象とする。
 32. `medical_folder_aliases` 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
 33. `medical_folder_aliases` 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。

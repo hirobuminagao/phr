@@ -9,6 +9,8 @@
 - 完了条件
 - Codex 指示単位
 
+DDLは設計変更に合わせて更新し、新規環境は最新DDLから構築する。既存DBが対象となるDDL変更を行う場合は、既存環境が追従できるようMigrationを同時に作成する。
+
 ### Phase1 Core DDL
 
 #### 依存Phase
@@ -104,7 +106,7 @@ Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP
 - `scripts/from_medical/01_scan_files.py`
 
 #### 更新ファイル
-- `scripts/from_medical/config/` 配下の設定ファイル（正式名未定）
+- `scripts/from_medical/config/scan_files.yml`
 - `scripts/from_medical/script_lib/` 配下の補助モジュール（必要に応じて）
 
 #### 参照資料
@@ -116,7 +118,11 @@ Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP
 - `event.result_root_path` と `medical_folder_aliases` を参照して対象フォルダを探索できる。
 - 重複ファイルを `file_receipts` に新規登録しない。
 - 新規検出ファイルは `file_receipts.status = DISCOVERED` で登録される。
-- 登録対象は初期実装では ZIP / XML のみとし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+- Phase3の実行設定は `scripts/from_medical/config/scan_files.yml` を正本とし、CLI引数は指定時のみ一時的な上書き用途とする。
+- 登録対象は初期実装では ZIP と健診結果本体XMLのファイル名規定に合う単体XMLとし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+- 単体XMLは `h*.xml` のみ登録対象とし、`ix08*.xml` / `su08*.xml` / schema関連 / XSD関連のXMLは登録しない。
+- 対象外XMLは `etl_errors` に記録しない。
+- ZIPはPhase3では中身を確認せず、ZIPファイル自体を登録する。
 - `file_sha256` はPhase3スキャン時に計算される。
 - `processable_count` はPhase3では設定せず `NULL` とする。
 - `file_role = FROM_MEDICAL`、`storage_folder_type = MEDICAL_RESULT_ROOT` で登録される。
@@ -127,12 +133,10 @@ Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP
 - 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、運用上対応が必要な事象として `etl_errors` に記録される。
 - 対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。
 - 対象 `event_id` の `result_root_path` 未設定時はPhase3実行時 `ERROR` とする。
-- `etl_runs.run_type = SCAN_FILES` とする。
-- `etl_runs.status = RUNNING / SUCCESS / WARNING / ERROR` とする。
-- `etl_errors.status = OPEN / RESOLVED` とする。
-- `etl_errors.error_type` / `error_code` はPhase3で必要最小限のみ定義される。
-- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録される。
-- `summary_message` は人間が読みやすい短いテキストで記録される。
+- ETL記帳は `scripts/lib/etl` の共通APIを利用し、`phase = SCAN_FILES`、`source = FROM_MEDICAL` とする。
+- `etl_runs.status` は共通ETL仕様の `running / success / partial / failed` を利用する。
+- Phase3固有のエラー分類は共通ETL構造の `field` / `error_code` に記録する。
+- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` に人間が読みやすい短いテキストとして記録される。
 
 #### Codex 指示単位
 Phase3 01_scan_files.pyのみを実装する。

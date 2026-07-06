@@ -22,6 +22,8 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 - `sql/migrations/dev_phr/20260703_001_dev_phr_add_result_root_path_to_event.sql`
 - `sql/seed/health_exam_result/0010_health_exam_result__medical_folder_aliases_event2.sql`
 
+DDLは設計変更に合わせて更新し、新規環境は最新DDLから構築する。既存DBが対象となるDDL変更を行う場合は、既存環境向けMigrationを同時に作成する。
+
 ## 3. 旧スクリプト要約から見た既存挙動
 
 旧スクリプトでは、共有フォルダ観測からローカル input へのコピーまでが複数段階に分かれていた。
@@ -115,7 +117,7 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 | `facility_name` | 初期は `dst_folder_norm` または `NULL` 候補。 | 医療機関名としてDBに入れるか、フォルダ表示名として扱うか要判断。 |
 | `storage_folder_type` | `MEDICAL_RESULT_ROOT`。 | Phase3登録時の決定済み値。 |
 | `status` | `DISCOVERED`。 | 決定済み。 |
-| `summary_message` | 原則 `NULL`。警告をファイル単位に残す場合のみ短い要約。 | 詳細は `etl_errors` へ寄せる。 |
+| `summary_message` | 原則 `NULL`。警告をファイル単位に残す場合のみ短い要約。 | `file_receipts` 側の補足欄。Runサマリーは共通ETLの `etl_runs.notes` へ寄せる。 |
 | `etl_run_id` | 当該scan Runの `etl_runs.run_id`。 | `02_import_xml.py` の入力Runになる。 |
 | `first_seen_at` | INSERT時刻。DBデフォルト利用候補。 | 旧scanの `first_seen_at` 相当。 |
 | `last_seen_at` | INSERT時は同時刻を入れる候補、または `NULL`。 | 再スキャン時に既存行更新しないなら `NULL` のままになる。運用判断が必要。 |
@@ -311,7 +313,7 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 
 ### 実装時に追加判断した事項
 
-- 設定ファイルは作成せず、初期実装は `--event-id` 必須のCLI引数で実行する。
+- 実行設定は `scripts/from_medical/config/scan_files.yml` を正本とし、CLI引数は指定時のみ一時的な上書き用途とする。
 - DB接続は既存共通の `scripts.lib.db.config.load_mysql_base_params` と `scripts.lib.db.mysql.connect_ctx` を利用する。
 - 初回実装では `health_exam_result` 独自の `etl_runs` / `etl_errors` DDLに合わせた最小SQLをスクリプト内に実装したが、ADR-0023と `03_decisions.md` の方針に合わせ、共通ETL構造と `scripts/lib/etl` public API 利用へ戻した。
 - Phase3で必要最小限のエラー分類として、`SCAN_PRECONDITION`、`FOLDER_SCAN`、`FOLDER_ALIAS`、`FILE_SCAN`、`DB_WRITE`、`UNEXPECTED` を共通 `etl_errors.field` に記録し、具体値を `error_code` に記録する。
@@ -325,7 +327,7 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 - Phase4以降のZIP展開、XML読込、XML基本情報抽出、健診値抽出。
 - CSV取込および `file_type = CSV` の登録。
 - `file_type = OTHER` の登録。
-- 設定YAMLの作成。
+- Phase3で使用する設定YAMLは `scripts/from_medical/config/scan_files.yml` として作成済み。
 
 ### ETL共通lib整合修正
 

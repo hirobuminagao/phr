@@ -23,10 +23,11 @@
 
 ### v2初期スコープ
 
-- 設定YAMLの `event_id` から `dev_phr.event.result_root_path` を取得する。
+- `scripts/from_medical/config/scan_files.yml` の `event_id` から `dev_phr.event.result_root_path` を取得する。CLI引数は指定時のみconfig値を一時的に上書きする。
 - `health_exam_result.medical_folder_aliases` を参照し、医療機関フォルダを解決する。
 - 各医療機関フォルダ配下の `02_健診結果（編集）` を毎回フルスキャンする。
-- Phase3では ZIP / XML の未登録ファイルのみ `file_receipts.status = DISCOVERED` で登録する。
+- Phase3では ZIP と健診結果本体XMLのファイル名規定に合う単体XMLの未登録ファイルのみ `file_receipts.status = DISCOVERED` で登録する。
+- 単体XMLは `h*.xml` のみ登録対象とし、`ix08*.xml` / `su08*.xml` / schema関連 / XSD関連のXMLは登録しない。
 - CSVは初期実装では `file_receipts` に登録せず、将来対応時にスキャン対象へ追加する。
 - ZIP/XMLからXMLを検出し、XML内容を `xml_sha256` で一意判定する。
 - 物理ファイルとXML内容の対応は `xml_file_links` に保持する。
@@ -118,7 +119,8 @@ Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP
 
 ### 入力
 
-- 設定YAMLの `event_id`
+- `scripts/from_medical/config/scan_files.yml`
+- CLI引数（指定時のみconfig値を一時的に上書きする）
 - `dev_phr.event.result_root_path`
 - `health_exam_result.medical_folder_aliases`
 - `<event.result_root_path>/<医療機関フォルダ>/02_健診結果（編集）` 配下のファイル
@@ -131,17 +133,17 @@ Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP
 
 ### 主な処理順
 
-1. 設定YAMLを読み、`event_id` を取得する。
+1. `scripts/from_medical/config/scan_files.yml` を正本として読み込み、指定されたCLI引数のみ上書きする。
 2. `etl_runs` に `01_scan_files.py` のRun開始を記録する。
 3. `dev_phr.event` から `result_root_path` を取得する。
 4. `medical_folder_aliases` を参照し、有効な医療機関フォルダを解決する。
 5. 各医療機関フォルダの `02_健診結果（編集）` をフルスキャンする。
 6. 対象ファイルの種別、ファイル名、`event.result_root_path` からの相対パス、サイズ、SHA256、医療機関情報を取得する。
-7. 初期登録対象は ZIP / XML とし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+7. 初期登録対象は ZIP と健診結果本体XMLのファイル名規定に合う単体XMLとし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
 8. 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、運用上対応が必要な事象として `etl_errors` に記録する。
 9. 登録済みファイルを `file_receipts` で判定し、既存であれば登録しない。
 10. 未登録ファイルのみ `file_receipts` に登録し、登録時の `etl_run_id` を保持する。
-11. 登録件数・スキップ件数・エラー件数を標準出力へ表示し、可能な範囲で `etl_runs.summary_message` に集約してRun終了を記録する。
+11. 登録件数・スキップ件数・エラー件数を標準出力へ表示し、可能な範囲で `etl_runs.notes` に集約してRun終了を記録する。
 
 ### 参照テーブル
 
@@ -194,6 +196,8 @@ Phase3登録時の固定値・方針:
 
 `file_type = OTHER` は初期実装では登録対象としない。`file_type = CSV` は将来CSV対応時に追加する。
 
+単体XMLは `h*.xml` のみ登録対象とし、`ix08*.xml` / `su08*.xml` / schema関連 / XSD関連のXMLは登録しない。対象外XMLは `etl_errors` にも記録しない。ZIPはPhase3では中身を確認せず、ZIPファイル自体を登録する。
+
 ### status更新
 
 - `file_receipts.status` は物理ファイル単位の機械的状態として使う。
@@ -204,15 +208,14 @@ Phase3登録時の固定値・方針:
 ### etl_runs / etl_errors の使い方
 
 - `etl_runs` はスキャンRunの開始・終了・件数サマリーを保持する。
-- Phase3の `etl_runs.run_type` は `SCAN_FILES` とする。
-- Phase3の `etl_runs.status` は `RUNNING / SUCCESS / WARNING / ERROR` とする。
-- `etl_errors.status` は `OPEN / RESOLVED` とする。
+- Phase3は共通ETL構造の `phase = SCAN_FILES`、`source = FROM_MEDICAL` として記録する。
+- Phase3の `etl_runs.status` は共通ETL仕様の `running / success / partial / failed` を利用する。
 - `etl_errors` はフォルダ参照不可、ファイル属性取得不可、SHA256算出不可、DB登録失敗などを記録する。
 - 登録済みスキップは通常エラーではないため、Runサマリーに集約する。
 - 対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。
 - `etl_errors` は運用上対応が必要な事象のみ記録する。
-- Phase3の `etl_errors.error_type` / `error_code` は必要最小限のみ定義し、将来必要に応じて拡張する。
-- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+- Phase3固有の分類は共通ETL構造の `field` / `error_code` に寄せる。
+- `notes` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
 
 ### 再実行方針
 
@@ -445,7 +448,7 @@ Phase3登録時の固定値・方針:
 
 - `etl_runs` はXML取込Runの開始・終了・対象件数・成功件数・失敗件数を保持する。
 - `etl_errors` はコピー失敗、ZIP展開失敗、XML parse失敗、XML基本情報不足、identity生成不可、subscriber照合例外、項目抽出失敗、DB登録失敗などを記録する。
-- `etl_errors` には可能な限り `file_receipt_id`、`xml_ledger_id`、`item_value_id` を紐付ける。
+- `etl_errors` は共通ETL構造を利用し、ファイル・XML・項目の補足情報は `src_file`、`field`、`field_value`、`error_code`、`message` などの既存カラムへ寄せる。
 - `etl_runs` / `etl_errors` は証跡であり、処理状態の正は各台帳の状態カラムとする。
 
 ### 再実行方針
@@ -868,6 +871,8 @@ SHA256計算は標準ライブラリ呼び出しで足りるため、共通ラ�
 
 ## 7. DDL作成前の最終確認リスト
 
+DDLは固定せず、設計変更に合わせて更新する。新規環境は最新DDLから構築し、既存環境はMigrationで追従する。DDLを変更した場合、既存DBが対象となる変更についてはMigrationを同時に作成する。
+
 | 対象 | 必要になる主なカラム | 12記載 | 足りなそうなもの / 要確認 |
 | --- | --- | --- | --- |
 | `dev_phr.event` | `result_root_path` | あり | migration対象として確定が必要。 |
@@ -877,8 +882,8 @@ SHA256計算は標準ライブラリ呼び出しで足りるため、共通ラ�
 | `xml_ledger` | `xml_sha256`, 基本情報, subscriber照合結果, `xml_status`, `check_status`, `xml_export_status`, `manual_export_approved` | あり | `xml_sha256` unique、reason code、出力対象外時の `xml_export_status`。制度チェック総合判定は `check_status` に保持する。 |
 | `exam_item_values` | `ledger_type`, `ledger_id`, `namecode`, raw/normalized値, `identity_item_code`, `validation_status` | あり | `ledger_type` enum、重複防止キー、値型別カラム範囲。 |
 | `exam_check_results` | `ledger_type`, `ledger_id`, 72項目分の `status_` / `reason_` | あり | core DDLからは一旦外す。72項目・status/reason方針は設計済み。 |
-| `etl_runs` | `run_type`, `event_id`, `started_at`, `finished_at`, `status`, `summary_message` | あり | ADR-0023の既存DDL/APIとの整合。`phase` enumが狭い可能性。 |
-| `etl_errors` | `run_id`, `file_receipt_id`, `xml_ledger_id`, `item_value_id`, `error_type`, `error_code`, `error_message` | あり | `resolved_by_xml_ledger_id` は再提出解決との関係が未決。 |
+| `etl_runs` | `run_id`, `phase`, `source`, `db_schema`, `started_at`, `finished_at`, `status`, metrics系カラム, `notes`, `admin_note` | あり | 既存 `scripts/lib/etl` の共通構造へ合わせる。 |
+| `etl_errors` | `error_id`, `run_id`, `phase`, `source`, `src_file`, `field`, `field_value`, `error_code`, `message`, `created_at` | あり | 既存 `scripts/lib/etl` の共通構造へ合わせ、health_exam_result専用カラムは持たない。 |
 | `dev_phr.exam_item_group_*` | 制度チェック用 group / identity member / presence rule | あり | 72項目対応のmigration / 初期データ追加が必要。v2初期では `exam_item_group_identity_members` への追加カラムは作成しない。 |
 | `dev_phr.exam_item_master` | `identity_item_code`, namecode対応, 異常値min/max候補 | あり | min/max追加有無。 |
 
@@ -954,7 +959,7 @@ core DDLから一旦外し、制度チェックDDLとして別途DDL化するテ
 
 - `01_scan_files.py` の詳細な件数サマリー項目。
 - `02_import_xml.py` の `--keep-work` オプション名、保持先命名。
-- `etl_errors.error_type` / `error_code` の細かな命名。ただし大分類は実装前に揃える。
+- `etl_errors.field` / `error_code` の細かな命名。ただし大分類は実装前に揃える。
 - `work_file_manager.py` 等の固有script_lib分割粒度。
 - HIA出力ZIP内ファイル名 `<xxx.zip>` の具体命名規則。ただし上書きしない方針は固定。
 - ログ出力フォーマット。

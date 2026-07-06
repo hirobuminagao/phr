@@ -124,7 +124,8 @@ Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP
 
 ### 入力
 
-- 設定YAMLの `event_id`
+- `scripts/from_medical/config/scan_files.yml`
+- CLI引数（指定時のみconfig値を一時的に上書きする）
 - `dev_phr.event.result_root_path`
 - `health_exam_result.medical_folder_aliases`
 - `event.result_root_path` 配下の `02_健診結果（編集）`
@@ -150,13 +151,13 @@ Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP
 ### 主な処理順
 
 1. `etl_runs` にスキャンRunを開始登録する。
-2. 設定YAMLから `event_id` を取得する。
+2. `scripts/from_medical/config/scan_files.yml` を正本として読み込み、指定されたCLI引数のみ上書きする。
 3. `dev_phr.event` から `result_root_path` を取得する。
 4. 対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
 5. `medical_folder_aliases` を参照し、イベント配下の医療機関フォルダを解決する。
 6. 各医療機関フォルダの `02_健診結果（編集）` 配下をフルスキャンする。
 7. ファイル種別、`event.result_root_path` からの相対パス、ファイルサイズ、SHA256、医療機関フォルダ情報を取得する。
-8. 初期登録対象は ZIP / XML とし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+8. 初期登録対象は ZIP と健診結果本体XMLのファイル名規定に合う単体XMLとし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
 9. 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、必要に応じて `etl_errors` に記録する。
 10. 登録済みファイルはスキップし、必要に応じて `etl_errors` またはRunサマリーに記録する。
 11. 未登録ファイルのみ `file_receipts` に追加し、登録時の `etl_run_id` を保持する。
@@ -185,15 +186,17 @@ Phase3登録時の固定値は以下とする。
 
 `file_type = OTHER` は初期実装では登録対象としない。`file_type = CSV` は将来CSV対応時に追加する。
 
+単体XMLは `h*.xml` のみ登録対象とし、`ix08*.xml` / `su08*.xml` / schema関連 / XSD関連のXMLは登録しない。対象外XMLは `etl_errors` にも記録しない。ZIPはPhase3では中身を確認せず、ZIPファイル自体を登録する。
+
 ### ETL状態値
 
-- `etl_runs.run_type = SCAN_FILES`
-- `etl_runs.status = RUNNING / SUCCESS / WARNING / ERROR`
-- `etl_errors.status = OPEN / RESOLVED`
-- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。
-- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+- ETL記帳は `scripts/lib/etl` の共通APIを利用する。
+- `etl_runs.phase = SCAN_FILES`、`etl_runs.source = FROM_MEDICAL` とする。
+- `etl_runs.status` は共通ETL仕様の `running / success / partial / failed` を利用する。
+- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` に記録する。
+- `notes` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
 
-`etl_errors` は運用上対応が必要な事象のみ記録する。対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。`etl_errors.error_type` / `error_code` はPhase3で必要最小限のみ定義し、将来必要に応じて拡張する。
+`etl_errors` は運用上対応が必要な事象のみ記録する。対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。Phase3固有の分類は共通ETL構造の `field` / `error_code` に寄せ、将来必要に応じて拡張する。
 
 ### エラー記録方針
 
@@ -271,6 +274,7 @@ Phase3登録時の固定値は以下とする。
 ### エラー記録方針
 
 - コピー失敗、ZIP展開失敗、XML parse失敗、基本情報不足、加入者照合NG、項目抽出失敗は `etl_errors` に記録する。
+- `etl_errors` は共通ETL構造を利用し、ファイル・XML・項目の補足情報は `src_file`、`field`、`field_value`、`error_code`、`message`、`notes` 相当の既存表現へ寄せる。
 - XML単位で処理不能な場合は `xml_ledger.xml_status = ERROR` / `xml_reason` に集約する。
 - ファイル単位の件数・総合状態は `file_receipts` に集約する。
 
