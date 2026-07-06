@@ -82,7 +82,7 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 6. 原則 `is_active = 1` のaliasを対象候補とし、`src_folder_raw` を実フォルダ名、`dst_folder_norm` を正規フォルダ名として扱う。
 7. 各aliasについて `<result_root_path>/<src_folder_raw>/02_健診結果（編集）/` を探索対象にする。
 8. 探索対象フォルダが存在しない場合は、ファイル単位ではなくalias/フォルダ単位で `etl_errors` またはRunサマリーに記録し、次のaliasへ進む。
-9. ZIP / XML の通常ファイルを列挙する。CSV、隠しファイル、一時ファイル、対象外拡張子、ディレクトリは登録しない。
+9. ZIP / XML の通常ファイルを列挙する。単体XMLは健診結果本体XMLのファイル名規定に合うもののみ対象とし、CSV、隠しファイル、一時ファイル、対象外拡張子、ディレクトリは登録しない。
 10. ファイル属性を取得し、`file_sha256` を計算する。
 11. `event_id`、`relative_path`、`file_sha256` で既存 `file_receipts` を確認する。
 12. 未登録の場合のみ `file_receipts` に `status = DISCOVERED` でINSERTする。
@@ -92,7 +92,9 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 
 ## 7. file_receipts 登録ルール
 
-登録対象は、Phase3の探索対象フォルダ配下に存在する ZIP / XML の通常ファイルのうち、`event_id` / `relative_path` / `file_sha256` の組み合わせが未登録のものとする。CSVは初期実装では登録せず、将来対応時にスキャン対象へ追加する。
+登録対象は、Phase3の探索対象フォルダ配下に存在する ZIP または健診結果本体XMLのファイル名規定に合う単体XMLの通常ファイルのうち、`event_id` / `relative_path` / `file_sha256` の組み合わせが未登録のものとする。CSVは初期実装では登録せず、将来対応時にスキャン対象へ追加する。
+
+単体XMLは、ZIP内XMLで除外する基準と同じ考え方で扱う。`h*.xml` は登録対象、`ix08*.xml` / `su08*.xml` およびXSD/schema関連ファイルは登録対象外とする。対象外XMLは `file_receipts` に登録せず、`etl_errors` にも記録しない。ZIPファイル自体は中身確認せず、Phase3では従来どおり登録対象とする。
 
 | カラム | Phase3登録値の推奨 | 判断材料・補足 |
 |---|---|---|
@@ -249,8 +251,8 @@ JSON等の構造化データは採用しない。将来、機械集計が必要�
 
 | 論点 | 旧スクリプトの挙動 | 今回の推奨 | 理由 | 人間判断 |
 |---|---|---|---|---|
-| 対象ファイル拡張子 | `medi_shared_files_scan.py` は `MEDI_SHARED_SCAN_EXTS` / `MEDI_SHARED_EXTS` を使い、既定は `zip`。`import_submit_csv.py` は別フローでCSVを扱う。 | 初期登録対象はZIP/XMLとする。CSVは初期実装では登録せず、将来対応時にスキャン対象へ追加する。 | v2はXML品質保証基盤中心。単体XMLは設計上処理対象。CSVを現時点で登録すると後続処理できない未処理データが蓄積する。 | 拡張子リストを設定化するか。 |
-| ZIP / XML / CSV の扱い | ZIPは共有観測、hash、XML有無probe、inputコピー、ZIP取込へ進む。XML単体は主フローでは弱い。CSVは別スクリプト。 | ZIP/XMLは `file_receipts` に登録。ZIP展開/XML読込はPhase4。CSVは初期実装では登録しない。 | `01_scan_files.py` は検出と登録のみ、`02_import_xml.py` がZIP展開/XML読込を担当する決定済み。 | CSV対応時の追加仕様。 |
+| 対象ファイル拡張子 | `medi_shared_files_scan.py` は `MEDI_SHARED_SCAN_EXTS` / `MEDI_SHARED_EXTS` を使い、既定は `zip`。`import_submit_csv.py` は別フローでCSVを扱う。 | 初期登録対象はZIPと、健診結果本体XMLのファイル名規定に合う単体XMLとする。CSVは初期実装では登録せず、将来対応時にスキャン対象へ追加する。 | v2はXML品質保証基盤中心。単体XMLでも `ix08*.xml` / `su08*.xml` / schema関連などHIAアップロード対象外の規定ファイルは後続処理対象にしないため。 | 拡張子リストを設定化するか。 |
+| ZIP / XML / CSV の扱い | ZIPは共有観測、hash、XML有無probe、inputコピー、ZIP取込へ進む。XML単体は主フローでは弱い。CSVは別スクリプト。 | ZIPは中身確認せず `file_receipts` に登録。単体XMLは `h*.xml` のみ登録し、`ix08*.xml` / `su08*.xml` / XSD・schema関連は登録しない。ZIP展開/XML読込はPhase4。CSVは初期実装では登録しない。 | `01_scan_files.py` は検出と登録のみ、`02_import_xml.py` がZIP展開/XML読込を担当する決定済み。単体XMLについてはZIP内XML除外基準と同じ考え方で、規定ファイルを台帳化しない。 | CSV対応時の追加仕様。 |
 | `file_sha256` の計算タイミング | 旧scan後、`medi_shared_files_hash_zip.py` がZIPのみ後段計算。 | Phase3登録前に対象ファイルすべてで計算する。 | `file_receipts.file_sha256` はNOT NULLで、重複キーの一部。未計算ではINSERTできない。 | チャンクサイズ、巨大ファイル時の上限・タイムアウトを設定化するか。 |
 | `file_receipts` へ登録するカラム | 旧 `medi_shared_files` はpath、file_name、ext、file_size、mtime、src_folder_raw、facility_hint、status等。後段でsha256等を追加。 | `event_id`, `file_role = FROM_MEDICAL`, `file_type = ZIP / XML`, `file_name`, `file_ext`, `source_path`, `relative_path`, `file_sha256`, `file_size`, `storage_folder_type = MEDICAL_RESULT_ROOT`, `status`, `etl_run_id`, 時刻系を登録。`processable_count` は `NULL`。 | DDLのNOT NULLと後続 `02_import_xml.py` 入力に必要な項目を満たす。中身由来の施設・保険者情報はPhase4責務。`OTHER` は初期実装では登録対象外。 | `received_at` をscan時刻にするか。`facility_name` に `dst_folder_norm` を入れるか。 |
 | `file_receipts.status = DISCOVERED` の登録条件 | 旧scanは `stage_status='NEW'` でUPSERTし、後段で判定・コピー。 | 未登録かつZIP/XMLの対象ファイルとして扱える場合のみ `DISCOVERED` でINSERT。既存行のstatusは更新しない。対象外ファイルは登録しない。 | v2では状態遷移を `DISCOVERED / IMPORTING / IMPORTED / ERROR` に限定し、再スキャンで処理済み状態を戻さないため。対象外ファイルまで台帳化するとノイズになるため。 | なし。 |
@@ -290,7 +292,7 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 
 - `--event-id` で対象eventを指定し、`dev_phr.event.result_root_path` を参照する。
 - `health_exam_result.medical_folder_aliases` を参照し、`src_folder_raw/02_健診結果（編集）` を探索する。
-- ZIP / XML のみを対象に、スキャン時に `file_sha256` を計算する。
+- ZIPおよび健診結果本体XMLのファイル名規定に合う単体XMLのみを対象に、スキャン時に `file_sha256` を計算する。
 - `event_id / relative_path / file_sha256` で既存 `file_receipts` を確認し、未登録ファイルのみ登録する。
 - 登録時は `file_role = FROM_MEDICAL`、`file_type = ZIP / XML`、`storage_folder_type = MEDICAL_RESULT_ROOT`、`status = DISCOVERED`、`processable_count = NULL` とする。
 - `relative_path` は `event.result_root_path` からの相対パスとする。
@@ -300,6 +302,7 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 ### 設計どおりに実装した事項
 
 - CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+- 単体XMLは `h*.xml` のみ `file_receipts` に登録し、`ix08*.xml` / `su08*.xml` / XSD・schema関連ファイルは登録しない。
 - `file_type = OTHER` は登録しない。
 - 対象外ファイルは原則 `etl_errors` に記録しない。
 - 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、運用上対応が必要な事象として `etl_errors` に記録する。

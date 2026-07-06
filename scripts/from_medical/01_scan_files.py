@@ -273,6 +273,17 @@ def file_ext(path: Path) -> str:
     return path.suffix.lower().lstrip(".")
 
 
+def is_target_standalone_xml(path: Path) -> bool:
+    name = path.name.lower()
+    if not name.endswith(".xml"):
+        return False
+    if name.startswith(("ix08", "su08")):
+        return False
+    if "schema" in name or "xsd" in name:
+        return False
+    return name.startswith("h")
+
+
 def is_hidden_or_temp(path: Path) -> bool:
     name = path.name
     lower_name = name.lower()
@@ -443,8 +454,12 @@ def scan_alias_files(
             summary.files_skipped += 1
             continue
 
-        summary.files_target += 1
         file_type = TARGET_EXTS[ext]
+        if file_type == "XML" and not is_target_standalone_xml(path):
+            summary.files_skipped += 1
+            continue
+
+        summary.files_target += 1
         summary.bump_type(file_type)
 
         try:
