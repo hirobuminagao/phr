@@ -118,7 +118,9 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 
 ### 目的
 
-対象イベントの `02_健診結果（編集）` 配下を毎回フルスキャンし、未登録ファイルのみ `file_receipts` に登録する。
+対象イベントの `02_健診結果（編集）` 配下を毎回フルスキャンし、初期実装では ZIP / XML の未登録ファイルのみ `file_receipts.status = DISCOVERED` で登録する。
+
+Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP展開、XML読込、健診値抽出は `02_import_xml.py` へ送る。CSVは初期実装では登録せず、将来CSV対応時にスキャン対象へ追加する。
 
 ### 入力
 
@@ -153,18 +155,45 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 4. 対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
 5. `medical_folder_aliases` を参照し、イベント配下の医療機関フォルダを解決する。
 6. 各医療機関フォルダの `02_健診結果（編集）` 配下をフルスキャンする。
-7. ファイル種別、相対パス、ファイルサイズ、SHA256、医療機関フォルダ情報を取得する。
-8. 登録済みファイルはスキップし、必要に応じて `etl_errors` またはRunサマリーに記録する。
-9. 未登録ファイルのみ `file_receipts` に追加し、登録時の `etl_run_id` を保持する。
-10. `etl_runs` に件数サマリーと終了状態を記録する。
+7. ファイル種別、`event.result_root_path` からの相対パス、ファイルサイズ、SHA256、医療機関フォルダ情報を取得する。
+8. 初期登録対象は ZIP / XML とし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+9. 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、必要に応じて `etl_errors` に記録する。
+10. 登録済みファイルはスキップし、必要に応じて `etl_errors` またはRunサマリーに記録する。
+11. 未登録ファイルのみ `file_receipts` に追加し、登録時の `etl_run_id` を保持する。
+12. `etl_runs` に件数サマリーと終了状態を記録する。
 
 ### 再実行方針
 
 - 毎回フルスキャンしてよい。
 - 既存 `file_receipts` と同一ファイルは登録せず、未登録ファイルだけを追加する。
 - `file_receipts` の論理一意キーは `event_id` / `relative_path` / `file_sha256` のままとする。
+- `relative_path` は `event.result_root_path` からの相対パスとする。
+- `file_sha256` はPhase3スキャン時に計算する。
+- `processable_count` はPhase3では設定せず `NULL` とする。
 - DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含めるが、スクリプト上の重複判定の考え方は論理一意キーを基準とする。
 - `work` へのコピーは行わないため、再実行しても一時ファイルの後始末は不要。
+
+### `file_receipts` 登録値
+
+Phase3登録時の固定値は以下とする。
+
+- `file_role = FROM_MEDICAL`
+- `file_type = ZIP / XML`
+- `storage_folder_type = MEDICAL_RESULT_ROOT`
+- `status = DISCOVERED`
+- `processable_count = NULL`
+
+`file_type = OTHER` は初期実装では登録対象としない。`file_type = CSV` は将来CSV対応時に追加する。
+
+### ETL状態値
+
+- `etl_runs.run_type = SCAN_FILES`
+- `etl_runs.status = RUNNING / SUCCESS / WARNING / ERROR`
+- `etl_errors.status = OPEN / RESOLVED`
+- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。
+- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+
+`etl_errors` は運用上対応が必要な事象のみ記録する。対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。`etl_errors.error_type` / `error_code` はPhase3で必要最小限のみ定義し、将来必要に応じて拡張する。
 
 ### エラー記録方針
 

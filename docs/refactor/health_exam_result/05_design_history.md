@@ -1,5 +1,6 @@
 # Design History
 
+
 ---
 
 ## DH-20260625-01 / 2026-06-25 13:30 JST
@@ -2671,5 +2672,117 @@ Phase2 では、イベントごとの結果格納ルートを `dev_phr.event.res
 ### 次回検討
 - DDL作成・レビュー時は、`05_design_history.md` ではなく、決定事項のみを反映した `03_decisions.md` を差分確認の対象とする。
 - SHA256生成列および複合UNIQUE制約の具体的な定義が、`03_decisions.md` の方針と矛盾しないか確認する。
+
+---
+
+---
+
+## DH-20260706-1 / 2026-07-06 09:32 JST
+
+### テーマ
+Phase3 `01_scan_files.py` のスキャン対象・登録ルール・ETL状態値の方針
+
+### 背景
+Phase3では、`dev_phr.event.result_root_path` と `medical_folder_aliases` を参照して医療機関フォルダを探索し、検出した投入ファイルを `file_receipts` に登録する。
+
+`25_phase3_scan_files_design_review.md` の作成により、対象ファイル種別、CSVの扱い、`file_receipts` への登録範囲、alias未解決時の扱い、`etl_runs` / `etl_errors` の状態値について判断が必要になったため、Phase3実装前の実務方針として整理した。
+
+### 議論
+- Phase3はファイル検出と `file_receipts.status = DISCOVERED` 登録に責務を限定し、ZIP展開・XML読込・健診値抽出はPhase4以降へ送る。
+- CSVは将来対応を見据えて設計余地は残すが、初期実装ではスキャン登録対象に含めない。
+- CSVを現時点で `file_receipts` に登録すると、後続処理できない未処理データが蓄積するため、CSV対応実装時に初めて登録対象へ追加する方針とした。
+- `file_sha256` は重複判定に必要なため、Phase3のスキャン時に計算する。
+- 再スキャン時は、決定済みの `event_id`、`relative_path`、`file_sha256` による重複判定を利用し、既存ファイルを重複登録しない。
+- `medical_folder_aliases` に存在しないフォルダ、無効alias、手動判断が必要なaliasは、処理を止めずに `etl_errors` へ記録してスキップする方針とした。
+- `etl_runs.run_type` は既存共通処理に `IMPORT` / `APPLY` が見えるものの、`health_exam_result.etl_runs.run_type` は `varchar` であり、scan処理の意味を明確にするため `SCAN_FILES` とする。
+- `etl_runs.status` は `RUNNING`、`SUCCESS`、`WARNING`、`ERROR` を採用し、一部スキップやエラー記録ありで処理継続した場合は `WARNING` とする。
+
+### 現時点の考え
+Phase3は「投入ファイルを見つけて台帳へ記帳する」最小責務に絞る。
+
+初期実装ではZIPとXMLを登録対象とし、CSVは登録しない。CSV対応は後続改修でスキャン対象に追加し、その時点で `file_receipts` へ記帳する。
+
+また、未知フォルダや手動判断が必要なaliasは、Phase3全体を停止させるのではなく、`etl_errors` に記録して他のフォルダ・ファイルのスキャンを継続する。
+
+### 決定事項
+- Phase3 `01_scan_files.py` は、ファイル検出と `file_receipts.status = DISCOVERED` 登録に責務を限定する。
+- Phase3の初期登録対象ファイルはZIPとXMLとする。
+- CSVは初期実装では `file_receipts` に登録しない。
+- CSVは将来対応時にスキャン対象へ追加し、その時点から `file_receipts` へ登録する。
+- `file_sha256` はPhase3のスキャン時に計算する。
+- `processable_count` はPhase3では設定せず、`NULL` とする。
+- ZIP内XML件数などの処理可能件数はPhase4以降で更新する。
+- `file_role` の初期値は `FROM_MEDICAL` とする。
+- `file_type` は初期実装では `ZIP`、`XML`、`OTHER` を扱い、CSV対応時に `CSV` を追加する。
+- `storage_folder_type` は `MEDICAL_RESULT_ROOT` とする。
+- `relative_path` は `event.result_root_path` からの相対パスとする。
+- `file_receipts` の重複判定は `event_id`、`relative_path`、`file_sha256` を基準とする。
+- `medical_folder_aliases` に存在しないフォルダは `etl_errors` に記録してスキップし、処理は継続する。
+- `is_active = 0` のaliasは対象外としてスキップし、必要に応じて `etl_errors` に記録する。
+- `manual_judgement = 1` のaliasはスキップし、手動確認が必要なものとして `etl_errors` に記録する。
+- 対象 `event_id` の `result_root_path` が未設定の場合は、Phase3実行時に `ERROR` とする。
+- 隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+- `etl_runs.run_type` は `SCAN_FILES` とする。
+- `etl_runs.status` は `RUNNING`、`SUCCESS`、`WARNING`、`ERROR` とする。
+- `etl_errors.status` は `OPEN`、`RESOLVED` とする。
+- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` にも記録する。
+
+### 保留事項
+- `etl_errors.error_type` / `error_code` の正式値。
+- `file_type = OTHER` を `file_receipts` に登録するか、単にスキップするかの詳細。
+- `summary_message` の具体的なフォーマット。
+- 対象外ファイルを `etl_errors` に記録するか、完全に無視するかの詳細。
+
+### 根拠
+- Phase3の責務を検出・記帳に限定することで、ZIP展開・XML読込・CSV解析との責務混在を避けるため。
+- CSVを現時点で登録すると、後続処理できない未処理データが蓄積するため。
+- `file_sha256` は再スキャン時の重複判定に必要であり、スキャン時点で計算するのが自然であるため。
+- `SCAN_FILES` は `IMPORT_XML` とは異なる処理であり、run_typeを分けた方が運用ログを読みやすいため。
+- 未知フォルダや手動判断aliasで全体を停止すると、処理可能な他ファイルの記帳まで止まるため。
+
+### 次回検討
+- `03_decisions.md` へPhase3のスキャン対象・登録ルール・ETL状態値を反映する。
+- `11_v2_script_design_notes.md` へ `01_scan_files.py` の処理方針として反映する。
+- `25_phase3_scan_files_design_review.md` へ今回の決定事項を反映し、Phase3実装GO判定を更新する。
+- `etl_errors.error_type` / `error_code` と `summary_message` の詳細を整理する。
+
+---
+
+## DH-20260706-2 / 2026-07-06 09:55 JST
+
+### テーマ
+Phase3残課題（ETLエラー・対象外ファイル・OTHER・summary_message）の最終方針決定
+
+### 背景
+Phase3（scan_files）の主要仕様は確定したが、実装前に対象外ファイルの扱い、ETLエラーの記録範囲、`file_type = OTHER` の扱い、`summary_message` の設計など、運用方針として残っていた事項について最終整理を行った。
+
+### 議論
+- `file_type = OTHER` をDBへ登録するかを検討。
+- CSVや隠しファイル、一時ファイルなど対象外ファイルを `etl_errors` として記録するかを検討。
+- `summary_message` をJSONなどの構造化データにするか、人間向けメッセージにするかを検討。
+- `etl_errors.error_type` / `error_code` をどの粒度まで定義するかを検討。
+
+### 現時点の考え
+Phase3は「医療機関から受領した対象ファイルを正しく登録すること」に責務を限定する。対象外ファイルまで管理対象を広げず、運用上対応が必要な事象のみをETLエラーとして記録する方針とする。また、将来の拡張余地は残しつつ、初期実装はできるだけシンプルに構成する。
+
+### 決定事項
+- `file_type = OTHER` は初期実装では登録対象としない。
+- 対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。
+- `etl_errors` は運用上対応が必要な事象（未知フォルダ、無効alias、manual_judgement等）のみ記録する。
+- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+- `etl_errors.error_type` / `error_code` はPhase3で必要最小限のみ定義し、将来必要に応じて拡張する。
+
+### 保留事項
+- なし
+
+### 根拠
+- Phase3の責務を医療機関フォルダの正常な取込に限定するため。
+- 対象外ファイルまでDBやETLエラーへ記録するとノイズが増え、運用負荷が高くなるため。
+- 人が対応すべき事象のみをETLエラーとして管理することで、障害対応の優先度を明確にできるため。
+- 初期実装をシンプルに保ちつつ、将来の拡張に対応できる設計とするため。
+
+### 次回検討
+- `03_decisions.md` へ本決定事項を反映し、関連する設計資料（11、12、19、20、25）との整合性を維持する。
+- 実装時に `etl_errors.error_type` / `error_code` の具体的な値を定義する。
 
 ---

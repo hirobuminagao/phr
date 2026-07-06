@@ -231,6 +231,10 @@ exam_item_values
 - `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / ERROR` の4状態で管理する。
 - 既に取り込み済みの重複ファイルは `file_receipts` に新規登録せず、重複件数は `etl_runs` のスキップ件数・実行サマリーで管理する。
 - `01_scan_files.py` が発見・登録、`02_import_xml.py` が状態遷移を更新する。
+- Phase3 `01_scan_files.py` はファイル検出と `file_receipts.status = DISCOVERED` 登録に責務を限定する。
+- Phase3の初期登録対象は ZIP / XML とし、CSVは初期実装では `file_receipts` に登録しない。
+- CSVは将来対応時にスキャン対象へ追加し、その時点で `file_type = CSV` を追加する。
+- `file_type = OTHER` は初期実装では登録対象としない。
 
 ### 主なカラム候補
 
@@ -268,11 +272,18 @@ updated_at
 
 - `zip_receipts` は初期実装では独立テーブルにしない。
 - ZIPは `file_type = ZIP` の処理分岐として扱う。
+- Phase3登録時の `file_role` は `FROM_MEDICAL` とする。
+- Phase3初期実装で登録対象とする `file_type` は `ZIP / XML` とする。
+- `file_type = OTHER` は初期実装では登録対象としない。
+- Phase3登録時の `storage_folder_type` は `MEDICAL_RESULT_ROOT` とする。
+- Phase3では `file_sha256` をスキャン時に計算する。
+- Phase3では `processable_count` を設定せず `NULL` とする。
 - `facility_code` / `facility_name` は健診機関コード・名称として保持する。
 - `processable_count` はZIPならXML件数、XML単体なら通常1、CSVなら設定に従って算出したデータ行数を保持する。
 - `content_checked_at` はファイル種別に依存しない中身確認日時として保持する。
 - `file_receipts.file_sha256` 単独UNIQUEは採用しない。
 - `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+- Phase3の `relative_path` は `event.result_root_path` からの相対パスとする。
 - 上記は論理一意キーとして維持し、DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。
 - `work` は `02_import_xml.py` が処理中だけ利用する一時領域であり、`file_receipts` では恒久的な `work_path` を保持しない。
 - `file_receipts` は人＋イベント単位の最終完了状態を管理しない。
@@ -589,6 +600,12 @@ created_at
 resolved_at
 ```
 
+### メモ
+
+- `etl_errors.status` は `OPEN / RESOLVED` とする。
+- Phase3の `etl_errors` は運用上対応が必要な事象のみ記録する。
+- Phase3の `etl_errors.error_type` / `error_code` は必要最小限のみ定義し、将来必要に応じて拡張する。
+
 ---
 
 ## 4.7 etl_runs
@@ -610,6 +627,13 @@ summary_message
 created_at
 updated_at
 ```
+
+### メモ
+
+- Phase3 `01_scan_files.py` の `run_type` は `SCAN_FILES` とする。
+- Phase3 `01_scan_files.py` の `status` は `RUNNING / SUCCESS / WARNING / ERROR` とする。
+- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。
+- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
 
 ---
 

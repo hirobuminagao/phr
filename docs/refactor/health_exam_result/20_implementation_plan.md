@@ -96,7 +96,9 @@ Phase2 medical_folder_aliases 初期データ / event migrationのみを実装�
 - Phase2 medical_folder_aliases 初期データ / event migration
 
 #### 目的
-医療機関フォルダ配下の投入ファイルを検出し、`file_receipts` に登録する。
+医療機関フォルダ配下の投入ファイルを検出し、初期実装では ZIP / XML の未登録ファイルのみ `file_receipts.status = DISCOVERED` で登録する。
+
+Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP展開・XML読込・健診値抽出は行わない。CSVは初期実装では登録せず、将来対応時にスキャン対象へ追加する。
 
 #### 新規作成ファイル
 - `scripts/from_medical/01_scan_files.py`
@@ -114,6 +116,23 @@ Phase2 medical_folder_aliases 初期データ / event migrationのみを実装�
 - `event.result_root_path` と `medical_folder_aliases` を参照して対象フォルダを探索できる。
 - 重複ファイルを `file_receipts` に新規登録しない。
 - 新規検出ファイルは `file_receipts.status = DISCOVERED` で登録される。
+- 登録対象は初期実装では ZIP / XML のみとし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+- `file_sha256` はPhase3スキャン時に計算される。
+- `processable_count` はPhase3では設定せず `NULL` とする。
+- `file_role = FROM_MEDICAL`、`storage_folder_type = MEDICAL_RESULT_ROOT` で登録される。
+- 登録対象の `file_type` は初期実装では `ZIP / XML` とする。
+- `file_type = OTHER` は初期実装では登録対象としない。
+- `relative_path` は `event.result_root_path` からの相対パスとする。
+- 重複判定は `event_id` / `relative_path` / `file_sha256` を基準とする。
+- 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、運用上対応が必要な事象として `etl_errors` に記録される。
+- 対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。
+- 対象 `event_id` の `result_root_path` 未設定時はPhase3実行時 `ERROR` とする。
+- `etl_runs.run_type = SCAN_FILES` とする。
+- `etl_runs.status = RUNNING / SUCCESS / WARNING / ERROR` とする。
+- `etl_errors.status = OPEN / RESOLVED` とする。
+- `etl_errors.error_type` / `error_code` はPhase3で必要最小限のみ定義される。
+- scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録される。
+- `summary_message` は人間が読みやすい短いテキストで記録される。
 
 #### Codex 指示単位
 Phase3 01_scan_files.pyのみを実装する。

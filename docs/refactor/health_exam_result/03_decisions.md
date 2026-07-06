@@ -215,6 +215,30 @@
 - 処理完了後、`work` 配下にはコピー・展開済みファイルを残さない。
 - デバッグ時のみ `--keep-work` のような明示オプションで `work` を一時保持できる。
 - `01_scan_files.py` は対象フォルダを毎回フルスキャンし、未登録ファイルのみ `file_receipts` へ登録する。
+- `01_scan_files.py` はファイル検出と `file_receipts.status = DISCOVERED` 登録に責務を限定する。
+- Phase3 `01_scan_files.py` の初期登録対象ファイルは ZIP / XML とする。
+- CSVは初期実装では `file_receipts` に登録しない。
+- CSVは将来対応時にスキャン対象へ追加し、その時点から `file_receipts` へ登録する。
+- `file_sha256` はPhase3スキャン時に計算する。
+- `processable_count` はPhase3では設定せず `NULL` とする。
+- Phase3登録時の `file_role` は `FROM_MEDICAL` とする。
+- Phase3初期実装で登録対象とする `file_type` は `ZIP / XML` とする。
+- `file_type = OTHER` は初期実装では登録対象としない。
+- CSV対応時に `file_type = CSV` を追加する。
+- Phase3登録時の `storage_folder_type` は `MEDICAL_RESULT_ROOT` とする。
+- `relative_path` は `event.result_root_path` からの相対パスとする。
+- Phase3の重複判定は `event_id`、`relative_path`、`file_sha256` を基準とする。
+- 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はPhase3ではスキップし、必要に応じて `etl_errors` に記録する。
+- 隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+- 対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。
+- Phase3の `etl_errors` は運用上対応が必要な事象のみ記録する。
+- Phase3の `etl_errors` 記録対象は、未知フォルダ、無効alias、`manual_judgement = 1` alias などを基本とする。
+- Phase3の `etl_errors.error_type` / `error_code` は必要最小限のみ定義し、将来必要に応じて拡張する。
+- Phase3の `etl_runs.run_type` は `SCAN_FILES` とする。
+- Phase3の `etl_runs.status` は `RUNNING / SUCCESS / WARNING / ERROR` とする。
+- `etl_errors.status` は `OPEN / RESOLVED` とする。
+- Phase3のscan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。
+- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
 - `01_scan_files.py` は未登録ファイルに `etl_run_id` を付与し、そのRunを `02_import_xml.py` の入力とする。
 - `02_import_xml.py` は指定 `etl_run_id` の未処理 `file_receipts` を対象に、Run単位で処理する。
 - `02_import_xml.py` のDBトランザクションは `file_receipt` 単位とする。

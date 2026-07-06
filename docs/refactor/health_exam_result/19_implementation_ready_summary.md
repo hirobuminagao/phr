@@ -26,7 +26,8 @@
 - 設定YAMLの `event_id` から `dev_phr.event.result_root_path` を取得する。
 - `health_exam_result.medical_folder_aliases` を参照し、医療機関フォルダを解決する。
 - 各医療機関フォルダ配下の `02_健診結果（編集）` を毎回フルスキャンする。
-- 未登録ファイルのみ `file_receipts` に登録する。
+- Phase3では ZIP / XML の未登録ファイルのみ `file_receipts.status = DISCOVERED` で登録する。
+- CSVは初期実装では `file_receipts` に登録せず、将来対応時にスキャン対象へ追加する。
 - ZIP/XMLからXMLを検出し、XML内容を `xml_sha256` で一意判定する。
 - 物理ファイルとXML内容の対応は `xml_file_links` に保持する。
 - XML内容の正台帳は `xml_ledger` とし、同一 `xml_sha256` は重複作成しない。
@@ -111,7 +112,9 @@
 
 ### 目的
 
-対象イベントの医療機関フォルダ配下にある `02_健診結果（編集）` を毎回フルスキャンし、未登録ファイルのみ `file_receipts` に登録する。
+対象イベントの医療機関フォルダ配下にある `02_健診結果（編集）` を毎回フルスキャンし、初期実装では ZIP / XML の未登録ファイルのみ `file_receipts.status = DISCOVERED` で登録する。
+
+Phase3はファイル検出と `file_receipts` 登録に責務を限定し、ZIP展開・XML読込・健診値抽出は `02_import_xml.py` で実施する。CSVは初期実装では登録しない。
 
 ### 入力
 
@@ -133,10 +136,12 @@
 3. `dev_phr.event` から `result_root_path` を取得する。
 4. `medical_folder_aliases` を参照し、有効な医療機関フォルダを解決する。
 5. 各医療機関フォルダの `02_健診結果（編集）` をフルスキャンする。
-6. 対象ファイルの種別、ファイル名、相対パス、サイズ、SHA256、医療機関情報を取得する。
-7. 登録済みファイルを `file_receipts` で判定し、既存であれば登録しない。
-8. 未登録ファイルのみ `file_receipts` に登録し、登録時の `etl_run_id` を保持する。
-9. 登録件数・スキップ件数・エラー件数を `etl_runs` に集約してRun終了を記録する。
+6. 対象ファイルの種別、ファイル名、`event.result_root_path` からの相対パス、サイズ、SHA256、医療機関情報を取得する。
+7. 初期登録対象は ZIP / XML とし、CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+8. 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、運用上対応が必要な事象として `etl_errors` に記録する。
+9. 登録済みファイルを `file_receipts` で判定し、既存であれば登録しない。
+10. 未登録ファイルのみ `file_receipts` に登録し、登録時の `etl_run_id` を保持する。
+11. 登録件数・スキップ件数・エラー件数を標準出力へ表示し、可能な範囲で `etl_runs.summary_message` に集約してRun終了を記録する。
 
 ### 参照テーブル
 
@@ -177,6 +182,18 @@
 - `created_at`
 - `updated_at`
 
+Phase3登録時の固定値・方針:
+
+- `file_role = FROM_MEDICAL`
+- `file_type = ZIP / XML`
+- `storage_folder_type = MEDICAL_RESULT_ROOT`
+- `status = DISCOVERED`
+- `processable_count = NULL`
+- `relative_path` は `event.result_root_path` からの相対パス
+- `file_sha256` はPhase3スキャン時に計算
+
+`file_type = OTHER` は初期実装では登録対象としない。`file_type = CSV` は将来CSV対応時に追加する。
+
 ### status更新
 
 - `file_receipts.status` は物理ファイル単位の機械的状態として使う。
@@ -187,13 +204,20 @@
 ### etl_runs / etl_errors の使い方
 
 - `etl_runs` はスキャンRunの開始・終了・件数サマリーを保持する。
+- Phase3の `etl_runs.run_type` は `SCAN_FILES` とする。
+- Phase3の `etl_runs.status` は `RUNNING / SUCCESS / WARNING / ERROR` とする。
+- `etl_errors.status` は `OPEN / RESOLVED` とする。
 - `etl_errors` はフォルダ参照不可、ファイル属性取得不可、SHA256算出不可、DB登録失敗などを記録する。
-- 登録済みスキップは通常エラーではないため、`etl_errors` に入れるかRunサマリーだけにするかは実装前に要確認。
+- 登録済みスキップは通常エラーではないため、Runサマリーに集約する。
+- 対象外ファイル（CSV、隠しファイル、一時ファイル等）は原則スキップし、`etl_errors` にも記録しない。
+- `etl_errors` は運用上対応が必要な事象のみ記録する。
+- Phase3の `etl_errors.error_type` / `error_code` は必要最小限のみ定義し、将来必要に応じて拡張する。
+- `summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
 
 ### 再実行方針
 
 - 毎回フルスキャンしてよい。
-- 同一ファイルは重複登録しない。
+- 同一ファイルは `event_id` / `relative_path` / `file_sha256` を基準に判定し、重複登録しない。
 - `work` を使わないため、一時ファイルの後始末は不要。
 
 ### エラー時の扱い
