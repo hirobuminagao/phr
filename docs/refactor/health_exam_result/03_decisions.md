@@ -7,6 +7,9 @@
 - 現行実装（work_folder / kenshin_list_pydir）は参照実装とする。
 - 既存構成は踏襲せず、業務責務に基づいて新システムを設計する。
 - 既存ロジックは必要に応じて再利用するが、構造は新規設計とする。
+- Phase進行を優先し、軽微な改善事項は積み残しとして管理する。
+- 積み残しは設計判断と改善作業を分離し、後続でまとめてレビュー・修正する。
+- 必要に応じて後続で積み残し一覧を作成する。
 
 ---
 
@@ -50,6 +53,10 @@
 - 新規DBの初期DDLは `sql/ddl/<db_name>/` 配下へ配置する。
 - 既存DBへの変更SQLは `sql/migrations/<target_db_name>/` 配下へ配置する。
 - 初期データSQLは `sql/seed/<db_name>/` 配下へ配置する。
+- DDLは固定せず、設計変更に合わせて更新する。
+- 新規環境は最新DDLから構築し、既存環境はMigrationで追従する。
+- DDLを変更した場合、既存DBが対象となる変更についてはMigrationを同時に作成する。
+- 設計変更は、設計書更新後にDDL・Migration・スクリプトへ反映する。
 - migration の配置先は機能名ではなく、変更対象DB名を基準とする。
 - migration ファイル名は `YYYYMMDD_NNN_<target_db_name>_<action>_<summary>.sql` を基本とする。
 - `health_exam_result` は新規DBのため、初期テーブル作成SQLは migration ではなく `sql/ddl/health_exam_result/` 配下へ配置する。
@@ -59,7 +66,12 @@
 - core DDLの初期作成対象は `etl_runs`、`etl_errors`、`medical_folder_aliases`、`file_receipts`、`xml_ledger`、`xml_file_links`、`exam_item_values` とする。
 - `exam_check_results` は制度チェック方針を再確認した後にDDL化する。
 - status系カラムはDB enumではなく `varchar` で定義する。
-- `health_exam_result` 内のテーブル間FKは張る。
+- `health_exam_result` 内の業務データ同士のFKは維持する。
+- `etl_runs` は監査・実行履歴であり、業務データの親として扱わない。
+- 業務テーブル側には `run_id`、`etl_run_id`、`extracted_run_id` などの参照IDを保持してよい。
+- ただし、業務テーブルおよび `etl_errors` から `etl_runs` へのFK制約は原則張らない。
+- 参照・検索性を確保するため、run_id系カラムにはINDEXを付与する。
+- ETL runとの整合性はDB制約ではなくスクリプト側で担保する。
 - `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
 - `event_id`、`subscriber_id`、`hia_subscriber_id` など外部参照・検索用カラムは必要に応じてINDEXを付与する。
 - `file_receipts.file_sha256` 単独UNIQUEは採用しない。
