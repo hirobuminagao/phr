@@ -338,6 +338,12 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 - `record_scan_error()` の引数名を `error_type` から `field` へ変更し、共通 `etl_errors.field` へ寄せた。DBへ記録する値と挙動は変更しない。
 - `etl_runs` / `etl_errors` のcollation差分は今回は変更しない。将来的に共通ETL DDL側を `utf8mb4_ja_0900_as_cs` へ寄せるかを検討する。
 
+### 実行設定のconfig化
+
+- `scripts/from_medical/config/scan_files.yml` を追加し、`event_id`、`health_db`、`dev_db`、`limit`、`chunk_size_mb`、`dry_run` を設定ファイルで管理する。
+- `01_scan_files.py` はconfigを正本として読み込み、CLI引数は指定された値のみ一時的な上書きとして扱う。
+- `--event-id` は必須指定ではなくなり、`python scripts/from_medical/01_scan_files.py` だけでconfigに基づく実行を開始できる。
+
 ### 残る改善候補
 
 - 共有フォルダ負荷が問題になる場合は、`rglob("*")` ではなく `rglob("*.zip")` / `rglob("*.xml")` の拡張子別探索へ変更する。

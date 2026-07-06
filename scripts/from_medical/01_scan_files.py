@@ -14,8 +14,9 @@ import hashlib
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping, cast
 
+import yaml
 from mysql.connector import errorcode
 from mysql.connector.errors import IntegrityError
 
@@ -34,6 +35,7 @@ from scripts.lib.etl import start_run as etl_start_run
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
 DEV_PHR_DB = "dev_phr"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "scan_files.yml"
 
 EDIT_FOLDER_NAME = "02_健診結果（編集）"
 ETL_PHASE = "SCAN_FILES"
@@ -48,6 +50,16 @@ FILE_STATUS_DISCOVERED = "DISCOVERED"
 TARGET_EXTS = {"zip": "ZIP", "xml": "XML"}
 SKIP_PREFIXES = (".", "~$")
 SKIP_SUFFIXES = (".tmp", ".part", ".crdownload")
+
+
+@dataclass(frozen=True)
+class ScanConfig:
+    event_id: int
+    health_db: str
+    dev_db: str
+    limit: int
+    chunk_size_mb: int
+    dry_run: bool
 
 
 @dataclass
@@ -125,28 +137,56 @@ class ScanSummary:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Scan medical result files into file_receipts.")
-    parser.add_argument("--event-id", type=int, required=True, help="dev_phr.event.event_id")
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Scan config YAML path.")
+    parser.add_argument("--event-id", type=int, default=None, help="Override dev_phr.event.event_id.")
     parser.add_argument("--dry-run", action="store_true", help="Scan and report without DB writes.")
-    parser.add_argument("--limit", type=int, default=0, help="Maximum target files to process. 0 means unlimited.")
+    parser.add_argument("--limit", type=int, default=None, help="Override maximum target files to process. 0 means unlimited.")
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
-    parser.add_argument("--health-db", default=HEALTH_EXAM_RESULT_DB, help="health_exam_result schema name.")
-    parser.add_argument("--dev-db", default=DEV_PHR_DB, help="dev_phr schema name.")
-    parser.add_argument("--chunk-size-mb", type=int, default=8, help="SHA256 read chunk size in MiB.")
+    parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
+    parser.add_argument("--dev-db", default=None, help="Override dev_phr schema name.")
+    parser.add_argument("--chunk-size-mb", type=int, default=None, help="Override SHA256 read chunk size in MiB.")
     return parser.parse_args()
 
 
-def start_scan_run(cur: Any, *, args: argparse.Namespace) -> int:
+def load_scan_config(path: str | Path) -> ScanConfig:
+    with Path(path).open("r", encoding="utf-8") as fp:
+        raw_data = yaml.safe_load(fp) or {}
+
+    data = cast(Mapping[str, Any], raw_data)
+    return ScanConfig(
+        event_id=int(data.get("event_id", 2)),
+        health_db=str(data.get("health_db") or HEALTH_EXAM_RESULT_DB),
+        dev_db=str(data.get("dev_db") or DEV_PHR_DB),
+        limit=int(data.get("limit", 0) or 0),
+        chunk_size_mb=int(data.get("chunk_size_mb", 8) or 8),
+        dry_run=bool(data.get("dry_run", False)),
+    )
+
+
+def resolve_config(args: argparse.Namespace) -> ScanConfig:
+    config = load_scan_config(args.config)
+    return ScanConfig(
+        event_id=args.event_id if args.event_id is not None else config.event_id,
+        health_db=args.health_db if args.health_db is not None else config.health_db,
+        dev_db=args.dev_db if args.dev_db is not None else config.dev_db,
+        limit=args.limit if args.limit is not None else config.limit,
+        chunk_size_mb=args.chunk_size_mb if args.chunk_size_mb is not None else config.chunk_size_mb,
+        dry_run=True if args.dry_run else config.dry_run,
+    )
+
+
+def start_scan_run(cur: Any, *, config: ScanConfig) -> int:
     return etl_start_run(
         cur,
         phase=ETL_PHASE,
         source=ETL_SOURCE,
-        db_schema=args.health_db,
-        db_path=args.health_db,
-        input_base=f"event_id={args.event_id}",
+        db_schema=config.health_db,
+        db_path=config.health_db,
+        input_base=f"event_id={config.event_id}",
         input_file=None,
         insurer_number=None,
-        dry_run=args.dry_run,
-        limit_rows=args.limit or None,
+        dry_run=config.dry_run,
+        limit_rows=config.limit or None,
     )
 
 
@@ -470,31 +510,31 @@ def scan_alias_files(
     return True
 
 
-def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
-    summary = ScanSummary(event_id=args.event_id)
-    chunk_size = max(args.chunk_size_mb, 1) * 1024 * 1024
+def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
+    summary = ScanSummary(event_id=config.event_id)
+    chunk_size = max(config.chunk_size_mb, 1) * 1024 * 1024
     run_id: int | None = None
 
     cur = dict_cursor(conn)
     try:
-        if not args.dry_run:
-            run_id = start_scan_run(cur, args=args)
+        if not config.dry_run:
+            run_id = start_scan_run(cur, config=config)
             conn.commit()
 
         try:
-            root_text = get_result_root_path(cur, dev_db=args.dev_db, event_id=args.event_id)
+            root_text = get_result_root_path(cur, dev_db=config.dev_db, event_id=config.event_id)
             summary.result_root_path = root_text
             if not root_text:
                 summary.errors += 1
                 summary.fatal_error = True
-                if not args.dry_run and run_id is not None:
+                if not config.dry_run and run_id is not None:
                     record_scan_error(
                         cur,
                         run_id=run_id,
                         field="SCAN_PRECONDITION",
                         error_code="RESULT_ROOT_PATH_MISSING",
-                        message=f"result_root_path is not set: event_id={args.event_id}",
-                        field_value=f"event_id={args.event_id}",
+                        message=f"result_root_path is not set: event_id={config.event_id}",
+                        field_value=f"event_id={config.event_id}",
                     )
                     finish_scan_run(cur, run_id=run_id, summary=summary, status=ETL_STATUS_FAILED)
                     conn.commit()
@@ -504,7 +544,7 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
             if not root.exists() or not root.is_dir():
                 summary.errors += 1
                 summary.fatal_error = True
-                if not args.dry_run and run_id is not None:
+                if not config.dry_run and run_id is not None:
                     record_scan_error(
                         cur,
                         run_id=run_id,
@@ -517,7 +557,7 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                     conn.commit()
                 return summary
 
-            aliases = fetch_aliases(cur, event_id=args.event_id)
+            aliases = fetch_aliases(cur, event_id=config.event_id)
             summary.aliases_total = len(aliases)
             alias_names = {str(row["src_folder_raw"]) for row in aliases}
             scan_unknown_folders(
@@ -526,7 +566,7 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                 root=root,
                 alias_names=alias_names,
                 summary=summary,
-                dry_run=args.dry_run,
+                dry_run=config.dry_run,
             )
 
             keep_scanning = True
@@ -538,7 +578,7 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                 if not is_active:
                     summary.aliases_inactive += 1
                     summary.errors += 1
-                    if not args.dry_run and run_id is not None:
+                    if not config.dry_run and run_id is not None:
                         record_scan_error(
                             cur,
                             run_id=run_id,
@@ -552,7 +592,7 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                 if manual_judgement:
                     summary.aliases_manual += 1
                     summary.errors += 1
-                    if not args.dry_run and run_id is not None:
+                    if not config.dry_run and run_id is not None:
                         record_scan_error(
                             cur,
                             run_id=run_id,
@@ -567,18 +607,18 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                 keep_scanning = scan_alias_files(
                     cur,
                     run_id=run_id,
-                    event_id=args.event_id,
+                    event_id=config.event_id,
                     root=root,
                     alias=alias,
                     summary=summary,
-                    dry_run=args.dry_run,
-                    limit=args.limit,
+                    dry_run=config.dry_run,
+                    limit=config.limit,
                     chunk_size=chunk_size,
                 )
                 if not keep_scanning:
                     break
 
-            if not args.dry_run and run_id is not None:
+            if not config.dry_run and run_id is not None:
                 status = ETL_STATUS_PARTIAL if summary.errors else ETL_STATUS_SUCCESS
                 finish_scan_run(cur, run_id=run_id, summary=summary, status=status)
                 conn.commit()
@@ -586,7 +626,7 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
             return summary
         except Exception:
             conn.rollback()
-            if not args.dry_run and run_id is not None:
+            if not config.dry_run and run_id is not None:
                 error_cur = dict_cursor(conn)
                 try:
                     record_scan_error(
@@ -612,11 +652,12 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
 
 def main() -> int:
     args = parse_args()
+    config = resolve_config(args)
     params = load_mysql_base_params(args.db_prefix)
 
-    with connect_ctx(params, database=args.health_db, autocommit=False) as conn:
-        summary = run_scan(conn, args)
-        if args.dry_run:
+    with connect_ctx(params, database=config.health_db, autocommit=False) as conn:
+        summary = run_scan(conn, config)
+        if config.dry_run:
             conn.rollback()
         summary.print()
         return 1 if summary.fatal_error else 0
