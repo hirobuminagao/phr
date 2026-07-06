@@ -41,12 +41,7 @@ CREATE TABLE `health_exam_result`.`file_receipts` (
   KEY `idx_file_receipts_first_seen` (`first_seen_at`),
   KEY `idx_file_receipts_last_seen` (`last_seen_at`),
   KEY `idx_file_receipts_received` (`received_at`),
-  KEY `idx_file_receipts_processed` (`processed_at`),
-
-  CONSTRAINT `fk_health_exam_result_file_receipts_etl_run`
-    FOREIGN KEY (`etl_run_id`)
-    REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
-    ON DELETE SET NULL
+  KEY `idx_file_receipts_processed` (`processed_at`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

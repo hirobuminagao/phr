@@ -331,7 +331,10 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 
 - `health_exam_result.etl_runs` は、独自カラム `id` / `run_type` / `event_id` / `summary_message` を廃止し、共通ETL構造の `run_id` / `phase` / `source` / `status` / metrics系カラム / `notes` / `admin_note` へ差し替えた。
 - `health_exam_result.etl_errors` は、独自カラム `id` / `file_receipt_id` / `xml_ledger_id` / `item_value_id` / `error_type` / `status` / `resolved_by_xml_ledger_id` / `resolved_at` を廃止し、共通ETL構造の `error_id` / `run_id` / `phase` / `source` / `src_file` / `field` / `field_value` / `error_code` / `message` へ差し替えた。
-- `file_receipts.etl_run_id` と `exam_item_values.extracted_run_id` の参照先は、`etl_runs.id` から `etl_runs.run_id` へ変更した。
+- `file_receipts.etl_run_id` と `exam_item_values.extracted_run_id` は、共通ETL構造の `etl_runs.run_id` を記録する参照用カラムとして保持する。
+- `etl_runs` は監査・実行履歴であり業務データの親ではないため、`file_receipts.etl_run_id`、`exam_item_values.extracted_run_id`、`etl_errors.run_id` から `etl_runs.run_id` へのFK制約は持たない。
+- `file_receipts.etl_run_id`、`exam_item_values.extracted_run_id`、`etl_errors.run_id` の検索用INDEXは維持する。
+- `xml_file_links` など業務データ同士のFKは維持し、今回の見直し対象外とする。
 - `etl_errors` の独自FK追加DDLは、共通ETL構造に存在しないカラムを参照するため削除した。
 - `scripts/lib/etl` は専用APIを新設せず、`phase = SCAN_FILES` を扱えるように共通DDLの `phase` を `varchar(64)` へ広げる最小修正のみ行った。
 - `01_scan_files.py` から独自の `etl_runs` / `etl_errors` SQLを削除し、`start_run` / `finish_run` / `log_error` を共通libから利用するように変更した。
@@ -365,3 +368,51 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 - 対象eventの `dev_phr.event.result_root_path` 設定値確認。
 - 実フォルダ構成と `medical_folder_aliases` 初期データ188件の整合確認。
 - 一時ファイル判定パターンが現場運用に対して十分かの確認。
+
+## 16. Phase3 dry-run確認結果
+
+### 実行日
+
+2026-07-06
+
+### 実行コマンド
+
+- `python -m py_compile scripts/from_medical/01_scan_files.py`
+- `python scripts/from_medical/01_scan_files.py --help`
+- `python scripts/from_medical/01_scan_files.py --dry-run`
+- `python scripts/from_medical/01_scan_files.py --dry-run --db-prefix MYSQL_`
+
+### 実行結果サマリー
+
+- `py_compile` は成功。
+- `--help` は成功。
+- `python scripts/from_medical/01_scan_files.py --dry-run` は、`PHR_DB_USER` 未設定のためDB接続前に停止した。
+- ローカル `scripts/.env` には `MYSQL_*` が設定されていたため、`--db-prefix MYSQL_` でも確認したが、MySQL server `127.0.0.1:3306` へ接続できず停止した。
+- そのため、今回の環境では aliases / files / ext_counts / file_type_counts / unknown_folders / missing_edit_folders / errors の実件数は取得できていない。
+
+### 単体XML除外確認
+
+- 実DB・実フォルダを使った件数確認は、MySQL接続不可のため未実施。
+- 実装上は単体XMLについて `h*.xml` のみ登録対象とし、`ix08*.xml` / `su08*.xml` / `*schema*.xml` / `*xsd*.xml` はスキップする。
+- 対象外XMLは `file_receipts` に登録せず、`etl_errors` にも記録しない。
+- ZIPファイル自体は中身確認せず、Phase3では従来どおり登録対象とする。
+
+### unknown/missing folder の扱い
+
+- 今回のdry-runはDB接続不可のため、unknown folder / missing edit folder の実件数は未確認。
+- unknown folder / missing edit folder が出た場合も、現時点では実装変更せず運用確認事項として扱う。
+- 明らかに恒久的な管理用フォルダ等と判明した場合のみ、将来の除外パターン追加を検討する。
+
+### 本実行前の確認事項
+
+- MySQL server が `127.0.0.1:3306` で起動していること。
+- `PHR_DB_*` または実行時 `--db-prefix MYSQL_` により、DB接続設定が解決できること。
+- `health_exam_result` / `dev_phr` へ接続でき、必要な参照・INSERT権限があること。
+- `dev_phr.event.event_id = 2` の `result_root_path` が設定済みで、実フォルダへアクセスできること。
+- dry-runで aliases / files / unknown_folders / missing_edit_folders の件数を確認してから本実行すること。
+
+### 本実行準備
+
+- 本実行コマンドは `python scripts/from_medical/01_scan_files.py`。
+- ローカル `.env` が `MYSQL_*` のみの場合は、接続設定を `PHR_DB_*` に揃えるか、`python scripts/from_medical/01_scan_files.py --db-prefix MYSQL_` で実行する。
+- 本実行でDBに入るテーブルは `health_exam_result.etl_runs`、必要時のみ `health_exam_result.etl_errors`、新規検出時の `health_exam_result.file_receipts`。

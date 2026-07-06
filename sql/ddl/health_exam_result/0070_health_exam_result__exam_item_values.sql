@@ -42,12 +42,7 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   KEY `idx_exam_item_values_normalize_status` (`normalize_status`),
   KEY `idx_exam_item_values_validation_status` (`validation_status`),
   KEY `idx_exam_item_values_extracted_run` (`extracted_run_id`),
-  KEY `idx_exam_item_values_extracted_at` (`extracted_at`),
-
-  CONSTRAINT `fk_health_exam_result_exam_item_values_extracted_run`
-    FOREIGN KEY (`extracted_run_id`)
-    REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
-    ON DELETE SET NULL
+  KEY `idx_exam_item_values_extracted_at` (`extracted_at`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
