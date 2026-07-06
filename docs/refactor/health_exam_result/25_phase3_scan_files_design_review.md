@@ -51,7 +51,7 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 - `health_exam_result.etl_runs` のscan Run
 - 新規検出ファイルの `health_exam_result.file_receipts`
 - 異常・スキップ調査用の `health_exam_result.etl_errors`
-- Run終了時の `etl_runs.summary_message`
+- Run終了時の `etl_runs.notes`
 
 ### Phase3では行わないこと
 
@@ -69,8 +69,8 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 | `dev_phr.event` | 参照のみ。対象 `event_id` の `result_root_path` を取得する。 | `event_id`, `result_root_path` |
 | `health_exam_result.medical_folder_aliases` | 参照のみ。event内の医療機関フォルダを解決する。 | `event_id`, `src_folder_raw`, `dst_folder_norm`, `manual_judgement`, `is_active`, `note` |
 | `health_exam_result.file_receipts` | 既存行参照、新規行INSERT。重複ファイルはINSERTしない。 | `event_id`, `relative_path`, `file_sha256`, `status`, `etl_run_id` など |
-| `health_exam_result.etl_runs` | scan Run開始・終了を記録する。 | `run_type`, `event_id`, `status`, `started_at`, `finished_at`, `summary_message` |
-| `health_exam_result.etl_errors` | scan中の異常を記録する。 | `run_id`, `file_receipt_id`, `error_type`, `error_code`, `error_message`, `status` |
+| `health_exam_result.etl_runs` | scan Run開始・終了を記録する。 | 共通ETL構造の `run_id`, `phase`, `source`, `status`, metrics系カラム, `notes` |
+| `health_exam_result.etl_errors` | scan中の異常を記録する。 | 共通ETL構造の `run_id`, `phase`, `source`, `src_file`, `field`, `field_value`, `error_code`, `message` |
 
 ## 6. 処理フロー案
 
@@ -88,7 +88,7 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 12. 未登録の場合のみ `file_receipts` に `status = DISCOVERED` でINSERTする。
 13. 登録済みの場合は新規登録せず、重複件数としてRunサマリーへ集約する。
 14. 個別ファイルの属性取得・SHA計算・INSERT失敗は `etl_errors` に記録し、可能な範囲で次ファイルへ進む。
-15. `etl_runs.finished_at`、`status`、`summary_message` を更新して終了する。
+15. `scripts/lib/etl.finish_run()` により `etl_runs.finished_at`、`status`、metrics、`notes` を更新して終了する。
 
 ## 7. file_receipts 登録ルール
 
@@ -114,7 +114,7 @@ Phase3 `01_scan_files.py` 実装前に、入力、参照テーブル、処理フ
 | `storage_folder_type` | `MEDICAL_RESULT_ROOT`。 | Phase3登録時の決定済み値。 |
 | `status` | `DISCOVERED`。 | 決定済み。 |
 | `summary_message` | 原則 `NULL`。警告をファイル単位に残す場合のみ短い要約。 | 詳細は `etl_errors` へ寄せる。 |
-| `etl_run_id` | 当該scan Runの `etl_runs.id`。 | `02_import_xml.py` の入力Runになる。 |
+| `etl_run_id` | 当該scan Runの `etl_runs.run_id`。 | `02_import_xml.py` の入力Runになる。 |
 | `first_seen_at` | INSERT時刻。DBデフォルト利用候補。 | 旧scanの `first_seen_at` 相当。 |
 | `last_seen_at` | INSERT時は同時刻を入れる候補、または `NULL`。 | 再スキャン時に既存行更新しないなら `NULL` のままになる。運用判断が必要。 |
 | `content_checked_at` | `NULL`。 | 中身確認をPhase4へ寄せるなら未設定。 |
@@ -188,41 +188,41 @@ Phase2実装済みの `medical_folder_aliases` は `event_id = 2` の188件を�
 
 ### etl_runs
 
-DDL上、`run_type` と `status` は `varchar` で値定義はDB制約化されていない。
+ADR-0023と `03_decisions.md` の更新により、`health_exam_result.etl_runs` / `etl_errors` は既存 `scripts/lib/etl` の共通構造へ戻す。Phase3スクリプトは独自SQLでETL記帳せず、共通libの public API を利用する。
 
 採用値:
 
-- `run_type`: `SCAN_FILES`
-- 開始時 `status`: `RUNNING`
-- 正常終了 `status`: `SUCCESS`
-- 一部スキップやエラー記録ありで処理継続した場合の `status`: `WARNING`
-- Run前提不備で終了する場合の `status`: `ERROR`
+- `phase`: `SCAN_FILES`
+- `source`: `FROM_MEDICAL`
+- 開始時 `status`: `running`
+- 正常終了 `status`: `success`
+- 一部スキップやエラー記録ありで処理継続した場合の `status`: `partial`
+- Run前提不備で終了する場合の `status`: `failed`
 
-旧実装では `medi_import_runs` や共通ETLでrun単位の開始・終了・summary noteを持っていた。Phase3でも、件数サマリーを標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。`summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+旧実装では `medi_import_runs` や共通ETLでrun単位の開始・終了・summary noteを持っていた。Phase3でも、件数サマリーを標準出力に表示し、`finish_run(..., extra_notes=...)` により `etl_runs.notes` に短い人間向けテキストとして記録する。
 
 ### etl_errors
 
-Phase3の `etl_errors` は、運用上対応が必要な事象のみ記録する。ファイル登録前のエラーが多いため `file_receipt_id` が `NULL` になるケースを許容する。
+Phase3の `etl_errors` は、運用上対応が必要な事象のみ記録する。共通ETL構造へ寄せるため、ファイル登録前のエラーは `src_file`、`field`、`field_value`、`error_code`、`message` で表現する。
 
 推奨する記録単位:
 
-- Run前提エラー: `run_id` 単位、`file_receipt_id = NULL`
-- alias/フォルダエラー: `run_id` 単位、`file_receipt_id = NULL`、`error_message` に対象パス
-- ファイル属性取得エラー: `run_id` 単位、`file_receipt_id = NULL`、`error_message` に対象パス
-- SHA計算エラー: `run_id` 単位、`file_receipt_id = NULL`、`error_message` に対象パス
-- INSERT後に発覚したファイル単位エラー: `file_receipt_id` を設定可能
+- Run前提エラー: `run_id` 単位、`field = SCAN_PRECONDITION`
+- alias/フォルダエラー: `run_id` 単位、`field = FOLDER_SCAN` または `FOLDER_ALIAS`、`field_value` / `message` に対象を記録
+- ファイル属性取得エラー: `run_id` 単位、`src_file` / `field_value` / `message` に対象パスを記録
+- SHA計算エラー: `run_id` 単位、`src_file` / `field_value` / `message` に対象パスを記録
+- INSERT失敗: `run_id` 単位、`field = DB_WRITE`、`src_file` / `field_value` / `message` に対象パスを記録
 
 Phase3で必要最小限の候補:
 
-- `error_type`: `SCAN_PRECONDITION` / `FOLDER_SCAN` / `FILE_STAT` / `FILE_HASH` / `DB_INSERT`
+- `field`: `SCAN_PRECONDITION` / `FOLDER_SCAN` / `FOLDER_ALIAS` / `FILE_SCAN` / `DB_WRITE` / `UNEXPECTED`
 - `error_code`: `RESULT_ROOT_PATH_MISSING` / `RESULT_ROOT_PATH_NOT_FOUND` / `EDIT_FOLDER_NOT_FOUND` / `UNKNOWN_MEDICAL_FOLDER` / `STAT_FAILED` / `SHA256_FAILED` / `INSERT_FAILED`
-- `status`: `OPEN` / `RESOLVED`
 
-`etl_errors.status` は `OPEN / RESOLVED` とする。`etl_errors.error_type` / `error_code` はPhase3で必要最小限のみ定義し、将来必要に応じて拡張する。
+共通ETL構造では `etl_errors.status`、`error_type`、`file_receipt_id` は持たない。Phase3固有の分類は `field` と `error_code` に寄せ、将来必要に応じて共通ETL仕様として拡張する。
 
 ### scan結果サマリー
 
-scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` にも記録する。`summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
+scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` にも記録する。notesは人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。
 
 サマリーには、最低限以下を出すことを推奨する。
 
@@ -261,9 +261,9 @@ JSON等の構造化データは採用しない。将来、機械集計が必要�
 | `manual_judgement = 1` のaliasの扱い | 旧copyでは `COALESCE(manual_judgement, auto_judgement)='KENSHIN'` とし、手動判断が自動判定より優先。 | スキップし、手動確認が必要なものとして必要に応じて `etl_errors` に記録する。 | Phase3で自動登録すると、人間判断が必要なフォルダを後続処理へ送る可能性がある。 | `etl_errors` に記録する具体粒度。 |
 | `event.result_root_path` 未設定時の扱い | 旧実装は `.env` の `MEDI_SHARED_ROOT` / `MEDI_IMPORT_INPUT_ROOT` に依存。 | Run失敗。`etl_errors` に `RESULT_ROOT_PATH_MISSING` 相当を記録。 | `03_decisions.md` で未設定時はエラーと決定済み。 | なし。エラーコード・メッセージ形式のみ要判断。 |
 | 対象外ファイル・隠しファイル・一時ファイルの扱い | 旧scanは拡張子別 `rglob("*.ext")` で対象外を自然に拾わない。 | 登録しない。原則 `etl_errors` にも記録しない。 | 共有フォルダにはOS生成物やアップロード途中ファイルが混ざり得る。対象外ファイルまで記録するとノイズが増え、運用負荷が高くなる。 | 一時ファイル判定パターンを決める必要がある。例: `.~`, `~$`, `.tmp`, `.part`, `.crdownload` など。 |
-| エラー時の `etl_errors` 記録単位 | 旧scanの `stat()` 失敗はwarningで継続。hash/probe失敗はnoteに保存。ZIP取込は可能な限りreceiptやprocess logに記録。 | 運用上対応が必要な事象のみ記録する。未知フォルダ、無効alias、`manual_judgement = 1` aliasなどを基本とする。`etl_errors.status` は `OPEN / RESOLVED`。 | 人が対応すべき事象のみをETLエラーとして管理することで、障害対応の優先度を明確にできる。 | Phase3実装時に必要最小限の `error_type` / `error_code` 具体値を定義する。 |
-| `etl_runs` の run_type / status | 旧 `medi_import_runs` と共通ETLでrunを作り、summary noteを更新。status値は既存基盤に揺れがある。 | `run_type = SCAN_FILES`。`status = RUNNING / SUCCESS / WARNING / ERROR`。 | DDLはvarcharで制約なし。scan処理の意味を明確にし、一部スキップやエラー記録ありで継続した場合を `WARNING` として表現する。 | なし。 |
-| scan結果サマリーとして何を出すか | 旧実装は標準ログ、note、run summaryに件数を出す。 | scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.summary_message` に記録する。`summary_message` は人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。 | 重複件数は `file_receipts` に残さない決定のため、Runサマリーが主な証跡になる。 | なし。 |
+| エラー時の `etl_errors` 記録単位 | 旧scanの `stat()` 失敗はwarningで継続。hash/probe失敗はnoteに保存。ZIP取込は可能な限りreceiptやprocess logに記録。 | 運用上対応が必要な事象のみ記録する。共通ETL構造に合わせ、分類は `field`、詳細は `error_code` / `message` / `field_value` に寄せる。 | 人が対応すべき事象のみをETLエラーとして管理することで、障害対応の優先度を明確にできる。 | Phase3実装時に必要最小限の `field` / `error_code` 具体値を定義する。 |
+| `etl_runs` の phase / status | 旧 `medi_import_runs` と共通ETLでrunを作り、summary noteを更新。status値は既存基盤に揺れがある。 | `phase = SCAN_FILES`、`source = FROM_MEDICAL`。`status = running / success / partial / failed`。 | ADR-0023に従い、既存 `scripts/lib/etl` の共通構造と運用へ寄せるため。 | なし。 |
+| scan結果サマリーとして何を出すか | 旧実装は標準ログ、note、run summaryに件数を出す。 | scan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` に記録する。notesは人間が読みやすい短いテキストとし、JSON等の構造化データは採用しない。 | 重複件数は `file_receipts` に残さない決定のため、Runサマリーが主な証跡になる。 | なし。 |
 
 ## 14. Phase3 実装GO判定
 
@@ -273,7 +273,7 @@ Phase3の主責務である「`event.result_root_path` と `medical_folder_alias
 
 Phase3実装前の主要な判断事項は整理済みであり、実装へ進める。
 
-実装時には、必要最小限の `etl_errors.error_type` / `error_code` 具体値と一時ファイル判定パターンを、ここで確定した方針の範囲内で定義する。
+実装時には、必要最小限の `etl_errors.field` / `error_code` 具体値と一時ファイル判定パターンを、ここで確定した方針の範囲内で定義する。
 
 ## 15. 実装結果
 
@@ -294,7 +294,7 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 - `event_id / relative_path / file_sha256` で既存 `file_receipts` を確認し、未登録ファイルのみ登録する。
 - 登録時は `file_role = FROM_MEDICAL`、`file_type = ZIP / XML`、`storage_folder_type = MEDICAL_RESULT_ROOT`、`status = DISCOVERED`、`processable_count = NULL` とする。
 - `relative_path` は `event.result_root_path` からの相対パスとする。
-- `etl_runs.run_type = SCAN_FILES`、`etl_runs.status = RUNNING / SUCCESS / WARNING / ERROR` でRunを記録する。
+- `scripts/lib/etl` の `start_run` / `finish_run` / `log_error` を利用し、`phase = SCAN_FILES`、`source = FROM_MEDICAL` としてRunを記録する。
 - `--dry-run` 指定時はDB書き込みを行わず、検出・重複判定・サマリー表示のみ行う。
 
 ### 設計どおりに実装した事項
@@ -303,18 +303,18 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 - `file_type = OTHER` は登録しない。
 - 対象外ファイルは原則 `etl_errors` に記録しない。
 - 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、運用上対応が必要な事象として `etl_errors` に記録する。
-- 対象 `event_id` の `result_root_path` 未設定または参照不可は `ERROR` とする。
-- scan結果サマリーは標準出力に表示し、実行時は短い人間向けテキストとして `etl_runs.summary_message` に記録する。
+- 対象 `event_id` の `result_root_path` 未設定または参照不可は `failed` とする。
+- scan結果サマリーは標準出力に表示し、実行時は短い人間向けテキストとして `etl_runs.notes` に記録する。
 
 ### 実装時に追加判断した事項
 
 - 設定ファイルは作成せず、初期実装は `--event-id` 必須のCLI引数で実行する。
 - DB接続は既存共通の `scripts.lib.db.config.load_mysql_base_params` と `scripts.lib.db.mysql.connect_ctx` を利用する。
-- `health_exam_result` の `etl_runs` / `etl_errors` は既存共通ETL helperのDDL形状と異なるため、Phase3スクリプト内でDDLに合わせた最小SQLを実装した。
-- Phase3で必要最小限の `etl_errors.error_type` / `error_code` として、`SCAN_PRECONDITION`、`FOLDER_SCAN`、`FOLDER_ALIAS`、`FILE_SCAN`、`DB_WRITE`、`UNEXPECTED` と、対応するコードを定義した。
+- 初回実装では `health_exam_result` 独自の `etl_runs` / `etl_errors` DDLに合わせた最小SQLをスクリプト内に実装したが、ADR-0023と `03_decisions.md` の方針に合わせ、共通ETL構造と `scripts/lib/etl` public API 利用へ戻した。
+- Phase3で必要最小限のエラー分類として、`SCAN_PRECONDITION`、`FOLDER_SCAN`、`FOLDER_ALIAS`、`FILE_SCAN`、`DB_WRITE`、`UNEXPECTED` を共通 `etl_errors.field` に記録し、具体値を `error_code` に記録する。
 - 一時ファイル判定は、ファイル名が `.` または `~$` で始まるもの、または `.tmp` / `.part` / `.crdownload` で終わるものを対象外とした。
 - `received_at`、`first_seen_at`、`last_seen_at` は新規登録時に `CURRENT_TIMESTAMP(3)` を設定する。
-- `file_receipts` INSERT時に `UNIQUE(event_id, relative_path_sha256, file_sha256)` が衝突した場合は、並行実行等による重複検出として扱い、`files_duplicate` に加算する。`etl_errors` には記録せず、Run status を `WARNING` にする原因にしない。
+- `file_receipts` INSERT時に `UNIQUE(event_id, relative_path_sha256, file_sha256)` が衝突した場合は、並行実行等による重複検出として扱い、`files_duplicate` に加算する。`etl_errors` には記録せず、Run status を `partial` にする原因にしない。
 - `event.result_root_path` 直下は医療機関フォルダを置く運用前提とする。管理用フォルダ等を置く場合は、将来除外パターン追加を検討する。
 
 ### 未実装にした事項
@@ -322,13 +322,27 @@ Phase3実装前の主要な判断事項は整理済みであり、実装へ進�
 - Phase4以降のZIP展開、XML読込、XML基本情報抽出、健診値抽出。
 - CSV取込および `file_type = CSV` の登録。
 - `file_type = OTHER` の登録。
-- DDL / migration / seed SQL の変更。
 - 設定YAMLの作成。
+
+### ETL共通lib整合修正
+
+- `health_exam_result.etl_runs` は、独自カラム `id` / `run_type` / `event_id` / `summary_message` を廃止し、共通ETL構造の `run_id` / `phase` / `source` / `status` / metrics系カラム / `notes` / `admin_note` へ差し替えた。
+- `health_exam_result.etl_errors` は、独自カラム `id` / `file_receipt_id` / `xml_ledger_id` / `item_value_id` / `error_type` / `status` / `resolved_by_xml_ledger_id` / `resolved_at` を廃止し、共通ETL構造の `error_id` / `run_id` / `phase` / `source` / `src_file` / `field` / `field_value` / `error_code` / `message` へ差し替えた。
+- `file_receipts.etl_run_id` と `exam_item_values.extracted_run_id` の参照先は、`etl_runs.id` から `etl_runs.run_id` へ変更した。
+- `etl_errors` の独自FK追加DDLは、共通ETL構造に存在しないカラムを参照するため削除した。
+- `scripts/lib/etl` は専用APIを新設せず、`phase = SCAN_FILES` を扱えるように共通DDLの `phase` を `varchar(64)` へ広げる最小修正のみ行った。
+- `01_scan_files.py` から独自の `etl_runs` / `etl_errors` SQLを削除し、`start_run` / `finish_run` / `log_error` を共通libから利用するように変更した。
+
+### 実装レビュー対応
+
+- `record_scan_error()` の引数名を `error_type` から `field` へ変更し、共通 `etl_errors.field` へ寄せた。DBへ記録する値と挙動は変更しない。
+- `etl_runs` / `etl_errors` のcollation差分は今回は変更しない。将来的に共通ETL DDL側を `utf8mb4_ja_0900_as_cs` へ寄せるかを検討する。
 
 ### 残る改善候補
 
 - 共有フォルダ負荷が問題になる場合は、`rglob("*")` ではなく `rglob("*.zip")` / `rglob("*.xml")` の拡張子別探索へ変更する。
 - `--dev-db` / `--health-db` は初期実装では任意指定可能としている。運用上必要になった場合は、許可値チェックを追加する。
+- 共通ETL DDLのcollationを `utf8mb4_ja_0900_as_cs` へ寄せるかは後続で検討する。
 
 ### 実行確認結果
 

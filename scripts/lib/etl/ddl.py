@@ -45,7 +45,7 @@ _ETL_RUNS_DDL = """
 CREATE TABLE IF NOT EXISTS etl_runs (
     run_id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
-    phase          ENUM('import', 'apply') NOT NULL,
+    phase          VARCHAR(64) NOT NULL,
     source         VARCHAR(190) NOT NULL,
     db_schema      VARCHAR(64) NULL,
 
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS etl_errors (
     error_id        BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     run_id          BIGINT UNSIGNED NULL,
 
-    phase           ENUM('import', 'apply') NOT NULL,
+    phase           VARCHAR(64) NOT NULL,
     source          VARCHAR(190) NOT NULL,
 
     insurer_number  VARCHAR(20) NULL,

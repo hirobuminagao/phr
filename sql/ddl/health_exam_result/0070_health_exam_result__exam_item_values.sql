@@ -46,27 +46,9 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
 
   CONSTRAINT `fk_health_exam_result_exam_item_values_extracted_run`
     FOREIGN KEY (`extracted_run_id`)
-    REFERENCES `health_exam_result`.`etl_runs` (`id`)
+    REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
     ON DELETE SET NULL
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_ja_0900_as_cs;
-
-ALTER TABLE `health_exam_result`.`etl_errors`
-  ADD CONSTRAINT `fk_health_exam_result_etl_errors_file_receipt`
-    FOREIGN KEY (`file_receipt_id`)
-    REFERENCES `health_exam_result`.`file_receipts` (`id`)
-    ON DELETE SET NULL,
-  ADD CONSTRAINT `fk_health_exam_result_etl_errors_xml_ledger`
-    FOREIGN KEY (`xml_ledger_id`)
-    REFERENCES `health_exam_result`.`xml_ledger` (`id`)
-    ON DELETE SET NULL,
-  ADD CONSTRAINT `fk_health_exam_result_etl_errors_item_value`
-    FOREIGN KEY (`item_value_id`)
-    REFERENCES `health_exam_result`.`exam_item_values` (`id`)
-    ON DELETE SET NULL,
-  ADD CONSTRAINT `fk_health_exam_result_etl_errors_resolved_by_xml_ledger`
-    FOREIGN KEY (`resolved_by_xml_ledger_id`)
-    REFERENCES `health_exam_result`.`xml_ledger` (`id`)
-    ON DELETE SET NULL;

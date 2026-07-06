@@ -26,18 +26,21 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.etl import RunMetrics
+from scripts.lib.etl import finish_run as etl_finish_run
+from scripts.lib.etl import log_error as etl_log_error
+from scripts.lib.etl import start_run as etl_start_run
 
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
 DEV_PHR_DB = "dev_phr"
 
 EDIT_FOLDER_NAME = "02_健診結果（編集）"
-RUN_TYPE = "SCAN_FILES"
-STATUS_RUNNING = "RUNNING"
-STATUS_SUCCESS = "SUCCESS"
-STATUS_WARNING = "WARNING"
-STATUS_ERROR = "ERROR"
-ERROR_STATUS_OPEN = "OPEN"
+ETL_PHASE = "SCAN_FILES"
+ETL_SOURCE = "FROM_MEDICAL"
+ETL_STATUS_SUCCESS = "success"
+ETL_STATUS_PARTIAL = "partial"
+ETL_STATUS_FAILED = "failed"
 
 FILE_ROLE = "FROM_MEDICAL"
 STORAGE_FOLDER_TYPE = "MEDICAL_RESULT_ROOT"
@@ -110,6 +113,15 @@ class ScanSummary:
         if self.type_counts:
             print("  file_type_counts=" + ", ".join(f"{k}:{v}" for k, v in sorted(self.type_counts.items())))
 
+    def to_metrics(self) -> RunMetrics:
+        return RunMetrics(
+            files=self.files_target,
+            rows_seen=self.files_seen,
+            rows_inserted=self.files_inserted,
+            rows_skipped=self.files_skipped + self.files_duplicate,
+            errors=self.errors,
+        )
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Scan medical result files into file_receipts.")
@@ -123,52 +135,54 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def start_run(cur: Any, *, event_id: int) -> int:
-    cur.execute(
-        """
-        INSERT INTO etl_runs (run_type, event_id, status, summary_message)
-        VALUES (%s, %s, %s, %s)
-        """,
-        (RUN_TYPE, event_id, STATUS_RUNNING, "scan_files started"),
-    )
-    return int(cur.lastrowid)
-
-
-def finish_run(cur: Any, *, run_id: int, status: str, summary_message: str) -> None:
-    cur.execute(
-        """
-        UPDATE etl_runs
-        SET status = %s,
-            finished_at = CURRENT_TIMESTAMP(3),
-            summary_message = %s
-        WHERE id = %s
-        """,
-        (status, summary_message, run_id),
+def start_scan_run(cur: Any, *, args: argparse.Namespace) -> int:
+    return etl_start_run(
+        cur,
+        phase=ETL_PHASE,
+        source=ETL_SOURCE,
+        db_schema=args.health_db,
+        db_path=args.health_db,
+        input_base=f"event_id={args.event_id}",
+        input_file=None,
+        insurer_number=None,
+        dry_run=args.dry_run,
+        limit_rows=args.limit or None,
     )
 
 
-def log_error(
+def finish_scan_run(cur: Any, *, run_id: int, summary: ScanSummary, status: str) -> None:
+    etl_finish_run(
+        cur,
+        run_id,
+        summary.to_metrics(),
+        status_override=status,
+        extra_notes=summary.to_message(),
+    )
+
+
+def record_scan_error(
     cur: Any,
     *,
     run_id: int,
-    error_type: str,
+    field: str,
     error_code: str,
     message: str,
-    file_receipt_id: int | None = None,
+    field_value: str | None = None,
 ) -> None:
-    cur.execute(
-        """
-        INSERT INTO etl_errors (
-            run_id,
-            file_receipt_id,
-            error_type,
-            error_code,
-            error_message,
-            status
-        )
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (run_id, file_receipt_id, error_type, error_code, message, ERROR_STATUS_OPEN),
+    src_file = None if field_value is None else field_value[:190]
+    etl_log_error(
+        cur,
+        run_id,
+        phase=ETL_PHASE,
+        source=ETL_SOURCE,
+        insurer_number=None,
+        src_file=src_file,
+        row_no=None,
+        line_no=None,
+        field=field,
+        field_value=field_value,
+        error_code=error_code,
+        message=message,
     )
 
 
@@ -323,12 +337,13 @@ def scan_unknown_folders(
     except OSError as exc:
         summary.errors += 1
         if not dry_run and run_id is not None:
-            log_error(
+            record_scan_error(
                 cur,
                 run_id=run_id,
-                error_type="SCAN_PRECONDITION",
+                field="SCAN_PRECONDITION",
                 error_code="RESULT_ROOT_PATH_READ_FAILED",
                 message=f"result_root_path cannot be listed: {root}: {exc}",
+                field_value=str(root),
             )
         return
 
@@ -338,12 +353,13 @@ def scan_unknown_folders(
         summary.unknown_folders += 1
         summary.errors += 1
         if not dry_run and run_id is not None:
-            log_error(
+            record_scan_error(
                 cur,
                 run_id=run_id,
-                error_type="FOLDER_SCAN",
+                field="FOLDER_SCAN",
                 error_code="UNKNOWN_MEDICAL_FOLDER",
                 message=f"unknown medical folder: {child}",
+                field_value=str(child),
             )
 
 
@@ -368,12 +384,13 @@ def scan_alias_files(
         summary.edit_folders_missing += 1
         summary.errors += 1
         if not dry_run and run_id is not None:
-            log_error(
+            record_scan_error(
                 cur,
                 run_id=run_id,
-                error_type="FOLDER_SCAN",
+                field="FOLDER_SCAN",
                 error_code="EDIT_FOLDER_NOT_FOUND",
                 message=f"edit folder not found: {edit_dir}",
+                field_value=str(edit_dir),
             )
         return True
 
@@ -397,12 +414,13 @@ def scan_alias_files(
         except OSError as exc:
             summary.errors += 1
             if not dry_run and run_id is not None:
-                log_error(
+                record_scan_error(
                     cur,
                     run_id=run_id,
-                    error_type="FILE_SCAN",
+                    field="FILE_SCAN",
                     error_code="FILE_READ_FAILED",
                     message=f"file read failed: {path}: {exc}",
+                    field_value=str(path),
                 )
             continue
 
@@ -434,12 +452,13 @@ def scan_alias_files(
                 summary.files_duplicate += 1
                 continue
             summary.errors += 1
-            log_error(
+            record_scan_error(
                 cur,
                 run_id=int(run_id),
-                error_type="DB_WRITE",
+                field="DB_WRITE",
                 error_code="FILE_RECEIPT_INSERT_FAILED",
                 message=f"file_receipt insert failed: {path}: {exc}",
+                field_value=str(path),
             )
 
         if limit and summary.files_target >= limit:
@@ -456,7 +475,7 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
     cur = dict_cursor(conn)
     try:
         if not args.dry_run:
-            run_id = start_run(cur, event_id=args.event_id)
+            run_id = start_scan_run(cur, args=args)
             conn.commit()
 
         try:
@@ -466,14 +485,15 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                 summary.errors += 1
                 summary.fatal_error = True
                 if not args.dry_run and run_id is not None:
-                    log_error(
+                    record_scan_error(
                         cur,
                         run_id=run_id,
-                        error_type="SCAN_PRECONDITION",
+                        field="SCAN_PRECONDITION",
                         error_code="RESULT_ROOT_PATH_MISSING",
                         message=f"result_root_path is not set: event_id={args.event_id}",
+                        field_value=f"event_id={args.event_id}",
                     )
-                    finish_run(cur, run_id=run_id, status=STATUS_ERROR, summary_message=summary.to_message())
+                    finish_scan_run(cur, run_id=run_id, summary=summary, status=ETL_STATUS_FAILED)
                     conn.commit()
                 return summary
 
@@ -482,14 +502,15 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                 summary.errors += 1
                 summary.fatal_error = True
                 if not args.dry_run and run_id is not None:
-                    log_error(
+                    record_scan_error(
                         cur,
                         run_id=run_id,
-                        error_type="SCAN_PRECONDITION",
+                        field="SCAN_PRECONDITION",
                         error_code="RESULT_ROOT_PATH_NOT_FOUND",
                         message=f"result_root_path is not a directory: {root}",
+                        field_value=str(root),
                     )
-                    finish_run(cur, run_id=run_id, status=STATUS_ERROR, summary_message=summary.to_message())
+                    finish_scan_run(cur, run_id=run_id, summary=summary, status=ETL_STATUS_FAILED)
                     conn.commit()
                 return summary
 
@@ -515,12 +536,13 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                     summary.aliases_inactive += 1
                     summary.errors += 1
                     if not args.dry_run and run_id is not None:
-                        log_error(
+                        record_scan_error(
                             cur,
                             run_id=run_id,
-                            error_type="FOLDER_ALIAS",
+                            field="FOLDER_ALIAS",
                             error_code="ALIAS_INACTIVE",
                             message=f"inactive alias skipped: {src_folder_raw}",
+                            field_value=src_folder_raw,
                         )
                     continue
 
@@ -528,12 +550,13 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                     summary.aliases_manual += 1
                     summary.errors += 1
                     if not args.dry_run and run_id is not None:
-                        log_error(
+                        record_scan_error(
                             cur,
                             run_id=run_id,
-                            error_type="FOLDER_ALIAS",
+                            field="FOLDER_ALIAS",
                             error_code="ALIAS_MANUAL_JUDGEMENT",
                             message=f"manual_judgement alias skipped: {src_folder_raw}",
+                            field_value=src_folder_raw,
                         )
                     continue
 
@@ -553,8 +576,8 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
                     break
 
             if not args.dry_run and run_id is not None:
-                status = STATUS_WARNING if summary.errors else STATUS_SUCCESS
-                finish_run(cur, run_id=run_id, status=status, summary_message=summary.to_message())
+                status = ETL_STATUS_PARTIAL if summary.errors else ETL_STATUS_SUCCESS
+                finish_scan_run(cur, run_id=run_id, summary=summary, status=status)
                 conn.commit()
 
             return summary
@@ -563,18 +586,18 @@ def run_scan(conn: Any, args: argparse.Namespace) -> ScanSummary:
             if not args.dry_run and run_id is not None:
                 error_cur = dict_cursor(conn)
                 try:
-                    log_error(
+                    record_scan_error(
                         error_cur,
                         run_id=run_id,
-                        error_type="UNEXPECTED",
+                        field="UNEXPECTED",
                         error_code="UNEXPECTED_SCAN_ERROR",
                         message="unexpected scan error",
                     )
-                    finish_run(
+                    finish_scan_run(
                         error_cur,
                         run_id=run_id,
-                        status=STATUS_ERROR,
-                        summary_message=summary.to_message(),
+                        summary=summary,
+                        status=ETL_STATUS_FAILED,
                     )
                     conn.commit()
                 finally:

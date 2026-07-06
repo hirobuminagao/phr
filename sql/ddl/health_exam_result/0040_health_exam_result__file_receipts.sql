@@ -45,7 +45,7 @@ CREATE TABLE `health_exam_result`.`file_receipts` (
 
   CONSTRAINT `fk_health_exam_result_file_receipts_etl_run`
     FOREIGN KEY (`etl_run_id`)
-    REFERENCES `health_exam_result`.`etl_runs` (`id`)
+    REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
     ON DELETE SET NULL
 )
 ENGINE=InnoDB
