@@ -182,3 +182,23 @@ Phase2 medical_folder_aliases 初期データ / event migration について、�
 Phase2はGO。
 
 `medical_folder_aliases` のUNIQUE / INDEX / 初期値方針、seed SQLの配置・命名・再実行方針、`dev_phr.event.result_root_path` の追加方針は決定済みであり、Phase2の実装へ進める状態である。残る確認事項は、migrationの正式ファイル名、`event_id = 2` への初期値設定方法、seed SQL内188件データの最終確認である。
+
+
+## 10. 実装結果
+
+### 実装日
+2026-07-04
+
+### 実装ファイル
+- `sql/migrations/dev_phr/20260703_001_dev_phr_add_result_root_path_to_event.sql`
+- `sql/seed/health_exam_result/0010_health_exam_result__medical_folder_aliases_event2.sql`
+
+### 実装内容
+- `dev_phr.event.result_root_path` migration 作成済み。
+- `medical_folder_aliases` seed SQL 作成済み。
+- `event_id = 2` の188件を投入対象として生成済み。
+- seed は `ON DUPLICATE KEY UPDATE` で再実行可能。
+
+### 現在の判定
+Phase2 実装完了。
+DB実機適用と188件目視確認は未実施。

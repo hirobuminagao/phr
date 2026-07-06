@@ -273,6 +273,7 @@ updated_at
 - `content_checked_at` はファイル種別に依存しない中身確認日時として保持する。
 - `file_receipts.file_sha256` 単独UNIQUEは採用しない。
 - `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+- 上記は論理一意キーとして維持し、DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。
 - `work` は `02_import_xml.py` が処理中だけ利用する一時領域であり、`file_receipts` では恒久的な `work_path` を保持しない。
 - `file_receipts` は人＋イベント単位の最終完了状態を管理しない。
 - 人間の業務確認状態を持つ場合は、機械的な `status` と混ぜず、将来の `operation_status` として分離する。
@@ -392,6 +393,7 @@ created_at
 - 単体XMLの場合、`xml_inner_path` は `NULL` とする。
 - 同一 `xml_sha256` のXMLを別ZIP等で受領した場合は、既存 `xml_ledger` を参照する `xml_file_links` を追加する。
 - `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
+- 上記は論理一意キーとして維持し、DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。
 
 ---
 
@@ -753,29 +755,31 @@ v2初期で本格実装するかは別途判断する。
 11. `dev_phr.exam_item_group_*` 系マスタは migration / 初期データ追加で72項目対応する。DDL追加ではなくデータ不足として扱う。
 12. `medical_folder_aliases` の初期投入データは `docs/spec/health_examinations/03_medical_folder_aliases_initial_data_v2_0_0.md` を正とする。
 13. `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
-14. `medical_folder_aliases` の一意制約は `UNIQUE(event_id, src_folder_raw)` とする。
-15. `medical_folder_aliases.dst_folder_norm` には一意制約を設けず、複数の実フォルダ名から同一名称への集約を許可する。
-16. `medical_folder_aliases` のインデックスは、初期実装では `event_id` および `UNIQUE(event_id, src_folder_raw)` によるものを基本とする。
-17. `medical_folder_aliases.is_active` の初期値は `1` とする。
-18. `medical_folder_aliases.manual_judgement` の初期値は `0` とする。
-19. 仮名称等の補足情報は `medical_folder_aliases.note` に保持し、`manual_judgement` の判定条件とはしない。
-20. status系カラムはDB enumではなく `varchar` で定義する。
-21. `health_exam_result` 内のテーブル間FKは張る。
-22. `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
-23. `file_receipts.file_sha256` 単独UNIQUEは採用しない。
-24. `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
-25. `exam_item_values.normalized_value` は `text` とする。
-26. `dev_phr.event.result_root_path` は migration で追加する。
-27. `dev_phr.event.result_root_path` の型は `text` とし、`NULL` 許可とする。
-28. v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
-29. `medical_folder_aliases` 初期データは `event_id = 2` の188件を投入対象とする。
-30. `medical_folder_aliases` 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
-31. `medical_folder_aliases` 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
-32. `medical_folder_aliases` 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
-33. 初期データSQL再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
-34. `medical_folder_aliases.created_at` は初回INSERT時のみ設定する。
-35. `medical_folder_aliases.alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
-36. `medical_folder_aliases.note` は、補足がある行のみ値を入れ、補足なしは `NULL` とする。
+14. 長尺文字列を含む複合UNIQUE制約は、DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。
+15. SHA256生成列は物理実装上の制約回避であり、論理設計上の一意キーは変更しない。
+16. `medical_folder_aliases` の一意制約は `UNIQUE(event_id, src_folder_raw)` とする。
+17. `medical_folder_aliases.dst_folder_norm` には一意制約を設けず、複数の実フォルダ名から同一名称への集約を許可する。
+18. `medical_folder_aliases` のインデックスは、初期実装では `event_id` および `UNIQUE(event_id, src_folder_raw)` によるものを基本とする。
+19. `medical_folder_aliases.is_active` の初期値は `1` とする。
+20. `medical_folder_aliases.manual_judgement` の初期値は `0` とする。
+21. 仮名称等の補足情報は `medical_folder_aliases.note` に保持し、`manual_judgement` の判定条件とはしない。
+22. status系カラムはDB enumではなく `varchar` で定義する。
+23. `health_exam_result` 内のテーブル間FKは張る。
+24. `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
+25. `file_receipts.file_sha256` 単独UNIQUEは採用しない。
+26. `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+27. `exam_item_values.normalized_value` は `text` とする。
+28. `dev_phr.event.result_root_path` は migration で追加する。
+29. `dev_phr.event.result_root_path` の型は `text` とし、`NULL` 許可とする。
+30. v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
+31. `medical_folder_aliases` 初期データは `event_id = 2` の188件を投入対象とする。
+32. `medical_folder_aliases` 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
+33. `medical_folder_aliases` 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
+34. `medical_folder_aliases` 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
+35. 初期データSQL再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
+36. `medical_folder_aliases.created_at` は初回INSERT時のみ設定する。
+37. `medical_folder_aliases.alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
+38. `medical_folder_aliases.note` は、補足がある行のみ値を入れ、補足なしは `NULL` とする。
 
 ### 未決として残す
 

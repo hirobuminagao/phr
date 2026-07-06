@@ -61,6 +61,8 @@
 - `file_receipts.file_sha256` 単独UNIQUEは採用しない。
 - `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
 - `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
+- 長尺文字列を含む複合UNIQUE制約は、DDL実装ではSHA256生成列を利用して実現する。
+- SHA256生成列の採用はMySQL実装上の制約回避を目的とした物理実装であり、論理設計で定義した一意キーは変更しない。
 - `exam_item_values.normalized_value` は `text` とする。
 - `medical_folder_aliases` の一意制約は `UNIQUE(event_id, src_folder_raw)` とする。
 - `medical_folder_aliases.dst_folder_norm` には一意制約を設けず、複数の実フォルダ名から同一名称への集約を許可する。

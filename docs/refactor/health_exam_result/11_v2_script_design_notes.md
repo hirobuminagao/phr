@@ -162,6 +162,8 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 
 - 毎回フルスキャンしてよい。
 - 既存 `file_receipts` と同一ファイルは登録せず、未登録ファイルだけを追加する。
+- `file_receipts` の論理一意キーは `event_id` / `relative_path` / `file_sha256` のままとする。
+- DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含めるが、スクリプト上の重複判定の考え方は論理一意キーを基準とする。
 - `work` へのコピーは行わないため、再実行しても一時ファイルの後始末は不要。
 
 ### エラー記録方針
@@ -247,6 +249,8 @@ reason code の詳細は未決とし、機械的ステータスと人間の業�
 
 - ZIP内XMLの場合、`xml_file_links.xml_inner_path` にはZIP内相対パスを保持する。
 - XML単体ファイルの場合、`xml_file_links.xml_inner_path` は `NULL` とする。
+- `xml_file_links` の論理一意キーは `file_receipt_id` / `xml_ledger_id` / `xml_inner_path` のままとする。
+- DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。
 
 ---
 

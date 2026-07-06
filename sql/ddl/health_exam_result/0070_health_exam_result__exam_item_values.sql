@@ -1,0 +1,72 @@
+CREATE TABLE `health_exam_result`.`exam_item_values` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `event_id` bigint NOT NULL,
+  `ledger_type` varchar(16) NOT NULL DEFAULT 'XML',
+  `ledger_id` bigint unsigned NOT NULL,
+  `subscriber_id` bigint unsigned DEFAULT NULL,
+  `hia_subscriber_id` varchar(190) DEFAULT NULL,
+  `namecode` char(17) NOT NULL,
+  `occurrence_no` int NOT NULL DEFAULT 1,
+  `raw_value` text,
+  `raw_value_type` varchar(32) DEFAULT NULL,
+  `raw_unit` varchar(64) DEFAULT NULL,
+  `normalized_value` text,
+  `normalized_unit` varchar(64) DEFAULT NULL,
+  `nullflavor` varchar(32) DEFAULT NULL,
+  `code_system` varchar(190) DEFAULT NULL,
+  `code_value` varchar(190) DEFAULT NULL,
+  `code_display` varchar(255) DEFAULT NULL,
+  `identity_item_code` varchar(32) DEFAULT NULL,
+  `jun_no` int DEFAULT NULL,
+  `normalize_status` varchar(32) DEFAULT NULL,
+  `normalize_reason` text,
+  `validation_status` varchar(32) DEFAULT NULL,
+  `validation_reason` text,
+  `extracted_run_id` bigint unsigned DEFAULT NULL,
+  `extracted_at` datetime(3) DEFAULT NULL,
+  `normalized_at` datetime(3) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
+  PRIMARY KEY (`id`),
+  KEY `idx_exam_item_values_event` (`event_id`),
+  KEY `idx_exam_item_values_ledger` (`ledger_type`, `ledger_id`),
+  KEY `idx_exam_item_values_subscriber` (`subscriber_id`),
+  KEY `idx_exam_item_values_hia_subscriber` (`hia_subscriber_id`),
+  KEY `idx_exam_item_values_namecode` (`namecode`),
+  KEY `idx_exam_item_values_occurrence` (`ledger_type`, `ledger_id`, `namecode`, `occurrence_no`),
+  KEY `idx_exam_item_values_nullflavor` (`nullflavor`),
+  KEY `idx_exam_item_values_code_value` (`code_value`),
+  KEY `idx_exam_item_values_identity_item_code` (`identity_item_code`),
+  KEY `idx_exam_item_values_jun_no` (`jun_no`),
+  KEY `idx_exam_item_values_normalize_status` (`normalize_status`),
+  KEY `idx_exam_item_values_validation_status` (`validation_status`),
+  KEY `idx_exam_item_values_extracted_run` (`extracted_run_id`),
+  KEY `idx_exam_item_values_extracted_at` (`extracted_at`),
+
+  CONSTRAINT `fk_health_exam_result_exam_item_values_extracted_run`
+    FOREIGN KEY (`extracted_run_id`)
+    REFERENCES `health_exam_result`.`etl_runs` (`id`)
+    ON DELETE SET NULL
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_ja_0900_as_cs;
+
+ALTER TABLE `health_exam_result`.`etl_errors`
+  ADD CONSTRAINT `fk_health_exam_result_etl_errors_file_receipt`
+    FOREIGN KEY (`file_receipt_id`)
+    REFERENCES `health_exam_result`.`file_receipts` (`id`)
+    ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_health_exam_result_etl_errors_xml_ledger`
+    FOREIGN KEY (`xml_ledger_id`)
+    REFERENCES `health_exam_result`.`xml_ledger` (`id`)
+    ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_health_exam_result_etl_errors_item_value`
+    FOREIGN KEY (`item_value_id`)
+    REFERENCES `health_exam_result`.`exam_item_values` (`id`)
+    ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_health_exam_result_etl_errors_resolved_by_xml_ledger`
+    FOREIGN KEY (`resolved_by_xml_ledger_id`)
+    REFERENCES `health_exam_result`.`xml_ledger` (`id`)
+    ON DELETE SET NULL;

@@ -94,7 +94,7 @@ Phase1 Core DDL の対象7テーブルについて、DDL作成前にカラム、
 | file_name | varchar(255)候補 | NOT NULL | - | INDEX候補 | 12 | ファイル名。 |
 | file_ext | varchar(32)候補 | NULL可 | NULL | INDEX候補 | 12 | 拡張子。 |
 | source_path | text または varchar(1024)候補 | NOT NULL | - | UNIQUE候補 | 12 / 19 | 実ファイルパス。型は未決。 |
-| relative_path | text または varchar(1024)候補 | NOT NULL候補 | - | UNIQUE構成要素 | 12 / 19 / 03 | `event.result_root_path` からの相対パス想定。型は未決。 |
+| relative_path | text または varchar(1024)候補 | NOT NULL候補 | - | 論理UNIQUE構成要素 | 12 / 19 / 03 | `event.result_root_path` からの相対パス想定。型は未決。実DDLでは長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。 |
 | output_path | text または varchar(1024)候補 | NULL可 | NULL | - | 12 | 将来的な出力ファイル資産台帳用途。 |
 | file_sha256 | char(64) | NOT NULL | - | INDEX / UNIQUE構成要素 | 12 / 19 / 03 | 単独UNIQUEは採用しない。重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。 |
 | file_size | bigint unsigned | NULL可 | NULL | - | 12 | バイト数。 |
@@ -159,7 +159,7 @@ Phase1 Core DDL の対象7テーブルについて、DDL作成前にカラム、
 | event_id | bigint | NOT NULL候補 | - | INDEX候補 | 03 / 12 | 検索性向上の冗長保持。cross schema FKは張らない。 |
 | file_receipt_id | bigint unsigned | NOT NULL | - | FK / INDEX / UNIQUE構成要素 | 03 / 12 | `file_receipts.id` 参照。 |
 | xml_ledger_id | bigint unsigned | NOT NULL | - | FK / INDEX / UNIQUE構成要素 | 03 / 12 | `xml_ledger.id` 参照。 |
-| xml_inner_path | text または varchar(1024)候補 | NULL可 | NULL | UNIQUE構成要素 | 03 / 12 | ZIP内相対パス。単体XMLではNULL。UNIQUEは `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせとする。 |
+| xml_inner_path | text または varchar(1024)候補 | NULL可 | NULL | 論理UNIQUE構成要素 | 03 / 12 | ZIP内相対パス。単体XMLではNULL。論理UNIQUEは `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせとする。実DDLでは長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。 |
 | created_at | datetime(3) | NOT NULL | CURRENT_TIMESTAMP(3)候補 | INDEX候補 | 12 / dev_phr系DDL | リンク作成時刻。 |
 
 ### 4.7 exam_item_values
@@ -217,6 +217,8 @@ Phase1 Core DDL の対象7テーブルについて、DDL作成前にカラム、
 - `file_receipts.file_sha256` 単独UNIQUEは採用しない。
 - `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
 - `xml_file_links` は `file_receipt_id`、`xml_ledger_id`、`xml_inner_path` の組み合わせをUNIQUEとする。
+- 長尺文字列を含む複合UNIQUE制約は、DDL実装ではMySQLのキー長などの制約回避のため、長尺文字列部分をSHA256生成列へ変換してUNIQUE制約へ含める。
+- SHA256生成列は物理実装上の制約回避であり、論理設計上の一意キーは変更しない。
 - `medical_folder_aliases` は `event_id` と `src_folder_raw` の組み合わせをUNIQUE候補とするが、正式制約は未決とする。
 - status系、時刻系、`event_id`、`subscriber_id`、`hia_subscriber_id`、`xml_sha256`、`file_sha256` はINDEX候補とする。
 - `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
@@ -261,3 +263,28 @@ Phase1 Core 7テーブルの責務、主カラム、status値の主要部分、�
 - `medical_folder_aliases` のUNIQUE制約。
 - `source_path` / `relative_path` / `output_path` の型。
 - `exam_item_values.validation_status` の正式値をPhase1でDDL制約に含めるか、文字列カラムに留めるか。
+
+## 10. 実装結果
+
+### 実装日
+2026-07-04
+
+### 実装ファイル
+- `sql/ddl/health_exam_result/0010_health_exam_result__etl_runs.sql`
+- ...
+
+### 実装時に変更・確定した事項
+- `exam_item_values.ledger_id` は `xml_ledger.id` へのFKを張らない。
+- `etl_runs.status` / `etl_errors.status` は `NOT NULL` だが DEFAULT は付けない。
+- 長尺TEXTを含む複合UNIQUEはSHA256生成列で実装する。
+
+### レビュー指摘と対応
+| 指摘 | 対応 |
+|---|---|
+| `ledger_id` FKが将来CSV対応と矛盾 | FK削除、INDEX維持 |
+| status defaultが未決値を確定していた | DEFAULT削除 |
+| 長尺TEXTのUNIQUEが生成列実装 | DH-20260704-1で正式決定 |
+
+### 現在の判定
+Phase1 実装完了。
+DB実機適用は未実施。

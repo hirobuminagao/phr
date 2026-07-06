@@ -1,0 +1,53 @@
+CREATE TABLE `health_exam_result`.`file_receipts` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `event_id` bigint NOT NULL,
+  `file_role` varchar(32) NOT NULL,
+  `file_type` varchar(32) NOT NULL,
+  `file_name` varchar(255) NOT NULL,
+  `file_ext` varchar(32) DEFAULT NULL,
+  `source_path` varchar(1024) NOT NULL,
+  `relative_path` varchar(1024) NOT NULL,
+  `relative_path_sha256` char(64) GENERATED ALWAYS AS (sha2(`relative_path`, 256)) STORED,
+  `output_path` varchar(1024) DEFAULT NULL,
+  `file_sha256` char(64) NOT NULL,
+  `file_size` bigint unsigned DEFAULT NULL,
+  `processable_count` int DEFAULT NULL,
+  `insurer_number` varchar(20) DEFAULT NULL,
+  `submitter_facility_code` varchar(64) DEFAULT NULL,
+  `facility_code` varchar(64) DEFAULT NULL,
+  `facility_name` varchar(255) DEFAULT NULL,
+  `storage_folder_type` varchar(64) DEFAULT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'DISCOVERED',
+  `summary_message` text,
+  `etl_run_id` bigint unsigned DEFAULT NULL,
+  `first_seen_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `last_seen_at` datetime(3) DEFAULT NULL,
+  `content_checked_at` datetime(3) DEFAULT NULL,
+  `received_at` datetime(3) DEFAULT NULL,
+  `processed_at` datetime(3) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_file_receipts_event_path_sha256` (`event_id`, `relative_path_sha256`, `file_sha256`),
+  KEY `idx_file_receipts_event_status` (`event_id`, `status`),
+  KEY `idx_file_receipts_file_type` (`file_type`),
+  KEY `idx_file_receipts_file_sha256` (`file_sha256`),
+  KEY `idx_file_receipts_insurer_number` (`insurer_number`),
+  KEY `idx_file_receipts_submitter_facility` (`submitter_facility_code`),
+  KEY `idx_file_receipts_facility` (`facility_code`),
+  KEY `idx_file_receipts_storage_folder_type` (`storage_folder_type`),
+  KEY `idx_file_receipts_etl_run` (`etl_run_id`),
+  KEY `idx_file_receipts_first_seen` (`first_seen_at`),
+  KEY `idx_file_receipts_last_seen` (`last_seen_at`),
+  KEY `idx_file_receipts_received` (`received_at`),
+  KEY `idx_file_receipts_processed` (`processed_at`),
+
+  CONSTRAINT `fk_health_exam_result_file_receipts_etl_run`
+    FOREIGN KEY (`etl_run_id`)
+    REFERENCES `health_exam_result`.`etl_runs` (`id`)
+    ON DELETE SET NULL
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_ja_0900_as_cs;
