@@ -274,3 +274,71 @@ Phase3の主責務である「`event.result_root_path` と `medical_folder_alias
 Phase3実装前の主要な判断事項は整理済みであり、実装へ進める。
 
 実装時には、必要最小限の `etl_errors.error_type` / `error_code` 具体値と一時ファイル判定パターンを、ここで確定した方針の範囲内で定義する。
+
+## 15. 実装結果
+
+### 実装日
+
+2026-07-06
+
+### 作成/更新ファイル
+
+- 作成: `scripts/from_medical/01_scan_files.py`
+- 更新: `docs/refactor/health_exam_result/25_phase3_scan_files_design_review.md`
+
+### 実装した処理
+
+- `--event-id` で対象eventを指定し、`dev_phr.event.result_root_path` を参照する。
+- `health_exam_result.medical_folder_aliases` を参照し、`src_folder_raw/02_健診結果（編集）` を探索する。
+- ZIP / XML のみを対象に、スキャン時に `file_sha256` を計算する。
+- `event_id / relative_path / file_sha256` で既存 `file_receipts` を確認し、未登録ファイルのみ登録する。
+- 登録時は `file_role = FROM_MEDICAL`、`file_type = ZIP / XML`、`storage_folder_type = MEDICAL_RESULT_ROOT`、`status = DISCOVERED`、`processable_count = NULL` とする。
+- `relative_path` は `event.result_root_path` からの相対パスとする。
+- `etl_runs.run_type = SCAN_FILES`、`etl_runs.status = RUNNING / SUCCESS / WARNING / ERROR` でRunを記録する。
+- `--dry-run` 指定時はDB書き込みを行わず、検出・重複判定・サマリー表示のみ行う。
+
+### 設計どおりに実装した事項
+
+- CSV、隠しファイル、一時ファイル、対象外拡張子は `file_receipts` に登録しない。
+- `file_type = OTHER` は登録しない。
+- 対象外ファイルは原則 `etl_errors` に記録しない。
+- 未知フォルダ、`is_active = 0` alias、`manual_judgement = 1` alias はスキップし、運用上対応が必要な事象として `etl_errors` に記録する。
+- 対象 `event_id` の `result_root_path` 未設定または参照不可は `ERROR` とする。
+- scan結果サマリーは標準出力に表示し、実行時は短い人間向けテキストとして `etl_runs.summary_message` に記録する。
+
+### 実装時に追加判断した事項
+
+- 設定ファイルは作成せず、初期実装は `--event-id` 必須のCLI引数で実行する。
+- DB接続は既存共通の `scripts.lib.db.config.load_mysql_base_params` と `scripts.lib.db.mysql.connect_ctx` を利用する。
+- `health_exam_result` の `etl_runs` / `etl_errors` は既存共通ETL helperのDDL形状と異なるため、Phase3スクリプト内でDDLに合わせた最小SQLを実装した。
+- Phase3で必要最小限の `etl_errors.error_type` / `error_code` として、`SCAN_PRECONDITION`、`FOLDER_SCAN`、`FOLDER_ALIAS`、`FILE_SCAN`、`DB_WRITE`、`UNEXPECTED` と、対応するコードを定義した。
+- 一時ファイル判定は、ファイル名が `.` または `~$` で始まるもの、または `.tmp` / `.part` / `.crdownload` で終わるものを対象外とした。
+- `received_at`、`first_seen_at`、`last_seen_at` は新規登録時に `CURRENT_TIMESTAMP(3)` を設定する。
+- `file_receipts` INSERT時に `UNIQUE(event_id, relative_path_sha256, file_sha256)` が衝突した場合は、並行実行等による重複検出として扱い、`files_duplicate` に加算する。`etl_errors` には記録せず、Run status を `WARNING` にする原因にしない。
+- `event.result_root_path` 直下は医療機関フォルダを置く運用前提とする。管理用フォルダ等を置く場合は、将来除外パターン追加を検討する。
+
+### 未実装にした事項
+
+- Phase4以降のZIP展開、XML読込、XML基本情報抽出、健診値抽出。
+- CSV取込および `file_type = CSV` の登録。
+- `file_type = OTHER` の登録。
+- DDL / migration / seed SQL の変更。
+- 設定YAMLの作成。
+
+### 残る改善候補
+
+- 共有フォルダ負荷が問題になる場合は、`rglob("*")` ではなく `rglob("*.zip")` / `rglob("*.xml")` の拡張子別探索へ変更する。
+- `--dev-db` / `--health-db` は初期実装では任意指定可能としている。運用上必要になった場合は、許可値チェックを追加する。
+
+### 実行確認結果
+
+- `python -m py_compile scripts/from_medical/01_scan_files.py` 成功。
+- `git diff --check` 成功。
+- 実DB接続を伴うscan実行は未実施。
+
+### 残る人間確認事項
+
+- 実環境の `PHR_DB_*` 接続設定と、`health_exam_result` / `dev_phr` への権限確認。
+- 対象eventの `dev_phr.event.result_root_path` 設定値確認。
+- 実フォルダ構成と `medical_folder_aliases` 初期データ188件の整合確認。
+- 一時ファイル判定パターンが現場運用に対して十分かの確認。
