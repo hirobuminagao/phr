@@ -434,6 +434,9 @@ def scan_alias_files(
                 return False
             continue
 
+        if run_id is None:
+            raise RuntimeError("run_id is required when registering file_receipts")
+
         try:
             insert_file_receipt(
                 cur,
@@ -444,7 +447,7 @@ def scan_alias_files(
                 file_type=file_type,
                 file_sha256=file_hash,
                 file_size=int(stat.st_size),
-                run_id=int(run_id),
+                run_id=run_id,
             )
             summary.files_inserted += 1
         except Exception as exc:
@@ -454,7 +457,7 @@ def scan_alias_files(
             summary.errors += 1
             record_scan_error(
                 cur,
-                run_id=int(run_id),
+                run_id=run_id,
                 field="DB_WRITE",
                 error_code="FILE_RECEIPT_INSERT_FAILED",
                 message=f"file_receipt insert failed: {path}: {exc}",
