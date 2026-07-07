@@ -136,8 +136,10 @@ ZIP内対象XML:
 
 `processable_count`:
 
-- Phase4でZIP内の対象XML件数を数え、`file_receipts.processable_count` に更新するのが推奨。
-- 対象XMLが0件の場合は、`file_receipts.status = ERROR`、`xml_ledger` / `xml_file_links` / `exam_item_values` は作らず、`etl_errors` に運用対応が必要なエラーとして記録するのが推奨。
+- Phase4でZIP内の対象XML件数を数え、`file_receipts.processable_count` に更新する。
+- Phase3ではZIP内件数を算出せず、`processable_count` は設定しない。
+- 対象XML件数は、Phase4のZIP内XML除外ルール適用後の取込対象XML件数とする。
+- 対象XMLが0件の場合は、`file_receipts.status = ERROR`、`xml_ledger` / `xml_file_links` / `exam_item_values` は作らず、`etl_errors` に `field = ZIP`、`error_code = ZIP_NO_TARGET_XML` を基本として記録する。
 - 除外XMLは `processable_count` に含めない。
 
 ## 7. 単体XML処理方針
@@ -276,8 +278,13 @@ identity generation failed: birthdate=NG(EMPTY), insurance_number=NG(EMPTY)
 
 XML parse不能・基本情報抽出不能:
 
-- XML内容台帳を作るかどうかが未決である。
-- parse不能では `xml_sha256` は計算可能だが、XMLとしての基本情報が取れないため、`xml_ledger` を `ERROR` で作るか、`file_receipts.ERROR` と `etl_errors` のみに留めるかをPhase4前に決める必要がある。
+- parse不能XMLでもXMLファイル自体のSHA256から `xml_sha256` を算出し、最小情報で `xml_ledger` を作成する。
+- parse不能XMLの `xml_status` は `PARSE_ERROR` とする。
+- parse不能XMLでは `identity_hash`、`person_id_custom`、`subscriber_id`、`hia_subscriber_id` は設定しない。
+- parse不能XMLでは `exam_item_values` を登録しない。
+- parse不能XMLの詳細は `etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録する。
+- 同一 `xml_sha256` のparse不能XMLを再受領した場合、`xml_ledger` は新規作成せず `xml_file_links` のみ追加する。
+- 以前の「parse不能XMLは `xml_ledger` を作成しない」方針は更新する。parse不能でもファイルバイト列から `xml_sha256` を算出でき、同一壊れXMLの再受領・重複判定・監査管理が可能なため、XML解析可否とXML台帳管理を分離する。
 
 ## 10. xml_file_links登録方針
 
@@ -310,6 +317,30 @@ ZIP内複数XML:
 
 Phase4では、XML内に実際に存在した健診項目値のみ `exam_item_values` に登録する。
 
+`exam_item_values` はPhase4（`02_import_xml.py`）で、`xml_ledger` 作成後に登録する。XML解析が成功している場合は、identity生成に失敗しても検査値はXML内容として保持できるため、`exam_item_values` を登録する。
+
+状態管理:
+
+- XML状態は `xml_status` で管理する。
+- 加入者照合状態は `subscriber_match_status` で管理する。
+- 検査値抽出・バリデーション状態は `exam_item_status` で管理する。
+- `xml_status` に加入者照合結果や検査値バリデーション結果を混在させない。
+- 加入者照合NG時に `xml_status` は変更しない。
+- `subscriber_match_status` と `exam_item_status` はそれぞれ独立した状態として扱う。
+- `xml_ledger` 側には検査値全体の総合状態として `exam_item_status` を保持する。
+- `xml_ledger.exam_item_status` / `exam_item_reason` はDDLへ追加済みであり、既存DB向けMigrationも作成済みである。
+- `exam_item_reason` は必要に応じて検査値総合状態の理由・サマリーを保持する。
+- health_exam_result のMigrationファイル名は `YYYYMMDD_NNN_health_exam_result_<description>.sql` とし、連番はその日の `sql/migrations/health_exam_result/` 配下で採番する。
+- `description` は英小文字 + snake_case とし、例は `20260707_001_health_exam_result_add_exam_item_status.sql` とする。
+- DDLのみ更新してMigrationを後回しにしない。
+
+Phase4で使用する正式コード:
+
+- `file_receipts.status`: `DISCOVERED` / `IMPORTING` / `IMPORTED` / `WARNING` / `ERROR`
+- `xml_status`: `READY` / `PARSE_ERROR`
+- `subscriber_match_status`: `MATCHED` / `NOT_FOUND` / `IDENTITY_ERROR` / `NOT_EXECUTED`
+- `exam_item_status`: `OK` / `WARNING` / `ERROR` / `NOT_EXECUTED`
+
 登録範囲:
 
 - `ledger_type = XML`
@@ -328,8 +359,31 @@ Phase4では、XML内に実際に存在した健診項目値のみ `exam_item_va
 正規化:
 
 - `normalized_value` / `normalized_unit` はPhase4登録処理内で生成する方針が03で決定済み。
-- ただし、健診項目値の正規化ルールと `validation_status` の正式値は未決である。
-- 初期実装では、raw値を保持し、可能な範囲で安全な型・単位正規化のみ行う案が現実的である。
+- `exam_item_values` 登録時の値検証は `item_master` を参照して実施する。
+- 型、単位、必須可否、namecode存在有無などの判定は `item_master` の定義を基準とする。
+- 検査値読込・値としての妥当性エラーは制度チェックとは分離する。
+- 法定健診・特定健診などの制度チェックは後続Phaseの `exam_check_results` 側で扱う。
+- XML内に項目entryとして存在したものは、値や型に問題があっても可能な限り `exam_item_values` に行を作る。
+- 項目単位の結果は `exam_item_values.normalize_status` / `normalize_reason` および `validation_status` / `validation_reason` に保持する。
+- `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたかを表す。
+- `validation_status` は `exam_item_master` 定義に照らして値として妥当かを表す。
+- 正常な場合は `normalize_status = OK`、`validation_status = OK` を基本とする。
+- 数値変換できない場合は `normalize_status = ERROR`、`validation_status = INVALID` を基本とする。
+- namecodeがmasterにない場合は `normalize_status = SKIPPED`、`validation_status = INVALID`、`validation_reason = UNKNOWN_NAMECODE` を基本とする。
+- 型不一致は `normalize_status = ERROR`、`validation_status = INVALID`、`validation_reason = INVALID_VALUE_TYPE` を基本とする。
+- null不可なのにnullの場合は `validation_status = INVALID`、`validation_reason = NULL_NOT_ALLOWED` を基本とする。
+- 単位不一致は `normalize_status = WARNING`、`validation_status = WARNING`、`validation_reason = UNIT_MISMATCH` を基本とする。
+
+`item_master` lookup:
+
+- `item_master` 参照処理は共通Lookupライブラリへ集約する。
+- 呼び出し側スクリプトで個別SQLを直接実装しない。
+- Phase4も後続フェーズも同一Lookupライブラリを利用する。
+- 共通Lookupライブラリは単品取得・複数取得の両APIを提供する。
+- 単品取得は、単一 `namecode` を指定し、該当項目情報をdictまたはNoneで返す。
+- 複数取得は、複数 `namecode` を指定し、`namecode -> item情報` のdictで返す。
+- 複数取得はPhase4のXML内namecode一括処理や後続制度チェックで利用する。
+- 単品取得は調査・個別処理・後続スクリプトで利用する。
 
 登録しないもの:
 
@@ -341,6 +395,12 @@ Phase4では、XML内に実際に存在した健診項目値のみ `exam_item_va
 
 - `xml_ledger` が既存の場合、`exam_item_values` は重複登録しない。
 - 新しい `xml_file_links` のみ追加する。
+
+一部検査値の取得失敗時:
+
+- 取得可能な検査値は `exam_item_values` に登録する。
+- 不足・異常がある項目は `etl_errors` に記録する。
+- 一部検査値の取得失敗だけでXML全体の処理を停止しない。
 
 ## 12. file_receipts.status更新方針
 
@@ -362,14 +422,17 @@ IMPORTED / WARNING / ERROR
 - 対象XMLがすべて正常に処理できた場合は `IMPORTED`。
 - ZIP内の対象XMLが一部のみ正常処理できた場合は `WARNING`。
 - ZIP内対象XMLが0件の場合は `ERROR`。
-- ファイル読込不能、ZIP展開不能、XML parse不能、DB登録失敗など、当該 `file_receipt` として後続へ渡せない場合は `ERROR`。
+- ZIP内全件parse不能など、対象XMLはあるが全件失敗の場合は `ERROR`。
+- 単体XML parse不能の場合は、`xml_ledger` を `PARSE_ERROR` で作成し、`file_receipts.status = ERROR` とする。
+- ファイル読込不能、ZIP展開不能、DB登録失敗など、当該 `file_receipt` として後続へ渡せない場合は `ERROR`。
 
 一部成功時:
 
 - ZIP内複数XMLのうち一部成功・一部失敗した場合は `file_receipts.status = WARNING` とする。
-- 正常XMLのみ `xml_ledger` を登録する。
-- 失敗XMLは `xml_ledger` を作成せず、`etl_errors` に記録する。
-- `file_receipts` はファイル全体の総合状態、`xml_ledger` は正常XML、`etl_errors` は失敗詳細を管理する。
+- 正常XMLとparse不能XMLを `xml_ledger` に登録する。
+- parse不能XMLは `xml_ledger` を `PARSE_ERROR` で作成し、`etl_errors` に記録する。
+- XMLファイルとして扱えない失敗は `xml_ledger` を作成せず、`etl_errors` に記録する。
+- `file_receipts` はファイル全体の総合状態、`xml_ledger` はXML内容の一意台帳、`etl_errors` は失敗詳細を管理する。
 
 件数・時刻:
 
@@ -393,11 +456,12 @@ Run:
 Metrics:
 
 - `files`: 処理対象 `file_receipts` 件数。
-- `rows_seen`: 検出した対象XML件数。
-- `rows_inserted`: 新規 `xml_ledger` または `exam_item_values` のどちらを基準にするかは要判断。
-- `rows_updated`: `file_receipts` 更新や既存XMLリンク追加を含めるかは要判断。
-- `rows_skipped`: 既存XML再受領、除外XML、対象外ファイル。
+- `rows_seen`: 対象XML件数。
+- `rows_inserted`: 新規 `xml_ledger` 件数。
+- `rows_updated`: `xml_file_links` 登録件数 + `file_receipts` 更新件数。
+- `rows_skipped`: 既存 `xml_sha256` 再受領・対象外XML件数。
 - `errors`: `etl_errors` 登録件数。
+- `exam_item_values` 件数は `rows_inserted` に含めず、必要に応じて `etl_runs.notes` のサマリーへ記録する。
 
 Errors:
 
@@ -416,34 +480,45 @@ Errors:
 | Phase4 configファイル名 | `scripts/from_medical/config/import_xml.yml` とする。 | Phase3のconfig正本方針と揃えるため。 | 決定済み。詳細設定項目は未決。 |
 | ZIP読取方式 | 初期実装は一時展開方式。 | 障害調査と実装の見通しが良い。 | ストリーム読みにする必要があるか。 |
 | ZIP内対象XML | `h*.xml` のみ対象、`ix08/su08/schema/xsd` は除外。 | Phase3単体XMLと同じ除外基準に揃える。 | 除外XML件数をどこに記録するか。 |
-| `processable_count` | 除外後の対象XML件数。 | 後続処理可能なXML数として扱える。 | 0件時のメッセージ・error_code。 |
+| `processable_count` | Phase4でZIP展開後に、除外後の対象XML件数を設定する。ZIP内対象XML0件は `file_receipts.status = ERROR` とし、`etl_errors` に `field = ZIP`、`error_code = ZIP_NO_TARGET_XML` を基本として記録する。 | ZIP内XML件数は展開後でなければ確定できず、実際の処理対象件数と一致した値を保持するため。 | 決定済み。0件時の詳細messageフォーマットは未決。 |
 | 単体XMLの再バリデーション | Phase4でも同じ除外条件を防御的に確認する。 | DB汚染や手動投入に備える。 | 不整合時にERRORかスキップか。 |
-| parse不能XMLの `xml_ledger` | `file_receipts.ERROR` + `etl_errors` に留める案が安全。 | 基本情報が取れないXMLを台帳化すると後続対象の扱いが曖昧になる。 | `xml_sha256` だけでERROR台帳を作るか。 |
+| parse不能XMLの `xml_ledger` | parse不能XMLでもXMLファイルSHA256から `xml_sha256` を算出し、最小情報で `xml_ledger` を作成する。`xml_status = PARSE_ERROR`、identity系項目は未設定、`exam_item_values` は登録しない。詳細は `etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録する。 | XML解析可否とXML台帳管理を分離し、同一壊れXMLの再受領・重複判定・監査管理を可能にするため。 | 決定済み。`xml_reason` の正式メッセージは未決。 |
 | identity generator API | `generate_identity_bundle(**raw)` を利用する。入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code`。戻り値は `ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみ利用する。 | identity生成の入口を単一化し、利用側に生成ロジックと内部構造依存を持たせないため。 | 決定済み。戻り値仕様全体の詳細記載粒度は未決。 |
-| identity生成失敗時 | XMLとして正常に読み込み可能なら `xml_ledger` は作成し、詳細は `etl_errors` に `field = IDENTITY` として記録する。`generator.reason` を代表理由、`field_results` を詳細ソース、`message` を人間確認用とする。 | XML内容自体は受領済みで、運用確認対象にできるため。 | `xml_status` / `subscriber_match_status` の正式コードは未決。 |
+| identity生成失敗時 | XMLとして正常に読み込み可能なら `xml_ledger` は作成し、詳細は `etl_errors` に `field = IDENTITY` として記録する。`generator.reason` を代表理由、`field_results` を詳細ソース、`message` を人間確認用とする。 | XML内容自体は受領済みで、運用確認対象にできるため。 | 決定済み。 |
+| 状態管理の責務分離 | XML状態は `xml_status`、加入者照合状態は `subscriber_match_status`、検査値抽出・バリデーション状態は `exam_item_status` で管理する。`xml_status` に加入者照合結果や検査値バリデーション結果を混在させず、加入者照合NG時も `xml_status` は変更しない。 | XML解析、加入者照合、検査値バリデーションは責務が異なるため。 | 決定済み。 |
+| Phase4 status正式コード | `file_receipts.status = DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED`、`exam_item_status = OK / WARNING / ERROR / NOT_EXECUTED` とする。 | Phase4内のXML状態、加入者照合状態、検査値状態を混在させず実装するため。 | 決定済み。 |
+| `xml_ledger.exam_item_status` DDL | `xml_ledger.exam_item_status` / `exam_item_reason` をDDLへ追加し、既存DB向けMigration `20260707_001_health_exam_result_add_exam_item_status.sql` を作成済み。 | Phase4で検査値抽出・妥当性の総合状態を `xml_ledger` に保持するため。 | 決定済み。 |
 | 既存XML再受領 | `xml_sha256` 一致で判定し、同一 `xml_sha256` 再受領時は `xml_file_links` のみ追加する。 | `xml_ledger` はXML内容の一意台帳であり、同一内容XMLを重複登録しないため。 | 決定済み。`SKIPPED` の詳細表現は未決。 |
 | `xml_file_links` 重複 | UNIQUE衝突は重複リンクとしてスキップ。 | 再実行時の冪等性を確保する。 | 重複リンクをRunスキップ件数に含めるか。 |
-| `exam_item_values.validation_status` | 初期は `NULL` または最小値のみ。 | 正式値が未決のため。 | Phase4前に正式値を決めるか、NULL許容で進めるか。 |
-| 一部成功ZIPの `file_receipts.status` | `WARNING` とする。正常XMLのみ `xml_ledger` 登録、失敗XMLは `etl_errors` 記録。 | ファイル全体の総合状態、正常XML、失敗詳細の責務を分離できるため。 | 決定済み。 |
-| ETL metricsの基準 | `files = file_receipts`、`rows_seen = 対象XML` を推奨。 | Runサマリーでファイル数とXML数を分けられる。 | inserted/updated/skippedの粒度。 |
+| `exam_item_values` 登録 | Phase4で `xml_ledger` 作成後に登録する。XML解析が成功していればidentity生成失敗時も登録し、同一 `xml_sha256` 再受領時は再登録しない。一部検査値取得失敗時は取得可能な値を登録し、不足・異常は `etl_errors` に記録して継続する。 | 検査値は加入者照合結果とは独立したXML内容であり、XML解析成功時に保持できるため。 | 決定済み。検査値関連の `etl_errors.field` 名称と `error_code` 一覧は未決。 |
+| `item_master` lookup | `item_master` 参照処理は共通Lookupライブラリへ集約し、呼び出し側スクリプトで個別SQLを直接実装しない。単品取得と複数取得の両APIを提供する。 | Phase4と後続制度チェックで同じ項目定義参照を再利用し、SQL実装を一元管理するため。 | 決定済み。キャッシュ方式、返却dictの正式キー、取得対象カラム一覧は未決。 |
+| `normalize_status` / `validation_status` | `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたか、`validation_status` は `exam_item_master` 定義に照らした妥当性を表す。数値変換不可は `ERROR / INVALID`、namecode未登録は `SKIPPED / INVALID`、単位不一致は `WARNING / WARNING`、正常は `OK / OK` とする。 | 正規化可否とマスタ定義上の妥当性を分離し、制度チェックとは別に扱うため。 | 決定済み。詳細reason一覧は未決。 |
+| 一部成功ZIPの `file_receipts.status` | `WARNING` とする。正常XMLとparse不能XMLは `xml_ledger` に登録し、失敗詳細は `etl_errors` に記録する。XMLファイルとして扱えない失敗は `xml_ledger` を作成しない。 | ファイル全体の総合状態、XML内容台帳、失敗詳細の責務を分離できるため。 | 決定済み。 |
+| ETL metricsの基準 | `files = file_receipts`、`rows_seen = 対象XML`、`rows_inserted = 新規xml_ledger`、`rows_updated = xml_file_links登録件数 + file_receipts更新件数`、`rows_skipped = 既存xml_sha256再受領・対象外XML件数`、`errors = etl_errors登録件数` とする。`exam_item_values` 件数は `rows_inserted` に含めず、必要に応じて `etl_runs.notes` へ記録する。 | Runサマリーでファイル数、XML数、台帳作成、リンク・状態更新、スキップ、エラーを分けて把握するため。 | 決定済み。`notes` の具体フォーマットは未決。 |
 | Phase4 `etl_errors` 基本構成 | `field` / `error_code` / `message` を基本構成とする。identity生成失敗時の `error_code` は `IDENTITY_BIRTHDATE_INVALID`、`IDENTITY_INSURER_NUMBER_INVALID`、`IDENTITY_INSURANCE_SYMBOL_INVALID`、`IDENTITY_INSURANCE_NUMBER_INVALID`、`IDENTITY_NAME_KANA_FULL_INVALID`、`IDENTITY_HASH_BUILD_FAILED` を基本とする。 | 共通ETL構造に合わせ、Phase4固有の独自構造を避けるため。 | 決定済み。 |
 | `--keep-work` | デバッグ用に用意する候補。 | ZIP展開・XML解析失敗の調査に有用。 | オプション名と保持先命名。 |
 
 ### Phase4前に決めるもの
 
-- ZIP内対象XML0件時の扱い。
-- parse不能XMLを `xml_ledger` に作るか。
-- identity生成失敗時の `xml_status` / `subscriber_match_status` の正式コード。
-- `generate_identity_bundle()` の戻り値仕様を設計書へどの粒度で記載するか。
+- `xml_ledger.exam_item_reason` に保持する理由・サマリーの具体内容。
 - `import_xml.yml` の詳細設定項目。
-- `file_receipts.status` の正式コード一覧。
 - `etl_errors.error_code` の正式コード一覧。
+- parse不能XMLで `xml_reason` に保持する正式メッセージ。
+- ZIP内対象XML0件時の詳細messageフォーマット。
+- `etl_errors.field` に使用する検査値関連の正式名称。
+- 検査値取得エラーの `error_code` 一覧。
+- 検査値バリデーションをどこまでPhase4で実施するか。
+- `dev_phr.norm_rules` / `dev_phr.norm_variants` をPhase4検査値正規化・バリデーションに利用するか。
+- Lookupライブラリのキャッシュ方式。
+- Lookupライブラリが返却するdictの正式キー構成。
+- `item_master` の取得対象カラム一覧。
 
 ### 実装中でよいもの
 
 - ZIP展開ディレクトリ名。
 - `--keep-work` の詳細。
 - ETL `notes` の具体フォーマット。
+- `etl_runs.notes` に記録する検査値サマリーの具体フォーマット。
 - XML抽出補助モジュールの分割粒度。
 - `exam_item_values` の `occurrence_no` 採番ロジックの細部。
 
@@ -452,18 +527,23 @@ Errors:
 - `check_status` の算出。
 - `xml_export_status` の最終出力可否。
 - `exam_check_results` 登録。
-- `validation_status` の詳細判定拡張。
 - CSV直取込。
 - 人＋イベント単位の状態管理台帳。
 
 ## 15. Phase4実装GO判定
 
-Phase4の責務範囲と共通lib利用方針は概ね整理できている。ただし、以下は実装前に人間判断が必要である。
+Phase4の責務範囲と共通lib利用方針、status正式コード、ETL metrics基準は整理できている。ただし、以下は実装前に対応または人間判断が必要である。
 
-- parse不能XMLを `xml_ledger` に作るか。
-- identity生成失敗時の `xml_status` / `subscriber_match_status` の正式コード。
-- ZIP内対象XML0件時の扱い。
+- `xml_ledger.exam_item_reason` に保持する理由・サマリーの具体内容。
 - `import_xml.yml` の詳細設定項目。
 - `etl_errors.error_code` の正式コード一覧。
+- parse不能XMLで `xml_reason` に保持する正式メッセージ。
+- ZIP内対象XML0件時の詳細messageフォーマット。
+- `etl_errors.field` に使用する検査値関連の正式名称。
+- 検査値取得エラーの `error_code` 一覧。
+- 検査値バリデーションをどこまでPhase4で実施するか。
+- `dev_phr.norm_rules` / `dev_phr.norm_variants` をPhase4検査値正規化・バリデーションに利用するか。
+- Lookupライブラリが返却するdictの正式キー構成。
+- `item_master` の取得対象カラム一覧。
 
-Phase4の入力条件、configファイル名、一部成功ZIP、既存XML再受領、Phase4 `etl_errors` 基本構成は決定済みである。残る未決をPhase4実装前に解消できればGOと判断できる。未決のまま実装する場合は、実装内で仮決定せず、エラー側へ倒すか、対象外として明示的にスキップする必要がある。
+Phase4の入力条件、configファイル名、一部成功ZIP、既存XML再受領、Phase4 `etl_errors` 基本構成、identity生成失敗時の記録仕様、parse不能XMLの台帳化、`processable_count` 更新、状態管理の責務分離、status正式コード、ETL metrics基準、`xml_ledger.exam_item_status` / `exam_item_reason` のDDL・Migration対応、`item_master` Lookup方針、`exam_item_values` 登録・正規化・バリデーション方針は決定済みである。残る未決をPhase4実装前に解消できればGOと判断できる。未決のまま実装する場合は、実装内で仮決定せず、エラー側へ倒すか、対象外として明示的にスキップする必要がある。

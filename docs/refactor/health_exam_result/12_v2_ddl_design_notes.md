@@ -312,6 +312,7 @@ XML内容の品質・突合・処理状態を管理する一意台帳。
 - `xml_sha256` によるXML内容の一意管理。
 - 加入者突合結果の保持。
 - XMLとしての処理状態と理由の保持。
+- 検査値抽出・妥当性の総合状態と理由・サマリーの保持。
 - XML単位の制度チェック状態の保持。
 - XML単位のHIA出力状態の保持。
 - チェックNG後に業務確認で出力OKとした手動承認情報の保持。
@@ -342,6 +343,8 @@ person_id_custom
 subscriber_match_status
 subscriber_match_method
 subscriber_match_reason
+exam_item_status
+exam_item_reason
 xml_status
 xml_reason
 check_status
@@ -355,11 +358,14 @@ updated_at
 ### メモ
 
 - `xml_status` は `02_import_xml.py` のXML取込状態を保持する。
+- `exam_item_status` は `02_import_xml.py` の検査値抽出・妥当性の総合状態を保持する。
+- Phase4で使用する `exam_item_status` は `OK` / `WARNING` / `ERROR` / `NOT_EXECUTED` とする。
+- `exam_item_reason` は必要に応じて検査値総合状態の理由・サマリーを保持する。
 - `check_status` は `03_check_exam_results.py` の制度チェック状態を保持する。
 - `xml_export_status` は `04_export_hia_xml.py` のHIA出力状態をXML単位で保持する。
 - `xml_reason` は固定enumではなく、スクリプト実装に応じて理由コードを追加できる文字列カラムとする。
-- `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラー、基本情報不足、加入者照合不可、その他XML単位で出力対象外となる理由をまとめて扱う。
-- XML単位の詳細ステータスは初期実装では持たない。
+- `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラーなどXMLそのものの状態のみを扱う。
+- 加入者照合結果は `subscriber_match_status`、検査値抽出・妥当性の総合状態は `exam_item_status` で管理し、`xml_status` には混在させない。
 - `xml_status` / `check_status` / `xml_export_status` の値定義は確定済みとし、reason code詳細は未決として残す。
 - 制度単位の判定が `NG` でも、医療機関確認等により正当理由が確認できた場合は、`manual_export_approved = true`、`manual_export_reason` を設定し、`xml_export_status = READY` とできる。
 - `check_status` はシステム判定結果として保持し、手動承認によって変更しない。
@@ -808,22 +814,24 @@ v2初期で本格実装するかは別途判断する。
 21. 仮名称等の補足情報は `medical_folder_aliases.note` に保持し、`manual_judgement` の判定条件とはしない。
 22. status系カラムはDB enumではなく `varchar` で定義する。
 23. `health_exam_result` 内の業務データ同士のFKは維持する。
-24. `etl_runs` へのFK制約は原則張らず、run_id系カラムとINDEXで参照・検索性を確保する。
-25. `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
-26. `file_receipts.file_sha256` 単独UNIQUEは採用しない。
-27. `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
-28. `exam_item_values.normalized_value` は `text` とする。
-29. `dev_phr.event.result_root_path` は migration で追加する。
-30. `dev_phr.event.result_root_path` の型は `text` とし、`NULL` 許可とする。
-31. v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
-31. `medical_folder_aliases` 初期データは `event_id = 2` の188件を投入対象とする。
-32. `medical_folder_aliases` 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
-33. `medical_folder_aliases` 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
-34. `medical_folder_aliases` 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
-35. 初期データSQL再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
-36. `medical_folder_aliases.created_at` は初回INSERT時のみ設定する。
-37. `medical_folder_aliases.alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
-38. `medical_folder_aliases.note` は、補足がある行のみ値を入れ、補足なしは `NULL` とする。
+24. `xml_ledger.exam_item_status` は検査値抽出・妥当性の総合状態を表し、Phase4では `OK` / `WARNING` / `ERROR` / `NOT_EXECUTED` を使用する。
+25. `xml_ledger.exam_item_reason` は必要に応じて検査値総合状態の理由・サマリーを保持する。
+26. `etl_runs` へのFK制約は原則張らず、run_id系カラムとINDEXで参照・検索性を確保する。
+27. `dev_phr` など外部DB・外部スキーマへのcross schema FKは張らない。
+28. `file_receipts.file_sha256` 単独UNIQUEは採用しない。
+29. `file_receipts` の重複防止は `event_id`、`relative_path`、`file_sha256` の組み合わせを基本とする。
+30. `exam_item_values.normalized_value` は `text` とする。
+31. `dev_phr.event.result_root_path` は migration で追加する。
+32. `dev_phr.event.result_root_path` の型は `text` とし、`NULL` 許可とする。
+33. v2処理では、対象 `event_id` の `result_root_path` が未設定の場合はエラーとする。
+34. `medical_folder_aliases` 初期データは `event_id = 2` の188件を投入対象とする。
+35. `medical_folder_aliases` 初期データSQLの配置先は `sql/seed/health_exam_result/` とする。
+36. `medical_folder_aliases` 初期データSQLのファイル名は `0010_health_exam_result__medical_folder_aliases_event2.sql` とする。
+37. `medical_folder_aliases` 初期データSQLは `INSERT ... ON DUPLICATE KEY UPDATE` で再実行可能にする。
+38. 初期データSQL再実行時の更新対象は `dst_folder_norm`、`note`、`is_active`、`manual_judgement`、`updated_at` とする。
+39. `medical_folder_aliases.created_at` は初回INSERT時のみ設定する。
+40. `medical_folder_aliases.alias_id` は自動採番に任せ、seed SQLでは明示投入しない。
+41. `medical_folder_aliases.note` は、補足がある行のみ値を入れ、補足なしは `NULL` とする。
 
 ### 未決として残す
 

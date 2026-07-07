@@ -9,7 +9,9 @@
 - 完了条件
 - Codex 指示単位
 
-DDLは設計変更に合わせて更新し、新規環境は最新DDLから構築する。既存DBが対象となるDDL変更を行う場合は、既存環境が追従できるようMigrationを同時に作成する。
+DDLは設計変更に合わせて更新し、新規環境は最新DDLから構築する。既存DBが対象となるDDL変更を行う場合は、既存環境が追従できるようMigrationを同時に作成し、DDLのみ更新してMigrationを後回しにしない。
+
+health_exam_result のMigrationファイル名は `YYYYMMDD_NNN_health_exam_result_<description>.sql` とする。連番はその日の `sql/migrations/health_exam_result/` 配下で採番し、`description` は英小文字 + snake_case とする。例: `20260707_001_health_exam_result_add_exam_item_status.sql`。
 
 ### Phase1 Core DDL
 
@@ -172,15 +174,39 @@ Phase3 01_scan_files.pyのみを実装する。
 - `docs/refactor/health_exam_result/12_v2_ddl_design_notes.md`
 
 #### 完了条件
-- `file_receipts.status` を `IMPORTING / IMPORTED / ERROR` へ更新できる。
+- `file_receipts.status` を `IMPORTING / IMPORTED / WARNING / ERROR` へ更新できる。
+- Phase4で使用する正式コードは、`file_receipts.status = DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED`、`exam_item_status = OK / WARNING / ERROR / NOT_EXECUTED` とする。
+- `xml_status` はXMLそのものの状態のみを表し、加入者照合NG時に変更しない。
+- `xml_ledger.exam_item_status` を追加し、必要に応じて `xml_ledger.exam_item_reason` も追加するDDL更新と既存DB向けMigrationが作成されている。
+- health_exam_result のMigrationファイル名は `YYYYMMDD_NNN_health_exam_result_<description>.sql` とし、例は `20260707_001_health_exam_result_add_exam_item_status.sql` とする。
+- ZIP展開後に取込対象XML件数を数え、`file_receipts.processable_count` を更新できる。
+- ZIP内対象XMLが0件の場合は `file_receipts.status = ERROR` とし、`etl_errors` に `field = ZIP`、`error_code = ZIP_NO_TARGET_XML` を基本として記録できる。
 - XML内容の一意性は `xml_ledger.xml_sha256` で判定される。
+- parse不能XMLでもXMLファイル自体のSHA256から `xml_sha256` を算出し、最小情報で `xml_ledger` を作成できる。
+- parse不能XMLの `xml_status` は `PARSE_ERROR` とし、`etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録できる。
+- parse不能XMLでは `identity_hash` / `person_id_custom` / `subscriber_id` / `hia_subscriber_id` は設定せず、`exam_item_values` も登録しない。
 - 物理ファイルとXML内容の対応は `xml_file_links` に記録される。
+- XML状態は `xml_status`、加入者照合状態は `subscriber_match_status`、検査値抽出・バリデーション状態は `exam_item_status` で分離して管理される。
+- `xml_status` に加入者照合結果や検査値バリデーション結果を混在させない。
 - `identity_hash` / `person_id_custom` 生成は `scripts.lib.identity.generator.generate_identity_bundle(**raw)` を唯一の入口とし、`02_import_xml.py` 内で独自生成しない。
 - identity入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` とする。
 - Phase4が `generate_identity_bundle()` の戻り値として利用するのは、`ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみとする。
 - XML parserはraw値抽出のみを担当し、identity用の独自正規化を実装しない。
 - 健診値は `exam_item_values` に縦持ちで登録される。
+- `exam_item_values` は `xml_ledger` 作成後に登録される。
+- XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` が登録される。
+- 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
+- 一部検査値の取得に失敗した場合は、取得可能な検査値を登録し、不足・異常は `etl_errors` に記録して処理が継続される。
 - `exam_item_values.normalized_value` / `normalized_unit` は登録処理内で生成される。
+- `exam_item_values` 登録時の値検証は共通Lookupライブラリで `item_master` を参照して実施される。
+- 呼び出し側スクリプトで `item_master` 参照SQLを直接実装しない。
+- XML内に項目entryとして存在したものは、値や型に問題があっても可能な限り `exam_item_values` に行が作成される。
+- 項目単位の結果は `exam_item_values.normalize_status` / `normalize_reason` および `validation_status` / `validation_reason` に保持される。
+- `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたかを表し、`validation_status` は `exam_item_master` 定義に照らして値として妥当かを表す。
+- 数値変換不可は `normalize_status = ERROR` / `validation_status = INVALID`、namecode未登録は `normalize_status = SKIPPED` / `validation_status = INVALID`、単位不一致は `normalize_status = WARNING` / `validation_status = WARNING`、正常は `normalize_status = OK` / `validation_status = OK` として扱える。
+- ETL metricsは、`files = 処理対象file_receipts件数`、`rows_seen = 対象XML件数`、`rows_inserted = 新規xml_ledger件数`、`rows_updated = xml_file_links登録件数 + file_receipts更新件数`、`rows_skipped = 既存xml_sha256再受領・対象外XML件数`、`errors = etl_errors登録件数` として記録できる。
+- `exam_item_values` 件数は `rows_inserted` に含めず、必要に応じて `etl_runs.notes` のサマリーへ記録できる。
+- 検査値バリデーションをどこまでPhase4で実施するか、`dev_phr.norm_rules` / `dev_phr.norm_variants` をPhase4検査値正規化・バリデーションに利用するか、`exam_item_reason` の保持内容、`etl_runs.notes` に記録する検査値サマリーの具体フォーマットは実装前または実装中に確認し、未決のまま勝手に確定しない。
 
 #### Codex 指示単位
 Phase4 02_import_xml.pyのみを実装する。

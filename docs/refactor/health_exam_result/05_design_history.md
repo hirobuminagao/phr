@@ -3178,3 +3178,244 @@ Phase4は共通identityライブラリの公開APIのみを利用し、内部処
 - 他フェーズでも共通利用できる `error_code` 運用ルールを整理する。
 
 ---
+
+## DH-20260707-3 / 2026-07-07 10:37 JST
+
+### テーマ
+Phase4における検査値（exam_item_values）登録方針
+
+### 背景
+Phase4（`02_import_xml.py`）の設計では、XML読込・identity生成・XML台帳登録までは整理できていたが、検査値を保持する `exam_item_values` の登録責務とエラー時の扱いを実装前に明確化する必要があった。
+
+### 議論
+- `exam_item_values` はPhase4でXML解析と同時に登録する責務とする。
+- 検査値は加入者照合結果とは独立したXML内容であり、identity生成失敗とは分けて扱う。
+- XMLとして正常に解析できる場合は、identity生成失敗でも検査値は保持できる。
+- 同一 `xml_sha256` の再受領時は `xml_ledger` を再作成しないため、`exam_item_values` も再登録しない。
+- 検査値取得時に一部項目のみ取得できない場合は、処理全体を停止せず、取得可能な項目は登録し、不足項目は `etl_errors` に記録する方針とした。
+
+### 現時点の考え
+`exam_item_values` はXML内容そのものを保持する台帳であり、加入者照合結果とは責務を分離する。
+
+XMLが正常に解析できる限り検査値を保持し、照合失敗や一部検査値不足によってXML全体を失わない構成とする。
+
+### 決定事項
+- `exam_item_values` はPhase4（`02_import_xml.py`）で登録する。
+- `xml_ledger` 作成後に `exam_item_values` を登録する。
+- XML解析が成功した場合は、identity生成失敗でも `exam_item_values` を登録する。
+- 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
+- 一部検査値の取得に失敗した場合は、取得可能な検査値は登録し、不足・異常は `etl_errors` に記録して処理を継続する。
+
+### 保留事項
+- `etl_errors.field` に使用する検査値関連の正式名称。
+- 検査値取得エラーの `error_code` 一覧。
+
+### 根拠
+- 検査値はXML内容であり、加入者照合結果とは独立して保持できるため。
+- XML解析成功時に検査値まで失うと、調査・再解析・制度チェックで再利用できなくなるため。
+- `xml_sha256` を基準にXML内容の一意性を管理する設計と整合するため。
+
+### 次回検討
+- `03_decisions.md` へ決定事項を同期する。
+- `26_phase4_import_xml_design_review.md` へ反映する。
+- `02_import_xml.py` の処理フローへ `exam_item_values` 登録処理を反映する。
+
+---
+
+## DH-20260707-4 / 2026-07-07 10:52 JST
+
+### テーマ
+Phase4におけるparse不能XML・ZIP内XML件数管理・XML状態管理方針
+
+### 背景
+Phase4（`02_import_xml.py`）の実装フローを確認した結果、parse不能XMLの扱いと、ZIP内XML件数（`processable_count`）の更新タイミングが未整理であることを確認した。
+
+また、同一XMLの再受領判定や運用時の調査性を考慮すると、parse不能XMLをどこまで台帳化するかを実装前に決定する必要があった。
+
+### 議論
+- parse不能XMLでも物理ファイル自体は取得できるため、`file_sha256` や `xml_sha256` の扱いを整理する必要がある。
+- XML内容を解析できなくても、XMLファイル自体のSHA256はファイル内容から生成できる。
+- 同一内容のparse不能XMLを再受領した場合は、SHA256により重複判定できるため、毎回同じエラーを増やさない構成が望ましい。
+- parse不能XMLはXML内容を取得できないため、`exam_item_values` や加入者情報は保持できない。
+- 一方で、運用上は「XMLが存在した」「解析できなかった」という履歴は残した方が調査しやすい。
+- そのため、parse不能XMLも `xml_ledger` に最小限の情報で登録し、状態管理を行う方針を採用する。
+- `xml_status` はXML解析状態を表す項目として利用し、parse不能XMLは `PARSE_ERROR` とする。
+- parse不能XMLでは `identity_hash`、`person_id_custom`、`subscriber_id`、`hia_subscriber_id`、`exam_item_values` は作成しない。
+- ZIP内対象XML件数（`processable_count`）は、Phase3では算出せず、Phase4でZIP展開時に更新する。
+- ZIP展開後に対象XML数を数え、`file_receipts.processable_count` を更新することで、実際の処理対象件数を管理する。
+- ZIP内対象XMLが0件の場合は、`file_receipts.status = ERROR` とし、`etl_errors` に記録して処理を終了する。
+
+### 現時点の考え
+XML解析可否とXML台帳管理は責務を分離する。
+
+parse不能XMLもXMLファイルとしては管理対象とし、最低限の情報を `xml_ledger` に保持することで、重複判定・運用調査・監査性を維持する。
+
+また、ZIP内XML件数は実際に展開しなければ判定できないため、`processable_count` はPhase4で更新する。
+
+### 決定事項
+- parse不能XMLも `xml_ledger` を作成する。
+- parse不能XMLの `xml_status` は `PARSE_ERROR` とする。
+- parse不能XMLでは `identity_hash`、`person_id_custom`、`subscriber_id`、`hia_subscriber_id` は設定しない。
+- parse不能XMLでは `exam_item_values` を登録しない。
+- parse不能XMLもXMLファイルSHA256を利用して重複判定を行う。
+- 同一 `xml_sha256` のparse不能XML再受領時は、新規 `xml_ledger` を作成せず `xml_file_links` のみ追加する。
+- `file_receipts.processable_count` はPhase4でZIP展開後に対象XML件数を設定する。
+- ZIP内対象XMLが0件の場合は `file_receipts.status = ERROR` とし、`etl_errors` に記録する。
+
+### 保留事項
+- `PARSE_ERROR` 以外の `xml_status` 正式コード一覧。
+- parse不能XMLで `xml_reason` に保持する正式メッセージ。
+- ZIP内対象XML0件時の `error_code` 正式名称。
+
+### 根拠
+- XMLファイル自体は取得できており、SHA256による重複判定・監査管理が可能なため。
+- parse不能XMLを台帳管理対象とすることで、再受領や障害調査時の追跡性を維持できるため。
+- ZIP内XML件数はZIP展開後でなければ確定できず、Phase3では算出できないため。
+- `processable_count` をPhase4で更新することで、実際の処理対象件数と一致した値を保持できるため。
+
+### 次回検討
+- `03_decisions.md` へ今回の決定事項を同期する。
+- `26_phase4_import_xml_design_review.md` の処理フローへ反映する。
+- `11_v2_script_design_notes.md`、`19_implementation_ready_summary.md`、`20_implementation_plan.md` のPhase4処理順へ反映する。
+
+---
+
+## DH-20260707-5 / 2026-07-07 11:25 JST
+
+### テーマ
+Phase4 状態管理（Status）整理および検査値バリデーション共通ライブラリ方針
+
+### 背景
+Phase4（`02_import_xml.py`）の実装フローを整理する中で、XML状態・加入者照合状態・検査値状態を混在させず管理する必要があることを確認した。
+
+また、`exam_item_values` 登録時には `item_master` を利用した検査値バリデーションを行うため、その取得処理を共通ライブラリ化する方針について協議した。
+
+### 議論
+- XML全体の状態、加入者照合状態、検査値抽出状態は責務が異なるため、それぞれ独立したStatusとして管理する。
+- XML全体の状態は `xml_status` とし、XML解析可否や処理可能状態を表す。
+- 加入者照合状態は `subscriber_match_status` とし、identity生成・加入者照合結果を表す。
+- 検査値状態は `exam_item_status` とし、検査値抽出・バリデーション結果を表す。
+- 検査値バリデーションでは、`item_master` の定義（型・単位・制約等）を参照して判定する。
+- `item_master` 参照処理を各スクリプトへ実装すると、取得処理やキャッシュ方法が分散する懸念がある。
+- そのため、`scripts/lib` に共通Lookupライブラリを配置し、すべてのスクリプトから共通利用する構成が望ましい。
+- Lookupライブラリは単品取得・複数取得の両方に対応する。
+- 単品取得は利用頻度が高く、複数取得は制度チェックなど大量参照時のDBアクセス削減を目的とする。
+- 共通ライブラリは既存ライブラリと同様に公開APIのみ利用し、呼び出し側はSQLを直接実装しない。
+
+### 現時点の考え
+状態管理は責務単位で分離し、それぞれ独立したStatusを保持する。
+
+また、検査値バリデーションに必要な`item_master`取得は共通Lookupライブラリへ集約し、Phase4だけでなく制度チェックなど後続フェーズからも再利用できる構成とする。
+
+### 決定事項
+- XML状態は `xml_status` で管理する。
+- 加入者照合状態は `subscriber_match_status` で管理する。
+- 検査値抽出・バリデーション状態は `exam_item_status` で管理する。
+- `exam_item_values` 登録時のバリデーションは `item_master` を参照して実施する。
+- `item_master` 参照処理は共通Lookupライブラリへ実装する。
+- 共通Lookupライブラリは公開APIのみ利用し、呼び出し側スクリプトでSQLを直接実装しない。
+- 共通Lookupライブラリは以下2種類の取得APIを提供する。
+  - 単一 `name_code` を指定し、該当項目情報をdictで取得するAPI。
+  - 複数 `name_code` を指定し、項目情報一覧を取得するAPI。
+- 後続フェーズ（制度チェック等）も同一Lookupライブラリを利用する。
+- `xml_status`、`subscriber_match_status`、`exam_item_status` は責務ごとに分離して管理する。
+- `exam_item_values` の値検証は `exam_item_master` を参照して実施する。
+- 検査値の型・単位・必須可否などの判定は `exam_item_master` を正とする。
+- `exam_item_master` の参照処理は共通ライブラリとして実装し、各スクリプトが個別SQLを発行しない。
+- 共通ライブラリは単一取得・複数取得の両APIを提供する。
+  - `get_exam_item(name_code)` は1件を辞書で返す。
+  - `get_exam_items(name_codes)` は複数件を辞書（name_code→情報）で返す。
+
+### 保留事項
+- `xml_status`・`subscriber_match_status`・`exam_item_status` の正式コード一覧。
+- Lookupライブラリのキャッシュ方式。
+- Lookupライブラリが返却するdictの正式キー構成。
+- `item_master` の取得対象カラム一覧。
+
+### 根拠
+- XML状態・加入者照合・検査値状態は責務が異なり、同一Statusへ混在させると状態管理が複雑になるため。
+- `item_master` 取得処理を共通化することで、SQL実装・キャッシュ・取得仕様を一元管理できるため。
+- 単品取得と複数取得の両方を提供することで、Phase4・制度チェック・将来のスクリプトまで共通利用できるため。
+- 公開APIのみを利用することで、内部実装変更時の影響範囲を最小化できるため。
+
+### 次回検討
+- `03_decisions.md` へ今回の決定事項を同期する。
+- `26_phase4_import_xml_design_review.md` へ状態管理およびLookupライブラリ利用方針を反映する。
+- Lookupライブラリの戻り値仕様とキャッシュ方式を設計する。
+- `exam_item_values` バリデーション実装へ反映する。
+
+---
+---
+
+## DH-20260707-6 / 2026-07-07 12:21 JST
+
+### テーマ
+Phase4 status正式コード・ETL metrics・検査値normalize/validation責務境界
+
+### 背景
+Phase4（`02_import_xml.py`）の実装前レビューにより、`xml_ledger.exam_item_status` が設計上必要である一方、DDLに未存在であることが確認された。また、`xml_status`・`subscriber_match_status`・`exam_item_status` の責務境界、Phase4で使う最小status/code、ETL metrics集計基準、`normalize_status` と `validation_status` の使い分けが未整理であることを確認した。
+
+### 議論
+- `xml_status` はXMLそのものの処理状態を表す責務に限定する。
+- 加入者照合結果は `subscriber_match_status` に分離し、`xml_status` へ混在させない。
+- 検査値抽出・妥当性結果は `exam_item_status` に分離する。
+- Phase4設計では `exam_item_status` が必要であるため、DDLへ追加する方針とした。
+- `exam_item_status` は `xml_ledger` 上で検査値全体の総合状態を表す。
+- `exam_item_values` の個別項目には `normalize_status` と `validation_status` を持たせ、値の正規化結果とマスタ照合結果を分けて扱う。
+- `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたかを表す。
+- `validation_status` は `exam_item_master` に照らして値として妥当かを表す。
+- Phase4のETL metricsは、XML・ファイル単位の処理量を中心に記録し、`exam_item_values` 件数はRun status判定に直接使わず、必要なら `notes` へサマリーとして記録する方針とした。
+- 検査値バリデーションの深さについては、過去の紙→CSV→DB取込で利用した `dev_phr.norm_rules` / `dev_phr.norm_variants` の利用可能性があるため、別途協議する。
+
+### 現時点の考え
+Phase4では、XML・加入者照合・検査値の状態を分離して管理する。`xml_status` はXML本体の状態に限定し、加入者照合結果と検査値抽出結果は別statusで保持する。
+
+また、検査値項目では、正規化できたかと、マスタ定義上妥当かを分けて管理する。詳細な正規化ルールに `norm_rules` / `norm_variants` を使うかどうかは次回以降の協議事項とする。
+
+### 決定事項
+- `xml_ledger.exam_item_status` を追加する方針とする。
+- 必要に応じて `xml_ledger.exam_item_reason` も追加する方針とする。
+- DDL変更が必要なため、DDL更新と既存DB向けmigrationを同時に作成する。
+- 加入者照合NG時に `xml_status` は変更しない。
+- `xml_status` はXMLそのものの状態のみを表す。
+- `subscriber_match_status` は加入者照合結果のみを表す。
+- `exam_item_status` は検査値抽出・妥当性の総合状態のみを表す。
+- Phase4で使用する `file_receipts.status` は `DISCOVERED` / `IMPORTING` / `IMPORTED` / `WARNING` / `ERROR` とする。
+- Phase4で使用する `xml_status` は `READY` / `PARSE_ERROR` とする。
+- Phase4で使用する `subscriber_match_status` は `MATCHED` / `NOT_FOUND` / `IDENTITY_ERROR` / `NOT_EXECUTED` とする。
+- Phase4で使用する `exam_item_status` は `OK` / `WARNING` / `ERROR` / `NOT_EXECUTED` とする。
+- Phase4のETL metricsは以下を基本とする。
+  - `files`: 処理対象 `file_receipts` 件数。
+  - `rows_seen`: 対象XML件数。
+  - `rows_inserted`: 新規 `xml_ledger` 件数。
+  - `rows_updated`: `xml_file_links` 登録件数 + `file_receipts` 更新件数。
+  - `rows_skipped`: 既存 `xml_sha256` 再受領・対象外XML件数。
+  - `errors`: `etl_errors` 登録件数。
+- `exam_item_values` 件数はETL metricsの `rows_inserted` に含めず、必要に応じて `etl_runs.notes` のサマリーへ記録する。
+- `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたかを表す。
+- `validation_status` は `exam_item_master` 定義に照らして値として妥当かを表す。
+- 数値変換できない場合は `normalize_status = ERROR`、`validation_status = INVALID` とする。
+- `namecode` がmasterにない場合は `normalize_status = SKIPPED`、`validation_status = INVALID` とする。
+- 単位不一致の場合は `normalize_status = WARNING`、`validation_status = WARNING` とする。
+- 正常な場合は `normalize_status = OK`、`validation_status = OK` とする。
+
+### 保留事項
+- 検査値バリデーションをどこまでPhase4で実施するか。
+- 過去の紙→CSV→DB取込で利用した `dev_phr.norm_rules` / `dev_phr.norm_variants` をPhase4検査値正規化・バリデーションに利用するか。
+- `exam_item_reason` を追加する場合の保持内容。
+- `etl_runs.notes` に記録する検査値サマリーの具体フォーマット。
+
+### 根拠
+- `xml_status` に加入者照合や検査値状態を混在させると、状態の責務が曖昧になり実装者によって扱いが分かれるため。
+- `exam_item_status` はPhase4の検査値抽出結果をXML単位で把握するために必要であり、DDLに存在しないままでは実装できないため。
+- ETL metricsに `exam_item_values` 件数を含めると件数が膨らみ、Run成否判定がファイル・XML単位の処理実態とズレる可能性があるため。
+- 正規化結果とマスタ妥当性を分離することで、型変換エラー、単位不一致、master未定義などの原因を切り分けやすくするため。
+
+### 次回検討
+- `03_decisions.md` へ今回の決定事項を同期する。
+- `26_phase4_import_xml_design_review.md` へstatus・metrics・normalize/validation方針を反映する。
+- `11_v2_script_design_notes.md`、`19_implementation_ready_summary.md`、`20_implementation_plan.md` へPhase4実装方針として同期する。
+- `xml_ledger.exam_item_status` / `exam_item_reason` 追加のDDL更新とmigrationを作成する。
+- `dev_phr.norm_rules` / `dev_phr.norm_variants` の内容を確認し、検査値バリデーションに利用するか協議する。
+
+---

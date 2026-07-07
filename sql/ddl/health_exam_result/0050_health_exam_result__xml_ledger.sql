@@ -22,6 +22,8 @@ CREATE TABLE `health_exam_result`.`xml_ledger` (
   `subscriber_match_status` varchar(32) DEFAULT NULL,
   `subscriber_match_method` varchar(64) DEFAULT NULL,
   `subscriber_match_reason` text,
+  `exam_item_status` varchar(32) DEFAULT NULL,
+  `exam_item_reason` text,
   `xml_status` varchar(32) NOT NULL DEFAULT 'PENDING',
   `xml_reason` text,
   `check_status` varchar(32) NOT NULL DEFAULT 'PENDING',
