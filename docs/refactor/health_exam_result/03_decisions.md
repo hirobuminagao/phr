@@ -158,10 +158,12 @@
 - `xml_file_links.xml_inner_path` はZIP内相対パスを保持する。
 - XML単体ファイルの場合、`xml_file_links.xml_inner_path` は `NULL` とする。
 - `exam_item_values` は健診結果値の共通基盤とする。初期実装では XML 由来を対象とし、将来的に CSV 由来も同一構造で扱う。
-- `exam_item_values` はXMLから健診値として取得できた事実を保持するテーブルとし、「正しいデータだけ保存する」方針は採用しない。
-- `exam_item_values` は実際に存在した健診値のみを保持する。不足項目を補完行として作ることはしないが、XML上に検査値らしきentryとして存在するものは、namecodeが判定できない場合も可能な限りraw行を保持する。
+- `exam_item_values` はXMLから健診値候補として取得できた事実を保持するテーブルとし、「正しいデータだけ保存する」方針は採用しない。
+- `exam_item_values` は実際に存在した健診値候補のみを保持する。不足項目を補完行として作ることはしないが、XML上に検査値らしきentryとして存在するものは、namecodeが判定できない場合も可能な限りraw行を保持する。
 - unsupported namecode は捨てず、`exam_item_values.namecode = NULL` として raw値、raw unit、nullFlavor、code系情報などを保持する。
+- `exam_item_values.namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
 - unsupported namecode は `etl_errors` にも `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録し、調査・マスタ追加・再処理の導線を残す。
+- この方針は、現場で健診値一覧からエラー行を確認できるようにするための人間中心設計である。
 - `exam_item_values` は縦持ちとする。
 - `exam_item_values` の由来は `ledger_type` / `ledger_id` で表現する。
 - `exam_item_values` には `event_id`、`subscriber_id`、`hia_subscriber_id` を検索性向上のため冗長保持する。
@@ -328,6 +330,11 @@
 - `02_import_xml.py` のDBトランザクションは `file_receipt` 単位とする。
 - 1ファイル失敗してもRun全体は止めず、失敗分を `etl_errors` に記録して次のファイルへ進む。
 - ZIP展開、XML読込、XML基本情報抽出、identity生成、加入者照合、健診項目raw値抽出、`xml_ledger`・`xml_file_links`・`exam_item_values` 登録は `02_import_xml.py` で実施する。
+- Phase4では厚生労働省HL7仕様に完全準拠したextractorを最初から作り込まず、旧medi系実装で実績のある抽出思想を優先する。
+- Phase4の基本情報取得は旧実装のXPath・取得方法を参考にし、健診項目取得は旧実装と同様に entry / observation 配下を広めに探索してraw値を取得する。
+- Phase4の目的は、XMLを安全に台帳化し、取得できたraw値を失わず保持することとする。
+- 厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析は、Phase5以降のリファクタリング対象とする。
+- 将来的にはXML解析を、基本情報ブロック解析、検査項目entry解析、特定健診関連ブロック解析、任意項目・ドック項目解析、保健指導関連ブロック解析の責務単位へ整理する。
 - Phase4では検査値の正規化、バリデーション、`exam_item_status` 更新、`normalize_status` 更新、`validation_status` 更新は実施しない。
 - Phase4のETL metricsは、`files` を処理対象 `file_receipts` 件数、`rows_seen` を対象XML件数、`rows_inserted` を新規 `xml_ledger` 件数、`rows_updated` を `xml_file_links` 登録件数 + `file_receipts` 更新件数、`rows_skipped` を既存 `xml_sha256` 再受領・対象外XML件数、`errors` を `etl_errors` 登録件数とする。
 - `exam_item_values` 件数は `rows_inserted` に含めず、必要に応じて `etl_runs.notes` のサマリーへ記録する。

@@ -267,13 +267,15 @@ Phase3登録時の固定値は以下とする。
     - parse不能XMLではidentity系項目を設定せず、`exam_item_values` も登録しない。
     - parse不能XMLの詳細は `etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録する。
 12. XML基本情報のraw値からdictを作成し、`scripts.lib.identity.generator.generate_identity_bundle(**raw)` で `person_id_custom` / `identity_hash` を生成し、`dev_phr.subscribers` と照合する。
+    - Phase4では厚生労働省HL7仕様に完全準拠したextractorを最初から作り込まず、旧medi系実装で実績のあるXPath・取得方法を参考にする。
 13. 照合結果を `xml_ledger` に保持する。
 14. XML内の健診項目raw値を抽出し、`exam_item_values` に登録する。
     - `exam_item_values` は `xml_ledger` 作成後に登録する。
     - XML解析が成功した場合は、identity生成に失敗しても登録する。
     - Phase4では検査値の正規化、バリデーション、`exam_item_status` 更新、`normalize_status` 更新、`validation_status` 更新を実施しない。
+    - 旧medi系実装のentry探索思想を優先し、entry / observation 配下を広めに探索して取得できたraw値を失わず保持する。
     - XML内に項目entryとして存在したものは、可能な限りraw値の行を作る。
-    - `exam_item_values` はXMLから検査値として取得できた事実を保持するテーブルとし、正しいデータだけ保存する方針は採用しない。
+    - `exam_item_values` はXMLから健診値候補として取得できた事実を保持するテーブルとし、正しいデータだけ保存する方針は採用しない。
     - namecodeが判定できない unsupported namecode は、`namecode = NULL` としてraw値、raw unit、nullFlavor、code系情報を保持し、あわせて `etl_errors` に `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` を記録する。
     - 一部検査値raw値の抽出に失敗した場合は、取得可能なraw値を登録し、不足・異常は `etl_errors` に記録して処理を継続する。
     - `exam_item_master`、`norm_variants`、`normalize_exam_item_value()` を用いた正規化・バリデーションは後続Phaseで実施する。
@@ -522,6 +524,8 @@ DB上のチェック結果・出力状態を参照し、HIAアップロード用
 | 制度チェック | 72項目の項目別 `status` / `reason` 生成、制度単位の `check_result` 集計 |
 | exam_check_results登録 | 横持ちチェック結果のupsert、reason生成 |
 | HIA出力 | DB上の正規化済みデータからHIAアップロード用XMLを生成 |
+
+Phase4では旧実装互換を優先し、厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析はPhase5以降のリファクタリング対象とする。将来的には、基本情報ブロック解析、検査項目entry解析、特定健診関連ブロック解析、任意項目・ドック項目解析、保健指導関連ブロック解析の責務単位へ整理する。
 
 ---
 

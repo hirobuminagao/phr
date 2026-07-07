@@ -198,7 +198,7 @@ Phase3 01_scan_files.pyのみを実装する。
 - Phase4が `generate_identity_bundle()` の戻り値として利用するのは、`ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみとする。
 - XML parserはraw値抽出のみを担当し、identity用の独自正規化を実装しない。
 - 健診値は `exam_item_values` に縦持ちで登録される。
-- `exam_item_values` はXMLから検査値として取得できた事実を保持するテーブルとし、正しいデータだけ保存する方針は採用しない。
+- `exam_item_values` はXMLから健診値候補として取得できた事実を保持するテーブルとし、正しいデータだけ保存する方針は採用しない。
 - `exam_item_values` は `xml_ledger` 作成後に登録される。
 - XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` が登録される。
 - 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
@@ -206,8 +206,12 @@ Phase3 01_scan_files.pyのみを実装する。
 - Phase4では `exam_item_values` にraw値、raw unit、nullFlavor、code系情報などを登録する。
 - Phase4では `exam_item_values.normalized_value` / `normalized_unit` を生成せず、`normalize_status` / `validation_status` も更新しない。
 - Phase4では検査値の正規化・バリデーション、`exam_item_status` 更新、`file_receipts` への検査値サマリー集約を実施しない。
+- Phase4では厚生労働省HL7仕様に完全準拠したextractorを最初から作り込まず、旧medi系実装で実績のある基本情報取得方法とentry探索思想を優先する。
+- 健診項目取得はentry / observation 配下を広めに探索し、XMLを安全に台帳化して取得できたraw値を失わず保持することを優先する。
 - XML内に項目entryとして存在したものは、可能な限り `exam_item_values` にraw値の行が作成される。
 - namecodeが判定できない unsupported namecode は `namecode = NULL` としてraw値・raw unit・nullFlavor・code系情報を保持し、あわせて `etl_errors` に `XML_UNSUPPORTED_NAMECODE` を記録する。
+- `namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
+- 厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析はPhase5以降のリファクタリング対象とする。
 - 後続の正規化Phaseでは `exam_item_values` のraw値を入力とし、`exam_item_master`、必要に応じて `norm_variants`、`normalize_exam_item_value()` を用いて正規化・バリデーションを実施する。
 - `norm_variants` はCD/CO系検査値の表記ゆれ辞書として限定利用し、`result_code_oid + raw_value_utf8` の完全一致を基本とする。
 - `norm_rules`、`raw_token_norm`、`normalize_plus_tokens`、`exam_value_normalizer.py` 相当の高度な前処理は後続Phaseでも初期採用せず、将来拡張とする。

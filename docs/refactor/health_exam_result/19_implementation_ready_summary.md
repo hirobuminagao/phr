@@ -97,7 +97,7 @@
 | `file_receipts` | 物理ファイル単位の受領・処理サマリー台帳。人＋イベント単位の最終完了状態は持たない。 |
 | `xml_file_links` | `file_receipts` と `xml_ledger` の対応台帳。ZIP内XMLパスを保持する。 |
 | `xml_ledger` | XML内容単位の一意台帳。XML取込状態、加入者照合結果、XML単位の最新HIA出力状態を持つ。`file_receipt_id` は持たない。 |
-| `exam_item_values` | XMLから健診値として取得できた事実の縦持ち。unsupported namecodeもraw行として保持し、XML/CSV共通の将来拡張を想定して `ledger_type` / `ledger_id` で由来を表す。 |
+| `exam_item_values` | XMLから健診値候補として取得できた事実の縦持ち。unsupported namecodeもraw行として保持し、XML/CSV共通の将来拡張を想定して `ledger_type` / `ledger_id` で由来を表す。 |
 | `exam_check_results` | 制度チェック結果の横持ち台帳。対象72項目の `status_<item_code>` / `reason_<item_code>` を一度だけ保持し、制度単位の総合判定の入力とする。core DDLからは一旦外す。 |
 | `medical_folder_aliases` | event単位の医療機関フォルダ名変換台帳。 |
 
@@ -467,13 +467,18 @@ Phase4で使用する正式コード:
 ### exam_item_values 登録
 
 - `exam_item_values` はPhase4（`02_import_xml.py`）で、`xml_ledger` 作成後に登録する。
-- `exam_item_values` はXMLから健診値として取得できた事実を保持する。正しいデータだけ保存する方針ではなく、XML内に実際に存在した検査値entryは可能な限りraw行として登録する。
+- `exam_item_values` はXMLから健診値候補として取得できた事実を保持する。正しいデータだけ保存する方針ではなく、XML内に実際に存在した検査値entryは可能な限りraw行として登録する。
 - 制度チェック上の不足項目は登録しないが、namecodeが判定できない unsupported namecode でも、取得できたraw値・code系情報は `namecode = NULL` の行として保持する。
 - unsupported namecode は `etl_errors` にも `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。
+- `namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
+- この方針は、現場で健診値一覧からエラー行を確認できるようにするための人間中心設計である。
 - XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` を登録する。
 - `ledger_type = XML`、`ledger_id = xml_ledger.id` とする。
 - `event_id` / `subscriber_id` / `hia_subscriber_id` は検索性向上の冗長カラムとして保持する。
 - Phase4ではraw値、raw unit、nullFlavor、code系情報などを登録し、正規化済み値・正規化状態・妥当性判定は更新しない。
+- Phase4では厚生労働省HL7仕様に完全準拠したextractorを最初から作り込まず、旧medi系実装で実績のある基本情報取得方法とentry探索思想を優先する。
+- 健診項目取得はentry / observation 配下を広めに探索し、XMLを安全に台帳化して取得できたraw値を失わず保持することを優先する。
+- 厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析はPhase5以降のリファクタリング対象とする。
 - Phase4では `exam_item_master` / `norm_variants` を用いた正規化・バリデーションを実施しない。
 - 後続の正規化Phaseでは `exam_item_values` のraw値を入力とし、`exam_item_master`、必要に応じて `norm_variants`、`normalize_exam_item_value()` を用いて正規化・バリデーションを実施する。
 - `xml_ledger.exam_item_status` や `file_receipts` への検査値サマリー反映は後続Phaseで実施する。

@@ -433,6 +433,7 @@ created_at
 - 実際に存在した健診値のみを保持する。不足項目を補完行として作ることはしない。
 - namecodeが判定できない、または未対応の検査値entryでも、raw値を取得できる場合は捨てずに保持する。
 - unsupported namecode は `namecode = NULL` とし、`code_system` / `code_value` / `code_display` / raw系カラムへ取得できた情報を保持する。
+- `namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
 - unsupported namecode はETL Errorにも記録し、調査・マスタ追加・再処理の導線を残す。
 - raw値と正規化値を保持する。
 - 正規化状態・正規化理由を保持する。
@@ -478,6 +479,7 @@ updated_at
 - `ledger_id` は `ledger_type` と組み合わせて由来Ledgerを表現する。
 - `exam_item_values` は実際に存在した健診値のみを保持する。不足項目の補完行は作らないが、XML上に検査値らしきentryとして存在するものは、namecodeが判定できない場合も可能な限りraw行を保持する。
 - `namecode` はNULL許可とし、unsupported namecodeのraw行ではNULLを設定する。検査項目コード体系や形式が未対応の場合でも、`code_system` / `code_value` / `code_display` に取得できたコード情報を残す。
+- `namecode = NULL` の行も受領事実として保持し、後続でマスタ追加・再正規化・再判定できるようにする。
 - 制度チェックは、`exam_item_values` に存在する値だけでなく「存在しない項目」も判定材料とするため、`exam_check_results` 側の責務とする。
 - 項目値としての妥当性（範囲外・形式不正等）は `validation_status` / `validation_reason` で保持する。
 - `validation_status` は制度チェックではなく、値そのものの妥当性を表す。
