@@ -3345,7 +3345,6 @@ Phase4（`02_import_xml.py`）の実装フローを整理する中で、XML状�
 - `exam_item_values` バリデーション実装へ反映する。
 
 ---
----
 
 ## DH-20260707-6 / 2026-07-07 12:21 JST
 
@@ -3419,3 +3418,60 @@ Phase4では、XML・加入者照合・検査値の状態を分離して管理�
 - `dev_phr.norm_rules` / `dev_phr.norm_variants` の内容を確認し、検査値バリデーションに利用するか協議する。
 
 ---
+
+## DH-20260707-7 / 2026-07-07 13:03 JST
+
+### テーマ
+検査値正規化・バリデーションマスタの利用方針整理
+
+### 背景
+`exam_item_values` のバリデーション設計を進める中で、旧紙・CSV取込時に利用していた `dev_phr.norm_rules`、`dev_phr.norm_variants` がPhase4でも利用できるかを調査した。
+
+既存実装・DDL・マスタ内容を確認した結果、実際の利用状況と設計意図に差異があることが分かったため、Phase4での採用範囲を整理した。
+
+### 当初の考え
+- `norm_rules` と `norm_variants` をそのままPhase4へ流用することを考えていた。
+- XML値の正規化・バリデーションも既存マスタで一括対応できる可能性を想定していた。
+
+### 議論
+- `exam_item_master` は `namecode` ごとの型・単位・OID・null許可などを保持するマスタであり、Phase4バリデーションの基準マスタとする。
+- `norm_variants` は既存スクリプトで実利用されており、CD/CO系コード値の表記ゆれ辞書として利用可能であることを確認した。
+- 一方で `norm_rules` はDDL・CSVは存在するものの、現行スクリプトから利用されておらず、現状では設計のみが先行している状態であることを確認した。
+- `norm_variants` の現行利用は `result_code_oid + raw_value_utf8` の完全一致検索のみであり、`raw_token_norm` や `normalize_plus_tokens` などは未使用である。
+- 旧 `normalize_item_values.py` は `work_other.medi_exam_result_item_values` 更新を前提としており、Phase4へそのまま流用するのではなく、共通ライブラリとして責務を整理する方向とした。
+- Phase4初期では過度な自動補正は行わず、XML受領値を尊重する最小実装を採用する方向とした。
+- 共通ライブラリは、Lookup層と正規化ロジック層を分離し、今後のCSV取込・制度チェックでも再利用できる構成とする方向で整理した。
+
+### 現時点の考え
+Phase4では `exam_item_master` を必須参照とし、CD/CO系のみ `norm_variants` を利用する。
+
+`norm_rules` は現時点では採用せず、将来仕様化した上で利用を検討する。
+
+### 決定事項
+- `exam_item_master` はPhase4バリデーションの基準マスタとする。
+- CD/CO系で `result_code_oid` が存在する場合のみ `norm_variants` を利用する。
+- `norm_variants` は初期Phase4では `raw_value_utf8` 完全一致のみ利用する。
+- `raw_token_norm`、`normalize_plus_tokens`、`norm_rules` はPhase4初期では利用しない。
+- `norm_rules` は将来拡張対象とし、仕様化後に採用可否を判断する。
+- 検査値正規化処理は共通ライブラリ化し、Phase4専用実装としない。
+- 共通ライブラリはLookup層と正規化ロジック層の責務を分離する。
+
+### 保留事項
+- `norm_rules` を正式採用する条件。
+- `raw_token_norm` を利用するかどうか。
+- XML・CSV・紙入力を共通正規化する範囲。
+- CD/CO辞書未一致時の `normalize_status` と `validation_status` の正式対応表。
+- 単位不一致時のWarning/Error判定基準。
+- 正規化共通ライブラリの正式API設計。
+
+### 根拠
+- `dev_phr.exam_item_master` 調査。
+- `dev_phr.norm_rules`・`dev_phr.norm_variants` 調査。
+- `normalize_item_values.py`・`exam_value_normalizer.py` の実装調査。
+- Phase4設計レビュー。
+
+### 次回検討
+- 正規化共通ライブラリのAPI設計。
+- `norm_variants` Lookupライブラリ設計。
+- `normalize_status`・`validation_status` の詳細コード整理。
+- Phase4バリデーションフローへの反映。
