@@ -3018,3 +3018,163 @@ XMLとして読み込み可能であれば、identity生成に失敗しても `x
 - `03_decisions.md` へ決定事項を同期する。
 - `26_phase4_import_xml_design_review.md` へ反映する。
 - Phase4実装時の `xml_status`・`subscriber_match_status` 更新仕様を整理する。
+
+---
+
+## DH-20260706-8 / 2026-07-06 19:42 JST
+
+### テーマ
+Phase4 identity生成処理の共通ライブラリ利用方針
+
+### 背景
+Phase4（`02_import_xml.py`）の実装着手前に、identity生成処理の責務を整理した。
+
+`identity_hash` や `person_id_custom` は加入者照合・重複判定・後続処理の基盤となるため、スクリプトごとに独自実装すると正規化ルールや生成結果がズレるリスクがあることを確認した。
+
+### 当初の考え
+- `02_import_xml.py` 内でXMLから取得した値をそのまま正規化し、`builder` を直接呼び出す案も考えられた。
+- スクリプト内で独自にidentity生成ロジックを持つ案もあった。
+
+### 議論
+- `identity_hash` と `person_id_custom` はシステム全体で同一アルゴリズム・同一正規化結果で生成されなければならない。
+- スクリプトごとに正規化やbuilder呼び出しを実装すると、将来的な仕様変更時に実装漏れや生成差異が発生する可能性がある。
+- Phase4はXMLから取得したraw値を共通identityライブラリへ渡し、その結果のみ利用する責務とする。
+- `builder` や `field` は内部実装とし、`02_import_xml.py` から直接利用しない。
+- identity生成仕様の変更は共通ライブラリのみ修正し、利用側スクリプトは変更不要な構成を維持する。
+
+### 現時点の考え
+identity生成はシステム共通ルールであり、`02_import_xml.py` は生成処理を持たない。
+
+XMLから取得したraw基本情報を共通ライブラリへ渡し、返却された結果のみを利用する。
+
+### 決定事項
+- `identity_hash` および `person_id_custom` の生成は必ず `scripts/lib/identity/generator.py` を利用する。
+- `02_import_xml.py` から `builder`・`field` を直接呼び出さない。
+- XML parserではidentity用の独自正規化を実装しない。
+- XMLから取得したraw値をそのまま共通identityライブラリへ渡す。
+- identity生成アルゴリズムは共通ライブラリを唯一の正本（Single Source of Truth）とする。
+- identity生成仕様を変更する場合は共通ライブラリのみ修正し、利用側スクリプトでは生成ロジックを持たない。
+
+### 保留事項
+- `scripts/lib/identity/generator.py` の公開API（引数・戻り値）の最終仕様。
+- identity生成失敗時に返却するエラー情報の標準形式。
+
+### 根拠
+- `identity_hash` の生成結果がズレると、同一人物が別人として扱われ、XML台帳・加入者照合・後続処理全体へ重大な影響を及ぼすため。
+- identity生成ロジックを一元管理することで、仕様変更時の修正箇所を共通ライブラリへ集約できるため。
+- スクリプトごとの独自実装を防ぐことで、長期的な保守性と整合性を確保できるため。
+
+### 次回検討
+- `03_decisions.md` へ決定事項を同期する。
+- `26_phase4_import_xml_design_review.md` へ反映する。
+- `generator.py` の公開API仕様を確定する。
+
+---
+
+## DH-20260707-1 / 2026-07-07 09:30 JST
+
+### テーマ
+Phase4 identity generator API とエラー記録方針
+
+### 背景
+Phase4（`02_import_xml.py`）の実装前に、`scripts/lib/identity/generator.py` の公開API仕様を確認し、`identity_hash` / `person_id_custom` 生成時の呼び出し方法と、identity生成失敗時の `etl_errors` 記録方針を整理した。
+
+### 議論
+- 現在の `generator.py` の公開入口は `generate_identity_bundle(**kwargs)` であり、dict一括型のAPIであることを確認した。
+- Phase4では、XMLから抽出したraw基本情報を指定キーのdictとして整形し、`generate_identity_bundle(**raw)` に渡す方式が自然であると整理した。
+- 呼び出し時の想定キーは、`birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` とする。
+- `builder` をPhase4から直接呼び出す必要はないことを確認した。
+- identity生成失敗時の `error_code` は、単一の汎用コードだけではなく、失敗したfield単位で細かく持つ方針とした。
+- `generator` の戻り値には `field_results` があり、`birthdate`、`insurer_number`、`insurance_symbol`、`insurance_number`、`name_kana_full` などのfield別結果を確認できる。
+- Phase4では `ok = False` の場合、`field_results` を参照して失敗fieldを抽出し、`etl_errors.error_code` にはfield別INVALID系コードまたはBUILD_FAILED系コードを設定する方針とした。
+- `generator.reason` は代表理由として扱い、すべての失敗項目を表す詳細情報としては `field_results` を利用する。
+- `etl_errors.message` には、人が読める形で失敗項目一覧を記録する方針とした。
+- 例として、`identity generation failed: birthdate=NG(EMPTY), insurance_number=NG(EMPTY)` のような形式を想定する。
+
+### 現時点の考え
+Phase4では、identity生成APIとして `generate_identity_bundle(**kwargs)` を利用する。
+
+identity生成失敗時は、`generator.reason` だけに依存せず、`field_results` を詳細ソースとして利用し、機械判定用の `error_code` と人間確認用の `message` を分けて記録する。
+
+### 決定事項
+- Phase4のidentity生成は `generate_identity_bundle(**kwargs)` を利用する。
+- Phase4ではXML raw基本情報からdictを作成し、`generate_identity_bundle(**raw)` に渡す。
+- Phase4から `builder` を直接呼び出さない。
+- Phase4で渡すidentity入力キーは、`birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` を基本とする。
+- identity生成失敗時の `etl_errors.error_code` は、field別INVALID系コードおよびBUILD_FAILED系コードを基本とする。
+- `generator.reason` は代表理由として扱う。
+- 失敗fieldの詳細は `field_results` を参照する。
+- `etl_errors.message` には、失敗fieldと理由を人が読める形式で一覧化して記録する。
+- `error_code` は機械判定用、`message` は人間確認用、`field_results` は詳細ソースとして役割を分ける。
+
+### 保留事項
+- field別INVALID系 `error_code` の正式コード一覧。
+- BUILD_FAILED系 `error_code` の正式名称。
+- `etl_errors.message` の正式フォーマット。
+- `generate_identity_bundle` の戻り値仕様を設計書へどの粒度で記載するか。
+
+### 根拠
+- `identity_hash` / `person_id_custom` の生成結果がスクリプトごとにズレると、加入者照合・XML台帳・後続処理全体に影響するため。
+- `generator.py` が既にfield別結果を返しており、Phase4側で失敗項目を詳細に記録できるため。
+- `reason` だけでは最初の失敗項目しか表せないため、複数項目欠損時の調査には `field_results` を利用した方がよいため。
+- 機械処理用の `error_code` と、人が読む `message` の責務を分けることで、検索性と運用確認性を両立できるため。
+
+### 次回検討
+- `03_decisions.md` へ決定事項を同期する。
+- `26_phase4_import_xml_design_review.md` へ反映する。
+- 必要に応じて `11_v2_script_design_notes.md`、`19_implementation_ready_summary.md`、`20_implementation_plan.md` へ同期する。
+
+---
+
+## DH-20260707-2 / 2026-07-07 10:21 JST
+
+### テーマ
+Phase4 identity生成失敗時のエラー記録仕様確定
+
+### 背景
+Phase4実装開始前に、identity generator API利用時のエラー記録方法および共通ライブラリとの責務分担を明確化する必要があった。あわせて、実装時に判断がぶれないよう `etl_errors` の記録方針と `generate_identity_bundle()` の利用範囲を確定することを目的として協議した。
+
+### 議論
+- `etl_errors.error_code` は機械判定用のコードとして利用する。
+- `etl_errors.message` は運用者が内容を把握しやすい人間向けメッセージとして利用する。
+- 詳細な失敗内容は `field_results` を参照し、`reason` は代表的な失敗理由として扱う。
+- Phase4は共通ライブラリの公開APIである `generate_identity_bundle(**raw)` のみを利用し、内部実装へ依存しない。
+- Phase4から利用する戻り値は必要最小限に限定し、ライブラリ内部構造との結合を避ける。
+- identity生成に失敗しても、XML自体の解析が正常であれば `xml_ledger` は作成する方針を維持する。
+- `error_code` はフィールド単位の入力不正と、最終的なidentity生成失敗を区別できる命名とすることを確認した。
+
+### 現時点の考え
+Phase4は共通identityライブラリの公開APIのみを利用し、内部処理へ依存しない構成とする。エラー情報は「機械判定」「人間確認」「詳細情報」を役割ごとに分離して管理することで、保守性と運用性を両立する。
+
+### 決定事項
+- `etl_errors.error_code` は以下のコード体系を採用する。
+  - `IDENTITY_BIRTHDATE_INVALID`
+  - `IDENTITY_INSURER_NUMBER_INVALID`
+  - `IDENTITY_INSURANCE_SYMBOL_INVALID`
+  - `IDENTITY_INSURANCE_NUMBER_INVALID`
+  - `IDENTITY_NAME_KANA_FULL_INVALID`
+  - `IDENTITY_HASH_BUILD_FAILED`
+- `etl_errors.message` は人間向け確認情報とし、以下の形式で記録する。
+  - `identity generation failed: <field>=NG(<reason>), <field>=NG(<reason>)`
+- Phase4が `generate_identity_bundle()` の戻り値として利用するのは以下のみとする。
+  - `ok`
+  - `reason`
+  - `person_id_custom`
+  - `identity_hash`
+  - `field_results`
+- XML解析が成功した場合は、identity生成に失敗しても `xml_ledger` を作成し、`etl_errors` にエラーを記録する。
+
+### 保留事項
+- `generate_identity_bundle()` の戻り値仕様を設計書へどの粒度で記載するか。
+
+### 根拠
+- `error_code`、`message`、`field_results` の責務を分離することで、機械判定・運用確認・詳細解析をそれぞれ独立して扱えるため。
+- Phase4が公開APIのみを利用することで、共通ライブラリ内部の変更による影響範囲を最小化できるため。
+- XML解析成功とidentity生成失敗を区別することで、入力データの追跡性と監査性を維持できるため。
+
+### 次回検討
+- `03_decisions.md` へ今回確定した決定事項を同期する。
+- Phase4実装時に本仕様に従って `etl_errors` および `xml_ledger` の記録処理を実装する。
+- 他フェーズでも共通利用できる `error_code` 運用ルールを整理する。
+
+---

@@ -175,6 +175,10 @@ Phase3 01_scan_files.pyのみを実装する。
 - `file_receipts.status` を `IMPORTING / IMPORTED / ERROR` へ更新できる。
 - XML内容の一意性は `xml_ledger.xml_sha256` で判定される。
 - 物理ファイルとXML内容の対応は `xml_file_links` に記録される。
+- `identity_hash` / `person_id_custom` 生成は `scripts.lib.identity.generator.generate_identity_bundle(**raw)` を唯一の入口とし、`02_import_xml.py` 内で独自生成しない。
+- identity入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` とする。
+- Phase4が `generate_identity_bundle()` の戻り値として利用するのは、`ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみとする。
+- XML parserはraw値抽出のみを担当し、identity用の独自正規化を実装しない。
 - 健診値は `exam_item_values` に縦持ちで登録される。
 - `exam_item_values.normalized_value` / `normalized_unit` は登録処理内で生成される。
 

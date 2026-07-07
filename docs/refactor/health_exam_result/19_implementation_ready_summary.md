@@ -405,10 +405,18 @@ Phase3登録時の固定値・方針:
 ### subscriber照合
 
 - XML基本情報から、氏名カナ、保険証記号、保険証番号、生年月日、性別等を抽出する。
-- identity共通仕様に従って `person_id_custom` / `identity_hash` を生成する。
+- XML基本情報のraw値からdictを作成し、`scripts.lib.identity.generator.generate_identity_bundle(**raw)` で `person_id_custom` / `identity_hash` を生成する。
+- 入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` とする。
+- Phase4が `generate_identity_bundle()` の戻り値として利用するのは、`ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみとする。
+- XML parserはraw値抽出のみを担当し、identity用の独自正規化を実装しない。
+- Phase4から `scripts/lib/identity/builder/` や `scripts/lib/identity/field/` を直接呼ばない。
 - `identity_hash` を主キー相当の照合キーとして subscriber lookup を行う。
 - 一致、未一致、複数一致、identity生成不可などを `subscriber_match_status` / `subscriber_match_method` / `subscriber_match_reason` に変換する。
 - `hia_subscriber_id` は正ではなく、検索・調査用の冗長補助キーとする。
+- XMLとして正常に読み込み可能な場合は、identity生成に失敗しても `xml_ledger` を作成し、詳細を `etl_errors` に `field = IDENTITY` として記録する。
+- identity生成失敗時は `generator.reason` を代表理由、`field_results` を詳細ソース、`etl_errors.message` を人間確認用として扱う。
+- identity生成失敗時の `etl_errors.error_code` は、`IDENTITY_BIRTHDATE_INVALID`、`IDENTITY_INSURER_NUMBER_INVALID`、`IDENTITY_INSURANCE_SYMBOL_INVALID`、`IDENTITY_INSURANCE_NUMBER_INVALID`、`IDENTITY_NAME_KANA_FULL_INVALID`、`IDENTITY_HASH_BUILD_FAILED` を基本とする。
+- identity生成失敗時の `etl_errors.message` は、`identity generation failed: <field>=NG(<reason>), <field>=NG(<reason>)` の形式を基本とし、複数fieldが失敗した場合はカンマ区切りで列挙する。
 
 ### xml_status 更新
 
@@ -813,7 +821,10 @@ DB上のチェック結果・出力可否を参照し、HIAアップロード用
 
 - DB接続: `scripts/lib/db/config.py`, `scripts/lib/db/mysql.py`
 - subscriber lookup: `scripts/lib/db/lookup/subscriber.py`, `scripts/lib/db/lookup/subscriber_identity.py`
-- identity生成: `scripts/lib/identity/generator.py`, `scripts/lib/identity/field/*`, `scripts/lib/identity/builder/*`
+- identity生成: `scripts/lib/identity/generator.py`
+  - `generator.py` を `identity_hash` / `person_id_custom` 生成の唯一の入口・正本とする。
+  - Phase4では `generate_identity_bundle(**raw)` を利用する。
+  - 利用側スクリプトから `scripts/lib/identity/field/*` / `scripts/lib/identity/builder/*` は直接呼ばない。
 - ETL run/error基盤: `scripts/lib/etl/*`
 
 ### 既存common_lib側の確認が必要なもの

@@ -103,8 +103,9 @@ Phase4設定ファイルは `scripts/from_medical/config/import_xml.yml` とす�
 - `scripts/lib/db`
   - DB接続、dict cursor、schema名管理。
 - `scripts/lib/identity`
-  - `generator.py` をPhase4のidentity生成入口とする。
-  - Phase4から `builder/` を直接呼ばない。
+  - `generator.py` をPhase4のidentity生成の唯一の入口・正本とする。
+  - Phase4から `builder/` / `field/` を直接呼ばない。
+  - `02_import_xml.py` 内にidentity生成ロジックを持たせない。
 - `scripts/lib/db/lookup/subscriber_identity.py`
   - `identity_hash` / `person_id_custom` / `hia_subscriber_id` などによるsubscriber照合候補。
 
@@ -154,11 +155,21 @@ ZIPと単体XMLで、XML bytes 以降の処理は同じパイプラインに寄�
 
 ## 8. identity基本情報抽出方針
 
-Phase4では、XMLから抽出したraw基本情報をもとに `scripts/lib/identity.generator` を必ず利用して `person_id_custom` / `identity_hash` を生成する。
+Phase4では、XMLから抽出したraw基本情報をもとに `scripts.lib.identity.generator.generate_identity_bundle(**kwargs)` を必ず利用して `person_id_custom` / `identity_hash` を生成する。
+
+Phase4ではXML raw基本情報からdictを作成し、`generate_identity_bundle(**raw)` に渡す。Phase4で渡すidentity入力キーは以下とする。
+
+- `birthdate`
+- `insurer_number_raw`
+- `insurance_symbol_raw`
+- `insurance_number_raw`
+- `name_kana_full_raw`
+- `gender_code`
 
 禁止すること:
 
 - XML raw値を直接 `builder/` に渡さない。
+- Phase4から `field/` を直接呼ばない。
 - Phase4から `builder.person_id_custom` / `builder.identity_hash` を直接呼ばない。
 - XML parser内で独自正規化しない。
 - Phase4固有ロジックで `person_id_custom` / `identity_hash` を組み立てない。
@@ -169,6 +180,8 @@ Phase4では、XMLから抽出したraw基本情報をもとに `scripts/lib/ide
 - `identity.generator`: raw値を受け、fieldを呼び、builderへ渡すオーケストレーションを行う。
 - `identity.field`: 型差異、表記揺れ、欠損、照合用値、正規化値を扱う。
 - `identity.builder`: canonical input から完成値を生成する。不足時の補完・推測はしない。
+
+`scripts/lib/identity/generator.py` を `identity_hash` / `person_id_custom` 生成のSingle Source of Truthとする。identity生成仕様を変更する場合は共通identity lib側を修正し、利用側スクリプトには生成ロジックを持たせない。
 
 データフロー:
 
@@ -188,13 +201,51 @@ xml_ledger
 
 `generator` 戻り値の扱い:
 
+Phase4が `generate_identity_bundle()` の戻り値として利用するのは以下のみとする。
+
+- `ok`
+- `reason`
+- `person_id_custom`
+- `identity_hash`
+- `field_results`
+
+Phase4は上記以外の内部構造へ依存しない。
+
 - `ok = true`
   - `person_id_custom` と `identity_hash` を `xml_ledger` に記録する。
   - `field_results` から `name_kana_match`、`insurance_symbol_match`、`insurance_number_match` など、DDLにあるmatch系項目へ記録できる値を採用する。
 - `ok = false`
+  - XMLとして正常に読み込み可能な場合は `xml_ledger` を作成する。
+  - `generator.reason` を代表理由として扱う。
+  - 失敗fieldの詳細は `field_results` を参照する。
   - `reason` を `xml_ledger.xml_reason` または `subscriber_match_reason` に記録する候補とする。
-  - `xml_status` を `ERROR` にするか、XML取込自体は登録して `subscriber_match_status` で失敗を表現するかはPhase4前の人間判断が必要。
-  - 運用上対応が必要なidentity生成失敗は `etl_errors` に `field = IDENTITY`、`error_code = IDENTITY_GENERATION_FAILED` 相当で記録するのが推奨。
+  - `identity_hash` / `person_id_custom` / `subscriber_id` / `hia_subscriber_id` は未設定とする。
+  - identity生成失敗の詳細は `etl_errors` に `field = IDENTITY` として記録する。
+  - `etl_errors.message` には失敗fieldと理由を人が読める形式で一覧化して記録する。
+  - `error_code` は機械判定用、`message` は人間確認用、`field_results` は詳細ソースとして役割を分ける。
+  - `error_code` は下記のコード体系を基本とする。
+  - `message` は下記のフォーマットを基本とし、複数fieldが失敗した場合はカンマ区切りで列挙する。
+
+`etl_errors.message` の基本形式:
+
+```text
+identity generation failed: <field>=NG(<reason>), <field>=NG(<reason>)
+```
+
+例:
+
+```text
+identity generation failed: birthdate=NG(EMPTY), insurance_number=NG(EMPTY)
+```
+
+`etl_errors.error_code` は以下を基本とする。
+
+- `IDENTITY_BIRTHDATE_INVALID`
+- `IDENTITY_INSURER_NUMBER_INVALID`
+- `IDENTITY_INSURANCE_SYMBOL_INVALID`
+- `IDENTITY_INSURANCE_NUMBER_INVALID`
+- `IDENTITY_NAME_KANA_FULL_INVALID`
+- `IDENTITY_HASH_BUILD_FAILED`
 
 加入者照合:
 
@@ -368,20 +419,22 @@ Errors:
 | `processable_count` | 除外後の対象XML件数。 | 後続処理可能なXML数として扱える。 | 0件時のメッセージ・error_code。 |
 | 単体XMLの再バリデーション | Phase4でも同じ除外条件を防御的に確認する。 | DB汚染や手動投入に備える。 | 不整合時にERRORかスキップか。 |
 | parse不能XMLの `xml_ledger` | `file_receipts.ERROR` + `etl_errors` に留める案が安全。 | 基本情報が取れないXMLを台帳化すると後続対象の扱いが曖昧になる。 | `xml_sha256` だけでERROR台帳を作るか。 |
-| identity生成失敗時 | `xml_ledger` は作成し、`xml_status = ERROR` または `subscriber_match_status` で表現する候補。 | XML内容自体は受領済みで、運用確認対象にできる。 | `xml_status` をERRORにするか、subscriber照合状態に閉じるか。 |
+| identity generator API | `generate_identity_bundle(**raw)` を利用する。入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code`。戻り値は `ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみ利用する。 | identity生成の入口を単一化し、利用側に生成ロジックと内部構造依存を持たせないため。 | 決定済み。戻り値仕様全体の詳細記載粒度は未決。 |
+| identity生成失敗時 | XMLとして正常に読み込み可能なら `xml_ledger` は作成し、詳細は `etl_errors` に `field = IDENTITY` として記録する。`generator.reason` を代表理由、`field_results` を詳細ソース、`message` を人間確認用とする。 | XML内容自体は受領済みで、運用確認対象にできるため。 | `xml_status` / `subscriber_match_status` の正式コードは未決。 |
 | 既存XML再受領 | `xml_sha256` 一致で判定し、同一 `xml_sha256` 再受領時は `xml_file_links` のみ追加する。 | `xml_ledger` はXML内容の一意台帳であり、同一内容XMLを重複登録しないため。 | 決定済み。`SKIPPED` の詳細表現は未決。 |
 | `xml_file_links` 重複 | UNIQUE衝突は重複リンクとしてスキップ。 | 再実行時の冪等性を確保する。 | 重複リンクをRunスキップ件数に含めるか。 |
 | `exam_item_values.validation_status` | 初期は `NULL` または最小値のみ。 | 正式値が未決のため。 | Phase4前に正式値を決めるか、NULL許容で進めるか。 |
 | 一部成功ZIPの `file_receipts.status` | `WARNING` とする。正常XMLのみ `xml_ledger` 登録、失敗XMLは `etl_errors` 記録。 | ファイル全体の総合状態、正常XML、失敗詳細の責務を分離できるため。 | 決定済み。 |
 | ETL metricsの基準 | `files = file_receipts`、`rows_seen = 対象XML` を推奨。 | Runサマリーでファイル数とXML数を分けられる。 | inserted/updated/skippedの粒度。 |
-| Phase4 `etl_errors` 基本構成 | `field` / `error_code` / `message` を基本構成とする。 | 共通ETL構造に合わせ、Phase4固有の独自構造を避けるため。 | 基本方針は決定済み。正式 `error_code` 一覧は未決。 |
+| Phase4 `etl_errors` 基本構成 | `field` / `error_code` / `message` を基本構成とする。identity生成失敗時の `error_code` は `IDENTITY_BIRTHDATE_INVALID`、`IDENTITY_INSURER_NUMBER_INVALID`、`IDENTITY_INSURANCE_SYMBOL_INVALID`、`IDENTITY_INSURANCE_NUMBER_INVALID`、`IDENTITY_NAME_KANA_FULL_INVALID`、`IDENTITY_HASH_BUILD_FAILED` を基本とする。 | 共通ETL構造に合わせ、Phase4固有の独自構造を避けるため。 | 決定済み。 |
 | `--keep-work` | デバッグ用に用意する候補。 | ZIP展開・XML解析失敗の調査に有用。 | オプション名と保持先命名。 |
 
 ### Phase4前に決めるもの
 
 - ZIP内対象XML0件時の扱い。
 - parse不能XMLを `xml_ledger` に作るか。
-- identity生成失敗時の `xml_status` / `subscriber_match_status` / `etl_errors` 反映方針。
+- identity生成失敗時の `xml_status` / `subscriber_match_status` の正式コード。
+- `generate_identity_bundle()` の戻り値仕様を設計書へどの粒度で記載するか。
 - `import_xml.yml` の詳細設定項目。
 - `file_receipts.status` の正式コード一覧。
 - `etl_errors.error_code` の正式コード一覧。
@@ -408,7 +461,7 @@ Errors:
 Phase4の責務範囲と共通lib利用方針は概ね整理できている。ただし、以下は実装前に人間判断が必要である。
 
 - parse不能XMLを `xml_ledger` に作るか。
-- identity生成失敗時に `xml_status = ERROR` とするか、subscriber照合状態に閉じるか。
+- identity生成失敗時の `xml_status` / `subscriber_match_status` の正式コード。
 - ZIP内対象XML0件時の扱い。
 - `import_xml.yml` の詳細設定項目。
 - `etl_errors.error_code` の正式コード一覧。

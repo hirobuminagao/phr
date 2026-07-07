@@ -271,6 +271,25 @@
 - `02_import_xml.py` のDBトランザクションは `file_receipt` 単位とする。
 - 1ファイル失敗してもRun全体は止めず、失敗分を `etl_errors` に記録して次のファイルへ進む。
 - ZIP展開、XML読込、XML基本情報抽出、加入者照合、健診項目値抽出、`xml_ledger`・`xml_file_links`・`exam_item_values` 登録は `02_import_xml.py` で一括実施する。
+- Phase4で `identity_hash` / `person_id_custom` を生成する場合は、必ず `scripts/lib/identity/generator.py` を利用する。
+- `scripts/lib/identity/generator.py` を `identity_hash` / `person_id_custom` 生成の唯一の入口・正本とする。
+- Phase4のidentity生成は `scripts.lib.identity.generator.generate_identity_bundle(**kwargs)` を利用する。
+- Phase4ではXML raw基本情報からdictを作成し、`generate_identity_bundle(**raw)` に渡す。
+- Phase4で `generate_identity_bundle` に渡すidentity入力キーは、`birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` とする。
+- Phase4が `generate_identity_bundle()` の戻り値として利用するのは、`ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみとする。
+- `02_import_xml.py` から `scripts/lib/identity/builder/` や `scripts/lib/identity/field/` を直接呼び出さない。
+- `02_import_xml.py` 内でidentity生成ロジックを独自実装しない。
+- XML parserはXML raw値の抽出のみ担当し、identity用の独自正規化を実装しない。
+- XML raw値の型差異・正規化は `scripts/lib/identity` 側へ寄せる。
+- Phase4はXML raw基本情報を `identity.generator` へ渡し、返却された `ok` / `reason` / `person_id_custom` / `identity_hash` / `field_results` を利用する。
+- Phase4のidentity生成データフローは、XML raw → `scripts.lib.identity.generator` → `field` → `builder` → `person_id_custom` / `identity_hash` → `xml_ledger` とする。
+- identity生成仕様を変更する場合は共通identity lib側を修正し、利用側スクリプトには生成ロジックを持たせない。
+- XMLとして正常に読み込み可能な場合は、identity生成に失敗しても `xml_ledger` を作成する。
+- identity生成失敗の詳細は `etl_errors` に `field = IDENTITY` として記録する。
+- identity生成失敗時の `etl_errors.error_code` は、`IDENTITY_BIRTHDATE_INVALID`、`IDENTITY_INSURER_NUMBER_INVALID`、`IDENTITY_INSURANCE_SYMBOL_INVALID`、`IDENTITY_INSURANCE_NUMBER_INVALID`、`IDENTITY_NAME_KANA_FULL_INVALID`、`IDENTITY_HASH_BUILD_FAILED` を基本とする。
+- identity生成失敗時の代表理由は `generator.reason` を利用し、失敗fieldの詳細は `field_results` を参照する。
+- identity生成失敗時の `etl_errors.message` は、`identity generation failed: <field>=NG(<reason>), <field>=NG(<reason>)` の形式を基本とし、複数fieldが失敗した場合はカンマ区切りで列挙する。
+- identity生成失敗時は、`error_code` は機械判定用、`message` は人間確認用、`field_results` は詳細ソースとして扱う。
 - Phase4でZIP内の対象XMLが一部のみ正常処理できた場合は、正常XMLのみ `xml_ledger` を登録し、失敗XMLは `xml_ledger` を作成せず `etl_errors` に記録する。
 - `file_receipts` はファイル全体の総合状態、`xml_ledger` は正常XML、`etl_errors` は失敗詳細を管理する。
 - 既存XMLは同一人物ではなく `xml_sha256` 一致で判定する。

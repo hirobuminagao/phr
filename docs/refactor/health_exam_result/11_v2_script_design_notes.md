@@ -255,7 +255,7 @@ Phase3登録時の固定値は以下とする。
 7. XMLごとに `xml_sha256` を算出する。
 8. `xml_sha256` が既存の場合は、`xml_ledger` を重複作成せず `xml_file_links` のみ追加し、必要に応じて `xml_status = SKIPPED` とする。
 9. `xml_sha256` が未登録の場合は、XML基本情報を抽出して `xml_ledger` を登録し、取込成功時は `xml_status = IMPORTED` とする。
-10. XML基本情報から正規化値と `identity_hash` を生成し、`dev_phr.subscribers` と照合する。
+10. XML基本情報のraw値からdictを作成し、`scripts.lib.identity.generator.generate_identity_bundle(**raw)` で `person_id_custom` / `identity_hash` を生成し、`dev_phr.subscribers` と照合する。
 11. 照合結果を `xml_ledger` に保持する。
 12. XML内の健診項目値を抽出し、`exam_item_values` に登録する。
 13. `file_receipts` に処理件数・処理状態を集約し、そのファイル分のトランザクションを確定する。
@@ -277,6 +277,19 @@ Phase3登録時の固定値は以下とする。
 - `etl_errors` は共通ETL構造を利用し、ファイル・XML・項目の補足情報は `src_file`、`field`、`field_value`、`error_code`、`message`、`notes` 相当の既存表現へ寄せる。
 - XML単位で処理不能な場合は `xml_ledger.xml_status = ERROR` / `xml_reason` に集約する。
 - ファイル単位の件数・総合状態は `file_receipts` に集約する。
+
+### identity生成方針
+
+- `identity_hash` / `person_id_custom` 生成は `scripts/lib/identity/generator.py` を唯一の入口とする。
+- Phase4では `generate_identity_bundle(**raw)` を利用する。
+- 入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` とする。
+- Phase4が `generate_identity_bundle()` の戻り値として利用するのは、`ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみとする。
+- `02_import_xml.py` から `scripts/lib/identity/builder/` や `scripts/lib/identity/field/` を直接呼ばない。
+- XML parserはraw値抽出のみを担当し、identity用の独自正規化を実装しない。
+- XMLとして正常に読み込み可能な場合は、identity生成に失敗しても `xml_ledger` を作成し、詳細を `etl_errors` に `field = IDENTITY` として記録する。
+- identity生成失敗時は `generator.reason` を代表理由、`field_results` を詳細ソース、`etl_errors.message` を人間確認用として扱う。
+- identity生成失敗時の `etl_errors.error_code` は、`IDENTITY_BIRTHDATE_INVALID`、`IDENTITY_INSURER_NUMBER_INVALID`、`IDENTITY_INSURANCE_SYMBOL_INVALID`、`IDENTITY_INSURANCE_NUMBER_INVALID`、`IDENTITY_NAME_KANA_FULL_INVALID`、`IDENTITY_HASH_BUILD_FAILED` を基本とする。
+- identity生成失敗時の `etl_errors.message` は、`identity generation failed: <field>=NG(<reason>), <field>=NG(<reason>)` の形式を基本とし、複数fieldが失敗した場合はカンマ区切りで列挙する。
 
 ### `xml_inner_path` 方針
 
