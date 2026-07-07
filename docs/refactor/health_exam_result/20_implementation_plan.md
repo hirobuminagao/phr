@@ -175,7 +175,8 @@ Phase3 01_scan_files.pyのみを実装する。
 
 #### 完了条件
 - `file_receipts.status` を `IMPORTING / IMPORTED / WARNING / ERROR` へ更新できる。
-- Phase4で使用する正式コードは、`file_receipts.status = DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED`、`exam_item_status = OK / WARNING / ERROR / NOT_EXECUTED` とする。
+- Phase4で使用する正式コードは、`file_receipts.status = DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` とする。`exam_item_status = OK / WARNING / ERROR / NOT_EXECUTED` は後続正規化Phaseで使用する。
+- Phase4では既存 `scripts/from_medical/config/import_xml.yml` を読み込んで処理し、設定項目の追加検討は行わない。configを正本とし、CLI引数は指定時のみ上書き用途とする。
 - `xml_status` はXMLそのものの状態のみを表し、加入者照合NG時に変更しない。
 - `xml_ledger.exam_item_status` を追加し、必要に応じて `xml_ledger.exam_item_reason` も追加するDDL更新と既存DB向けMigrationが作成されている。
 - health_exam_result のMigrationファイル名は `YYYYMMDD_NNN_health_exam_result_<description>.sql` とし、例は `20260707_001_health_exam_result_add_exam_item_status.sql` とする。
@@ -184,9 +185,13 @@ Phase3 01_scan_files.pyのみを実装する。
 - XML内容の一意性は `xml_ledger.xml_sha256` で判定される。
 - parse不能XMLでもXMLファイル自体のSHA256から `xml_sha256` を算出し、最小情報で `xml_ledger` を作成できる。
 - parse不能XMLの `xml_status` は `PARSE_ERROR` とし、`etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録できる。
+- Phase4の `etl_errors.field` は `CONFIG` / `FILE` / `ZIP` / `XML` / `IDENTITY` / `SUBSCRIBER` / `DB` を基本とする。
+- Phase4の主な `etl_errors.error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せ、検査値単位の詳細エラーコードと normalize / validation 専用エラーコードはPhase4では作成しない。
+- `etl_errors.message` は人間確認用とし、parse不能XMLは `xml parse failed: path=<path>, inner_path=<inner_path>, reason=<parser_error>`、ZIP内対象XML0件は `zip has no target xml: path=<path>, pattern=h*.xml, excludes=ix08,su08,schema,xsd`、raw抽出失敗は `xml raw extract failed: path=<path>, inner_path=<inner_path>, field=<field>, reason=<reason>` を基本形式とする。複数fieldの場合は `fields=<field1>,<field2>` とする。
 - parse不能XMLでは `identity_hash` / `person_id_custom` / `subscriber_id` / `hia_subscriber_id` は設定せず、`exam_item_values` も登録しない。
 - 物理ファイルとXML内容の対応は `xml_file_links` に記録される。
-- XML状態は `xml_status`、加入者照合状態は `subscriber_match_status`、検査値抽出・バリデーション状態は `exam_item_status` で分離して管理される。
+- XML状態は `xml_status`、加入者照合状態は `subscriber_match_status`、検査値抽出・バリデーション状態は `exam_item_status` で分離して管理される。ただしPhase4では `exam_item_status` を更新しない。
 - `xml_status` に加入者照合結果や検査値バリデーション結果を混在させない。
 - `identity_hash` / `person_id_custom` 生成は `scripts.lib.identity.generator.generate_identity_bundle(**raw)` を唯一の入口とし、`02_import_xml.py` 内で独自生成しない。
 - identity入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code` とする。
@@ -197,16 +202,16 @@ Phase3 01_scan_files.pyのみを実装する。
 - XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` が登録される。
 - 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
 - 一部検査値の取得に失敗した場合は、取得可能な検査値を登録し、不足・異常は `etl_errors` に記録して処理が継続される。
-- `exam_item_values.normalized_value` / `normalized_unit` は登録処理内で生成される。
-- `exam_item_values` 登録時の値検証は共通Lookupライブラリで `item_master` を参照して実施される。
-- 呼び出し側スクリプトで `item_master` 参照SQLを直接実装しない。
-- XML内に項目entryとして存在したものは、値や型に問題があっても可能な限り `exam_item_values` に行が作成される。
-- 項目単位の結果は `exam_item_values.normalize_status` / `normalize_reason` および `validation_status` / `validation_reason` に保持される。
-- `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたかを表し、`validation_status` は `exam_item_master` 定義に照らして値として妥当かを表す。
-- 数値変換不可は `normalize_status = ERROR` / `validation_status = INVALID`、namecode未登録は `normalize_status = SKIPPED` / `validation_status = INVALID`、単位不一致は `normalize_status = WARNING` / `validation_status = WARNING`、正常は `normalize_status = OK` / `validation_status = OK` として扱える。
+- Phase4では `exam_item_values` にraw値、raw unit、nullFlavor、code系情報などを登録する。
+- Phase4では `exam_item_values.normalized_value` / `normalized_unit` を生成せず、`normalize_status` / `validation_status` も更新しない。
+- Phase4では検査値の正規化・バリデーション、`exam_item_status` 更新、`file_receipts` への検査値サマリー集約を実施しない。
+- XML内に項目entryとして存在したものは、可能な限り `exam_item_values` にraw値の行が作成される。
+- 後続の正規化Phaseでは `exam_item_values` のraw値を入力とし、`exam_item_master`、必要に応じて `norm_variants`、`normalize_exam_item_value()` を用いて正規化・バリデーションを実施する。
+- `norm_variants` はCD/CO系検査値の表記ゆれ辞書として限定利用し、`result_code_oid + raw_value_utf8` の完全一致を基本とする。
+- `norm_rules`、`raw_token_norm`、`normalize_plus_tokens`、`exam_value_normalizer.py` 相当の高度な前処理は後続Phaseでも初期採用せず、将来拡張とする。
 - ETL metricsは、`files = 処理対象file_receipts件数`、`rows_seen = 対象XML件数`、`rows_inserted = 新規xml_ledger件数`、`rows_updated = xml_file_links登録件数 + file_receipts更新件数`、`rows_skipped = 既存xml_sha256再受領・対象外XML件数`、`errors = etl_errors登録件数` として記録できる。
 - `exam_item_values` 件数は `rows_inserted` に含めず、必要に応じて `etl_runs.notes` のサマリーへ記録できる。
-- 検査値バリデーションをどこまでPhase4で実施するか、`dev_phr.norm_rules` / `dev_phr.norm_variants` をPhase4検査値正規化・バリデーションに利用するか、`exam_item_reason` の保持内容、`etl_runs.notes` に記録する検査値サマリーの具体フォーマットは実装前または実装中に確認し、未決のまま勝手に確定しない。
+- 正規化Phaseの正式名称、スクリプト名、ETL単位・再実行単位、`normalize_exam_item_value()` の正式引数・返却値、正規化完了後に更新する台帳・サマリー項目の詳細は後続Phase設計で決め、Phase4実装内で仮決定しない。
 
 #### Codex 指示単位
 Phase4 02_import_xml.pyのみを実装する。

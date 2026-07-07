@@ -162,30 +162,46 @@
 - `exam_item_values` は縦持ちとする。
 - `exam_item_values` の由来は `ledger_type` / `ledger_id` で表現する。
 - `exam_item_values` には `event_id`、`subscriber_id`、`hia_subscriber_id` を検索性向上のため冗長保持する。
-- `exam_item_values` の正規化値・正規化状態は `exam_item_values` の責務とする。
-- `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたかを表す。
-- 項目値としての妥当性チェックは `exam_item_values` で管理する。
-- `validation_status` は `exam_item_master` 定義に照らして値として妥当かを表す。
-- `exam_item_values` 登録時の値検証は `item_master` を参照して実施する。
-- 型、単位、必須可否、namecode存在有無などの判定は `item_master` の定義を基準とする。
-- 検査値読込・値としての妥当性エラーは制度チェックとは分離する。
+- Phase4では `exam_item_values` へのraw値登録までを責務とし、検査値の正規化・バリデーションは実施しない。
+- Phase4では `normalized_value`、`normalized_unit`、`normalize_status`、`validation_status` を更新しない。
+- `exam_item_values` の正規化値・正規化状態・妥当性判定は後続の正規化Phaseで更新する。
+- `normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたかを表し、後続Phaseで管理する。
+- `validation_status` は `exam_item_master` 定義に照らして値として妥当かを表し、後続Phaseで管理する。
+- `exam_item_master` を検査項目定義・バリデーション基準の正とする。
+- `exam_item_master` は `namecode` ごとの型、単位、`result_code_oid`、nullFlavor可否などを判断する中心マスタとする。
+- 型、単位、必須可否、namecode存在有無などの判定は、後続の正規化Phaseで `exam_item_master` の定義を基準に実施する。
+- 検査値読込・値としての妥当性エラーは制度チェックとは分離し、後続の正規化Phaseで扱う。
 - 法定健診・特定健診の不足判定結果は `exam_item_values` に保持せず、`exam_check_results` で管理する。
 - 法定健診・特定健診などの制度チェックは後続Phaseの `exam_check_results` 側で扱う。
-- `item_master` 参照処理は共通Lookupライブラリへ集約し、呼び出し側スクリプトで個別SQLを直接実装しない。
-- Phase4も後続フェーズも同一Lookupライブラリを利用する。
+- `exam_item_master` 参照処理は共通Lookupライブラリへ集約し、呼び出し側スクリプトで個別SQLを直接実装しない。
+- 後続の正規化Phaseと制度チェックPhaseは同一Lookupライブラリを利用する。
 - 共通Lookupライブラリは単品取得・複数取得の両APIを提供する。
 - 単品取得は単一 `namecode` を指定し、該当項目情報をdictまたはNoneで返す。
 - 複数取得は複数 `namecode` を指定し、`namecode -> item情報` のdictで返す。
 - 複数取得はPhase4のXML内namecode一括処理や後続制度チェックで利用し、単品取得は調査・個別処理・後続スクリプトで利用する。
-- XML内に項目entryとして存在したものは、値や型に問題があっても可能な限り `exam_item_values` に行を作る。
-- 項目単位の結果は `exam_item_values.normalize_status` / `normalize_reason` および `validation_status` / `validation_reason` に保持する。
+- XML内に項目entryとして存在したものは、Phase4で可能な限り `exam_item_values` にraw値の行を作る。
+- 項目単位の正規化・妥当性結果は、後続Phaseで `exam_item_values.normalize_status` / `normalize_reason` および `validation_status` / `validation_reason` に保持する。
+- 正規化とバリデーションは責務を分離する。
 - 正常な場合は `normalize_status = OK`、`validation_status = OK` を基本とする。
-- 数値変換できない場合は `normalize_status = ERROR`、`validation_status = INVALID` を基本とする。
+- 数値変換できない場合は `normalize_status = ERROR`、`validation_status = INVALID`、`validation_reason = INVALID_VALUE_TYPE` を基本とする。
 - namecodeがmasterにない場合は `normalize_status = SKIPPED`、`validation_status = INVALID`、`validation_reason = UNKNOWN_NAMECODE` を基本とする。
 - 型不一致は `normalize_status = ERROR`、`validation_status = INVALID`、`validation_reason = INVALID_VALUE_TYPE` を基本とする。
 - null不可なのにnullの場合は `validation_status = INVALID`、`validation_reason = NULL_NOT_ALLOWED` を基本とする。
 - 単位不一致は `normalize_status = WARNING`、`validation_status = WARNING`、`validation_reason = UNIT_MISMATCH` を基本とする。
-- `xml_ledger` 側には検査値全体の総合状態として `exam_item_status` を保持する。
+- `norm_variants` はCD/CO系検査値の表記ゆれ辞書として限定利用する。
+- 後続正規化Phaseの初期実装では、`norm_variants` は `result_code_oid + raw_value_utf8` の完全一致を基本とする。
+- CD/CO系で `result_code_oid` が存在する場合のみ `norm_variants` を利用する。
+- CD/CO以外では後続正規化Phaseの初期実装では `norm_variants` を利用しない。
+- CD/CO系で `norm_variants` に一致しない場合は `normalize_status = ERROR`、`validation_status = INVALID`、`validation_reason = NORMALIZE_VARIANT_NOT_FOUND` とし、raw値は `exam_item_values` に保持して後続の辞書追加・再正規化に備える。
+- `norm_variants` は主に `normalize_status` に効く辞書とし、`exam_item_master` は主に `validation_status` の基準とする。
+- `norm_rules` は後続正規化Phaseの初期実装では採用しない。DDL・CSVは存在するが現行スクリプトでの実利用が確認できず、仕様化が必要なためである。
+- `norm_rules` は将来拡張対象とし、仕様化・共通ライブラリ化後に採用可否を判断する。
+- `raw_token_norm`、`normalize_plus_tokens`、`exam_value_normalizer.py` 相当の高度な前処理は後続正規化Phaseの初期実装では採用しない。
+- 検査値正規化処理は入力経路に依存しない後続Phaseの共通処理として設計し、将来的なCSV取込・制度チェックでも再利用できる共通ライブラリ化を前提とする。
+- 共通libとして `scripts/lib/examination/value_normalizer.py` を作成する方針とし、公開APIは `normalize_exam_item_value()` を基本とする。
+- 後続の正規化スクリプトはraw値、raw単位、`exam_item_master`、必要に応じて `norm_variants` を共通libへ渡す。
+- Lookup層は `exam_item_master` / `norm_variants` などのDB参照を担当し、正規化ロジック層はraw値から `normalized_value` / `normalized_unit` / `normalize_status` / `validation_status` / `validation_reason` を返す処理を担当する。
+- `xml_ledger` 側には後続Phaseで検査値全体の総合状態として `exam_item_status` を保持する。
 - `xml_ledger.exam_item_status` を追加する。必要に応じて `xml_ledger.exam_item_reason` も追加する。
 - `xml_ledger.exam_item_status` / `exam_item_reason` はDDL変更が必要なため、DDL更新と既存DB向けmigrationを同時に作成する。
 - `exam_check_results` は同一性項目コード単位の横持ちとする。
@@ -242,8 +258,8 @@
 - 新規DB名は `health_exam_result` とする。
 - `dev_phr` は原則参照とする。ただし、人・イベント・共通マスタなど `dev_phr` が正となるテーブルは、必要に応じてテーブル単位で書き込みを許容する。
 - 処理系・台帳系テーブルは `health_exam_result` に配置する。
-- v2初期処理は XML/受診者単位で一気通貫に実行する。
-- 処理順序は「基本情報抽出 → 加入者照合 → 健診項目抽出 → 項目単位チェック → XML/受診者単位チェック集約」を基本とする。
+- v2初期処理はPhaseごとに責務を分離して実行する。
+- 処理順序は「XML取込・加入者照合・健診項目raw値登録 → 検査値正規化・バリデーション → 項目単位チェック → XML/受診者単位チェック集約」を基本とする。
 - ファイル単位の件数・エラー数・サマリー更新は、XML/受診者単位処理の完了後に集約する。
 - 将来的にCSV直取込へ対応する場合は、`csv_row_ledger` を追加し、基本情報Ledgerと健診結果値を分離した構造とする。
 - status はシステム処理ステータスと業務フローステータスを分けて設計する。
@@ -253,11 +269,11 @@
 - Phase4の `xml_status` は `READY / PARSE_ERROR` を正式コードとする。
 - 加入者照合状態は `subscriber_match_status` で管理し、identity生成・加入者照合結果を表す。
 - Phase4の `subscriber_match_status` は `MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` を正式コードとする。
-- 検査値抽出・バリデーション状態は `exam_item_status` で管理する。
-- Phase4の `exam_item_status` は `OK / WARNING / ERROR / NOT_EXECUTED` を正式コードとする。
+- 検査値抽出・バリデーション状態は後続Phaseで `exam_item_status` として管理する。
+- 後続の正規化Phaseで使用する `exam_item_status` は `OK / WARNING / ERROR / NOT_EXECUTED` を正式コードとする。
 - `xml_status` に加入者照合結果や検査値バリデーション結果を混在させない。
 - 加入者照合NG時に `xml_status` は変更しない。
-- `subscriber_match_status` と `exam_item_status` はそれぞれ独立した状態として扱う。
+- `subscriber_match_status` と `exam_item_status` はそれぞれ独立した状態として扱う。ただしPhase4では `exam_item_status` を更新しない。
 - `xml_ledger` に `xml_status` / `xml_reason` を保持する。
 - `xml_status` / `xml_reason` は、XML読込エラー、Namespaceエラー、XMLフォーマットエラーなどXML状態を扱い、加入者照合や検査値バリデーションの状態とは分離する。
 - `check_status` は `03_check_exam_results.py` の制度チェック状態を表し、`PENDING / OK / WARNING / NG` の4状態で管理する。
@@ -304,9 +320,11 @@
 - `02_import_xml.py` の通常実行は `event_id` と `file_receipts.status = DISCOVERED` を入力条件とする。
 - `02_import_xml.py` はCLIから `etl_run_id` を指定した場合のみ対象を当該Runに限定する。
 - Phase4の実行設定は `scripts/from_medical/config/import_xml.yml` を正本とし、CLI引数は指定時のみ一時的な上書き用途とする。
+- Phase4では既存 `scripts/from_medical/config/import_xml.yml` を読み込んで処理を行い、設定項目の追加検討は行わない。
 - `02_import_xml.py` のDBトランザクションは `file_receipt` 単位とする。
 - 1ファイル失敗してもRun全体は止めず、失敗分を `etl_errors` に記録して次のファイルへ進む。
-- ZIP展開、XML読込、XML基本情報抽出、加入者照合、健診項目値抽出、`xml_ledger`・`xml_file_links`・`exam_item_values` 登録は `02_import_xml.py` で一括実施する。
+- ZIP展開、XML読込、XML基本情報抽出、identity生成、加入者照合、健診項目raw値抽出、`xml_ledger`・`xml_file_links`・`exam_item_values` 登録は `02_import_xml.py` で実施する。
+- Phase4では検査値の正規化、バリデーション、`exam_item_status` 更新、`normalize_status` 更新、`validation_status` 更新は実施しない。
 - Phase4のETL metricsは、`files` を処理対象 `file_receipts` 件数、`rows_seen` を対象XML件数、`rows_inserted` を新規 `xml_ledger` 件数、`rows_updated` を `xml_file_links` 登録件数 + `file_receipts` 更新件数、`rows_skipped` を既存 `xml_sha256` 再受領・対象外XML件数、`errors` を `etl_errors` 登録件数とする。
 - `exam_item_values` 件数は `rows_inserted` に含めず、必要に応じて `etl_runs.notes` のサマリーへ記録する。
 - Phase4で `identity_hash` / `person_id_custom` を生成する場合は、必ず `scripts/lib/identity/generator.py` を利用する。
@@ -324,7 +342,7 @@
 - identity生成仕様を変更する場合は共通identity lib側を修正し、利用側スクリプトには生成ロジックを持たせない。
 - XMLとして正常に読み込み可能な場合は、identity生成に失敗しても `xml_ledger` を作成する。
 - identity生成失敗の詳細は `etl_errors` に `field = IDENTITY` として記録する。
-- identity生成失敗時の `etl_errors.error_code` は、`IDENTITY_BIRTHDATE_INVALID`、`IDENTITY_INSURER_NUMBER_INVALID`、`IDENTITY_INSURANCE_SYMBOL_INVALID`、`IDENTITY_INSURANCE_NUMBER_INVALID`、`IDENTITY_NAME_KANA_FULL_INVALID`、`IDENTITY_HASH_BUILD_FAILED` を基本とする。
+- identity生成失敗時の `etl_errors.error_code` は、Phase4では `IDENTITY_GENERATION_FAILED` に寄せる。
 - identity生成失敗時の代表理由は `generator.reason` を利用し、失敗fieldの詳細は `field_results` を参照する。
 - identity生成失敗時の `etl_errors.message` は、`identity generation failed: <field>=NG(<reason>), <field>=NG(<reason>)` の形式を基本とし、複数fieldが失敗した場合はカンマ区切りで列挙する。
 - identity生成失敗時は、`error_code` は機械判定用、`message` は人間確認用、`field_results` は詳細ソースとして扱う。
@@ -349,8 +367,20 @@
 - `exam_item_values` は `xml_ledger` 作成後に登録する。
 - XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` を登録する。
 - 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
-- 一部検査値の取得に失敗した場合は、取得可能な検査値は登録し、不足・異常は `etl_errors` に記録して処理を継続する。
+- 一部検査値raw値の抽出に失敗した場合は、取得可能な検査値raw値は登録し、不足・異常は `etl_errors` に記録して処理を継続する。
 - Phase4の `etl_errors` は `field`、`error_code`、`message` を基本構成として記録する。
+- Phase4では `etl_errors.error_code` を必要最小限のコードセットで運用する。
+- Phase4で扱う主な `etl_errors.error_code` は、`CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- Phase4では検査値単位の詳細エラーコードを作成しない。
+- normalize / validation 専用エラーコードはPhase5で設計する。
+- Phase4の `etl_errors.field` は、`CONFIG`、`FILE`、`ZIP`、`XML`、`IDENTITY`、`SUBSCRIBER`、`DB` を基本とする。
+- 検査値raw抽出エラーは初期Phase4では `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。
+- normalize / validation 系の `field` はPhase4では扱わない。
+- Phase4の `etl_errors.message` は人が調査しやすい内容を優先し、対象ファイル、対象XML、対象フィールド、理由を含む共通フォーマットとする。
+- parse不能XMLの `etl_errors.message` は `xml parse failed: path=<path>, inner_path=<inner_path>, reason=<parser_error>` を基本とする。
+- ZIP内対象XML0件の `etl_errors.message` は `zip has no target xml: path=<path>, pattern=h*.xml, excludes=ix08,su08,schema,xsd` を基本とする。
+- raw抽出失敗の `etl_errors.message` は `xml raw extract failed: path=<path>, inner_path=<inner_path>, field=<field>, reason=<reason>` を基本とする。
+- 複数fieldのraw抽出失敗は `xml raw extract failed: path=<path>, inner_path=<inner_path>, fields=<field1>,<field2>, reason=<reason>` を基本とする。
 - `03_check_exam_results.py` はXMLファイルを再読込せず、`xml_ledger`・`exam_item_values` を入力として制度チェックを実施する。
 - `03_check_exam_results.py` は `exam_check_results` を更新し、その結果を `xml_ledger` へ集約する。
 - `04_export_hia_xml.py` はDB上のチェック結果・出力可否を参照してHIAアップロード用XMLを生成する。
@@ -358,7 +388,7 @@
 - 既存出力ファイルは上書きしない。
 - 出力済みファイルの削除・整理は運用側の責務とする。
 - 出力履歴はRun単位の出力フォルダを証跡とする。
-- `exam_item_values.normalized_value` / `normalized_unit` は `02_import_xml.py` の登録処理内で生成する。
+- `exam_item_values.normalized_value` / `normalized_unit` は `02_import_xml.py` では生成せず、後続の正規化Phaseで更新する。
 - SHA256計算は共通ライブラリ化せず、各処理内で実装する。
 - 最終的には、人＋イベント単位の状態管理台帳を追加する方向とする。
 - 人＋イベント単位の台帳では、その人の健診イベントが最終的にOKか、確認中か、再提出依頼中か、完了かを管理する。

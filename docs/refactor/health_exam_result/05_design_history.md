@@ -3475,3 +3475,233 @@ Phase4では `exam_item_master` を必須参照とし、CD/CO系のみ `norm_var
 - `norm_variants` Lookupライブラリ設計。
 - `normalize_status`・`validation_status` の詳細コード整理。
 - Phase4バリデーションフローへの反映。
+
+---
+
+## DH-20260707-8 / 2026-07-07 14:20 JST
+
+### テーマ
+Phase4 検査値正規化・バリデーション基盤の整理
+
+### 背景
+Phase4 実装前レビューを進める中で、既存の `dev_phr.exam_item_master`、`norm_rules`、`norm_variants` の役割と再利用方針を調査した。
+
+旧紙・CSV取込処理で利用していた正規化資産を、そのまま流用するか、新しい共通ライブラリとして再整理するかを検討した。
+
+### 当初の考え
+- `norm_rules` と `norm_variants` をそのまま Phase4 で利用することを想定していた。
+
+### 議論
+- `exam_item_master` は Phase4 の検査項目定義・型・単位・OIDを管理する中心マスタとして利用する。
+- `norm_variants` は CD/CO 系検査値の表記ゆれ辞書として再利用できる可能性が高い。
+- 現行実装は `result_code_oid + raw_value_utf8` の完全一致で利用しており、Phase4 初期も同方式を基本とする方向で整理した。
+- `norm_rules` はDDL・CSVは存在するものの、現行スクリプトでは利用されておらず、そのまま採用するのではなく仕様化・共通ライブラリ化を前提に判断する。
+- 正規化とバリデーションは責務を分離し、`normalize_status` と `validation_status` を独立して管理する方向とした。
+- 将来的なCSV等の入力元追加も考慮し、正規化処理は Phase4 専用実装ではなく共通ライブラリとして設計する方向とした。
+
+### 現時点の考え
+Phase4 初期では、安全性を優先して既存資産を必要最小限利用する。
+
+`exam_item_master` を中心に、`norm_variants` は限定利用し、`norm_rules` は仕様化後に採用可否を判断する。
+
+### 決定事項
+現時点ではなし。
+
+### 保留事項
+- Phase4 で検査値バリデーションをどこまで実施するか。
+- `norm_rules` を採用するか。
+- `exam_value_normalizer.py` 相当の前処理を採用するか。
+- CD/CO 辞書未一致時の `normalize_status` / `validation_status` の正式仕様。
+- 単位不一致時の扱い。
+- 共通正規化ライブラリのAPI設計。
+
+### 根拠
+- `dev_phr.exam_item_master`・`norm_rules`・`norm_variants` 調査結果
+- 旧 `normalize_item_values.py` 調査
+- 旧 `exam_value_normalizer.py` 調査
+- Phase4 実装前レビュー
+
+### 次回検討
+- バリデーション実施範囲の決定
+- `norm_rules` 採用可否の最終判断
+- 共通正規化ライブラリ設計
+- `03_decisions.md` への反映
+
+---
+
+## DH-20260707-9 / 2026-07-07 14:46 JST
+
+### テーマ
+Phase4 検査値正規化・バリデーション方針の最終整理
+
+### 背景
+`exam_item_master`、`norm_rules`、`norm_variants` の調査を実施した結果、Phase4初期実装でどこまで正規化・バリデーションを行うか、および共通ライブラリの責務を整理する必要があった。
+
+### 当初の考え
+- `norm_rules` と `norm_variants` の両方を利用する案を検討していた。
+- XML値も紙・CSV向けと同じ高度な正規化を行う案を考えていた。
+
+### 議論
+- `exam_item_master` を検査項目定義およびバリデーション基準の正とする。
+- `norm_variants` は CD / CO 型のみを対象とし、`result_code_oid + raw_value_utf8` の完全一致で利用する。
+- `norm_rules` は現行スクリプトで利用実績がなく、仕様も未成熟であるため、Phase4初期では採用しない。
+- `raw_token_norm`、`normalize_plus_tokens`、`exam_value_normalizer.py` 相当の高度な前処理も初期Phase4では採用しない。
+- CD / CO 辞書未一致は、辞書不足または未知値として扱い、自動補正は行わない。
+- 単位不一致は値自体を否定せず、Warningとして継続処理する。
+- 数値型で数値へ変換できない場合は値として不正と判断する。
+- 正規化処理は Phase4 専用実装とせず、Lookup層と正規化ロジック層を分離した共通ライブラリとして実装する。
+- XML取込スクリプトは、共通ライブラリへ raw値・単位・`exam_item_master`・必要に応じて `norm_variants` を渡すだけの構成とする。
+
+### 現時点の考え
+Phase4初期実装では、安全性・再現性を優先し、自動補正は最小限とする。
+
+正規化ロジックは共通ライブラリへ集約し、将来的なCSV・紙取込でも再利用できる構成とする。
+
+### 決定事項
+- `exam_item_master` を検査項目定義・バリデーション基準の正とする。
+- `norm_variants` は CD / CO 型のみ、`result_code_oid + raw_value_utf8` 完全一致で利用する。
+- `norm_rules` は Phase4 初期では採用しない。
+- 高度な字句正規化は将来拡張とする。
+- CD / CO 辞書未一致時は以下とする。
+  - `normalize_status = ERROR`
+  - `validation_status = INVALID`
+  - `validation_reason = NORMALIZE_VARIANT_NOT_FOUND`
+- 単位不一致時は以下とする。
+  - `normalize_status = WARNING`
+  - `validation_status = WARNING`
+  - `validation_reason = UNIT_MISMATCH`
+- 数値変換不可時は以下とする。
+  - `normalize_status = ERROR`
+  - `validation_status = INVALID`
+  - `validation_reason = INVALID_VALUE_TYPE`
+- 正規化処理は共通ライブラリとして実装し、公開APIは `normalize_exam_item_value()` を基本とする。
+
+### 保留事項
+- `norm_rules` を採用するタイミング。
+- 高度な字句正規化（`raw_token_norm` 等）の採用可否。
+- `normalize_exam_item_value()` の正式引数・返却値。
+- Lookupキャッシュ方式。
+- `normalize_status` / `validation_status` のコード一覧最終版。
+
+### 根拠
+- `exam_item_master`・`norm_rules`・`norm_variants` の現行調査結果。
+- Phase4初期実装では安全性・再現性を優先する設計方針。
+- XML・CSV・紙取込で共通利用できる正規化基盤を構築するため。
+
+### 次回検討
+- 正規化共通ライブラリのAPI詳細設計。
+- `normalize_exam_item_value()` の実装。
+- Phase4 XML Importへの組み込み。
+- `03_decisions.md`、Phase4設計資料との同期。
+
+---
+
+## DH-20260707-10 / 2026-07-07 15:18 JST
+
+### テーマ
+Phase4とPhase5の責務分離（検査値正規化・バリデーションの後続フェーズ化）
+
+### 背景
+Phase4の設計を進める中で、XML取込・加入者照合・検査値抽出・正規化・バリデーションまでを一つのスクリプトへ集約すると責務が大きくなり、実装・テスト・保守の負荷が高くなることが分かった。
+
+また、検査値の正規化・バリデーションは `exam_item_values` にraw値が登録されていれば後続処理として独立実行できるため、XML取込処理と強く結合させる必要はないことを再確認した。
+
+### 当初の考え
+- Phase4でXML取込から検査値正規化・バリデーションまで実施することを想定していた。
+
+### 議論
+- Phase4の責務は、XMLを正しく取り込み、加入者へ紐付け、検査値のrawデータをDBへ登録するところまでとする。
+- `exam_item_values` はraw値を保持する事実テーブルとし、この段階では正規化済み値や妥当性判定を持たない。
+- 検査値正規化・バリデーションは後続Phaseとして独立させる。
+- 後続Phaseでは `exam_item_values` のraw値を入力とし、`exam_item_master`・`norm_variants` 等を参照して正規化・バリデーションを実施する。
+- `normalize_status`、`validation_status`、`normalized_value`、`normalized_unit` 等は後続Phaseで更新する。
+- `xml_ledger.exam_item_status` や `file_receipts` への検査値サマリー反映も、後続Phaseの責務とする。
+- 正規化処理を独立させることで、辞書追加やルール変更後の再実行が容易になり、CSV取込など他の入力経路でも同じ正規化処理を利用できる。
+
+### 現時点の考え
+Phase4は「rawデータ登録まで」を責務とし、検査値正規化・バリデーションは独立した後続Phaseとして設計する。
+
+### 決定事項
+- Phase4では検査値の正規化・バリデーションを実施しない。
+- Phase4の責務は `exam_item_values` へのraw値登録までとする。
+- `normalize_status`、`validation_status`、`normalized_value`、`normalized_unit` は後続Phaseで更新する。
+- `xml_ledger.exam_item_status` の更新は後続Phaseで実施する。
+- `file_receipts` への検査値サマリー集約は後続Phaseで実施する。
+- 検査値正規化処理は入力経路に依存しない共通処理として設計する。
+
+### 保留事項
+- 後続Phaseの正式名称。
+- 正規化スクリプトの正式ファイル名。
+- `normalize_exam_item_value()` の正式API。
+- 正規化PhaseのETL単位・再実行単位。
+- 正規化完了後に更新する台帳・サマリー項目の詳細。
+
+### 根拠
+- XML取込と検査値正規化は責務が異なるため。
+- rawデータが登録されていれば、正規化は後続処理として独立実行できるため。
+- 辞書更新やルール変更時に正規化のみ再実行できる構成の方が保守性・再利用性が高いため。
+- CSV等の他入力経路でも同じ正規化処理を利用できるため。
+
+### 次回検討
+- 後続Phaseの正式名称を決定する。
+- 正規化スクリプト設計を作成する。
+- `normalize_exam_item_value()` のAPIを確定する。
+- `exam_item_values` の更新フローと `xml_ledger`・`file_receipts` の集約タイミングを整理する。
+
+---
+
+## DH-20260707-11 / 2026-07-07 15:36 JST
+
+### テーマ
+Phase4実装前最終整理（設定・エラーコード・エラーメッセージ方針）
+
+### 背景
+Phase4の責務を「XMLからraw値を取り込み、`exam_item_values` へ登録するまで」と整理したことで、実装を開始する前に残っていた細かな仕様を確認した。
+
+対象は以下の3点である。
+
+- import_xml.yml の扱い
+- Phase4で使用する `etl_errors.error_code`
+- エラーメッセージの記録方針
+
+### 当初の考え
+- `import_xml.yml` の設定項目をまだ追加で整理する必要があると考えていた。
+- `etl_errors.error_code` は詳細な分類が必要か検討していた。
+- エラーメッセージは個別形式を都度考える想定だった。
+
+### 議論
+- `import_xml.yml` は既に作成済みであり、Phase4ではその設定を参照して処理を行う方針とした。
+- Phase4では実装を優先し、設定項目の追加検討は行わない。
+- `etl_errors.error_code` は初期実装として必要最小限のコードのみ採用する。
+- XML解析失敗・ZIP展開失敗・DB登録失敗など、処理単位で分類できれば十分と判断した。
+- Phase4では検査値単位・項目単位の細かなエラーコードまでは持たず、詳細はエラーメッセージで補足する。
+- エラーメッセージは人が調査しやすいことを優先し、対象ファイル・対象XML・理由を共通フォーマットで保持する。
+- parseエラーやraw抽出失敗時は、可能な限り対象ファイルパス・XMLパス・対象フィールド・例外内容を記録する。
+- normalize・validationはPhase5へ分離したため、それら専用のエラーコードはPhase4では扱わない。
+
+### 現時点の考え
+Phase4は「処理を止めないための最低限のエラー管理」に留める。
+
+詳細な正規化・バリデーション・項目単位エラー管理はPhase5で実装する。
+
+### 決定事項
+- Phase4では既存 `import_xml.yml` を読み込んで処理を行う。
+- Phase4では `etl_errors.error_code` を必要最小限のコードセットで運用する。
+- エラーメッセージは対象ファイル・対象XML・対象フィールド・理由を含む共通フォーマットとする。
+- 検査値単位の詳細エラーコードはPhase4では作成しない。
+- normalize・validation専用エラーコードはPhase5で設計する。
+
+### 保留事項
+- Phase5で追加する normalize / validation 用 error_code 一覧。
+- 共通エラーメッセージ生成ユーティリティの設計。
+- エラーメッセージ多言語対応の要否。
+
+### 根拠
+- Phase4の責務をraw登録までへ限定したこと。
+- 初期実装では処理完了を優先し、過度なエラー分類を避けるため。
+- エラーコードを増やしすぎると保守性が低下するため。
+
+### 次回検討
+- `03_decisions.md` へ今回の決定事項を反映する。
+- Phase4実装開始。
+- Phase5（normalize / validation）の設計を開始する。

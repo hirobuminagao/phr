@@ -1,0 +1,27 @@
+event_id: 2
+
+health_db: health_exam_result
+dev_db: dev_phr
+
+dry_run: false
+limit: 0
+
+input:
+  file_status: DISCOVERED
+  file_types:
+    - ZIP
+    - XML
+  etl_run_id:
+
+zip:
+  target_xml_pattern: "h*.xml"
+  exclude_prefixes:
+    - ix08
+    - su08
+  exclude_keywords:
+    - schema
+    - xsd
+  keep_work: false
+
+processing:
+  chunk_size_mb: 8
