@@ -74,6 +74,10 @@ ERROR_FIELD_DB = "DB"
 XSI_TYPE_ATTR = "{http://www.w3.org/2001/XMLSchema-instance}type"
 NAMECODE_RE = re.compile(r"^[0-9A-Za-z]{17}$")
 EXAM_ITEM_CODE_SYSTEM_OID = "1.2.392.200119.6.1005"
+PATIENT_ID_ROOT_INSURER_NUMBER = "1.2.392.200119.6.101"
+PATIENT_ID_ROOT_INSURANCE_SYMBOL = "1.2.392.200119.6.204"
+PATIENT_ID_ROOT_INSURANCE_NUMBER = "1.2.392.200119.6.205"
+FACILITY_CODE_ROOT = "1.2.392.200119.6.102"
 
 
 @dataclass(frozen=True)
@@ -360,6 +364,80 @@ def first_child_attr(parent: ElementTree.Element, child_name: str, *attrs: str) 
     return None
 
 
+def child_by_local(parent: ElementTree.Element | None, child_name: str) -> ElementTree.Element | None:
+    if parent is None:
+        return None
+    child_name_l = child_name.lower()
+    for child in list(parent):
+        if local_name(child.tag).lower() == child_name_l:
+            return child
+    return None
+
+
+def children_by_local(parent: ElementTree.Element | None, child_name: str) -> list[ElementTree.Element]:
+    if parent is None:
+        return []
+    child_name_l = child_name.lower()
+    return [child for child in list(parent) if local_name(child.tag).lower() == child_name_l]
+
+
+def path_by_local(root: ElementTree.Element, *path: str) -> ElementTree.Element | None:
+    elem: ElementTree.Element | None = root
+    parts = list(path)
+    if parts and local_name(root.tag).lower() == parts[0].lower():
+        parts = parts[1:]
+    for part in parts:
+        elem = child_by_local(elem, part)
+        if elem is None:
+            return None
+    return elem
+
+
+def attr_at_path(root: ElementTree.Element, path: Sequence[str], attr_name: str) -> str | None:
+    elem = path_by_local(root, *path)
+    return attr_value(elem, attr_name) if elem is not None else None
+
+
+def text_at_path(root: ElementTree.Element, path: Sequence[str]) -> str | None:
+    elem = path_by_local(root, *path)
+    return elem_text(elem) if elem is not None else None
+
+
+def attr_at_first_path(root: ElementTree.Element, paths: Sequence[Sequence[str]], attr_name: str) -> str | None:
+    for path in paths:
+        value = attr_at_path(root, path, attr_name)
+        if value:
+            return value
+    return None
+
+
+def patient_role(root: ElementTree.Element) -> ElementTree.Element | None:
+    return path_by_local(root, "ClinicalDocument", "recordTarget", "patientRole")
+
+
+def patient_role_id_extension(root: ElementTree.Element, id_root: str) -> str | None:
+    role = patient_role(root)
+    for elem in children_by_local(role, "id"):
+        if attr_value(elem, "root") == id_root:
+            return attr_value(elem, "extension")
+    return None
+
+
+def service_event(root: ElementTree.Element) -> ElementTree.Element | None:
+    return path_by_local(root, "ClinicalDocument", "documentationOf", "serviceEvent")
+
+
+def extract_document_id(root: ElementTree.Element) -> str | None:
+    doc_id = path_by_local(root, "ClinicalDocument", "id")
+    if doc_id is None:
+        return None
+    root_value = attr_value(doc_id, "root")
+    extension = attr_value(doc_id, "extension")
+    if root_value and extension:
+        return f"{root_value}|{extension}"
+    return root_value or extension
+
+
 def parse_mysql_date(value: str | None) -> str | None:
     if not value:
         return None
@@ -387,28 +465,26 @@ def extract_basic_info(root: ElementTree.Element) -> dict[str, Any]:
         "exam_date": None,
     }
 
-    for elem in iter_named(root, "id"):
-        value = attr_value(elem, "extension", "root")
-        if value:
-            info["document_id"] = value
-            break
-
-    for elem in iter_named(root, "birthTime", "birthdate", "birthDate"):
-        info["birthdate"] = attr_value(elem, "value") or elem_text(elem)
-        if info["birthdate"]:
-            break
-
-    for elem in iter_named(root, "administrativeGenderCode", "gender", "genderCode", "sex"):
-        info["gender_code"] = attr_value(elem, "code", "value") or elem_text(elem)
-        if info["gender_code"]:
-            break
-
-    for elem in iter_named(root, "effectiveTime", "examDate", "exam_date", "kenshinDate"):
-        value = attr_value(elem, "value") or elem_text(elem)
-        parsed = parse_mysql_date(value)
-        if parsed:
-            info["exam_date"] = parsed
-            break
+    info["document_id"] = extract_document_id(root)
+    info["birthdate"] = attr_at_path(
+        root,
+        ("ClinicalDocument", "recordTarget", "patientRole", "patient", "birthTime"),
+        "value",
+    )
+    info["gender_code"] = attr_at_path(
+        root,
+        ("ClinicalDocument", "recordTarget", "patientRole", "patient", "administrativeGenderCode"),
+        "code",
+    )
+    exam_raw = attr_at_first_path(
+        root,
+        (
+            ("ClinicalDocument", "documentationOf", "serviceEvent", "effectiveTime"),
+            ("ClinicalDocument", "documentationOf", "serviceEvent", "effectiveTime", "low"),
+        ),
+        "value",
+    )
+    info["exam_date"] = parse_mysql_date(exam_raw)
 
     for elem in iter_named(root, "nameKana", "name_kana", "kanaName", "kana_name"):
         value = elem_text(elem)
@@ -416,36 +492,33 @@ def extract_basic_info(root: ElementTree.Element) -> dict[str, Any]:
             info["name_kana_full_raw"] = value
             break
     if not info["name_kana_full_raw"]:
-        for elem in iter_named(root, "name"):
-            use = (attr_value(elem, "use") or "").lower()
-            if "kana" not in use and "phonetic" not in use:
-                continue
-            value = elem_text(elem)
-            if value:
-                info["name_kana_full_raw"] = value
+        info["name_kana_full_raw"] = text_at_path(
+            root,
+            ("ClinicalDocument", "recordTarget", "patientRole", "patient", "name"),
+        )
+
+    event = service_event(root)
+    performer_org = path_by_local(
+        root,
+        "ClinicalDocument",
+        "documentationOf",
+        "serviceEvent",
+        "performer",
+        "assignedEntity",
+        "representedOrganization",
+    )
+    if performer_org is not None:
+        for org_id in children_by_local(performer_org, "id"):
+            if attr_value(org_id, "root") == FACILITY_CODE_ROOT:
+                info["facility_code"] = attr_value(org_id, "extension")
                 break
+        info["facility_name"] = first_child_attr(performer_org, "name")
+    if not info["facility_code"] and event is not None:
+        info["facility_code"] = first_child_attr(event, "id", "extension")
 
-    for elem in iter_named(root, "representedOrganization", "organization", "custodianOrganization"):
-        info["facility_code"] = first_child_attr(elem, "id", "extension", "root") or info["facility_code"]
-        info["facility_name"] = first_child_attr(elem, "name") or info["facility_name"]
-        if info["facility_code"] or info["facility_name"]:
-            break
-
-    info["insurer_number_raw"] = first_exact_attr_or_text(
-        root,
-        ("insurerNumber", "insurer_number", "hokenshaNumber", "hokensha_no", "payerNumber"),
-        ("value", "extension", "code"),
-    )
-    info["insurance_symbol_raw"] = first_exact_attr_or_text(
-        root,
-        ("insuranceSymbol", "insurance_symbol", "insuredSymbol", "insured_symbol"),
-        ("value", "extension", "code"),
-    )
-    info["insurance_number_raw"] = first_exact_attr_or_text(
-        root,
-        ("insuranceNumber", "insurance_number", "insuredNumber", "insured_number"),
-        ("value", "extension", "code"),
-    )
+    info["insurer_number_raw"] = patient_role_id_extension(root, PATIENT_ID_ROOT_INSURER_NUMBER)
+    info["insurance_symbol_raw"] = patient_role_id_extension(root, PATIENT_ID_ROOT_INSURANCE_SYMBOL)
+    info["insurance_number_raw"] = patient_role_id_extension(root, PATIENT_ID_ROOT_INSURANCE_NUMBER)
 
     return info
 
@@ -503,6 +576,20 @@ def value_type(value_elem: ElementTree.Element) -> str | None:
     )
 
 
+def extract_value_raw(value_elem: ElementTree.Element | None) -> str | None:
+    if value_elem is None:
+        return None
+    return (
+        attr_value(value_elem, "value")
+        or attr_value(value_elem, "code")
+        or elem_text(value_elem)
+    )
+
+
+def observation_text(elem: ElementTree.Element) -> ElementTree.Element | None:
+    return find_child(elem, "text")
+
+
 @dataclass(frozen=True)
 class UnsupportedNamecode:
     code: str | None
@@ -535,12 +622,15 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
         raw_code = attr_value(code_elem, "code", "value") if code_elem is not None else attr_value(elem, "code")
         raw_code_system = attr_value(code_elem, "codeSystem") if code_elem is not None else attr_value(elem, "codeSystem")
         raw_code_display = attr_value(code_elem, "displayName") if code_elem is not None else attr_value(elem, "displayName")
-        value_elem = find_child(elem, "value") or elem
-        raw_value = (
-            attr_value(value_elem, "value")
-            or attr_value(value_elem, "code")
-            or elem_text(value_elem)
-        )
+        value_elem = find_child(elem, "value")
+        text_elem = observation_text(elem)
+        raw_value = extract_value_raw(value_elem) or elem_text(text_elem) or elem_text(elem)
+        raw_value_type = value_type(value_elem) if value_elem is not None else "ST" if raw_value else None
+        raw_unit = attr_value(value_elem, "unit") if value_elem is not None else None
+        nullflavor = attr_value(value_elem, "nullFlavor") if value_elem is not None else attr_value(elem, "nullFlavor")
+        value_code_system = attr_value(value_elem, "codeSystem") if value_elem is not None else None
+        value_code = attr_value(value_elem, "code") if value_elem is not None else None
+        value_display = attr_value(value_elem, "displayName") if value_elem is not None else None
         if not namecode:
             unsupported_occurrence += 1
             unsupported_namecodes.append(UnsupportedNamecode(code=raw_code, code_system=raw_code_system))
@@ -549,12 +639,12 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                     "namecode": None,
                     "occurrence_no": unsupported_occurrence,
                     "raw_value": raw_value,
-                    "raw_value_type": value_type(value_elem),
-                    "raw_unit": attr_value(value_elem, "unit"),
-                    "nullflavor": attr_value(value_elem, "nullFlavor"),
-                    "code_system": raw_code_system,
-                    "code_value": raw_code,
-                    "code_display": raw_code_display,
+                    "raw_value_type": raw_value_type,
+                    "raw_unit": raw_unit,
+                    "nullflavor": nullflavor,
+                    "code_system": raw_code_system or value_code_system,
+                    "code_value": raw_code or value_code,
+                    "code_display": raw_code_display or value_display,
                     "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                     "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
                 }
@@ -567,12 +657,12 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                 "namecode": namecode,
                 "occurrence_no": occurrence_by_namecode[namecode],
                 "raw_value": raw_value,
-                "raw_value_type": value_type(value_elem),
-                "raw_unit": attr_value(value_elem, "unit"),
-                "nullflavor": attr_value(value_elem, "nullFlavor"),
-                "code_system": attr_value(value_elem, "codeSystem"),
-                "code_value": attr_value(value_elem, "code"),
-                "code_display": attr_value(value_elem, "displayName"),
+                "raw_value_type": raw_value_type,
+                "raw_unit": raw_unit,
+                "nullflavor": nullflavor,
+                "code_system": raw_code_system or value_code_system,
+                "code_value": raw_code or value_code,
+                "code_display": raw_code_display or value_display,
                 "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                 "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
             }
