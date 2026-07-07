@@ -5,7 +5,7 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   `ledger_id` bigint unsigned NOT NULL,
   `subscriber_id` bigint unsigned DEFAULT NULL,
   `hia_subscriber_id` varchar(190) DEFAULT NULL,
-  `namecode` char(17) NOT NULL,
+  `namecode` char(17) DEFAULT NULL,
   `occurrence_no` int NOT NULL DEFAULT 1,
   `raw_value` text,
   `raw_value_type` varchar(32) DEFAULT NULL,

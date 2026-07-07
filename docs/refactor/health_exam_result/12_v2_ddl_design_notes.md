@@ -133,7 +133,7 @@ result_root_path
 ### 用途
 
 - `namecode` から項目名・値型・単位・代表項目コードを解決する。
-- `exam_item_values` 登録時の項目辞書として利用する。
+- 後続正規化Phaseや制度チェック時の項目辞書として利用する。
 - 異常値チェックの min/max を追加する候補。
 
 ---
@@ -423,14 +423,17 @@ created_at
 
 ### 役割
 
-健診結果値の共通基盤。初期実装ではXML由来を対象とし、将来的にCSV由来も受け入れる。
+健診結果値の共通基盤。初期実装ではXML由来を対象とし、将来的にCSV由来も受け入れる。正しい検査値だけではなく、XMLから健診値として取得できた事実を保持する。
 
 ### 責務
 
 - XML / CSV 由来の健診項目値を共通形式で保持する。
 - 由来Ledgerを `ledger_type` / `ledger_id` で表現する。
 - 検索性向上のため `event_id` / `subscriber_id` / `hia_subscriber_id` を冗長保持する。
-- 実際に存在した健診値のみを保持する。
+- 実際に存在した健診値のみを保持する。不足項目を補完行として作ることはしない。
+- namecodeが判定できない、または未対応の検査値entryでも、raw値を取得できる場合は捨てずに保持する。
+- unsupported namecode は `namecode = NULL` とし、`code_system` / `code_value` / `code_display` / raw系カラムへ取得できた情報を保持する。
+- unsupported namecode はETL Errorにも記録し、調査・マスタ追加・再処理の導線を残す。
 - raw値と正規化値を保持する。
 - 正規化状態・正規化理由を保持する。
 - 項目値としての妥当性（範囲外・形式不正等）を保持する。
@@ -444,7 +447,7 @@ ledger_type
 ledger_id
 subscriber_id
 hia_subscriber_id
-namecode
+namecode (NULL許可。unsupported namecodeの場合はNULL)
 occurrence_no
 raw_value
 raw_value_type
@@ -473,7 +476,8 @@ updated_at
 - `exam_item_values` はXML専用ではなく、XML / CSV 共通の健診値テーブルとする。
 - `ledger_type` は現時点では `XML` / `CSV` を採用し、それ以外の入力元は現時点では決定しない。
 - `ledger_id` は `ledger_type` と組み合わせて由来Ledgerを表現する。
-- `exam_item_values` は実際に存在した健診値のみを保持する。
+- `exam_item_values` は実際に存在した健診値のみを保持する。不足項目の補完行は作らないが、XML上に検査値らしきentryとして存在するものは、namecodeが判定できない場合も可能な限りraw行を保持する。
+- `namecode` はNULL許可とし、unsupported namecodeのraw行ではNULLを設定する。検査項目コード体系や形式が未対応の場合でも、`code_system` / `code_value` / `code_display` に取得できたコード情報を残す。
 - 制度チェックは、`exam_item_values` に存在する値だけでなく「存在しない項目」も判定材料とするため、`exam_check_results` 側の責務とする。
 - 項目値としての妥当性（範囲外・形式不正等）は `validation_status` / `validation_reason` で保持する。
 - `validation_status` は制度チェックではなく、値そのものの妥当性を表す。

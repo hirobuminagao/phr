@@ -186,8 +186,8 @@ Phase3 01_scan_files.pyのみを実装する。
 - parse不能XMLでもXMLファイル自体のSHA256から `xml_sha256` を算出し、最小情報で `xml_ledger` を作成できる。
 - parse不能XMLの `xml_status` は `PARSE_ERROR` とし、`etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録できる。
 - Phase4の `etl_errors.field` は `CONFIG` / `FILE` / `ZIP` / `XML` / `IDENTITY` / `SUBSCRIBER` / `DB` を基本とする。
-- Phase4の主な `etl_errors.error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
-- 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せ、検査値単位の詳細エラーコードと normalize / validation 専用エラーコードはPhase4では作成しない。
+- Phase4の主な `etl_errors.error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。unsupported namecode はraw抽出失敗とは分け、`field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。normalize / validation 専用エラーコードはPhase4では作成しない。
 - `etl_errors.message` は人間確認用とし、parse不能XMLは `xml parse failed: path=<path>, inner_path=<inner_path>, reason=<parser_error>`、ZIP内対象XML0件は `zip has no target xml: path=<path>, pattern=h*.xml, excludes=ix08,su08,schema,xsd`、raw抽出失敗は `xml raw extract failed: path=<path>, inner_path=<inner_path>, field=<field>, reason=<reason>` を基本形式とする。複数fieldの場合は `fields=<field1>,<field2>` とする。
 - parse不能XMLでは `identity_hash` / `person_id_custom` / `subscriber_id` / `hia_subscriber_id` は設定せず、`exam_item_values` も登録しない。
 - 物理ファイルとXML内容の対応は `xml_file_links` に記録される。
@@ -198,6 +198,7 @@ Phase3 01_scan_files.pyのみを実装する。
 - Phase4が `generate_identity_bundle()` の戻り値として利用するのは、`ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみとする。
 - XML parserはraw値抽出のみを担当し、identity用の独自正規化を実装しない。
 - 健診値は `exam_item_values` に縦持ちで登録される。
+- `exam_item_values` はXMLから検査値として取得できた事実を保持するテーブルとし、正しいデータだけ保存する方針は採用しない。
 - `exam_item_values` は `xml_ledger` 作成後に登録される。
 - XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` が登録される。
 - 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
@@ -206,6 +207,7 @@ Phase3 01_scan_files.pyのみを実装する。
 - Phase4では `exam_item_values.normalized_value` / `normalized_unit` を生成せず、`normalize_status` / `validation_status` も更新しない。
 - Phase4では検査値の正規化・バリデーション、`exam_item_status` 更新、`file_receipts` への検査値サマリー集約を実施しない。
 - XML内に項目entryとして存在したものは、可能な限り `exam_item_values` にraw値の行が作成される。
+- namecodeが判定できない unsupported namecode は `namecode = NULL` としてraw値・raw unit・nullFlavor・code系情報を保持し、あわせて `etl_errors` に `XML_UNSUPPORTED_NAMECODE` を記録する。
 - 後続の正規化Phaseでは `exam_item_values` のraw値を入力とし、`exam_item_master`、必要に応じて `norm_variants`、`normalize_exam_item_value()` を用いて正規化・バリデーションを実施する。
 - `norm_variants` はCD/CO系検査値の表記ゆれ辞書として限定利用し、`result_code_oid + raw_value_utf8` の完全一致を基本とする。
 - `norm_rules`、`raw_token_norm`、`normalize_plus_tokens`、`exam_value_normalizer.py` 相当の高度な前処理は後続Phaseでも初期採用せず、将来拡張とする。

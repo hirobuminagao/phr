@@ -97,7 +97,7 @@
 | `file_receipts` | 物理ファイル単位の受領・処理サマリー台帳。人＋イベント単位の最終完了状態は持たない。 |
 | `xml_file_links` | `file_receipts` と `xml_ledger` の対応台帳。ZIP内XMLパスを保持する。 |
 | `xml_ledger` | XML内容単位の一意台帳。XML取込状態、加入者照合結果、XML単位の最新HIA出力状態を持つ。`file_receipt_id` は持たない。 |
-| `exam_item_values` | 実際に存在した健診値の縦持ち。XML/CSV共通の将来拡張を想定し、`ledger_type` / `ledger_id` で由来を表す。 |
+| `exam_item_values` | XMLから健診値として取得できた事実の縦持ち。unsupported namecodeもraw行として保持し、XML/CSV共通の将来拡張を想定して `ledger_type` / `ledger_id` で由来を表す。 |
 | `exam_check_results` | 制度チェック結果の横持ち台帳。対象72項目の `status_<item_code>` / `reason_<item_code>` を一度だけ保持し、制度単位の総合判定の入力とする。core DDLからは一旦外す。 |
 | `medical_folder_aliases` | event単位の医療機関フォルダ名変換台帳。 |
 
@@ -432,9 +432,9 @@ Phase3登録時の固定値・方針:
 ### Phase4 etl_errors 最小運用
 
 - Phase4では `etl_errors.error_code` を必要最小限のコードセットで運用する。
-- 主な `error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- 主な `error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
 - `etl_errors.field` は `CONFIG`、`FILE`、`ZIP`、`XML`、`IDENTITY`、`SUBSCRIBER`、`DB` を基本とする。
-- 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。
+- 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。unsupported namecode はraw抽出失敗とは分け、`field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。
 - 検査値単位の詳細エラーコードと normalize / validation 専用エラーコードはPhase4では作成せず、Phase5で設計する。
 - `etl_errors.message` は対象ファイル、対象XML、対象フィールド、理由を含む人間確認用テキストとする。
 - parse不能XMLは `xml parse failed: path=<path>, inner_path=<inner_path>, reason=<parser_error>` を基本形式とする。
@@ -467,9 +467,10 @@ Phase4で使用する正式コード:
 ### exam_item_values 登録
 
 - `exam_item_values` はPhase4（`02_import_xml.py`）で、`xml_ledger` 作成後に登録する。
-- 実際にXML内に存在した健診値のみ登録する。
+- `exam_item_values` はXMLから健診値として取得できた事実を保持する。正しいデータだけ保存する方針ではなく、XML内に実際に存在した検査値entryは可能な限りraw行として登録する。
+- 制度チェック上の不足項目は登録しないが、namecodeが判定できない unsupported namecode でも、取得できたraw値・code系情報は `namecode = NULL` の行として保持する。
+- unsupported namecode は `etl_errors` にも `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。
 - XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` を登録する。
-- 制度チェック上の不足項目は `exam_item_values` には作らず、`exam_check_results` で判定する。
 - `ledger_type = XML`、`ledger_id = xml_ledger.id` とする。
 - `event_id` / `subscriber_id` / `hia_subscriber_id` は検索性向上の冗長カラムとして保持する。
 - Phase4ではraw値、raw unit、nullFlavor、code系情報などを登録し、正規化済み値・正規化状態・妥当性判定は更新しない。

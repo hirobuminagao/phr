@@ -309,7 +309,9 @@ ZIP内複数XML:
 
 ## 11. exam_item_values登録方針
 
-Phase4では、XML内に実際に存在した健診項目値のみ `exam_item_values` に登録する。
+Phase4では、XML内に実際に存在した健診項目値のみ `exam_item_values` に登録する。不足項目を補完行として作ることはしない。
+
+`exam_item_values` はXMLから検査値として取得できた事実を保持するテーブルとし、正しいデータだけ保存する方針は採用しない。XML上に検査値らしきentryとして存在するものは、namecodeが判定できない場合も可能な限りraw行として保持する。
 
 `exam_item_values` はPhase4（`02_import_xml.py`）で、`xml_ledger` 作成後に登録する。XML解析が成功している場合は、identity生成に失敗しても検査値はXML内容として保持できるため、`exam_item_values` を登録する。
 
@@ -349,6 +351,13 @@ Phase4で使用する正式コード:
 - `jun_no`
 - `extracted_run_id`
 - `extracted_at`
+
+unsupported namecode:
+
+- 検査項目コード体系や形式が未対応でnamecodeを採用できない場合でも、raw値を取得できるものは `exam_item_values` に登録する。
+- `namecode = NULL` とし、`code_system` / `code_value` / `code_display` / raw系カラムへ取得できた情報を保持する。
+- `etl_errors` にも `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として代表エラーを記録する。
+- `XML_RAW_EXTRACT_FAILED` はraw抽出自体が失敗した場合に限定する。
 
 Phase4で実施しないもの:
 
@@ -476,8 +485,8 @@ Errors:
 - `log_error` を利用する。
 - Phase4の `etl_errors` は `field`、`error_code`、`message` を基本構成として記録する。
 - `field` は `CONFIG` / `FILE` / `ZIP` / `XML` / `IDENTITY` / `SUBSCRIBER` / `DB` を基本とする。
-- `error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
-- 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。
+- `error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。unsupported namecode はraw抽出失敗とは分け、`field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。
 - 検査値単位の詳細エラーコードと normalize / validation 専用エラーコードはPhase4では作成しない。
 - `message` は対象ファイル、対象XML、対象フィールド、理由を含む人間確認用テキストとする。
 - XML parse不能は `xml parse failed: path=<path>, inner_path=<inner_path>, reason=<parser_error>` を基本形式とする。
@@ -504,7 +513,7 @@ Errors:
 | `xml_ledger.exam_item_status` DDL | `xml_ledger.exam_item_status` / `exam_item_reason` をDDLへ追加し、既存DB向けMigration `20260707_001_health_exam_result_add_exam_item_status.sql` を作成済み。Phase4では更新せず、後続Phaseで更新する。 | 後続Phaseで検査値抽出・妥当性の総合状態を `xml_ledger` に保持するため。 | 決定済み。 |
 | 既存XML再受領 | `xml_sha256` 一致で判定し、同一 `xml_sha256` 再受領時は `xml_file_links` のみ追加する。 | `xml_ledger` はXML内容の一意台帳であり、同一内容XMLを重複登録しないため。 | 決定済み。`SKIPPED` の詳細表現は未決。 |
 | `xml_file_links` 重複 | UNIQUE衝突は重複リンクとしてスキップ。 | 再実行時の冪等性を確保する。 | 重複リンクをRunスキップ件数に含めるか。 |
-| `exam_item_values` 登録 | Phase4で `xml_ledger` 作成後にraw値を登録する。XML解析が成功していればidentity生成失敗時も登録し、同一 `xml_sha256` 再受領時は再登録しない。一部検査値raw値の抽出失敗時は取得可能なraw値を登録し、不足・異常は `etl_errors` に記録して継続する。 | 検査値は加入者照合結果とは独立したXML内容であり、XML解析成功時にraw事実として保持できるため。 | 決定済み。raw抽出失敗は `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。 |
+| `exam_item_values` 登録 | Phase4で `xml_ledger` 作成後にraw値を登録する。XML解析が成功していればidentity生成失敗時も登録し、同一 `xml_sha256` 再受領時は再登録しない。一部検査値raw値の抽出失敗時は取得可能なraw値を登録し、不足・異常は `etl_errors` に記録して継続する。unsupported namecode も `namecode = NULL` のraw行として保持する。 | 検査値は加入者照合結果とは独立したXML内容であり、XML解析成功時にraw事実として保持できるため。現場調査では「正しいデータだけ」より「届いた事実を失わない」ことが重要なため。 | 決定済み。raw抽出失敗は `XML_RAW_EXTRACT_FAILED`、unsupported namecode は `XML_UNSUPPORTED_NAMECODE` として区別する。 |
 | Phase4の正規化・バリデーション | Phase4では normalize、validation、`exam_item_status` 更新、`normalize_status` 更新、`validation_status` 更新、`normalized_value` / `normalized_unit` 生成、検査値サマリー集約を実施しない。 | XML取込と検査値正規化は責務が異なり、raw値があれば正規化は独立再実行できるため。 | 決定済み。 |
 | `exam_item_master` lookup | `exam_item_master` を検査項目定義・バリデーション基準の正とし、参照処理は共通Lookupライブラリへ集約する。呼び出し側スクリプトで個別SQLを直接実装しない。単品取得と複数取得の両APIを提供する。 | 後続正規化Phaseと後続制度チェックで同じ項目定義参照を再利用し、SQL実装を一元管理するため。 | 決定済み。キャッシュ方式、返却dictの正式キー、取得対象カラム一覧は未決。 |
 | `normalize_status` / `validation_status` | 後続Phaseで管理する。`normalize_status` はraw値から `normalized_value` / `normalized_unit` を作成できたか、`validation_status` は `exam_item_master` 定義に照らした妥当性を表す。数値変換不可は `ERROR / INVALID / INVALID_VALUE_TYPE`、namecode未登録は `SKIPPED / INVALID / UNKNOWN_NAMECODE`、単位不一致は `WARNING / WARNING / UNIT_MISMATCH`、正常は `OK / OK` とする。 | 正規化可否とマスタ定義上の妥当性を分離し、制度チェックとは別に扱うため。 | 決定済み。コード一覧最終版は未決。 |
@@ -551,4 +560,4 @@ Errors:
 
 Phase4の責務範囲、status正式コード、ETL metrics基準、既存 `import_xml.yml` 利用方針、最小 `error_code`、`field`、message基本形式は整理できている。Phase4はXML読込、XML Ledger登録、identity生成、subscriber照合、`exam_item_values` raw値登録までに責務を限定する。
 
-Phase4の入力条件、configファイル名、一部成功ZIP、既存XML再受領、Phase4 `etl_errors` 基本構成、identity生成失敗時の記録仕様、parse不能XMLの台帳化、`processable_count` 更新、状態管理の責務分離、status正式コード、ETL metrics基準、`xml_ledger.exam_item_status` / `exam_item_reason` のDDL・Migration対応、Phase4では正規化・バリデーションを実施しない方針、`exam_item_values` raw値登録方針は決定済みである。Phase4実装GOと判断する。正規化・バリデーションは後続Phaseとして別途設計し、Phase4実装内で仮決定しない。
+Phase4の入力条件、configファイル名、一部成功ZIP、既存XML再受領、Phase4 `etl_errors` 基本構成、identity生成失敗時の記録仕様、parse不能XMLの台帳化、`processable_count` 更新、状態管理の責務分離、status正式コード、ETL metrics基準、`xml_ledger.exam_item_status` / `exam_item_reason` のDDL・Migration対応、Phase4では正規化・バリデーションを実施しない方針、`exam_item_values` raw値登録方針、unsupported namecodeを `exam_item_values.namecode = NULL` のraw行と `etl_errors.XML_UNSUPPORTED_NAMECODE` の両方で管理する方針は決定済みである。Phase4実装GOと判断する。正規化・バリデーションは後続Phaseとして別途設計し、Phase4実装内で仮決定しない。

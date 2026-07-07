@@ -158,7 +158,10 @@
 - `xml_file_links.xml_inner_path` はZIP内相対パスを保持する。
 - XML単体ファイルの場合、`xml_file_links.xml_inner_path` は `NULL` とする。
 - `exam_item_values` は健診結果値の共通基盤とする。初期実装では XML 由来を対象とし、将来的に CSV 由来も同一構造で扱う。
-- `exam_item_values` は実際に存在した健診値のみを保持する。
+- `exam_item_values` はXMLから健診値として取得できた事実を保持するテーブルとし、「正しいデータだけ保存する」方針は採用しない。
+- `exam_item_values` は実際に存在した健診値のみを保持する。不足項目を補完行として作ることはしないが、XML上に検査値らしきentryとして存在するものは、namecodeが判定できない場合も可能な限りraw行を保持する。
+- unsupported namecode は捨てず、`exam_item_values.namecode = NULL` として raw値、raw unit、nullFlavor、code系情報などを保持する。
+- unsupported namecode は `etl_errors` にも `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録し、調査・マスタ追加・再処理の導線を残す。
 - `exam_item_values` は縦持ちとする。
 - `exam_item_values` の由来は `ledger_type` / `ledger_id` で表現する。
 - `exam_item_values` には `event_id`、`subscriber_id`、`hia_subscriber_id` を検索性向上のため冗長保持する。
@@ -180,6 +183,7 @@
 - 複数取得は複数 `namecode` を指定し、`namecode -> item情報` のdictで返す。
 - 複数取得はPhase4のXML内namecode一括処理や後続制度チェックで利用し、単品取得は調査・個別処理・後続スクリプトで利用する。
 - XML内に項目entryとして存在したものは、Phase4で可能な限り `exam_item_values` にraw値の行を作る。
+- `XML_RAW_EXTRACT_FAILED` はraw抽出自体が失敗した場合に使い、unsupported namecode は `XML_UNSUPPORTED_NAMECODE` として区別する。
 - 項目単位の正規化・妥当性結果は、後続Phaseで `exam_item_values.normalize_status` / `normalize_reason` および `validation_status` / `validation_reason` に保持する。
 - 正規化とバリデーションは責務を分離する。
 - 正常な場合は `normalize_status = OK`、`validation_status = OK` を基本とする。
@@ -370,11 +374,11 @@
 - 一部検査値raw値の抽出に失敗した場合は、取得可能な検査値raw値は登録し、不足・異常は `etl_errors` に記録して処理を継続する。
 - Phase4の `etl_errors` は `field`、`error_code`、`message` を基本構成として記録する。
 - Phase4では `etl_errors.error_code` を必要最小限のコードセットで運用する。
-- Phase4で扱う主な `etl_errors.error_code` は、`CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- Phase4で扱う主な `etl_errors.error_code` は、`CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
 - Phase4では検査値単位の詳細エラーコードを作成しない。
 - normalize / validation 専用エラーコードはPhase5で設計する。
 - Phase4の `etl_errors.field` は、`CONFIG`、`FILE`、`ZIP`、`XML`、`IDENTITY`、`SUBSCRIBER`、`DB` を基本とする。
-- 検査値raw抽出エラーは初期Phase4では `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。
+- 検査値raw抽出エラーは初期Phase4では `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。unsupported namecode はraw抽出失敗とは分け、`field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。
 - normalize / validation 系の `field` はPhase4では扱わない。
 - Phase4の `etl_errors.message` は人が調査しやすい内容を優先し、対象ファイル、対象XML、対象フィールド、理由を含む共通フォーマットとする。
 - parse不能XMLの `etl_errors.message` は `xml parse failed: path=<path>, inner_path=<inner_path>, reason=<parser_error>` を基本とする。
