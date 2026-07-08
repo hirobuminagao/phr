@@ -73,7 +73,6 @@ ERROR_FIELD_DB = "DB"
 
 XSI_TYPE_ATTR = "{http://www.w3.org/2001/XMLSchema-instance}type"
 NAMECODE_RE = re.compile(r"^[0-9A-Za-z]{17}$")
-EXAM_ITEM_CODE_SYSTEM_OID = "1.2.392.200119.6.1005"
 PATIENT_ID_ROOT_INSURER_NUMBER = "1.2.392.200119.6.101"
 PATIENT_ID_ROOT_INSURANCE_SYMBOL = "1.2.392.200119.6.204"
 PATIENT_ID_ROOT_INSURANCE_NUMBER = "1.2.392.200119.6.205"
@@ -326,7 +325,9 @@ def attr_value(elem: ElementTree.Element, *names: str) -> str | None:
     return None
 
 
-def elem_text(elem: ElementTree.Element) -> str | None:
+def elem_text(elem: ElementTree.Element | None) -> str | None:
+    if elem is None:
+        return None
     return compact_text("".join(elem.itertext()))
 
 
@@ -548,10 +549,6 @@ def is_valid_namecode(value: str | None) -> bool:
     return bool(value and NAMECODE_RE.match(value))
 
 
-def has_exam_item_code_system(elem: ElementTree.Element) -> bool:
-    return attr_value(elem, "codeSystem") == EXAM_ITEM_CODE_SYSTEM_OID
-
-
 def find_code_element(elem: ElementTree.Element) -> ElementTree.Element | None:
     if local_name(elem.tag).lower() == "code":
         return elem
@@ -560,7 +557,7 @@ def find_code_element(elem: ElementTree.Element) -> ElementTree.Element | None:
 
 def find_namecode(elem: ElementTree.Element) -> str | None:
     code_elem = find_code_element(elem)
-    if code_elem is None or not has_exam_item_code_system(code_elem):
+    if code_elem is None:
         return None
     value = attr_value(code_elem, "code", "value")
     if is_valid_namecode(value):
@@ -642,9 +639,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                     "raw_value_type": raw_value_type,
                     "raw_unit": raw_unit,
                     "nullflavor": nullflavor,
-                    "code_system": raw_code_system or value_code_system,
-                    "code_value": raw_code or value_code,
-                    "code_display": raw_code_display or value_display,
+                    "code_system": value_code_system or raw_code_system,
+                    "code_value": value_code or raw_code,
+                    "code_display": value_display or raw_code_display,
                     "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                     "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
                 }
@@ -660,9 +657,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                 "raw_value_type": raw_value_type,
                 "raw_unit": raw_unit,
                 "nullflavor": nullflavor,
-                "code_system": raw_code_system or value_code_system,
-                "code_value": raw_code or value_code,
-                "code_display": raw_code_display or value_display,
+                "code_system": value_code_system or raw_code_system,
+                "code_value": value_code or raw_code,
+                "code_display": value_display or raw_code_display,
                 "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                 "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
             }
