@@ -16,6 +16,8 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   `code_system` varchar(190) DEFAULT NULL,
   `code_value` varchar(190) DEFAULT NULL,
   `code_display` varchar(255) DEFAULT NULL,
+  `namecode_display_name` varchar(255) DEFAULT NULL,
+  `negation_ind` tinyint(1) DEFAULT NULL,
   `identity_item_code` varchar(32) DEFAULT NULL,
   `jun_no` int DEFAULT NULL,
   `normalize_status` varchar(32) DEFAULT NULL,

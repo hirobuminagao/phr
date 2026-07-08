@@ -383,6 +383,8 @@ Phase3登録時の固定値・方針:
 - `code_system`
 - `code_value`
 - `code_display`
+- `namecode_display_name`
+- `negation_ind`
 - `identity_item_code`
 - `jun_no`
 - `normalize_status`
@@ -481,11 +483,14 @@ Phase4で使用する正式コード:
 - `ledger_type = XML`、`ledger_id = xml_ledger.id` とする。
 - `event_id` / `subscriber_id` / `hia_subscriber_id` は検索性向上の冗長カラムとして保持する。
 - Phase4ではraw値、raw unit、nullFlavor、code系情報などを登録し、正規化済み値・正規化状態・妥当性判定は更新しない。
+- `observation/code/displayName` は検査項目名として `namecode_display_name` に保持する。
+- `value/@displayName` はCD/CO等の結果値コード名称として `code_display` に保持し、PQ/ST等では `code_display` を設定しない。
+- `observation/@negationInd` は `negation_ind` にraw属性として保持し、Phase4では判定には使わない。
 - Phase4では厚生労働省HL7仕様に完全準拠したextractorを最初から作り込まず、旧medi系実装で実績のある基本情報取得方法とentry探索思想を優先する。
 - 健診項目取得はentry / observation 配下を広めに探索し、XMLを安全に台帳化して取得できたraw値を失わず保持することを優先する。
 - `entryRelationship` 配下の `observation` は通常の健診項目候補として取り込み、17文字namecodeを持つ `observation` はPQ/ST/CD/COなど型に関わらず保持する。
 - wrapper `observation` は登録せず、`raw_value` は対象 `observation` の direct child `value` または `text` のみから取得する。
-- `displayName` は `raw_value` として扱わず、`code_display` として保持する。
+- `displayName` は `raw_value` として扱わず、検査項目名と結果値名称を分離して保持する。
 - 厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析はPhase5以降のリファクタリング対象とする。
 - Phase4では `exam_item_master` / `norm_variants` を用いた正規化・バリデーションを実施しない。
 - 後続の正規化Phaseでは `exam_item_values` のraw値を入力とし、`exam_item_master`、必要に応じて `norm_variants`、`normalize_exam_item_value()` を用いて正規化・バリデーションを実施する。

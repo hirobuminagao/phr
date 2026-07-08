@@ -354,6 +354,8 @@ Phase4で使用する正式コード:
 - `namecode`
 - `occurrence_no`
 - raw値、raw unit、nullFlavor、code系情報
+- `namecode_display_name`
+- `negation_ind`
 - `identity_item_code`
 - `jun_no`
 - `extracted_run_id`
@@ -362,7 +364,7 @@ Phase4で使用する正式コード:
 unsupported namecode:
 
 - 検査項目コード体系や形式が未対応でnamecodeを採用できない場合でも、raw値を取得できるものは `exam_item_values` に登録する。
-- `namecode = NULL` とし、`code_system` / `code_value` / `code_display` / raw系カラムへ取得できた情報を保持する。
+- `namecode = NULL` とし、`code_system` / `code_value` / `code_display` / `namecode_display_name` / raw系カラムへ取得できた情報を保持する。
 - `namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
 - `etl_errors` にも `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として代表エラーを記録する。
 - `XML_RAW_EXTRACT_FAILED` はraw抽出自体が失敗した場合に限定する。
@@ -377,7 +379,11 @@ XML抽出方針:
 - 17文字namecodeを持つ `observation` は、PQ/ST/CD/COなど型に関わらず `exam_item_values` へ保持する。
 - wrapper `observation` は登録しない。
 - `raw_value` は対象 `observation` の direct child `value` または `text` のみから取得し、親 `observation` が子孫値を集約しないようにする。
-- `displayName` は `raw_value` として扱わず、`code_display` として保持する。
+- `observation/code/displayName` は検査項目名として `namecode_display_name` に保持する。
+- `value/@displayName` はCD/CO等の結果値コード名称として `code_display` に保持する。
+- PQ/ST等、結果値コードを持たない型では `code_display` を設定しない。
+- `observation/@negationInd` は `negation_ind` にraw属性として保持し、Phase4では判定には使わない。
+- `displayName` は `raw_value` として扱わない。
 - XML構造情報と健診値を混在させない。
 - Phase4の目的は、XMLを安全に台帳化し、取得できたraw値を失わず保持することである。
 - 厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析は、Phase5以降のリファクタリング対象とする。

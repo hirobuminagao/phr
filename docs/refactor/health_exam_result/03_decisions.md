@@ -163,6 +163,9 @@
 - unsupported namecode は捨てず、`exam_item_values.namecode = NULL` として raw値、raw unit、nullFlavor、code系情報などを保持する。
 - `exam_item_values.namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
 - unsupported namecode は `etl_errors` にも `field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録し、調査・マスタ追加・再処理の導線を残す。
+- `observation/code/displayName` は検査項目名として `exam_item_values.namecode_display_name` に保持する。
+- `value/@displayName` はCD/CO等の結果値コード名称として `exam_item_values.code_display` に保持し、PQ/ST等では設定しない。
+- `observation/@negationInd` は `exam_item_values.negation_ind` にraw属性として保持する。
 - この方針は、現場で健診値一覧からエラー行を確認できるようにするための人間中心設計である。
 - `exam_item_values` は縦持ちとする。
 - `exam_item_values` の由来は `ledger_type` / `ledger_id` で表現する。
@@ -388,7 +391,11 @@
 - 17文字の検査コードを持つ `observation` は、値種別（PQ/ST/CD/CO等）に関わらず `exam_item_values` へ保持する。
 - wrapper `observation` は登録しない。
 - `raw_value` は対象 `observation` の direct child である `value` または `text` のみから取得する。
-- `displayName` を `raw_value` の代替として利用せず、`code_display` として保持する。
+- `observation/code/displayName` は検査項目名であり、結果値ではないため、`namecode_display_name` に保持する。
+- `value/@displayName` はCD/CO等の結果値コード名称であり、`code_display` に保持する。
+- PQ/ST等、結果値コードを持たない型では `code_display` を設定しない。
+- `observation/@negationInd` は `exam_item_values.negation_ind` にraw属性として保持する。Phase4では判定には使わず、後続の制度チェック・実施有無判定の材料として残す。
+- `displayName` を `raw_value` の代替として利用しない。
 - XML構造情報と健診値を混在させない。
 - Phase4の `etl_errors` は `field`、`error_code`、`message` を基本構成として記録する。
 - Phase4では `etl_errors.error_code` を必要最小限のコードセットで運用する。

@@ -671,6 +671,7 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
         value_code_system = attr_value(value_elem, "codeSystem") if value_elem is not None else None
         value_code = attr_value(value_elem, "code") if value_elem is not None else None
         value_display = attr_value(value_elem, "displayName") if value_elem is not None else None
+        negation_ind = parse_bool_int(attr_value(elem, "negationInd"))
         if not namecode:
             unsupported_occurrence += 1
             unsupported_namecodes.append(UnsupportedNamecode(code=raw_code, code_system=raw_code_system))
@@ -684,7 +685,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                     "nullflavor": nullflavor,
                     "code_system": value_code_system or raw_code_system,
                     "code_value": value_code or raw_code,
-                    "code_display": value_display or raw_code_display,
+                    "code_display": value_display,
+                    "namecode_display_name": raw_code_display,
+                    "negation_ind": negation_ind,
                     "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                     "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
                 }
@@ -702,7 +705,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                 "nullflavor": nullflavor,
                 "code_system": value_code_system or raw_code_system,
                 "code_value": value_code or raw_code,
-                "code_display": value_display or raw_code_display,
+                "code_display": value_display,
+                "namecode_display_name": raw_code_display,
+                "negation_ind": negation_ind,
                 "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                 "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
             }
@@ -718,6 +723,17 @@ def parse_int(value: str | None) -> int | None:
         return int(value)
     except ValueError:
         return None
+
+
+def parse_bool_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    value_l = value.strip().lower()
+    if value_l in {"true", "1"}:
+        return 1
+    if value_l in {"false", "0"}:
+        return 0
+    return None
 
 
 def is_target_inner_xml(name: str, zip_config: ZipConfig) -> bool:
@@ -1001,6 +1017,8 @@ def insert_exam_item_values(
             row.get("code_system"),
             row.get("code_value"),
             row.get("code_display"),
+            row.get("namecode_display_name"),
+            row.get("negation_ind"),
             row.get("identity_item_code"),
             row.get("jun_no"),
             run_id,
@@ -1015,6 +1033,7 @@ def insert_exam_item_values(
             namecode, occurrence_no,
             raw_value, raw_value_type, raw_unit,
             nullflavor, code_system, code_value, code_display,
+            namecode_display_name, negation_ind,
             identity_item_code, jun_no,
             extracted_run_id, extracted_at
         )
@@ -1024,6 +1043,7 @@ def insert_exam_item_values(
             %s, %s,
             %s, %s, %s,
             %s, %s, %s, %s,
+            %s, %s,
             %s, %s,
             %s, CURRENT_TIMESTAMP(3)
         )

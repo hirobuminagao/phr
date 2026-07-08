@@ -3922,3 +3922,50 @@ XML解析以降はZIPが正常展開済みであることを前提とする。
 - `import_xml.yml` のパスワード設定仕様を確定する。
 - ZIP展開処理へ設定値読み込みを実装する。
 - ETLエラーコードとメッセージを整理する。
+
+---
+
+## DH-20260708-3 / 2026-07-08 10:14 JST
+
+### テーマ
+exam_item_values における検査項目名と結果値名称の責務整理
+
+### 背景
+Phase4 XML取込の実装・動作確認を進める中で、`observation/code/displayName` と `value/@displayName` の扱いを整理した。
+
+現行実装では、検査項目の `displayName` と、結果値コード（CD/CO）の `displayName` を同じ `code_display` カラムで保持していた。しかし、PQ・ST型では結果値名称が存在しないため、検査項目名が `code_display` に入る状態となっていた。
+
+### 議論
+- `observation/code/displayName` は検査項目名であり、検査値ではない。
+- `value/@displayName` はCD・COなどコード値を持つ検査結果の意味を表す名称であり、検査項目名とは責務が異なる。
+- `code_display` は結果値コード（CD/CO）の表示名称として利用するため、PQ・ST等では値を持たない方が自然である。
+- 検査項目名は別カラムとして保持した方が責務が明確になる。
+- そのため、`observation/code/displayName` を保持する新規カラム（例: `namecode_display_name`）を追加する方向で整理した。
+- `code_display` は `value/@displayName` が存在する場合のみ保持し、結果値コードを持たないPQ・STではNULLとする。
+- `negationInd` についても将来的な判定材料となる可能性があるため、別途保持を検討する。
+
+### 現時点の考え
+検査項目名と検査結果値名称は意味が異なるため、同一カラムでは管理しない。
+
+`exam_item_values` は受領した事実を忠実に保持することを優先し、検査項目名と結果値名称をそれぞれ独立した情報として保持する。
+
+### 決定事項
+- `observation/code/displayName` は検査項目名として別カラムへ保持する方向とする。
+- `code_display` はCD・CO等の結果値コード名称として利用する。
+- PQ・ST等では `code_display` を設定しない。
+- `negationInd` は将来的な保持対象として検討する。
+
+### 保留事項
+- 新規カラムの正式名称。
+- `negationInd` の保持先と利用用途。
+- DDL・スクリプトへの正式反映。
+
+### 根拠
+- HL7 CDAでは `observation/code` と `value` は異なる意味を持つため。
+- 検査項目名と結果値名称を分離した方がデータの意味を正確に保持できるため。
+- 将来の正規化・変換・デバッグでも情報の欠落を防げるため。
+
+### 次回検討
+- `exam_item_values` DDLへ新規カラムを追加する。
+- `02_import_xml.py` を修正し、検査項目名と結果値名称を別々に保持する。
+- `negationInd` の取り込み要否を整理する。

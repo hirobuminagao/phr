@@ -432,9 +432,12 @@ created_at
 - 検索性向上のため `event_id` / `subscriber_id` / `hia_subscriber_id` を冗長保持する。
 - 実際に存在した健診値のみを保持する。不足項目を補完行として作ることはしない。
 - namecodeが判定できない、または未対応の検査値entryでも、raw値を取得できる場合は捨てずに保持する。
-- unsupported namecode は `namecode = NULL` とし、`code_system` / `code_value` / `code_display` / raw系カラムへ取得できた情報を保持する。
+- unsupported namecode は `namecode = NULL` とし、`code_system` / `code_value` / `code_display` / `namecode_display_name` / raw系カラムへ取得できた情報を保持する。
 - `namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
 - unsupported namecode はETL Errorにも記録し、調査・マスタ追加・再処理の導線を残す。
+- `observation/code/displayName` は検査項目名として `namecode_display_name` に保持する。
+- `value/@displayName` はCD/CO等の結果値コード名称として `code_display` に保持し、PQ/ST等では `code_display` を設定しない。
+- `observation/@negationInd` は `negation_ind` にraw属性として保持する。
 - raw値と正規化値を保持する。
 - 正規化状態・正規化理由を保持する。
 - 項目値としての妥当性（範囲外・形式不正等）を保持する。
@@ -458,7 +461,9 @@ normalized_unit
 nullflavor
 code_system
 code_value
-code_display
+code_display (結果値コード名称)
+namecode_display_name (検査項目名)
+negation_ind
 identity_item_code
 jun_no
 normalize_status

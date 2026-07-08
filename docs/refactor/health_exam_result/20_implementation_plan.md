@@ -206,13 +206,16 @@ Phase3 01_scan_files.pyのみを実装する。
 - 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
 - 一部検査値の取得に失敗した場合は、取得可能な検査値を登録し、不足・異常は `etl_errors` に記録して処理が継続される。
 - Phase4では `exam_item_values` にraw値、raw unit、nullFlavor、code系情報などを登録する。
+- `observation/code/displayName` は検査項目名として `namecode_display_name` に保持する。
+- `value/@displayName` はCD/CO等の結果値コード名称として `code_display` に保持し、PQ/ST等では `code_display` を設定しない。
+- `observation/@negationInd` は `negation_ind` にraw属性として保持し、Phase4では判定には使わない。
 - Phase4では `exam_item_values.normalized_value` / `normalized_unit` を生成せず、`normalize_status` / `validation_status` も更新しない。
 - Phase4では検査値の正規化・バリデーション、`exam_item_status` 更新、`file_receipts` への検査値サマリー集約を実施しない。
 - Phase4では厚生労働省HL7仕様に完全準拠したextractorを最初から作り込まず、旧medi系実装で実績のある基本情報取得方法とentry探索思想を優先する。
 - 健診項目取得はentry / observation 配下を広めに探索し、XMLを安全に台帳化して取得できたraw値を失わず保持することを優先する。
 - `entryRelationship` 配下の `observation` は通常の健診項目候補として取り込み、17文字namecodeを持つ `observation` はPQ/ST/CD/COなど型に関わらず保持する。
 - wrapper `observation` は登録せず、`raw_value` は対象 `observation` の direct child `value` または `text` のみから取得する。
-- `displayName` は `raw_value` として扱わず、`code_display` として保持する。
+- `displayName` は `raw_value` として扱わず、検査項目名と結果値名称を分離して保持する。
 - XML内に項目entryとして存在したものは、可能な限り `exam_item_values` にraw値の行が作成される。
 - namecodeが判定できない unsupported namecode は `namecode = NULL` としてraw値・raw unit・nullFlavor・code系情報を保持し、あわせて `etl_errors` に `XML_UNSUPPORTED_NAMECODE` を記録する。
 - `namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。
