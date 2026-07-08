@@ -4037,3 +4037,58 @@ Phase4のXML取込結果を確認したところ、`negation_ind = 1`、`namecod
 - 採用した判定ルールは `03_decisions.md` へ反映する。
 
 ---
+
+## DH-20260708-6 / 2026-07-08 14:32 JST
+
+### テーマ
+Phase5以降の責務定義と実装順序の固定
+
+### 背景
+Phase4 XML取込が一通り完了したため、次のPhaseへ進む前に、既存の実装計画と会話上の認識にズレがないかを確認した。
+
+レビューの結果、`20_implementation_plan.md` では Phase5 は `dev_phr` 制度マスタ整備、Phase6 は `exam_check_results` DDL、Phase7 は `03_check_exam_results.py` 実装とされている一方、会話上では Phase5 に normalize / validation / 制度チェック実装まで含める認識が混在していた。
+
+### 議論
+- Phase番号と責務が曖昧なまま進めると、DDL、マスタ、スクリプト、設計資料の更新順が崩れる。
+- Phase4はXML取込と `exam_item_values` raw登録まで完了した。
+- 次に制度チェック実装へ直接進むには、`exam_check_results` DDL、制度マスタ、正規化・validation方針がまだ不足している。
+- 既存計画に合わせるなら、次のPhase5は制度チェック実装ではなく、`dev_phr` 側の制度マスタ整備に限定するのが安全である。
+- Phase5では `02_exam_check_item_spec_v2_0_0.md` の72項目と、既存 `dev_phr.exam_item_group_*` 系マスタとの差分を棚卸しする。
+- Phase6で `exam_check_results` のDDLを確定する。
+- Phase7で制度チェック実装に進む。
+- normalize / validation は制度チェック実装と混ぜず、別PhaseまたはPhase7前の独立工程として整理する必要がある。
+
+### 現時点の考え
+Phase5は、制度チェックを実装する前のマスタ整備Phaseとする。
+
+Phase5でいきなり `exam_check_results` 登録や制度チェック実装には進まず、まず制度判定に必要なマスタ・仕様・差分を固める。
+
+### 決定事項
+- Phase5の責務は `dev_phr` 制度マスタ整備に固定する。
+- Phase5では制度チェック実装を行わない。
+- Phase5では `exam_check_results` DDL作成を主目的にしない。
+- Phase5では `02_exam_check_item_spec_v2_0_0.md` の72項目と既存 `dev_phr.exam_item_group_*` 系マスタとの差分を棚卸しする。
+- Phase6で `exam_check_results` DDLを確定する。
+- Phase7で `03_check_exam_results.py` の実装に進む。
+- normalize / validation は制度チェック実装と混在させず、独立した責務として整理する。
+
+### 保留事項
+- normalize / validation を Phase6 前に行うか、Phase7 前の独立Phaseとするか。
+- `exam_item_values.validation_status` / `validation_reason` をいつ埋めるか。
+- `exam_check_results` に制度単位の総合判定を持つか、`xml_ledger` へ集約するか。
+- `xml_ledger.check_reason` を追加するか。
+- `exam_check_results` の再実行方式を upsert にするか削除再作成にするか。
+
+### 根拠
+- 既存の `20_implementation_plan.md` では Phase5 が制度マスタ整備として整理されているため。
+- `exam_check_results` DDLが未作成の状態で制度チェック実装へ進むと、後戻りが大きくなるため。
+- 制度チェックは `exam_item_values`、制度マスタ、正規化・validation、チェック結果DDLに依存するため、先にマスタと責務を固定する必要があるため。
+- Phase番号と責務を固定することで、03・11・19・20・26の設計同期がしやすくなるため。
+
+### 次回検討
+- 05から03へPhase5責務定義を反映する。
+- 11/19/20/26へPhase5以降の責務順を同期する。
+- `02_exam_check_item_spec_v2_0_0.md` と `dev_phr.exam_item_group_*` 系マスタの差分調査を行う。
+- Phase5で作成・更新すべきseed / migration / docsを整理する。
+
+---

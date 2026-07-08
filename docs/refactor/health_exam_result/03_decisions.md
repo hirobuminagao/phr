@@ -166,6 +166,9 @@
 - `observation/code/displayName` は検査項目名として `exam_item_values.namecode_display_name` に保持する。
 - `value/@displayName` はCD/CO等の結果値コード名称として `exam_item_values.code_display` に保持し、PQ/ST等では設定しない。
 - `observation/@negationInd` は `exam_item_values.negation_ind` にraw属性として保持する。
+- `negation_ind = 1` かつ `raw_value` がない行も、Phase4では受領した事実として `exam_item_values` に保持する。
+- Phase4では値の有無だけで `exam_item_values` の行を除外しない。
+- Phase5以降のpresence判定では、レコード存在のみを根拠に検査実施・値ありとは判断せず、`raw_value`、`nullFlavor`、`negation_ind` を考慮して判定する。
 - この方針は、現場で健診値一覧からエラー行を確認できるようにするための人間中心設計である。
 - `exam_item_values` は縦持ちとする。
 - `exam_item_values` の由来は `ledger_type` / `ledger_id` で表現する。
@@ -233,6 +236,12 @@
   - 法定OK・特定WARNING → `WARNING`
   - 法定NG → `NG`
 - 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
+- Phase5の責務は `dev_phr` 制度マスタ整備に固定する。
+- Phase5では制度チェック実装を行わない。
+- Phase5では `exam_check_results` DDL作成を主目的にしない。
+- Phase6で `exam_check_results` DDLを確定する。
+- Phase7で `03_check_exam_results.py` を実装する。
+- normalize / validation は制度チェック実装と混在させず、独立した責務として整理する。
 - `ANY_NONEMPTY` は presence 判定ルールとして扱い、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
 - `ANY_NONEMPTY` は行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
 - `CALCULATE` ルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
@@ -340,7 +349,8 @@
 - 厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析は、Phase5以降のリファクタリング対象とする。
 - 将来的にはXML解析を、基本情報ブロック解析、検査項目entry解析、特定健診関連ブロック解析、任意項目・ドック項目解析、保健指導関連ブロック解析の責務単位へ整理する。
 - Phase4では検査値の正規化、バリデーション、`exam_item_status` 更新、`normalize_status` 更新、`validation_status` 更新は実施しない。
-- Phase4のETL metricsは、`files` を処理対象 `file_receipts` 件数、`rows_seen` を対象XML件数、`rows_inserted` を新規 `xml_ledger` 件数、`rows_updated` を `xml_file_links` 登録件数 + `file_receipts` 更新件数、`rows_skipped` を既存 `xml_sha256` 再受領・対象外XML件数、`errors` を `etl_errors` 登録件数とする。
+- Phase4のETL metricsは、`files` を処理対象 `file_receipts` 件数、`rows_seen` を対象XML件数、`rows_inserted` を新規 `xml_ledger` 件数、`rows_updated` を `xml_file_links` 登録件数 + `file_receipts` 更新件数、`rows_skipped` を既存 `xml_sha256` 再受領など処理対象だったが新規処理しなかった件数、`errors` を `etl_errors` 登録件数とする。
+- Phase4で `ix08`、`su08`、`schema`、`xsd` など設計どおり除外した対象外XML件数は、`rows_skipped` には含めず、`xml_excluded` または `excluded_xml` として別集計する。
 - `exam_item_values` 件数は `rows_inserted` に含めず、必要に応じて `etl_runs.notes` のサマリーへ記録する。
 - Phase4で `identity_hash` / `person_id_custom` を生成する場合は、必ず `scripts/lib/identity/generator.py` を利用する。
 - `scripts/lib/identity/generator.py` を `identity_hash` / `person_id_custom` 生成の唯一の入口・正本とする。
