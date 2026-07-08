@@ -126,7 +126,7 @@ class ImportSummary:
     identity_errors: int = 0
     subscriber_not_found: int = 0
     zip_no_target_xml: int = 0
-    skipped_xml: int = 0
+    xml_excluded: int = 0
     errors: int = 0
     file_status_counts: dict[str, int] = field(default_factory=dict)
 
@@ -139,7 +139,7 @@ class ImportSummary:
             rows_seen=self.xml_seen,
             rows_inserted=self.xml_ledgers_inserted,
             rows_updated=self.xml_links_inserted + self.file_receipts_updated,
-            rows_skipped=self.xml_ledgers_existing + self.skipped_xml,
+            rows_skipped=self.xml_ledgers_existing,
             errors=self.errors,
         )
 
@@ -164,7 +164,7 @@ class ImportSummary:
             "  xml: "
             f"seen={self.xml_seen} ledgers_inserted={self.xml_ledgers_inserted} "
             f"ledgers_existing={self.xml_ledgers_existing} parse_errors={self.xml_parse_errors} "
-            f"skipped={self.skipped_xml}"
+            f"excluded_xml={self.xml_excluded}"
         )
         print(
             "  links/items: "
@@ -1193,7 +1193,7 @@ def read_candidates_from_file(
         data = source_path.read_bytes()
         return [XmlCandidate(file_receipt=file_receipt, inner_path=None, data=data)], 0
 
-    skipped = 0
+    excluded = 0
     candidates: list[XmlCandidate] = []
     with zipfile.ZipFile(source_path) as zf:
         target_infos: list[zipfile.ZipInfo] = []
@@ -1203,7 +1203,7 @@ def read_candidates_from_file(
             if is_target_inner_xml(info.filename, config.zip):
                 target_infos.append(info)
             elif info.filename.lower().endswith(".xml"):
-                skipped += 1
+                excluded += 1
         password: bytes | None = None
         if any(is_encrypted_zip_info(info) for info in target_infos):
             password = resolve_zip_password(cur, config, file_receipt)
@@ -1217,8 +1217,8 @@ def read_candidates_from_file(
                     data=read_zip_member(zf, info, password if is_encrypted_zip_info(info) else None),
                 )
             )
-    summary.skipped_xml += skipped
-    return candidates, skipped
+    summary.xml_excluded += excluded
+    return candidates, excluded
 
 
 def process_xml_candidate(
