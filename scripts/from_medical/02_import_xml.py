@@ -587,6 +587,34 @@ def observation_text(elem: ElementTree.Element) -> ElementTree.Element | None:
     return find_child(elem, "text")
 
 
+def has_entry_relationship(elem: ElementTree.Element) -> bool:
+    return find_child(elem, "entryRelationship") is not None
+
+
+def is_nullflavor_only_code(elem: ElementTree.Element | None) -> bool:
+    if elem is None:
+        return False
+    if attr_value(elem, "code", "value"):
+        return False
+    return attr_value(elem, "nullFlavor") is not None
+
+
+def is_grouping_observation(
+    *,
+    code_elem: ElementTree.Element | None,
+    value_elem: ElementTree.Element | None,
+    text_elem: ElementTree.Element | None,
+    elem: ElementTree.Element,
+) -> bool:
+    code_missing_or_nullflavor = code_elem is None or is_nullflavor_only_code(code_elem)
+    return (
+        code_missing_or_nullflavor
+        and value_elem is None
+        and text_elem is None
+        and has_entry_relationship(elem)
+    )
+
+
 @dataclass(frozen=True)
 class UnsupportedNamecode:
     code: str | None
@@ -621,7 +649,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
         raw_code_display = attr_value(code_elem, "displayName") if code_elem is not None else attr_value(elem, "displayName")
         value_elem = find_child(elem, "value")
         text_elem = observation_text(elem)
-        raw_value = extract_value_raw(value_elem) or elem_text(text_elem) or elem_text(elem)
+        if is_grouping_observation(code_elem=code_elem, value_elem=value_elem, text_elem=text_elem, elem=elem):
+            continue
+        raw_value = extract_value_raw(value_elem) or elem_text(text_elem)
         raw_value_type = value_type(value_elem) if value_elem is not None else "ST" if raw_value else None
         raw_unit = attr_value(value_elem, "unit") if value_elem is not None else None
         nullflavor = attr_value(value_elem, "nullFlavor") if value_elem is not None else attr_value(elem, "nullFlavor")
