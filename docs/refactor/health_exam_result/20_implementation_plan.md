@@ -175,7 +175,7 @@ Phase3 01_scan_files.pyのみを実装する。
 
 #### 完了条件
 - `file_receipts.status` を `IMPORTING / IMPORTED / WARNING / ERROR` へ更新できる。
-- Phase4で使用する正式コードは、`file_receipts.status = DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` とする。`exam_item_status = OK / WARNING / ERROR / NOT_EXECUTED` は後続正規化Phaseで使用する。
+- Phase4で使用する正式コードは、`file_receipts.status = DISCOVERED / WAITING_PASSWORD / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` とする。`exam_item_status = OK / WARNING / ERROR / NOT_EXECUTED` は後続正規化Phaseで使用する。
 - Phase4では `scripts/from_medical/config/import_xml.yml` を読み込んで処理する。configを正本とし、CLI引数は指定時のみ上書き用途とする。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
 - `xml_status` はXMLそのものの状態のみを表し、加入者照合NG時に変更しない。
 - `xml_ledger.exam_item_status` を追加し、必要に応じて `xml_ledger.exam_item_reason` も追加するDDL更新と既存DB向けMigrationが作成されている。
@@ -183,7 +183,8 @@ Phase3 01_scan_files.pyのみを実装する。
 - ZIP展開後に取込対象XML件数を数え、`file_receipts.processable_count` を更新できる。
 - ZIP内対象XMLが0件の場合は `file_receipts.status = ERROR` とし、`etl_errors` に `field = ZIP`、`error_code = ZIP_NO_TARGET_XML` を基本として記録できる。
 - パスワード付きZIPはPhase4で対応する。パスワードはスクリプトへハードコードせず既存のZIPパスワード管理情報から取得し、lookup優先順位は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` とする。
-- パスワード未検出時は `ZIP_PASSWORD_NOT_FOUND`、不一致・復号失敗時は `ZIP_DECRYPT_FAILED` として記録し、XML解析へ進まない。パスワード平文はログ・`etl_errors.message` に出力しない。
+- パスワード未検出時は `ZIP_PASSWORD_NOT_FOUND` として記録し、`file_receipts.status = WAITING_PASSWORD` としてXML解析へ進まない。パスワード登録後はCLIオプションなしの通常runで再処理できる。パスワード平文はログ・`etl_errors.message` に出力しない。
+- 不一致・復号失敗時は `ZIP_DECRYPT_FAILED` として記録するが、現時点では `WAITING_PASSWORD` へ寄せず調査対象として残す。
 - XML内容の一意性は `xml_ledger.xml_sha256` で判定される。
 - parse不能XMLでもXMLファイル自体のSHA256から `xml_sha256` を算出し、最小情報で `xml_ledger` を作成できる。
 - parse不能XMLの `xml_status` は `PARSE_ERROR` とし、`etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録できる。

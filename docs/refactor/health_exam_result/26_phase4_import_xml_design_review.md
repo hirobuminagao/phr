@@ -27,11 +27,11 @@ Phase4 `02_import_xml.py` 実装前に、`03_decisions.md` を正本として、
 
 ## 3. Phase4の責務範囲
 
-Phase4 `02_import_xml.py` は、Phase3で `file_receipts.status = DISCOVERED` として登録された ZIP / XML を入力に、XML内容をDBへ取り込む処理を担当する。
+Phase4 `02_import_xml.py` は、Phase3で `file_receipts.status = DISCOVERED` として登録された ZIP / XML、および `WAITING_PASSWORD` のパスワード登録待ちファイルを入力に、XML内容をDBへ取り込む処理を担当する。
 
 Phase4で実装する範囲:
 
-- `file_receipts.status = DISCOVERED` かつ `file_type = ZIP / XML` の対象取得。
+- `file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)` かつ `file_type = ZIP / XML` の対象取得。
 - 対象 `file_receipt` 単位のトランザクション管理。
 - ZIPファイルから対象XMLを列挙する。
 - 単体XMLをXMLとして読み込む。
@@ -75,7 +75,7 @@ Phase4では制度チェックの合否判定、HIA出力、CSV直取込、`file
 - CLI引数は指定時のみconfig値の一時的な上書き用途とする。
 - `event_id`。
 - `health_exam_result.file_receipts`
-  - `status = DISCOVERED`
+  - `status IN (DISCOVERED, WAITING_PASSWORD)`
   - `file_type IN ('ZIP', 'XML')`
   - `event_id` 一致
 - CLIから `etl_run_id` を指定した場合のみ、対象を当該Runの `file_receipts` へ限定する。
@@ -92,7 +92,7 @@ Phase4では制度チェックの合否判定、HIA出力、CSV直取込、`file
 
 ### config / CLI指定
 
-Phase4設定ファイルは `scripts/from_medical/config/import_xml.yml` とする。configを正本とし、CLI引数は指定時のみ一時的な上書き用途とする。通常実行は `event_id + file_receipts.status = DISCOVERED` を入力条件とし、CLIから `etl_run_id` を指定した場合のみ対象Runへ限定する。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
+Phase4設定ファイルは `scripts/from_medical/config/import_xml.yml` とする。configを正本とし、CLI引数は指定時のみ一時的な上書き用途とする。通常実行は `event_id + file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)` を入力条件とし、CLIから `etl_run_id` を指定した場合のみ対象Runへ限定する。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
 
 ## 5. 共通lib利用方針
 
@@ -132,8 +132,10 @@ ZIPはPhase4で初めて中身を確認する。
 - Phase4ではパスワード付きZIPへ対応する。
 - パスワードはスクリプトへハードコードせず、既存のZIPパスワード管理情報から取得する。
 - lookup優先順位は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` とする。
-- パスワード未検出時は `field = ZIP`、`error_code = ZIP_PASSWORD_NOT_FOUND` として記録し、XML解析へ進まない。
+- パスワード未検出時は `field = ZIP`、`error_code = ZIP_PASSWORD_NOT_FOUND` として記録し、`file_receipts.status = WAITING_PASSWORD` としてXML解析へ進まない。
+- パスワード登録後はCLIオプションなしの通常runで再処理できる。
 - パスワード不一致・復号失敗時は `field = ZIP`、`error_code = ZIP_DECRYPT_FAILED` として記録し、XML解析へ進まない。
+- `ZIP_DECRYPT_FAILED` はパスワード誤り以外の要因もあり得るため、現時点では `WAITING_PASSWORD` へ寄せず調査対象として残す。
 - ZIPパスワード対応はImport入口で完結させ、XML解析ロジックへ持ち込まない。
 - パスワード平文はログ・`etl_errors.message` に出力しない。
 
@@ -339,7 +341,7 @@ Phase4では、XML内に実際に存在した健診項目値のみ `exam_item_va
 
 Phase4で使用する正式コード:
 
-- `file_receipts.status`: `DISCOVERED` / `IMPORTING` / `IMPORTED` / `WARNING` / `ERROR`
+- `file_receipts.status`: `DISCOVERED` / `WAITING_PASSWORD` / `IMPORTING` / `IMPORTED` / `WARNING` / `ERROR`
 - `xml_status`: `READY` / `PARSE_ERROR`
 - `subscriber_match_status`: `MATCHED` / `NOT_FOUND` / `IDENTITY_ERROR` / `NOT_EXECUTED`
 - 後続正規化Phaseの `exam_item_status`: `OK` / `WARNING` / `ERROR` / `NOT_EXECUTED`
@@ -451,21 +453,23 @@ Lookup / 正規化lib:
 
 ## 12. file_receipts.status更新方針
 
-Phase4では `file_receipts.status` を `DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR` を前提に整理する。
+Phase4では `file_receipts.status` を `DISCOVERED / WAITING_PASSWORD / IMPORTING / IMPORTED / WARNING / ERROR` を前提に整理する。
 
 状態遷移:
 
 ```text
 DISCOVERED
+WAITING_PASSWORD
   ↓
 IMPORTING
   ↓
-IMPORTED / WARNING / ERROR
+IMPORTED / WARNING / ERROR / WAITING_PASSWORD
 ```
 
 推奨:
 
 - 対象 `file_receipt` の処理開始時に `IMPORTING` へ更新する。
+- パスワード未登録ZIPは `WAITING_PASSWORD` へ更新し、パスワード登録後に通常runで再処理する。
 - 対象XMLがすべて正常に処理できた場合は `IMPORTED`。
 - ZIP内の対象XMLが一部のみ正常処理できた場合は `WARNING`。
 - ZIP内対象XMLが0件の場合は `ERROR`。
@@ -529,7 +533,7 @@ Errors:
 
 | 論点 | 現時点の推奨 | 理由 | 人間判断 |
 | --- | --- | --- | --- |
-| Phase4の入力条件 | 通常実行は `event_id + file_receipts.status = DISCOVERED`、CLI `etl_run_id` 指定時のみ対象Runへ限定する。 | 通常運用ではイベント単位の未処理ファイル処理が扱いやすく、障害解析時のみRun限定が有効なため。 | 決定済み。 |
+| Phase4の入力条件 | 通常実行は `event_id + file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)`、CLI `etl_run_id` 指定時のみ対象Runへ限定する。 | 通常運用ではイベント単位の未処理ファイル処理が扱いやすく、パスワード登録後の再処理も通常runへ乗せられるため。 | 決定済み。 |
 | Phase4 config | `scripts/from_medical/config/import_xml.yml` を読み込んで処理する。config正本・CLI上書き用途の方針を維持し、ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。 | Phase3のconfig正本方針と揃えつつ、パスワードをコードへ直書きしないため。 | 決定済み。 |
 | ZIP読取方式 | 初期実装は一時展開方式。 | 障害調査と実装の見通しが良い。 | ストリーム読みにする必要があるか。 |
 | ZIP内対象XML | `h*.xml` のみ対象、`ix08/su08/schema/xsd` は除外。 | Phase3単体XMLと同じ除外基準に揃える。 | 除外XML件数をどこに記録するか。 |
@@ -539,7 +543,7 @@ Errors:
 | identity generator API | `generate_identity_bundle(**raw)` を利用する。入力キーは `birthdate`、`insurer_number_raw`、`insurance_symbol_raw`、`insurance_number_raw`、`name_kana_full_raw`、`gender_code`。戻り値は `ok`、`reason`、`person_id_custom`、`identity_hash`、`field_results` のみ利用する。 | identity生成の入口を単一化し、利用側に生成ロジックと内部構造依存を持たせないため。 | 決定済み。戻り値仕様全体の詳細記載粒度は未決。 |
 | identity生成失敗時 | XMLとして正常に読み込み可能なら `xml_ledger` は作成し、詳細は `etl_errors` に `field = IDENTITY`、`error_code = IDENTITY_GENERATION_FAILED` として記録する。`generator.reason` を代表理由、`field_results` を詳細ソース、`message` を人間確認用とする。 | XML内容自体は受領済みで、運用確認対象にできるため。 | 決定済み。 |
 | 状態管理の責務分離 | XML状態は `xml_status`、加入者照合状態は `subscriber_match_status`、検査値抽出・バリデーション状態は後続Phaseで `exam_item_status` として管理する。Phase4では `exam_item_status` を更新しない。 | XML取込、加入者照合、検査値正規化・バリデーションは責務が異なるため。 | 決定済み。 |
-| status正式コード | Phase4は `file_receipts.status = DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` を使用する。後続正規化Phaseの `exam_item_status` は `OK / WARNING / ERROR / NOT_EXECUTED` とする。 | Phase4内のXML状態、加入者照合状態、後続の検査値状態を混在させず実装するため。 | 決定済み。 |
+| status正式コード | Phase4は `file_receipts.status = DISCOVERED / WAITING_PASSWORD / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` を使用する。後続正規化Phaseの `exam_item_status` は `OK / WARNING / ERROR / NOT_EXECUTED` とする。 | Phase4内のXML状態、加入者照合状態、後続の検査値状態を混在させず実装するため。 | 決定済み。 |
 | `xml_ledger.exam_item_status` DDL | `xml_ledger.exam_item_status` / `exam_item_reason` をDDLへ追加し、既存DB向けMigration `20260707_001_health_exam_result_add_exam_item_status.sql` を作成済み。Phase4では更新せず、後続Phaseで更新する。 | 後続Phaseで検査値抽出・妥当性の総合状態を `xml_ledger` に保持するため。 | 決定済み。 |
 | 既存XML再受領 | `xml_sha256` 一致で判定し、同一 `xml_sha256` 再受領時は `xml_file_links` のみ追加する。 | `xml_ledger` はXML内容の一意台帳であり、同一内容XMLを重複登録しないため。 | 決定済み。`SKIPPED` の詳細表現は未決。 |
 | `xml_file_links` 重複 | UNIQUE衝突は重複リンクとしてスキップ。 | 再実行時の冪等性を確保する。 | 重複リンクをRunスキップ件数に含めるか。 |

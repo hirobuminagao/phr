@@ -53,6 +53,7 @@ FILE_STATUS_IMPORTING = "IMPORTING"
 FILE_STATUS_IMPORTED = "IMPORTED"
 FILE_STATUS_WARNING = "WARNING"
 FILE_STATUS_ERROR = "ERROR"
+FILE_STATUS_WAITING_PASSWORD = "WAITING_PASSWORD"
 
 FILE_TYPE_ZIP = "ZIP"
 FILE_TYPE_XML = "XML"
@@ -83,6 +84,7 @@ FACILITY_CODE_ROOT = "1.2.392.200119.6.102"
 @dataclass(frozen=True)
 class InputConfig:
     file_status: str
+    file_statuses: tuple[str, ...]
     file_types: tuple[str, ...]
     etl_run_id: int | None
 
@@ -243,6 +245,14 @@ def load_import_config(path: str | Path) -> ImportConfig:
     raw_processing = cast(Mapping[str, Any], data.get("processing") or {})
 
     file_types = tuple(str(v).upper() for v in raw_input.get("file_types") or [FILE_TYPE_ZIP, FILE_TYPE_XML])
+    raw_file_statuses = raw_input.get("file_statuses")
+    if raw_file_statuses:
+        file_statuses = tuple(str(v).upper() for v in raw_file_statuses)
+    else:
+        file_status = str(raw_input.get("file_status") or FILE_STATUS_DISCOVERED).upper()
+        file_statuses = (file_status,)
+        if file_status == FILE_STATUS_DISCOVERED:
+            file_statuses = (FILE_STATUS_DISCOVERED, FILE_STATUS_WAITING_PASSWORD)
     raw_etl_run_id = raw_input.get("etl_run_id")
     etl_run_id = int(raw_etl_run_id) if raw_etl_run_id not in (None, "") else None
 
@@ -256,6 +266,7 @@ def load_import_config(path: str | Path) -> ImportConfig:
         chunk_size_mb=int(raw_processing.get("chunk_size_mb", 8) or 8),
         input=InputConfig(
             file_status=str(raw_input.get("file_status") or FILE_STATUS_DISCOVERED),
+            file_statuses=file_statuses,
             file_types=file_types,
             etl_run_id=etl_run_id,
         ),
@@ -280,6 +291,7 @@ def resolve_config(args: argparse.Namespace) -> ImportConfig:
         chunk_size_mb=config.chunk_size_mb,
         input=InputConfig(
             file_status=config.input.file_status,
+            file_statuses=config.input.file_statuses,
             file_types=config.input.file_types,
             etl_run_id=args.etl_run_id if args.etl_run_id is not None else config.input.etl_run_id,
         ),
@@ -751,8 +763,9 @@ def is_target_inner_xml(name: str, zip_config: ZipConfig) -> bool:
 
 
 def fetch_file_receipts(cur: Any, config: ImportConfig) -> list[dict[str, Any]]:
-    placeholders = ", ".join(["%s"] * len(config.input.file_types))
-    params: list[Any] = [config.event_id, config.input.file_status, *config.input.file_types]
+    status_placeholders = ", ".join(["%s"] * len(config.input.file_statuses))
+    type_placeholders = ", ".join(["%s"] * len(config.input.file_types))
+    params: list[Any] = [config.event_id, *config.input.file_statuses, *config.input.file_types]
     etl_filter = ""
     if config.input.etl_run_id is not None:
         etl_filter = "AND etl_run_id = %s"
@@ -767,8 +780,8 @@ def fetch_file_receipts(cur: Any, config: ImportConfig) -> list[dict[str, Any]]:
         SELECT *
         FROM {qname(config.health_db)}.file_receipts
         WHERE event_id = %s
-          AND status = %s
-          AND file_type IN ({placeholders})
+          AND status IN ({status_placeholders})
+          AND file_type IN ({type_placeholders})
           {etl_filter}
         ORDER BY id
         {limit_sql}
@@ -1552,6 +1565,7 @@ def process_file_receipt(
     source_path = Path(str(file_receipt.get("source_path") or ""))
     file_error_count_before = summary.errors
     candidate_read_failed = False
+    waiting_password = False
 
     if not config.dry_run:
         try:
@@ -1606,6 +1620,7 @@ def process_file_receipt(
         candidates = []
     except ZipPasswordNotFoundError:
         candidate_read_failed = True
+        waiting_password = True
         message = f"zip password not found: path={source_path}"
         record_import_error(
             health_cur if not config.dry_run else None,
@@ -1733,7 +1748,10 @@ def process_file_receipt(
                 conn.commit()
 
     file_error_count = summary.errors - file_error_count_before
-    status = final_file_status(target_count, ok_count, file_error_count + xml_error_count)
+    if waiting_password:
+        status = FILE_STATUS_WAITING_PASSWORD
+    else:
+        status = final_file_status(target_count, ok_count, file_error_count + xml_error_count)
     summary.bump_file_status(status)
     message = (
         f"import_xml target_xml={target_count} ok={ok_count} "

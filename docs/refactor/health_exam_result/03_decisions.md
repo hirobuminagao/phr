@@ -272,7 +272,8 @@
 - ファイル単位の件数・エラー数・サマリー更新は、XML/受診者単位処理の完了後に集約する。
 - 将来的にCSV直取込へ対応する場合は、`csv_row_ledger` を追加し、基本情報Ledgerと健診結果値を分離した構造とする。
 - status はシステム処理ステータスと業務フローステータスを分けて設計する。
-- Phase4の `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR` を正式コードとする。
+- Phase4の `file_receipts.status` は `DISCOVERED / WAITING_PASSWORD / IMPORTING / IMPORTED / WARNING / ERROR` を正式コードとする。
+- `WAITING_PASSWORD` はZIPパスワード登録待ちの再実行可能状態とする。
 - Phase4でZIP内の対象XMLが一部のみ正常処理できた場合は `file_receipts.status = WARNING` とする。
 - `xml_status` はXML状態を管理し、XML解析可否や処理可能状態を表す。
 - Phase4の `xml_status` は `READY / PARSE_ERROR` を正式コードとする。
@@ -326,7 +327,7 @@
 - 共通ETL構造にない `run_type`、`summary_message`、`etl_errors.status`、`etl_errors.error_type` は採用しない。
 - Phase3のscan結果サマリーは標準出力に表示し、可能な範囲で `etl_runs.notes` に人間が読みやすい短いテキストとして記録する。
 - `01_scan_files.py` は未登録ファイルに `etl_run_id` を付与し、そのRunを `02_import_xml.py` の入力とする。
-- `02_import_xml.py` の通常実行は `event_id` と `file_receipts.status = DISCOVERED` を入力条件とする。
+- `02_import_xml.py` の通常実行は `event_id` と `file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)` を入力条件とする。
 - `02_import_xml.py` はCLIから `etl_run_id` を指定した場合のみ対象を当該Runに限定する。
 - Phase4の実行設定は `scripts/from_medical/config/import_xml.yml` を正本とし、CLI引数は指定時のみ一時的な上書き用途とする。
 - Phase4では `scripts/from_medical/config/import_xml.yml` を読み込んで処理を行う。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
@@ -378,7 +379,9 @@
 - Phase4ではパスワード付きZIPへ対応する。パスワードはスクリプトへハードコードせず、既存のZIPパスワード管理情報から取得する。
 - ZIPパスワード解決は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` の順で行う。
 - ZIPパスワード未検出時は `etl_errors` に `field = ZIP`、`error_code = ZIP_PASSWORD_NOT_FOUND` を記録し、XML解析へ進まない。
+- ZIPパスワード未検出時は `file_receipts.status = WAITING_PASSWORD` とし、パスワード登録後にCLIオプションなしの通常runで再処理できるようにする。
 - ZIPパスワード不一致・復号失敗時は `etl_errors` に `field = ZIP`、`error_code = ZIP_DECRYPT_FAILED` を記録し、XML解析へ進まない。
+- `ZIP_DECRYPT_FAILED` はパスワード誤り以外の要因もあり得るため、現時点では `WAITING_PASSWORD` へ寄せず調査対象として扱う。最終扱いは発生条件を実装・ライブラリ挙動から確認した後に決定する。
 - ZIPパスワード対応はImport入口で完結させ、XML解析ロジックへ持ち込まない。パスワード平文はログ・`etl_errors.message` に出力しない。
 - Phase4の `file_receipts.status` は、ZIP内一部成功時は `WARNING`、ZIP内全件parse不能など対象XMLはあるが全件失敗の場合は `ERROR`、ZIP内対象XML0件の場合も `ERROR` とする。
 - 単体XML parse不能の場合は、`xml_ledger` を `PARSE_ERROR` で作成し、`file_receipts.status = ERROR` とする。

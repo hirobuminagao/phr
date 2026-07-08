@@ -201,7 +201,8 @@ Phase3登録時の固定値・方針:
 ### status更新
 
 - `file_receipts.status` は物理ファイル単位の機械的状態として使う。
-- 値は `DISCOVERED` / `IMPORTING` / `IMPORTED` / `ERROR` とする。
+- 値は `DISCOVERED` / `WAITING_PASSWORD` / `IMPORTING` / `IMPORTED` / `WARNING` / `ERROR` とする。
+- `WAITING_PASSWORD` はZIPパスワード登録待ちの再実行可能状態とする。
 - 登録直後は `DISCOVERED` とする。
 - 登録済みスキップは原則エラーではなく、Runサマリーに残す。
 
@@ -274,14 +275,16 @@ Phase3登録時の固定値・方針:
 
 1. `scripts/from_medical/config/import_xml.yml` を正本として読み込み、指定されたCLI引数のみ上書きする。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
 2. `etl_runs` にXML取込Run開始を記録する。
-3. 通常実行は `event_id + file_receipts.status = DISCOVERED`、CLI `etl_run_id` 指定時のみ対象Runへ限定して未処理 `file_receipts` を取得する。
+3. 通常実行は `event_id + file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)`、CLI `etl_run_id` 指定時のみ対象Runへ限定して未処理・再実行可能 `file_receipts` を取得する。
 4. 対象 `file_receipt` ごとにDBトランザクションを開始する。
 5. 対象ファイルを処理直前に `work` へ一時コピーする。
 6. ZIPの場合は `02_import_xml.py` 内で展開し、XMLを列挙する。
    - パスワード付きZIPはPhase4で対応する。
    - パスワードはスクリプトへハードコードせず、既存のZIPパスワード管理情報から取得する。
    - lookup優先順位は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` とする。
-   - パスワード未検出時は `ZIP_PASSWORD_NOT_FOUND`、不一致・復号失敗時は `ZIP_DECRYPT_FAILED` として `etl_errors` に記録し、XML解析へ進まない。
+   - パスワード未検出時は `ZIP_PASSWORD_NOT_FOUND` として `etl_errors` に記録し、`file_receipts.status = WAITING_PASSWORD` としてXML解析へ進まない。
+   - パスワード登録後はCLIオプションなしの通常runで再処理できる。
+   - 不一致・復号失敗時は `ZIP_DECRYPT_FAILED` として `etl_errors` に記録するが、現時点では `WAITING_PASSWORD` へ寄せない。
    - パスワード平文はログ・`etl_errors.message` に出力しない。
 7. ZIP内の取込対象XML件数を数え、`file_receipts.processable_count` に更新する。
    - Phase3ではZIP内件数を算出しない。
@@ -466,7 +469,7 @@ Phase3登録時の固定値・方針:
 
 Phase4で使用する正式コード:
 
-- `file_receipts.status`: `DISCOVERED` / `IMPORTING` / `IMPORTED` / `WARNING` / `ERROR`
+- `file_receipts.status`: `DISCOVERED` / `WAITING_PASSWORD` / `IMPORTING` / `IMPORTED` / `WARNING` / `ERROR`
 - `xml_status`: `READY` / `PARSE_ERROR`
 - `subscriber_match_status`: `MATCHED` / `NOT_FOUND` / `IDENTITY_ERROR` / `NOT_EXECUTED`
 - `exam_item_status`: `OK` / `WARNING` / `ERROR` / `NOT_EXECUTED` は後続正規化Phaseで使用する。Phase4では更新しない。

@@ -45,7 +45,7 @@ scripts/lib/
 
 - `01_scan_files.py` は対象フォルダを毎回フルスキャンし、未登録ファイルのみ `file_receipts` に登録する。重複ファイルは新規登録せず、スキップ件数としてRunサマリーに集約する。登録時の `file_receipts.status` は `DISCOVERED` とする。
 - `01_scan_files.py` は `work` へのコピーを行わない。
-- `02_import_xml.py` は指定 `etl_run_id` の未処理 `file_receipts` を対象にする。処理開始時に `file_receipts.status = IMPORTING`、成功時に `IMPORTED`、失敗時に `ERROR` とする。
+- `02_import_xml.py` は通常実行で `file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)` の未処理・再実行可能ファイルを対象にする。処理開始時に `file_receipts.status = IMPORTING`、成功時に `IMPORTED`、失敗時に `ERROR`、パスワード登録待ち時に `WAITING_PASSWORD` とする。
 - `02_import_xml.py` はRun単位で複数の `file_receipts` を処理し、DBトランザクションは `file_receipt` 単位とする。
 - `work` への一時コピー、ZIP展開、XMLファイル読込は `02_import_xml.py` に集約する。
 - `02_import_xml.py` はXML基本情報抽出、加入者照合、健診項目値抽出、`xml_file_links` / `xml_ledger` / `exam_item_values` 登録を一括で行う。
@@ -214,7 +214,7 @@ Phase3登録時の固定値は以下とする。
 
 ### 目的
 
-通常実行は `event_id + file_receipts.status = DISCOVERED` を対象に、CLI `etl_run_id` 指定時のみ対象Runへ限定して、XML内容の取込、物理ファイルとのリンク、基本情報抽出、加入者照合、健診項目raw値抽出を行う。
+通常実行は `event_id + file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)` を対象に、CLI `etl_run_id` 指定時のみ対象Runへ限定して、XML内容の取込、物理ファイルとのリンク、基本情報抽出、加入者照合、健診項目raw値抽出を行う。
 
 ### 入力
 
@@ -252,13 +252,15 @@ Phase3登録時の固定値は以下とする。
 
 1. `scripts/from_medical/config/import_xml.yml` を正本として読み込み、指定されたCLI引数のみ上書きする。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
 2. `etl_runs` にXML取込Runを開始登録する。
-3. 通常実行は `event_id + file_receipts.status = DISCOVERED`、CLI `etl_run_id` 指定時のみ対象Runへ限定して未処理 `file_receipts` を取得する。
+3. 通常実行は `event_id + file_receipts.status IN (DISCOVERED, WAITING_PASSWORD)`、CLI `etl_run_id` 指定時のみ対象Runへ限定して未処理・再実行可能 `file_receipts` を取得する。
 4. 対象 `file_receipt` ごとにDBトランザクションを開始する。
 5. 対象ファイルを処理直前に `work` へ一時コピーする。
 6. ZIPの場合はこのスクリプト内でのみ展開する。パスワード付きZIPはImport入口でパスワードを解決し、XML解析ロジックへ持ち込まない。
    - パスワードはスクリプトへハードコードせず、既存のZIPパスワード管理情報から取得する。
    - lookup優先順位は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` とする。
-   - パスワード未検出時は `field = ZIP`、`error_code = ZIP_PASSWORD_NOT_FOUND`、不一致・復号失敗時は `field = ZIP`、`error_code = ZIP_DECRYPT_FAILED` として記録する。
+   - パスワード未検出時は `field = ZIP`、`error_code = ZIP_PASSWORD_NOT_FOUND` として記録し、`file_receipts.status = WAITING_PASSWORD` とする。
+   - パスワード登録後はCLIオプションなしの通常runで再処理できる。
+   - 不一致・復号失敗時は `field = ZIP`、`error_code = ZIP_DECRYPT_FAILED` として記録するが、現時点では `WAITING_PASSWORD` へ寄せない。
    - パスワード平文はログ・`etl_errors.message` に出力しない。
 7. ZIP内の取込対象XML件数を数え、`file_receipts.processable_count` に更新する。
    - Phase3ではZIP内件数を算出しない。

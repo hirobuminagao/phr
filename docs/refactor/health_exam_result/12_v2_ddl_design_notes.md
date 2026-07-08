@@ -233,7 +233,9 @@ exam_item_values
 - 処理対象件数と中身確認日時の保持。
 - 処理結果サマリーの保持。
 - 物理ファイル単位の機械的な処理状態の保持。
-- `file_receipts.status` は `DISCOVERED / IMPORTING / IMPORTED / ERROR` の4状態で管理する。
+- `file_receipts.status` は `DISCOVERED / WAITING_PASSWORD / IMPORTING / IMPORTED / WARNING / ERROR` で管理する。
+- `WAITING_PASSWORD` はZIPパスワード登録待ちの再実行可能状態を表す。
+- `file_receipts.status` は `varchar(32)` であり、enum/check制約を持たないため、`WAITING_PASSWORD` 追加に伴うDDL変更・migrationは不要とする。
 - 既に取り込み済みの重複ファイルは `file_receipts` に新規登録せず、重複件数は `etl_runs` のスキップ件数・実行サマリーで管理する。
 - `01_scan_files.py` が発見・登録、`02_import_xml.py` が状態遷移を更新する。
 - Phase3 `01_scan_files.py` はファイル検出と `file_receipts.status = DISCOVERED` 登録に責務を限定する。
