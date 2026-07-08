@@ -326,7 +326,7 @@
 - `02_import_xml.py` の通常実行は `event_id` と `file_receipts.status = DISCOVERED` を入力条件とする。
 - `02_import_xml.py` はCLIから `etl_run_id` を指定した場合のみ対象を当該Runに限定する。
 - Phase4の実行設定は `scripts/from_medical/config/import_xml.yml` を正本とし、CLI引数は指定時のみ一時的な上書き用途とする。
-- Phase4では既存 `scripts/from_medical/config/import_xml.yml` を読み込んで処理を行い、設定項目の追加検討は行わない。
+- Phase4では `scripts/from_medical/config/import_xml.yml` を読み込んで処理を行う。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
 - `02_import_xml.py` のDBトランザクションは `file_receipt` 単位とする。
 - 1ファイル失敗してもRun全体は止めず、失敗分を `etl_errors` に記録して次のファイルへ進む。
 - ZIP展開、XML読込、XML基本情報抽出、identity生成、加入者照合、健診項目raw値抽出、`xml_ledger`・`xml_file_links`・`exam_item_values` 登録は `02_import_xml.py` で実施する。
@@ -372,6 +372,11 @@
 - Phase3ではZIP内件数を算出せず、`processable_count` は設定しない。
 - ZIPの対象XML件数は、Phase4のZIP内XML除外ルール適用後の取込対象XML件数とする。
 - ZIP内対象XMLが0件の場合は `file_receipts.status = ERROR` とし、`xml_ledger` は作成せず、`etl_errors` に `field = ZIP`、`error_code = ZIP_NO_TARGET_XML` を基本として記録する。
+- Phase4ではパスワード付きZIPへ対応する。パスワードはスクリプトへハードコードせず、既存のZIPパスワード管理情報から取得する。
+- ZIPパスワード解決は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` の順で行う。
+- ZIPパスワード未検出時は `etl_errors` に `field = ZIP`、`error_code = ZIP_PASSWORD_NOT_FOUND` を記録し、XML解析へ進まない。
+- ZIPパスワード不一致・復号失敗時は `etl_errors` に `field = ZIP`、`error_code = ZIP_DECRYPT_FAILED` を記録し、XML解析へ進まない。
+- ZIPパスワード対応はImport入口で完結させ、XML解析ロジックへ持ち込まない。パスワード平文はログ・`etl_errors.message` に出力しない。
 - Phase4の `file_receipts.status` は、ZIP内一部成功時は `WARNING`、ZIP内全件parse不能など対象XMLはあるが全件失敗の場合は `ERROR`、ZIP内対象XML0件の場合も `ERROR` とする。
 - 単体XML parse不能の場合は、`xml_ledger` を `PARSE_ERROR` で作成し、`file_receipts.status = ERROR` とする。
 - `exam_item_values` はPhase4（`02_import_xml.py`）で登録する。
@@ -379,9 +384,15 @@
 - XML解析が成功した場合は、identity生成に失敗しても `exam_item_values` を登録する。
 - 同一 `xml_sha256` の再受領時は `exam_item_values` を再登録しない。
 - 一部検査値raw値の抽出に失敗した場合は、取得可能な検査値raw値は登録し、不足・異常は `etl_errors` に記録して処理を継続する。
+- `entryRelationship` 配下の `observation` は通常の健診項目候補として取り込む。
+- 17文字の検査コードを持つ `observation` は、値種別（PQ/ST/CD/CO等）に関わらず `exam_item_values` へ保持する。
+- wrapper `observation` は登録しない。
+- `raw_value` は対象 `observation` の direct child である `value` または `text` のみから取得する。
+- `displayName` を `raw_value` の代替として利用せず、`code_display` として保持する。
+- XML構造情報と健診値を混在させない。
 - Phase4の `etl_errors` は `field`、`error_code`、`message` を基本構成として記録する。
 - Phase4では `etl_errors.error_code` を必要最小限のコードセットで運用する。
-- Phase4で扱う主な `etl_errors.error_code` は、`CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- Phase4で扱う主な `etl_errors.error_code` は、`CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`ZIP_PASSWORD_NOT_FOUND`、`ZIP_DECRYPT_FAILED`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
 - Phase4では検査値単位の詳細エラーコードを作成しない。
 - normalize / validation 専用エラーコードはPhase5で設計する。
 - Phase4の `etl_errors.field` は、`CONFIG`、`FILE`、`ZIP`、`XML`、`IDENTITY`、`SUBSCRIBER`、`DB` を基本とする。

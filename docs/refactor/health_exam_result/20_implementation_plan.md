@@ -176,17 +176,19 @@ Phase3 01_scan_files.pyのみを実装する。
 #### 完了条件
 - `file_receipts.status` を `IMPORTING / IMPORTED / WARNING / ERROR` へ更新できる。
 - Phase4で使用する正式コードは、`file_receipts.status = DISCOVERED / IMPORTING / IMPORTED / WARNING / ERROR`、`xml_status = READY / PARSE_ERROR`、`subscriber_match_status = MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` とする。`exam_item_status = OK / WARNING / ERROR / NOT_EXECUTED` は後続正規化Phaseで使用する。
-- Phase4では既存 `scripts/from_medical/config/import_xml.yml` を読み込んで処理し、設定項目の追加検討は行わない。configを正本とし、CLI引数は指定時のみ上書き用途とする。
+- Phase4では `scripts/from_medical/config/import_xml.yml` を読み込んで処理する。configを正本とし、CLI引数は指定時のみ上書き用途とする。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
 - `xml_status` はXMLそのものの状態のみを表し、加入者照合NG時に変更しない。
 - `xml_ledger.exam_item_status` を追加し、必要に応じて `xml_ledger.exam_item_reason` も追加するDDL更新と既存DB向けMigrationが作成されている。
 - health_exam_result のMigrationファイル名は `YYYYMMDD_NNN_health_exam_result_<description>.sql` とし、例は `20260707_001_health_exam_result_add_exam_item_status.sql` とする。
 - ZIP展開後に取込対象XML件数を数え、`file_receipts.processable_count` を更新できる。
 - ZIP内対象XMLが0件の場合は `file_receipts.status = ERROR` とし、`etl_errors` に `field = ZIP`、`error_code = ZIP_NO_TARGET_XML` を基本として記録できる。
+- パスワード付きZIPはPhase4で対応する。パスワードはスクリプトへハードコードせず既存のZIPパスワード管理情報から取得し、lookup優先順位は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` とする。
+- パスワード未検出時は `ZIP_PASSWORD_NOT_FOUND`、不一致・復号失敗時は `ZIP_DECRYPT_FAILED` として記録し、XML解析へ進まない。パスワード平文はログ・`etl_errors.message` に出力しない。
 - XML内容の一意性は `xml_ledger.xml_sha256` で判定される。
 - parse不能XMLでもXMLファイル自体のSHA256から `xml_sha256` を算出し、最小情報で `xml_ledger` を作成できる。
 - parse不能XMLの `xml_status` は `PARSE_ERROR` とし、`etl_errors` に `field = XML`、`error_code = XML_PARSE_FAILED` を基本として記録できる。
 - Phase4の `etl_errors.field` は `CONFIG` / `FILE` / `ZIP` / `XML` / `IDENTITY` / `SUBSCRIBER` / `DB` を基本とする。
-- Phase4の主な `etl_errors.error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- Phase4の主な `etl_errors.error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`ZIP_PASSWORD_NOT_FOUND`、`ZIP_DECRYPT_FAILED`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
 - 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。unsupported namecode はraw抽出失敗とは分け、`field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。normalize / validation 専用エラーコードはPhase4では作成しない。
 - `etl_errors.message` は人間確認用とし、parse不能XMLは `xml parse failed: path=<path>, inner_path=<inner_path>, reason=<parser_error>`、ZIP内対象XML0件は `zip has no target xml: path=<path>, pattern=h*.xml, excludes=ix08,su08,schema,xsd`、raw抽出失敗は `xml raw extract failed: path=<path>, inner_path=<inner_path>, field=<field>, reason=<reason>` を基本形式とする。複数fieldの場合は `fields=<field1>,<field2>` とする。
 - parse不能XMLでは `identity_hash` / `person_id_custom` / `subscriber_id` / `hia_subscriber_id` は設定せず、`exam_item_values` も登録しない。
@@ -208,6 +210,9 @@ Phase3 01_scan_files.pyのみを実装する。
 - Phase4では検査値の正規化・バリデーション、`exam_item_status` 更新、`file_receipts` への検査値サマリー集約を実施しない。
 - Phase4では厚生労働省HL7仕様に完全準拠したextractorを最初から作り込まず、旧medi系実装で実績のある基本情報取得方法とentry探索思想を優先する。
 - 健診項目取得はentry / observation 配下を広めに探索し、XMLを安全に台帳化して取得できたraw値を失わず保持することを優先する。
+- `entryRelationship` 配下の `observation` は通常の健診項目候補として取り込み、17文字namecodeを持つ `observation` はPQ/ST/CD/COなど型に関わらず保持する。
+- wrapper `observation` は登録せず、`raw_value` は対象 `observation` の direct child `value` または `text` のみから取得する。
+- `displayName` は `raw_value` として扱わず、`code_display` として保持する。
 - XML内に項目entryとして存在したものは、可能な限り `exam_item_values` にraw値の行が作成される。
 - namecodeが判定できない unsupported namecode は `namecode = NULL` としてraw値・raw unit・nullFlavor・code系情報を保持し、あわせて `etl_errors` に `XML_UNSUPPORTED_NAMECODE` を記録する。
 - `namecode = NULL` は「検査値候補として届いたが、検査項目コードとして未対応・未判定」を表す。

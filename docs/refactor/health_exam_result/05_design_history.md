@@ -3822,3 +3822,103 @@ XML解析仕様そのものの刷新は、互換性確認後にPhase5以降で�
 - 旧XML解析スクリプトのentry取得ロジックを調査する。
 - Phase4へ互換取得ロジックを反映する。
 - Phase5向けに厚生労働省HL7仕様ベースの解析設計を整理する。
+
+---
+
+## DH-20260708-1 / 2026-07-08 10:12 JST
+
+### テーマ
+Phase4 XML取込における entryRelationship の扱いと wrapper observation の整理
+
+### 背景
+Phase4 の XML 取込実装をサンプルXMLで確認したところ、`entryRelationship` 配下の `observation` を親 `observation` と同列に走査していたため、子要素の値を親 `observation` が重複して取り込む事象が発生した。
+
+また、実施理由や所見などの ST 値についても、検査値として保持すべきものと、親側へ誤って集約されてしまうものを区別する必要があることが判明した。
+
+### 当初の考え
+- XML内の `observation` を広く走査し、可能な限り健診値候補を取得する。
+- `entryRelationship` 配下も含め、取得できる情報は失わない方針としていた。
+
+### 議論
+- `entryRelationship` 配下の `observation` は健診値候補として保持する。
+- `RSON`（実施理由）や `COMP`（所見）なども、17文字の検査コードを持つ `observation` であれば `exam_item_values` へ保持する。
+- 一方で、`entryRelationship` を束ねるだけの親 `observation` は健診値ではなく構造上のラッパーである。
+- 親 `observation` が子孫の `value` や `text` をまとめて `raw_value` として保持する挙動は誤りと判断した。
+- `raw_value` は対象 `observation` の direct child である `value` または `text` のみから取得する。
+- `displayName` は検査項目名称であり、検査値ではないため `raw_value` の代替として利用しない。
+- `displayName` は `code_display` 等のメタ情報として保持し、検査値とは明確に責務を分離する。
+- wrapper `observation` は行化せず、子 `observation` のみを `exam_item_values` として登録する。
+- Phase4 は旧 medi 系との互換性を優先するが、構造上不要な wrapper 行は登録しない。
+
+### 現時点の考え
+`exam_item_values` は「実際に意味を持つ observation」のみを保持する。
+
+XML構造を表現するためだけの wrapper observation は登録対象外とし、実施理由・所見なども検査コードを持つ observation として保持する。
+
+### 決定事項
+- `entryRelationship` 配下の `observation` は通常の健診項目として取り込む。
+- 17文字の検査コードを持つ `observation` は、値種別（PQ/ST/CD/CO）に関わらず `exam_item_values` へ保持する。
+- wrapper `observation` は登録しない。
+- `raw_value` は direct child の `value` または `text` のみから取得する。
+- `displayName` を `raw_value` の代替として利用しない。
+- XML構造情報と健診値を混在させない。
+
+### 保留事項
+- Phase5 における HL7 CDA の `entryRelationship` 種別（COMP、RSON、REFR など）の正式な意味付け。
+- 実施理由・所見などを将来的にカテゴリ化するかどうか。
+- `entryRelationship` の構造情報を別テーブルへ保持する必要性。
+
+### 根拠
+- サンプルXMLによる実機検証結果。
+- 旧 medi 系実装との比較。
+- Phase4 の責務である「受領した健診値を欠落なく保持する」という設計方針。
+
+### 次回検討
+- 実DBでの取込確認。
+- `exam_item_values` の登録件数と旧 medi 系との比較。
+- Phase5 に向けた HL7 CDA 構造解析の詳細設計。
+
+---
+
+## DH-20260708-02 / 2026-07-08 10:14 JST
+
+### テーマ
+ZIPパスワード付きファイルへの対応方針
+
+### 背景
+Phase4 Importの実DBテストを開始したところ、一部医療機関から受領したZIPファイルがパスワード付きであるため、ZIP展開処理で取込が停止した。
+
+### 議論
+- 現在のPhase4実装はパスワードなしZIPを前提としている。
+- 実運用ではパスワード付きZIPを受領するケースが存在する。
+- ZIP展開できなければXML抽出・基本情報抽出・健診項目抽出へ進めない。
+- パスワードはスクリプトへ固定値で埋め込まず、設定から取得できる構成とする。
+- 医療機関ごと、またはイベントごとに異なるパスワードへ対応できる拡張性を考慮する。
+- パスワード未設定や展開失敗時は、XML解析処理へ進まずETLエラーとして終了する。
+- ZIPパスワード対応はImport入口の責務とし、XML解析ロジックへ影響を持ち込まない。
+
+### 現時点の考え
+ZIP展開はImport処理の入口責務とし、パスワード対応は設定で吸収する。
+
+XML解析以降はZIPが正常展開済みであることを前提とする。
+
+### 決定事項
+- Phase4ではパスワード付きZIPへ対応する。
+- パスワードは設定ファイルから取得する。
+- スクリプトへパスワードをハードコードしない。
+- ZIP展開失敗時はXML解析を行わず、ETLエラーとして終了する。
+- ZIPパスワード対応はImport入口で完結させる。
+
+### 保留事項
+- パスワード設定をイベント単位・医療機関単位のどちらで管理するか。
+- 複数候補パスワードを試行するか。
+- パスワード管理方法（YAML・環境変数・Secret管理）の正式仕様。
+
+### 根拠
+- 実DBテストでパスワード付きZIPを受領したため。
+- XML解析処理へZIP展開処理を混在させない責務分離を維持するため。
+
+### 次回検討
+- `import_xml.yml` のパスワード設定仕様を確定する。
+- ZIP展開処理へ設定値読み込みを実装する。
+- ETLエラーコードとメッセージを整理する。

@@ -92,7 +92,7 @@ Phase4では制度チェックの合否判定、HIA出力、CSV直取込、`file
 
 ### config / CLI指定
 
-Phase4設定ファイルは `scripts/from_medical/config/import_xml.yml` とする。configを正本とし、CLI引数は指定時のみ一時的な上書き用途とする。通常実行は `event_id + file_receipts.status = DISCOVERED` を入力条件とし、CLIから `etl_run_id` を指定した場合のみ対象Runへ限定する。
+Phase4設定ファイルは `scripts/from_medical/config/import_xml.yml` とする。configを正本とし、CLI引数は指定時のみ一時的な上書き用途とする。通常実行は `event_id + file_receipts.status = DISCOVERED` を入力条件とし、CLIから `etl_run_id` を指定した場合のみ対象Runへ限定する。ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。
 
 ## 5. 共通lib利用方針
 
@@ -129,6 +129,13 @@ ZIPはPhase4で初めて中身を確認する。
 - 処理完了後は `work` を削除する。
 - `--keep-work` 指定時のみ調査用に保持する。
 - ZIP内XMLは、ZIP内相対パスを `xml_file_links.xml_inner_path` に保持する。
+- Phase4ではパスワード付きZIPへ対応する。
+- パスワードはスクリプトへハードコードせず、既存のZIPパスワード管理情報から取得する。
+- lookup優先順位は `ZIP_SHA256`、`ZIP_NAME`、`FACILITY` とする。
+- パスワード未検出時は `field = ZIP`、`error_code = ZIP_PASSWORD_NOT_FOUND` として記録し、XML解析へ進まない。
+- パスワード不一致・復号失敗時は `field = ZIP`、`error_code = ZIP_DECRYPT_FAILED` として記録し、XML解析へ進まない。
+- ZIPパスワード対応はImport入口で完結させ、XML解析ロジックへ持ち込まない。
+- パスワード平文はログ・`etl_errors.message` に出力しない。
 
 ZIP内対象XML:
 
@@ -366,6 +373,12 @@ XML抽出方針:
 - Phase4初期では旧medi系実装で実績のある抽出思想を優先する。
 - 基本情報取得は旧実装のXPath・取得方法を参考にする。
 - 健診項目取得は旧実装と同様にentry / observation 配下を広めに探索し、raw値を取得する。
+- `entryRelationship` 配下の `observation` は通常の健診項目候補として取り込む。
+- 17文字namecodeを持つ `observation` は、PQ/ST/CD/COなど型に関わらず `exam_item_values` へ保持する。
+- wrapper `observation` は登録しない。
+- `raw_value` は対象 `observation` の direct child `value` または `text` のみから取得し、親 `observation` が子孫値を集約しないようにする。
+- `displayName` は `raw_value` として扱わず、`code_display` として保持する。
+- XML構造情報と健診値を混在させない。
 - Phase4の目的は、XMLを安全に台帳化し、取得できたraw値を失わず保持することである。
 - 厚生労働省HL7仕様に沿った Section / Organizer / Entry 単位の構造解析は、Phase5以降のリファクタリング対象とする。
 - 将来的には、基本情報ブロック解析、検査項目entry解析、特定健診関連ブロック解析、任意項目・ドック項目解析、保健指導関連ブロック解析の責務単位へXML解析を整理する。
@@ -496,7 +509,7 @@ Errors:
 - `log_error` を利用する。
 - Phase4の `etl_errors` は `field`、`error_code`、`message` を基本構成として記録する。
 - `field` は `CONFIG` / `FILE` / `ZIP` / `XML` / `IDENTITY` / `SUBSCRIBER` / `DB` を基本とする。
-- `error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
+- `error_code` は `CONFIG_INVALID`、`FILE_NOT_FOUND`、`FILE_READ_FAILED`、`ZIP_OPEN_FAILED`、`ZIP_NO_TARGET_XML`、`ZIP_PASSWORD_NOT_FOUND`、`ZIP_DECRYPT_FAILED`、`XML_READ_FAILED`、`XML_PARSE_FAILED`、`XML_RAW_EXTRACT_FAILED`、`XML_UNSUPPORTED_NAMECODE`、`IDENTITY_GENERATION_FAILED`、`SUBSCRIBER_NOT_FOUND`、`SUBSCRIBER_LOOKUP_FAILED`、`DB_XML_LEDGER_SAVE_FAILED`、`DB_XML_FILE_LINK_SAVE_FAILED`、`DB_EXAM_ITEM_VALUES_SAVE_FAILED`、`DB_FILE_RECEIPT_STATUS_UPDATE_FAILED` を基本とする。
 - 検査値raw抽出エラーは `field = XML`、`error_code = XML_RAW_EXTRACT_FAILED` に寄せる。unsupported namecode はraw抽出失敗とは分け、`field = XML`、`error_code = XML_UNSUPPORTED_NAMECODE` として記録する。
 - 検査値単位の詳細エラーコードと normalize / validation 専用エラーコードはPhase4では作成しない。
 - `message` は対象ファイル、対象XML、対象フィールド、理由を含む人間確認用テキストとする。
@@ -511,7 +524,7 @@ Errors:
 | 論点 | 現時点の推奨 | 理由 | 人間判断 |
 | --- | --- | --- | --- |
 | Phase4の入力条件 | 通常実行は `event_id + file_receipts.status = DISCOVERED`、CLI `etl_run_id` 指定時のみ対象Runへ限定する。 | 通常運用ではイベント単位の未処理ファイル処理が扱いやすく、障害解析時のみRun限定が有効なため。 | 決定済み。 |
-| Phase4 config | 既存 `scripts/from_medical/config/import_xml.yml` を読み込んで処理する。Phase4では設定項目の追加検討は行わず、config正本・CLI上書き用途の方針を維持する。 | Phase3のconfig正本方針と揃え、Phase4実装前に設定追加で範囲を広げないため。 | 決定済み。 |
+| Phase4 config | `scripts/from_medical/config/import_xml.yml` を読み込んで処理する。config正本・CLI上書き用途の方針を維持し、ZIPパスワード管理テーブル参照先として `work_db` を設定に含める。 | Phase3のconfig正本方針と揃えつつ、パスワードをコードへ直書きしないため。 | 決定済み。 |
 | ZIP読取方式 | 初期実装は一時展開方式。 | 障害調査と実装の見通しが良い。 | ストリーム読みにする必要があるか。 |
 | ZIP内対象XML | `h*.xml` のみ対象、`ix08/su08/schema/xsd` は除外。 | Phase3単体XMLと同じ除外基準に揃える。 | 除外XML件数をどこに記録するか。 |
 | `processable_count` | Phase4でZIP展開後に、除外後の対象XML件数を設定する。ZIP内対象XML0件は `file_receipts.status = ERROR` とし、`etl_errors` に `field = ZIP`、`error_code = ZIP_NO_TARGET_XML` を基本として記録する。 | ZIP内XML件数は展開後でなければ確定できず、実際の処理対象件数と一致した値を保持するため。 | 決定済み。messageは `zip has no target xml: path=<path>, pattern=h*.xml, excludes=ix08,su08,schema,xsd` を基本とする。 |

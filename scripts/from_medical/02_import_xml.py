@@ -42,6 +42,7 @@ from scripts.lib.identity.generator import generate_identity_bundle
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
 DEV_PHR_DB = "dev_phr"
+WORK_OTHER_DB = "work_other"
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "import_xml.yml"
 
 ETL_PHASE = "IMPORT_XML"
@@ -99,6 +100,7 @@ class ImportConfig:
     event_id: int
     health_db: str
     dev_db: str
+    work_db: str
     dry_run: bool
     limit: int
     chunk_size_mb: int
@@ -208,6 +210,14 @@ class ImportDbError(RuntimeError):
         self.field_value = field_value
 
 
+class ZipPasswordNotFoundError(RuntimeError):
+    pass
+
+
+class ZipDecryptError(RuntimeError):
+    pass
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Import discovered ZIP/XML files into XML ledger tables.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Import config YAML path.")
@@ -218,6 +228,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
     parser.add_argument("--dev-db", default=None, help="Override dev_phr schema name.")
+    parser.add_argument("--work-db", default=None, help="Override work_other schema name.")
     parser.add_argument("--keep-work", action="store_true", help="Override config zip.keep_work to true.")
     return parser.parse_args()
 
@@ -239,6 +250,7 @@ def load_import_config(path: str | Path) -> ImportConfig:
         event_id=int(data.get("event_id", 2)),
         health_db=str(data.get("health_db") or HEALTH_EXAM_RESULT_DB),
         dev_db=str(data.get("dev_db") or DEV_PHR_DB),
+        work_db=str(data.get("work_db") or WORK_OTHER_DB),
         dry_run=bool(data.get("dry_run", False)),
         limit=int(data.get("limit", 0) or 0),
         chunk_size_mb=int(raw_processing.get("chunk_size_mb", 8) or 8),
@@ -262,6 +274,7 @@ def resolve_config(args: argparse.Namespace) -> ImportConfig:
         event_id=args.event_id if args.event_id is not None else config.event_id,
         health_db=args.health_db if args.health_db is not None else config.health_db,
         dev_db=args.dev_db if args.dev_db is not None else config.dev_db,
+        work_db=args.work_db if args.work_db is not None else config.work_db,
         dry_run=True if args.dry_run else config.dry_run,
         limit=args.limit if args.limit is not None else config.limit,
         chunk_size_mb=config.chunk_size_mb,
@@ -1064,7 +1077,79 @@ def subscriber_status_from_identity(
     }
 
 
+def facility_folder_name(file_receipt: Mapping[str, Any]) -> str | None:
+    relative_path = compact_text(file_receipt.get("relative_path"))
+    if not relative_path:
+        return None
+    parts = [part for part in re.split(r"[\\/]+", relative_path) if part]
+    return parts[0] if parts else None
+
+
+def resolve_zip_password(cur: Any, config: ImportConfig, file_receipt: Mapping[str, Any]) -> bytes | None:
+    facility_codes = [
+        compact_text(file_receipt.get("facility_code")),
+        compact_text(file_receipt.get("submitter_facility_code")),
+    ]
+    facility_codes = [code for code in facility_codes if code]
+    facility_placeholders = ", ".join(["%s"] * len(facility_codes)) or "NULL"
+    params: list[Any] = [
+        compact_text(file_receipt.get("file_sha256")),
+        compact_text(file_receipt.get("file_name")) or Path(str(file_receipt.get("source_path") or "")).name,
+        *facility_codes,
+        facility_folder_name(file_receipt),
+    ]
+    cur.execute(
+        f"""
+        SELECT password_text
+        FROM {qname(config.work_db)}.medi_zip_passwords
+        WHERE is_active = 1
+          AND (
+            (scope_type = 'ZIP_SHA256' AND zip_sha256 = %s)
+            OR (scope_type = 'ZIP_NAME' AND zip_name = %s)
+            OR (
+              scope_type = 'FACILITY'
+              AND (
+                facility_code IN ({facility_placeholders})
+                OR facility_folder_name = %s
+              )
+            )
+          )
+        ORDER BY
+          CASE scope_type
+            WHEN 'ZIP_SHA256' THEN 1
+            WHEN 'ZIP_NAME' THEN 2
+            WHEN 'FACILITY' THEN 3
+            ELSE 9
+          END,
+          priority,
+          zip_password_id
+        LIMIT 1
+        """,
+        tuple(params),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    password = compact_text(row.get("password_text") if isinstance(row, Mapping) else row[0])
+    return password.encode("utf-8") if password is not None else None
+
+
+def is_encrypted_zip_info(info: zipfile.ZipInfo) -> bool:
+    return bool(info.flag_bits & 0x1)
+
+
+def read_zip_member(zf: zipfile.ZipFile, info: zipfile.ZipInfo, password: bytes | None) -> bytes:
+    try:
+        return zf.read(info, pwd=password)
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        if "password" in message or "encrypted" in message or "decrypt" in message:
+            raise ZipDecryptError(type(exc).__name__) from exc
+        raise
+
+
 def read_candidates_from_file(
+    cur: Any,
     file_receipt: Mapping[str, Any],
     config: ImportConfig,
     summary: ImportSummary,
@@ -1078,19 +1163,27 @@ def read_candidates_from_file(
     skipped = 0
     candidates: list[XmlCandidate] = []
     with zipfile.ZipFile(source_path) as zf:
+        target_infos: list[zipfile.ZipInfo] = []
         for info in zf.infolist():
             if info.is_dir():
                 continue
             if is_target_inner_xml(info.filename, config.zip):
-                candidates.append(
-                    XmlCandidate(
-                        file_receipt=file_receipt,
-                        inner_path=info.filename,
-                        data=zf.read(info),
-                    )
-                )
+                target_infos.append(info)
             elif info.filename.lower().endswith(".xml"):
                 skipped += 1
+        password: bytes | None = None
+        if any(is_encrypted_zip_info(info) for info in target_infos):
+            password = resolve_zip_password(cur, config, file_receipt)
+            if password is None:
+                raise ZipPasswordNotFoundError
+        for info in target_infos:
+            candidates.append(
+                XmlCandidate(
+                    file_receipt=file_receipt,
+                    inner_path=info.filename,
+                    data=read_zip_member(zf, info, password if is_encrypted_zip_info(info) else None),
+                )
+            )
     summary.skipped_xml += skipped
     return candidates, skipped
 
@@ -1438,6 +1531,7 @@ def process_file_receipt(
     file_receipt_id = int(cast(Any, file_receipt.get("id")))
     source_path = Path(str(file_receipt.get("source_path") or ""))
     file_error_count_before = summary.errors
+    candidate_read_failed = False
 
     if not config.dry_run:
         try:
@@ -1461,8 +1555,9 @@ def process_file_receipt(
             return
 
     try:
-        candidates, _skipped = read_candidates_from_file(file_receipt, config, summary)
+        candidates, _skipped = read_candidates_from_file(health_cur, file_receipt, config, summary)
     except FileNotFoundError:
+        candidate_read_failed = True
         message = f"file not found: path={source_path}"
         record_import_error(
             health_cur if not config.dry_run else None,
@@ -1476,6 +1571,7 @@ def process_file_receipt(
         )
         candidates = []
     except zipfile.BadZipFile as exc:
+        candidate_read_failed = True
         message = f"zip open failed: path={source_path}, reason={compact_text(exc) or type(exc).__name__}"
         record_import_error(
             health_cur if not config.dry_run else None,
@@ -1488,7 +1584,36 @@ def process_file_receipt(
             field_value=str(source_path),
         )
         candidates = []
+    except ZipPasswordNotFoundError:
+        candidate_read_failed = True
+        message = f"zip password not found: path={source_path}"
+        record_import_error(
+            health_cur if not config.dry_run else None,
+            run_id=run_id,
+            summary=summary,
+            field=ERROR_FIELD_ZIP,
+            error_code="ZIP_PASSWORD_NOT_FOUND",
+            message=message,
+            src_file=str(source_path),
+            field_value=str(source_path),
+        )
+        candidates = []
+    except ZipDecryptError as exc:
+        candidate_read_failed = True
+        message = f"zip decrypt failed: path={source_path}, reason={compact_text(exc) or type(exc).__name__}"
+        record_import_error(
+            health_cur if not config.dry_run else None,
+            run_id=run_id,
+            summary=summary,
+            field=ERROR_FIELD_ZIP,
+            error_code="ZIP_DECRYPT_FAILED",
+            message=message,
+            src_file=str(source_path),
+            field_value=str(source_path),
+        )
+        candidates = []
     except OSError as exc:
+        candidate_read_failed = True
         message = f"file read failed: path={source_path}, reason={compact_text(exc) or type(exc).__name__}"
         record_import_error(
             health_cur if not config.dry_run else None,
@@ -1507,7 +1632,11 @@ def process_file_receipt(
     ok_count = 0
     xml_error_count = 0
 
-    if target_count == 0 and str(file_receipt.get("file_type") or "").upper() == FILE_TYPE_ZIP:
+    if (
+        target_count == 0
+        and not candidate_read_failed
+        and str(file_receipt.get("file_type") or "").upper() == FILE_TYPE_ZIP
+    ):
         message = (
             f"zip has no target xml: path={source_path}, "
             "pattern=h*.xml, excludes=ix08,su08,schema,xsd"
