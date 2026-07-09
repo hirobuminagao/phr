@@ -96,6 +96,12 @@ class CheckSummary:
         print(f"  deleted={self.rows_deleted}")
 
 
+@dataclass(frozen=True)
+class GroupProblemResult:
+    result: ItemResult
+    required: bool
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate exam_check_results from imported exam item values.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Check config YAML path.")
@@ -262,6 +268,8 @@ def summarize_group(
             if include_not_implemented_summary and result.reason:
                 reasons.append(f"{identity_code}:{result.reason}")
             continue
+        if result.status == STATUS_MISSING and not required:
+            continue
         if result.reason:
             reasons.append(f"{identity_code}:{result.reason}")
         if required and not result.is_ok_like:
@@ -326,13 +334,24 @@ def is_verbose_problem_result(result: ItemResult) -> bool:
 def group_problem_results(
     group_members: dict[str, dict[str, Any]],
     item_results: dict[str, ItemResult],
-) -> list[ItemResult]:
-    results: list[ItemResult] = []
-    for identity_code, _ in sorted_group_members(group_members):
+) -> list[GroupProblemResult]:
+    results: list[GroupProblemResult] = []
+    for identity_code, member in sorted_group_members(group_members):
         result = item_results.get(identity_code)
         if result is not None and is_verbose_problem_result(result):
-            results.append(result)
+            required = int(member.get("required_flag") or 0) == 1
+            results.append(GroupProblemResult(result=result, required=required))
     return results
+
+
+def print_group_problem_results(results: list[GroupProblemResult]) -> None:
+    if not results:
+        print("    none")
+        return
+    for problem in results:
+        result = problem.result
+        requirement = "required" if problem.required else "optional"
+        print(f"    - {result.identity_code}: {requirement} status={result.status} reason={result.reason}")
 
 
 def print_dry_run_detail(
@@ -343,8 +362,8 @@ def print_dry_run_detail(
     check_status: str,
     check_reason: str | None,
     item_results: dict[str, ItemResult],
-    legal_problem_results: list[ItemResult],
-    specific_problem_results: list[ItemResult],
+    legal_problem_results: list[GroupProblemResult],
+    specific_problem_results: list[GroupProblemResult],
 ) -> None:
     print("dry_run_detail:")
     print(f"  xml_ledger_id={ledger['id']}")
@@ -357,18 +376,10 @@ def print_dry_run_detail(
     print(f"  check_reason={check_reason}")
 
     print("  legal_problem_items:")
-    if legal_problem_results:
-        for result in legal_problem_results:
-            print(f"    - {result.identity_code}: status={result.status} reason={result.reason}")
-    else:
-        print("    none")
+    print_group_problem_results(legal_problem_results)
 
     print("  specific_problem_items:")
-    if specific_problem_results:
-        for result in specific_problem_results:
-            print(f"    - {result.identity_code}: status={result.status} reason={result.reason}")
-    else:
-        print("    none")
+    print_group_problem_results(specific_problem_results)
 
     problem_results = [
         result
