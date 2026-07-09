@@ -27,6 +27,7 @@ CREATE TABLE `health_exam_result`.`xml_ledger` (
   `xml_status` varchar(32) NOT NULL DEFAULT 'PENDING',
   `xml_reason` text,
   `check_status` varchar(32) NOT NULL DEFAULT 'PENDING',
+  `check_reason` text,
   `xml_export_status` varchar(32) NOT NULL DEFAULT 'PENDING',
   `manual_export_approved` tinyint(1) NOT NULL DEFAULT 0,
   `manual_export_reason` text,

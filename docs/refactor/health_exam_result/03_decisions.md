@@ -220,17 +220,32 @@
 - `exam_check_results` は項目ごとに `status` / `reason` を持つ。
 - 制度チェックは、項目単位の判定と制度単位の総合判定を分離する。
 - `exam_check_results` は結果のみ保持し、判定ルールはマスタで管理する。
+- `exam_check_results` は履歴テーブルではなく、再生成可能な最新結果テーブルとして扱う。
+- `exam_check_results` は最新判定結果のみ保持する。
+- 制度チェック再実行時は、対象レコードを削除して再生成する。
+- 加入者情報変更時は、対象者を再判定する専用処理で対応する。
+- 制度改定・設計変更時は、対象年度を削除後に再実行する。
+- `exam_check_results` の更新履歴・Auditは保持しない。
+- `exam_check_results` の主キーは `id` のみとする。
+- `exam_check_results` には業務キーによる一意制約を設けない。
+- `exam_check_results` はFK制約を張らず、参照キーはINDEXのみ作成する。
+- `exam_check_results` は `xml_ledger_id`、`event_id`、`subscriber_id`、`hia_subscriber_id` を保持する。
 - `exam_check_results` の横持ち対象は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の72項目を正とする。
 - まず統合された制度チェック対象72項目について、同一性項目コード単位で `exam_check_results` に横持ちの `status` / `reason` を記録する。
 - 72項目の項目別 `status` / `reason` は、法定健診・特定健診で二重に持たない。
 - `exam_check_results` の項目別 `status` は `OK`、`CALCULATED`、`ALTERNATIVE`、`MISSING`、`INVALID` の5種類とする。
 - `exam_check_results` の項目別 `reason` は特記事項のみ保持し、`OK` の場合は `NULL` とする。
+- 法定健診の総合判定カラム名は `legal_check_result` とする。
+- 特定健診の総合判定カラム名は `specific_check_result` とする。
+- 法定健診のreason summaryカラム名は `legal_reason_summary` とする。
+- 特定健診のreason summaryカラム名は `specific_reason_summary` とする。
 - XML処理結果ログおよび医療機関向けメッセージは、`reason` が `NULL` ではない項目を集約して生成する。
 - 法定健診・特定健診の総合判定は、72項目の `status` をもとに、それぞれの制度グループ定義に従って `OK` / `WARNING` / `NG` を集計する。
 - 法定健診・特定健診の総合判定は `exam_check_results` を唯一の入力として算出し、XML や `exam_item_values` を直接参照しない。
 - 項目ごとの判定結果は `exam_check_results` の項目別 `status` / `reason` が保持する。
 - `check_result` は `exam_check_results` の項目別 `status` を制度グループ単位で集計した最終判定とする。
 - 制度チェック総合判定は、`exam_check_results` の制度判定結果から `xml_ledger.check_status` を生成する。
+- `xml_ledger` にはJOIN削減用に `check_reason` を追加する。
 - 法定健診・特定健診の制度チェック総合判定は以下とする。
   - 法定OK・特定OK → `OK`
   - 法定OK・特定WARNING → `WARNING`
