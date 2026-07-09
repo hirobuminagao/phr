@@ -246,10 +246,12 @@
 - `check_result` は `exam_check_results` の項目別 `status` を制度グループ単位で集計した最終判定とする。
 - 制度チェック総合判定は、`exam_check_results` の制度判定結果から `xml_ledger.check_status` を生成する。
 - `xml_ledger` にはJOIN削減用に `check_reason` を追加する。
+- 法定健診判定と特定健診判定は独立して集約する。
+- `xml_ledger.check_status` は法定健診側を主判定とする。
 - 法定健診・特定健診の制度チェック総合判定は以下とする。
-  - 法定OK・特定OK → `OK`
-  - 法定OK・特定WARNING → `WARNING`
-  - 法定NG → `NG`
+  - `legal_check_result = NG` の場合 → `xml_ledger.check_status = NG`
+  - `legal_check_result = OK` かつ `specific_check_result = NG/WARNING` の場合 → `xml_ledger.check_status = WARNING`
+  - `legal_check_result = OK` かつ `specific_check_result = OK` の場合 → `xml_ledger.check_status = OK`
 - 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
 - Phase5の責務は `dev_phr` 制度マスタ整備に固定する。
 - Phase5では制度チェック実装を行わない。
@@ -266,6 +268,9 @@
 - Phase7の `etl_errors` はスクリプト異常のみを記録する。
 - Phase7の制度判定結果は `exam_check_results` の `status` / `reason` で管理する。
 - Phase7の未実装ルールは `status = INVALID`、`reason = NOT_IMPLEMENTED` とする。
+- 未実装ルールによる `INVALID / NOT_IMPLEMENTED` は制度不適合NGとは区別する。
+- 特定健診側の未実装ルールは参考情報として扱う。
+- 制度全体の集約時は、未実装ルールを `xml_ledger.check_status = NG` へ直結させない。
 - Phase7の `reason` は項目単位で保持し、制度別 summary および `xml_ledger.check_reason` は項目別 `reason` を集約して生成する。
 - normalize / validation は制度チェック実装と混在させず、独立した責務として整理する。
 - 制度チェックでは、DBはルール定義のみを保持し、ルール処理は共通ライブラリで実装する。

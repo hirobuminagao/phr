@@ -220,6 +220,7 @@ def summarize_group(
     item_results: dict[str, ItemResult],
     *,
     missing_result: str,
+    include_not_implemented_summary: bool,
 ) -> tuple[str, str | None]:
     reasons: list[str] = []
     final_result = RESULT_OK
@@ -230,6 +231,10 @@ def summarize_group(
             if required:
                 final_result = worse_result(final_result, missing_result)
                 reasons.append(f"{identity_code}:MISSING")
+            continue
+        if is_not_implemented_result(result):
+            if include_not_implemented_summary and result.reason:
+                reasons.append(f"{identity_code}:{result.reason}")
             continue
         if result.reason:
             reasons.append(f"{identity_code}:{result.reason}")
@@ -257,9 +262,9 @@ def worse_result(current: str, candidate: str) -> str:
 def aggregate_check_status(legal_result: str, specific_result: str) -> str:
     if legal_result == RESULT_NG:
         return CHECK_STATUS_NG
-    if specific_result == RESULT_NG:
-        return CHECK_STATUS_NG
     if legal_result == RESULT_WARNING or specific_result == RESULT_WARNING:
+        return CHECK_STATUS_WARNING
+    if legal_result == RESULT_OK and specific_result == RESULT_NG:
         return CHECK_STATUS_WARNING
     return CHECK_STATUS_OK
 
@@ -282,10 +287,26 @@ def result_columns(item_results: dict[str, ItemResult]) -> dict[str, Any]:
     return columns
 
 
+def is_not_implemented_result(result: ItemResult) -> bool:
+    return bool(result.reason and REASON_NOT_IMPLEMENTED in result.reason)
+
+
 def is_verbose_problem_result(result: ItemResult) -> bool:
     if result.status in {STATUS_INVALID, STATUS_MISSING}:
         return True
-    return bool(result.reason and REASON_NOT_IMPLEMENTED in result.reason)
+    return is_not_implemented_result(result)
+
+
+def group_problem_results(
+    group_members: dict[str, dict[str, Any]],
+    item_results: dict[str, ItemResult],
+) -> list[ItemResult]:
+    results: list[ItemResult] = []
+    for identity_code, _ in sorted_group_members(group_members):
+        result = item_results.get(identity_code)
+        if result is not None and is_verbose_problem_result(result):
+            results.append(result)
+    return results
 
 
 def print_dry_run_detail(
@@ -296,6 +317,8 @@ def print_dry_run_detail(
     check_status: str,
     check_reason: str | None,
     item_results: dict[str, ItemResult],
+    legal_problem_results: list[ItemResult],
+    specific_problem_results: list[ItemResult],
 ) -> None:
     print("dry_run_detail:")
     print(f"  xml_ledger_id={ledger['id']}")
@@ -304,7 +327,22 @@ def print_dry_run_detail(
     print(f"  legal_check_result={legal_result}")
     print(f"  specific_check_result={specific_result}")
     print(f"  check_status={check_status}")
+    print(f"  check_status_basis=legal:{legal_result} specific:{specific_result}")
     print(f"  check_reason={check_reason}")
+
+    print("  legal_problem_items:")
+    if legal_problem_results:
+        for result in legal_problem_results:
+            print(f"    - {result.identity_code}: status={result.status} reason={result.reason}")
+    else:
+        print("    none")
+
+    print("  specific_problem_items:")
+    if specific_problem_results:
+        for result in specific_problem_results:
+            print(f"    - {result.identity_code}: status={result.status} reason={result.reason}")
+    else:
+        print("    none")
 
     problem_results = [
         result
@@ -422,8 +460,18 @@ def process_ledgers(
             common_namecodes=group_namecodes.get(COMMON_GROUP, {}),
             values=values_by_ledger.get(ledger_id, []),
         )
-        legal_result, legal_summary = summarize_group(legal_identities, item_results, missing_result=RESULT_NG)
-        specific_result, specific_summary = summarize_group(specific_identities, item_results, missing_result=RESULT_WARNING)
+        legal_result, legal_summary = summarize_group(
+            legal_identities,
+            item_results,
+            missing_result=RESULT_NG,
+            include_not_implemented_summary=False,
+        )
+        specific_result, specific_summary = summarize_group(
+            specific_identities,
+            item_results,
+            missing_result=RESULT_WARNING,
+            include_not_implemented_summary=True,
+        )
         check_status = aggregate_check_status(legal_result, specific_result)
         check_reason = aggregate_check_reason(legal_summary, specific_summary)
         if check_status == CHECK_STATUS_OK:
@@ -441,6 +489,8 @@ def process_ledgers(
                 check_status=check_status,
                 check_reason=check_reason,
                 item_results=item_results,
+                legal_problem_results=group_problem_results(legal_identities, item_results),
+                specific_problem_results=group_problem_results(specific_identities, item_results),
             )
 
         if config.dry_run:
