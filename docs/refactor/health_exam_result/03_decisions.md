@@ -242,29 +242,65 @@
 - Phase6で `exam_check_results` DDLを確定する。
 - Phase7で `03_check_exam_results.py` を実装する。
 - normalize / validation は制度チェック実装と混在させず、独立した責務として整理する。
-- `ANY_NONEMPTY` は presence 判定ルールとして扱い、対象 `namecode` 群のうち1つ以上に有効値が存在すれば充足とする。
-- `ANY_NONEMPTY` は行が存在するだけでは充足とせず、`NULL`・空値・無効値は充足扱いしない。
-- `CALCULATE` ルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
+- 制度チェックでは、DBはルール定義のみを保持し、ルール処理は共通ライブラリで実装する。
+- `03_check_exam_results.py` はルール実装を持たず、処理制御、DB入出力、結果保存を担当する。
+- `03_check_exam_results.py` は、マスタから取得したルールに応じて共通Rule / Lookup / Calculateライブラリを呼び出すオーケストレーターとする。
+- `presence_value_mode` の基本ルールとして、`ANY_VALID_VALUE`、`ANY_RECORD`、`ANY_OF_NAMECODES`、`CALCULATED`、`ALTERNATIVE`、`CONDITIONAL` を扱う。
+- 各 `presence_value_mode` の処理は `03_check_exam_results.py` に直書きせず、共通ルールライブラリへ実装する。
+- `ANY_VALID_VALUE` は、`raw_value`、`nullFlavor`、`negation_ind` を考慮して有効値が存在するかを判定する。
+- `ANY_RECORD` は、値の有無ではなくレコード存在を確認するルールとする。
+- `ANY_OF_NAMECODES` は、指定された複数 `namecode` のうち、いずれかが有効値を持つ場合に充足とする。
+- `CALCULATED` ルールは、対象同一性項目に有効値が存在しない場合のみ評価する。
 - 対象同一性項目に有効値が存在する場合は、その値を採用し、項目別 `status = OK` とする。
-- `CALCULATE` に必要な同一性項目がすべて揃う場合は、共通計算ライブラリを利用して値を生成し、項目別 `status = CALCULATED` とする。
-- `CALCULATE` で値を確定できない場合のみ、`ALTERNATIVE` ルールを評価する。
+- `CALCULATED` に必要な同一性項目がすべて揃う場合は、共通Calculateライブラリを利用して値を生成し、項目別 `status = CALCULATED` とする。
+- `CALCULATED` で値を確定できない場合のみ、`ALTERNATIVE` ルールを評価する。
 - `ALTERNATIVE` が成立した場合は、対象項目を項目別 `status = ALTERNATIVE`、代替項目を項目別 `status = OK` とする。
-- `CALCULATE` と `ALTERNATIVE` のいずれでも値を確定できない場合は、項目別 `status = MISSING` とする。
-- 計算ロジックは共通ライブラリ `scripts/lib/examination/calc.py` へ実装し、制度チェック側は計算ライブラリを呼び出して `status` を決定する。
-- `CALCULATE` と `ALTERNATIVE` は別ルールとして扱い、同一の処理フローへ混在させない。
+- `CALCULATED` と `ALTERNATIVE` のいずれでも値を確定できない場合は、項目別 `status = MISSING` とする。
+- `ALTERNATIVE` は、対象項目が不足する場合に代替項目で充足できるかを判定する。
+- `CONDITIONAL` は、条件付き必須項目の判定入口として扱う。
+- 計算処理は共通Calculateライブラリへ集約する。
+- 計算元取得は共通Lookupライブラリへ集約する。
+- Lookupライブラリは、対象キーから必要な検査値と取得可否を返却する。
+- Calculateライブラリは、Lookup結果を入力として計算結果のみを返却する純粋関数として実装する。
+- BMI等の算出項目追加時は、Calculateライブラリへ関数を追加して対応する。
+- `CALCULATED` と `ALTERNATIVE` は別ルールとして扱い、同一の処理フローへ混在させない。
 - `ALTERNATIVE` は既存の identity 項目コードによる処理フローを利用する。
 - `ALTERNATIVE` 共通処理は `scripts/lib/examination/alternative.py` に実装する。
 - `ALTERNATIVE` 共通処理では、ケース判定と実処理関数を分離する。
 - 採用されなかった案・比較案としての Alternative は `05_design_history.md` で管理し、`03_decisions.md` には採用された最終決定のみを記載する。
 - 旧 `LSIO_Legal_Item` は v2 の正ではなく、差分確認・参考資料として扱う。
+- 既存 `LSIO_Legal_Item` グループは維持する。
+- v2用の `exam_item_group` を新規追加する。
+- v2は追加方式で導入し、既存運用へ影響を与えない。
+- 将来的にv2グループへ完全移行可能と判断した場合のみ、既存 `LSIO_Legal_Item` グループの廃止を検討する。
+- 制度マスタは既存 `dev_phr.exam_item_group_*` 系テーブルをベースに構成する。
+- 新規制度ルールテーブルは追加しない方針とする。
 - `dev_phr.exam_item_group_*` は migration 対象とし、必要差分のみ追加・修正する。
+- 既存スクリプトとの互換性は優先せず、v2要件に必要なDDL変更・migrationを実施する。
 - マスタ構成としては、共通72項目用グループ、法定健診判定用グループ、特定健診判定用グループを分けて扱う方針とする。
 - 共通72項目用グループは、`exam_check_results` の項目別 `status` / `reason` を生成するために利用する。
 - 法定健診判定用グループと特定健診判定用グループは、制度単位の `check_result` を集計するために利用する。
 - 特定健診用グループは、初期実装ではマスタ未投入でも動作可能な構成とし、後でマスタを投入すれば判定できるようにする。
+- `exam_item_group_identity_members` は制度上の同一性項目管理を担当する。
+- `exam_item_group_method_members` は `method_code` 単位の制度ルール管理を担当する。
+- `exam_item_group_members` は `namecode` 単位の取得候補管理を担当する。
+- `exam_item_group_method_members` はv2要件に合わせて必要なカラムを追加する前提とする。
+- `exam_item_group_method_members` をv2制度チェック用のmethod単位ルールマスタとして拡張する。
+- `exam_item_group_method_members` のv2追加カラムとして、`presence_value_mode varchar(32) NULL`、`required_flag tinyint(1) NULL`、`condition_code varchar(64) NULL`、`rule_code varchar(64) NULL`、`rule_source_identity_codes varchar(255) NULL`、`rule_source_method_codes varchar(255) NULL`、`rule_source_namecodes text NULL`、`is_active tinyint(1) NOT NULL DEFAULT 1`、`updated_at datetime(6) NULL ON UPDATE CURRENT_TIMESTAMP(6)` を追加する方針とする。
+- `rule_params` JSON は採用しない。
+- ルールが参照する項目はJSONではなく、`rule_source_*` の専用カラムで保持する。
+- 条件判定は自由記述式の `condition_expr` ではなく、共通ライブラリが解釈する識別子として `condition_code` を採用する。
+- 参照元項目を表す命名として `rule_source_*` を採用する。
+- v2では制度チェックを `method_code` を判定単位として実装する。
+- identity は制度上の同一性判定、method は検査方法判定という責務を維持する。
+- 現行 `exam_item_master` では `method_code` と `namecode` を実質同一として扱う。
+- 現時点では素材や測定方式まで区別する医療機関データは想定せず、`method_code` 単位で十分と判断する。
+- `exam_item_group_members` は将来の複数 `namecode` 対応を見据えて維持する。
+- 初期実装では将来要件のためだけに複雑な判定構造は導入しない。
+- 将来、素材レベルまで区別が必要になった場合は、その時点で `exam_item_master` と `exam_item_group_*` 構成を拡張して対応する。
 - v2初期では `exam_item_group_identity_members` への追加カラムは行わず、既存カラムを利用する。
-- 制度チェックの判定ロジックは `03_check_exam_results.py` に集約する。
-- DBはどのルールを使うかを管理し、スクリプトはそのルールをどう判定するかを実装する。
+- 制度チェックの判定ロジックは共通ルールライブラリへ集約する。
+- DBはどのルールを使うかを管理し、`03_check_exam_results.py` はそのルールをどう判定するかを共通ライブラリへ委譲する。
 - 法定健診チェックは主判定とする。
 - 特定健診チェックは原則 warning / 参考判定とする。
 - 特定健診チェック結果だけを理由に、健診機関へ再提出要求する運用にはしない。

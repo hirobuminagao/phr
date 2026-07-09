@@ -4092,3 +4092,278 @@ Phase5でいきなり `exam_check_results` 登録や制度チェック実装に�
 - Phase5で作成・更新すべきseed / migration / docsを整理する。
 
 ---
+
+## DH-20260708-7 / 2026-07-08 15:22 JST
+
+### テーマ
+制度チェックマスタ整備に向けた論点整理
+
+### 背景
+Phase4実装完了後、`exam_check_results` 実装へ進む前に、Codexレビューを実施した。
+
+レビューの結果、制度チェック実装へ進む前に、現行マスタ・制度仕様・実装計画の対応関係を整理する必要があることが分かった。
+
+### 当初の考え
+- Phase5では、そのまま制度マスタ整備へ着手することを考えていた。
+
+### 議論
+- レビュー結果をそのまま設計へ反映するのではなく、まず「何を決める必要があるか」を論点として整理する方針とした。
+- レビューは決定事項ではなく、協議を始めるための材料として扱う。
+- 現時点では `exam_check_results` のDDLや制度チェック実装へは進まず、制度マスタ整備に必要な情報を棚卸しする。
+- 最初の棚卸し対象として、72項目仕様・`exam_item_master`・現行 `LSIO_Legal_Item` の対応関係を整理することとした。
+- 差分を可視化したうえで、流用・追加・廃止・修正対象を判断する方針とした。
+
+### 現時点の考え
+制度マスタ整備では、実装より先に現状把握を行い、差分を可視化した上で整備方針を決定する。
+
+### 決定事項
+- Codexレビュー結果は、そのまま決定事項とせず、設計論点として扱う。
+- Phase5開始時は、制度マスタの現状棚卸しを優先する。
+- 次の作業として、「72項目spec × exam_item_master × LSIO_Legal_Item の差分表を作成する」ことを決定した。
+
+### 保留事項
+- 差分に対する流用・追加・修正方針。
+- 特定健診グループの整備方法。
+- 条件付き必須・算出・代替ルールの表現方法。
+
+### 根拠
+- Codexレビュー結果
+- Phase5責務整理
+
+### 次回検討
+- 72項目specと既存制度マスタとの差分表を作成する。
+- 差分をもとに制度マスタ整備方針を決定する。
+
+---
+
+## DH-20260708-8 / 2026-07-08 16:36 JST
+
+### テーマ
+制度チェックルール実装と共通ライブラリ（Rule / Lookup / Calculate）の責務整理
+
+### 背景
+Phase5の制度マスタ整備を進める中で、`presence_value_mode`、`CALCULATED`、`ALTERNATIVE` などのルールをどこまでDBへ持たせ、どこからスクリプト側で処理するかを整理した。
+
+また、制度チェック処理を項目ごとの個別実装ではなく、共通ライブラリとして再利用可能な構成にする方針について協議した。
+
+### 当初の考え
+- `03_check_exam_results.py` 内で各制度ルールを個別実装することを考えていた。
+- 計算処理も制度チェックスクリプト内へ直接記述する案があった。
+
+### 議論
+- DBは「どのルールを適用するか」を管理し、ルールの実装自体は共通ライブラリが担当する責務とする。
+- `presence_value_mode` や `condition_expr` はルール選択情報として保持し、実際の判定ロジックは共通ライブラリへ委譲する。
+- 制度チェックスクリプトは、対象同一性項目とルールを取得し、対応する判定関数を呼び出すオーケストレーションのみを担当する。
+- `CALCULATED` は「直接値が存在する場合は直接値を優先し、存在しない場合のみ計算を行う」という共通ルールとして扱う。
+- 計算式は制度チェックへ埋め込まず、共通計算ライブラリへ集約する。
+- 計算処理は「必要な検査項目を取得するLookup」と「値を計算するCalculate」を分離する。
+- Lookupライブラリは、対象キーを受け取り、計算元となる検査値と取得可否を返却する責務とする。
+- Calculateライブラリは、Lookup結果を受け取り、BMIなどの計算結果のみを返却する純粋関数として実装する。
+- 新しい算出項目を追加する場合は、計算関数を追加するだけで対応できる構成とする。
+- 将来的にはALTERNATIVEやその他の制度ルールについても、同様にルール単位の共通ライブラリとして拡張できる構成を目指す。
+- `presence_value_mode` の初期ルール種別として、以下を候補ではなく設計上の基本ルールとして扱う。
+  - `ANY_VALID_VALUE`
+  - `ANY_RECORD`
+  - `ANY_OF_NAMECODES`
+  - `CALCULATED`
+  - `ALTERNATIVE`
+  - `CONDITIONAL`
+- `ANY_VALID_VALUE` は、`raw_value`、`nullFlavor`、`negation_ind` を考慮して有効値が存在するかを判定する。
+- `ANY_RECORD` は、値の有無ではなくレコード存在を確認するルールとする。
+- `ANY_OF_NAMECODES` は、指定された複数 `namecode` のうち、いずれかが有効値を持つ場合に充足とする。
+- `CALCULATED` は、直接値が存在する場合は直接値を優先し、存在しない場合のみ計算を行う。
+- `ALTERNATIVE` は、対象項目が不足する場合に代替項目で充足できるかを判定する。
+- `CONDITIONAL` は、条件付き必須項目の判定入口として扱う。
+
+### 現時点の考え
+制度チェックでは、DBはルールを管理し、スクリプトは処理順を制御し、ルール実装は共通ライブラリへ集約する責務分離を基本方針とする。
+
+計算処理はLookupとCalculateを分離することで、再利用性・保守性・テスト容易性を高める。
+
+### 決定事項
+- DBはルール定義のみを保持し、ルール処理は共通ライブラリで実装する。
+- `03_check_exam_results.py` はルールの実装を持たず、処理制御のみ担当する。
+- `CALCULATED` は「直接値優先、存在しない場合のみ計算」の共通ルールとする。
+- 計算処理は共通Calculateライブラリへ集約する。
+- 計算元取得は共通Lookupライブラリへ集約する。
+- Lookupライブラリは、対象キーから必要な検査値と取得可否を返却する。
+- Calculateライブラリは、Lookup結果を入力として計算結果のみを返却する純粋関数として実装する。
+- BMI等の算出項目追加時は、Calculateライブラリへ関数を追加して対応する。
+- ルール単位の共通ライブラリ構成とし、将来的な制度改定や新ルール追加時も共通基盤を拡張する方針とする。
+- `presence_value_mode` の基本ルールとして、`ANY_VALID_VALUE`、`ANY_RECORD`、`ANY_OF_NAMECODES`、`CALCULATED`、`ALTERNATIVE`、`CONDITIONAL` を扱う。
+- 各 `presence_value_mode` の処理は `03_check_exam_results.py` に直書きせず、共通ルールライブラリへ実装する。
+- `CALCULATED` は「直接値優先、なければ計算」のルールとして定義する。
+
+### 保留事項
+- Lookupライブラリの正式API。
+- Calculateライブラリの正式API。
+- ALTERNATIVEを共通ライブラリへどこまで集約するか。
+- ルールライブラリ全体のディレクトリ構成。
+- ルールごとの戻り値フォーマット。
+
+### 根拠
+- DBへ判定ロジックを持たせると、複雑なルール変更や制度改定への追従が困難になるため。
+- ルール単位・計算単位で共通ライブラリ化することで、再利用性・保守性・テスト容易性を高められるため。
+- LookupとCalculateを分離することで、計算ロジックとデータ取得責務を明確に分離できるため。
+
+### 次回検討
+- LookupライブラリのAPI設計。
+- CalculateライブラリのAPI設計。
+- ルールライブラリ全体の構成整理。
+- `03_decisions.md` への同期。
+
+---
+
+## DH-20260708-9 / 2026-07-08 18:22 JST
+
+### テーマ
+既存制度マスタ流用方針と `exam_item_group_*` テーブル責務の再整理
+
+### 背景
+Phase5の制度マスタ整備を進める中で、新規ルールテーブルを追加する案と、既存の `exam_item_group_identity_members`、`exam_item_group_method_members`、`exam_item_group_members` を拡張して利用する案を比較した。
+
+また、既存スクリプトは今後利用しない前提である一方、既存テーブルは将来の保守性や移行性も考慮しながら整理する必要があった。
+
+### 当初の考え
+- 制度チェック用に新規ルールテーブルを追加する案を考えていた。
+- 一方で既存 `exam_item_group_*` 系テーブルをそのまま流用できないかも検討していた。
+
+### 議論
+- 既存スクリプトとの互換性は考慮しなくてよく、必要であれば既存カラムの追加・変更も許容する方針とした。
+- 新規テーブルを増やすよりも、既存 `exam_item_group_*` 系テーブルへ責務を整理した方が、マスタ構造を一本化できる。
+- `exam_item_group_identity_members` は制度上の72項目（同一性項目）の定義を管理する責務とする。
+- `exam_item_group_method_members` は `method_code` 単位の制度ルールを管理する責務とする。
+- `exam_item_group_members` は `namecode` 単位の取得候補・実データ対応を管理する責務とする。
+- 現状の `exam_item_group_method_members` は制度ルールを保持するには情報が不足しており、ルール関連カラムの追加が必要であることを確認した。
+- `presence_value_mode`、`required_flag`、`condition_expr` などは、identity単位ではなくmethod単位で管理した方が責務として自然であることを確認した。
+- `required_presence_namecodes` のようなCSV管理は段階的に解消し、methodまたはnamecode構造で表現する方向とした。
+- DBはルール定義のみを保持し、実際の判定ロジックは共通Ruleライブラリへ委譲する方針は維持する。
+- 既存テーブルは流用するが、既存設計をそのまま維持することを目的とせず、v2設計として必要な形へ整理・拡張する。
+
+### 現時点の考え
+制度マスタは新規テーブルを増やさず、既存 `exam_item_group_*` 系テーブルをv2向けに整理・拡張して利用する方向が最も保守性が高い。
+
+既存スクリプトとの互換性は考慮せず、今後利用する制度チェック基盤として責務を明確化した構成へ見直す。
+
+### 決定事項
+- 制度マスタは既存 `exam_item_group_*` 系テーブルをベースに構成する。
+- 新規制度ルールテーブルは追加しない方針とする。
+- `exam_item_group_identity_members` は制度上の同一性項目管理を担当する。
+- `exam_item_group_method_members` は `method_code` 単位の制度ルール管理を担当する。
+- `exam_item_group_members` は `namecode` 単位の取得候補管理を担当する。
+- `exam_item_group_method_members` はv2要件に合わせて必要なカラムを追加する前提とする。
+- 既存スクリプトとの互換性は考慮せず、必要なDDL変更・migrationを実施する。
+- 既存LSIOグループは維持する。
+- v2用のexam_item_groupを新規追加する。
+- v2は追加方式で導入し、既存運用へ影響を与えない。
+- 将来的にv2グループへ完全移行可能と判断した場合のみ、既存LSIOグループの廃止を検討する。
+
+### 保留事項
+- `exam_item_group_method_members` に追加する正式カラム一覧。
+- `presence_value_mode` をmethod側へ完全移行するか、identity側デフォルトとして残すか。
+- `rule_code`・`rule_params` の採用有無。
+- `role` の役割整理およびenum拡張要否。
+- `required_presence_namecodes` の最終移行方針。
+
+### 根拠
+- 既存テーブルを活用することで、制度マスタ構造を一本化できるため。
+- method単位ルールは `exam_item_group_method_members` が最も責務に適しているため。
+- 既存スクリプトを利用しないため、DDL変更による影響範囲が限定的であるため。
+- DBにはルール定義のみを保持し、判定ロジックは共通ライブラリへ集約する設計方針と整合するため。
+
+### 次回検討
+- `exam_item_group_method_members` のDDLを確定する。
+- Phase5制度マスタのseed構成を整理する。
+- `03_decisions.md` へ決定事項を同期する。
+- 共通Ruleライブラリとの対応関係を整理する。
+
+## DH-20260708-10 / 2026-07-08 18:41 JST
+
+### テーマ
+制度チェックを `method_code` 中心で進める方針と `exam_item_master` の役割整理
+
+### 背景
+Phase5の制度マスタ整備を進める中で、制度チェックを `namecode` ベースで設計するか、`method_code` ベースで設計するかを整理した。
+
+現状の `exam_item_master` では `namecode` と `method_code` が実質1:1の関係となっており、将来的な拡張性とのバランスを考慮した設計方針を確認した。
+
+### 当初の考え
+- `method_code` と `namecode` を明確に分離した制度設計を考えていた。
+- 将来的な複数 `namecode` 対応を前提に、初期から厳密な構造へ寄せる案も検討していた。
+
+### 議論
+- 現行 `exam_item_master` では `namecode` と `method_code` は実質1:1で管理されている。
+- 現在受領している健診XMLでは、同一 `method_code` に対して複数の素材（複数 `namecode`）が届くケースは確認されていない。
+- そのため、Phase5・Phase7時点では `method_code` を制度チェックの判定単位とし、実装を単純化する方針とした。
+- `exam_item_group_members` は将来的な複数 `namecode` 対応を見据えた構造として維持するが、現時点では `method_code = namecode` とみなして運用できる。
+- 将来、医療機関から素材レベルの複数 `namecode` が提供されるようになった場合は、その時点で `method_code` 配下へ複数 `namecode` を紐付ける設計へ拡張する。
+- 初期実装では将来要件のために過度な複雑化は行わず、現在のデータ実態を優先する。
+
+### 現時点の考え
+制度チェックは `method_code` を判定単位として設計する。
+
+現状では `exam_item_master` の `method_code` と `namecode` を同一視して問題なく、将来的にデータ構造が変わった場合のみ `exam_item_group_members` を活用して拡張する。
+
+### 決定事項
+- 制度チェックは `method_code` を判定単位として実装する。
+- 現行 `exam_item_master` では `method_code` と `namecode` を実質同一として扱う。
+- `exam_item_group_members` は将来の複数 `namecode` 対応を見据えて維持する。
+- 初期実装では将来要件のためだけに複雑な判定構造は導入しない。
+- 複数 `namecode` を持つ医療機関データが確認された時点で、`method_code` 配下の複数 `namecode` 対応を再検討する。
+
+### 保留事項
+- 複数 `namecode` を持つ `method_code` の実データ確認。
+- `exam_item_group_members` を本格利用するタイミング。
+- 素材レベルの検査項目管理が必要となった場合の migration 方針。
+
+### 根拠
+- 現行 `exam_item_master` では `method_code` と `namecode` が1:1で管理されているため。
+- 現在受領している健診XMLでは、素材レベルまで分かれた複数 `namecode` の実データが存在しないため。
+- 将来の可能性だけで初期実装を複雑化するより、現状データに合わせて設計した方が保守性・実装性に優れるため。
+
+### 次回検討
+- `03_decisions.md` へ決定事項を同期する。
+- `exam_item_group_method_members` のDDLを確定する。
+- `exam_item_group_members` の利用範囲を整理する。
+- Phase5制度マスタseedへ反映する。
+
+---
+
+## DH-20260709-01 / 2026-07-09 06:14 JST
+
+### 背景
+Phase5で `exam_item_group_method_members` を v2制度チェック用ルールマスタとして拡張するにあたり、追加カラムと責務を整理した。
+
+### 協議内容
+- 制度チェックは `method_code` 単位で実施する方針のため、ルール定義も `exam_item_group_method_members` に集約する。
+- DBはルール定義のみを保持し、実際の判定・計算・条件評価は共通Pythonライブラリへ委譲する。
+- `rule_params` にJSONを保持する案も検討したが、現時点では受け渡す情報が限定的であり、可読性・保守性を優先して採用しない方針とした。
+- 条件判定は自由記述式ではなく共通ライブラリが解釈する識別子を利用するため、`condition_expr` ではなく `condition_code` を採用する。
+- 参照元項目はJSONへ格納せず、専用カラムで保持する。
+- `rule_source_method_codes` は制度上大量指定を想定しないため `varchar(255)` を採用する。将来上限を超える要件が発生した場合に見直す。
+- `rule_source_namecodes` は将来の複数 `namecode` 対応用として保持するが、初期実装では基本的に利用しない。
+
+### 決定事項
+`exam_item_group_method_members` へ以下のカラムを追加する。
+
+| カラム | 型 | 用途 |
+|---|---|---|
+| `presence_value_mode` | `varchar(32)` | 存在判定方式（ANY_VALID_VALUE、CALCULATED等） |
+| `required_flag` | `tinyint(1)` | 制度上の必須・任意判定 |
+| `condition_code` | `varchar(64)` | 条件判定ルール識別子 |
+| `rule_code` | `varchar(64)` | 共通Rule/Calculateライブラリ識別子 |
+| `rule_source_identity_codes` | `varchar(255)` | Ruleが参照するidentity_code一覧 |
+| `rule_source_method_codes` | `varchar(255)` | Ruleが参照するmethod_code一覧 |
+| `rule_source_namecodes` | `text` | Ruleが参照するnamecode一覧（将来拡張用） |
+| `is_active` | `tinyint(1)` | ルール有効／無効 |
+| `updated_at` | `datetime(6)` | 最終更新日時 |
+
+### 命名方針
+- プロジェクト全体では `source_*` が入力元・参照元を表す命名として広く利用されていることを確認した。
+- `depends_*` 系は既存命名規約として定着していない。
+- 今回はルールが参照する項目であることを明確にするため、`rule_source_*` 命名を採用する。
+
+### 保留事項
+- `required_flag` の運用（NULL許可・既存LSIOデータへの適用方針）。
+- `exam_item_group_method_members` のmigration内容。
+- `rule_source_namecodes` を実際に利用するタイミング（複数 `namecode` 対応時）。
