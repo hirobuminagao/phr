@@ -281,6 +281,8 @@
 - `required_flag = 0` の任意項目が `MISSING` の場合、制度別 summary へ含めない。
 - `required_flag = 0` の任意項目 `MISSING` は、法定健診・特定健診のNG理由として扱わない。
 - `9N501` / `9N506` の `NOT_IMPLEMENTED` は、seed上 `required_flag = 1` であってもPhase7では制度NG集約から除外する。
+- `9N021` の `MISSING` はXML取込不具合ではなく、現行ルールマスタ不足によるものとして扱う。
+- Phase7では `9N021` と `9N016` 腹囲の関係を考慮し、`9N016` が有効値として存在する場合、`9N021` の不足を単独で制度NGへ直結させない。
 - 制度仕様との差異が判明した場合は、Phase7ではスクリプト側で暫定対応し、将来ルールマスタへ移管できるようにする。
 - Phase7の `reason` は項目単位で保持し、制度別 summary および `xml_ledger.check_reason` は項目別 `reason` を集約して生成する。
 - normalize / validation は制度チェック実装と混在させず、独立した責務として整理する。

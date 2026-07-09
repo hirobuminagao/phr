@@ -25,6 +25,9 @@ from .models import (
 
 NOT_IMPLEMENTED_RULE_CODES = {"METABOLIC_SYNDROME", "HEALTH_GUIDANCE_LEVEL"}
 NOT_IMPLEMENTED_IDENTITY_CODES = {"9N501", "9N506"}
+PHASE7_TEMP_9N021_IDENTITY = "9N021"
+PHASE7_TEMP_9N021_SOURCE_IDENTITY = "9N016"
+PHASE7_TEMP_9N021_REASON = "ALTERNATIVE:9N021:source=9N016"
 
 
 @dataclass
@@ -62,6 +65,10 @@ def evaluate_identity(
     direct_values = index.values_by_identity.get(identity_code, [])
     if any(value.has_valid_value for value in direct_values):
         return ItemResult(identity_code, STATUS_OK)
+    if identity_code == PHASE7_TEMP_9N021_IDENTITY and has_valid_identity_value(
+        index, PHASE7_TEMP_9N021_SOURCE_IDENTITY
+    ):
+        return ItemResult(identity_code, STATUS_ALTERNATIVE, PHASE7_TEMP_9N021_REASON)
 
     if not rules:
         if any(value.has_valid_value for namecode in namecodes for value in index.values_by_namecode.get(namecode, [])):
@@ -168,3 +175,7 @@ def first_decimal_for_identity(
         # depend on derived numeric sources should be implemented explicitly later.
         return None
     return None
+
+
+def has_valid_identity_value(index: ValueIndex, identity_code: str) -> bool:
+    return any(value.has_valid_value for value in index.values_by_identity.get(identity_code, []))

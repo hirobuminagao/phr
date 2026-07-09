@@ -31,7 +31,7 @@ from scripts.lib.examination.lookup import fetch_method_rules
 from scripts.lib.examination.lookup import fetch_target_ledgers
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK, RESULT_WARNING
-from scripts.lib.examination.models import REASON_NOT_IMPLEMENTED, STATUS_INVALID, STATUS_MISSING, ItemResult
+from scripts.lib.examination.models import REASON_NOT_IMPLEMENTED, STATUS_ALTERNATIVE, STATUS_INVALID, STATUS_MISSING, ItemResult
 from scripts.lib.examination.rules import build_value_index, evaluate_identity
 
 
@@ -268,6 +268,8 @@ def summarize_group(
             if include_not_implemented_summary and result.reason:
                 reasons.append(f"{identity_code}:{result.reason}")
             continue
+        if result.is_ok_like:
+            continue
         if result.status == STATUS_MISSING and not required:
             continue
         if result.reason:
@@ -326,6 +328,8 @@ def is_not_implemented_result(result: ItemResult) -> bool:
 
 
 def is_verbose_problem_result(result: ItemResult) -> bool:
+    if result.status == STATUS_ALTERNATIVE and result.reason:
+        return True
     if result.status in {STATUS_INVALID, STATUS_MISSING}:
         return True
     return is_not_implemented_result(result)
