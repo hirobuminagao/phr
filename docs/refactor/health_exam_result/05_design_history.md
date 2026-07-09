@@ -4695,3 +4695,107 @@ Phase6で `exam_check_results` のDDL設計へ進むにあたり、主キー・�
 - 再実行スクリプトの実行単位を整理する。
 
 ---
+
+## DH-20260709-07 / 2026-07-09 13:40 JST
+
+### テーマ
+Phase7における制度チェック実装範囲の整理（複雑判定の後続Phase化）
+
+### 背景
+Phase7開始前レビューを実施した結果、`METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` は、年齢・性別・腹囲・BMI・リスク項目・喫煙など複数条件を組み合わせた制度判定であり、現在の制度チェック基盤とは責務が異なることを再確認した。
+
+### 当初の考え
+- Phase7で全72項目を制度チェックまで含めて実装することを考えていた。
+- `METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` も共通Ruleライブラリへ実装する案を検討していた。
+
+### 議論
+- v2制度マスタは「検査項目ごとの存在判定・算出・代替判定」を責務とする。
+- `METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` は、単一検査項目ではなく複数検査項目を組み合わせた制度判定である。
+- 年齢・性別・腹囲・BMI・血圧・血糖・脂質・喫煙など複数条件が関与するため、通常の `presence_value_mode` や `rule_code` と同列に扱うと責務が混在する。
+- これらは制度判定ロジックとして独立した責務を持つため、Phase7初期の共通ルール実装対象から除外する。
+- Phase7では制度チェック基盤（ANY_VALID_VALUE、ANY_RECORD、ANY_OF_NAMECODES、CALCULATED、ALTERNATIVE等）の完成を優先する。
+- `METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` は後続Phaseで制度仕様を整理したうえで実装する。
+
+### 現時点の考え
+Phase7では制度チェック基盤を完成させ、複雑な制度判定は後続Phaseへ切り分ける。
+
+共通基盤完成後に、メタボ判定・保健指導レベル判定を制度ロジックとして追加実装する。
+
+### 決定事項
+- Phase7では `METABOLIC_SYNDROME` を実装対象外とする。
+- Phase7では `HEALTH_GUIDANCE_LEVEL` を実装対象外とする。
+- 両者はv2制度マスタには残すが、制度チェック実装は後続Phaseで行う。
+- Phase7では検査項目単位の制度チェック基盤実装を優先する。
+- 複雑な制度判定は通常の検査項目ルールとは責務を分離する。
+
+### 保留事項
+- メタボ判定ロジックの正式実装仕様。
+- 保健指導レベル判定ロジックの正式実装仕様。
+- 年齢・性別・喫煙等の制度条件を表現する設計。
+- 後続Phaseでの実装順序。
+
+### 根拠
+- `METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` は検査項目ではなく、複数検査項目を組み合わせた制度判定であるため。
+- Phase7では制度チェック基盤を先に安定させた方が責務が明確で保守性が高いため。
+- 複雑な制度判定を分離することで、制度改定時の影響範囲を限定できるため。
+
+### 次回検討
+- `03_decisions.md` へ本決定事項を同期する。
+- Phase7の実装対象を制度チェック基盤に限定する。
+- メタボ判定・保健指導レベル判定は、v2制度チェック基盤とは責務を分離し、制度仕様整理後に後続バージョンで実装する。
+
+---
+
+## DH-20260709-08 / 2026-07-09 14:33 JST
+
+### テーマ
+Phase7制度チェック基盤の実装範囲と再実行・エラー管理方針
+
+### 背景
+Phase7着手前レビューを実施した結果、制度チェック基盤は実装可能な状態であることを確認した。一方で、再実行範囲、ETLエラー管理、未実装ルールの扱いについては、実装前に最小仕様を決定する必要があった。
+
+### 議論
+- Phase7は制度チェック基盤の実装を優先する。
+- 再実行は制度チェック結果を削除後に再生成する方式とする。
+- 初期実装ではイベント単位の再実行で十分と判断した。
+- `etl_errors` は制度判定結果ではなく、スクリプトや実行環境の異常を記録する用途とする。
+- 制度チェック結果は `exam_check_results` の `status` / `reason` で管理する。
+- `METABOLIC_SYNDROME` および `HEALTH_GUIDANCE_LEVEL` は制度マスタには保持するが、Phase7では判定ロジックを実装しない。
+- 未実装ルールは `status=INVALID`、`reason=NOT_IMPLEMENTED` として、データ不正と区別できるようにする。
+- `reason` は項目単位で保持し、制度別 summary および `xml_ledger.check_reason` は項目別 `reason` を集約して生成する。
+
+### 現時点の考え
+Phase7では制度チェック基盤の完成を優先し、複雑な制度判定や個別再実行機能は後続バージョンへ切り分ける。
+
+### 決定事項
+- Phase7の再実行CLIは `--event-id` のみ対応する。
+- 制度チェックは削除後再生成方式とする。
+- `etl_errors` はスクリプト異常のみを記録する。
+- 制度判定結果は `exam_check_results` の `status` / `reason` で管理する。
+- `METABOLIC_SYNDROME` および `HEALTH_GUIDANCE_LEVEL` はPhase7では実装しない。
+- 未実装ルールは `status=INVALID`、`reason=NOT_IMPLEMENTED` とする。
+- `reason` は項目単位で保持し、制度別 summary および `xml_ledger.check_reason` は項目別 `reason` を集約して生成する。
+
+### 保留事項
+- `--xml-ledger-id`、`--subscriber-id` など個別再実行CLIの追加時期。
+- `reason` の詳細フォーマット最適化。
+- メタボ判定・保健指導レベル判定の制度仕様整理。
+
+### 根拠
+- Phase7開始前レビューにより、制度チェック基盤は実装可能と判断したため。
+- 制度判定結果とスクリプト実行異常を分離した方が責務が明確になるため。
+- 複雑な制度判定は通常の検査項目ルールとは責務が異なるため。
+
+### 実装引き継ぎ
+- 本DHの決定事項を `03_decisions.md` へ同期後、実装者は決定済み事項として扱う。
+- Phase7実装では `03_decisions.md`、制度チェック仕様（docs/spec）、Phase5 Seed、Phase6 DDLを参照して実装する。
+- `03_check_exam_results.py` はオーケストレーターとし、Lookup / Rule / Calculate / Alternative ライブラリへ処理を委譲する。
+- `03_decisions.md` に同期済みの内容は再協議せず、実装不能となる不足事項のみ不足入力として報告する。
+
+### 次回検討
+- `03_decisions.md` へ本DHの決定事項を同期する。
+- `03_check_exam_results.py` を実装する。
+- Lookup / Rule / Calculate / Alternative ライブラリを実装する。
+- `exam_check_results` 生成処理および `xml_ledger.check_status` / `check_reason` 集約処理を実装する。
+
+---

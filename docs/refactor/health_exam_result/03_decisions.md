@@ -256,6 +256,17 @@
 - Phase5では `exam_check_results` DDL作成を主目的にしない。
 - Phase6で `exam_check_results` DDLを確定する。
 - Phase7で `03_check_exam_results.py` を実装する。
+- Phase7では検査項目単位の制度チェック基盤実装を優先する。
+- Phase7では `METABOLIC_SYNDROME` を実装対象外とする。
+- Phase7では `HEALTH_GUIDANCE_LEVEL` を実装対象外とする。
+- `METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` はv2制度マスタには残すが、制度チェック実装は後続Phaseで行う。
+- 複雑な制度判定は通常の検査項目ルールとは責務を分離する。
+- Phase7の再実行CLIは `--event-id` のみ対応する。
+- Phase7の制度チェックは削除後再生成方式とする。
+- Phase7の `etl_errors` はスクリプト異常のみを記録する。
+- Phase7の制度判定結果は `exam_check_results` の `status` / `reason` で管理する。
+- Phase7の未実装ルールは `status = INVALID`、`reason = NOT_IMPLEMENTED` とする。
+- Phase7の `reason` は項目単位で保持し、制度別 summary および `xml_ledger.check_reason` は項目別 `reason` を集約して生成する。
 - normalize / validation は制度チェック実装と混在させず、独立した責務として整理する。
 - 制度チェックでは、DBはルール定義のみを保持し、ルール処理は共通ライブラリで実装する。
 - `03_check_exam_results.py` はルール実装を持たず、処理制御、DB入出力、結果保存を担当する。
