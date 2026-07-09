@@ -263,7 +263,13 @@
 - Phase7では `HEALTH_GUIDANCE_LEVEL` を実装対象外とする。
 - `METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` はv2制度マスタには残すが、制度チェック実装は後続Phaseで行う。
 - 複雑な制度判定は通常の検査項目ルールとは責務を分離する。
-- Phase7の再実行CLIは `--event-id` のみ対応する。
+- `event_id` はYAML設定ファイルで管理する。
+- Phase7は設定ファイルから `event_id` を取得して実行する。
+- Phase4〜Phase7で設定取得方法を統一する。
+- CLIは通常運用で必須入力を受け取る責務を持たない。
+- CLIはデバッグ・限定実行・将来の個別再実行インターフェースとして利用する。
+- `--event-id` が指定された場合は、YAMLの `event_id` を一時的に上書きする。
+- Phase7の再実行CLIは、初期実装では `--event-id` による一時上書きのみ対応する。
 - Phase7の制度チェックは削除後再生成方式とする。
 - Phase7の `etl_errors` はスクリプト異常のみを記録する。
 - Phase7の制度判定結果は `exam_check_results` の `status` / `reason` で管理する。

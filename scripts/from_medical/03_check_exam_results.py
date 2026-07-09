@@ -8,7 +8,9 @@ import argparse
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping, cast
+
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +37,7 @@ from scripts.lib.examination.rules import build_value_index, evaluate_identity
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
 DEV_PHR_DB = "dev_phr"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "import_xml.yml"
 ETL_PHASE = "CHECK_EXAM_RESULTS"
 ETL_SOURCE = "FROM_MEDICAL"
 
@@ -95,29 +98,52 @@ class CheckSummary:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate exam_check_results from imported exam item values.")
-    parser.add_argument("--event-id", type=int, required=True, help="Target event_id.")
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Check config YAML path.")
+    parser.add_argument("--event-id", type=int, default=None, help="Override config event_id.")
     parser.add_argument("--dry-run", action="store_true", help="Read and report without DB writes.")
-    parser.add_argument("--limit", type=int, default=0, help="Maximum xml_ledger rows to process. 0 means unlimited.")
+    parser.add_argument("--limit", type=int, default=None, help="Override maximum xml_ledger rows to process. 0 means unlimited.")
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
-    parser.add_argument("--health-db", default=HEALTH_EXAM_RESULT_DB, help="Override health_exam_result schema name.")
-    parser.add_argument("--dev-db", default=DEV_PHR_DB, help="Override dev_phr schema name.")
+    parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
+    parser.add_argument("--dev-db", default=None, help="Override dev_phr schema name.")
     parser.add_argument("--verbose", action="store_true", help="Print per-ledger details with --dry-run.")
     return parser.parse_args()
 
 
-def config_from_args(args: argparse.Namespace) -> CheckConfig:
-    if args.event_id <= 0:
-        raise ValueError("event_id must be positive")
-    if args.limit < 0:
-        raise ValueError("limit must be >= 0")
+def load_check_config(path: str | Path) -> CheckConfig:
+    with Path(path).open("r", encoding="utf-8") as fp:
+        raw_data = yaml.safe_load(fp) or {}
+    data = cast(Mapping[str, Any], raw_data)
+    raw_event_id = data.get("event_id")
+    event_id = int(raw_event_id) if raw_event_id not in (None, "") else 0
     return CheckConfig(
-        event_id=args.event_id,
-        health_db=args.health_db,
-        dev_db=args.dev_db,
-        dry_run=bool(args.dry_run),
-        limit=int(args.limit or 0),
+        event_id=event_id,
+        health_db=str(data.get("health_db") or HEALTH_EXAM_RESULT_DB),
+        dev_db=str(data.get("dev_db") or DEV_PHR_DB),
+        dry_run=bool(data.get("dry_run", False)),
+        limit=int(data.get("limit", 0) or 0),
+        verbose=False,
+    )
+
+
+def resolve_config(args: argparse.Namespace) -> CheckConfig:
+    config = load_check_config(args.config)
+    resolved = CheckConfig(
+        event_id=args.event_id if args.event_id is not None else config.event_id,
+        health_db=args.health_db if args.health_db is not None else config.health_db,
+        dev_db=args.dev_db if args.dev_db is not None else config.dev_db,
+        dry_run=True if args.dry_run else config.dry_run,
+        limit=args.limit if args.limit is not None else config.limit,
         verbose=bool(args.verbose),
     )
+    validate_config(resolved)
+    return resolved
+
+
+def validate_config(config: CheckConfig) -> None:
+    if config.event_id <= 0:
+        raise ValueError("event_id must be positive")
+    if config.limit < 0:
+        raise ValueError("limit must be >= 0")
 
 
 def start_check_run(cur: Any, config: CheckConfig) -> int:
@@ -563,7 +589,7 @@ def run(config: CheckConfig, *, db_prefix: str = "PHR_DB_") -> CheckSummary:
 def main() -> int:
     args = parse_args()
     try:
-        config = config_from_args(args)
+        config = resolve_config(args)
         summary = run(config, db_prefix=args.db_prefix)
         summary.print()
         return 0 if summary.errors == 0 else 1
