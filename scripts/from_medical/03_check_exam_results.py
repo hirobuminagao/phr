@@ -29,7 +29,7 @@ from scripts.lib.examination.lookup import fetch_method_rules
 from scripts.lib.examination.lookup import fetch_target_ledgers
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK, RESULT_WARNING
-from scripts.lib.examination.models import STATUS_INVALID, STATUS_MISSING, ItemResult
+from scripts.lib.examination.models import REASON_NOT_IMPLEMENTED, STATUS_INVALID, STATUS_MISSING, ItemResult
 from scripts.lib.examination.rules import build_value_index, evaluate_identity
 
 
@@ -53,6 +53,7 @@ class CheckConfig:
     dev_db: str
     dry_run: bool
     limit: int
+    verbose: bool
 
 
 @dataclass
@@ -100,6 +101,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=HEALTH_EXAM_RESULT_DB, help="Override health_exam_result schema name.")
     parser.add_argument("--dev-db", default=DEV_PHR_DB, help="Override dev_phr schema name.")
+    parser.add_argument("--verbose", action="store_true", help="Print per-ledger details with --dry-run.")
     return parser.parse_args()
 
 
@@ -114,6 +116,7 @@ def config_from_args(args: argparse.Namespace) -> CheckConfig:
         dev_db=args.dev_db,
         dry_run=bool(args.dry_run),
         limit=int(args.limit or 0),
+        verbose=bool(args.verbose),
     )
 
 
@@ -279,6 +282,44 @@ def result_columns(item_results: dict[str, ItemResult]) -> dict[str, Any]:
     return columns
 
 
+def is_verbose_problem_result(result: ItemResult) -> bool:
+    if result.status in {STATUS_INVALID, STATUS_MISSING}:
+        return True
+    return bool(result.reason and REASON_NOT_IMPLEMENTED in result.reason)
+
+
+def print_dry_run_detail(
+    *,
+    ledger: dict[str, Any],
+    legal_result: str,
+    specific_result: str,
+    check_status: str,
+    check_reason: str | None,
+    item_results: dict[str, ItemResult],
+) -> None:
+    print("dry_run_detail:")
+    print(f"  xml_ledger_id={ledger['id']}")
+    print(f"  subscriber_id={ledger.get('subscriber_id')}")
+    print(f"  hia_subscriber_id={ledger.get('hia_subscriber_id')}")
+    print(f"  legal_check_result={legal_result}")
+    print(f"  specific_check_result={specific_result}")
+    print(f"  check_status={check_status}")
+    print(f"  check_reason={check_reason}")
+
+    problem_results = [
+        result
+        for _, result in sorted(item_results.items(), key=lambda item: item[0])
+        if is_verbose_problem_result(result)
+    ]
+    if not problem_results:
+        print("  problem_items=none")
+        return
+
+    print("  problem_items:")
+    for result in problem_results:
+        print(f"    - {result.identity_code}: status={result.status} reason={result.reason}")
+
+
 def insert_check_result(
     cur: Any,
     *,
@@ -391,6 +432,16 @@ def process_ledgers(
             summary.warning += 1
         else:
             summary.ng += 1
+
+        if config.dry_run and config.verbose:
+            print_dry_run_detail(
+                ledger=ledger,
+                legal_result=legal_result,
+                specific_result=specific_result,
+                check_status=check_status,
+                check_reason=check_reason,
+                item_results=item_results,
+            )
 
         if config.dry_run:
             continue
