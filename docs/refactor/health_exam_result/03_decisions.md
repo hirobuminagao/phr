@@ -267,6 +267,11 @@
 - `ALTERNATIVE` は既存の identity 項目コードによる処理フローを利用する。
 - `ALTERNATIVE` 共通処理は `scripts/lib/examination/alternative.py` に実装する。
 - `ALTERNATIVE` 共通処理では、ケース判定と実処理関数を分離する。
+- `3F069` non-HDLコレステロールは `CALCULATED` として扱う。
+- `3F069` non-HDLコレステロールには `ALTERNATIVE` を持たせない。
+- LDLコレステロール側の制度チェックで、必要に応じて `3F069` non-HDLコレステロールを `ALTERNATIVE` の参照元として扱う。
+- 厚生労働省付属2の文言はDBルールへ直訳せず、制度チェック実装上の責務に分解して表現する。
+- 1つの `method_code` に複数の `presence_value_mode` を持たせる設計にはしない。
 - 採用されなかった案・比較案としての Alternative は `05_design_history.md` で管理し、`03_decisions.md` には採用された最終決定のみを記載する。
 - 旧 `LSIO_Legal_Item` は v2 の正ではなく、差分確認・参考資料として扱う。
 - 既存 `LSIO_Legal_Item` グループは維持する。
@@ -278,9 +283,20 @@
 - `dev_phr.exam_item_group_*` は migration 対象とし、必要差分のみ追加・修正する。
 - 既存スクリプトとの互換性は優先せず、v2要件に必要なDDL変更・migrationを実施する。
 - マスタ構成としては、共通72項目用グループ、法定健診判定用グループ、特定健診判定用グループを分けて扱う方針とする。
+- 共通72項目用グループの `group_code` は `v2_2026_CHECK_72_ITEMS` とする。
+- 法定健診判定用グループの `group_code` は `v2_2026_LSIO_Legal_Item` とする。
+- 特定健診判定用グループの `group_code` は `v2_2026_Specific_Health_Item` とする。
 - 共通72項目用グループは、`exam_check_results` の項目別 `status` / `reason` を生成するために利用する。
 - 法定健診判定用グループと特定健診判定用グループは、制度単位の `check_result` を集計するために利用する。
 - 特定健診用グループは、初期実装ではマスタ未投入でも動作可能な構成とし、後でマスタを投入すれば判定できるようにする。
+- Phase5の次作業として、制度マスタseedを作成する。
+- Phase5制度マスタseedの正は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の72項目仕様とする。
+- `03_decisions.md` に同期済みの決定事項は、Phase5 seed作成時に未決定として扱わない。
+- `exam_item_master` の `xml_method_code` がNULLでも `namecode` が存在する場合は、`LEFT(namecode, 10)` を補完 `xml_method_code` として扱う。
+- `exam_item_master` に不足している `xml_method_code` は、既存値を上書きしない補完seedで整備する。
+- Phase5制度マスタseedは、補完済み `xml_method_code` を前提に作成する。
+- `required_flag`、`presence_value_mode`、`rule_code`、`rule_source_*` は `03_decisions.md` の決定事項と72項目仕様に基づいてseedへ反映する。
+- seed作成時に `03_decisions.md`、72項目仕様、既存DDL、既存seedを確認しても判断できない事項のみ、不足入力として報告する。
 - `exam_item_group_identity_members` は制度上の同一性項目管理を担当する。
 - `exam_item_group_method_members` は `method_code` 単位の制度ルール管理を担当する。
 - `exam_item_group_members` は `namecode` 単位の取得候補管理を担当する。

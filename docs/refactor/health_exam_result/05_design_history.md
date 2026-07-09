@@ -1,5 +1,17 @@
 # Design History
 
+## このドキュメントの位置付け
+
+- 本ドキュメントを実装時の唯一の決定事項（Single Source of Truth）とする。
+- 05_design_history.md は意思決定の経緯を記録する履歴であり、03_decisions.md と異なる場合は03_decisions.mdを優先する。
+- レビュー・DDL・seed作成・実装は03_decisions.mdを基準に行う。
+
+## 実装ルール
+
+- 03_decisions.mdを正式決定とする。
+- docs/specをseed・DDL・実装の正とする。
+- 実装者は決定事項の再協議を行わない。
+- 不足がある場合のみ不足入力として報告する。
 
 ---
 
@@ -4423,3 +4435,211 @@ DH-20260709-01 では、`exam_item_group_method_members` を制度チェック�
 - `required_flag` の正式な値定義を整理する。
 - `03_decisions.md` へ DH-20260709-02 の決定事項を反映する。
 - 将来制度改定時のMigration方針を整理する。
+
+---
+
+## DH-20260709-03 / 2026-07-09 11:04 JST
+
+### テーマ
+Phase5制度マスタseed作成方針
+
+### 背景
+Phase5のDDL/migrationレビューがGOとなり、次の作業として制度マスタseed作成へ進む段階となった。
+
+### 議論
+- Phase5は制度マスタ整備であり、DDL/migrationだけでは完了しない。
+- seedは `02_exam_check_item_spec_v2_0_0.md` の72項目仕様を正として作成する。
+- `03_decisions.md` に同期済みの決定事項は再協議対象としない。
+- Codexには、03・仕様書・既存DDL・既存seedを読み取り、seed作成まで進めさせる。
+- 判断不能なものだけを不足入力として報告させる。
+
+### 現時点の考え
+Phase5の次作業は、制度マスタseed作成である。
+
+レビューに戻るのではなく、03の決定事項と72項目仕様を入力としてseed実装へ進める。
+
+### 決定事項
+- Phase5の次作業として制度マスタseedを作成する。
+- seed作成はCodexに実施させる。
+- seedの正は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` とする。
+- `03_decisions.md` に同期済みの決定事項は未決定として扱わない。
+- `required_flag`、`presence_value_mode`、`rule_code`、`rule_source_*` は03の決定事項と72項目仕様に基づいてseedへ反映する。
+- 判断不能な事項のみ不足入力として報告する。
+
+### 保留事項
+- seed作成時に03・仕様書・既存DDLから判断できない項目。
+- seed投入後の実DB検証手順。
+- Phase5完了判定の最終確認。
+
+### 根拠
+- Phase5は制度マスタ整備であり、DDL/migrationだけでは制度チェック用マスタが完成しないため。
+- 72項目仕様は既に整理済みであり、seed作成の正として利用できるため。
+- 03を正式決定事項として扱う運用により、同じ論点の再協議を避けるため。
+
+### 実装引き継ぎ
+- 実装者は `03_decisions.md` を正式決定事項として扱う。
+- 実装者は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` をseed作成の正として扱う。
+- 03に記載済みの内容は再協議せず、seedへ反映する。
+- 03・仕様書・既存DDL・既存seedを確認しても判断できない場合のみ、不足入力として報告する。
+- 今回の実装対象はPhase5の制度マスタseed作成であり、制度チェック実装・`exam_check_results` DDL・Rule/Lookup/Calculate lib実装には進まない。
+
+#### 実施内容
+- DH-20260709-03 の決定事項のうち、正式決定として扱うseed作成方針を `03_decisions.md` へ同期した。
+- 3グループの正式 `group_code` を `03_decisions.md` へ同期した。
+  - 共通72項目: `v2_2026_CHECK_72_ITEMS`
+  - 法定健診判定: `v2_2026_LSIO_Legal_Item`
+  - 特定健診判定: `v2_2026_Specific_Health_Item`
+- `03_decisions.md`、72項目仕様、既存DDL、既存seedを確認した。
+- `exam_item_groups`、`exam_item_group_members`、`exam_item_group_identity_members`、`exam_item_group_method_members` のseed作成に必要な前提を確認した。
+- `sql/seed/dev_phr/0010_dev_phr__exam_item_groups_v2_2026.sql` を作成した。
+
+#### レビュー結果
+- `03_decisions.md` には、共通72項目用グループ、法定健診判定用グループ、特定健診判定用グループの正式 `group_code` が同期済みである。
+- seed SQL は既存 `LSIO_Legal_Item` を更新せず、v2 group追加方式で作成した。
+- 72項目仕様の同一性項目はすべて `exam_item_master` export 上で対応候補を確認できた。
+- seed SQL は `exam_item_groups`、`exam_item_group_identity_members`、`exam_item_group_method_members`、`exam_item_group_members` の4テーブルを対象とする。
+- `condition_code`、method側 `condition_expr`、`rule_params` JSON は引き続き使用しない。
+
+#### 次回実装
+- seed SQLをDBへ適用し、投入件数と重複更新の挙動を確認する。
+- seed適用後、Phase5完了判定を行う。
+
+#### 引き継ぎ事項
+- seed作成時は `03_decisions.md` をSingle Source of Truthとし、05は意思決定履歴として参照する。
+- 03に同期済みの `required_flag`、`presence_value_mode`、`rule_code`、`rule_source_*` の責務は未決定として扱わない。
+- seed SQLは `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の72項目仕様を正とし、`sql/export_sql/exam_item_master.sql` をnamecode/method_code候補として利用している。
+- 不足入力はなし。
+
+### 次回検討
+- Phase5 seed SQLをDBへ適用する。
+- seed適用後に投入結果をレビューする。
+- Phase5完了条件を確認する。
+
+---
+
+## DH-20260709-04 / 2026-07-09 11:48 JST
+
+### テーマ
+Phase5制度マスタseedレビューおよびmethod_codeマスタ補完方針
+
+### 背景
+Phase5制度マスタseedをレビューした結果、`required_flag` の誤設定は修正されたものの、BMI・肥満度・メタボ判定・保健指導レベルなどの計算・判定項目が `exam_item_group_method_members` へ登録できないことが判明した。
+
+原因を確認したところ、制度設計ではなく `exam_item_master` 側の `method_code` 未整備によるものであることを整理した。
+
+### 議論
+- 制度チェックは `method_code` 単位で管理する方針は変更しない。
+- BMI、肥満度、メタボ判定、保健指導レベルは、いずれも直接値を持たない計算・判定項目である。
+- これらは `presence_value_mode` と `rule_code` により共通Ruleライブラリで計算・判定する。
+- 現在seedへ登録できない理由は、`exam_item_master.method_code` が未定義であるためであり、制度マスタ設計の問題ではない。
+- JLAC10では検査方法コード（method）は同一性項目コードを含む検査方法単位として扱う考え方であり、`method_code` を制度チェック単位とする設計は妥当である。
+- 同一性項目に対応する `method_code` が存在しない計算・判定項目については、`exam_item_master` を補完するseedを追加した上で制度マスタseedを完成させる。
+
+### 現時点の考え
+制度マスタseedを無理に変更するのではなく、先に `exam_item_master` の `method_code` 定義を補完し、その後制度マスタseedを完成させる。
+
+### 決定事項
+- 制度チェックは引き続き `method_code` を判定単位とする。
+- 計算・判定項目も `method_code` を持つ前提で管理する。
+- `exam_item_master` に不足している `method_code` はseedで補完する。
+- `exam_item_group_method_members` は補完後の `method_code` を利用して制度ルールを登録する。
+- Ruleライブラリは `rule_code` と `rule_source_*` を利用して計算・代替判定を実施する。
+
+### 保留事項
+- 計算・判定項目へ付与する正式 `method_code` 一覧。
+- `exam_item_master` 補完seedの投入順序。
+- 補完後の制度マスタseed再レビュー。
+
+### 根拠
+- No-Goとなった原因は制度ルールではなく `exam_item_master` の `method_code` 未整備であったため。
+- JLAC10の検査方法コードを制度チェック単位として扱う設計と整合するため。
+- `method_code` を補完することで、制度ルールと実データ管理の責務を統一できるため。
+
+### 実装引き継ぎ
+- `exam_item_master` に不足する `method_code` を補完するseedを先に作成する。
+- 制度マスタseedは補完後の `method_code` を利用して完成させる。
+- `exam_item_group_method_members` は計算・判定項目も通常項目と同様に `method_code` 単位で登録する。
+- Ruleライブラリ側は既存設計どおり `rule_code` と `rule_source_*` を参照し、計算・代替判定を行う。
+
+#### 実施内容
+- Phase5制度マスタseedレビューを実施した。
+- `required_flag` の `●注2)` 誤判定を修正した。
+- No-Go要因を分析し、原因が `exam_item_master.method_code` 未整備であることを確認した。
+- 計算・判定項目についても `method_code` を付与する方針を整理した。
+
+#### レビュー結果
+- `required_flag` の誤りは解消された。
+- 制度マスタ設計自体には問題はなかった。
+- `exam_item_master` の `method_code` 補完後にseedを完成できる見込みとなった。
+- Phase5は `exam_item_master` 補完seed作成後に再レビューを実施する。
+
+#### 次回実装
+- `exam_item_master` 補完seedを作成する。
+- 補完seed適用後、制度マスタseedを更新する。
+- Phase5 seedレビューを再実施し、GO判定を確認する。
+
+#### 引き継ぎ事項
+- `method_code` を制度チェックの唯一の判定単位として扱う。
+- 計算・判定項目も例外扱いせず、`method_code` を付与して管理する。
+- 制度マスタ側で特別対応は行わず、`exam_item_master` の補完で対応する。
+
+### 次回検討
+- `exam_item_master` 補完seedを作成する。
+- 補完後の制度マスタseedレビュー。
+- Phase5完了判定。
+
+---
+
+## DH-20260709-05 / 2026-07-09 12:06 JST
+
+### テーマ
+non-HDLとLDL代替関係の設計上の整理
+
+### 背景
+Phase5制度マスタseedレビューにおいて、`3F069` non-HDLに `CALCULATED` と `ALTERNATIVE` の両方を持たせる必要があるのではないか、という指摘が出た。
+
+しかし、付属2の記載内容を制度チェック実装へ落とし込む際、記載文言をそのままDBルールへ写すのではなく、制度判定としてどの項目がどの項目を参照するかを整理する必要があった。
+
+### 議論
+- `3F069` non-HDLは、直接値があれば直接値を使用し、なければ総コレステロールとHDLから算出する項目として扱う。
+- non-HDL自身は、他項目を代替して充足する項目ではなく、算出可能な検査項目として整理する。
+- LDLが不足または評価条件に合わない場合に、non-HDLを代替的に利用するのは、non-HDL側ではなくLDL側の制度判定ルールである。
+- そのため、`3F069` に `CALCULATED` と `ALTERNATIVE` の両方を持たせる必要はない。
+- 付属2の記載は、実装上は「non-HDLが代替ルールを持つ」ではなく、「LDL側がnon-HDLを代替参照する」と整理する。
+- 厚生労働省資料の書き方をDBルールへ直訳せず、制度チェック実装で責務が明確になる形へ読み替える。
+
+### 現時点の考え
+non-HDLは `CALCULATED` 項目として扱い、LDLは必要に応じてnon-HDLを `ALTERNATIVE` として参照する。
+
+これにより、1つの `method_code` に複数の `presence_value_mode` を持たせる必要はなくなり、現行DDLの1行1mode設計で表現できる。
+
+### 決定事項
+- `3F069` non-HDLは `CALCULATED` として扱う。
+- `3F069` non-HDLには `ALTERNATIVE` を持たせない。
+- LDL側の制度チェックで、必要に応じて `3F069` non-HDLを `ALTERNATIVE` の参照元として扱う。
+- 付属2の記載は、実装設計上の責務に分解してDBルールへ落とし込む。
+- 厚生労働省資料の文言をそのままDBルールへ直訳しない。
+
+### 保留事項
+- LDL側でnon-HDLを代替参照する条件の詳細。
+- LDL / non-HDL 関連の `rule_code` と `rule_source_*` の正式seed表現。
+- 血糖 / HbA1c など他の代替関係でも、同様に参照方向を確認する。
+
+### 根拠
+- non-HDLは直接値または計算により値を確定する項目であるため。
+- 代替評価は、代替される側の項目で管理した方が責務が明確であるため。
+- 1つのmethodに複数modeを持たせず、現行DDLの1行1mode設計を維持できるため。
+
+### 実装引き継ぎ
+- `3F069` は `presence_value_mode = CALCULATED` とする。
+- `3F069` に `ALTERNATIVE` を設定しない。
+- LDL側の `ALTERNATIVE` ルールで `rule_source_identity_codes` または `rule_source_method_codes` に `3F069` を参照元として設定する。
+- seed修正時は、non-HDL側ではなくLDL側の代替参照として表現する。
+- 03へ同期後、実装者はこの方針を決定済みとして扱い、`3F069` の二重mode表現を再協議しない。
+
+### 次回検討
+- `03_decisions.md` へ本決定事項を同期する。
+- Phase5制度マスタseedを修正する。
+- 修正後にPhase5 seedレビューを再実施する。
+
+---
