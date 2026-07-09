@@ -295,23 +295,18 @@ def worse_result(current: str, candidate: str) -> str:
     return candidate if rank[candidate] > rank[current] else current
 
 
-def aggregate_check_status(legal_result: str, specific_result: str) -> str:
+def aggregate_check_status(legal_result: str) -> str:
     if legal_result == RESULT_NG:
         return CHECK_STATUS_NG
-    if legal_result == RESULT_WARNING or specific_result == RESULT_WARNING:
-        return CHECK_STATUS_WARNING
-    if legal_result == RESULT_OK and specific_result == RESULT_NG:
+    if legal_result == RESULT_WARNING:
         return CHECK_STATUS_WARNING
     return CHECK_STATUS_OK
 
 
-def aggregate_check_reason(legal_summary: str | None, specific_summary: str | None) -> str | None:
-    parts: list[str] = []
+def aggregate_check_reason(legal_summary: str | None) -> str | None:
     if legal_summary:
-        parts.append(f"LEGAL:{legal_summary}")
-    if specific_summary:
-        parts.append(f"SPECIFIC:{specific_summary}")
-    return " | ".join(parts) if parts else None
+        return f"LEGAL:{legal_summary}"
+    return None
 
 
 def result_columns(item_results: dict[str, ItemResult]) -> dict[str, Any]:
@@ -376,7 +371,7 @@ def print_dry_run_detail(
     print(f"  legal_check_result={legal_result}")
     print(f"  specific_check_result={specific_result}")
     print(f"  check_status={check_status}")
-    print(f"  check_status_basis=legal:{legal_result} specific:{specific_result}")
+    print(f"  check_status_basis=legal_only:{legal_result}")
     print(f"  check_reason={check_reason}")
 
     print("  legal_problem_items:")
@@ -513,8 +508,8 @@ def process_ledgers(
             missing_result=RESULT_WARNING,
             include_not_implemented_summary=True,
         )
-        check_status = aggregate_check_status(legal_result, specific_result)
-        check_reason = aggregate_check_reason(legal_summary, specific_summary)
+        check_status = aggregate_check_status(legal_result)
+        check_reason = aggregate_check_reason(legal_summary)
         if check_status == CHECK_STATUS_OK:
             summary.ok += 1
         elif check_status == CHECK_STATUS_WARNING:

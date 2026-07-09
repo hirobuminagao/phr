@@ -247,12 +247,14 @@
 - 制度チェック総合判定は、`exam_check_results` の制度判定結果から `xml_ledger.check_status` を生成する。
 - `xml_ledger` にはJOIN削減用に `check_reason` を追加する。
 - 法定健診判定と特定健診判定は独立して集約する。
-- `xml_ledger.check_status` は法定健診側を主判定とする。
-- 法定健診・特定健診の制度チェック総合判定は以下とする。
-  - `legal_check_result = NG` の場合 → `xml_ledger.check_status = NG`
-  - `legal_check_result = OK` かつ `specific_check_result = NG/WARNING` の場合 → `xml_ledger.check_status = WARNING`
-  - `legal_check_result = OK` かつ `specific_check_result = OK` の場合 → `xml_ledger.check_status = OK`
-- 特定健診不足は `WARNING`、法定健診不足は `NG` とする。
+- `xml_ledger.check_status` は `legal_check_result` のみを基準として決定する。
+- `legal_check_result = OK` の場合、`xml_ledger.check_status = OK` とする。
+- `legal_check_result = WARNING` の場合、`xml_ledger.check_status = WARNING` とする。
+- `legal_check_result = NG` の場合、`xml_ledger.check_status = NG` とする。
+- `specific_check_result` は `xml_ledger.check_status` に一切影響させない。
+- `specific_check_result` / `specific_reason_summary` は `exam_check_results` に保持する。
+- `xml_ledger.check_reason` は、`legal_check_result` を `WARNING` または `NG` にした法定健診由来の理由のみ保持する。
+- 特定健診由来のみの指摘は `xml_ledger.check_reason` へ含めない。
 - Phase5の責務は `dev_phr` 制度マスタ整備に固定する。
 - Phase5では制度チェック実装を行わない。
 - Phase5では `exam_check_results` DDL作成を主目的にしない。

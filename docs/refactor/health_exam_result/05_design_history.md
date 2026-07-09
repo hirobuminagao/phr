@@ -5006,3 +5006,57 @@ Phase7では制度チェック基盤の完成を優先する。
 - `9N021` の暫定スクリプト対応を実施する。
 - dry-runで制度判定結果を再確認する。
 - Phase7完了後、スクリプト実装とルールマスタの対応表を作成し、seedへ移管する制度ルールを整理する。
+
+---
+
+## DH-20260709-13 / 2026-07-09 20:10 JST
+
+### テーマ
+xml_ledger 総合判定と特定健診判定の責務分離
+
+### 背景
+Phase7の制度チェック実装を進める中で、法定健診・特定健診の判定を `xml_ledger.check_status` へどのように集約するかを再整理した。
+
+これまで「特定健診は参考情報」という方針は協議していたが、その意味が曖昧だったため、実装では `specific_check_result=WARNING` が `check_status=WARNING` へ反映されていた。
+
+業務上の責務を改めて整理し、総合判定への反映方法を明確化した。
+
+### 当初の考え
+- 法定健診を主判定とする。
+- 特定健診は参考情報として扱う。
+- 特定健診がWARNINGの場合は総合判定もWARNINGとする実装となっていた。
+
+### 議論
+- `xml_ledger` は業務台帳であり、人が一覧で処理可否を確認するための総合判定を保持する。
+- 法定健診は法令上の提出可否に関わる主判定として扱う。
+- 特定健診判定は制度上の参考情報として保持する。
+- 特定健診の不足や未実装項目は、再提出要求やXML全体の総合判定へ直接影響させない。
+- 特定健診の判定結果は `exam_check_results` および `specific_check_result`・`check_reason` 等へ保持し、調査や将来の機能拡張に利用する。
+- `xml_ledger.check_status` は法定健診の判定結果を主として決定する。
+
+### 現時点の考え
+`xml_ledger.check_status` は業務上の総合判定であり、法定健診を基準として判定する。
+
+特定健診は情報として保持するが、総合判定を変更するためには使用しない。
+
+### 決定事項
+- `xml_ledger.check_status` は `legal_check_result` を基準として決定する。
+- `legal_check_result = OK` の場合は、`specific_check_result` が `OK`・`WARNING`・`NG` のいずれであっても `check_status = OK` とする。
+- `legal_check_result = WARNING` の場合は、`check_status = WARNING` とする。
+- `legal_check_result = NG` の場合は、`check_status = NG` とする。
+- `specific_check_result` は `exam_check_results`、`check_reason` 等へ保持する参考情報とする。
+- `specific_check_result` 単独では `xml_ledger.check_status` を変更しない。
+
+### 保留事項
+- 将来、特定健診の保健指導判定・受診勧奨判定を追加する際の利用方法。
+- 業務画面上で特定健診の参考情報をどのように表示するか。
+
+### 根拠
+- 法定健診と特定健診は業務上の役割が異なるため。
+- `xml_ledger` は業務台帳として総合判定を保持する責務を持つため。
+- 特定健診不足をXML全体の提出可否へ直結させない運用とするため。
+
+### 次回検討
+- `03_decisions.md` へ正式決定として同期する。
+- `03_check_exam_results.py` の総合判定集約ロジックを決定事項へ合わせて修正する。
+- dry-run により `legal_check_result=OK`・`specific_check_result=WARNING` の場合に `check_status=OK` となることを確認する。
