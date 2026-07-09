@@ -245,7 +245,7 @@
 - 制度チェックでは、DBはルール定義のみを保持し、ルール処理は共通ライブラリで実装する。
 - `03_check_exam_results.py` はルール実装を持たず、処理制御、DB入出力、結果保存を担当する。
 - `03_check_exam_results.py` は、マスタから取得したルールに応じて共通Rule / Lookup / Calculateライブラリを呼び出すオーケストレーターとする。
-- `presence_value_mode` の基本ルールとして、`ANY_VALID_VALUE`、`ANY_RECORD`、`ANY_OF_NAMECODES`、`CALCULATED`、`ALTERNATIVE`、`CONDITIONAL` を扱う。
+- `presence_value_mode` の基本ルールとして、`ANY_VALID_VALUE`、`ANY_RECORD`、`ANY_OF_NAMECODES`、`CALCULATED`、`ALTERNATIVE` を扱う。
 - 各 `presence_value_mode` の処理は `03_check_exam_results.py` に直書きせず、共通ルールライブラリへ実装する。
 - `ANY_VALID_VALUE` は、`raw_value`、`nullFlavor`、`negation_ind` を考慮して有効値が存在するかを判定する。
 - `ANY_RECORD` は、値の有無ではなくレコード存在を確認するルールとする。
@@ -257,7 +257,7 @@
 - `ALTERNATIVE` が成立した場合は、対象項目を項目別 `status = ALTERNATIVE`、代替項目を項目別 `status = OK` とする。
 - `CALCULATED` と `ALTERNATIVE` のいずれでも値を確定できない場合は、項目別 `status = MISSING` とする。
 - `ALTERNATIVE` は、対象項目が不足する場合に代替項目で充足できるかを判定する。
-- `CONDITIONAL` は、条件付き必須項目の判定入口として扱う。
+- 条件付き必須などの将来要件は現時点では実装対象外とする。
 - 計算処理は共通Calculateライブラリへ集約する。
 - 計算元取得は共通Lookupライブラリへ集約する。
 - Lookupライブラリは、対象キーから必要な検査値と取得可否を返却する。
@@ -286,10 +286,12 @@
 - `exam_item_group_members` は `namecode` 単位の取得候補管理を担当する。
 - `exam_item_group_method_members` はv2要件に合わせて必要なカラムを追加する前提とする。
 - `exam_item_group_method_members` をv2制度チェック用のmethod単位ルールマスタとして拡張する。
-- `exam_item_group_method_members` のv2追加カラムとして、`presence_value_mode varchar(32) NULL`、`required_flag tinyint(1) NULL`、`condition_code varchar(64) NULL`、`rule_code varchar(64) NULL`、`rule_source_identity_codes varchar(255) NULL`、`rule_source_method_codes varchar(255) NULL`、`rule_source_namecodes text NULL`、`is_active tinyint(1) NOT NULL DEFAULT 1`、`updated_at datetime(6) NULL ON UPDATE CURRENT_TIMESTAMP(6)` を追加する方針とする。
+- `exam_item_group_method_members` のv2追加カラムとして、`presence_value_mode varchar(32) NULL`、`required_flag tinyint(1) NULL`、`rule_code varchar(64) NULL`、`rule_source_identity_codes varchar(255) NULL`、`rule_source_method_codes varchar(255) NULL`、`rule_source_namecodes text NULL`、`is_active tinyint(1) NOT NULL DEFAULT 1`、`updated_at datetime(6) NULL ON UPDATE CURRENT_TIMESTAMP(6)` を追加する方針とする。
 - `rule_params` JSON は採用しない。
 - ルールが参照する項目はJSONではなく、`rule_source_*` の専用カラムで保持する。
-- 条件判定は自由記述式の `condition_expr` ではなく、共通ライブラリが解釈する識別子として `condition_code` を採用する。
+- 現時点では条件付き必須の仕様が確定していないため、抽象的な条件カラムは先行追加しない。
+- DH-20260709-01 で採用した `condition_code` は、DH-20260709-02 により採用しない。
+- 条件付き必須などの将来要件が必要になった時点で、意味が確定した専用カラムをmigrationで追加する。
 - 参照元項目を表す命名として `rule_source_*` を採用する。
 - v2では制度チェックを `method_code` を判定単位として実装する。
 - identity は制度上の同一性判定、method は検査方法判定という責務を維持する。
