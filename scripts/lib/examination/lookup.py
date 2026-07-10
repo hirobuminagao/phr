@@ -73,7 +73,13 @@ def fetch_identity_members(cur: Any, *, dev_db: str, group_codes: tuple[str, ...
     placeholders = ", ".join(["%s"] * len(group_codes))
     cur.execute(
         f"""
-        SELECT group_code, identity_item_code, required_flag, presence_value_mode, sort_no
+        SELECT
+          group_code,
+          identity_item_code,
+          COALESCE(NULLIF(identity_item_name, ''), identity_item_code) AS identity_item_name,
+          required_flag,
+          presence_value_mode,
+          sort_no
         FROM {qname(dev_db)}.exam_item_group_identity_members
         WHERE group_code IN ({placeholders})
         ORDER BY group_code, sort_no, identity_item_code

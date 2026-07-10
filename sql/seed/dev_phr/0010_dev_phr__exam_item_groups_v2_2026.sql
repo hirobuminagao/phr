@@ -211,6 +211,24 @@ ON DUPLICATE KEY UPDATE
   `sort_no` = VALUES(`sort_no`),
   `updated_at` = CURRENT_TIMESTAMP(6);
 
+UPDATE `dev_phr`.`exam_item_group_identity_members` im
+LEFT JOIN (
+  SELECT
+    identity_item_code,
+    COALESCE(MAX(NULLIF(identity_item_name, '')), identity_item_code) AS identity_item_name
+  FROM `dev_phr`.`exam_item_master`
+  WHERE identity_item_code IS NOT NULL
+  GROUP BY identity_item_code
+) em
+  ON em.identity_item_code = im.identity_item_code
+SET im.identity_item_name = COALESCE(em.identity_item_name, im.identity_item_code),
+    im.updated_at = CURRENT_TIMESTAMP(6)
+WHERE im.group_code IN (
+    'v2_2026_CHECK_72_ITEMS',
+    'v2_2026_LSIO_Legal_Item',
+    'v2_2026_Specific_Health_Item'
+  );
+
 INSERT INTO `dev_phr`.`exam_item_group_method_members`
   (`group_code`, `xml_method_code`, `role`, `priority`, `presence_value_mode`, `required_flag`, `rule_code`, `rule_source_identity_codes`, `rule_source_method_codes`, `rule_source_namecodes`, `is_active`, `notes`) VALUES
   ('v2_2026_CHECK_72_ITEMS', '9N01100000', 'RESULT_VALUE', 30, 'CALCULATED', 0, 'BMI', '9N001,9N006', NULL, NULL, 1, '9N011: ＢＭＩ'),

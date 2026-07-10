@@ -10,6 +10,9 @@
 - Phase進行を優先し、軽微な改善事項は積み残しとして管理する。
 - 積み残しは設計判断と改善作業を分離し、後続でまとめてレビュー・修正する。
 - 必要に応じて後続で積み残し一覧を作成する。
+- Phase7実行後に見えた改修対象と将来機能は分離して管理する。
+- 早期改修では、可読性向上およびレビュー効率改善を優先する。
+- Phase7実行結果の検証結果は、レビュー資料として残せる形で整理する。
 
 ---
 
@@ -149,6 +152,7 @@
 - CSVの場合、`processable_count` は設定に従って算出したデータ行数とする。
 - CSV直取込は初期実装の対象外とし、紙・CSVは別処理でXML化して投入する。
 - `xml_ledger` はXML内容の一意台帳とし、`xml_sha256` を一意性判定の基準とする。
+- `xml_ledger` に `xml_file_name` を追加し、XMLファイル名を冗長保持する。
 - 同一 `xml_sha256` のXMLは `xml_ledger` に重複作成しない。
 - `xml_ledger.file_receipt_id` は持たない。
 - `duplicate_of_xml_ledger_id` は採用しない。
@@ -255,6 +259,9 @@
 - `specific_check_result` / `specific_reason_summary` は `exam_check_results` に保持する。
 - `xml_ledger.check_reason` は、`legal_check_result` を `WARNING` または `NG` にした法定健診由来の理由のみ保持する。
 - 特定健診由来のみの指摘は `xml_ledger.check_reason` へ含めない。
+- `xml_ledger.check_reason` は台帳・確認用として日本語項目名を利用する。
+- `xml_ledger.check_reason` の表記は `法定: 腹囲:MISSING | 胸部X線:MISSING` の形式とする。
+- `MISSING` / `ALTERNATIVE` / `NOT_IMPLEMENTED` などの status / reason code は英語コードを維持する。
 - Phase5の責務は `dev_phr` 制度マスタ整備に固定する。
 - Phase5では制度チェック実装を行わない。
 - Phase5では `exam_check_results` DDL作成を主目的にしない。
@@ -333,6 +340,8 @@
 - 法定健診判定用グループの `group_code` は `v2_2026_LSIO_Legal_Item` とする。
 - 特定健診判定用グループの `group_code` は `v2_2026_Specific_Health_Item` とする。
 - 共通72項目用グループは、`exam_check_results` の項目別 `status` / `reason` を生成するために利用する。
+- `exam_item_group_identity_members` に `identity_item_name` を追加する。
+- `identity_item_name` は seed で `exam_item_master.identity_item_name` を反映する。
 - 法定健診判定用グループと特定健診判定用グループは、制度単位の `check_result` を集計するために利用する。
 - 特定健診用グループは、初期実装ではマスタ未投入でも動作可能な構成とし、後でマスタを投入すれば判定できるようにする。
 - Phase5の次作業として、制度マスタseedを作成する。
@@ -387,7 +396,10 @@
 - `xml_status` はXML状態を管理し、XML解析可否や処理可能状態を表す。
 - Phase4の `xml_status` は `READY / PARSE_ERROR` を正式コードとする。
 - 加入者照合状態は `subscriber_match_status` で管理し、identity生成・加入者照合結果を表す。
-- Phase4の `subscriber_match_status` は `MATCHED / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` を正式コードとする。
+- Phase4の `subscriber_match_status` は `MATCHED / CANDIDATE / NOT_FOUND / IDENTITY_ERROR / NOT_EXECUTED` を正式コードとする。
+- `person_id_custom` 一致は確定一致ではなく候補一致として扱う。
+- `person_id_custom` 一致時は `subscriber_match_method = PERSON_ID_CUSTOM`、`subscriber_match_status = CANDIDATE`、`subscriber_match_reason = PERSON_ID_CUSTOM_CANDIDATE` で保持する。
+- `person_id_custom` 一致時も、候補確認の手がかりとして `subscriber_id` / `hia_subscriber_id` などの候補情報は保持する。
 - 検査値抽出・バリデーション状態は後続Phaseで `exam_item_status` として管理する。
 - 後続の正規化Phaseで使用する `exam_item_status` は `OK / WARNING / ERROR / NOT_EXECUTED` を正式コードとする。
 - `xml_status` に加入者照合結果や検査値バリデーション結果を混在させない。

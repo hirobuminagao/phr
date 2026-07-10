@@ -5060,3 +5060,166 @@ Phase7の制度チェック実装を進める中で、法定健診・特定健�
 - `03_decisions.md` へ正式決定として同期する。
 - `03_check_exam_results.py` の総合判定集約ロジックを決定事項へ合わせて修正する。
 - dry-run により `legal_check_result=OK`・`specific_check_result=WARNING` の場合に `check_status=OK` となることを確認する。
+
+## DH-20260710-01 / 2026-07-10 11:23 JST
+
+### テーマ
+Phase7実行結果を踏まえた改修対象・検証項目・vNext機能の整理
+
+### 背景
+Phase7の実装・実行により、健診結果受領チェックシステムの基本的な処理フローは成立した。
+一方で、実運用やレビューを想定すると、改善したい点や未実装機能が明確になってきたため、優先度を整理する。
+
+### 協議
+
+#### 早期に改修したい項目
+
+**1. xml_ledger.check_reason の可読性向上**
+- `LEGAL:` を `法定:` など日本語表記へ変更する。
+- 同一性項目コードは日本語項目名へ変換する。
+- `MISSING` など内部判定コードはそのまま利用しても問題ない。
+- 健診機関への確認や社内レビュー時の可読性向上を目的とする。
+
+**2. XMLファイル名の保持**
+- `xml_ledger` に元XMLファイル名を保持する。
+- SHA256とは別に、人が検索・確認しやすい情報として利用する。
+- 台帳運用・問い合わせ対応を容易にすることを目的とする。
+
+**3. person_id_custom一致の扱い見直し**
+- `identity_hash` 一致は確定一致とする。
+- `person_id_custom` 一致は候補一致として扱う。
+- 確定一致ではなく、確認対象としてレビュー可能な状態へ変更する。
+
+### 実装後の確認項目
+
+以下について実データで検証を行う。
+
+- `exam_check_results` が期待どおり登録されること
+- `xml_ledger.check_status`
+- `xml_ledger.check_reason`
+- 9N021暫定代替判定
+- specific参考判定
+
+検証結果はレビュー資料として残せるよう整理する。
+
+### 将来実装候補（vNext）
+
+#### 1. XML単位のレビュー対象判定
+
+レビュー対象となるXMLを抽出しやすくするため、業務用フラグを追加する。
+
+対象例
+- 加入者突合が確定一致ではない
+- 法定判定NG
+
+例
+- `review_required_flag`
+- `needs_review`
+
+#### 2. 検査値妥当性チェック
+
+XML構造だけではなく、値そのものの妥当性確認を追加する。
+
+対象例
+- XSD・Schema必須チェック
+- データ型チェック
+- コード体系チェック
+- 値域チェック（low/high）
+- 医学的・業務的にあり得ない値の検出
+
+### 現時点の考え
+
+まずは運用・レビュー効率を向上させる改修を優先する。
+その後、レビュー支援機能や検査値妥当性チェックなど、品質向上機能を段階的に追加していく。
+
+### 決定事項
+
+- 改修対象と将来機能を分離して管理する。
+- 可読性向上およびレビュー効率改善を優先する。
+- 高確度一致（person_id_custom）は確定一致とは区別する。
+- 検証結果はレビュー資料として残せる形で整理する。
+
+### 保留事項
+
+- review_required_flag の保持方法
+- person_id_custom の最終ステータス設計
+- 検査値妥当性チェックの実装範囲
+
+### 次回検討
+
+- 各改修項目の詳細設計
+- review_required の判定条件
+- 値域チェック・妥当性チェックの仕様策定
+
+---
+
+## DH-20260710-02 / 2026-07-10 12:01 JST
+
+### テーマ
+Phase7後の早期改修方針と台帳可読性・突合候補管理の確定
+
+### 背景
+Phase7のDB反映確認により、制度チェック結果の生成、`exam_check_results` への登録、`xml_ledger.check_status` / `check_reason` の更新が動作することを確認した。
+
+一方で、実運用では健診機関への確認、社内レビュー、加入者突合結果の確認を行うため、台帳上の情報を人が読みやすく、かつ確認対象を追いやすい形へ整える必要が出てきた。
+
+### 議論
+- `xml_ledger.check_reason` は、健診機関へ確認する材料になるため、内部コードだけではなく日本語項目名を含めた表示にしたい。
+- `MISSING` などのstatus / reason codeは、システム的な利便性を維持するため英語コードのまま扱う。
+- `LEGAL:` は台帳・確認用には `法定:` として表示する。
+- 同一性項目コードは、日本語項目名へ変換して `腹囲:MISSING` のように表示する。
+- 日本語項目名は都度 `exam_item_master` へJOINするより、制度グループ側に保持した方が実装・運用が単純になる。
+- `exam_item_group_identity_members` に `identity_item_name` を追加し、seedで `exam_item_master.identity_item_name` を反映する方針とする。
+- XMLファイル名は、SHA256や内部パスだけでは人が確認しづらいため、`xml_ledger` に `xml_file_name` として冗長保持する。
+- `person_id_custom` による一致は高確度候補ではあるが、確定一致とは扱わない。
+- `person_id_custom` 一致時も、調査の手がかりとして `subscriber_id` / `hia_subscriber_id` などの候補情報は保持する。
+- Phase7 DB実行レビュー資料は作成候補として認識するが、現時点では保留し、まず早期改修を優先する。
+
+### 現時点の考え
+Phase7後の早期改修では、DB構造・チェック処理の大規模見直しではなく、実運用で人が確認しやすい台帳情報を整えることを優先する。
+
+加入者突合では、確定一致と候補一致を明確に分ける。候補一致でも調査用情報は残し、後続レビューで判断できるようにする。
+
+### 決定事項
+- `subscriber_match_status` に `CANDIDATE` を追加する。
+- `person_id_custom` 一致は確定一致ではなく候補一致として扱う。
+- `person_id_custom` 一致時は以下の値で保持する。
+  - `subscriber_match_method = PERSON_ID_CUSTOM`
+  - `subscriber_match_status = CANDIDATE`
+  - `subscriber_match_reason = PERSON_ID_CUSTOM_CANDIDATE`
+- `person_id_custom` 一致時も、候補確認の手がかりとして `subscriber_id` / `hia_subscriber_id` などの候補情報は保持する。
+- `xml_ledger` に `xml_file_name` を追加し、XMLファイル名を冗長保持する。
+- `xml_ledger.check_reason` は台帳・確認用として日本語項目名を利用する。
+- `xml_ledger.check_reason` の表記は、例として `法定: 腹囲:MISSING | 胸部X線:MISSING` の形式とする。
+- `MISSING` / `ALTERNATIVE` / `NOT_IMPLEMENTED` などのstatus / reason codeは英語コードを維持する。
+- `exam_item_group_identity_members` に `identity_item_name` を追加する。
+- `identity_item_name` はseedで `exam_item_master.identity_item_name` を反映する。
+
+### 保留事項
+- Phase7 DB実行レビュー資料 `32_phase7_db_run_review.md` の作成。
+- `CANDIDATE` のレビュー画面・抽出SQLでの扱い。
+- `xml_file_name` の既存データ補完方法。
+- `identity_item_name` が取得できない場合のフォールバック表記。
+
+### 根拠
+- 健診機関への確認時には、同一性項目コードだけではなく日本語項目名が必要になるため。
+- 台帳確認では、XMLファイル名が見える方が人間の調査効率が高いため。
+- `person_id_custom` は高確度ではあるが、確定一致として自動処理すると誤紐付けリスクがあるため。
+- 候補一致でも `subscriber_id` / `hia_subscriber_id` を保持することで、確認時の手がかりを失わずに済むため。
+- 日本語項目名を制度グループ側に保持すれば、制度チェック時のJOINを増やさずに `check_reason` を生成できるため。
+
+### 実装引き継ぎ
+- `03_decisions.md` へ同期後、実装者は上記を決定済みとして扱う。
+- `person_id_custom` 一致は `MATCHED` ではなく `CANDIDATE` として実装する。
+- `CANDIDATE` でも候補情報として `subscriber_id` / `hia_subscriber_id` は保持する。
+- `xml_ledger.check_reason` は法定由来理由のみを保持する既存方針を維持しつつ、日本語項目名へ変換する。
+- `identity_item_name` は `exam_item_group_identity_members` に追加し、seedで補完する。
+- DDL / migration / seed / script の変更が必要になるため、適用順を確認してから実装する。
+
+### 次回検討
+- `03_decisions.md` へ本DHの決定事項を同期する。
+- 早期改修として、DDL / migration / seed / script の変更箇所を洗い出す。
+- `CANDIDATE` のDB反映・抽出確認を実施する。
+- `check_reason` 日本語化後のdry-run / run結果を確認する。
+
+---

@@ -61,9 +61,12 @@ XML_STATUS_READY = "READY"
 XML_STATUS_PARSE_ERROR = "PARSE_ERROR"
 
 SUBSCRIBER_MATCH_MATCHED = "MATCHED"
+SUBSCRIBER_MATCH_CANDIDATE = "CANDIDATE"
 SUBSCRIBER_MATCH_NOT_FOUND = "NOT_FOUND"
 SUBSCRIBER_MATCH_IDENTITY_ERROR = "IDENTITY_ERROR"
 SUBSCRIBER_MATCH_NOT_EXECUTED = "NOT_EXECUTED"
+SUBSCRIBER_METHOD_PERSON_ID_CUSTOM = "PERSON_ID_CUSTOM"
+SUBSCRIBER_REASON_PERSON_ID_CUSTOM_CANDIDATE = "PERSON_ID_CUSTOM_CANDIDATE"
 
 ERROR_FIELD_CONFIG = "CONFIG"
 ERROR_FIELD_FILE = "FILE"
@@ -190,6 +193,14 @@ class XmlCandidate:
         if self.inner_path:
             return f"{source_path}!{self.inner_path}"
         return source_path
+
+    @property
+    def xml_file_name(self) -> str | None:
+        raw_path = self.inner_path or str(self.file_receipt.get("source_path") or "")
+        if not raw_path:
+            return None
+        parts = [part for part in re.split(r"[\\/]+", raw_path) if part]
+        return parts[-1] if parts else None
 
 
 @dataclass
@@ -901,6 +912,7 @@ def insert_xml_ledger(
     config: ImportConfig,
     *,
     xml_sha256: str,
+    xml_file_name: str | None,
     xml_status: str,
     xml_reason: str | None,
     basic: Mapping[str, Any],
@@ -919,7 +931,7 @@ def insert_xml_ledger(
             INSERT INTO {qname(config.health_db)}.xml_ledger (
                 event_id,
                 subscriber_id, hia_subscriber_id,
-                xml_sha256, document_id,
+                xml_sha256, xml_file_name, document_id,
                 insurer_number, facility_code, facility_name, exam_date,
                 name_kana_raw,
                 insurance_symbol_raw, insurance_number_raw,
@@ -931,7 +943,7 @@ def insert_xml_ledger(
             VALUES (
                 %s,
                 %s, %s,
-                %s, %s,
+                %s, %s, %s,
                 %s, %s, %s, %s,
                 %s,
                 %s, %s,
@@ -946,6 +958,7 @@ def insert_xml_ledger(
                 subscriber.get("subscriber_id"),
                 subscriber.get("hia_subscriber_id"),
                 xml_sha256,
+                xml_file_name,
                 basic.get("document_id"),
                 basic.get("insurer_number_raw"),
                 basic.get("facility_code"),
@@ -1086,6 +1099,14 @@ def subscriber_status_from_identity(
     )
     if result.status == "matched":
         row = result.rows[0]
+        if result.matched_by == "person_id_custom":
+            return {
+                "subscriber_id": row.get("subscriber_id"),
+                "hia_subscriber_id": row.get("hia_subscriber_id"),
+                "subscriber_match_status": SUBSCRIBER_MATCH_CANDIDATE,
+                "subscriber_match_method": SUBSCRIBER_METHOD_PERSON_ID_CUSTOM,
+                "subscriber_match_reason": SUBSCRIBER_REASON_PERSON_ID_CUSTOM_CANDIDATE,
+            }
         return {
             "subscriber_id": row.get("subscriber_id"),
             "hia_subscriber_id": row.get("hia_subscriber_id"),
@@ -1273,6 +1294,7 @@ def process_xml_candidate(
                     health_cur,
                     config,
                     xml_sha256=xml_sha256,
+                    xml_file_name=candidate.xml_file_name,
                     xml_status=XML_STATUS_PARSE_ERROR,
                     xml_reason=message,
                     basic={},
@@ -1336,6 +1358,7 @@ def process_xml_candidate(
                     health_cur,
                     config,
                     xml_sha256=xml_sha256,
+                    xml_file_name=candidate.xml_file_name,
                     xml_status=XML_STATUS_READY,
                     xml_reason="XML_RAW_EXTRACT_FAILED",
                     basic={},
@@ -1485,6 +1508,7 @@ def process_xml_candidate(
             health_cur,
             config,
             xml_sha256=xml_sha256,
+            xml_file_name=candidate.xml_file_name,
             xml_status=XML_STATUS_READY,
             xml_reason=None,
             basic=basic,

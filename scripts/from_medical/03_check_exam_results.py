@@ -303,9 +303,35 @@ def aggregate_check_status(legal_result: str) -> str:
     return CHECK_STATUS_OK
 
 
-def aggregate_check_reason(legal_summary: str | None) -> str | None:
-    if legal_summary:
-        return f"LEGAL:{legal_summary}"
+def identity_display_name(identity_code: str, group_members: dict[str, dict[str, Any]]) -> str:
+    member = group_members.get(identity_code) or {}
+    return str(member.get("identity_item_name") or identity_code)
+
+
+def aggregate_check_reason(
+    *,
+    legal_members: dict[str, dict[str, Any]],
+    item_results: dict[str, ItemResult],
+) -> str | None:
+    reasons: list[str] = []
+    for identity_code, member in sorted_group_members(legal_members):
+        required = int(member.get("required_flag") or 0) == 1
+        result = item_results.get(identity_code)
+        display_name = identity_display_name(identity_code, legal_members)
+        if result is None:
+            if required:
+                reasons.append(f"{display_name}:MISSING")
+            continue
+        if is_not_implemented_result(result):
+            continue
+        if result.is_ok_like:
+            continue
+        if result.status == STATUS_MISSING and not required:
+            continue
+        if result.reason:
+            reasons.append(f"{display_name}:{result.reason}")
+    if reasons:
+        return f"法定: {' | '.join(reasons)}"
     return None
 
 
@@ -509,7 +535,7 @@ def process_ledgers(
             include_not_implemented_summary=True,
         )
         check_status = aggregate_check_status(legal_result)
-        check_reason = aggregate_check_reason(legal_summary)
+        check_reason = aggregate_check_reason(legal_members=legal_identities, item_results=item_results)
         if check_status == CHECK_STATUS_OK:
             summary.ok += 1
         elif check_status == CHECK_STATUS_WARNING:

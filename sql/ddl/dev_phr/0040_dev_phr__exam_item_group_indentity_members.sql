@@ -1,6 +1,7 @@
 CREATE TABLE `dev_phr`.`exam_item_group_identity_members` (
   `group_code` varchar(64) NOT NULL COMMENT '健診項目グループコード',
   `identity_item_code` varchar(32) NOT NULL COMMENT '同一性項目コード',
+  `identity_item_name` varchar(190) DEFAULT NULL COMMENT '同一性項目名称',
   `required_flag` tinyint(1) NOT NULL DEFAULT 1 COMMENT '1=必須',
   `condition_expr` varchar(1024) DEFAULT NULL COMMENT '必須条件式（評価式）',
   `required_presence_namecodes` text COMMENT 'presence判定用のnamecode CSV（OR集合）',
