@@ -9,7 +9,7 @@ JOIN (
     xfl.xml_ledger_id,
     SUBSTRING_INDEX(
       REPLACE(
-        COALESCE(xfl.xml_inner_path, fr.relative_path, fr.source_path, fr.work_path),
+        COALESCE(xfl.xml_inner_path, fr.relative_path, fr.source_path, fr.file_name),
         '\\',
         '/'
       ),
