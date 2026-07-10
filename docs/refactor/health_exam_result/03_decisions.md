@@ -286,6 +286,12 @@
 - 未実装ルールによる `INVALID / NOT_IMPLEMENTED` は制度不適合NGとは区別する。
 - 特定健診側の未実装ルールは参考情報として扱う。
 - 制度全体の集約時は、未実装ルールを `xml_ledger.check_status = NG` へ直結させない。
+- Phase7では、`docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の法定健診整理を正とする。
+- 労働安全衛生法（法定健診）側で「△」として整理した項目は、一旦 `required_flag = 1` として扱う。
+- `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の「△」は、元資料の「□（医師判断等）」を制度チェック用に整理した表現を含む。
+- この決定は法定健診側のみを対象とし、特定健診側の「△」には適用しない。
+- 「☆（情報を入手した場合に限り報告）」は対象外とし、`required_flag = 0` を維持する。
+- 年齢・性別・医師判断等の条件付き判定は、将来ルールマスタで表現する。
 - Phase7ではルールマスタ（seed）の大規模見直しは行わず、スクリプト側で制度判定を暫定補完する。
 - `required_flag = 0` の任意項目が `MISSING` の場合、制度別 summary へ含めない。
 - `required_flag = 0` の任意項目 `MISSING` は、法定健診・特定健診のNG理由として扱わない。
@@ -348,6 +354,8 @@
 - Phase5制度マスタseedの正は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の72項目仕様とする。
 - `03_decisions.md` に同期済みの決定事項は、Phase5 seed作成時に未決定として扱わない。
 - `exam_item_master` の `xml_method_code` がNULLでも `namecode` が存在する場合は、`LEFT(namecode, 10)` を補完 `xml_method_code` として扱う。
+- `9E160（視力）` は法定健診必須項目として `v2_2026_LSIO_Legal_Item` へ登録する。
+- `xml_method_code` を持たない項目は、`exam_item_group_members` の namecode 定義で判定する。
 - `exam_item_master` に不足している `xml_method_code` は、既存値を上書きしない補完seedで整備する。
 - Phase5制度マスタseedは、補完済み `xml_method_code` を前提に作成する。
 - `required_flag`、`presence_value_mode`、`rule_code`、`rule_source_*` は `03_decisions.md` の決定事項と72項目仕様に基づいてseedへ反映する。
