@@ -41,6 +41,10 @@ OUTCOME_TOTAL_POINT_LABEL = "90060_outcome_total_point_entry_relationship"
 OUTCOME_TOTAL_POINT_DELETE_REASON = "final動機づけ支援のアウトカム合計ポイント0 block削除"
 
 MOTIVATION_GUIDANCE_CODE = "2"
+OUTCOME_TOTAL_POINT_DELETE_EXCLUDED_INSURER_NUMBERS = {
+    "06380216",
+    "06139463",
+}
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,7 @@ def should_delete_outcome_total_point_block(
     report_code: str | None,
     level_code: str | None,
     outcome_total_points: int | None,
+    insurer_number: str | None,
 ) -> tuple[bool, str]:
     """アウトカム合計ポイント0 block削除fixの実行可否を判定する。
 
@@ -65,6 +70,7 @@ def should_delete_outcome_total_point_block(
     - report_code = 22
     - 90010 section の observation/code = 1020000001 の value code が 2（動機づけ支援）
     - アウトカム合計ポイント値が 0
+    - 保険者番号が削除除外リストに含まれていない
     """
     if (report_code or "").strip() != "22":
         return False, "report_codeが22ではありません"
@@ -75,6 +81,10 @@ def should_delete_outcome_total_point_block(
     if outcome_total_points != 0:
         return False, "アウトカム合計ポイントが0ではありません"
 
+    normalized_insurer_number = (insurer_number or "").strip()
+    if normalized_insurer_number in OUTCOME_TOTAL_POINT_DELETE_EXCLUDED_INSURER_NUMBERS:
+        return False, "保険者番号がアウトカム合計ポイントblock削除対象外です"
+
     return True, "削除条件に合致しました"
 
 
@@ -84,6 +94,7 @@ def apply_outcome_total_point_block_fix(
     report_code: str | None,
     level_code: str | None,
     outcome_total_points: int | None,
+    insurer_number: str | None,
 ) -> OutcomePointBlockFixResult:
     """条件に合致する場合、アウトカム合計ポイント0 blockを削除する。
 
@@ -94,6 +105,7 @@ def apply_outcome_total_point_block_fix(
         report_code=report_code,
         level_code=level_code,
         outcome_total_points=outcome_total_points,
+        insurer_number=insurer_number,
     )
 
     if not should_delete:
