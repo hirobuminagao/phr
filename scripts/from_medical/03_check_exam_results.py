@@ -23,16 +23,15 @@ from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import log_error as etl_log_error
 from scripts.lib.etl import start_run as etl_start_run
-from scripts.lib.examination.lookup import COMMON_GROUP, LEGAL_GROUP, SPECIFIC_GROUP
-from scripts.lib.examination.lookup import fetch_exam_values
-from scripts.lib.examination.lookup import fetch_group_namecodes
-from scripts.lib.examination.lookup import fetch_identity_members
-from scripts.lib.examination.lookup import fetch_method_rules
+from scripts.from_medical.script_lib.article44_checker import ARTICLE44_CHECKERS
+from scripts.from_medical.script_lib.article44_checker import check_article44
+from scripts.from_medical.script_lib.article44_models import Article44Result, CheckResult
+from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
+from scripts.from_medical.script_lib.article44_value_loader import load_article44_value_map
 from scripts.lib.examination.lookup import fetch_target_ledgers
 from scripts.lib.examination.lookup import qname
-from scripts.lib.examination.models import RESULT_NG, RESULT_OK, RESULT_WARNING
-from scripts.lib.examination.models import REASON_NOT_IMPLEMENTED, STATUS_ALTERNATIVE, STATUS_INVALID, STATUS_MISSING, ItemResult
-from scripts.lib.examination.rules import build_value_index, evaluate_identity
+from scripts.lib.examination.models import RESULT_NG, RESULT_OK
+from scripts.lib.examination.models import STATUS_ALTERNATIVE, STATUS_CALCULATED, STATUS_INVALID, STATUS_MISSING, STATUS_OK
 
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
@@ -46,7 +45,9 @@ CHECK_STATUS_OK = "OK"
 CHECK_STATUS_WARNING = "WARNING"
 CHECK_STATUS_NG = "NG"
 
-GROUP_CODES = (COMMON_GROUP, LEGAL_GROUP, SPECIFIC_GROUP)
+ARTICLE44_OK_STATUSES = {STATUS_OK, STATUS_CALCULATED, STATUS_ALTERNATIVE}
+ARTICLE44_PROBLEM_STATUSES = {STATUS_MISSING, STATUS_INVALID}
+ARTICLE44_ALLOWED_STATUSES = ARTICLE44_OK_STATUSES | ARTICLE44_PROBLEM_STATUSES
 
 
 @dataclass(frozen=True)
@@ -94,12 +95,6 @@ class CheckSummary:
         print(self.to_message())
         print(f"  dry_run={self.dry_run}")
         print(f"  deleted={self.rows_deleted}")
-
-
-@dataclass(frozen=True)
-class GroupProblemResult:
-    result: ItemResult
-    required: bool
 
 
 def parse_args() -> argparse.Namespace:
@@ -199,196 +194,70 @@ def record_script_error(
     )
 
 
-def build_item_results(
-    *,
-    common_identities: dict[str, dict[str, Any]],
-    common_rules: dict[str, list[Any]],
-    common_namecodes: dict[str, set[str]],
-    values: list[Any],
-) -> dict[str, ItemResult]:
-    index = build_value_index(values)
-    results: dict[str, ItemResult] = {}
-    ordered_identity_codes = sorted(
-        common_identities,
-        key=lambda code: (
-            common_identities[code].get("sort_no") is None,
-            int(common_identities[code].get("sort_no") or 0),
-            code,
-        ),
-    )
-
-    visiting: set[str] = set()
-
-    def ensure_result(identity_code: str) -> ItemResult:
-        if identity_code in results:
-            return results[identity_code]
-        if identity_code in visiting:
-            result = ItemResult(identity_code, STATUS_INVALID, "RULE_DEPENDENCY_CYCLE")
-            results[identity_code] = result
-            return result
-        visiting.add(identity_code)
-        for rule in common_rules.get(identity_code, []):
-            for source_identity in rule.source_identity_codes:
-                if source_identity in common_identities and source_identity not in results:
-                    ensure_result(source_identity)
-        result = evaluate_identity(
-            identity_code,
-            rules=common_rules.get(identity_code, []),
-            namecodes=common_namecodes.get(identity_code, set()),
-            index=index,
-            result_by_identity=results,
-        )
-        results[identity_code] = result
-        visiting.discard(identity_code)
-        return result
-
-    for identity_code in ordered_identity_codes:
-        ensure_result(identity_code)
-    return results
-
-
-def summarize_group(
-    group_members: dict[str, dict[str, Any]],
-    item_results: dict[str, ItemResult],
-    *,
-    missing_result: str,
-    include_not_implemented_summary: bool,
-) -> tuple[str, str | None]:
-    reasons: list[str] = []
-    final_result = RESULT_OK
-    for identity_code, member in sorted_group_members(group_members):
-        required = int(member.get("required_flag") or 0) == 1
-        result = item_results.get(identity_code)
-        if result is None:
-            if required:
-                final_result = worse_result(final_result, missing_result)
-                reasons.append(f"{identity_code}:MISSING")
-            continue
-        if is_not_implemented_result(result):
-            if include_not_implemented_summary and result.reason:
-                reasons.append(f"{identity_code}:{result.reason}")
-            continue
-        if result.is_ok_like:
-            continue
-        if result.status == STATUS_MISSING and not required:
-            continue
-        if result.reason:
-            reasons.append(f"{identity_code}:{result.reason}")
-        if required and not result.is_ok_like:
-            final_result = worse_result(final_result, missing_result)
-    return final_result, " | ".join(reasons) if reasons else None
-
-
-def sorted_group_members(group_members: dict[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
-    return sorted(
-        group_members.items(),
-        key=lambda item: (
-            item[1].get("sort_no") is None,
-            int(item[1].get("sort_no") or 0),
-            item[0],
-        ),
-    )
-
-
-def worse_result(current: str, candidate: str) -> str:
-    rank = {RESULT_OK: 0, RESULT_WARNING: 1, RESULT_NG: 2}
-    return candidate if rank[candidate] > rank[current] else current
-
-
 def aggregate_check_status(legal_result: str) -> str:
     if legal_result == RESULT_NG:
         return CHECK_STATUS_NG
-    if legal_result == RESULT_WARNING:
-        return CHECK_STATUS_WARNING
     return CHECK_STATUS_OK
 
 
-def identity_display_name(identity_code: str, group_members: dict[str, dict[str, Any]]) -> str:
-    member = group_members.get(identity_code) or {}
-    return str(member.get("identity_item_name") or identity_code)
+def validate_article44_result(article44_result: Article44Result) -> None:
+    expected_detail_nos = tuple(ARTICLE44_CHECKERS)
+    actual_detail_nos = tuple(article44_result)
+    if actual_detail_nos != expected_detail_nos:
+        raise ValueError(
+            "Article44Result detail numbers mismatch: "
+            f"expected={expected_detail_nos!r} actual={actual_detail_nos!r}"
+        )
+    for detail_no, result in article44_result.items():
+        if not isinstance(result, CheckResult):
+            raise ValueError(f"Article44Result value must be CheckResult: detail_no={detail_no}")
+        if result.status not in ARTICLE44_ALLOWED_STATUSES:
+            raise ValueError(f"Article44Result has invalid status: detail_no={detail_no} status={result.status!r}")
 
 
-def aggregate_check_reason(
-    *,
-    legal_members: dict[str, dict[str, Any]],
-    item_results: dict[str, ItemResult],
-) -> str | None:
-    reasons: list[str] = []
-    for identity_code, member in sorted_group_members(legal_members):
-        required = int(member.get("required_flag") or 0) == 1
-        result = item_results.get(identity_code)
-        display_name = identity_display_name(identity_code, legal_members)
-        if result is None:
-            if required:
-                reasons.append(f"{display_name}:MISSING")
-            continue
-        if is_not_implemented_result(result):
-            continue
-        if result.is_ok_like:
-            continue
-        if result.status == STATUS_MISSING and not required:
-            continue
-        if result.reason:
-            reasons.append(f"{display_name}:{result.reason}")
-    if reasons:
-        return f"法定: {' | '.join(reasons)}"
-    return None
-
-
-def result_columns(item_results: dict[str, ItemResult]) -> dict[str, Any]:
-    columns: dict[str, Any] = {}
-    for identity_code, result in item_results.items():
-        suffix = identity_code.lower()
-        columns[f"status_{suffix}"] = result.status
-        columns[f"reason_{suffix}"] = result.reason
+def article44_result_columns(
+    article44_result: Article44Result,
+) -> dict[str, object]:
+    validate_article44_result(article44_result)
+    columns: dict[str, object] = {}
+    for detail_no, result in article44_result.items():
+        columns[f"a44_{detail_no}_status"] = result.status
+        columns[f"a44_{detail_no}_reason"] = result.reason
     return columns
 
 
-def is_not_implemented_result(result: ItemResult) -> bool:
-    return bool(result.reason and REASON_NOT_IMPLEMENTED in result.reason)
+def aggregate_article44_legal_result(article44_result: Article44Result) -> tuple[str, str | None]:
+    validate_article44_result(article44_result)
+    reasons: list[str] = []
+    for detail_no, result in article44_result.items():
+        if result.status in ARTICLE44_OK_STATUSES:
+            continue
+        if result.status in ARTICLE44_PROBLEM_STATUSES:
+            reasons.append(f"{detail_no}:{result.reason or result.status}")
+            continue
+        raise ValueError(f"Article44Result has invalid status: detail_no={detail_no} status={result.status!r}")
+    if reasons:
+        return RESULT_NG, " | ".join(reasons)
+    return RESULT_OK, None
 
 
-def is_verbose_problem_result(result: ItemResult) -> bool:
-    if result.status == STATUS_ALTERNATIVE and result.reason:
-        return True
-    if result.status in {STATUS_INVALID, STATUS_MISSING}:
-        return True
-    return is_not_implemented_result(result)
-
-
-def group_problem_results(
-    group_members: dict[str, dict[str, Any]],
-    item_results: dict[str, ItemResult],
-) -> list[GroupProblemResult]:
-    results: list[GroupProblemResult] = []
-    for identity_code, member in sorted_group_members(group_members):
-        result = item_results.get(identity_code)
-        if result is not None and is_verbose_problem_result(result):
-            required = int(member.get("required_flag") or 0) == 1
-            results.append(GroupProblemResult(result=result, required=required))
-    return results
-
-
-def print_group_problem_results(results: list[GroupProblemResult]) -> None:
-    if not results:
-        print("    none")
-        return
-    for problem in results:
-        result = problem.result
-        requirement = "required" if problem.required else "optional"
-        print(f"    - {result.identity_code}: {requirement} status={result.status} reason={result.reason}")
+def article44_problem_results(article44_result: Article44Result) -> list[tuple[str, CheckResult]]:
+    validate_article44_result(article44_result)
+    return [
+        (detail_no, result)
+        for detail_no, result in article44_result.items()
+        if result.status in ARTICLE44_PROBLEM_STATUSES or (result.status == STATUS_ALTERNATIVE and result.reason)
+    ]
 
 
 def print_dry_run_detail(
     *,
     ledger: dict[str, Any],
     legal_result: str,
-    specific_result: str,
+    specific_result: str | None,
     check_status: str,
     check_reason: str | None,
-    item_results: dict[str, ItemResult],
-    legal_problem_results: list[GroupProblemResult],
-    specific_problem_results: list[GroupProblemResult],
+    article44_result: Article44Result,
 ) -> None:
     print("dry_run_detail:")
     print(f"  xml_ledger_id={ledger['id']}")
@@ -400,24 +269,14 @@ def print_dry_run_detail(
     print(f"  check_status_basis=legal_only:{legal_result}")
     print(f"  check_reason={check_reason}")
 
-    print("  legal_problem_items:")
-    print_group_problem_results(legal_problem_results)
-
-    print("  specific_problem_items:")
-    print_group_problem_results(specific_problem_results)
-
-    problem_results = [
-        result
-        for _, result in sorted(item_results.items(), key=lambda item: item[0])
-        if is_verbose_problem_result(result)
-    ]
+    problem_results = article44_problem_results(article44_result)
     if not problem_results:
-        print("  problem_items=none")
+        print("  article44_problem_items=none")
         return
 
-    print("  problem_items:")
-    for result in problem_results:
-        print(f"    - {result.identity_code}: status={result.status} reason={result.reason}")
+    print("  article44_problem_items:")
+    for detail_no, result in problem_results:
+        print(f"    - {detail_no}: status={result.status} reason={result.reason}")
 
 
 def insert_check_result(
@@ -425,9 +284,9 @@ def insert_check_result(
     *,
     health_db: str,
     ledger: dict[str, Any],
-    item_results: dict[str, ItemResult],
+    article44_result: Article44Result,
     legal_result: str,
-    specific_result: str,
+    specific_result: str | None,
     legal_summary: str | None,
     specific_summary: str | None,
 ) -> None:
@@ -441,7 +300,7 @@ def insert_check_result(
         "legal_reason_summary": legal_summary,
         "specific_reason_summary": specific_summary,
     }
-    row.update(result_columns(item_results))
+    row.update(article44_result_columns(article44_result))
     columns = list(row.keys())
     placeholders = ", ".join(["%s"] * len(columns))
     column_sql = ", ".join(f"`{column}`" for column in columns)
@@ -494,48 +353,30 @@ def process_ledgers(
     config: CheckConfig,
     summary: CheckSummary,
 ) -> None:
-    identities = fetch_identity_members(dev_cur, dev_db=config.dev_db, group_codes=GROUP_CODES)
-    method_rules = fetch_method_rules(dev_cur, dev_db=config.dev_db, group_codes=GROUP_CODES)
-    group_namecodes = fetch_group_namecodes(dev_cur, dev_db=config.dev_db, group_codes=GROUP_CODES)
-    common_identities = identities.get(COMMON_GROUP, {})
-    legal_identities = identities.get(LEGAL_GROUP, {})
-    specific_identities = identities.get(SPECIFIC_GROUP, {})
+    required_namecodes = fetch_article44_required_namecodes(dev_cur, dev_db=config.dev_db)
 
     ledgers = fetch_target_ledgers(health_cur, health_db=config.health_db, event_id=config.event_id, limit=config.limit)
     ledger_ids = [int(ledger["id"]) for ledger in ledgers]
     summary.ledgers_seen = len(ledgers)
-    values_by_ledger = fetch_exam_values(
-        health_cur,
-        health_db=config.health_db,
-        dev_db=config.dev_db,
-        ledger_ids=ledger_ids,
-    )
 
     if not config.dry_run:
         summary.rows_deleted = delete_existing_results(health_cur, health_db=config.health_db, ledger_ids=ledger_ids)
 
     for ledger in ledgers:
         ledger_id = int(ledger["id"])
-        item_results = build_item_results(
-            common_identities=common_identities,
-            common_rules=method_rules.get(COMMON_GROUP, {}),
-            common_namecodes=group_namecodes.get(COMMON_GROUP, {}),
-            values=values_by_ledger.get(ledger_id, []),
+        value_map = load_article44_value_map(
+            health_cur,
+            xml_ledger_id=ledger_id,
+            required_namecodes=required_namecodes,
+            result_db=config.health_db,
         )
-        legal_result, legal_summary = summarize_group(
-            legal_identities,
-            item_results,
-            missing_result=RESULT_NG,
-            include_not_implemented_summary=False,
-        )
-        specific_result, specific_summary = summarize_group(
-            specific_identities,
-            item_results,
-            missing_result=RESULT_WARNING,
-            include_not_implemented_summary=True,
-        )
+        article44_result = check_article44(value_map)
+        validate_article44_result(article44_result)
+        legal_result, legal_summary = aggregate_article44_legal_result(article44_result)
+        specific_result = None
+        specific_summary = None
         check_status = aggregate_check_status(legal_result)
-        check_reason = aggregate_check_reason(legal_members=legal_identities, item_results=item_results)
+        check_reason = legal_summary
         if check_status == CHECK_STATUS_OK:
             summary.ok += 1
         elif check_status == CHECK_STATUS_WARNING:
@@ -550,9 +391,7 @@ def process_ledgers(
                 specific_result=specific_result,
                 check_status=check_status,
                 check_reason=check_reason,
-                item_results=item_results,
-                legal_problem_results=group_problem_results(legal_identities, item_results),
-                specific_problem_results=group_problem_results(specific_identities, item_results),
+                article44_result=article44_result,
             )
 
         if config.dry_run:
@@ -561,7 +400,7 @@ def process_ledgers(
             health_cur,
             health_db=config.health_db,
             ledger=ledger,
-            item_results=item_results,
+            article44_result=article44_result,
             legal_result=legal_result,
             specific_result=specific_result,
             legal_summary=legal_summary,
