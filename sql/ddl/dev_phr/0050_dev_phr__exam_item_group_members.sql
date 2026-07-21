@@ -3,6 +3,9 @@ CREATE TABLE `dev_phr`.`exam_item_group_members` (
   `namecode` char(17) NOT NULL COMMENT '健診項目namecode',
   `role` enum('PRESENCE_KEY','RESULT_VALUE','AUX') NOT NULL COMMENT 'グループ内の役割',
   `priority` int NOT NULL DEFAULT 100 COMMENT '評価・表示優先度',
+  `value_type` varchar(8) DEFAULT NULL COMMENT '期待XML値型',
+  `method` varchar(32) DEFAULT NULL COMMENT '取得定義・分類用メタ情報',
+  `identity_code` varchar(32) DEFAULT NULL COMMENT 'namecode由来の既存項目識別子（法令項目詳細Noではない）',
   `notes` varchar(1024) DEFAULT NULL COMMENT '備考',
   `created_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 

@@ -17,6 +17,26 @@
 - 第1層から第3層は、現時点では則44専用処理として `scripts/from_medical/script_lib/` 配下へ配置する。
 - 第4層のみ、制度非依存の共通libとして `scripts/lib/examination/check/` 配下へ配置する。
 - 則44判定全体を `scripts/lib/examination/` 配下の共通libには置かない。
+- 第1層〜第3層で共有する則44専用の型定義は `scripts/from_medical/script_lib/article44_models.py` へ配置する。
+- `article44_models.py` は処理層ではなく、第1層〜第3層間のデータ契約を定義する型モジュールである。
+- `article44_models.py` はDBアクセス、値取得、正規化、判定処理、保存処理を持たない。
+- 第4層は制度非依存の最小関数だけを置くため、則44専用型を `scripts/lib/examination/check/` へ配置しない。
+- 第1層、第2層、第3層は同じ型定義をimportして使用する。
+- 各処理ファイル内で同じdataclassやEnumを重複定義しない。
+- 則44の23項目に関する具体的な判定ルールは、`article44_checker.py` を正とする。
+- DBから判定ルールを動的生成しない。
+- DBの `method` を読み取ってRuleEngineのように判定処理を組み立てない。
+- 則44用の必要namecode定義は、`exam_item_groups` と `exam_item_group_members` を正とする。
+- `exam_item_group_members` はnamecode集合だけでなく、取得時に必要なメタ情報も同一行へ保持する。
+- 則44第1層の必要namecode取得では、`exam_item_master` とのJOINを前提としない。
+- `exam_item_master` は現時点で必要な情報が完全に揃っている保証がないため、則44第1層の必須参照先にはしない。
+- 第1層のDB参照は、則44判定に必要なnamecode群と取得時に必要なメタ情報を一括取得するために使用する。
+- DBは「必要な値を取得するための定義」を持ち、Pythonは「取得した値をどう組み合わせて判定するか」を持つ。
+- 取得処理を単純化し、処理開始時に必要定義を1回で取得できることを優先する。
+- 同じDB定義を対象者ごとに繰り返し取得せず、処理開始時など適切な単位で一度取得して再利用する。
+- `exam_item_master` と情報が重複しても許容する。
+- 今回の定義件数は限定的であり、二重保持による管理コストより、JOIN回避・定義独立性・取得処理の単純化を優先する。
+- 将来マスタ統合を検討する場合も、現バージョンでは `exam_item_group_members` を則44取得定義の正とする。
 - 共通lib化は将来利用を想定して先行実施せず、制度をまたいで同一契約・同一責務となる実績が確認できたものだけを後から昇格する。
 - 旧設計と本設計が衝突した場合は、本設計を優先する。
 
@@ -40,10 +60,73 @@
           ▼
 一人分またはXML1件分の Article44Result
 （則44各項目の CheckResult を法令項目詳細Noごとに横並びで保持）
+
+共有型定義
+      scripts/from_medical/script_lib/article44_models.py
+      第1層〜第3層がimportして使用するデータ契約
 ```
 
 第4層は、第3層の項目別判定関数から必要に応じて呼び出される最小部品である。
 第1層から第4層までを直列に1回だけ通過し、第4層が処理の最終段として結果を返す構造ではない。
+
+---
+
+# 則44共有型定義
+
+第1層〜第3層で共有する則44専用の型定義は、以下へ配置する。
+
+```
+scripts/from_medical/script_lib/article44_models.py
+```
+
+`article44_models.py` は処理層ではなく、第1層〜第3層間のデータ契約を定義する型モジュールである。
+DBアクセス、値取得、正規化、判定処理、保存処理は持たない。
+第4層は制度非依存の最小関数だけを置くため、則44専用型を `scripts/lib/examination/check/` へ配置しない。
+
+`article44_models.py` へ配置する型は以下とする。
+
+- `ExpectedValueType`
+- `RequiredNamecode`
+- `ValueState`
+- `ValueInvalidReason`
+- `PQValue`
+- `CDValue`
+- `STValue`
+- `CheckResult`
+- `ValueMap`
+- `Article44Result`
+
+`ExpectedValueType` は、第1層がnamecodeごとの期待値型を返すためのEnumであり、`PQ` / `CD` / `ST` を持つ。
+CO対象は現バージョンでは `CD` として扱う。
+
+`RequiredNamecode` は、`namecode` と `expected_value_type` を保持する。
+
+`ValueState` は、`NOT_FOUND` / `NULL` / `EMPTY` / `PRESENT` を持つ。
+
+`ValueInvalidReason` は、`TYPE_MISMATCH` / `PARSE_ERROR` / `FORMAT_ERROR` / `DUPLICATE_NAMECODE` を持つ。
+
+`PQValue` / `CDValue` / `STValue` は、本資料で確定したフィールド構成を使用する。
+
+`CheckResult` は以下の契約とする。
+
+```python
+@dataclass(frozen=True)
+class CheckResult:
+    status: str
+    reason: str | None = None
+```
+
+`ValueMap` は以下の型エイリアスとする。
+
+```python
+ValueMap = dict[str, PQValue | CDValue | STValue]
+```
+
+`Article44Result` は以下の型エイリアスとする。
+
+```python
+Article44Result = dict[str, CheckResult]
+```
 
 ---
 
@@ -59,6 +142,34 @@
 - DBの `raw_value_type` との一致判定は第2層で行う。
 - 現バージョンでは則44に必要なnamecodeを返す。
 - 次バージョンで特定健診を追加する際は、則44と特定健診の必要namecodeの和集合を取得する方向とする。
+- 第1層は、DBから対象グループ、グループに所属するnamecode、namecodeの期待値型、method、identity_codeを一括取得する。
+- 第1層は、取得したDB定義を `RequiredNamecode(namecode=..., expected_value_type=...)` へ変換して第2層へ渡す。
+- 第1層は、checkerの判定順、fallback、status、reasonを決定しない。
+
+DBを正とする情報は以下とする。
+
+- 対象となる項目グループ
+- グループに所属するnamecode
+- namecodeの期待値型
+- method
+- identity_code
+
+想定する既存テーブルは以下とする。
+
+- `exam_item_groups`
+- `exam_item_group_members`
+
+`exam_item_master` は既存の項目マスタとして引き続き存在する。
+ただし、則44第1層の必要namecode取得では必須JOIN先としない。
+`exam_item_master` に同じvalue_type、method、identity_code相当の情報が存在しても、則44用group member側への二重保持を許容する。
+group member側の値は、その則44用グループで使用する取得定義として管理する。
+`exam_item_master` とgroup member間の整合性確認を将来実施する可能性はあるが、今回の取得処理ではJOINして補完しない。
+`exam_item_master` に値が無い、または不完全であっても、則44用group member定義だけで第1層が成立する構造とする。
+
+則44用のルール名またはグループコードは、新規追加してよい。
+ただし、本資料では具体的なグループコード文字列は確定しない。
+
+DBは「何を取得するか」を管理し、Python checkerは「取得した値をどう判定するか」を管理する。
 
 ## 配置
 
@@ -71,7 +182,9 @@ scripts/from_medical/script_lib/article44_required_namecodes.py
 - 判定対象制度
 - ルールバージョン
 
-DB・ruleテーブル構造、SQL、最終返却形式は未決とする。
+SQLの詳細、最終返却コンテナ型は未決とする。
+
+第1層は同じDB定義を対象者ごとに繰り返し取得せず、処理開始時など適切な単位で一度取得して再利用する。
 
 ## 出力
 
@@ -79,7 +192,8 @@ DB・ruleテーブル構造、SQL、最終返却形式は未決とする。
 required_namecodes: tuple[RequiredNamecode, ...]
 ```
 
-これは想定例であり、最終コンテナ型は未決とする。
+`RequiredNamecode` および `ExpectedValueType` は最終名称として確定し、実体は `article44_models.py` へ配置する。
+第1層の最終コンテナ型は引き続き未決だが、要素型は `RequiredNamecode` とする。
 
 `required_namecodes` は単なる文字列一覧ではなく、namecodeごとの期待値型を含む定義一覧とする。
 
@@ -89,7 +203,7 @@ required_namecodes: tuple[RequiredNamecode, ...]
 - DBレコードが存在しない場合に、どのValue型で `NOT_FOUND` を生成するか
 - DBの `raw_value_type` と比較する基準
 
-型定義の想定例は以下とする。
+型定義は `article44_models.py` で以下の契約として確定する。
 
 ```python
 from dataclasses import dataclass
@@ -110,6 +224,19 @@ class RequiredNamecode:
 
 COは現バージョンでは `CDValue` として扱うため、期待値型として独立したCOは設けず、CO対象namecodeも `ExpectedValueType.CD` とする。
 
+`method` と `identity_code` はDBから一括取得する。
+ただし、第2層の `ValueMap` 構築には不要なため、現時点では `RequiredNamecode` へ追加しない。
+
+理由は以下とする。
+
+- 第2層が必要とするのは、取得対象namecodeと期待値型だけである。
+- methodは判定ルールを動的生成するために使用しない。
+- identity_codeはnamecode取得やValue型生成には不要である。
+- methodとidentity_codeを `ValueMap` へ伝播させない。
+- 不要なメタ情報を第2層・`ValueMap` へ伝播させない。
+
+将来、定義検証・監査・一覧出力などで必要になった場合は、第1層の補助返却情報として別途拡張を検討する。
+
 返却例は以下とする。
 
 ```python
@@ -127,6 +254,198 @@ required_namecodes = (
         expected_value_type=ExpectedValueType.ST,
     ),
 )
+```
+
+## `exam_item_group_members` の責務
+
+`exam_item_group_members` は、namecodeの集合と取得用メタ情報を保持する。
+法令項目詳細No単位のルール構造は持たせず、group member定義から法令項目詳細Noごとのcheckerを動的生成しない。
+
+現行カラムに加え、migrationにより以下のカラムを追加する方針とする。
+3カラムはいずれも既存group member行への即時バックフィルを必須にしないため、NULL許容・DEFAULT NULLとする。
+
+- value_type: `varchar(8) DEFAULT NULL`
+- method: `varchar(32) DEFAULT NULL`
+- identity_code: `varchar(32) DEFAULT NULL`
+
+### namecode
+
+- 第2層がDBから取得する健診結果値のキー。
+- 第1層から第2層へ渡す必須情報。
+
+### priority
+
+- SQL取得順を安定させるための並び順。
+- 法令項目詳細Noごとの判定順ではない。
+- checkerの実行順は `article44_checker.py` の `ARTICLE44_CHECKERS` の定義順を正とする。
+- DBのpriorityからchecker順やfallback順を動的生成しない。
+- 則44専用group member seedでは、checker内のnamecode登場順に沿って10刻みで採番する。
+- 同じ法令項目内では標準経路、代替経路、補助値の順に並べてもよい。
+- ただし、判定上の正は常にPython checkerとする。
+
+対応は以下とする。
+
+```text
+priority
+    = SQL取得順を安定させるため
+
+checker順
+    = PythonのARTICLE44_CHECKERSが正
+```
+
+則44専用group member seedの採番例は以下とする。
+
+```text
+10
+20
+30
+...
+```
+
+### value_type
+
+- 当該namecodeに期待するXML値型。
+- `PQ` / `CD` / `ST` / `CO` を想定する。
+- COは現バージョンではCDとして扱う。
+- 第1層で `ExpectedValueType` へ変換する。
+- COは現バージョンでは `ExpectedValueType.CD` へ変換する。
+- `exam_item_master.xml_value_type` とのJOINで取得せず、group member行から直接取得する。
+
+### method
+
+- namecodeの取得定義・分類・仕様確認・監査に使用するメタ情報。
+- `article44_checker.py` の判定ルールを動的生成するためには使用しない。
+- `ANY` / `ALL` / `FALLBACK` / `FINDING` 等を保持してもよいが、具体的な組み合わせ、判定順、fallback、status、reasonはPython checkerを正とする。
+- `exam_item_master.xml_method_code` とのJOINを前提としない。
+
+### identity_code
+
+- namecodeから導出できる既存の項目識別子。
+- 基本的には既存 `exam_item_master.identity_item_code` と同じ同一性項目コードを保持する補助情報。
+- 処理時に毎回再計算しなくて済むようDBへ保持している。
+- 法令項目詳細Noではない。
+- 法令項目詳細Noの代用として使用しない。
+- `identity_code` と法令項目詳細Noを同一視・転用しない。
+- `exam_item_master.identity_item_code` とのJOINを前提としない。
+
+既存 `exam_item_master.identity_item_code` は `varchar(32)` である。
+固定定義上の値は現時点では5文字の英数字だが、既存定義と揃えるため `exam_item_group_members.identity_code` も `varchar(32)` とする。
+一部の同一性項目コードは、namecode先頭5桁と完全一致しない既存同一性体系を表すため、単純な先頭5桁再計算だけを正としない。
+
+> `identity_code` と法令項目詳細Noは別の識別体系である。<br>
+> `exam_item_group_members.identity_code` へ法令項目詳細Noを格納したり、法令項目詳細Noとの紐付けに転用したりしない。
+
+## 則44専用グループ定義
+
+則44の23checkerが参照する必要namecodeだけを保持する専用グループを追加する方針とする。
+既存の72項目グループ、法定健診集計用グループ、特定健診グループとは分離する。
+
+正式なグループ定義は以下とする。
+
+| 項目 | 値 |
+|---|---|
+| group_code | `v2_2026_ARTICLE44_CHECK_ITEMS` |
+| group_name | `2026年版 労働安全衛生規則第44条チェック項目` |
+| description | `労働安全衛生規則第44条の23項目判定で必要なnamecode取得定義。判定ルールはarticle44_checker.pyを正とする。` |
+
+既存の `v2_2026_LSIO_Legal_Item` は法定健診判定用グループとして残し、則44の23checker専用取得定義とは混同しない。
+
+則44専用グループのseedは以下へ作成済みである。
+
+```
+sql/seed/dev_phr/0015_dev_phr__article44_check_items_v2_2026.sql
+```
+
+seed member件数は72件である。
+`article44_checker.py` の23checkerが参照する一意namecode 72件と完全一致する。
+CSV `docs/refactor/health_exam_result/労安法_一般健康診断_項目対応表.csv` の23対象項目の `require_namecodes` 一意72件とも完全一致する。
+
+CSVの `excluded_namecodes` に記載されているLDL計算法除外対象 `3F077000002391901` は、checkerで取得対象として参照していないため、Article44専用group member seedには含めない。
+除外判定のための追加取得は現バージョンでは行わず、checkerが参照するnamecodeのみを取得定義とする。
+
+則44専用groupのmember行では、以下を必須入力とする。
+DBカラム自体は既存group互換のためNULL許容だが、Article44専用seedではNULLを許容しない。
+
+- namecode
+- value_type
+- method
+- identity_code
+- priority
+
+### Article44専用memberのvalue_type
+
+- `PQ` / `CD` / `ST` / `CO` のいずれかとする。
+- Python変換時は `CO` を `ExpectedValueType.CD` へ変換する。
+- checkerが期待するValue型、CSVの判定内容、既存 `exam_item_master.xml_value_type` を突合して確定する。
+
+### Article44専用memberのmethod
+
+- DB上の取得分類・監査用メタ情報とする。
+- checker動的生成には使用しない。
+- 実際の値一覧はseed作成時にcheckerの用途を確認して決める。
+- 既存 `exam_item_master.xml_method_code` が存在する場合はそれを使用する。
+- 既存 `exam_item_master.xml_method_code` がNULLの場合は、CSVの `require_methods` と処理フローからnamecodeに対応するXML method codeを確定する。
+- CSVの `require_methods` と既存 `exam_item_master.xml_method_code` が異なる場合は、DBのmethodはXML method codeであるため既存master値を優先する。
+
+### Article44専用memberのidentity_code
+
+- namecode由来の既存識別子とする。
+- 法令項目詳細Noではない。
+- 原則としてcheckerで使用するnamecodeの既存identity体系に合わせる。
+- 既存 `exam_item_master.identity_item_code` を優先して確定する。
+
+## 既存group memberのバックフィル方針
+
+今回のmigrationでは、既存group member行へ追加3カラムをバックフィルしない。
+既存72項目処理は従来どおり既存テーブル、JOIN、別定義を使用する。
+新しい則44専用groupのseed行だけ、3カラムを必須入力して段階的に利用開始する。
+
+追加3カラムのNULLは「未移行・未定義」を表す。
+Article44専用groupではNULLを許容しない。
+`article44_required_namecodes.py` は、対象group内で3カラムの必須条件を検証する。
+
+今回のmigrationには以下を追加しない。
+
+- 既存group memberへのUPDATE
+- `exam_item_master` からのUPDATE JOIN
+- trigger
+- CHECK制約
+- NOT NULL化
+- index追加
+- Article44グループseed
+
+## 第1層の取得処理
+
+`article44_required_namecodes.py` の責務は以下とする。
+
+1. 則44用のグループ定義を特定する。
+2. `exam_item_group_members` から対象グループの行を一括取得する。
+3. 以下を同一テーブルから取得する。
+   - namecode
+   - value_type
+   - method
+   - identity_code
+   - priority
+4. `exam_item_master` とはJOINしない。
+5. value_typeを `ExpectedValueType` へ変換する。
+6. `RequiredNamecode(namecode, expected_value_type)` を生成する。
+7. 同一namecodeが複数定義されている場合は期待値型の整合性を確認して一意化する。
+8. checkerの判定順、組み合わせ、fallback、status、reasonは決定しない。
+9. DB定義は対象者ごとに取得せず、処理開始時など適切な単位で1回取得して再利用する。
+
+想定SQLの概形は以下とする。
+実際のSQL、DB名、プレースホルダ方式は実装時に確定する。
+
+```sql
+SELECT
+    namecode,
+    value_type,
+    method,
+    identity_code,
+    priority
+FROM exam_item_group_members
+WHERE group_code = %s
+ORDER BY priority, namecode
 ```
 
 ## 現時点
@@ -185,6 +504,7 @@ ValueMap
 ```
 
 `ValueMap` の型は以下とする。
+`ValueMap` は型エイリアスとして確定し、実体は `article44_models.py` へ配置する。
 
 ```python
 ValueMap = dict[str, PQValue | CDValue | STValue]
@@ -263,6 +583,7 @@ PQValue(
     unit="<DB単位またはNone>",
     is_valid=False,
     invalid_reason=ValueInvalidReason.TYPE_MISMATCH,
+    duplicate_count=None,
 )
 ```
 
@@ -280,6 +601,7 @@ PQValue(
     unit=None,
     is_valid=False,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -292,6 +614,7 @@ CDValue(
     code_value=None,
     is_valid=False,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -304,10 +627,97 @@ STValue(
     text=None,
     is_valid=False,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
-同一namecodeが複数件存在する場合の扱いも未決とする。
+## 同一namecode重複時の返却契約
+
+`ValueMap` は1つの `xml_ledger_id` 単位で構築する。
+
+同一人物の後続版・修正版XMLは別 `xml_ledger_id`、別 `xml_sha256` として履歴保持されるため、本重複判定の対象外とする。
+
+本重複判定の対象は、同一 `xml_ledger_id` 内に同じnamecodeが複数件存在する場合とする。
+
+基本方針は以下とする。
+
+- 同一namecodeが複数件存在しても、XML全体・対象者全体の処理は停止しない。
+- 先勝ち、後勝ち、任意の1件採用は行わない。
+- 複数値をlistとして第3層へ渡すこともしない。
+- 当該namecodeは利用不能な値として扱い、関係する法令項目を `INVALID` 判定できるようにする。
+- 他のnamecode、他の法令項目の判定は継続する。
+
+第2層の重複検知責務は以下とする。
+
+- DB一括取得結果をnamecodeごとに集約する。
+- namecodeごとの取得件数を数える。
+- 同一namecodeが2件以上存在する場合は重複として検知する。
+- 同一namecodeが2件以上の場合、その件数を `duplicate_count` へ設定する。
+- 重複時は期待値型に対応するValue型を返す。
+- `value_state` は `PRESENT` とする。
+- `is_valid` は `False` とする。
+- `invalid_reason` は `ValueInvalidReason.DUPLICATE_NAMECODE` とする。
+- `duplicate_count` は実際の重複件数とする。
+- 変換後値は `None` とする。
+- raw値、変換後値、unitは採用値を選ばないため `None` とする。
+- 重複した複数値のうち、どれか1件を採用しない。
+- 当該namecode以外の `ValueMap` 構築は継続する。
+
+重複時にraw値をどれか1件だけ保持すると、その値を採用したように見えるため、現バージョンではrawフィールドも `None` とする。
+重複時はDB上に値レコードが存在するため、`value_state=PRESENT` とする。
+ただし、複数値のうちどれを採用するか一意に決められないため、raw値および変換後値は `None` とする。
+`PRESENT` は採用可能な値が1件あることを意味せず、DB上にNULL・空文字ではない値レコードが存在することを表す。
+重複時の利用不能理由は `invalid_reason=ValueInvalidReason.DUPLICATE_NAMECODE`、件数は `duplicate_count` で表す。
+
+PQの重複時返却例は以下とする。
+
+```python
+PQValue(
+    value_state=ValueState.PRESENT,
+    raw_value=None,
+    numeric_value=None,
+    unit=None,
+    is_valid=False,
+    invalid_reason=ValueInvalidReason.DUPLICATE_NAMECODE,
+    duplicate_count=2,
+)
+```
+
+CDまたはCOの重複時返却例は以下とする。
+
+```python
+CDValue(
+    value_state=ValueState.PRESENT,
+    raw_value=None,
+    code_value=None,
+    is_valid=False,
+    invalid_reason=ValueInvalidReason.DUPLICATE_NAMECODE,
+    duplicate_count=2,
+)
+```
+
+STの重複時返却例は以下とする。
+
+```python
+STValue(
+    value_state=ValueState.PRESENT,
+    raw_text=None,
+    text=None,
+    is_valid=False,
+    invalid_reason=ValueInvalidReason.DUPLICATE_NAMECODE,
+    duplicate_count=2,
+)
+```
+
+重複件数は、第3層が最終reasonへ含められるようにする必要がある。
+
+重複件数の扱いは以下とする。
+
+- 最終的な `CheckResult.reason` には重複namecodeであることを必ず残す。
+- 第2層で `duplicate_count` を保持するため、重複件数をreasonへ含められる。
+- 想定reason形式は現行方式に従い、文字列コードまたは `CODE:detail` 形式とする。
+- 例: `DUPLICATE_NAMECODE`
+- 例: `DUPLICATE_NAMECODE:count=2`
 
 ---
 
@@ -370,17 +780,44 @@ CDの場合は、CDとして使用する `code_value` がSQL NULLである状態
 - `value_state` は、DB上で値がどのように存在していたかを表す。
 - `is_valid` は、各値型として判定処理に利用可能かを表す。
 - `invalid_reason` は、`value_state=PRESENT` だが、`is_valid=False` となった理由を表す。
+- `duplicate_count` は、同一 `xml_ledger_id` 内で同一namecodeが複数件存在した場合の件数を表す。
 - 値が存在していても型変換や形式検証に失敗する場合があるため、両者は別責務とする。
 - 型不正の場合は `value_state=PRESENT` のまま、`is_valid=False` とする。
 - `NOT_FOUND / NULL / EMPTY` はすべて `is_valid=False` とする。
 - `NOT_FOUND / NULL / EMPTY`、および `PRESENT` かつ `is_valid=True` の場合は `invalid_reason=None` とする。
 - `NOT_FOUND / NULL / EMPTY` は `value_state` だけで状態を特定できるため、`invalid_reason` へ重複保持しない。
+- `duplicate_count` は重複時のみ2以上の整数を保持し、重複でない場合は `None` とする。
+- `duplicate_count=1` は使用しない。
+- `duplicate_count` は、値の存在状態や利用可否そのものを表すフィールドではない。
+- `duplicate_count` は、`value_state`、`is_valid`、`invalid_reason` と組み合わせて使用する。
+
+`duplicate_count` の整合性ルールは以下とする。
+
+```text
+invalid_reason == ValueInvalidReason.DUPLICATE_NAMECODE
+    → duplicate_count is not None
+    → duplicate_count >= 2
+
+invalid_reason != ValueInvalidReason.DUPLICATE_NAMECODE
+    → duplicate_count is None
+```
+
+以下の場合、`duplicate_count=None` とする。
+
+- `NOT_FOUND`
+- `NULL`
+- `EMPTY`
+- `PRESENT` かつ `is_valid=True`
+- `TYPE_MISMATCH`
+- `PARSE_ERROR`
+- `FORMAT_ERROR`
 
 ## ValueInvalidReason
 
 値の存在状態とは別に、`PRESENT` だが型として利用できない理由を表す共通Enumを定義する。
+`ValueInvalidReason` は最終Enum名として確定し、実体は `article44_models.py` へ配置する。
 
-現時点では以下の3種類のみ定義し、理由を過度に細分化しない。
+現時点では以下の4種類のみ定義し、理由を過度に細分化しない。
 
 ```python
 from enum import Enum
@@ -390,6 +827,7 @@ class ValueInvalidReason(str, Enum):
     TYPE_MISMATCH = "TYPE_MISMATCH"
     PARSE_ERROR = "PARSE_ERROR"
     FORMAT_ERROR = "FORMAT_ERROR"
+    DUPLICATE_NAMECODE = "DUPLICATE_NAMECODE"
 ```
 
 各値の意味は以下とする。
@@ -399,6 +837,7 @@ class ValueInvalidReason(str, Enum):
 |TYPE_MISMATCH|required定義の期待値型とDBのraw_value_typeが一致しない|
 |PARSE_ERROR|期待値型とDB型は一致しているが、値を必要な型へ変換できない。現時点では主にPQのDecimal変換失敗で使用する|
 |FORMAT_ERROR|期待値型とDB型は一致しているが、値がその型の最低限の形式要件を満たさない。現時点では主にCDまたはCOの形式不正で使用する|
+|DUPLICATE_NAMECODE|同一xml_ledger_id内で同一namecodeが複数件存在する。どの値を採用すべきか一意に決められないため、当該namecodeを判定へ利用しない|
 
 `invalid_reason` は第2層の正規化・形式検証結果を第3層へ渡すための中間情報であり、最終的な業務reasonは第3層が決定する。
 
@@ -439,6 +878,7 @@ class STValue:
     text: str | None
     is_valid: bool
     invalid_reason: ValueInvalidReason | None
+    duplicate_count: int | None
 ```
 
 各フィールドの意味は以下とする。
@@ -504,6 +944,7 @@ STValue(
     text="胸部X線検査の結果、 異常所見なし",
     is_valid=True,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -516,6 +957,7 @@ STValue(
     text="",
     is_valid=False,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -528,6 +970,7 @@ STValue(
     text=None,
     is_valid=False,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -540,6 +983,7 @@ STValue(
     text="<最低限正規化後文字列またはNone>",
     is_valid=False,
     invalid_reason=ValueInvalidReason.TYPE_MISMATCH,
+    duplicate_count=None,
 )
 ```
 
@@ -585,6 +1029,7 @@ class CDValue:
     code_value: str | None
     is_valid: bool
     invalid_reason: ValueInvalidReason | None
+    duplicate_count: int | None
 ```
 
 各フィールドの意味は以下とする。
@@ -672,6 +1117,7 @@ CDValue(
     code_value="1",
     is_valid=True,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -684,6 +1130,7 @@ CDValue(
     code_value="01",
     is_valid=False,
     invalid_reason=ValueInvalidReason.FORMAT_ERROR,
+    duplicate_count=None,
 )
 ```
 
@@ -696,6 +1143,7 @@ CDValue(
     code_value="A1",
     is_valid=False,
     invalid_reason=ValueInvalidReason.FORMAT_ERROR,
+    duplicate_count=None,
 )
 ```
 
@@ -708,6 +1156,7 @@ CDValue(
     code_value=None,
     is_valid=False,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -720,6 +1169,7 @@ CDValue(
     code_value="<DBコード値またはNone>",
     is_valid=False,
     invalid_reason=ValueInvalidReason.TYPE_MISMATCH,
+    duplicate_count=None,
 )
 ```
 
@@ -763,6 +1213,7 @@ class PQValue:
     unit: str | None
     is_valid: bool
     invalid_reason: ValueInvalidReason | None
+    duplicate_count: int | None
 ```
 
 各フィールドの意味は以下とする。
@@ -816,6 +1267,7 @@ PQValue(
     unit="cm",
     is_valid=True,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -829,6 +1281,7 @@ PQValue(
     unit="cm",
     is_valid=False,
     invalid_reason=ValueInvalidReason.PARSE_ERROR,
+    duplicate_count=None,
 )
 ```
 
@@ -842,6 +1295,7 @@ PQValue(
     unit="cm",
     is_valid=False,
     invalid_reason=None,
+    duplicate_count=None,
 )
 ```
 
@@ -855,6 +1309,7 @@ PQValue(
     unit="<DB単位またはNone>",
     is_valid=False,
     invalid_reason=ValueInvalidReason.TYPE_MISMATCH,
+    duplicate_count=None,
 )
 ```
 
@@ -899,6 +1354,47 @@ PQValue(
 - 法令項目詳細Noごとの小さな判定関数を配置する。
 - 則44の全項目を一巡させるオーケストレーション関数を配置する。
 - 一人分またはXML1件分の各 `CheckResult` を、法令項目詳細Noをキーとする横並び結果として返す。
+- 法令項目詳細Noごとの判定対象namecodeの組み合わせ、判定順、ANY / ALLの具体的な組み合わせ、fallback、優先順位、CDとSTの整合性、検索語、数値条件、status、reason、23checkerのオーケストレーションは `article44_checker.py` を正とする。
+- DBのmethodやgroup member行を使って、checkerの判定ルールを動的に再構築しない。
+
+法令項目詳細Noは、23checker、Article44Result、横持ちresultカラムを追跡するための正式な識別子である。
+法令項目詳細Noと判定ロジックの対応は `article44_checker.py` が持つ。
+`exam_item_group_members` に法令項目詳細No単位のルール構造を持たせない。
+DBのgroup member定義から、法令項目詳細Noごとのcheckerを動的生成しない。
+法令項目詳細NoをDBマスタへ保持する場合は、項目マスタ側の属性として扱う方向とし、group memberの役割とは分離する。
+`exam_item_master` に法令項目詳細Noを保持する可能性はあるが、カラム名やDDLは本資料では確定しない。
+今回の第1層・第2層の実装に法令項目詳細Noは必須ではない。
+
+同一namecode重複時の判定方針は以下とする。
+
+- `ValueInvalidReason.DUPLICATE_NAMECODE` を検知した場合、関係する法令項目の `status` は `INVALID` とする。
+- `reason` には重複namecodeであることを示す文字列を設定する。
+- `duplicate_count` を参照して現行reason方式のdetailを生成する。
+- 重複件数が取得できるため、重複時reasonは原則として `DUPLICATE_NAMECODE:count=<duplicate_count>` とする。
+- `duplicate_count` が想定外に `None` の場合は、実装不整合として扱う。
+- ただし、全体停止の例外とするか、detailなしの `DUPLICATE_NAMECODE` へ退避するかは実装時に防御的に決めてよい。
+- 通常契約としては、`DUPLICATE_NAMECODE` と `duplicate_count` は必ず対で存在する。
+- 重複したnamecodeを利用するすべての法令項目を `INVALID` 対象とする。
+- 他の法令項目の判定は継続する。
+
+想定例は以下とする。
+
+```python
+CheckResult(
+    status="INVALID",
+    reason="DUPLICATE_NAMECODE:count=2",
+)
+```
+
+reasonの最終文字列形式は現行reason方式を踏襲し、新しいreason体系やEnumは追加しない。
+
+上位層との関係は以下とする。
+
+- 第2層は重複を検知しても例外で全体停止しない。
+- 第3層は該当法令項目を `INVALID` として `Article44Result` へ含める。
+- `Article44Result` は他の正常項目も含めて返す。
+- 後続の制度別集約、`xml_ledger.check_status`、XML単位・ZIP単位の集約処理は、`Article44Result` の `INVALID` を材料として `WARNING` または `NG` 等を決定する。
+- 上位層の最終集約ルール自体は今回変更しない。
 
 ## 配置
 
@@ -963,7 +1459,7 @@ def check_article44(value_map):
     }
 ```
 
-これはインターフェースの想定例であり、型注釈・最終関数名・全項目一覧は未決とする。
+実装では `ARTICLE44_CHECKERS` のdict挿入順により、現バージョンの23項目順を保証する。
 
 全項目オーケストレーション関数の責務は以下とする。
 
@@ -998,7 +1494,8 @@ def check_article44(value_map):
 
 `CheckResult` は、現行72項目方式の `ItemResult` と同じ考え方で扱う。
 
-最終インターフェース例は以下とする。
+`CheckResult` は最終クラス名として確定し、実体は `article44_models.py` へ配置する。
+契約は以下とする。
 
 ```python
 from dataclasses import dataclass
@@ -1009,8 +1506,6 @@ class CheckResult:
     status: str
     reason: str | None = None
 ```
-
-最終クラス名は未決でもよいが、現バージョンでは以下を確定する。
 
 - `status` は文字列とする。
 - `reason` は `str | None` とする。
@@ -1028,6 +1523,15 @@ class CheckResult:
 
 `WARNING` / `NG` は項目別statusではない。
 これらは制度別集約結果および `xml_ledger.check_status` の値であり、`CheckResult.status` では使用しない。
+
+32に記載された `WARNING` は、項目別 `CheckResult.status` の値としてそのまま使用しない。
+32の `WARNING` 表現は、値の取得方法や成立経路が標準経路ではない、または確認を要する状態を示す仕様上の表現として読む。
+第3層checkerでは、条件の意味に応じて現行の項目別statusへ変換する。
+
+- 代替経路で項目が成立した場合は原則 `ALTERNATIVE`。
+- 必要値が不足して成立しない場合は `MISSING`。
+- 値は存在するが形式不正、型不一致、重複、条件矛盾等で利用できない場合は `INVALID`。
+- `WARNING` / `NG` への集約は判定基盤の外側で行う。
 
 `CheckResult.reason` は以下の方針とする。
 
@@ -1074,10 +1578,11 @@ a44_4403001001_reason
 }
 ```
 
-この一人分またはXML1件分の集合を、本資料では仮に `Article44Result` と呼ぶ。
+この一人分またはXML1件分の集合を `Article44Result` と呼ぶ。
 
 現行72項目方式では、一人分またはXML1件分の判定結果を `dict[str, ItemResult]` で保持している。
-今回も同じ考え方を踏襲し、`Article44Result` は `dict[str, CheckResult]` とする。
+今回も同じ考え方を踏襲し、`Article44Result` は `dict[str, CheckResult]` の型エイリアスとして確定する。
+実体は `article44_models.py` へ配置する。
 
 違いはキーのみである。
 
@@ -1098,7 +1603,6 @@ a44_4403001001_reason
 以下は未決として保留する。
 
 - 便利メソッドを持たせるか
-- 項目順序をどこで保証するか
 
 ---
 
@@ -1231,9 +1735,12 @@ scripts/lib/examination/check/
 ├── all.py
 ├── any.py
 ├── compare.py
-├── finding.py
-└── priority.py
+└── finding.py
 ```
+
+`priority.py` は現時点では実装しない。
+優先順位処理は第3層checkerへ明示的に実装する。
+同じ入力・同じ意味・同じ返却の優先順位処理が複数項目で確認された場合のみ、後から共通化を検討する。
 
 ## 設計方針
 
@@ -1250,31 +1757,49 @@ scripts/lib/examination/check/
 
 第4層には最小関数だけを置き、第3層の項目別関数で順番に呼び出して組み立てる。
 
-現時点の役割候補は以下とする。
+現時点の実装済み関数は以下とする。
 
 ### `any.py`
 
-- 複数候補のうち1件以上に有効値があるかを判定する。
+- `has_any_valid(values)`
+- `is_valid=True` が1件以上あれば `True`。
+- 空Iterableは `False`。
+- `ValueMap` や制度知識を持たない。
 
 ### `all.py`
 
-- 指定した候補すべてに有効値があるかを判定する。
+- `has_all_valid(values)`
+- すべて `is_valid=True` なら `True`。
+- 空IterableはPython標準 `all()` と同じく `True`。
+- `ValueMap` や制度知識を持たない。
 
 ### `compare.py`
 
-- 数値比較またはコード比較を行う。
-- 入力、演算子、返却型は未決とする。
+- 有効な `numeric_value` を `Decimal` で比較する。
+- `is_valid=False` または `numeric_value=None` は `False`。
+- 実装済みpublic関数は以下とする。
+  - `is_equal`
+  - `is_greater_than`
+  - `is_greater_than_or_equal`
+  - `is_less_than`
+  - `is_less_than_or_equal`
+  - `is_between`
+- コード比較は行わない。
 
 ### `finding.py`
 
-- 所見有無CDと所見詳細状態を受け取り、最小単位の所見成立状態を返す。
-- 制度別の最終 `status`・`reason` は第3層が決定する。
+- 有効な正規化済み `text` の存在確認・検索語の部分一致を行う。
+- 実装済みpublic関数は以下とする。
+  - `has_text`
+  - `contains_any_keyword`
+- `raw_text` は検索しない。
+- CDとSTの組み合わせ、最終 `status`・`reason` は第3層で決める。
 
 ### `priority.py`
 
-- 優先順位付き候補から最初の有効値を選択する。
-
-関数名、入力型、返却型、例外方針は今後1関数ずつ協議するため未決とする。
+- 現時点では実装しない。
+- 優先順位処理は第3層checkerへ明示的に実装する。
+- 同じ入力・同じ意味・同じ返却の優先順位処理が複数項目で確認された場合のみ、後から共通化を検討する。
 
 ---
 
@@ -1285,19 +1810,62 @@ scripts/lib/examination/check/
 ## 胸部X線の例
 
 ```
-1. any.pyで胸部X線検査結果の有無を確認する。
-2. 検査結果がなければfinding.pyで所見パターン1を確認する。
-3. 必要に応じてfinding.pyで所見パターン2を確認する。
-4. 複数所見パターンのOR、WARNING優先条件、最終status・reasonは第3層で決定する。
+1. 正規の胸部X線検査結果が有効か確認する。
+2. 正規の検査結果が有効なら OK。
+3. 正規の検査結果が成立しない場合のみ、32で定義された所見パターンを確認する。
+4. 所見パターンのいずれかで項目成立と判断できる場合は ALTERNATIVE。
+5. 正規結果も所見パターンも存在しない場合は MISSING。
+6. 値は存在するが、型不一致、形式不正、重複、所見有無と詳細の矛盾等で利用できない場合は INVALID。
+7. WARNING は項目別statusとして返さない。
 ```
+
+胸部X線の基本対応は以下とする。
+
+```text
+正規検査結果で成立
+    → OK
+
+正規検査結果なし + 所見パターンで成立
+    → ALTERNATIVE
+
+成立材料なし
+    → MISSING
+
+値は存在するが利用不能・矛盾
+    → INVALID
+```
+
+複数の所見パターンがある場合のOR条件、判定順、参照namecodeは32の既存仕様に従う。
 
 ## 聴力の例
 
 ```
-1. all.pyで4項目すべての有無を確認する。
-2. ALLが成立しない場合のみ、会話法の有無を確認する。
-3. 項目別status・reasonの最終判定は第3層で決定する。
+1. 1000Hz右、1000Hz左、4000Hz右、4000Hz左の4項目を確認する。
+2. 4項目すべてが有効なら OK。
+3. 4項目すべてが成立しない場合のみ、会話法を確認する。
+4. 会話法が有効なら ALTERNATIVE。
+5. 4項目も会話法も成立しない場合は MISSING。
+6. 参照値に TYPE_MISMATCH / PARSE_ERROR / FORMAT_ERROR / DUPLICATE_NAMECODE 等の利用不能理由がある場合は、該当条件に応じて INVALID。
+7. WARNING は項目別statusとして返さない。
 ```
+
+聴力の基本対応は以下とする。
+
+```text
+4項目すべて有効
+    → OK
+
+4項目不足 + 会話法有効
+    → ALTERNATIVE
+
+4項目不足 + 会話法も不成立
+    → MISSING
+
+値は存在するが利用不能・重複・型不一致
+    → INVALID
+```
+
+会話法が存在する場合でも、4項目すべてが有効なら標準経路を優先して `OK` とする。
 
 ---
 
@@ -1337,6 +1905,22 @@ Article44Resultを返却
 | 第3層 | 則44の法令項目詳細Noごとの判定を組み立て、全項目を一巡させて一人分の横並び結果を返す | `article44_checker.py` |
 | 第4層 | 制度非依存の最小判定部品を提供する | `scripts/lib/examination/check/` |
 
+## 責務分離の要約
+
+DBは「何を取得するか」を管理し、Python checkerは「取得した値をどう判定するか」を管理する。
+
+| 管理対象 | 正とする場所 |
+|---|---|
+| 対象グループ | DB `exam_item_groups` |
+| 必要namecode群 | DB `exam_item_group_members` |
+| namecodeの期待値型 | DB `exam_item_group_members.value_type` |
+| method | DB `exam_item_group_members.method` |
+| identity_code | DB `exam_item_group_members.identity_code` |
+| 法令項目詳細Noごとの判定ルール | `article44_checker.py` |
+| namecodeの組み合わせ・順序・fallback | `article44_checker.py` |
+| status / reason | `article44_checker.py` |
+| ValueMap構築 | `article44_value_loader.py` |
+
 ---
 
 # 実装責任
@@ -1344,6 +1928,7 @@ Article44Resultを返却
 ## 今回こちらで詳細設計・実装する範囲
 
 - 第2層のValueMap返却契約
+- 第1層〜第3層で共有する則44専用型の `article44_models.py` への配置
 - ST / CD / PQの正規化仕様
 - 法令項目詳細Noごとの小さな判定関数
 - 全項目オーケストレーション関数
@@ -1398,33 +1983,23 @@ Codex側では以下を行わない。
 
 # 保留事項
 
-- 第1層のDB・ruleテーブル構造
-- 第1層の最終返却形式
-- RequiredNamecodeの最終クラス名
-- ExpectedValueTypeの最終Enum名
-- 第1層の最終コンテナ型
-- ValueInvalidReasonの最終Enum名
-- ValueInvalidReasonからCheckResult.reasonへの変換方針
-- CheckResult.reasonの具体的なコード体系
-- 同一namecodeが複数件存在する場合の扱い
-- method・identity別索引を追加するか
+- 同一namecodeに異なるvalue_typeが定義された場合の扱い
+- 追加3カラムの将来的なNOT NULL化・CHECK制約追加の要否
+- 必要なindexの有無
+- `exam_item_master` との将来的な整合性検証方法
 - Article44Resultに便利メソッドを持たせるか
-- Article44Resultの項目順序をどこで保証するか
 - 業務歴を将来Article44Resultへ追加するか
 - 喀痰を将来Article44Resultへ追加するか
 - 任意項目を横持ちカラムとして物理作成するか
 - statusカラムのDB型
 - reasonカラムのDB型・最大長
 - Article44Resultから横持ちカラムへの変換方法
-- migrationで既存カラムを残す・変更する・廃止する基準
-- 第4層各関数の入力・返却・例外仕様
 
 ---
 
 # 次回検討
 
-1. CheckResult.reasonの具体的なコード体系を確定する。
-2. 同一namecodeが複数件存在する場合の扱いを確定する。
-3. Article44Resultの項目順序をどこで保証するか確定する。
-4. 第4層の最初の関数を1つ選ぶ。
-5. 決定内容を本資料と03へ同期する。
+1. `article44_required_namecodes.py` を実装する。
+2. `article44_value_loader.py` を実装する。
+3. UnitTestを追加する。
+4. 決定内容を本資料と03へ同期する。
