@@ -267,7 +267,14 @@
 - Phase5では `exam_check_results` DDL作成を主目的にしない。
 - Phase6で `exam_check_results` DDLを確定する。
 - Phase7で `03_check_exam_results.py` を実装する。
-- Phase7では検査項目単位の制度チェック基盤実装を優先する。
+- Phase7では、労働安全衛生規則第44条を対象とした法定健診判定を優先する。
+- Phase7の法定健診判定は、対象者1人単位で実施する。
+- Phase7の法定健診判定では、判定開始時に `require_namecodes` の値を一括取得し、判定中は原則DBへ再問い合わせしない。
+- Phase7の法定健診判定では、最初に取得した値から `EvaluationContext` を構築し、判定関数はDBへ直接アクセスせず `EvaluationContext` から必要値を受け取る。
+- Phase7の法定健診判定主体は法令項目詳細Noとする。
+- Phase7の法定健診判定では、identity、method、namecode は法令項目詳細Noの判定材料として扱う。
+- Phase7の法定健診判定の詳細設計は `docs/refactor/health_exam_result/31_phase7_legal_check_redesign.md` を参照資料とする。
+- Phase7の法定健診判定方針を表現するDB構造は後続で決定し、現時点では決め打ちしない。
 - Phase7では `METABOLIC_SYNDROME` を実装対象外とする。
 - Phase7では `HEALTH_GUIDANCE_LEVEL` を実装対象外とする。
 - `METABOLIC_SYNDROME` と `HEALTH_GUIDANCE_LEVEL` はv2制度マスタには残すが、制度チェック実装は後続Phaseで行う。
@@ -306,9 +313,15 @@
 - 制度仕様との差異が判明した場合は、Phase7ではスクリプト側で暫定対応し、将来ルールマスタへ移管できるようにする。
 - Phase7の `reason` は項目単位で保持し、制度別 summary および `xml_ledger.check_reason` は項目別 `reason` を集約して生成する。
 - normalize / validation は制度チェック実装と混在させず、独立した責務として整理する。
-- 制度チェックでは、DBはルール定義のみを保持し、ルール処理は共通ライブラリで実装する。
+- Phase7の法定健診判定スクリプトは、上位・中間・下位の三層構造とする。
 - `03_check_exam_results.py` はルール実装を持たず、処理制御、DB入出力、結果保存を担当する。
-- `03_check_exam_results.py` は、マスタから取得したルールに応じて共通Rule / Lookup / Calculateライブラリを呼び出すオーケストレーターとする。
+- Phase7の法定健診判定における上位層は、対象者単位の処理制御、値取得、評価コンテキスト構築、法令項目詳細Noごとの判定呼び出し、結果保存を担当する。
+- Phase7の法定健診判定における中間層は、法令項目詳細Noごとの判定関数とし、法令項目詳細Noと関数を一対一にする。
+- Phase7の法定健診判定における下位層は、`ANY`、`PRIORITY`、`ALL`、`FINDING` 等の共通判定libとする。
+- Phase7の法定健診判定では、共通化は最小単位の判定処理に限定する。
+- Phase7の法定健診判定では、血糖、胸部X線、腹囲、視力、聴力等の制度固有ロジックは法令項目詳細Noごとの判定関数に保持する。
+- Phase7の法定健診判定関数は、判定結果を共通形式の `CheckResult` として返却し、少なくとも `status` と `reason` を扱う。
+- Phase7の法定健診判定における `reason` は、健診機関への確認にも利用できる日本語を基本とする。
 - `presence_value_mode` の基本ルールとして、`ANY_VALID_VALUE`、`ANY_RECORD`、`ANY_OF_NAMECODES`、`CALCULATED`、`ALTERNATIVE` を扱う。
 - 各 `presence_value_mode` の処理は `03_check_exam_results.py` に直書きせず、共通ルールライブラリへ実装する。
 - `ANY_VALID_VALUE` は、`raw_value`、`nullFlavor`、`negation_ind` を考慮して有効値が存在するかを判定する。
@@ -377,7 +390,7 @@
 - DH-20260709-01 で採用した `condition_code` は、DH-20260709-02 により採用しない。
 - 条件付き必須などの将来要件が必要になった時点で、意味が確定した専用カラムをmigrationで追加する。
 - 参照元項目を表す命名として `rule_source_*` を採用する。
-- v2では制度チェックを `method_code` を判定単位として実装する。
+- v2の法定健診チェックでは、法令項目詳細Noを判定単位として実装する。
 - identity は制度上の同一性判定、method は検査方法判定という責務を維持する。
 - 現行 `exam_item_master` では `method_code` と `namecode` を実質同一として扱う。
 - 現時点では素材や測定方式まで区別する医療機関データは想定せず、`method_code` 単位で十分と判断する。
@@ -385,8 +398,8 @@
 - 初期実装では将来要件のためだけに複雑な判定構造は導入しない。
 - 将来、素材レベルまで区別が必要になった場合は、その時点で `exam_item_master` と `exam_item_group_*` 構成を拡張して対応する。
 - v2初期では `exam_item_group_identity_members` への追加カラムは行わず、既存カラムを利用する。
-- 制度チェックの判定ロジックは共通ルールライブラリへ集約する。
-- DBはどのルールを使うかを管理し、`03_check_exam_results.py` はそのルールをどう判定するかを共通ライブラリへ委譲する。
+- Phase7の法定健診判定ロジックは、法令項目詳細Noごとの判定関数と最下層の共通判定libで構成する。
+- `03_check_exam_results.py` は、法令項目詳細Noごとの判定関数を呼び出し、判定関数が必要に応じて共通判定libを利用する。
 - 法定健診チェックは主判定とする。
 - 特定健診チェックは原則 warning / 参考判定とする。
 - 特定健診チェック結果だけを理由に、健診機関へ再提出要求する運用にはしない。
