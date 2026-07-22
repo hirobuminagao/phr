@@ -55,12 +55,31 @@ def section_xml(
     """
 
 
-def observation_xml(namecode: str, value: str = "1") -> str:
+def observation_xml(
+    namecode: str,
+    value: str = "1",
+    interpretation_code: str | None = None,
+    interpretation_code_system: str | None = None,
+    interpretation_name: str | None = None,
+) -> str:
+    interpretation_attrs = []
+    if interpretation_code is not None:
+        interpretation_attrs.append(f'code="{interpretation_code}"')
+    if interpretation_code_system is not None:
+        interpretation_attrs.append(f'codeSystem="{interpretation_code_system}"')
+    if interpretation_name is not None:
+        interpretation_attrs.append(f'displayName="{interpretation_name}"')
+    interpretation_xml = (
+        f"<interpretationCode {' '.join(interpretation_attrs)}/>"
+        if interpretation_attrs
+        else ""
+    )
     return f"""
     <entry>
       <observation>
         <code code="{namecode}" displayName="項目"/>
         <value xsi:type="ST" value="{value}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+        {interpretation_xml}
       </observation>
     </entry>
     """
@@ -87,6 +106,27 @@ def test_extract_exam_items_adds_section_info_to_row() -> None:
     assert rows[0]["section_name"] == "労働安全衛生法健診結果セクション"
     assert rows[0]["namecode"] == "9N056160400000049"
     assert rows[0]["raw_value"] == "既往歴あり"
+
+
+def test_extract_exam_items_adds_interpretation_code_to_row() -> None:
+    root = parse_xml(
+        section_xml(
+            entries=observation_xml(
+                "9N056160400000049",
+                "既往歴あり",
+                interpretation_code="H",
+                interpretation_code_system="2.16.840.1.113883.5.83",
+                interpretation_name="High",
+            )
+        )
+    )
+
+    rows = import_xml.extract_exam_items(root).rows
+
+    assert len(rows) == 1
+    assert rows[0]["interpretation_code"] == "H"
+    assert rows[0]["interpretation_code_system"] == "2.16.840.1.113883.5.83"
+    assert rows[0]["interpretation_name"] == "High"
 
 
 def test_extract_exam_items_uses_title_when_display_name_is_missing() -> None:
@@ -179,6 +219,9 @@ def test_insert_exam_item_values_includes_section_columns_and_params() -> None:
                 "code_system": None,
                 "code_value": None,
                 "code_display": None,
+                "interpretation_code": "H",
+                "interpretation_code_system": "2.16.840.1.113883.5.83",
+                "interpretation_name": "High",
                 "namecode_display_name": "既往歴",
                 "negation_ind": None,
                 "identity_item_code": None,
@@ -190,9 +233,17 @@ def test_insert_exam_item_values_includes_section_columns_and_params() -> None:
     assert inserted == 1
     sql, params = cur.executemany_calls[0]
     assert "section_code, section_code_system, section_name" in " ".join(sql.split())
+    assert "interpretation_code, interpretation_code_system, interpretation_name" in " ".join(
+        sql.split()
+    )
     assert params[0][4:8] == (
         "9N056160400000049",
         "01030",
         "1.2.392.200119.6.1010",
         "労働安全衛生法健診結果セクション",
+    )
+    assert params[0][16:19] == (
+        "H",
+        "2.16.840.1.113883.5.83",
+        "High",
     )

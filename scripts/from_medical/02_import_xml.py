@@ -748,6 +748,20 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
         value_code_system = attr_value(value_elem, "codeSystem") if value_elem is not None else None
         value_code = attr_value(value_elem, "code") if value_elem is not None else None
         value_display = attr_value(value_elem, "displayName") if value_elem is not None else None
+        interpretation_elem = find_child(elem, "interpretationCode")
+        interpretation_code = (
+            attr_value(interpretation_elem, "code") if interpretation_elem is not None else None
+        )
+        interpretation_code_system = (
+            attr_value(interpretation_elem, "codeSystem")
+            if interpretation_elem is not None
+            else None
+        )
+        interpretation_name = (
+            attr_value(interpretation_elem, "displayName")
+            if interpretation_elem is not None
+            else None
+        )
         negation_ind = parse_bool_int(attr_value(elem, "negationInd"))
         if not namecode:
             unsupported_occurrence += 1
@@ -766,6 +780,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                     "code_system": value_code_system,
                     "code_value": value_code,
                     "code_display": value_display,
+                    "interpretation_code": interpretation_code,
+                    "interpretation_code_system": interpretation_code_system,
+                    "interpretation_name": interpretation_name,
                     "namecode_display_name": raw_code_display,
                     "negation_ind": negation_ind,
                     "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
@@ -789,6 +806,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                 "code_system": value_code_system,
                 "code_value": value_code,
                 "code_display": value_display,
+                "interpretation_code": interpretation_code,
+                "interpretation_code_system": interpretation_code_system,
+                "interpretation_name": interpretation_name,
                 "namecode_display_name": raw_code_display,
                 "negation_ind": negation_ind,
                 "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
@@ -1106,6 +1126,9 @@ def insert_exam_item_values(
             row.get("code_system"),
             row.get("code_value"),
             row.get("code_display"),
+            row.get("interpretation_code"),
+            row.get("interpretation_code_system"),
+            row.get("interpretation_name"),
             row.get("namecode_display_name"),
             row.get("negation_ind"),
             row.get("identity_item_code"),
@@ -1123,6 +1146,7 @@ def insert_exam_item_values(
             occurrence_no,
             raw_value, raw_value_type, raw_unit,
             nullflavor, code_system, code_value, code_display,
+            interpretation_code, interpretation_code_system, interpretation_name,
             namecode_display_name, negation_ind,
             identity_item_code, jun_no,
             extracted_run_id, extracted_at
@@ -1134,6 +1158,7 @@ def insert_exam_item_values(
             %s,
             %s, %s, %s,
             %s, %s, %s, %s,
+            %s, %s, %s,
             %s, %s,
             %s, %s,
             %s, CURRENT_TIMESTAMP(3)
