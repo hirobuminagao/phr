@@ -41,9 +41,9 @@ OUTCOME_TOTAL_POINT_LABEL = "90060_outcome_total_point_entry_relationship"
 OUTCOME_TOTAL_POINT_DELETE_REASON = "final動機づけ支援のアウトカム合計ポイント0 block削除"
 
 MOTIVATION_GUIDANCE_CODE = "2"
+"""動機付け最終の場合にブロック削除をしないリスト"""
 OUTCOME_TOTAL_POINT_DELETE_EXCLUDED_INSURER_NUMBERS = {
     "06380216",
-    "06139463",
 }
 
 

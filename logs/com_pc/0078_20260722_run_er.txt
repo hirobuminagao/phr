@@ -1,0 +1,26 @@
+PS C:\Users\1107858.KSMD\work\phr> & C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\python.exe c:/Users/1107858.KSMD/work/phr/scripts/from_medical/01_scan_files.py 
+Traceback (most recent call last):
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_medical\01_scan_files.py", line 682, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_medical\01_scan_files.py", line 674, in main
+    summary = run_scan(conn, config)
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_medical\01_scan_files.py", line 622, in run_scan
+    keep_scanning = scan_alias_files(
+        cur,
+    ...<7 lines>...
+        chunk_size=chunk_size,
+    )
+  File "c:\Users\1107858.KSMD\work\phr\scripts\from_medical\01_scan_files.py", line 434, in scan_alias_files
+    if not edit_dir.exists() or not edit_dir.is_dir():
+           ~~~~~~~~~~~~~~~^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\pathlib\_abc.py", line 450, in exists
+    self.stat(follow_symlinks=follow_symlinks)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\1107858.KSMD\AppData\Local\Programs\Python\Python313\Lib\pathlib\_local.py", line 515, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+PS C:\Users\1107858.KSMD\work\phr> phr/scripts/from_medical/02_import_xml.py
+phr/scripts/from_medical/02_import_xml.py: The term 'phr/scripts/from_medical/02_import_xml.py' is not recognized as a name of a cmdlet, function, script file, or executable program.
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
