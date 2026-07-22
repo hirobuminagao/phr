@@ -356,9 +356,10 @@ checker順
 sql/seed/dev_phr/0015_dev_phr__article44_check_items_v2_2026.sql
 ```
 
-seed member件数は72件である。
-`article44_checker.py` の23checkerが参照する一意namecode 72件と完全一致する。
-CSV `docs/refactor/health_exam_result/労安法_一般健康診断_項目対応表.csv` の23対象項目の `require_namecodes` 一意72件とも完全一致する。
+seed member件数は73件である。
+これはArticle44の判定項目数23件とは別であり、複数namecodeを組み合わせて1つの法令項目詳細Noを判定するためである。
+`article44_checker.py` の23checkerが参照する一意namecode 73件と完全一致する。
+CSV `docs/refactor/health_exam_result/労安法_一般健康診断_項目対応表.csv` の23対象項目の `require_namecodes` 一意73件とも完全一致する。
 
 CSVの `excluded_namecodes` に記載されているLDL計算法除外対象 `3F077000002391901` は、checkerで取得対象として参照していないため、Article44専用group member seedには含めない。
 除外判定のための追加取得は現バージョンでは行わず、checkerが参照するnamecodeのみを取得定義とする。
@@ -560,6 +561,60 @@ CO対象namecodeは `ExpectedValueType.CD` として定義されるため、`CDV
 第3層で `dict.get()` によるキー不存在判定を通常の欠損判定として使用しない。
 キー不存在は、DB欠損ではなくloaderまたはcheckerの実装不整合として扱う。
 
+## section_code優先
+
+`exam_item_values` には親CDA section情報を保存する。
+
+```text
+section_code
+section_code_system
+section_name
+```
+
+Article44のValueMap生成では、同一namecodeが複数sectionに存在する場合、労働安全衛生法健診結果セクションを表す `section_code='01030'` を優先する。
+
+現行方針は以下とする。
+
+```text
+01030が1件
+    → 01030を採用
+
+01030が複数件
+    → DUPLICATE_NAMECODE
+
+01030が無く、他sectionが1件
+    → 互換性のため採用
+
+01030が無く、他sectionが複数件
+    → DUPLICATE_NAMECODE
+```
+
+この方針により、特定健診セクションやがん検診セクションに同じnamecodeが存在しても、Article44判定では労働安全衛生法健診セクションの値を優先できる。
+
+`section_code` がNULLまたは空の場合は、01030以外のsectionと同じfallback候補として扱う。
+ただし、01030が存在する場合はNULL sectionの行を採用しない。
+
+section情報は値の出自を識別するためのimportメタ情報であり、`PQValue` / `CDValue` / `STValue` へは伝播させない。
+
+## interpretationCode保存
+
+`exam_item_values` には、observation直下の `interpretationCode` を保存する。
+
+```text
+interpretation_code
+interpretation_code_system
+interpretation_name
+```
+
+`interpretationCode` は、健診医療機関側が付与する高値・低値・正常などの検査結果解釈コードを受け止めるための情報である。
+
+現時点では、Article44の必須項目充足判定には使用しない。
+Article44判定は、項目の存在、値型、値状態、制度上の組み合わせを主な判定材料とする。
+
+`interpretationCode` は将来、異常値一覧、受診勧奨、PHR表示、医療機関側判定との比較などで利用する可能性がある。
+
+`interpretationCode` はimport時に保存するXML由来メタ情報であり、現バージョンでは `PQValue` / `CDValue` / `STValue` へは伝播させない。
+
 DBレコードが存在する場合は、期待値型とDBの `raw_value_type` を比較する。
 期待値型と実際の型が一致しない場合でも、値は存在するため `value_state=PRESENT` とする。
 型不一致の場合は、期待値型に対応するValue型を返し、`is_valid=False` とする。
@@ -637,7 +692,7 @@ STValue(
 
 同一人物の後続版・修正版XMLは別 `xml_ledger_id`、別 `xml_sha256` として履歴保持されるため、本重複判定の対象外とする。
 
-本重複判定の対象は、同一 `xml_ledger_id` 内に同じnamecodeが複数件存在する場合とする。
+本重複判定の対象は、同一 `xml_ledger_id` 内に同じnamecodeが複数件存在し、かつsection優先後も採用候補を一意に決められない場合とする。
 
 基本方針は以下とする。
 
@@ -650,9 +705,12 @@ STValue(
 第2層の重複検知責務は以下とする。
 
 - DB一括取得結果をnamecodeごとに集約する。
-- namecodeごとの取得件数を数える。
-- 同一namecodeが2件以上存在する場合は重複として検知する。
-- 同一namecodeが2件以上の場合、その件数を `duplicate_count` へ設定する。
+- namecodeごとの取得行から `section_code='01030'` を優先する。
+- 01030が1件だけ存在する場合は、その行を採用し、他sectionの同一namecodeは重複扱いしない。
+- 01030が複数件存在する場合は重複として検知する。
+- 01030が存在せず、他sectionの同一namecodeが1件だけ存在する場合は互換性のため採用する。
+- 01030が存在せず、他sectionの同一namecodeが複数件存在する場合は重複として検知する。
+- 重複の場合、その採用候補集合の件数を `duplicate_count` へ設定する。
 - 重複時は期待値型に対応するValue型を返す。
 - `value_state` は `PRESENT` とする。
 - `is_valid` は `False` とする。
@@ -1894,6 +1952,24 @@ Article44Resultを返却
 - トランザクション管理
 - DB upsert
 
+ただし、現行実装では接続側として `03_check_exam_results.py` が `Article44Result` を受け取り、`exam_check_results` の `a44_<法令項目詳細No>_status` / `a44_<法令項目詳細No>_reason` 46列へ展開して保存する。
+また、`legal_check_result` / `legal_reason_summary` を生成し、`xml_ledger.check_status` / `xml_ledger.check_reason` へ反映する。
+
+`legal_reason_summary` と `xml_ledger.check_reason` は検索性のため同じ文字列を二重保持する。
+形式は以下とする。
+
+```text
+<法令項目詳細No>:<日本語項目名>:<reason>
+```
+
+例:
+
+```text
+4403003001:腹囲:MISSING | 4411001001:心電図:DUPLICATE_NAMECODE:count=2
+```
+
+全23項目がOK相当の場合は、`legal_reason_summary` と `xml_ledger.check_reason` はNULLとする。
+
 ---
 
 # 層間責務
@@ -1950,6 +2026,16 @@ DBは「何を取得するか」を管理し、Python checkerは「取得した�
 接続側では、第3層の項目判定や第4層の最小関数を再解釈・再実装しない。
 接続側は `Article44Result` を受け取り、保存・総合判定・CSV出力など後続処理へ渡す。
 
+現行実装では、上記接続範囲のうち以下は実装済みである。
+
+- 本体スクリプトから4層を一巡させる呼び出し配線。
+- `Article44Result` から横持ちカラムへの変換。
+- `exam_check_results` へのa44 46列保存。
+- Article44法定総合判定。
+- `xml_ledger.check_status` / `xml_ledger.check_reason` への反映。
+
+特定健診総合判定は現行Article44ルートでは未接続とし、別フェーズで扱う。
+
 Codex側では以下を行わない。
 
 - 法令項目詳細Noごとの小さな判定関数の再実装
@@ -1977,6 +2063,9 @@ Codex側では以下を行わない。
 
 33_check_framework_design.md
 判定基盤仕様
+
+34_article44_implementation_status.md
+33以降に実装で確定した現在地整理
 ```
 
 ---
@@ -1991,15 +2080,14 @@ Codex側では以下を行わない。
 - 業務歴を将来Article44Resultへ追加するか
 - 喀痰を将来Article44Resultへ追加するか
 - 任意項目を横持ちカラムとして物理作成するか
-- statusカラムのDB型
-- reasonカラムのDB型・最大長
-- Article44Resultから横持ちカラムへの変換方法
+- section_code優先方針の実DB再import後の確認
+- interpretationCodeを将来どの判定・表示へ利用するか
 
 ---
 
 # 次回検討
 
-1. `article44_required_namecodes.py` を実装する。
-2. `article44_value_loader.py` を実装する。
-3. UnitTestを追加する。
-4. 決定内容を本資料と03へ同期する。
+1. section情報とinterpretationCodeを含めて実DBを再importする。
+2. `03_check_exam_results.py` を再実行し、NG理由を再集計する。
+3. `DUPLICATE_NAMECODE` がsection優先により減少するか確認する。
+4. 特定健診は別フェーズとして設計範囲を再整理する。

@@ -237,6 +237,7 @@
 - `exam_check_results` の横持ち対象は `docs/spec/health_examinations/02_exam_check_item_spec_v2_0_0.md` の72項目を正とする。
 - まず統合された制度チェック対象72項目について、同一性項目コード単位で `exam_check_results` に横持ちの `status` / `reason` を記録する。
 - 72項目の項目別 `status` / `reason` は、法定健診・特定健診で二重に持たない。
+- 後続のArticle44再設計により、現行の法定健診実装では旧72項目横持ち方式を使用せず、労働安全衛生規則第44条の法令項目詳細No 23項目を `a44_<法令項目詳細No>_status` / `a44_<法令項目詳細No>_reason` として保存する。詳細は `33_check_framework_design.md` および `34_article44_implementation_status.md` を正とする。
 - `exam_check_results` の項目別 `status` は `OK`、`CALCULATED`、`ALTERNATIVE`、`MISSING`、`INVALID` の5種類とする。
 - `exam_check_results` の項目別 `reason` は特記事項のみ保持し、`OK` の場合は `NULL` とする。
 - 法定健診の総合判定カラム名は `legal_check_result` とする。
