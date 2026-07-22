@@ -652,6 +652,13 @@ def is_grouping_observation(
 
 
 @dataclass(frozen=True)
+class SectionInfo:
+    section_code: str | None
+    section_code_system: str | None
+    section_name: str | None
+
+
+@dataclass(frozen=True)
 class UnsupportedNamecode:
     code: str | None
     code_system: str | None
@@ -663,10 +670,57 @@ class ExamExtraction:
     unsupported_namecodes: tuple[UnsupportedNamecode, ...]
 
 
+def section_info(section: ElementTree.Element | None) -> SectionInfo:
+    if section is None:
+        return SectionInfo(None, None, None)
+    code_elem = find_child(section, "code")
+    section_name = attr_value(code_elem, "displayName") if code_elem is not None else None
+    if section_name is None:
+        section_name = elem_text(find_child(section, "title"))
+    return SectionInfo(
+        section_code=attr_value(code_elem, "code") if code_elem is not None else None,
+        section_code_system=attr_value(code_elem, "codeSystem") if code_elem is not None else None,
+        section_name=section_name,
+    )
+
+
+def iter_section_observations(section: ElementTree.Element) -> Iterable[ElementTree.Element]:
+    for child in list(section):
+        child_name = local_name(child.tag).lower()
+        if child_name == "section":
+            continue
+        if child_name == "observation":
+            yield child
+        yield from iter_section_observations(child)
+
+
+def collect_observation_candidates(
+    root: ElementTree.Element,
+) -> list[tuple[ElementTree.Element, SectionInfo]]:
+    candidates: list[tuple[ElementTree.Element, SectionInfo]] = []
+    seen_element_ids: set[int] = set()
+    for section in (elem for elem in root.iter() if local_name(elem.tag).lower() == "section"):
+        info = section_info(section)
+        for elem in iter_section_observations(section):
+            if id(elem) in seen_element_ids:
+                continue
+            seen_element_ids.add(id(elem))
+            candidates.append((elem, info))
+
+    null_section = SectionInfo(None, None, None)
+    for elem in root.iter():
+        if local_name(elem.tag).lower() != "observation" or id(elem) in seen_element_ids:
+            continue
+        seen_element_ids.add(id(elem))
+        candidates.append((elem, null_section))
+    return candidates
+
+
 def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
-    candidates = [elem for elem in root.iter() if local_name(elem.tag).lower() == "observation"]
+    candidates = collect_observation_candidates(root)
     if not candidates:
-        candidates = [elem for elem in root.iter() if find_namecode(elem)]
+        null_section = SectionInfo(None, None, None)
+        candidates = [(elem, null_section) for elem in root.iter() if find_namecode(elem)]
 
     occurrence_by_namecode: dict[str, int] = {}
     unsupported_occurrence = 0
@@ -674,7 +728,7 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
     unsupported_namecodes: list[UnsupportedNamecode] = []
     seen_element_ids: set[int] = set()
 
-    for elem in candidates:
+    for elem, info in candidates:
         if id(elem) in seen_element_ids:
             continue
         seen_element_ids.add(id(elem))
@@ -700,6 +754,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
             unsupported_namecodes.append(UnsupportedNamecode(code=raw_code, code_system=raw_code_system))
             rows.append(
                 {
+                    "section_code": info.section_code,
+                    "section_code_system": info.section_code_system,
+                    "section_name": info.section_name,
                     "namecode": None,
                     "occurrence_no": unsupported_occurrence,
                     "raw_value": raw_value,
@@ -720,6 +777,9 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
         occurrence_by_namecode[namecode] = occurrence_by_namecode.get(namecode, 0) + 1
         rows.append(
             {
+                "section_code": info.section_code,
+                "section_code_system": info.section_code_system,
+                "section_name": info.section_name,
                 "namecode": namecode,
                 "occurrence_no": occurrence_by_namecode[namecode],
                 "raw_value": raw_value,
@@ -1035,6 +1095,9 @@ def insert_exam_item_values(
             subscriber_id,
             hia_subscriber_id,
             row.get("namecode"),
+            row.get("section_code"),
+            row.get("section_code_system"),
+            row.get("section_name"),
             row.get("occurrence_no"),
             row.get("raw_value"),
             row.get("raw_value_type"),
@@ -1056,7 +1119,8 @@ def insert_exam_item_values(
         INSERT INTO {qname(config.health_db)}.exam_item_values (
             event_id, ledger_type, ledger_id,
             subscriber_id, hia_subscriber_id,
-            namecode, occurrence_no,
+            namecode, section_code, section_code_system, section_name,
+            occurrence_no,
             raw_value, raw_value_type, raw_unit,
             nullflavor, code_system, code_value, code_display,
             namecode_display_name, negation_ind,
@@ -1066,7 +1130,8 @@ def insert_exam_item_values(
         VALUES (
             %s, 'XML', %s,
             %s, %s,
-            %s, %s,
+            %s, %s, %s, %s,
+            %s,
             %s, %s, %s,
             %s, %s, %s, %s,
             %s, %s,
