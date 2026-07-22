@@ -48,6 +48,31 @@ CHECK_STATUS_NG = "NG"
 ARTICLE44_OK_STATUSES = {STATUS_OK, STATUS_CALCULATED, STATUS_ALTERNATIVE}
 ARTICLE44_PROBLEM_STATUSES = {STATUS_MISSING, STATUS_INVALID}
 ARTICLE44_ALLOWED_STATUSES = ARTICLE44_OK_STATUSES | ARTICLE44_PROBLEM_STATUSES
+ARTICLE44_DETAIL_NAMES: dict[str, str] = {
+    "4401001001": "既往歴",
+    "4402001001": "自覚症状",
+    "4402001002": "他覚症状",
+    "4403001001": "身長",
+    "4403002001": "体重",
+    "4403003001": "腹囲",
+    "4403004001": "視力",
+    "4403005001": "聴力",
+    "4404001001": "胸部X線",
+    "4405001001": "収縮期血圧",
+    "4405001002": "拡張期血圧",
+    "4406001001": "血色素量",
+    "4406001002": "赤血球数",
+    "4407001001": "AST",
+    "4407001002": "ALT",
+    "4407001003": "γ-GT",
+    "4408001001": "LDLコレステロール",
+    "4408001002": "HDLコレステロール",
+    "4408001003": "中性脂肪",
+    "4409001001": "血糖",
+    "4410001001": "尿糖",
+    "4410001002": "尿蛋白",
+    "4411001001": "心電図",
+}
 
 
 @dataclass(frozen=True)
@@ -202,6 +227,13 @@ def aggregate_check_status(legal_result: str) -> str:
 
 def validate_article44_result(article44_result: Article44Result) -> None:
     expected_detail_nos = tuple(ARTICLE44_CHECKERS)
+    detail_name_nos = tuple(ARTICLE44_DETAIL_NAMES)
+    if detail_name_nos != expected_detail_nos:
+        raise ValueError(
+            "ARTICLE44_DETAIL_NAMES keys mismatch: "
+            f"expected_count={len(expected_detail_nos)} actual_count={len(detail_name_nos)} "
+            f"expected={expected_detail_nos!r} actual={detail_name_nos!r}"
+        )
     actual_detail_nos = tuple(article44_result)
     if actual_detail_nos != expected_detail_nos:
         raise ValueError(
@@ -233,7 +265,9 @@ def aggregate_article44_legal_result(article44_result: Article44Result) -> tuple
         if result.status in ARTICLE44_OK_STATUSES:
             continue
         if result.status in ARTICLE44_PROBLEM_STATUSES:
-            reasons.append(f"{detail_no}:{result.reason or result.status}")
+            detail_name = ARTICLE44_DETAIL_NAMES[detail_no]
+            reason = result.reason or result.status
+            reasons.append(f"{detail_no}:{detail_name}:{reason}")
             continue
         raise ValueError(f"Article44Result has invalid status: detail_no={detail_no} status={result.status!r}")
     if reasons:
