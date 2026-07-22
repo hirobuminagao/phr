@@ -22,6 +22,9 @@ from scripts.from_medical.script_lib.article44_models import (
 from scripts.lib.examination.lookup import qname
 
 
+ARTICLE44_SECTION_CODE = "01030"
+
+
 def load_article44_value_map(
     cursor: Any,
     *,
@@ -46,7 +49,8 @@ def load_article44_value_map(
           raw_value_type,
           raw_value,
           raw_unit,
-          code_value
+          code_value,
+          section_code
         FROM {qname(result_db)}.exam_item_values
         WHERE ledger_type = 'XML'
           AND ledger_id = %s
@@ -73,17 +77,31 @@ def _build_value_map(
         namecode_rows = rows_by_namecode.get(required.namecode, ())
         if not namecode_rows:
             value_map[required.namecode] = _not_found_value(required.expected_value_type)
-        elif len(namecode_rows) >= 2:
+            continue
+
+        selected_rows = _select_article44_section_rows(namecode_rows)
+        if len(selected_rows) >= 2:
             value_map[required.namecode] = _duplicate_value(
                 required.expected_value_type,
-                len(namecode_rows),
+                len(selected_rows),
             )
         else:
             value_map[required.namecode] = _build_value(
                 required.expected_value_type,
-                namecode_rows[0],
+                selected_rows[0],
             )
     return value_map
+
+
+def _select_article44_section_rows(
+    rows: tuple[Mapping[str, object], ...],
+) -> tuple[Mapping[str, object], ...]:
+    article44_rows = tuple(
+        row for row in rows if _section_code(row) == ARTICLE44_SECTION_CODE
+    )
+    if article44_rows:
+        return article44_rows
+    return rows
 
 
 def _validate_required_namecodes(required_namecodes: tuple[RequiredNamecode, ...]) -> None:
@@ -120,7 +138,10 @@ def _group_rows_by_namecode(
         namecode = _required_row_text(row, "namecode")
         if namecode not in required_set:
             raise ValueError(f"SQL returned unexpected namecode: {namecode}")
-        _require_columns(row, ("raw_value_type", "raw_value", "raw_unit", "code_value"))
+        _require_columns(
+            row,
+            ("raw_value_type", "raw_value", "raw_unit", "code_value", "section_code"),
+        )
         grouped[namecode].append(row)
     return {namecode: tuple(namecode_rows) for namecode, namecode_rows in grouped.items()}
 
@@ -298,6 +319,16 @@ def _db_value_type(row: Mapping[str, object]) -> str | None:
     if value is None:
         return None
     return str(value).strip()
+
+
+def _section_code(row: Mapping[str, object]) -> str | None:
+    value = _optional_text(row, "section_code")
+    if value is None:
+        return None
+    stripped = value.strip()
+    if stripped == "":
+        return None
+    return stripped
 
 
 def _optional_text(row: Mapping[str, object], column: str) -> str | None:

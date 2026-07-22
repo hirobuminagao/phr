@@ -29,6 +29,7 @@ def row(
     raw_value: object = None,
     code_value: object = None,
     unit: object = None,
+    section_code: object = "01030",
     id: int = 1,
 ) -> dict[str, object]:
     return {
@@ -38,6 +39,7 @@ def row(
         "raw_value": raw_value,
         "raw_unit": unit,
         "code_value": code_value,
+        "section_code": section_code,
     }
 
 
@@ -558,6 +560,102 @@ def test_build_value_map_continues_after_duplicate_namecode() -> None:
     assert value_map["normal"].is_valid is True
 
 
+def test_build_value_map_prefers_article44_section_when_other_section_has_same_namecode() -> None:
+    value = _build_value_map(
+        (required("x", ExpectedValueType.ST),),
+        [
+            row(
+                namecode="x",
+                raw_value_type="ST",
+                raw_value="特定健診側",
+                section_code="01010",
+                id=1,
+            ),
+            row(
+                namecode="x",
+                raw_value_type="ST",
+                raw_value="労安法側",
+                section_code="01030",
+                id=2,
+            ),
+            row(
+                namecode="x",
+                raw_value_type="ST",
+                raw_value="がん検診側",
+                section_code="01060",
+                id=3,
+            ),
+        ],
+    )["x"]
+
+    assert isinstance(value, STValue)
+    assert value.is_valid is True
+    assert value.raw_text == "労安法側"
+    assert value.invalid_reason is None
+
+
+def test_build_value_map_returns_duplicate_when_article44_section_has_multiple_rows() -> None:
+    value = _build_value_map(
+        (required("x", ExpectedValueType.CD),),
+        [
+            row(namecode="x", raw_value_type="CD", code_value="1", section_code="01010", id=1),
+            row(namecode="x", raw_value_type="CD", code_value="2", section_code="01030", id=2),
+            row(namecode="x", raw_value_type="CD", code_value="3", section_code="01030", id=3),
+        ],
+    )["x"]
+
+    assert isinstance(value, CDValue)
+    assert value.invalid_reason == ValueInvalidReason.DUPLICATE_NAMECODE
+    assert value.duplicate_count == 2
+
+
+def test_build_value_map_falls_back_to_single_non_article44_section_row() -> None:
+    value = _build_value_map(
+        (required("x", ExpectedValueType.PQ),),
+        [
+            row(
+                namecode="x",
+                raw_value_type="PQ",
+                raw_value="170",
+                section_code="01010",
+                id=1,
+            ),
+        ],
+    )["x"]
+
+    assert isinstance(value, PQValue)
+    assert value.is_valid is True
+    assert value.numeric_value == Decimal("170")
+
+
+def test_build_value_map_returns_duplicate_when_no_article44_section_and_multiple_rows() -> None:
+    value = _build_value_map(
+        (required("x", ExpectedValueType.ST),),
+        [
+            row(namecode="x", raw_value_type="ST", raw_value="a", section_code="01010", id=1),
+            row(namecode="x", raw_value_type="ST", raw_value="b", section_code="01060", id=2),
+        ],
+    )["x"]
+
+    assert isinstance(value, STValue)
+    assert value.invalid_reason == ValueInvalidReason.DUPLICATE_NAMECODE
+    assert value.duplicate_count == 2
+
+
+def test_build_value_map_prefers_article44_section_over_null_section_row() -> None:
+    value = _build_value_map(
+        (required("x", ExpectedValueType.CD),),
+        [
+            row(namecode="x", raw_value_type="CD", code_value="1", section_code=None, id=1),
+            row(namecode="x", raw_value_type="CD", code_value="2", section_code="01030", id=2),
+        ],
+    )["x"]
+
+    assert isinstance(value, CDValue)
+    assert value.is_valid is True
+    assert value.code_value == "2"
+
+
 def test_load_article44_value_map_uses_single_sql_and_fake_cursor_contract() -> None:
     cursor = FakeCursor(
         [
@@ -585,6 +683,7 @@ def test_load_article44_value_map_uses_single_sql_and_fake_cursor_contract() -> 
     assert "ledger_type = 'XML'" in compact_sql
     assert "ledger_id = %s" in compact_sql
     assert "namecode IN" in compact_sql
+    assert "section_code" in compact_sql
     assert compact_sql.count("%s") == 1 + len(required_namecodes)
     assert params == (123, "x", "y")
     assert " JOIN " not in compact_sql.upper()
