@@ -1,0 +1,327 @@
+# phr_master Decisions
+
+## Status
+
+Draft.
+
+このドキュメントは `02_02_exam_result_csv_import` の前提となるマスタ整備、および `phr_master` 新設に関する採用済み決定事項を管理する。
+協議経緯は `05_design_history.md` に記録し、本ファイルには実装・DDL・seed・migration の前提にできる内容だけを反映する。
+
+## Decisions
+
+### Primary Objective
+
+- 本 spec の主目的は `02_02_exam_result_csv_import` の設計前提を固めることである。
+- `phr_master` 新設は、CSV取込に必要な健診機関マスタ、CSVフォーマット、CSV列マッピング、結果値normalize辞書を整理するための前提整備として扱う。
+- `phr_master` 作成そのものを本丸とはしない。
+
+### DB Name
+
+- マスタ用DB名は `phr_master` とする。
+
+### Role
+
+- `phr_master` は、PHR全体で参照する共通マスタを管理するDBとする。
+- `phr_master` は、個人情報・健診結果値・受領ファイル・ETL実行結果などの業務トランザクションを保持しない。
+- `phr_master` は、将来的な複数人運用における権限分離の境界として利用する。
+
+### Initial Boundary
+
+- `dev_phr` は、加入者、個人、イベント、実体データを中心に保持する。
+- `health_exam_result` は、健診結果受領、取込、チェック、状態管理などの業務データを保持する。
+- `work_other` は、既存運用・一時処理・移行前資産の作業用DBとして扱う。
+- `phr_master` は、共通マスタ、コード、辞書、機関情報を保持する。
+
+### Exam Facility Master
+
+- 医療機関と健診機関は明確に分ける。
+- 今回扱うのは健診結果CSV取込に必要な「健診機関」であるため、マスタ名・ドキュメント上の呼称は健診機関寄りにする。
+- 健診機関そのものを表す親マスタを `phr_master` 側に作成する方針とする。
+- 健診機関マスタの正式テーブル名は `exam_facilities` とする。
+- 現行の `medical_folder_aliases` は、健診機関そのものではなく、受領フォルダ名の揺れ・イベント別配置を扱う子情報として整理する。
+- `medical_folder_aliases` は、このCSV取込前提整備のタイミングで `phr_master` 側へ移す方向とする。
+- aliasテーブル名は既存の `medical_folder_aliases` をそのまま使う。
+- 現行の `health_exam_result.medical_folder_aliases` 登録内容は、原則そのまま新しいaliasテーブルへ移す。
+- aliasテーブルには新しい健診機関マスタのIDを保持する。
+- `01_scan_files.py` は、フォルダaliasから健診機関IDを確定し、後続処理へ引き継げる状態で `file_receipts` へ登録する。
+- `file_receipts` には、CSV取込の後続処理が参照できるように `exam_facility_id` を追加する。
+- 健診機関コード・名称のスナップショットは、既存 `file_receipts.facility_code` / `facility_name` を利用する。
+- フォルダaliasから健診機関を解決する処理は、個別スクリプトへSQLを直書きせず、`scripts/lib/db/lookup/exam_facility.py` の共通lookup libとして追加する案を基本とする。
+- lookup libはフォルダ名、イベントID、マスタDB名を入力し、`exam_facility_id`, `exam_facility_code`, `exam_facility_name` を返す案を基本とする。
+- 同じlookup libに、`exam_facility_id` から健診機関handleを返す関数と、`exam_facility_code` から健診機関handleを返す関数も追加する案を基本とする。
+- lookup libの各入口は、返却キーとして `exam_facility_id`, `exam_facility_code`, `exam_facility_name`, `exam_facility_display_name`, `medical_institution_code` を揃える案を基本とする。
+
+### CSV Import Impact
+
+- `02_02_exam_result_csv_import` では、受領ファイルから健診機関を特定し、健診機関に応じたCSVフォーマット・マッピングを選択する必要がある。
+- CSVフォーマット定義、CSV列マッピング、結果値変換辞書は `phr_master` 側に置く。
+- CSVマッピングは、健診機関ID、mapping version、CSV項目、変換ルールを持つ構成を基本とする。
+- `01_scan_files.py` から `file_receipts` へCSV取込に必要な健診機関情報を引き渡す設計は、`02_02_exam_result_csv_import` の前提として別途整理する。
+- CSV取込では、`exam_item_values` 登録時にnormalize処理まで組み込む。
+- CSV取込時のnormalizeは、CSV由来のraw値を入力とし、その結果を `exam_item_values` のnormalize系カラムへ反映する。
+- 健診結果値normalizeはCSV取込専用実装にせず、`scripts/lib/examination/value_normalizer.py` の共通libとして作成する案を基本とする。
+- normalize共通libの主APIは、`namecode` とraw値を入力し、`normalized_value`, `normalized_unit`, `normalize_status`, `normalize_reason`, `validation_status`, `validation_reason` を返す `normalize_exam_item_value()` とする案を基本とする。
+- `namecode` から型・単位を返すlookupは、既存 `scripts/lib/db/lookup/exam_item_master.py` の `get_exam_item()` / `get_exam_items()` を利用する案を基本とする。
+- CD/CO系の結果値名寄せは `phr_master.norm_variants` を利用する。
+- `norm_variants` 参照は個別スクリプトへSQLを直書きせず、`scripts/lib/db/lookup/norm_variant.py` の共通lookup libとして追加する案を基本とする。
+- 初期案では、CD/CO系かつ `exam_item_master.result_code_oid` が存在する場合のみ、`result_code_oid + raw_value_utf8` の完全一致で `norm_variants` を引く。
+- CD/CO系で `norm_variants` に一致しない場合は、`normalize_status = ERROR`, `validation_status = INVALID`, `validation_reason = NORMALIZE_VARIANT_NOT_FOUND` とする案を基本とする。
+- `norm_variants` は旧「紙→Excel→DB 2テーブル直接投入→normalize→export」フローで実利用されている資産であり、今後はnormalize共通libから参照する。
+- `norm_variants` はCSV健診結果取込で必要な共通マスタとして `phr_master` 初期DDLに含める。テーブル責務はCD/CO系結果値名寄せ辞書とする。
+- 旧 `dev_phr.norm_variants` の廃止タイミングは今回決めない。CSV取込実装後、参照切替と運用影響を確認してから別途判断する。
+- `norm_variants` は、既存辞書をそのまま移すだけでなく、実CSVで必要な表記揺れを確認して追加する。
+- ヒロオカCSVで確認した追加候補は `23_hirooka_clinic_pattern_a_review.md` の `norm_variants Coverage` に整理する。
+- 辞書追加は「取り込むと決めた実値」のみ行う。ヘッダー表記揺れと同じく、CD/CO結果値もシステム側で憶測吸収しない。
+- 検証目的で、意図的に未登録のCD/CO値を残したテストケースを用意し、`NORMALIZE_VARIANT_NOT_FOUND`、辞書追加、同一CSV再取込で正常化される流れを確認する。
+- CSV由来raw値に含まれうる `未実施`, `測定不能`, `未受診` などの非測定値語は、CD/CO系 `norm_variants` とは別に、型に依存しない共通前処理として `value_normalizer` 側で扱う。
+- 非測定値語辞書は初期実装ではYAMLファイルとして管理し、DBテーブル化は後続課題とする。
+- `異常なし`, `所見なし`, `あり`, `なし`, `陽性`, `陰性`, `+`, `-` は項目によって結果値として意味を持つため、非測定値語辞書には入れず、CD/COなら `norm_variants`、STなら文字列正規化で扱う。
+- 完全空セルは `exam_item_values` 行を作らない。
+- `未実施` / `測定不能` / `判定不能` などは、健診機関由来のABC等の健診判定ではなく、entry内の項目結果値そのものが示す実施状態・測定可否として扱う。
+- そのため、健診機関由来の健診判定を初期実装で保持・利用しない方針の影響を受けず、`exam_item_values.raw_value` とnormalize状態に残す。
+- `未実施`, `未受診`, `実施せず`, `キャンセル`, `中止`, `拒否`, `対象外` など、実施されていないことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_NO_RESULT`, `validation_status = WARNING` として扱う。
+- `測定不能`, `判定不能`, `検体不良`, `採血不可`, `測定不可` など、測定できなかったことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_UNMEASURABLE`, `validation_status = WARNING` として扱う。
+- 型に合わない未知文字列は、元値を `exam_item_values.raw_value` に残し、`normalize_status = ERROR`, `normalize_reason = INVALID_VALUE_TYPE`, `validation_status = INVALID` として扱う。
+- `あり` / `なし` は結果値として意味を持つ可能性があるため、初期の共通ノイズ辞書には含めず、項目別ルール、CD/CO辞書、または変換ルールで扱う。
+- 数値系 `data_type` は初期実装では `PQ`, `INT`, `REAL` とする。現行exportの数値型は `PQ` だが、旧 `norm_rules` との互換として `INT` / `REAL` も受ける。
+- `raw_unit` と `item_master.unit` が異なる場合、初期実装では単位変換せず、`normalize_status = ERROR`, `normalize_reason = UNIT_MISMATCH`, `validation_status = INVALID` とする。
+- CSV値の機械的な前処理は、`identity_hash` と同じくDBルールではなく共通lib側へ寄せる。
+- 処理順は、完全空値判定、共通base normalize、非測定値語判定、型別normalize、単位チェックとする。
+- `transform_rule_code` は初期DDLに含めない。将来、項目別明示変換が必要になった時点で用途名と仕様を決めてmigration追加する。
+- `norm_variant` lookupは単品APIと一括APIの両方を持つ。CSV取込では一括APIで事前取得し、単品APIは少量処理・テスト・再normalize用に使う。
+- CSV直取込では、CSVデータ行単位の台帳として `health_exam_result.csv_row_ledger` を追加する案を基本とする。
+- CSV由来の `exam_item_values` は `ledger_type = 'CSV'`, `ledger_id = csv_row_ledger.csv_row_ledger_id` で由来を表す。
+- `csv_loader` はCSV読込の共通部品として利用し、mapping適用、rule実行、normalize、identity生成、加入者照合は `csv_loader` の責務外とする。
+- CSVヘッダー読取は既存 `scripts/lib/csv/csv_loader.py` の `load_csv()` / `CSVLoader.get_headers()` / `CSVLoader.get_header_dict()` を利用する案を基本とする。
+- 既存 `csv_loader` 実装と `docs/spec/common_lib/csv_loader.md` の想定APIには差分があるため、既存利用スクリプトに影響を与えない追加APIとして `CsvLoadResult` / `CsvHeaderSet` 形式へ拡張する案を基本とする。
+- 既存 `load_csv()` の戻り値は `CSVLoader` のまま維持し、構造化結果が必要な処理向けに `load_csv_result()` などの追加APIを作る案を基本とする。
+
+### Initial `exam_facilities` Shape
+
+- `exam_facilities` は健診機関そのものを表す親マスタとする。
+- 主キーは `exam_facility_id` とする。
+- 健診機関の業務コードは `exam_facility_code` として保持する。
+- 正式名は `exam_facility_name`、表示用の短い名称は `exam_facility_display_name` とする。
+- 受領フォルダ名や既存XML由来の `facility_code` / `facility_name` は、親マスタのIDとは別の由来値として扱う。
+- 初期カラムは、識別・表示・有効/無効・監査日時を中心に最小構成とする。
+- 具体的な初期候補は `exam_facility_id`, `exam_facility_code`, `exam_facility_name`, `exam_facility_display_name`, `exam_facility_type`, `medical_institution_code`, `reservation_system_medical_institution_code`, `postal_code`, `address`, `phone_number`, `website_url`, `management_entity`, `note`, `is_active`, `created_at`, `updated_at` とする。
+- 支払基金CSVの `機関種別`, `ホームページ`, `経営主体` は、それぞれ `exam_facility_type`, `website_url`, `management_entity` へ保持する案を基本とする。
+- 支払基金CSVの `機関コード` は `medical_institution_code` へ保持する案を基本とし、支払基金専用カラムは初期DDL案には含めない。
+- 既存受領フォルダは医療機関番号を先頭10桁にして作成されている運用と考え、alias先頭10桁は `medical_institution_code` 候補として扱う。
+- 全国CSVに見つからない番号は、地方厚生局・都道府県単位のオープンデータや別年度/別区分の公開データに存在する可能性があるが、初期実装では支払基金CSV、過去CSV/XML実績、受領データ内の番号で確認できた範囲のみ採用する。
+- 契約・請求側との接続が必要になった段階で、医療機関番号を正規管理する `medical_institutions` 相当のマスタを後続追加し、`exam_facilities` と紐づける方針を検討する。
+- この後続論点は事業所単位ではなく、健保、代行機関、医療施設の連携関係として扱う。
+- 後続設計では、`exam_facilities` の一階層上に医療施設/医療機関マスタを置く案、または `exam_facilities` に連携カラムを追加する案を比較する。
+
+### `medical_folder_aliases` Connection
+
+- `medical_folder_aliases` は `phr_master` 側へ移す方向とし、`exam_facility_id` を持つ。
+- `event_id` と `src_folder_raw` による既存の一意性は維持する。
+- cross schema FK は原則張らず、アプリケーション・移行SQL・検査SQLで整合性を確認する。
+- `dst_folder_norm` は既存運用どおり、フォルダ配置・出力先の正規化名として残す。
+- `medical_folder_aliases` の参照は共通lookup lib経由を基本とし、lookupでは `exam_facilities` とJOINして有効な健診機関だけを返す。
+
+### `file_receipts` Facility Handoff
+
+- `file_receipts` には `exam_facility_id` を追加する。
+- `exam_facility_id` はCSV取込が `phr_master` のCSVフォーマット・マッピングを選択するためのキーとする。
+- 既存の `facility_code` / `facility_name` は、scan時にlookupした健診機関コード・名称のスナップショットとして利用する案を基本とする。
+- `exam_facility_code` / `exam_facility_name` を `file_receipts` に別カラムとして追加する案は採用しない方向とする。
+- 既存XML/ZIP取込では、暗号ZIPのパスワード解決時に `file_receipts.facility_code` / `submitter_facility_code` / 受領フォルダ名を参照するため、この変更はZIPパスワード解決の影響範囲に含める。
+- 初期実装では `facility_folder_name` 一致を既存互換として維持し、`exam_facility_id` によるパスワード解決は追加しない。
+- `file_receipts` はXML側の実装に寄せ、ファイル単位の現在状態は既存 `status` / `summary_message` / `processable_count` / `content_checked_at` / `processed_at` で表現する。
+- `file_receipts` にはCSV実ファイルのヘッダー照合情報として `actual_header_sha256` と `matched_csv_format_version_id` を追加する案を基本とする。
+- CSV行単位の加入者突合は、XML import と同じく基本情報抽出、`generate_identity_bundle()`、`resolve_subscriber_identity()` の流れに揃える。
+- 加入者突合、健診結果値処理、check/export状態は、XML側の `xml_ledger` に相当するCSV行台帳 `csv_row_ledger` へ持たせる。
+- `file_receipts` に `subscriber_match_*` / `exam_item_*` / `csv_status` / `csv_reason` を追加する案は採用しない。
+- ヘッダー関連など、ファイル単位で停止または確認Goが必要な内容は既存 `status` / `summary_message` と停止後Go項目で扱う。
+- `file_receipts` には停止後Goの証跡として `import_resume_approved` / `import_resume_approved_at` / `import_resume_approved_by` / `import_resume_approved_reason` / `import_resume_scope` を追加する案を基本とする。
+- `WAITING_CONFIRM` はCSVの確認待ち状態として `file_receipts.status` に追加する。
+- CSV取込の `etl_runs.phase` は `IMPORT_CSV_EXAM_RESULTS` とする。
+- `file_receipts.etl_run_id` は既存XML側と同じくscan時runの参照として扱い、CSV取込runでは上書きしない。
+- CSV取込runは `csv_row_ledger.etl_run_id` と `etl_errors.run_id` に残す。
+
+### CSV Mapping Tables
+
+- CSVフォーマット定義の親テーブルを `csv_format_versions` とする。
+- CSVテンプレートのマッピングは、`csv_exam_result_mapping_rules` / `csv_exam_result_mapping_conditions` を主案とする。
+- `csv_column_mappings` は初期検討時の旧暫定案として扱い、初期DDLの主対象にはしない。
+- CSV結果値変換ルールテーブル `csv_value_transform_rules` は初期DDL対象から外す。
+- `csv_format_versions` は、健診機関ID、mapping version、対象ファイル種別、ヘッダー有無、文字コード、区切り文字、有効期間、有効/無効を持つ構成を基本とする。
+- `csv_exam_result_mapping_rules` は、format version、登録先種別、登録先namecodeまたは基本情報field、排他/複数entry制御、必須/任意を持つ構成を基本とする。
+- `csv_exam_result_mapping_conditions` は、CSV列識別、値/下限/上限/判定/方式などのsource role、条件値、OR/AND groupを持つ構成を基本とする。
+- CSV列識別は、ヘッダー名と列番号の両方を保持できるようにする。
+- 変換ルールのDB管理は初期対象外とし、全角半角、空白、制御文字、非測定値語などの共通処理は `value_normalizer` 側で行う。
+- `target_kind` は `LEDGER_FIELD` / `EXAM_ITEM_VALUE` とする。
+- `target_resolution_type` は `SINGLE_NAMECODE` / `IDENTITY_ITEM_CANDIDATES` とする。
+- `selection_mode` は `DIRECT` / `EXCLUSIVE_ONE` / `MULTI_ENTRY` とする。
+- `method_structure_type` は `SINGLE_COLUMN` / `MULTI_COLUMN` とする。
+- `source_role` は `VALUE` / `LOWER_LIMIT` / `UPPER_LIMIT` / `JUDGEMENT` / `METHOD` / `QUALIFIER` とする。
+- `condition_type` は `HEADER_MATCH` / `METHOD_MATCH` / `VALUE_PRESENT` / `VALUE_MATCH` とする。
+- `locator_type` は `HEADER_NAME` / `COLUMN_NO` / `HEADER_AND_COLUMN` とする。
+- `operator` は `EQUALS` / `NOT_EQUALS` / `IN` / `NOT_IN` / `EXISTS` / `NOT_EXISTS` / `NOT_EMPTY` / `EMPTY` とする。
+- `csv_exam_result_mapping_rules.target_field` は `LEDGER_FIELD` の登録先カラムを表すための項目とし、`EXAM_ITEM_VALUE` では原則NULLとする。
+- 検査値ruleの値・下限・上限・判定の区別は、`target_field` ではなく `csv_exam_result_mapping_conditions.source_role` で表す。
+- CSVテンプレート登録という入口は1つにする。
+- 基本情報マッピングと検査結果値マッピングは登録先としては分けるが、CSVから値を抽出するマッピング形式は共通化する案を基本とする。
+- 基本情報マッピングは `csv_row_ledger` の基本情報カラムへ反映する。
+- 検査結果値マッピングは `exam_item_values` の `namecode` ベース登録へ反映する。
+- 基本情報は、条件なしの `target_kind = LEDGER_FIELD`, `source_role = VALUE` のruleとして表現する。
+- 検査結果値は、`target_kind = EXAM_ITEM_VALUE`、`target_namecode` または `target_identity_item_code`、`source_role`、必要に応じた条件を持つruleとして表現する。
+- `csv_ledger_field_mappings` のような基本情報専用テーブルは代替案として残す。
+- 加入者CSV取込の `template_mappings` に合わせ、健診結果CSVマッピングも `csv_header_name` を主たる照合キーとし、列順は `csv_column_order` として1始まりの定義順・検査補助に使う案を基本とする。
+- 健診結果CSVは任意項目の増減、施設別・健保別テンプレート差分、健診基幹システムの出力設定差分により列位置が変わりやすいため、`csv_column_order` を処理上の値取得キーとして使わない案を基本とする。
+- CSVヘッダー構造の解釈方式は、健診機関単位ではなく `csv_format_versions.header_structure_type` としてformat version単位に保持する案を基本とする。
+- CSVヘッダーcontextの作り方も、`csv_format_versions.header_context_rule` としてformat version単位に保持する案を基本とする。
+- CSVベース設定として、`csv_format_versions.header_mode` と `data_start_row_no` を持たせる案を基本とする。
+- CSVテンプレート変更による静かな欠落を防ぐため、`csv_format_versions` に `header_sha256` / `header_snapshot_json` / `header_hash_status` を持たせる案を基本とする。
+- `header_sha256` は、context/occurrence解決後の正規化済みヘッダー構造を列順込みでhash化する。
+- 実取込時は、CSV実ファイルから算出した `header_sha256` とformat versionの `header_sha256` を照合する。
+- CSV取込の基本方針は、可能な限り取り込み、エラー・不足・警告を明確に記録することとする。
+- ヘッダー不一致の場合は、初期実装では自動続行しない。
+- ヘッダー不一致時に続行する場合は、format側で確認後Goを許可し、かつ `file_receipts` 側に人が内容確認済みでGoした証跡がある場合に限る。
+- ヘッダー一致の場合、登録済みヘッダー内の未マッピング列はテンプレート登録時に不要と判断した意図的な非取込列として扱い、coverage不足エラーにはしない。
+- ヘッダー不一致時に列番号指定ruleがある場合、または必要なmapping列を解決できない場合は、誤登録リスクが高いため停止候補とする。
+- `csv_format_versions` に `header_mismatch_policy`, `allow_column_no_rules`, `duplicate_row_policy`, `missing_basic_info_policy` を持たせる案を基本とする。
+- `header_mismatch_policy` の初期値は `ALLOW_AFTER_CONFIRM` とする。
+- ヘッダー不一致時の続行は、format側の `header_mismatch_policy`、実CSVで必要列を解決できるか、`file_receipts` 側の確認済みGo証跡を組み合わせて制御するが、人の確認なしに自動続行はしない。
+- `allow_column_no_rules` は列番号指定ruleを許すかを表し、初期値は許可しない方針とする。
+- `duplicate_row_policy` は同一 `row_sha256` の扱いを表し、初期値はcheck済みOK行をskipする方針とする。
+- `missing_basic_info_policy` は健診日など基本情報不足時の扱いを表し、初期値は取込を進めて後続checkで扱う方針とする。
+- `header_snapshot_json` は確認用snapshotとしてJSONで保持する案を基本とし、取込制御に使う値は通常カラムに出す。
+- 初期の `header_mode` は `NONE`, `SINGLE`, `WITH_CONTEXT` とする。
+- 初期の `header_structure_type` は `SIMPLE_HEADER` と `GROUPED_VALUE_METHOD` とする。
+- 初期の `header_context_rule` は `NONE`, `UPPER_HEADER`, `CARRY_FORWARD_ITEM` とする。
+- ハートクロスのように2行目にfield code/namecodeがあるCSVも、専用の `NAMECODE_ROW` 方式は増やさず、既存の複数行ヘッダーとして扱う。
+- 2行目コード/namecodeは、通常のヘッダー名指定で使う実ヘッダーとして扱う。専用の `header_code` / `header_namecode` カラムは初期実装では追加しない。
+- 複数行ヘッダーでは、どの行を実ヘッダーとして列指定に使うかを表す `active_header_row` 相当の設定を持つ案を基本とする。
+- 初期実装では、1つの `csv_format_versions` / `mapping_version` に対して登録できるヘッダーは1種類とする。
+- ヘッダー名の表記ゆれはシステム側で自動吸収しない。
+- ヘッダー名が違うCSV、列構造が違うCSV、施設・健保・出力テンプレート差分があるCSVは、同じ施設でも別 `mapping_version` として明示登録する。
+- ヘッダー表記ゆれのN対N自動マッチングは、違う列を憶測で同一視するリスクがあるため初期実装では扱わない。
+- ルールやマッピングは完全自動生成しない。健診機関・mapping versionごとの初回テンプレートは、人がCSV実物を確認して手動登録する。
+- `CARRY_FORWARD_ITEM` は自動推測エンジンではなく、手動登録済みの `header_snapshot_json.normalized_columns` に従って、持ち回りcontext形式のCSVヘッダー構造を再現する方式として扱う。
+- `CARRY_FORWARD_ITEM` でも、取込時にシステムが検査項目名を推測してmappingを作ることはしない。実取込では登録済みheader fingerprintとmapping conditionを照合する。
+- 将来複数ヘッダーを扱う場合も、取り込み時の自動推測ではなく、人が確認済みのheader variantとして登録する方向を検討する。
+- 血糖の `区分列で分岐` / `空腹時・随時別列` などの選択は、format本体の永続カラムではなく、seed/FastAPI入力支援側の補助設定として扱う。
+- 同一ヘッダー名が繰り返されるCSVに備え、`csv_exam_result_mapping_conditions` は `header_context`, `header_name`, `header_occurrence` を持つ案を基本とする。
+- ヘッダー指定による列解決は、指定条件で1列に決まることを必須とする。
+- 指定条件で0件の場合は列未検出、2件以上の場合は曖昧指定としてエラーにし、推測して続行しない。
+- 同値ヘッダーが複数存在するCSVでは、人が `header_context`, `header_occurrence`, `COLUMN_NO`, `HEADER_AND_COLUMN` などで一意化条件を登録する。
+- 健診結果値のマッピングは、単純な「CSV列 -> namecode」ではなく、`namecode` を親にしてCSV上の値取得条件を追加していくルールモデルを採用する。
+- `csv_exam_result_mapping_rules` は登録先種別を持つ親ルール、`csv_exam_result_mapping_conditions` はヘッダー名、context、方式列、値有無などの評価条件を表す子ルールとする案を検討する。
+- 同一rule内の `condition_group_no` はOR条件の単位、同一group内の複数条件はAND条件として評価する案を基本とする。
+- rule/conditionの重複validateはDB制約ではなく、seed生成時および将来のFastAPI登録時に行う。
+- 同一rule key、同一rule内の同一 `source_role + locator`、同一rule内の複数 `VALUE`、`EXCLUSIVE_ONE` の同priority衝突などはテンプレート登録エラーとして扱う。
+- 投入先の決め方は `SINGLE_NAMECODE` と `IDENTITY_ITEM_CANDIDATES` を候補とする。
+- `SINGLE_NAMECODE` は投入先 `namecode` を固定指定する。
+- `IDENTITY_ITEM_CANDIDATES` は同一性項目を起点に候補 `namecode` を表示・絞り込む。
+- `identity_item_code` は候補探索や画面表示の括りとして使い、それだけで候補同士が排他であるとは判断しない。
+- CSVマッピングでは `selection_mode` を持たせ、`DIRECT` / `EXCLUSIVE_ONE` / `MULTI_ENTRY` を候補とする。
+- `EXCLUSIVE_ONE` は同じ候補グループ内で条件に一致した1つの `namecode` のみ採用する。
+- `EXCLUSIVE_ONE` の排他範囲を明示するため、親ruleに `selection_group_code` を持たせる案を基本とする。
+- `MULTI_ENTRY` は同じ `identity_item_code` 配下で複数ruleが成立しても、それぞれ別 `exam_item_values` entryとして登録する。
+- 値列と検査方法列の指定方法は、ヘッダー名、列番号、ヘッダー名+列番号を候補とする。
+- 列番号のみ指定は例外対応とし、原則はヘッダー名を優先する。
+- ヘッダー名+列番号指定は、値取得に加えて列ズレ検知に使う案を基本とする。
+- テンプレート登録画面は、上位に健診機関とmapping versionを持ち、CSVベース設定を行ったうえで、同一性項目を選択し、候補 `namecode` をチェックして使用条件を設定する流れを候補とする。
+- CSVテンプレート登録では、候補 `namecode` ごとにCSV内の `値` / `下限` / `上限` / `判定` 列が存在するか、存在する場合に取り込むかを設定できるようにする案を基本とする。
+- ここで扱う `判定` は、法定項目の必須/不足チェックや `check_result` の評価ではなく、健診機関がCSVに出してきた検査別判定・カテゴリ総合判定を指す。
+- `未実施` / `測定不能` / `判定不能` など、entry内の項目結果値として出てくる実施状態・測定可否は、この健診機関由来の健診判定とは別に扱う。
+- 健診機関由来の健診判定は、健診機関ごとの基準、契約、事業所向け帳票要件で意味が変わる可能性が高いため、初期実装ではPHR側の判定ロジックや納品判定には利用しない。
+- 健診機関由来の健診判定は原本証跡として扱う。正規化、評価、納品利用、健診機関別判定範囲マスタの作成は後続バージョンで別途検討する。
+- 初期実装では、`source_role = JUDGEMENT` は「CSV内に健診機関由来の判定列が存在する/取り込む対象にできる」ことを表すだけで、`exam_item_values.interpretation_code` へ必ず反映する意味ではない。
+- ヒロオカCSVの `Ａ` / `Ｂ` / `Ｃ６` / `Ｃ１２` / `Ｄ` のような施設判定は、`norm_variants` へ追加しない。
+- CSVテンプレート登録支援として、付属2由来の `identity_item_code` を網羅する上位グループ初期セットを用意する案を基本とする。
+- `exam_item_master.identity_item_code` ごとの `ANNEX2_IDENTITY` グループを最小網羅単位とし、少なくとも付属2項目の候補表示漏れを防ぐ。
+- `ANNEX2_IDENTITY` 197件は `phr_master` に物理seedとして保存する。
+- `exam_item_concept_groups` / `exam_item_concept_group_members` は正式テーブル化する。
+- 血糖・脂質・血圧などは、複数の `ANNEX2_IDENTITY` を束ねる入力支援bundleとして扱う。
+- 入力支援bundleも初期セットとして決める方針とする。血糖/HbA1c、脂質、腎機能関連は階層型で採用する。
+- 入力支援bundleは、画面では大きい親bundleで探し、内部では小さい意味単位の子bundleに分ける階層型を採用する。
+- `exam_item_concept_groups` は `parent_concept_group_id` / `parent_concept_group_code` / `concept_group_depth` を持つ案を基本とする。
+- `GLUCOSE_RELATED` 配下に `GLUCOSE` / `HBA1C` を置く。
+- `LIPID_RELATED` 配下に `TRIGLYCERIDE` / `HDL_CHOLESTEROL` / `LDL_CHOLESTEROL` / `NON_HDL_CHOLESTEROL` / `TOTAL_CHOLESTEROL` を置く。
+- `RENAL_RELATED` 配下に `CREATININE` / `EGFR` / `URIC_ACID` / `URINE_ALBUMIN` を置く。
+- `CREATININE` は `3C015`、`EGFR` は `8A065` として分ける。
+- 入力支援bundleは検体別分類より意味別分類を優先し、腎機能関連では血清尿酸・尿中アルブミンも近くに置く。
+- 上位グループは全検査項目の医学分類を手作業で設計するものではなく、CSV登録時に候補 `namecode` を探しやすくするための支援レイヤーとして扱う。
+- 上位グループは既存 `exam_item_master` / `exam_item_group_*` をseed材料にできるが、労安法チェック用グループとは責務を分ける。
+- 上位グループ配下でも、実際の保存先は `target_namecode` 単位で明示する。
+- `LOWER_LIMIT` / `UPPER_LIMIT` / `JUDGEMENT` は、マスタ基準範囲ではなくCSV由来項目列を表す。
+- `20_mapping_rule_screen_mock.html` は画面実装ではなく、テンプレート登録構造を把握するためのサンプルモックとして扱う。
+- 今回スコープでは、CSV取込を成立させるための初期テンプレート登録はseed前提とする。
+- テンプレート登録は、今回スコープ完了後の次タスクでFastAPIベースの管理API化を検討する。
+- 現時点ではFastAPI実装は行わず仕様整理に留める。
+- CSV取込の初期処理方式は、1行ごとに基本情報と検査結果値を抽出し、`csv_row_ledger` と `exam_item_values` を順に登録する行単位処理を採用する。
+- ただし、抽出処理の関数境界は基本情報と検査結果値で分け、将来のバッチ処理へ転用できる形にする。
+- CSV取込ではリアルタイム性を求めず、初期実装は1人/1行ずつ処理する方針を基本とする。
+- CSVテンプレートは候補ruleを定義するだけで、実際に作成する `exam_item_values.namecode` はCSVデータ行ごとの補助列・方式条件を評価して決定する。
+- 1行処理では、抽出対象ruleを取得し、各項目ruleに従って値を1個ずつ作成し、1行分の `csv_row_ledger` / `exam_item_values` 登録を組み立ててcommitする。
+- CSV行を再処理する場合、`exam_item_values` は `ledger_type = 'CSV'` かつ `ledger_id = csv_row_ledger_id` の既存行をdeleteしてからinsertする。
+- 現状の `exam_item_values` に新しい一意制約を追加せず、CSV由来結果値は行台帳単位のdelete+insertで整合させる。
+- 行処理中に失敗した場合は、その行の変更をrollbackし、行単位errorとして記録する案を基本とする。
+- 抽出マッピングは基本情報も検査結果値も同じrule/condition形式で扱う。
+- 基本情報は条件なしのruleとして扱う。
+- `csv_row_ledger` は `xml_ledger` と対になるCSV行台帳として扱い、名称は `csv_row_ledger` を維持する案を基本とする。
+- CSVファイル全体の重複抑制には `file_receipts.file_sha256` を使う。
+- CSV行単位の重複抑制には `csv_row_ledger.row_sha256` を使う。
+- `row_sha256` は列順込みのセル配列から算出し、ヘッダー名sort済みkey-value hashにはしない。
+- `row_sha256` は、CSV loaderで文字コード変換後のセル配列を列順込みでJSON正規化し、SHA-256化する。
+- check済みでOK扱いの同一 `row_sha256` は再取込時にskipする。
+- check済みOKの既存行はskipし、未完了、WARNING、ERROR、check未実行は再処理対象とする。
+- CSV取込Runは、新規CSVだけでなく、過去にヘッダー不一致等で停止したが `file_receipts` 側で確認Goが出ているCSVも同じ入口で処理対象にする。
+- 停止済みCSVの再投入Goは、別モードを作らず通常Run内で拾い、未完了の後続処理を進める案を基本とする。
+- CSV由来の `VALUE` が完全空セルの場合は `exam_item_values` 行を作らない。
+- CSV由来の下限・上限・判定だけが存在し、`VALUE` が完全空セルの場合も `exam_item_values` 行を作らない。
+- `未実施` / `キャンセル` / `測定不能` などの非測定値語は完全空ではないため、`exam_item_values.raw_value` に原文を残す。
+- 健診日など基本情報が不足していてもCSV取込段階ではskipしない。足りない基本情報の判定は将来 `check_result` 側のスコープで扱う。
+- ハートクロスCSVのようにCSV単体に健診日がないサンプルでも、別データで健診日を特定できる見込みがある場合は、実装検証を止めない。
+- その場合、テンプレートは暫定設定として作成し、健診日取得元は健診機関回答待ちまたは別データ連携待ちとして明示する。
+- 健診日未解決の行は `csv_row_ledger.exam_date = NULL` で保持し、後続checkで不足として検知できる状態にする。
+- 完全空行はCSV取込段階でskipする。
+- 既存 `work_other.medi_exam_result_ledger` は旧紙/Excel系の1人=1件の基本情報台帳であり、CSV行台帳設計の参照元とする。
+- `health_exam_result.file_receipts` はファイル単位台帳であり、人/行単位の基本情報台帳としては共用しない。
+- `exam_item_values` にはCSV由来の下限/上限専用カラムが現状ないため、原本由来情報として `source_reference_lower` / `source_reference_upper` を追加するmigration候補を作成する。
+- CSV由来の下限/上限の単位は、結果値の `raw_unit` と同じ前提で扱う。
+- 下限/上限だけ別単位で提出されるケースはかなり特殊であり、初期設計では専用単位カラムを持たない。
+- 健診機関由来の健診判定を `exam_item_values.interpretation_code` / `interpretation_code_system` / `interpretation_name` に寄せる案は、初期実装では採用しない。
+- XML由来の `interpretationCode` は標準コードとして扱えるが、CSV由来判定は施設固有判定である可能性が高いため、同一扱いしない。
+- 健診機関由来の健診判定の保存先は、初期実装では原本証跡として `raw_row_json` から復元できる状態を最低条件とし、必要に応じて `exam_item_values.source_judgement_raw` などの専用カラム追加を別途検討する。
+- CSVに `namecode` が付与されていても、その列の実値が `exam_item_master.xml_value_type` や `result_code_oid` と整合しない場合は、システム側で別項目へ推測振替しない。
+- 例: CD項目 `9N066000000000011` に `心雑音 要受診` のような自由記載/医師判断相当の文字列が入る場合は、`norm_variants` を追加して救済する対象ではなく、健診機関へのフォーマット確認事項として扱う。
+- この種の不整合は、CSV取込マッピング仕様で吸収する課題ではなく、健診機関とのCSV仕様すり合わせ・確認依頼の業務フローで扱う。
+- ヘッダー不一致時の続行可否は、rule/template側に「確認後Goを許す設定」を持ち、`file_receipts` 側に「このファイル内容を確認済みでGo」の証跡を持つ二段構えを基本とする。
+- `etl_errors` には初期実装で rule_id / condition_id / namecode 専用カラムを追加しない。既存 `field` / `field_value` / `message` に寄せ、必要になったら後続で補助カラム追加を検討する。
+- CSV取込の事前停止は最小限とし、目的は「まず取り込む」「エラー・不足・警告を明確にする」こととする。
+- 停止候補は、必要なmapping列を安全に解決できない場合、列番号指定ruleにより誤登録リスクが高い場合などに限定する。
+
+### Source CSV Check
+
+- 支払基金の全国CSV `Pref_00.csv` は `docs/spec/exam_result_csv_import/downloads/Pref_00.csv` に配置済みである。
+- `/Users/hiro/Downloads/Pref_00.csv` と project 配下の `Pref_00.csv` は `cksum` が一致している。
+- `Pref_00.csv` はCP932として読込可能であり、UTF-8としては読込不可である。
+- `Pref_00.csv` のヘッダーは `機関コード`, `機関種別`, `機関名`, `郵便番号`, `電話番号`, `機関所在地`, `ホームページ`, `経営主体` の8列である。
+- `Pref_00.csv` は54,713行、データ行54,712行であり、全データ行が8列である。
+
+## Not Decided Yet
+
+- `phr_master` の初期DDL詳細。
+- `exam_item_master`、`exam_item_groups`、`norm_rules` の移動時期。
+- `funds`、`fund_insurer_numbers` など保険者系マスタの移動時期。
+- 将来、`exam_facilities.exam_facility_code` を `medical_institution_code` と別採番にする必要が出た場合の移行方針。
+- `exam_facilities.exam_facility_type` の正式コード体系。
+- `dev_phr` 既存スクリプト・SQLの参照先変更範囲。
+- マスタ管理者、業務処理者、参照者などの具体的なDBロールDDL。
+- 既存データ移行SQL。
+- ADR化する単位。
+- `csv_format_versions` / `csv_exam_result_mapping_rules` / `csv_exam_result_mapping_conditions` / `norm_variants` の最終DDL SQL化。
+- mapping version の命名規則と切替ルール。
+- 健診結果値normalize共通libの正式API。
+- 非測定値語を `nullflavor` へ写像するかどうか。
+- `あり` / `なし` の項目別扱いの具体seed。
+- テンプレート登録FastAPIの正式スコープ。
+- `csv_row_ledger` の最終DDL SQL化。
+- ヒロオカクリニック実CSVを元にした初期seed内容。
+- `csv_loader` 追加APIの正式名。
+- alias lookupで `folder_name` が空、未登録、無効施設の場合の正式な状態遷移。

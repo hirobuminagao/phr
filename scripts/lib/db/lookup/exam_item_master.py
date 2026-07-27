@@ -23,6 +23,7 @@ EXAM_ITEM_MASTER_COLUMNS = """
     nullflavor_allowed AS nullable,
     display_unit,
     ucum_unit,
+    result_code_oid,
     data_type_label,
     identity_item_code,
     jun_no
@@ -63,6 +64,8 @@ def _dedupe_namecodes(namecodes: Iterable[str | None]) -> list[str]:
 def get_exam_item(
     cur: Any,
     namecode: str | None,
+    *,
+    dev_db: str = DEV_PHR,
 ) -> dict[str, Any] | None:
     """Return one exam item master row by namecode.
 
@@ -77,7 +80,7 @@ def get_exam_item(
         f"""
         SELECT
             {EXAM_ITEM_MASTER_COLUMNS}
-        FROM `{DEV_PHR}`.`exam_item_master`
+        FROM `{dev_db}`.`exam_item_master`
         WHERE `namecode` = %s
         LIMIT 1
         """,
@@ -90,6 +93,8 @@ def get_exam_item(
 def get_exam_items(
     cur: Any,
     namecodes: Iterable[str | None],
+    *,
+    dev_db: str = DEV_PHR,
 ) -> dict[str, dict[str, Any]]:
     """Return exam item master rows keyed by namecode.
 
@@ -105,7 +110,7 @@ def get_exam_items(
         f"""
         SELECT
             {EXAM_ITEM_MASTER_COLUMNS}
-        FROM `{DEV_PHR}`.`exam_item_master`
+        FROM `{dev_db}`.`exam_item_master`
         WHERE `namecode` IN ({placeholders})
         """,
         tuple(normalized_namecodes),

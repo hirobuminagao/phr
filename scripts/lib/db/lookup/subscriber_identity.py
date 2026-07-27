@@ -32,6 +32,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
+from scripts.lib.db.schemas import DEV_PHR
+
 
 # ============================================================
 # types
@@ -58,6 +60,12 @@ IDENTITY_HANDLE_COLUMNS = """
     person_id_custom,
     name_kana_full_match
 """
+
+
+def _subscribers_table(dev_db: str | None) -> str:
+    if dev_db is None:
+        return "subscribers"
+    return f"`{dev_db.replace('`', '``')}`.`subscribers`"
 
 
 @dataclass(frozen=True)
@@ -108,6 +116,7 @@ def list_identity_handles_by_hia_subscriber_id(
     cur,
     *,
     hia_subscriber_id: str | None,
+    dev_db: str | None = None,
 ) -> list[dict[str, Any]]:
     """HIA加入者ID完全一致で軽量 identity handle を返す。"""
     if not hia_subscriber_id:
@@ -117,7 +126,7 @@ def list_identity_handles_by_hia_subscriber_id(
         f"""
         SELECT
             {IDENTITY_HANDLE_COLUMNS}
-        FROM subscribers
+        FROM {_subscribers_table(dev_db)}
         WHERE hia_subscriber_id = %s
         ORDER BY id
         """,
@@ -131,6 +140,7 @@ def list_identity_handles_by_identity_hash(
     cur,
     *,
     identity_hash: str | None,
+    dev_db: str | None = None,
 ) -> list[dict[str, Any]]:
     """identity_hash完全一致で軽量 identity handle を返す。"""
     if not identity_hash:
@@ -140,7 +150,7 @@ def list_identity_handles_by_identity_hash(
         f"""
         SELECT
             {IDENTITY_HANDLE_COLUMNS}
-        FROM subscribers
+        FROM {_subscribers_table(dev_db)}
         WHERE identity_hash = %s
         ORDER BY id
         """,
@@ -154,6 +164,7 @@ def list_identity_handles_by_person_id_custom(
     cur,
     *,
     person_id_custom: str | None,
+    dev_db: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     person_id_custom完全一致で軽量 identity handle を返す。
@@ -168,7 +179,7 @@ def list_identity_handles_by_person_id_custom(
         f"""
         SELECT
             {IDENTITY_HANDLE_COLUMNS}
-        FROM subscribers
+        FROM {_subscribers_table(dev_db)}
         WHERE person_id_custom = %s
         ORDER BY id
         """,
@@ -226,6 +237,7 @@ def resolve_subscriber_identity(
     hia_subscriber_id: str | None = None,
     identity_hash: str | None = None,
     person_id_custom: str | None = None,
+    dev_db: str | None = None,
 ) -> SubscriberIdentityLookupResult:
     """
     subscriber identity を段階的に解決する。
@@ -245,6 +257,7 @@ def resolve_subscriber_identity(
         rows = list_identity_handles_by_hia_subscriber_id(
             cur,
             hia_subscriber_id=hia_subscriber_id,
+            dev_db=dev_db,
         )
         result = _to_lookup_result(
             matched_by="hia_subscriber_id",
@@ -257,6 +270,7 @@ def resolve_subscriber_identity(
         rows = list_identity_handles_by_identity_hash(
             cur,
             identity_hash=identity_hash,
+            dev_db=dev_db,
         )
         result = _to_lookup_result(
             matched_by="identity_hash",
@@ -269,6 +283,7 @@ def resolve_subscriber_identity(
         rows = list_identity_handles_by_person_id_custom(
             cur,
             person_id_custom=person_id_custom,
+            dev_db=dev_db,
         )
         result = _to_lookup_result(
             matched_by="person_id_custom",

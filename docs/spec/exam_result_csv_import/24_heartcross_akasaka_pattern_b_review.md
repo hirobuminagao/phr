@@ -1,0 +1,221 @@
+# Heartcross Akasaka Pattern B Review
+
+## Status
+
+Draft.
+
+このドキュメントは、`docs/spec/exam_result_csv_import/samples/heartcross_akasaka/heartcross_akasaka_sample_001.csv` を、CSV健診結果取込の2行ヘッダー代表サンプルとして調査した結果を整理する。
+目的は、ヒロオカ Pattern A とは異なる「表示ヘッダー + namecode行」形式を、現行マッピング/ルール/normalize設計で表現できるか確認することである。
+
+## Sample Summary
+
+- 施設名: ハートクロス健診プラザ赤坂駅前
+- サンプル種別: CSV健診結果サンプル
+- 機微情報: なし。サンプルデータへ加工済み。
+- 文字コード: CP932
+- 行数: 7行
+- データ行数: 5行
+- 列数: 164列
+- ヘッダー行: 2行
+- データ開始行: 3行目
+- 全行列数: 164列で一致
+- 値あり列数: 72列
+
+## Pattern Classification
+
+ハートクロスCSVは、CSV取込パターンBとして扱う。
+
+- `header_mode = WITH_CONTEXT`
+- `header_structure_type = GROUPED_VALUE_METHOD`
+- `header_context_rule = UPPER_HEADER`
+- `active_header_row_no = 2`
+- `data_start_row_no = 3`
+
+特徴:
+
+- 1行目は日本語表示ヘッダー。
+- 2行目は基本情報field codeまたは健診項目 `namecode`。
+- 2行目を実ヘッダーとして指定すれば、多くの検査値は通常のヘッダー指定と同じ形で列指定できる。
+- 同一ヘッダー名、同一namecodeの重複はサンプル上はない。
+- ヒロオカ Pattern A と異なり、指定に使うヘッダー名が日本語表示名ではなく2行目コード/namecodeになるため、コピペや一部変更の運用がしやすい。
+- ただし、これは専用のマッピング方式ではない。単に「ヘッダー指定で使う行が2行目」という違いとして扱う。
+
+## Header Facts
+
+| item | value |
+| --- | --- |
+| row 1 | display header |
+| row 2 | ledger field code or namecode |
+| row 1 duplicate count | 0 |
+| row 2 duplicate count | 0 |
+| blank row 1 headers | 0 |
+| blank row 2 codes | 0 |
+| row 1 sha256 | `3f63520c04fabe5ee463b4e14fde2bd580196c9968d9eeba3a0bb8e8a7fb5799` |
+| row 1+2 sha256 | `d8fbf9da281ed0cc3957ca18da1f6a8674a9e3e0816e968b07d2043453043613` |
+| `csv_format_versions.header_sha256` | `25e510f122f072d17b2b534cbe847d473fb90230ed2219d3bc3e0d2fbba55867` |
+
+初期実装では、2行ヘッダー全体をfingerprint対象にする。
+つまり、1行目の表示名だけでなく、2行目のfield code/namecodeも含めて `header_sha256` を算出する。
+一方で、列指定に使う実ヘッダーは2行目とし、1行目は表示補助/確認用contextとして保持する。
+`csv_format_versions.header_sha256` は、文字コード変換後のヘッダーセル配列を標準化し、列順込みの `normalized_columns` 配列としてJSON正規化した値から算出する。
+
+## Basic Information Columns
+
+基本情報候補:
+
+| column_no | display header | row 2 code | use |
+| ---: | --- | --- | --- |
+| 1 | 保険者番号 | `INSURER_NUMBER` | 加入者突合 |
+| 2 | 被保険者証等記号 | `INSURANCE_CARD_SYMBOL` | 加入者突合 |
+| 3 | 被保険者証等番号 | `INSURANCE_CARD_NUMBER` | 加入者突合 |
+| 4 | 被保険者証等枝番 | `INSURANCE_CARD_BRANCH_NUMBER` | 加入者突合 |
+| 5 | 受診者カナ氏名 | `NAME_KANA` | 加入者突合 |
+| 6 | 受診者生年月日 | `BIRTHDAY` | 加入者突合 |
+| 7 | 受診者郵便番号 | `POSTALCODE` | 原本郵便番号。任意 |
+
+確認結果:
+
+- `INSURER_NUMBER` は全5データ行で値あり。
+- `INSURANCE_CARD_SYMBOL` は全5データ行で値あり。
+- `INSURANCE_CARD_NUMBER` は全5データ行で値あり。
+- `INSURANCE_CARD_BRANCH_NUMBER` は列として存在するが、サンプルでは空欄。
+- `NAME_KANA` は全5データ行で値あり。
+- `BIRTHDAY` は全5データ行で値あり。
+- `POSTALCODE` は全5データ行で値あり。
+- 健診日はCSV内に見当たらない。
+
+健診日の扱い:
+
+- ハートクロスCSV単体からは行ごとの `exam_date` を確定できない。
+- ただし、別データから健診日を特定できる見込みがあるため、CSV取込実装検証は止めない。
+- 初期設定は暫定テンプレートとして作成し、健診日取得元は健診機関回答待ちとする。
+- 実取込では、健診日が未解決の行は `csv_row_ledger.exam_date = NULL` とし、後続checkで不足として検知できる状態にする。
+- 健診機関回答または別データ連携で健診日取得元が確定したら、基本情報mappingまたは前処理で `exam_date` を補完する。
+
+## Important Result Columns
+
+初期マッピング優先候補:
+
+| column_no | display header | namecode | notes |
+| ---: | --- | --- | --- |
+| 8 | 身長 | `9N001000000000001` | PQ |
+| 9 | 体重 | `9N006000000000001` | PQ |
+| 10 | ＢＭＩ | `9N011000000000001` | PQ |
+| 14 | 腹囲 | `9N016160100000001` | PQ |
+| 26 | 平均最高血圧 | `9A755000000000001` | PQ |
+| 27 | 平均最低血圧 | `9A765000000000001` | PQ |
+| 28 | 尿蛋白 | `1A010000000190111` | CO。尿定性 |
+| 29 | 尿糖 | `1A020000000190111` | CO。尿定性 |
+| 30 | 尿潜血 | `1A100000000190111` | CO。尿定性 |
+| 38 | 赤血球数 | `2A020000001930101` | PQ |
+| 39 | ﾍﾓｸﾞﾛﾋﾞﾝ | `2A030000001930101` | PQ |
+| 42 | 中性脂肪 | `3F015000002327101` | PQ |
+| 43 | ＨＤＬｺﾚｽﾃﾛｰﾙ | `3F070000002327101` | PQ |
+| 44 | ＬＤＬｺﾚｽﾃﾛｰﾙ | `3F077000002327101` | PQ |
+| 45 | ＡＳＴ | `3B035000002327201` | PQ |
+| 46 | ＡＬＴ | `3B045000002327201` | PQ |
+| 47 | γ-ＧＴＰ | `3B090000002327101` | PQ |
+| 52 | 食後時間 | `9N141000000000011` | CD。サンプル値は `12.0`, `10.0`, `15.0` |
+| 53 | 空腹時血糖 | `3D010000001927201` | PQ |
+| 54 | ＨｂＡ１ｃ | `3D046000001920402` | PQ |
+| 55 | 随時血糖 | `3D010129901927201` | 列あり。サンプルでは空欄 |
+| 56 | ｸﾚｱﾁﾆﾝ | `3C015000002327101` | PQ |
+| 57 | 尿酸 | `3C020000002327101` | PQ |
+| 76 | メタボリックシンドローム判定 | `9N501000000000011` | CD。標準entry値 |
+| 116 | 保健指導レベル | `9N506000000000011` | CD。標準entry値 |
+| 141 | ｅＧＦＲ | `8A065000002391901` | PQ |
+| 149 | non-HDLｺﾚｽﾃﾛｰﾙ | `3F069000002391901` | PQ |
+
+## Judgement-Like Header Handling
+
+このCSVには `判定` を含む列が複数ある。
+ただし、文字列上の `判定` だけで健診機関由来のABC等の健診判定と判断してはいけない。
+
+標準entry値として扱う列:
+
+| column_no | display header | namecode | sample values |
+| ---: | --- | --- | --- |
+| 76 | メタボリックシンドローム判定 | `9N501000000000011` | `予備群該当`, `非該当` |
+| 116 | 保健指導レベル | `9N506000000000011` | `動機づけ支援`, `情報提供` |
+
+健診機関由来の健診判定として扱う候補:
+
+| column_no | display header | namecode | sample values |
+| ---: | --- | --- | --- |
+| 77 | 心電図判定 | `9A110160700000011` | `要精検`, `要経過観察`, `軽度異常`, `異常なし` |
+| 78 | 胸部Ｘ線判定 | `9N206160700000011` | `軽度異常`, `異常なし` |
+| 82 | 総合判定 | `9N511000000000049` | `要精密検査`, `要経過観察`, `軽度異常` |
+
+初期実装では、健診機関由来の健診判定はPHR側判定や納品判定に使わない。
+一方、`メタボリックシンドローム判定` や `保健指導レベル` のように、項目そのものがCD結果値である列は `VALUE` として取り込む。
+
+`未実施` / `測定不能` / `判定不能` など、entry内の項目結果値として出てくる実施状態・測定可否は、健診機関由来の健診判定とは別に扱う。
+
+## Mapping Implications
+
+ハートクロスCSVでは、2行目のfield code/namecodeをヘッダー名として指定できる。
+重要なのは方式名ではなく、指定したヘッダー条件で列が一意に決まることである。
+
+- 基本情報は `target_kind = LEDGER_FIELD` とし、2行目の `INSURER_NUMBER` などを `target_field` へ紐づける。
+- 検査結果値は `target_kind = EXAM_ITEM_VALUE` とし、2行目の `namecode` を `target_namecode` として使う。
+- 2行目がfield code/namecodeの場合でも、マッピング上は通常のヘッダー名指定と同じである。
+- マッピング登録時の人間の判断は「2行目コードをヘッダーとして指定する」「この列を使うか」「VALUEとして使うか」が中心になる。
+- `header_snapshot_json` は row 1 display header と row 2 code/namecode の両方を保持する。
+- `CsvHeaderSet` は複数ヘッダー行を保持し、どの行を実ヘッダーとして使うかを表せる必要がある。
+- row 2 code/namecode専用の `header_code` / `header_namecode` カラムは初期実装では追加しない。
+- 2行目の `INSURER_NUMBER` や `9N001000000000001` は、通常の `header_name` として扱う。
+
+列解決の評価:
+
+- 2行目を実ヘッダーとして使う場合、サンプル上は同一ヘッダーが0件であり、`header_name` 単独指定で一意に列解決できる。
+- 取込時に指定ヘッダーが0件の場合は、列未検出としてエラーにする。
+- 取込時に指定ヘッダーが2件以上ある場合は、曖昧な列指定としてエラーにする。
+- 2件以上あるCSVでは、`header_context`、`header_occurrence`、または `HEADER_AND_COLUMN` により人が一意化条件を追加登録する。
+- 一意化条件を追加しても列が1件に決まらない場合、機械的な取り込みを進めない。
+
+## Normalize / Value Handling Review
+
+既存 `norm_variants` と照合が必要な代表値:
+
+- 尿定性: `（－）`
+- 所見有無系: `異常所見なし`, `正常範囲`, `所見なし`, `所見あり`
+- 問診: `いいえ`, `はい`, `ふつう`, `遅い`, `速い`
+- 生活習慣: `取組済み(６ヶ月以上)`, `意思あり(近いうち)`, `取組済み(６ヶ月未満)`
+- 特定健診判定系: `予備群該当`, `非該当`, `動機づけ支援`, `情報提供`
+
+注意点:
+
+- `食後時間` は `9N141000000000011` のCD項目だが、サンプル値は `12.0`, `10.0`, `15.0` であり、現行の `norm_variants` canonical `10時間以上` とは形が違う。
+- この値をCDとして辞書追加するか、CSV値側の意味を確認してtransformするか、施設確認が必要である。
+- `0.1未満` のような数値+比較表現は、PQ normalizeで単純数値化してよいか確認が必要である。
+
+健診機関へのフォーマット確認事項:
+
+- `内科診察所見1` / `9N066000000000011` はCD項目だが、サンプル1行目に `心雑音 要受診` が入っている。
+- `内科診察所見2` / `9N066160800000049` には `高血圧 要観察` が入っている。
+- `9N066000000000011` のようなCD項目に自由記載や医師判断相当の文字列が入る場合、システム側でST項目へ推測振替しない。
+- このケースは `norm_variants` へ辞書追加して吸収する対象ではなく、健診機関側のCSV仕様、namecode付与、列内容の確認事項として扱う。
+- 取込実装上は、該当値をnormalizeエラーとして検知し、原本行は `csv_row_ledger.raw_row_json` に保持する。
+
+## Rule Coverage Review
+
+| requirement | current rule model |
+| --- | --- |
+| 2行ヘッダーfingerprint | `csv_format_versions.header_mode = WITH_CONTEXT`, `header_sha256`, `header_snapshot_json` |
+| row 2 code/namecodeによる列指定 | 通常のヘッダー指定として表現する。専用方式は増やさない |
+| 同値ヘッダーがない場合 | `header_name` 単独で列解決できる |
+| 同値ヘッダーがある場合 | `header_context` / `header_occurrence` / `HEADER_AND_COLUMN` で人が一意化する |
+| 一意に決まらない場合 | 取込エラー。推測して続行しない |
+| 基本情報field code | `target_kind = LEDGER_FIELD` |
+| 結果値namecode | `target_kind = EXAM_ITEM_VALUE` |
+| ヘッダー表示名と2行目コードの両方確認 | header snapshotとheader hashで確認する。列指定は2行目コードを使う |
+| 健診機関由来判定と標準CD値の分離 | namecodeの `xml_value_type` / `result_code_oid` とmapping上の `source_role` で分離する |
+| 非測定値語 | `value_normalizer` の共通前処理 |
+
+## Open Points
+
+1. 健診日を別データからどう紐づけるか。健診機関回答待ち。
+2. `食後時間` の `12.0` / `10.0` / `15.0` をどう扱うか。
+3. `0.1未満` のような比較付き数値を初期normalize対象にするか、未対応としてエラーにするか。
+4. `内科診察所見1` / `9N066000000000011` に入る自由記載/医師判断相当の値を、健診機関へ確認する。
+5. `心電図判定`, `胸部Ｘ線判定`, `総合判定` を初期テンプレートでマッピング対象に含めるか。含める場合もPHR側判定には使わず原本証跡扱いとする。

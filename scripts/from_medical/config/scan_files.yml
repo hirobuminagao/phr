@@ -1,6 +1,7 @@
 event_id: 2
 health_db: health_exam_result
 dev_db: dev_phr
+master_db: phr_master
 limit: 0
 chunk_size_mb: 8
 dry_run: false

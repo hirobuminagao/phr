@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>健診結果CSV マッピングルール モック</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f6f7;
+      --panel: #fff;
+      --band: #fafbfc;
+      --line: #d8dee5;
+      --line-strong: #aeb8c3;
+      --text: #202a33;
+      --muted: #667684;
+      --accent: #147447;
+      --accent-soft: #e6f4ed;
+      --blue: #255fbd;
+      --blue-soft: #e8f0ff;
+      --warn: #986000;
+      --warn-soft: #fff4da;
+      --danger: #a33838;
+      --danger-soft: #fde9e9;
+      --shadow: 0 1px 2px rgba(16, 24, 40, .08);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    header {
+      min-height: 56px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    h1 { margin: 0; font-size: 18px; font-weight: 650; }
+    h2 { margin: 0; font-size: 15px; font-weight: 650; }
+    h3 { margin: 0 0 10px; font-size: 13px; font-weight: 650; }
+    button, input, select { font: inherit; }
+    button {
+      min-height: 34px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 0 12px;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    input, select {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 6px 9px;
+    }
+    label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    input[type="checkbox"] { width: 18px; min-height: 18px; height: 18px; accent-color: var(--accent); }
+
+    main {
+      display: grid;
+      grid-template-columns: 280px minmax(720px, 1fr);
+      gap: 14px;
+      padding: 14px;
+      min-height: calc(100vh - 56px);
+    }
+
+    aside, section {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar, .row-actions, .chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pane-head {
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .block { padding: 14px 15px; border-bottom: 1px solid var(--line); }
+    .stack { display: grid; gap: 12px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .grid-4 { display: grid; grid-template-columns: 1.2fr 1fr 1fr .8fr; gap: 12px; }
+    .subtle { color: var(--muted); font-size: 12px; }
+    .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 0 8px;
+      background: #eef2f5;
+      color: #40505e;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .pill.ok { background: var(--accent-soft); color: var(--accent); }
+    .pill.warn { background: var(--warn-soft); color: var(--warn); }
+    .pill.danger { background: var(--danger-soft); color: var(--danger); }
+    .pill.blue { background: var(--blue-soft); color: var(--blue); }
+
+    .bundle-list, .candidate-list { display: grid; gap: 6px; padding: 8px; }
+    .bundle-row, .candidate-row {
+      min-height: 48px;
+      padding: 8px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .bundle-row.active, .candidate-row.active {
+      background: var(--accent-soft);
+      border-color: #96d1b4;
+    }
+    .candidate-row { grid-template-columns: auto 1fr auto; }
+    .candidate-row input { margin: 0; }
+    .title { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .base-settings {
+      background: var(--band);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 15px;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .segmented span {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid var(--line-strong);
+      color: var(--muted);
+      background: #fff;
+      font-size: 13px;
+    }
+    .segmented span:last-child { border-right: 0; }
+    .segmented .selected { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px; vertical-align: top; text-align: left; }
+    th { background: #f8fafb; color: var(--muted); font-weight: 600; }
+    .matrix th:nth-child(1) { width: 120px; }
+    .matrix th:nth-child(2) { width: 190px; }
+    .matrix th:nth-child(3) { width: 190px; }
+    .matrix th:nth-child(4) { width: 190px; }
+    .matrix th:nth-child(5) { width: 190px; }
+    .matrix th:nth-child(6) { width: 220px; }
+    .matrix th:nth-child(7) { width: 220px; }
+    .tiny { min-height: 30px; padding: 4px 6px; border-radius: 5px; font-size: 13px; }
+    .cell-stack { display: grid; gap: 6px; }
+    .cell-line { display: grid; grid-template-columns: 58px 1fr; gap: 6px; align-items: center; }
+    .cell-line .wide { grid-column: 1 / -1; }
+    .cell-label { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .inline-check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; margin: 0; }
+    .inline-check input { flex: 0 0 auto; }
+
+    .rule-detail { overflow: auto; }
+    .csv-preview { overflow: auto; border-top: 1px solid var(--line); }
+    .csv-preview table { min-width: 860px; font-size: 12px; }
+    .csv-preview th, .csv-preview td { white-space: nowrap; }
+    .hit { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-soft); font-weight: 650; }
+    .method-hit { outline: 2px solid var(--blue); outline-offset: -2px; background: var(--blue-soft); font-weight: 650; }
+    .warn-hit { outline: 2px solid var(--warn); outline-offset: -2px; background: var(--warn-soft); font-weight: 650; }
+
+    .kv { display: grid; grid-template-columns: 112px 1fr; gap: 8px; align-items: start; }
+    .kv b { color: var(--muted); font-size: 12px; font-weight: 600; }
+    .notice {
+      border: 1px solid #edc777;
+      background: var(--warn-soft);
+      color: var(--warn);
+      border-radius: 6px;
+      padding: 10px;
+      line-height: 1.45;
+      font-size: 13px;
+    }
+
+    @media (max-width: 1180px) {
+      main { grid-template-columns: 260px minmax(0, 1fr); }
+    }
+    @media (max-width: 820px) {
+      header { align-items: flex-start; flex-direction: column; gap: 10px; padding: 12px; }
+      main, .grid-2, .grid-4 { grid-template-columns: 1fr; }
+      main { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>健診結果CSV マッピングルール</h1>
+    <div class="toolbar">
+      <button>ヘッダー再計算</button>
+      <button>dry-run</button>
+      <button class="primary">保存</button>
+    </div>
+  </header>
+
+  <main>
+    <aside>
+      <div class="pane-head">
+        <h2>候補bundle</h2>
+        <span class="pill ok">入力支援</span>
+      </div>
+      <div class="block stack">
+        <div>
+          <label>健診機関</label>
+          <select>
+            <option>ヒロオカクリニック</option>
+            <option>サンプル健診センター</option>
+          </select>
+        </div>
+        <div>
+          <label>Mapping version</label>
+          <input value="2026-07_hirooka_initial">
+        </div>
+      </div>
+      <div class="block">
+        <label>bundle検索</label>
+        <input value="腎">
+      </div>
+      <div class="bundle-list">
+        <div class="bundle-row active">
+          <div>
+            <div class="title">腎機能関連</div>
+            <div class="subtle code">RENAL_RELATED</div>
+          </div>
+          <span class="pill">4件</span>
+        </div>
+        <div class="bundle-row">
+          <div>
+            <div class="title">脂質関連</div>
+            <div class="subtle code">LIPID_RELATED</div>
+          </div>
+          <span class="pill warn">方式あり</span>
+        </div>
+        <div class="bundle-row">
+          <div>
+            <div class="title">血糖関連</div>
+            <div class="subtle code">GLUCOSE_RELATED</div>
+          </div>
+          <span class="pill warn">補助列</span>
+        </div>
+        <div class="bundle-row">
+          <div>
+            <div class="title">基本情報</div>
+            <div class="subtle code">LEDGER_FIELDS</div>
+          </div>
+          <span class="pill blue">条件なし</span>
+        </div>
+      </div>
+    </aside>
+
+    <section class="rule-detail">
+      <div class="pane-head">
+        <div>
+          <h2>テンプレート設定</h2>
+          <div class="subtle">CSVの形を固定し、その上でnamecodeごとに値と条件を設定する</div>
+        </div>
+        <span class="pill warn">header確認済み</span>
+      </div>
+
+      <div class="base-settings stack">
+        <div class="grid-4">
+          <div>
+            <label>ヘッダー</label>
+            <select>
+              <option>contextあり</option>
+              <option>単一</option>
+              <option>なし</option>
+            </select>
+          </div>
+          <div>
+            <label>構造</label>
+            <select>
+              <option>方式-値分解方式</option>
+              <option>単純ヘッダー</option>
+            </select>
+          </div>
+          <div>
+            <label>Context生成</label>
+            <select>
+              <option>上段ヘッダー持ち回り</option>
+              <option>上段ヘッダー</option>
+              <option>なし</option>
+            </select>
+          </div>
+          <div>
+            <label>データ開始行</label>
+            <input value="3">
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label>header_sha256</label>
+            <input class="code" value="9f3a...c712">
+          </div>
+          <div>
+            <label>ヘッダー不一致時</label>
+            <select>
+              <option>停止する</option>
+              <option>確認済みならGo</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>namecode候補</h3>
+        <div class="candidate-list">
+          <div class="candidate-row active">
+            <input type="checkbox" checked>
+            <div>
+              <div class="title">血清クレアチニン</div>
+              <div class="subtle code">CREATININE / 3C015</div>
+            </div>
+            <span class="pill ok">使用</span>
+          </div>
+          <div class="candidate-row active">
+            <input type="checkbox" checked>
+            <div>
+              <div class="title">eGFR</div>
+              <div class="subtle code">EGFR / 8A065</div>
+            </div>
+            <span class="pill ok">使用</span>
+          </div>
+          <div class="candidate-row active">
+            <input type="checkbox" checked>
+            <div>
+              <div class="title">血清尿酸</div>
+              <div class="subtle code">URIC_ACID / 3C020</div>
+            </div>
+            <span class="pill ok">使用</span>
+          </div>
+          <div class="candidate-row">
+            <input type="checkbox">
+            <div>
+              <div class="title">尿中アルブミン</div>
+              <div class="subtle code">URINE_ALBUMIN / 3A015</div>
+            </div>
+            <span class="pill">不要列</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="row-actions">
+          <h3 style="margin:0">選択中rule: eGFR</h3>
+          <span class="pill blue">target_kind=EXAM_ITEM_VALUE</span>
+          <span class="pill">selection=DIRECT</span>
+        </div>
+      </div>
+
+      <div class="block">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>投入先</th>
+              <th>値</th>
+              <th>下限</th>
+              <th>上限</th>
+              <th>判定</th>
+              <th>条件 1</th>
+              <th>条件 2</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="cell-stack">
+                  <label>投入先</label>
+                  <select class="tiny">
+                    <option>eGFR</option>
+                    <option>血清クレアチニン</option>
+                    <option>血清尿酸</option>
+                  </select>
+                  <label>namecode</label>
+                  <input class="tiny code" value="8A065000002391901">
+                  <span class="subtle">eGFR / PQ / ml/min/1.73m2</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">指定</span><select class="tiny"><option>ヘッダー+列</option><option>ヘッダー</option><option>列番号</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Context</span><input class="tiny" value="腎機能"></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="eGFR"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="18"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="下限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="19"></div>
+                  <div class="subtle">source_reference_lower</div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="上限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="20"></div>
+                  <div class="subtle">source_reference_upper</div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="判定"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="21"></div>
+                  <div class="subtle">interpretation raw</div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>QUALIFIER</option><option>METHOD</option><option>VALUE</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="対象"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>空でない</option><option>一致</option><option>存在</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value=""></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>METHOD</option><option>QUALIFIER</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value=""></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>未使用</option><option>一致</option><option>存在</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value=""></div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="block">
+        <h3>OR条件グループ</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>group</th>
+              <th>AND条件</th>
+              <th>成立時</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="code">1</td>
+              <td>値列が存在 AND 対象列が空でない</td>
+              <td>このnamecodeの `exam_item_values` を作る</td>
+            </tr>
+            <tr>
+              <td class="code">2</td>
+              <td>値列が存在 AND 対象列が存在しない</td>
+              <td>通常CSV用の代替ruleとして許可</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="block">
+        <div class="row-actions">
+          <h3 style="margin:0">複数条件例: 血糖</h3>
+          <span class="pill blue">GLUCOSE_RELATED &gt; GLUCOSE</span>
+          <span class="pill warn">selection=EXCLUSIVE_ONE</span>
+          <span class="pill">補助列=血糖区分</span>
+        </div>
+      </div>
+
+      <div class="block">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>投入先</th>
+              <th>値</th>
+              <th>下限</th>
+              <th>上限</th>
+              <th>判定</th>
+              <th>条件 1</th>
+              <th>条件 2</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="cell-stack">
+                  <label>投入先</label>
+                  <select class="tiny">
+                    <option>空腹時血糖 1</option>
+                    <option>空腹時血糖 2</option>
+                    <option>随時血糖 1</option>
+                    <option>随時血糖 2</option>
+                  </select>
+                  <label>namecode</label>
+                  <input class="tiny code" value="3D010000001926101">
+                  <span class="subtle">空腹時血糖 1</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Context</span><input class="tiny" value="血糖"></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="30"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="下限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="31"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="上限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="32"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="判定"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="33"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>METHOD</option><option>QUALIFIER</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="血糖区分"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>一致</option><option>存在</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value="1"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>VALUE</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>空でない</option><option>存在</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value=""></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-stack">
+                  <label>投入先</label>
+                  <select class="tiny">
+                    <option>空腹時血糖 2</option>
+                    <option>空腹時血糖 1</option>
+                    <option>随時血糖 1</option>
+                    <option>随時血糖 2</option>
+                  </select>
+                  <label>namecode</label>
+                  <input class="tiny code" value="3D010000001927201">
+                  <span class="subtle">空腹時血糖 2</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Context</span><input class="tiny" value="血糖"></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="30"></div>
+                </div>
+              </td>
+              <td><span class="subtle">空腹時血糖1と同じ列設定</span></td>
+              <td><span class="subtle">空腹時血糖1と同じ列設定</span></td>
+              <td><span class="subtle">空腹時血糖1と同じ列設定</span></td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="血糖区分"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>一致</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value="2"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>空でない</option></select></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-stack">
+                  <label>投入先</label>
+                  <select class="tiny">
+                    <option>随時血糖 1</option>
+                    <option>随時血糖 2</option>
+                    <option>空腹時血糖 1</option>
+                    <option>空腹時血糖 2</option>
+                  </select>
+                  <label>namecode</label>
+                  <input class="tiny code" value="3D010000001927301">
+                  <span class="subtle">随時血糖 1</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Context</span><input class="tiny" value="血糖"></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="30"></div>
+                </div>
+              </td>
+              <td><span class="subtle">同じ列設定</span></td>
+              <td><span class="subtle">同じ列設定</span></td>
+              <td><span class="subtle">同じ列設定</span></td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="血糖区分"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>一致</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value="4"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>空でない</option></select></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-stack">
+                  <label>投入先</label>
+                  <select class="tiny">
+                    <option>随時血糖 2</option>
+                    <option>随時血糖 1</option>
+                    <option>空腹時血糖 1</option>
+                    <option>空腹時血糖 2</option>
+                  </select>
+                  <label>namecode</label>
+                  <input class="tiny code" value="3D010000001927401">
+                  <span class="subtle">随時血糖 2</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Context</span><input class="tiny" value="血糖"></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="30"></div>
+                </div>
+              </td>
+              <td><span class="subtle">同じ列設定</span></td>
+              <td><span class="subtle">同じ列設定</span></td>
+              <td><span class="subtle">同じ列設定</span></td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="血糖区分"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>一致</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value="5"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="値"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>空でない</option></select></div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="block">
+        <h3>血糖の条件グループ一覧</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>候補</th>
+              <th>AND条件</th>
+              <th>同じCSV行で作るentry</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>空腹時血糖1</td>
+              <td>値が空でない AND 血糖区分 = 1</td>
+              <td>1件だけ作る</td>
+            </tr>
+            <tr>
+              <td>空腹時血糖2</td>
+              <td>値が空でない AND 血糖区分 = 2</td>
+              <td>1件だけ作る</td>
+            </tr>
+            <tr>
+              <td>随時血糖1</td>
+              <td>値が空でない AND 血糖区分 = 4</td>
+              <td>1件だけ作る</td>
+            </tr>
+            <tr>
+              <td>随時血糖2</td>
+              <td>値が空でない AND 血糖区分 = 5</td>
+              <td>1件だけ作る</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="block">
+        <div class="row-actions">
+          <h3 style="margin:0">複数列パターン: 空腹時列と随時列が別</h3>
+          <span class="pill blue">GLUCOSE_RELATED &gt; GLUCOSE</span>
+          <span class="pill">selection=MULTI_ENTRY</span>
+          <span class="pill warn">値列そのものが条件</span>
+        </div>
+      </div>
+
+      <div class="block">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>投入先</th>
+              <th>値</th>
+              <th>下限</th>
+              <th>上限</th>
+              <th>判定</th>
+              <th>条件 1</th>
+              <th>条件 2</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="cell-stack">
+                  <label>投入先</label>
+                  <select class="tiny">
+                    <option>空腹時血糖</option>
+                    <option>随時血糖</option>
+                  </select>
+                  <label>namecode</label>
+                  <input class="tiny code" value="3D010000001926101">
+                  <span class="subtle">空腹時血糖</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Context</span><input class="tiny" value="血糖"></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="空腹時"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="30"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="空腹時下限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="31"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="空腹時上限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="32"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="空腹時判定"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="33"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>VALUE</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="空腹時"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>空でない</option><option>存在</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value=""></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>METHOD</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value=""></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>未使用</option></select></div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="cell-stack">
+                  <label>投入先</label>
+                  <select class="tiny">
+                    <option>随時血糖</option>
+                    <option>空腹時血糖</option>
+                  </select>
+                  <label>namecode</label>
+                  <input class="tiny code" value="3D010000001927301">
+                  <span class="subtle">随時血糖</span>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Context</span><input class="tiny" value="血糖"></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="随時"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="34"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="随時下限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="35"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="随時上限"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="36"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <label class="inline-check"><input type="checkbox" checked> 取り込む</label>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="随時判定"></div>
+                  <div class="cell-line"><span class="cell-label">列</span><input class="tiny" value="37"></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>VALUE</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value="随時"></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>空でない</option><option>存在</option></select></div>
+                  <div class="cell-line"><span class="cell-label">値</span><input class="tiny" value=""></div>
+                </div>
+              </td>
+              <td>
+                <div class="cell-stack">
+                  <div class="cell-line"><span class="cell-label">役割</span><select class="tiny"><option>METHOD</option></select></div>
+                  <div class="cell-line"><span class="cell-label">Header</span><input class="tiny" value=""></div>
+                  <div class="cell-line"><span class="cell-label">条件</span><select class="tiny"><option>未使用</option></select></div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="block">
+        <h3>別列パターンのCSVプレビュー</h3>
+        <div class="csv-preview">
+          <table>
+            <thead>
+              <tr>
+                <th>29</th><th class="hit">30</th><th>31</th><th>32</th><th>33</th><th class="warn-hit">34</th><th>35</th><th>36</th><th>37</th>
+              </tr>
+              <tr>
+                <th>血糖</th><th class="hit">血糖</th><th>血糖</th><th>血糖</th><th>血糖</th><th class="warn-hit">血糖</th><th>血糖</th><th>血糖</th><th>血糖</th>
+              </tr>
+              <tr>
+                <th>区分</th><th class="hit">空腹時</th><th>空腹時下限</th><th>空腹時上限</th><th>空腹時判定</th><th class="warn-hit">随時</th><th>随時下限</th><th>随時上限</th><th>随時判定</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td></td><td class="hit">96</td><td>70</td><td>109</td><td>A</td><td class="warn-hit"></td><td></td><td></td><td></td>
+              </tr>
+              <tr>
+                <td></td><td class="hit"></td><td></td><td></td><td></td><td class="warn-hit">142</td><td></td><td>199</td><td>B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>CSVプレビュー</h3>
+        <div class="csv-preview">
+          <table>
+            <thead>
+              <tr>
+                <th>1</th><th>2</th><th>3</th><th>16</th><th>17</th><th class="hit">18</th><th>19</th><th>20</th><th>21</th><th>22</th>
+              </tr>
+              <tr>
+                <th>基本</th><th>基本</th><th>基本</th><th>腎機能</th><th>腎機能</th><th class="hit">腎機能</th><th>腎機能</th><th>腎機能</th><th>腎機能</th><th>腎機能</th>
+              </tr>
+              <tr>
+                <th>受診日</th><th>保険者番号</th><th>氏名</th><th>Cre</th><th>尿酸</th><th class="hit">eGFR</th><th>下限</th><th>上限</th><th>判定</th><th class="method-hit">対象</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2026/07/01</td><td>06123456</td><td>山田 太郎</td><td>0.82</td><td>5.4</td><td class="hit">74.2</td><td>60</td><td></td><td>A</td><td class="method-hit">1</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="block">
+        <div class="row-actions">
+          <h3 style="margin:0">構造への落とし込み</h3>
+          <span class="pill ok">成立</span>
+        </div>
+      </div>
+      <div class="block stack">
+        <div class="grid-2">
+          <div class="kv">
+            <b>format</b>
+            <span>ヘッダー=contextあり / 方式-値分解方式 / データ開始行=3</span>
+          </div>
+          <div class="kv">
+            <b>bundle</b>
+            <span class="code">RENAL_RELATED &gt; EGFR</span>
+          </div>
+          <div class="kv">
+            <b>rule</b>
+            <span class="code">target_kind=EXAM_ITEM_VALUE, target_namecode=8A065000002391901</span>
+          </div>
+          <div class="kv">
+            <b>値</b>
+            <span>Context=腎機能 / Header=eGFR / 列=18</span>
+          </div>
+          <div class="kv">
+            <b>付属値</b>
+            <span>下限、上限、判定は同じrule配下のsource_role違い</span>
+          </div>
+          <div class="kv">
+            <b>条件</b>
+            <span>condition_group_noでOR、同じgroup内はAND</span>
+          </div>
+          <div class="kv">
+            <b>空値</b>
+            <span>値が空なら `exam_item_values` は作らない</span>
+          </div>
+        </div>
+        <div class="notice">
+          このモックでは、画面上の1行が `csv_exam_result_mapping_rules`、値/下限/上限/判定/条件が `csv_exam_result_mapping_conditions` に展開される想定。
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 DEV_PHR = "dev_phr"
 WORK_OTHER = "work_other"
+PHR_MASTER = "phr_master"
 
 
 # v1.1.0: 利用可能schema一覧
@@ -33,4 +34,5 @@ WORK_OTHER = "work_other"
 ALL_SCHEMAS: tuple[str, ...] = (
     DEV_PHR,
     WORK_OTHER,
+    PHR_MASTER,
 )

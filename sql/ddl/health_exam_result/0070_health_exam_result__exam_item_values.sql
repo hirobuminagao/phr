@@ -13,6 +13,8 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   `raw_value` text,
   `raw_value_type` varchar(32) DEFAULT NULL,
   `raw_unit` varchar(64) DEFAULT NULL,
+  `source_reference_lower` text COMMENT '原本由来の基準下限。CSV等で健診機関が提出した値を保持する',
+  `source_reference_upper` text COMMENT '原本由来の基準上限。CSV等で健診機関が提出した値を保持する',
   `normalized_value` text,
   `normalized_unit` varchar(64) DEFAULT NULL,
   `nullflavor` varchar(32) DEFAULT NULL,

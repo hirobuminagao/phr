@@ -1,0 +1,39 @@
+CREATE TABLE `phr_master`.`csv_format_versions` (
+  `csv_format_version_id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `exam_facility_id` bigint unsigned NOT NULL,
+  `mapping_version` varchar(64) NOT NULL,
+  `file_type` varchar(32) NOT NULL DEFAULT 'CSV',
+  `format_name` varchar(255) DEFAULT NULL,
+  `has_header` tinyint(1) NOT NULL DEFAULT 1,
+  `header_mode` varchar(64) NOT NULL DEFAULT 'SINGLE',
+  `header_structure_type` varchar(64) NOT NULL DEFAULT 'SIMPLE_HEADER',
+  `header_context_rule` varchar(64) DEFAULT NULL,
+  `active_header_row_no` int DEFAULT NULL,
+  `data_start_row_no` int NOT NULL DEFAULT 2,
+  `header_sha256` char(64) DEFAULT NULL,
+  `header_snapshot_json` json DEFAULT NULL,
+  `header_hash_status` varchar(32) NOT NULL DEFAULT 'UNVERIFIED',
+  `header_mismatch_policy` varchar(64) NOT NULL DEFAULT 'ALLOW_AFTER_CONFIRM',
+  `allow_column_no_rules` tinyint(1) NOT NULL DEFAULT 0,
+  `duplicate_row_policy` varchar(64) NOT NULL DEFAULT 'SKIP_CHECKED_OK',
+  `missing_basic_info_policy` varchar(64) NOT NULL DEFAULT 'IMPORT_AND_CHECK_LATER',
+  `character_encoding` varchar(32) NOT NULL DEFAULT 'CP932',
+  `delimiter` varchar(8) NOT NULL DEFAULT ',',
+  `quote_char` varchar(8) DEFAULT '"',
+  `valid_from` date DEFAULT NULL,
+  `valid_to` date DEFAULT NULL,
+  `note` text,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
+  PRIMARY KEY (`csv_format_version_id`),
+  UNIQUE KEY `uq_csv_format_versions_facility_version` (`exam_facility_id`, `mapping_version`),
+  KEY `idx_csv_format_versions_header_sha256` (`header_sha256`),
+  KEY `idx_csv_format_versions_header_mismatch_policy` (`header_mismatch_policy`),
+  KEY `idx_csv_format_versions_facility_active` (`exam_facility_id`, `is_active`),
+  KEY `idx_csv_format_versions_validity` (`valid_from`, `valid_to`)
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_ja_0900_as_cs;

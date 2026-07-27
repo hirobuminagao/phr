@@ -27,6 +27,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.db.schemas import PHR_MASTER
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import log_error as etl_log_error
@@ -47,7 +48,7 @@ ETL_STATUS_FAILED = "failed"
 FILE_ROLE = "FROM_MEDICAL"
 STORAGE_FOLDER_TYPE = "MEDICAL_RESULT_ROOT"
 FILE_STATUS_DISCOVERED = "DISCOVERED"
-TARGET_EXTS = {"zip": "ZIP", "xml": "XML"}
+TARGET_EXTS = {"zip": "ZIP", "xml": "XML", "csv": "CSV"}
 SKIP_PREFIXES = (".", "~$")
 SKIP_SUFFIXES = (".tmp", ".part", ".crdownload")
 
@@ -57,6 +58,7 @@ class ScanConfig:
     event_id: int
     health_db: str
     dev_db: str
+    master_db: str
     limit: int
     chunk_size_mb: int
     dry_run: bool
@@ -144,6 +146,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
     parser.add_argument("--dev-db", default=None, help="Override dev_phr schema name.")
+    parser.add_argument("--master-db", default=None, help="Override phr_master schema name.")
     parser.add_argument("--chunk-size-mb", type=int, default=None, help="Override SHA256 read chunk size in MiB.")
     return parser.parse_args()
 
@@ -157,6 +160,7 @@ def load_scan_config(path: str | Path) -> ScanConfig:
         event_id=int(data.get("event_id", 2)),
         health_db=str(data.get("health_db") or HEALTH_EXAM_RESULT_DB),
         dev_db=str(data.get("dev_db") or DEV_PHR_DB),
+        master_db=str(data.get("master_db") or PHR_MASTER),
         limit=int(data.get("limit", 0) or 0),
         chunk_size_mb=int(data.get("chunk_size_mb", 8) or 8),
         dry_run=bool(data.get("dry_run", False)),
@@ -169,6 +173,7 @@ def resolve_config(args: argparse.Namespace) -> ScanConfig:
         event_id=args.event_id if args.event_id is not None else config.event_id,
         health_db=args.health_db if args.health_db is not None else config.health_db,
         dev_db=args.dev_db if args.dev_db is not None else config.dev_db,
+        master_db=args.master_db if args.master_db is not None else config.master_db,
         limit=args.limit if args.limit is not None else config.limit,
         chunk_size_mb=args.chunk_size_mb if args.chunk_size_mb is not None else config.chunk_size_mb,
         dry_run=True if args.dry_run else config.dry_run,
@@ -245,13 +250,24 @@ def get_result_root_path(cur: Any, *, dev_db: str, event_id: int) -> str | None:
     return text or None
 
 
-def fetch_aliases(cur: Any, *, event_id: int) -> list[dict[str, Any]]:
+def fetch_aliases(cur: Any, *, master_db: str, event_id: int) -> list[dict[str, Any]]:
     cur.execute(
-        """
-        SELECT alias_id, src_folder_raw, dst_folder_norm, manual_judgement, is_active, note
-        FROM medical_folder_aliases
-        WHERE event_id = %s
-        ORDER BY src_folder_raw
+        f"""
+        SELECT
+            mfa.alias_id,
+            mfa.src_folder_raw,
+            mfa.dst_folder_norm,
+            mfa.manual_judgement,
+            mfa.is_active,
+            mfa.note,
+            ef.exam_facility_id,
+            ef.exam_facility_code,
+            ef.exam_facility_name
+        FROM `{master_db}`.`medical_folder_aliases` mfa
+        LEFT JOIN `{master_db}`.`exam_facilities` ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        WHERE mfa.event_id = %s
+        ORDER BY mfa.src_folder_raw
         """,
         (event_id,),
     )
@@ -326,6 +342,9 @@ def insert_file_receipt(
     file_sha256: str,
     file_size: int,
     run_id: int,
+    exam_facility_id: int | None,
+    facility_code: str | None,
+    facility_name: str | None,
 ) -> int:
     cur.execute(
         """
@@ -339,6 +358,9 @@ def insert_file_receipt(
             relative_path,
             file_sha256,
             file_size,
+            facility_code,
+            facility_name,
+            exam_facility_id,
             processable_count,
             storage_folder_type,
             status,
@@ -348,7 +370,7 @@ def insert_file_receipt(
             received_at
         )
         VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s,
             CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
         )
         """,
@@ -362,6 +384,9 @@ def insert_file_receipt(
             relative_path,
             file_sha256,
             file_size,
+            facility_code,
+            facility_name,
+            exam_facility_id,
             STORAGE_FOLDER_TYPE,
             FILE_STATUS_DISCOVERED,
             run_id,
@@ -503,6 +528,11 @@ def scan_alias_files(
                 file_sha256=file_hash,
                 file_size=int(stat.st_size),
                 run_id=run_id,
+                exam_facility_id=(
+                    int(alias["exam_facility_id"]) if alias.get("exam_facility_id") is not None else None
+                ),
+                facility_code=alias.get("exam_facility_code"),
+                facility_name=alias.get("exam_facility_name"),
             )
             summary.files_inserted += 1
         except Exception as exc:
@@ -572,7 +602,7 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                     conn.commit()
                 return summary
 
-            aliases = fetch_aliases(cur, event_id=config.event_id)
+            aliases = fetch_aliases(cur, master_db=config.master_db, event_id=config.event_id)
             summary.aliases_total = len(aliases)
             alias_names = {str(row["src_folder_raw"]) for row in aliases}
             scan_unknown_folders(
@@ -615,8 +645,20 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                             error_code="ALIAS_MANUAL_JUDGEMENT",
                             message=f"manual_judgement alias skipped: {src_folder_raw}",
                             field_value=src_folder_raw,
-                        )
+                    )
                     continue
+
+                if alias.get("exam_facility_id") is None:
+                    summary.errors += 1
+                    if not config.dry_run and run_id is not None:
+                        record_scan_error(
+                            cur,
+                            run_id=run_id,
+                            field="FOLDER_ALIAS",
+                            error_code="EXAM_FACILITY_UNRESOLVED",
+                            message=f"exam facility unresolved for alias: {src_folder_raw}",
+                            field_value=src_folder_raw,
+                        )
 
                 summary.aliases_active += 1
                 keep_scanning = scan_alias_files(
