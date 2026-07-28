@@ -1,7 +1,6 @@
--- Draft seed for 02_02_exam_result_csv_import sample format mappings.
+-- Seed for 02_02_exam_result_csv_import initial sample format mappings.
 --
 -- Scope:
--- - This SQL is a draft for review and must not be applied as-is.
 -- - Run after exam_facilities seed is loaded from the 支払基金 CSV.
 -- - Resolve exam_facility_id by exam_facilities.medical_institution_code.
 -- - It covers CSV format versions and initial VALUE-focused mappings for:
@@ -13,6 +12,8 @@
 -- - phr_master.csv_format_versions
 -- - phr_master.csv_exam_result_mapping_rules
 -- - phr_master.csv_exam_result_mapping_conditions
+
+USE `phr_master`;
 
 START TRANSACTION;
 
@@ -76,9 +77,35 @@ INSERT INTO `phr_master`.`csv_format_versions` (
   '"',
   'draft seed: hirooka sample. header_snapshot_json should be generated from sample CSV before actual seed.',
   1
-);
+)
+ON DUPLICATE KEY UPDATE
+  `file_type` = VALUES(`file_type`),
+  `format_name` = VALUES(`format_name`),
+  `has_header` = VALUES(`has_header`),
+  `header_mode` = VALUES(`header_mode`),
+  `header_structure_type` = VALUES(`header_structure_type`),
+  `header_context_rule` = VALUES(`header_context_rule`),
+  `active_header_row_no` = VALUES(`active_header_row_no`),
+  `data_start_row_no` = VALUES(`data_start_row_no`),
+  `header_sha256` = VALUES(`header_sha256`),
+  `header_hash_status` = VALUES(`header_hash_status`),
+  `header_mismatch_policy` = VALUES(`header_mismatch_policy`),
+  `allow_column_no_rules` = VALUES(`allow_column_no_rules`),
+  `duplicate_row_policy` = VALUES(`duplicate_row_policy`),
+  `missing_basic_info_policy` = VALUES(`missing_basic_info_policy`),
+  `character_encoding` = VALUES(`character_encoding`),
+  `delimiter` = VALUES(`delimiter`),
+  `quote_char` = VALUES(`quote_char`),
+  `note` = VALUES(`note`),
+  `is_active` = VALUES(`is_active`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
 
-SET @hirooka_csv_format_version_id := LAST_INSERT_ID();
+SELECT `csv_format_version_id`
+  INTO @hirooka_csv_format_version_id
+FROM `phr_master`.`csv_format_versions`
+WHERE `exam_facility_id` = @hirooka_exam_facility_id
+  AND `mapping_version` = 'HIROOKA_2026_05_PATTERN_A_V1'
+LIMIT 1;
 
 CREATE TEMPORARY TABLE `tmp_csv_exam_mapping_seed` (
   `seed_key` varchar(128) NOT NULL,
@@ -175,7 +202,29 @@ SELECT
   1,
   CONCAT('draft seed:', `seed_key`, ':', COALESCE(`note`, ''))
 FROM `tmp_csv_exam_mapping_seed`
-WHERE `format_key` = 'HIROOKA';
+WHERE `format_key` = 'HIROOKA'
+ON DUPLICATE KEY UPDATE
+  `target_kind` = VALUES(`target_kind`),
+  `target_resolution_type` = VALUES(`target_resolution_type`),
+  `selection_mode` = VALUES(`selection_mode`),
+  `selection_group_code` = VALUES(`selection_group_code`),
+  `target_namecode` = VALUES(`target_namecode`),
+  `target_identity_item_code` = VALUES(`target_identity_item_code`),
+  `target_field` = VALUES(`target_field`),
+  `method_structure_type` = VALUES(`method_structure_type`),
+  `raw_value_type` = VALUES(`raw_value_type`),
+  `raw_unit` = VALUES(`raw_unit`),
+  `is_required` = VALUES(`is_required`),
+  `priority` = VALUES(`priority`),
+  `is_active` = VALUES(`is_active`),
+  `note` = VALUES(`note`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+DELETE c
+FROM `phr_master`.`csv_exam_result_mapping_conditions` c
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id;
 
 INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
   `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
@@ -253,9 +302,35 @@ INSERT INTO `phr_master`.`csv_format_versions` (
   '"',
   'draft seed: heartcross sample. active header is row 2. exam_date is not in CSV and remains pending facility/other-data confirmation.',
   1
-);
+)
+ON DUPLICATE KEY UPDATE
+  `file_type` = VALUES(`file_type`),
+  `format_name` = VALUES(`format_name`),
+  `has_header` = VALUES(`has_header`),
+  `header_mode` = VALUES(`header_mode`),
+  `header_structure_type` = VALUES(`header_structure_type`),
+  `header_context_rule` = VALUES(`header_context_rule`),
+  `active_header_row_no` = VALUES(`active_header_row_no`),
+  `data_start_row_no` = VALUES(`data_start_row_no`),
+  `header_sha256` = VALUES(`header_sha256`),
+  `header_hash_status` = VALUES(`header_hash_status`),
+  `header_mismatch_policy` = VALUES(`header_mismatch_policy`),
+  `allow_column_no_rules` = VALUES(`allow_column_no_rules`),
+  `duplicate_row_policy` = VALUES(`duplicate_row_policy`),
+  `missing_basic_info_policy` = VALUES(`missing_basic_info_policy`),
+  `character_encoding` = VALUES(`character_encoding`),
+  `delimiter` = VALUES(`delimiter`),
+  `quote_char` = VALUES(`quote_char`),
+  `note` = VALUES(`note`),
+  `is_active` = VALUES(`is_active`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
 
-SET @heartcross_csv_format_version_id := LAST_INSERT_ID();
+SELECT `csv_format_version_id`
+  INTO @heartcross_csv_format_version_id
+FROM `phr_master`.`csv_format_versions`
+WHERE `exam_facility_id` = @heartcross_exam_facility_id
+  AND `mapping_version` = 'HEARTCROSS_2026_05_PATTERN_B_V1'
+LIMIT 1;
 
 DELETE FROM `tmp_csv_exam_mapping_seed`;
 
@@ -337,7 +412,29 @@ SELECT
   1,
   CONCAT('draft seed:', `seed_key`, ':', COALESCE(`note`, ''))
 FROM `tmp_csv_exam_mapping_seed`
-WHERE `format_key` = 'HEARTCROSS';
+WHERE `format_key` = 'HEARTCROSS'
+ON DUPLICATE KEY UPDATE
+  `target_kind` = VALUES(`target_kind`),
+  `target_resolution_type` = VALUES(`target_resolution_type`),
+  `selection_mode` = VALUES(`selection_mode`),
+  `selection_group_code` = VALUES(`selection_group_code`),
+  `target_namecode` = VALUES(`target_namecode`),
+  `target_identity_item_code` = VALUES(`target_identity_item_code`),
+  `target_field` = VALUES(`target_field`),
+  `method_structure_type` = VALUES(`method_structure_type`),
+  `raw_value_type` = VALUES(`raw_value_type`),
+  `raw_unit` = VALUES(`raw_unit`),
+  `is_required` = VALUES(`is_required`),
+  `priority` = VALUES(`priority`),
+  `is_active` = VALUES(`is_active`),
+  `note` = VALUES(`note`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+DELETE c
+FROM `phr_master`.`csv_exam_result_mapping_conditions` c
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+WHERE r.`csv_format_version_id` = @heartcross_csv_format_version_id;
 
 INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
   `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
@@ -369,5 +466,4 @@ WHERE s.`format_key` = 'HEARTCROSS';
 
 DROP TEMPORARY TABLE `tmp_csv_exam_mapping_seed`;
 
--- Keep this SQL as draft until required IDs and open decisions are resolved.
-ROLLBACK;
+COMMIT;
