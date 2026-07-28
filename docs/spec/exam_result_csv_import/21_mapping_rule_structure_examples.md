@@ -156,6 +156,34 @@ CSV上で同じ括りに見える項目でも、値、計算方法、補助値�
 各ruleを独立評価し、`VALUE` が存在するruleごとに `exam_item_values` 行を作る。
 `identity_item_code` は候補を絞り込むUI/lookupキーであり、排他性の根拠にはしない。
 
+## Example 5: Finding Presence CD and Finding Text ST
+
+健診機関との確認により「所見なしの場合はCD=`2`、所見がある場合はCD=`1`と原文STを登録する」と確定したテンプレートを表す。
+システムが所見文言の医学的意味を推測するルールではない。
+
+### Rules
+
+| rule | target_namecode | value_source_type | fixed_value | value_join_separator | required |
+|---|---|---|---|---|---|
+| 所見なしCD | 所見有無CD namecode | `FIXED` | `2` | `NULL` | false |
+| 所見ありCD | 所見有無CD namecode | `FIXED` | `1` | `NULL` | false |
+| 所見本文ST | 所見本文ST namecode | `SOURCE` | `NULL` | ` / ` | false |
+
+### Conditions
+
+| rule | group | source_role | condition_type | source column | operator | expected |
+|---|---:|---|---|---|---|---|
+| 所見なしCD | 1 | `QUALIFIER` | `CELL_VALUE` | 所見1 | `EQUALS` | `異常所見なし` |
+| 所見ありCD | 1 | `QUALIFIER` | `CELL_VALUE` | 所見1 | `NOT_EMPTY` | `NULL` |
+| 所見ありCD | 1 | `QUALIFIER` | `CELL_VALUE` | 所見1 | `NOT_EQUALS` | `異常所見なし` |
+| 所見本文ST | 1 | `VALUE` | `HEADER_MATCH` | 所見1 | `PRESENT` | `NULL` |
+| 所見本文ST | 1 | `VALUE` | `HEADER_MATCH` | 所見2 | `PRESENT` | `NULL` |
+
+異常側は `NOT_EMPTY` と `NOT_EQUALS` を同一groupのAND条件にする。`NOT_EQUALS` だけでは空欄まで所見ありになるため禁止する。
+複数ST列は空欄を除外し、条件のpriority順、すなわちテンプレートで明示したCSV列順に結合する。
+同じCD namecodeへ向く2つのruleは条件分岐であり、各ruleを `required` にはしない。
+ハートクロスへこの例を適用するかは健診機関回答後に決定する。
+
 ## Hash / Skip Notes
 
 - `file_receipts.file_sha256` はCSVファイル全体の重複抑制に使う。

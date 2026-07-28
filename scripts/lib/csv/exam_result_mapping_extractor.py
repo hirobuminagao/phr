@@ -59,6 +59,39 @@ def _group_conditions(rule: CsvMappingRule) -> dict[int, list[CsvMappingConditio
     return groups
 
 
+def _extract_role_values(
+    conditions: list[CsvMappingCondition],
+    row: list[str],
+    rule: CsvMappingRule,
+) -> tuple[dict[str, str | None], list[str]]:
+    source_values: dict[str, list[str | None]] = {}
+    for condition in conditions:
+        if condition.condition_type != "HEADER_MATCH":
+            continue
+        role = condition.source_role or "VALUE"
+        source_values.setdefault(role, []).append(_cell_value(row, condition.resolved_column_no))
+
+    values_by_role: dict[str, str | None] = {}
+    for role, values in source_values.items():
+        if role == "VALUE" and len(values) > 1:
+            separator = rule.value_join_separator
+            if separator is None:
+                return {}, ["MULTIPLE_VALUE_SOURCES_REQUIRE_JOIN_SEPARATOR"]
+            nonempty = [value for value in values if value not in {None, ""}]
+            values_by_role[role] = separator.join(nonempty) if nonempty else None
+        else:
+            values_by_role[role] = values[0]
+
+    if rule.value_source_type == "FIXED":
+        if rule.fixed_value is None:
+            return {}, ["FIXED_VALUE_NOT_CONFIGURED"]
+        values_by_role["VALUE"] = rule.fixed_value
+    elif rule.value_source_type != "SOURCE":
+        return {}, [f"UNSUPPORTED_VALUE_SOURCE_TYPE:{rule.value_source_type}"]
+
+    return values_by_role, []
+
+
 def extract_rule_value(row: list[str], rule: CsvMappingRule) -> ExtractedCsvRuleValue:
     """Extract one rule's role values from a CSV row.
 
@@ -91,19 +124,13 @@ def extract_rule_value(row: list[str], rule: CsvMappingRule) -> ExtractedCsvRule
         if not all(_condition_matches(condition, row) for condition in conditions):
             continue
 
-        values_by_role: dict[str, str | None] = {}
-        for condition in conditions:
-            role = condition.source_role or "VALUE"
-            if role in values_by_role:
-                continue
-            if condition.condition_type == "HEADER_MATCH":
-                values_by_role[role] = _cell_value(row, condition.resolved_column_no)
+        values_by_role, value_errors = _extract_role_values(conditions, row, rule)
 
         return ExtractedCsvRuleValue(
             rule=rule,
             values_by_role=values_by_role,
             matched_condition_group_no=group_no,
-            errors=tuple(errors),
+            errors=tuple(errors + value_errors),
         )
 
     return ExtractedCsvRuleValue(

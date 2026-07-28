@@ -356,6 +356,14 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ('heartcross.basic.postal_code', 'HEARTCROSS', 'LEDGER_FIELD', 'postal_code', NULL, NULL, 'POSTALCODE', 1, 'VALUE', NULL, NULL, 0, 80, 'basic: postal code'),
 
 -- Heartcross exam item values. Row 2 code/namecode is used as header_name.
+-- The following CSV columns are intentionally not mapped:
+-- - intentionally excluded derived/non-standard values: 9N012000000000001, 9N013000000000001
+-- - intentionally excluded legacy phase-3 questionnaire item: 9N806000000000011
+-- - facility judgement pending confirmation: 9N256160700000011, 9N266160700000011,
+--   9F130160700000011,
+--   9N251160700000011, 9N271160700000011, 9N276160700000011,
+--   9N281160700000011, 9F140160700000011, 9N291160700000011,
+--   9N511000000000049
 ('heartcross.exam.height', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N001000000000001', NULL, '9N001000000000001', 1, 'VALUE', NULL, NULL, 1, 1000, 'height'),
 ('heartcross.exam.weight', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N006000000000001', NULL, '9N006000000000001', 1, 'VALUE', NULL, NULL, 1, 1010, 'weight'),
 ('heartcross.exam.bmi', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N011000000000001', NULL, '9N011000000000001', 1, 'VALUE', NULL, NULL, 1, 1020, 'BMI'),
@@ -392,7 +400,112 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ('heartcross.exam.metabolic', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N501000000000011', NULL, '9N501000000000011', 1, 'VALUE', NULL, NULL, 1, 1330, 'standard CD value, not facility ABC judgement'),
 ('heartcross.exam.guidance_level', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N506000000000011', NULL, '9N506000000000011', 1, 'VALUE', NULL, NULL, 1, 1340, 'standard CD value, not facility ABC judgement'),
 ('heartcross.exam.egfr', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '8A065000002391901', NULL, '8A065000002391901', 1, 'VALUE', NULL, NULL, 0, 1350, 'eGFR'),
-('heartcross.exam.non_hdl', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3F069000002391901', NULL, '3F069000002391901', 1, 'VALUE', NULL, NULL, 1, 1360, 'non-HDL cholesterol');
+('heartcross.exam.non_hdl', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3F069000002391901', NULL, '3F069000002391901', 1, 'VALUE', NULL, NULL, 1, 1360, 'non-HDL cholesterol'),
+('heartcross.exam.9n026000000000002', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N026000000000002', NULL, '9N026000000000002', 1, 'VALUE', NULL, NULL, 0, 2000, '肥満度％'),
+('heartcross.exam.9n021000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N021000000000001', NULL, '9N021000000000001', 1, 'VALUE', NULL, NULL, 0, 2010, '内臓脂肪面積'),
+('heartcross.exam.9e160162100000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E160162100000001', NULL, '9E160162100000001', 1, 'VALUE', NULL, NULL, 0, 2020, '裸眼視力(右)'),
+('heartcross.exam.9e160162200000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E160162200000001', NULL, '9E160162200000001', 1, 'VALUE', NULL, NULL, 0, 2030, '裸眼視力(左)'),
+('heartcross.exam.9e160162500000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E160162500000001', NULL, '9E160162500000001', 1, 'VALUE', NULL, NULL, 0, 2040, '矯正視力(右)'),
+('heartcross.exam.9e160162600000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E160162600000001', NULL, '9E160162600000001', 1, 'VALUE', NULL, NULL, 0, 2050, '矯正視力(左)'),
+('heartcross.exam.9e105162100000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E105162100000001', NULL, '9E105162100000001', 1, 'VALUE', NULL, NULL, 0, 2060, '眼圧(右)'),
+('heartcross.exam.9e105162200000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E105162200000001', NULL, '9E105162200000001', 1, 'VALUE', NULL, NULL, 0, 2070, '眼圧(左)'),
+('heartcross.exam.9a751000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9A751000000000001', NULL, '9A751000000000001', 1, 'VALUE', NULL, NULL, 0, 2080, '最高血圧1回目'),
+('heartcross.exam.9a761000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9A761000000000001', NULL, '9A761000000000001', 1, 'VALUE', NULL, NULL, 0, 2090, '最低血圧1回目'),
+('heartcross.exam.9a752000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9A752000000000001', NULL, '9A752000000000001', 1, 'VALUE', NULL, NULL, 0, 2100, '最高血圧2回目'),
+('heartcross.exam.9a762000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9A762000000000001', NULL, '9A762000000000001', 1, 'VALUE', NULL, NULL, 0, 2110, '最低血圧2回目'),
+('heartcross.exam.1a030000000190301', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '1A030000000190301', NULL, '1A030000000190301', 1, 'VALUE', NULL, NULL, 0, 2120, '比重'),
+('heartcross.exam.2a040000001930102', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '2A040000001930102', NULL, '2A040000001930102', 1, 'VALUE', NULL, NULL, 0, 2130, 'ﾍﾏﾄｸﾘｯﾄ'),
+('heartcross.exam.2a050000001930101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '2A050000001930101', NULL, '2A050000001930101', 1, 'VALUE', NULL, NULL, 0, 2140, '血小板数'),
+('heartcross.exam.2a010000001930101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '2A010000001930101', NULL, '2A010000001930101', 1, 'VALUE', NULL, NULL, 0, 2150, '白血球数'),
+('heartcross.exam.2a060000001930101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '2A060000001930101', NULL, '2A060000001930101', 1, 'VALUE', NULL, NULL, 0, 2160, 'ＭＣＶ'),
+('heartcross.exam.2a070000001930101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '2A070000001930101', NULL, '2A070000001930101', 1, 'VALUE', NULL, NULL, 0, 2170, 'ＭＣＨ'),
+('heartcross.exam.2a080000001930101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '2A080000001930101', NULL, '2A080000001930101', 1, 'VALUE', NULL, NULL, 0, 2180, 'ＭＣＨＣ'),
+('heartcross.exam.2a020161001930149', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '2A020161001930149', NULL, '2A020161001930149', 1, 'VALUE', NULL, NULL, 0, 2190, '貧血実施理由'),
+('heartcross.exam.3f050000002327101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3F050000002327101', NULL, '3F050000002327101', 1, 'VALUE', NULL, NULL, 0, 2200, '総ｺﾚｽﾃﾛｰﾙ'),
+('heartcross.exam.3b070000002327101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3B070000002327101', NULL, '3B070000002327101', 1, 'VALUE', NULL, NULL, 0, 2210, 'ＡＬＰ'),
+('heartcross.exam.3j010000002327101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3J010000002327101', NULL, '3J010000002327101', 1, 'VALUE', NULL, NULL, 0, 2220, '総ﾋﾞﾘﾙﾋﾞﾝ'),
+('heartcross.exam.3a010000002327101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3A010000002327101', NULL, '3A010000002327101', 1, 'VALUE', NULL, NULL, 0, 2230, '総蛋白'),
+('heartcross.exam.3a015000002327101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3A015000002327101', NULL, '3A015000002327101', 1, 'VALUE', NULL, NULL, 0, 2240, 'ｱﾙﾌﾞﾐﾝ'),
+('heartcross.exam.9e100160900000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E100160900000049', NULL, '9E100160900000049', 1, 'VALUE', NULL, NULL, 0, 2250, '眼底所見1'),
+('heartcross.exam.9e100166200000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E100166200000011', NULL, '9E100166200000011', 1, 'VALUE', NULL, NULL, 0, 2260, '眼底SCHEIE(S)'),
+('heartcross.exam.9e100166100000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E100166100000011', NULL, '9E100166100000011', 1, 'VALUE', NULL, NULL, 0, 2270, '眼底SCHEIE(H)'),
+('heartcross.exam.9e100166000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E100166000000011', NULL, '9E100166000000011', 1, 'VALUE', NULL, NULL, 0, 2280, '眼底KW'),
+('heartcross.exam.9e100166300000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E100166300000011', NULL, '9E100166300000011', 1, 'VALUE', NULL, NULL, 0, 2290, '眼底SCOTT'),
+('heartcross.exam.9e100161000000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E100161000000049', NULL, '9E100161000000049', 1, 'VALUE', NULL, NULL, 0, 2300, '眼底実施理由'),
+('heartcross.exam.9a110161000000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9A110161000000049', NULL, '9A110161000000049', 1, 'VALUE', NULL, NULL, 0, 2310, '心電図実施理由'),
+('heartcross.exam.9n121000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N121000000000001', NULL, '9N121000000000001', 1, 'VALUE', NULL, NULL, 0, 2320, '心拍数'),
+('heartcross.exam.9c310000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9C310000000000001', NULL, '9C310000000000001', 1, 'VALUE', NULL, NULL, 0, 2330, '努力性肺活量'),
+('heartcross.exam.9c380000000000002', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9C380000000000002', NULL, '9C380000000000002', 1, 'VALUE', NULL, NULL, 0, 2340, '％肺活量'),
+('heartcross.exam.9c320000000000001', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9C320000000000001', NULL, '9C320000000000001', 1, 'VALUE', NULL, NULL, 0, 2350, '1秒量'),
+('heartcross.exam.9c330000000000002', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9C330000000000002', NULL, '9C330000000000002', 1, 'VALUE', NULL, NULL, 0, 2360, '1秒率'),
+('heartcross.exam.9n256160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N256160800000049', NULL, '9N256160800000049', 1, 'VALUE', NULL, NULL, 0, 2370, '上部消化管Ｘ所見1'),
+('heartcross.exam.9n266160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N266160800000049', NULL, '9N266160800000049', 1, 'VALUE', NULL, NULL, 0, 2380, '上部消化管内視鏡診断1'),
+('heartcross.exam.9f130160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9F130160800000049', NULL, '9F130160800000049', 1, 'VALUE', NULL, NULL, 0, 2390, '腹部ｴｺｰ所見1'),
+('heartcross.exam.9n061000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N061000000000011', NULL, '9N061000000000011', 1, 'VALUE', NULL, NULL, 0, 2400, 'かぜをひいている'),
+('heartcross.exam.9n061160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N061160800000049', NULL, '9N061160800000049', 1, 'VALUE', NULL, NULL, 0, 2410, '食欲がない'),
+('heartcross.exam.9n716000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N716000000000011', NULL, '9N716000000000011', 1, 'VALUE', NULL, NULL, 0, 2420, '脳卒中'),
+('heartcross.exam.9n721000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N721000000000011', NULL, '9N721000000000011', 1, 'VALUE', NULL, NULL, 0, 2430, '心臓病'),
+('heartcross.exam.9n726000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N726000000000011', NULL, '9N726000000000011', 1, 'VALUE', NULL, NULL, 0, 2440, '慢性の腎不全や人工透析'),
+('heartcross.exam.9n731000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N731000000000011', NULL, '9N731000000000011', 1, 'VALUE', NULL, NULL, 0, 2450, '貧血'),
+('heartcross.exam.9n741000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N741000000000011', NULL, '9N741000000000011', 1, 'VALUE', NULL, NULL, 0, 2460, '20歳時の体重から10kg以上増加'),
+('heartcross.exam.9n746000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N746000000000011', NULL, '9N746000000000011', 1, 'VALUE', NULL, NULL, 0, 2470, '30分以上の運動を週2日以上、1年以上実施'),
+('heartcross.exam.9n751000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N751000000000011', NULL, '9N751000000000011', 1, 'VALUE', NULL, NULL, 0, 2480, '歩行又は同等の身体活動を1日1時間以上実施'),
+('heartcross.exam.9n756000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N756000000000011', NULL, '9N756000000000011', 1, 'VALUE', NULL, NULL, 0, 2490, 'ほぼ同年齢の同性と比較して歩く速度が速い'),
+('heartcross.exam.9n872000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N872000000000011', NULL, '9N872000000000011', 1, 'VALUE', NULL, NULL, 0, 2500, '食事をかんで食べる時の状態はどれにあてはまりますか'),
+('heartcross.exam.9n766000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N766000000000011', NULL, '9N766000000000011', 1, 'VALUE', NULL, NULL, 0, 2510, '食べる速度が人と比較して速い'),
+('heartcross.exam.9n771000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N771000000000011', NULL, '9N771000000000011', 1, 'VALUE', NULL, NULL, 0, 2520, '就寝前2時間以内の夕食が週3回以上'),
+('heartcross.exam.9n782000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N782000000000011', NULL, '9N782000000000011', 1, 'VALUE', NULL, NULL, 0, 2530, '朝昼夕の３食以外に間食や甘い飲み物を摂取していますか'),
+('heartcross.exam.9n781000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N781000000000011', NULL, '9N781000000000011', 1, 'VALUE', NULL, NULL, 0, 2540, '朝食を抜くことが週3回以上'),
+('heartcross.exam.9n786000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N786000000000011', NULL, '9N786000000000011', 1, 'VALUE', NULL, NULL, 0, 2550, 'お酒を飲む頻度'),
+('heartcross.exam.9n791000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N791000000000011', NULL, '9N791000000000011', 1, 'VALUE', NULL, NULL, 0, 2560, '1日当たりの飲酒量'),
+('heartcross.exam.9n796000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N796000000000011', NULL, '9N796000000000011', 1, 'VALUE', NULL, NULL, 0, 2570, '睡眠で休養が十分とれる'),
+('heartcross.exam.9n801000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N801000000000011', NULL, '9N801000000000011', 1, 'VALUE', NULL, NULL, 0, 2580, '生活習慣を改善'),
+('heartcross.exam.9n701167000000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N701167000000049', NULL, '9N701167000000049', 1, 'VALUE', NULL, NULL, 0, 2590, '血圧：薬剤名'),
+('heartcross.exam.9n706167000000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N706167000000049', NULL, '9N706167000000049', 1, 'VALUE', NULL, NULL, 0, 2600, '血糖：薬剤名'),
+('heartcross.exam.9n711167000000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N711167000000049', NULL, '9N711167000000049', 1, 'VALUE', NULL, NULL, 0, 2610, '脂質：薬剤名'),
+('heartcross.exam.9n701167100000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N701167100000049', NULL, '9N701167100000049', 1, 'VALUE', NULL, NULL, 0, 2620, '血圧：服薬理由'),
+('heartcross.exam.9n706167100000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N706167100000049', NULL, '9N706167100000049', 1, 'VALUE', NULL, NULL, 0, 2630, '血糖：服薬理由'),
+('heartcross.exam.9n711167100000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N711167100000049', NULL, '9N711167100000049', 1, 'VALUE', NULL, NULL, 0, 2640, '脂質：服薬理由'),
+('heartcross.exam.9n251160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N251160800000049', NULL, '9N251160800000049', 1, 'VALUE', NULL, NULL, 0, 2650, '胸部CT所見1'),
+('heartcross.exam.9n271160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N271160800000049', NULL, '9N271160800000049', 1, 'VALUE', NULL, NULL, 0, 2660, '婦人科内診所見1'),
+('heartcross.exam.9n276160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N276160800000049', NULL, '9N276160800000049', 1, 'VALUE', NULL, NULL, 0, 2670, '乳部触診所見1'),
+('heartcross.exam.9n281160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N281160800000049', NULL, '9N281160800000049', 1, 'VALUE', NULL, NULL, 0, 2680, 'ﾏﾝﾓ所見1'),
+('heartcross.exam.9f140160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9F140160800000049', NULL, '9F140160800000049', 1, 'VALUE', NULL, NULL, 0, 2690, '乳部エコー所見1'),
+('heartcross.exam.9n291160800000049', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N291160800000049', NULL, '9N291160800000049', 1, 'VALUE', NULL, NULL, 0, 2700, '子宮細胞診(頚部)所見1'),
+('heartcross.exam.1b030000001599811', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '1B030000001599811', NULL, '1B030000001599811', 1, 'VALUE', NULL, NULL, 0, 2710, '便潜血判定'),
+('heartcross.exam.5d305000002399811', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '5D305000002399811', NULL, '5D305000002399811', 1, 'VALUE', NULL, NULL, 0, 2720, '前立腺特異抗原(PSA)'),
+('heartcross.exam.9d100163100000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9D100163100000011', NULL, '9D100163100000011', 1, 'VALUE', NULL, NULL, 0, 2730, '聴力(右)1000'),
+('heartcross.exam.9d100163200000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9D100163200000011', NULL, '9D100163200000011', 1, 'VALUE', NULL, NULL, 0, 2740, '聴力(右)4000'),
+('heartcross.exam.9d100163500000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9D100163500000011', NULL, '9D100163500000011', 1, 'VALUE', NULL, NULL, 0, 2750, '聴力(左)1000'),
+('heartcross.exam.9d100163600000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9D100163600000011', NULL, '9D100163600000011', 1, 'VALUE', NULL, NULL, 0, 2760, '聴力(左)4000'),
+('heartcross.exam.9d100164000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9D100164000000011', NULL, '9D100164000000011', 1, 'VALUE', NULL, NULL, 0, 2770, '検査法'),
+('heartcross.exam.5h010000001910111', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '5H010000001910111', NULL, '5H010000001910111', 1, 'VALUE', NULL, NULL, 0, 2780, '血液型ABO'),
+('heartcross.exam.5h020000001910111', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '5H020000001910111', NULL, '5H020000001910111', 1, 'VALUE', NULL, NULL, 0, 2790, '血液型Rh'),
+('heartcross.exam.9a110161600000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9A110161600000011', NULL, '9A110161600000011', 1, 'VALUE', NULL, NULL, 0, 2800, '心電図対象者'),
+('heartcross.exam.9e100161600000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9E100161600000011', NULL, '9E100161600000011', 1, 'VALUE', NULL, NULL, 0, 2810, '眼底対象者'),
+('heartcross.exam.3c015161002399949', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3C015161002399949', NULL, '3C015161002399949', 1, 'VALUE', NULL, NULL, 0, 2820, '血清ｸﾚｱﾁﾆﾝ実施理由'),
+('heartcross.exam.3c015161602399911', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3C015161602399911', NULL, '3C015161602399911', 1, 'VALUE', NULL, NULL, 0, 2830, '血清クレアチニン対象者'),
+('heartcross.exam.7a021165208543311', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '7A021165208543311', NULL, '7A021165208543311', 1, 'VALUE', NULL, NULL, 0, 2840, '子宮細胞診(頚部)ベセスダ'),
+('heartcross.exam.3a015000000106101', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3A015000000106101', NULL, '3A015000000106101', 1, 'VALUE', NULL, NULL, 0, 2850, '尿中ｱﾙﾌﾞﾐﾝ定量'),
+('heartcross.exam.3a015000000106128', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3A015000000106128', NULL, '3A015000000106128', 1, 'VALUE', NULL, NULL, 0, 2860, '尿中アルブミンクレアチニン補正値／アルブミン指数'),
+('heartcross.exam.3a015000000406126', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '3A015000000406126', NULL, '3A015000000406126', 1, 'VALUE', NULL, NULL, 0, 2870, '尿中アルブミン一日量'),
+('heartcross.exam.9n950000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N950000000000011', NULL, '9N950000000000011', 1, 'VALUE', NULL, NULL, 0, 2880, '情報提供の方法'),
+('heartcross.exam.9n807000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N807000000000011', NULL, '9N807000000000011', 1, 'VALUE', NULL, NULL, 0, 2890, '健診当日初回面接実施'),
+('heartcross.exam.9n932000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N932000000000011', NULL, '9N932000000000011', 1, 'VALUE', NULL, NULL, 0, 2900, 'あなたの現在の健康状態はいかがですか'),
+('heartcross.exam.9n933000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N933000000000011', NULL, '9N933000000000011', 1, 'VALUE', NULL, NULL, 0, 2910, '毎日の生活に満足していますか'),
+('heartcross.exam.9n934000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N934000000000011', NULL, '9N934000000000011', 1, 'VALUE', NULL, NULL, 0, 2920, '１日３食きちんと食べていますか'),
+('heartcross.exam.9n935000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N935000000000011', NULL, '9N935000000000011', 1, 'VALUE', NULL, NULL, 0, 2930, '半年前に比べて固いもの(*)が食べにくくなりましたか'),
+('heartcross.exam.9n936000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N936000000000011', NULL, '9N936000000000011', 1, 'VALUE', NULL, NULL, 0, 2940, 'お茶や汁物等でむせることがありますか'),
+('heartcross.exam.9n937000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N937000000000011', NULL, '9N937000000000011', 1, 'VALUE', NULL, NULL, 0, 2950, '６カ月間で２～３kg以上の体重減少がありましたか'),
+('heartcross.exam.9n938000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N938000000000011', NULL, '9N938000000000011', 1, 'VALUE', NULL, NULL, 0, 2960, '以前に比べて歩く速度が遅くなってきたと思いますか'),
+('heartcross.exam.9n939000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N939000000000011', NULL, '9N939000000000011', 1, 'VALUE', NULL, NULL, 0, 2970, 'この1年間に転んだことがありますか'),
+('heartcross.exam.9n940000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N940000000000011', NULL, '9N940000000000011', 1, 'VALUE', NULL, NULL, 0, 2980, 'ウォーキング等の運動を週に1回以上していますか'),
+('heartcross.exam.9n941000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N941000000000011', NULL, '9N941000000000011', 1, 'VALUE', NULL, NULL, 0, 2990, '周りの人から「いつも同じことを聞く」などの物忘れがあると言われていますか'),
+('heartcross.exam.9n942000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N942000000000011', NULL, '9N942000000000011', 1, 'VALUE', NULL, NULL, 0, 3000, '今日が何月何日かわからない時がありますか'),
+('heartcross.exam.9n943000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N943000000000011', NULL, '9N943000000000011', 1, 'VALUE', NULL, NULL, 0, 3010, 'あなたはたばこを吸いますか'),
+('heartcross.exam.9n944000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N944000000000011', NULL, '9N944000000000011', 1, 'VALUE', NULL, NULL, 0, 3020, '週に1回以上は外出していますか'),
+('heartcross.exam.9n945000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N945000000000011', NULL, '9N945000000000011', 1, 'VALUE', NULL, NULL, 0, 3030, 'ふだんから家族や友人と付き合いがありますか'),
+('heartcross.exam.9n946000000000011', 'HEARTCROSS', 'EXAM_ITEM_VALUE', NULL, '9N946000000000011', NULL, '9N946000000000011', 1, 'VALUE', NULL, NULL, 0, 3040, '体調が悪いときに、身近に相談できる人がいますか');
 
 INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
   `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
@@ -436,6 +549,39 @@ ON DUPLICATE KEY UPDATE
   `note` = VALUES(`note`),
   `updated_at` = CURRENT_TIMESTAMP(3);
 
+-- Heartcross ECG/chest X-ray judgement text is used only to derive the
+-- standard finding-presence CD. The facility judgement itself is not stored.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
+  `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
+  `target_namecode`, `method_structure_type`, `value_source_type`, `fixed_value`,
+  `is_required`, `priority`, `is_active`, `note`
+) VALUES
+  (@heartcross_csv_format_version_id, 'heartcross.exam.ecg_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
+   '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1370, 1,
+   'draft seed:heartcross.exam.ecg_presence_normal:異常なし -> 所見なし CD=2'),
+  (@heartcross_csv_format_version_id, 'heartcross.exam.ecg_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
+   '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1380, 1,
+   'draft seed:heartcross.exam.ecg_presence_abnormal:異常判定かつ所見あり -> 所見あり CD=1'),
+  (@heartcross_csv_format_version_id, 'heartcross.exam.chest_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
+   '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1390, 1,
+   'draft seed:heartcross.exam.chest_xray_presence_normal:異常なし -> 所見なし CD=2'),
+  (@heartcross_csv_format_version_id, 'heartcross.exam.chest_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
+   '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1400, 1,
+   'draft seed:heartcross.exam.chest_xray_presence_abnormal:異常判定かつ所見あり -> 所見あり CD=1')
+ON DUPLICATE KEY UPDATE
+  `target_kind` = VALUES(`target_kind`),
+  `target_resolution_type` = VALUES(`target_resolution_type`),
+  `selection_mode` = VALUES(`selection_mode`),
+  `target_namecode` = VALUES(`target_namecode`),
+  `method_structure_type` = VALUES(`method_structure_type`),
+  `value_source_type` = VALUES(`value_source_type`),
+  `fixed_value` = VALUES(`fixed_value`),
+  `is_required` = VALUES(`is_required`),
+  `priority` = VALUES(`priority`),
+  `is_active` = VALUES(`is_active`),
+  `note` = VALUES(`note`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
 DELETE c
 FROM `phr_master`.`csv_exam_result_mapping_conditions` c
 JOIN `phr_master`.`csv_exam_result_mapping_rules` r
@@ -469,6 +615,46 @@ JOIN `phr_master`.`csv_exam_result_mapping_rules` r
   ON r.`csv_format_version_id` = @heartcross_csv_format_version_id
  AND r.`note` LIKE CONCAT('draft seed:', s.`seed_key`, ':%')
 WHERE s.`format_key` = 'HEARTCROSS';
+
+-- Branch conditions for standard finding-presence CD values.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_name`, `header_occurrence`, `operator`, `expected_value`,
+  `source_role`, `priority`, `is_active`, `note`
+)
+SELECT r.`csv_exam_result_mapping_rule_id`, 1, 'CELL_VALUE', 'HEADER_NAME', x.`header_name`, 1,
+       x.`operator`, x.`expected_value`, 'QUALIFIER', x.`priority`, 1,
+       CONCAT('draft derived condition:', r.`rule_key`)
+FROM `phr_master`.`csv_exam_result_mapping_rules` r
+JOIN (
+  SELECT 'heartcross.exam.ecg_presence_normal' AS `rule_key`, '9A110160700000011' AS `header_name`,
+         'EQUALS' AS `operator`, '異常なし' AS `expected_value`, 100 AS `priority`
+  UNION ALL SELECT 'heartcross.exam.ecg_presence_abnormal', '9A110160700000011', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'heartcross.exam.ecg_presence_abnormal', '9A110160700000011', 'NOT_EQUALS', '異常なし', 110
+  UNION ALL SELECT 'heartcross.exam.chest_xray_presence_normal', '9N206160700000011', 'EQUALS', '異常なし', 100
+  UNION ALL SELECT 'heartcross.exam.chest_xray_presence_abnormal', '9N206160700000011', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'heartcross.exam.chest_xray_presence_abnormal', '9N206160700000011', 'NOT_EQUALS', '異常なし', 110
+) x ON x.`rule_key` = r.`rule_key`
+WHERE r.`csv_format_version_id` = @heartcross_csv_format_version_id;
+
+-- Store finding text only for abnormal judgement rows.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_name`, `header_occurrence`, `operator`, `expected_value`,
+  `source_role`, `priority`, `is_active`, `note`
+)
+SELECT r.`csv_exam_result_mapping_rule_id`, 1, 'CELL_VALUE', 'HEADER_NAME', x.`header_name`, 1,
+       x.`operator`, x.`expected_value`, 'QUALIFIER', x.`priority`, 1,
+       CONCAT('draft abnormal finding condition:', r.`rule_key`)
+FROM `phr_master`.`csv_exam_result_mapping_rules` r
+JOIN (
+  SELECT 'heartcross.exam.ecg_finding_text' AS `rule_key`, '9A110160700000011' AS `header_name`,
+         'NOT_EMPTY' AS `operator`, NULL AS `expected_value`, 110 AS `priority`
+  UNION ALL SELECT 'heartcross.exam.ecg_finding_text', '9A110160700000011', 'NOT_EQUALS', '異常なし', 120
+  UNION ALL SELECT 'heartcross.exam.chest_xray_finding_text', '9N206160700000011', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'heartcross.exam.chest_xray_finding_text', '9N206160700000011', 'NOT_EQUALS', '異常なし', 120
+) x ON x.`rule_key` = r.`rule_key`
+WHERE r.`csv_format_version_id` = @heartcross_csv_format_version_id;
 
 DROP TEMPORARY TABLE `tmp_csv_exam_mapping_seed`;
 

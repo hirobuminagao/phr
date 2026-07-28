@@ -41,6 +41,9 @@ class CsvMappingRule:
     target_identity_item_code: str | None
     target_field: str | None
     method_structure_type: str | None
+    value_source_type: str
+    fixed_value: str | None
+    value_join_separator: str | None
     raw_value_type: str | None
     raw_unit: str | None
     is_required: bool
@@ -269,6 +272,13 @@ def load_csv_mapping_rules(
                 target_identity_item_code=_compact_text(row.get("target_identity_item_code")),
                 target_field=_compact_text(row.get("target_field")),
                 method_structure_type=_compact_text(row.get("method_structure_type")),
+                value_source_type=_compact_text(row.get("value_source_type")) or "SOURCE",
+                fixed_value=_compact_text(row.get("fixed_value")),
+                value_join_separator=(
+                    str(row["value_join_separator"])
+                    if row.get("value_join_separator") is not None
+                    else None
+                ),
                 raw_value_type=_compact_text(row.get("raw_value_type")),
                 raw_unit=_compact_text(row.get("raw_unit")),
                 is_required=bool(row.get("is_required")),

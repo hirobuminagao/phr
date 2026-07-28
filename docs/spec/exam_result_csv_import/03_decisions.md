@@ -90,6 +90,10 @@ Draft.
 - CSV値の機械的な前処理は、`identity_hash` と同じくDBルールではなく共通lib側へ寄せる。
 - 処理順は、完全空値判定、共通base normalize、非測定値語判定、型別normalize、単位チェックとする。
 - `transform_rule_code` は初期DDLに含めない。将来、項目別明示変換が必要になった時点で用途名と仕様を決めてmigration追加する。
+- 所見有無CDと所見本文STの組合せを施設別テンプレートで明示できるよう、mapping ruleは `value_source_type = SOURCE / FIXED`、`fixed_value`、`value_join_separator` を持つ。
+- `FIXED` は行条件が成立した場合だけ明示した固定値を生成する。医学的意味を文言から推測して固定値を決めない。
+- `SOURCE` で複数の `VALUE` 列を指定する場合は `value_join_separator` を必須とし、空欄列を除外してCSV列順に結合する。
+- ハートクロスへこの所見有無CD/STルールを適用するかは健診機関回答後に決定し、回答前のseedには反映しない。
 - `norm_variant` lookupは単品APIと一括APIの両方を持つ。CSV取込では一括APIで事前取得し、単品APIは少量処理・テスト・再normalize用に使う。
 - CSV直取込では、CSVデータ行単位の台帳として `health_exam_result.csv_row_ledger` を追加する案を基本とする。
 - CSV由来の `exam_item_values` は `ledger_type = 'CSV'`, `ledger_id = csv_row_ledger.csv_row_ledger_id` で由来を表す。

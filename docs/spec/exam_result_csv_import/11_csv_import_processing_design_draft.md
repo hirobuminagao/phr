@@ -318,9 +318,11 @@ CSVテンプレート登録という入口は1つにする。
 
 - `target_namecode` は `exam_item_values.namecode` を表す。
 - `source_role = VALUE` は `exam_item_values.raw_value` へ反映する。
+- `value_source_type = SOURCE` はCSV列値を使用し、複数のVALUE列がある場合は明示された `value_join_separator` で空欄を除外してCSV列順に結合する。
+- `value_source_type = FIXED` は行条件成立時に `fixed_value` を値として使用する。所見文言からCD値を推測する用途には使わず、施設確認済みテンプレート設定として登録する。
 - `source_role = LOWER_LIMIT` / `UPPER_LIMIT` / `JUDGEMENT` はCSV由来の下限・上限・判定として扱う。
 - `raw_value_type`, `raw_unit`, `exam_item_master`, `norm_variants` を使って結果値登録とnormalizeを行う。
-- 項目別明示変換は初期実装では扱わない。必要になった時点でmapping ruleへ追加する。
+- 任意の項目別変換関数は扱わない。条件付き固定値と複数列結合はmapping ruleの明示設定として扱う。
 
 ただし、健診結果値のマッピングは「CSV列から登録先へ」だけで表すと、管理画面や実CSV差分に対して扱いづらくなる可能性が高い。
 実務上は `namecode` を中心に、「このCSVではどのヘッダー条件に一致したら、その `namecode` の値として採用するか」を管理する形が自然である。
