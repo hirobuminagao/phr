@@ -335,9 +335,11 @@ CSV取込Runは毎回同じ入口にする。
 
 通常Runで拾う対象:
 
-1. 新規CSV。
+1. scanまたはformat再照合で `READY` になったCSV。
 2. 過去に停止したが `file_receipts.import_resume_approved` が立っているCSV。
 3. `csv_row_ledger` までは作成済みだが、加入者突合や検査値登録などの後続処理が未完了のCSV。
+
+`DISCOVERED` はformat照合前または取込準備未完了の状態として扱い、CSV取込Runの通常対象にはしない。
 
 ### Row-Oriented Processing
 

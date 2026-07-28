@@ -450,7 +450,7 @@ CSVに基準下限、基準上限、判定が含まれない場合は未設定�
 2. `01_scan_files.py` が `phr_master.medical_folder_aliases` から `exam_facility_id` を確定し、`file_receipts` にスナップショットを持たせる。
 3. `01_scan_files.py` がCSV format照合共通処理を呼び、`actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` / `status` を設定する。
 4. 初回mapping未登録、複数候補、default未決定などで `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` でformat照合だけを再適用する。
-5. `02_02_exam_result_csv_import` が新規CSVと、過去に停止したが確認Go済みのCSVを同じRunで取得する。
+5. `02_02_exam_result_csv_import` が `READY` のCSVと、過去に停止したが `import_resume_approved = 1` のCSVを同じRunで取得する。`DISCOVERED` は取込対象にしない。
 6. `02_02_exam_result_csv_import` は `file_receipts.matched_csv_format_version_id` があればそれを優先し、なければ `file_receipts.exam_facility_id` から `phr_master.csv_format_versions` を探索する。
 7. `scripts/lib/csv/csv_loader.py` の `load_csv_result()` でCSVを読み、文字コード、delimiter、quote、ヘッダー、行数を取得する。formatがfallbackを許可する場合は登録文字コードを先に試し、UTF-8 BOM / UTF-8 / CP932も候補にする。
 8. 実CSVのヘッダー構造から `header_sha256` を算出し、採用formatの `csv_format_versions.header_sha256` と照合する。
@@ -529,7 +529,7 @@ CSV取込Runは、基本的に毎回同じ動きにする。
 対象候補:
 
 1. 新規CSV
-   - `file_receipts` に登録済みで、CSV取込が未開始のもの。
+   - `file_receipts` に登録済みで、format照合済みの `READY` のもの。
 2. 停止済みCSV
    - ヘッダー不一致、不足設定、確認待ちなどで停止したもの。
    - rule/template側で確認後Goが許可され、かつ `file_receipts` 側で確認Goが出ている場合だけ再処理する。

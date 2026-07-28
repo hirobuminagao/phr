@@ -310,11 +310,14 @@ def record_error(
 
 def fetch_csv_file_receipts(cur: Any, *, config: ImportConfig) -> list[dict[str, Any]]:
     params: list[Any] = []
-    statuses = [FILE_STATUS_DISCOVERED, FILE_STATUS_READY, FILE_STATUS_WAITING_CONFIRM]
+    statuses = [FILE_STATUS_READY]
     if config.include_imported:
         statuses.append(FILE_STATUS_IMPORTED)
-    where = ["file_type = 'CSV'", f"status IN ({', '.join(['%s'] * len(statuses))})"]
+    status_conditions = [f"status IN ({', '.join(['%s'] * len(statuses))})"]
     params.extend(statuses)
+    status_conditions.append("(status = %s AND import_resume_approved = 1)")
+    params.append(FILE_STATUS_WAITING_CONFIRM)
+    where = ["file_type = 'CSV'", f"({' OR '.join(status_conditions)})"]
     if config.event_id is not None:
         where.append("event_id = %s")
         params.append(config.event_id)

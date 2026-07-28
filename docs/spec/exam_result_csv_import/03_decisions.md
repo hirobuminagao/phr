@@ -137,12 +137,15 @@ Draft.
 - `file_receipts` にはCSV実ファイルの照合情報として `actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` を保持する。
 - scan時点でCSV formatが1件に確定できた場合は `matched_csv_format_version_id` を入れて `READY` とし、0件または複数件の場合は `WAITING_CONFIRM` とする。
 - 初回scan時にmapping未登録で `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` を再実行してformat照合だけを再適用する。
+- activeなformatがない場合は「マッピング未登録」、activeなformatはあるがheaderが一致しない場合は「CSV構造不一致」として扱い、どちらも `WAITING_CONFIRM` で止めるが `summary_message` / `etl_errors` の理由は区別する。
 - CSV行単位の加入者突合は、XML import と同じく基本情報抽出、`generate_identity_bundle()`、`resolve_subscriber_identity()` の流れに揃える。
 - 加入者突合、健診結果値処理、check/export状態は、XML側の `xml_ledger` に相当するCSV行台帳 `csv_row_ledger` へ持たせる。
 - `file_receipts` に `subscriber_match_*` / `exam_item_*` / `csv_status` / `csv_reason` を追加する案は採用しない。
 - ヘッダー関連など、ファイル単位で停止または確認Goが必要な内容は既存 `status` / `summary_message` と停止後Go項目で扱う。
 - `file_receipts` には停止後Goの証跡として `import_resume_approved` / `import_resume_approved_at` / `import_resume_approved_by` / `import_resume_approved_reason` / `import_resume_scope` を追加する案を基本とする。
 - `WAITING_CONFIRM` はCSVの確認待ち状態として `file_receipts.status` に追加する。
+- CSV取込Runの通常対象は `file_receipts.status = READY` のCSVと、`WAITING_CONFIRM` だが `import_resume_approved = 1` のCSVに限定する。
+- `DISCOVERED` はformat照合前または取込準備未完了の状態として扱い、CSV取込Runの対象にはしない。
 - CSV取込の `etl_runs.phase` は `IMPORT_CSV_EXAM_RESULTS` とする。
 - `file_receipts.etl_run_id` は既存XML側と同じくscan時runの参照として扱い、CSV取込runでは上書きしない。
 - CSV取込runは `csv_row_ledger.etl_run_id` と `etl_errors.run_id` に残す。
