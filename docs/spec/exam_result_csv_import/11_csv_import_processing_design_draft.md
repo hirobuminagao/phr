@@ -51,7 +51,7 @@ CSV取込側で必要になる処理テーブル案は以下とする。
   - CSVファイル単位の受領台帳として利用する。
   - `exam_facility_id` を追加する案は `10_phr_master_initial_ddl_draft.md` に記載する。
   - 既存 `facility_code` / `facility_name` は、scan時にlookupした健診機関コード・名称のスナップショットとして利用する案とする。
-  - CSVファイルでは、scan時または再照合時に `actual_header_sha256` / `matched_csv_format_version_id` を保持する。
+  - CSVファイルでは、scan時または再照合時に `actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` を保持する。
 - `csv_row_ledger`
   - CSVデータ行単位の基本情報Ledger。
   - 受診者識別、健診日、加入者照合状態、行処理状態を保持する。
@@ -448,11 +448,11 @@ CSVに基準下限、基準上限、判定が含まれない場合は未設定�
 
 1. `01_scan_files.py` がCSVを `file_receipts` に登録する。
 2. `01_scan_files.py` が `phr_master.medical_folder_aliases` から `exam_facility_id` を確定し、`file_receipts` にスナップショットを持たせる。
-3. `01_scan_files.py` がCSV format照合共通処理を呼び、`actual_header_sha256` / `matched_csv_format_version_id` / `status` を設定する。
+3. `01_scan_files.py` がCSV format照合共通処理を呼び、`actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` / `status` を設定する。
 4. 初回mapping未登録、複数候補、default未決定などで `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` でformat照合だけを再適用する。
 5. `02_02_exam_result_csv_import` が新規CSVと、過去に停止したが確認Go済みのCSVを同じRunで取得する。
 6. `02_02_exam_result_csv_import` は `file_receipts.matched_csv_format_version_id` があればそれを優先し、なければ `file_receipts.exam_facility_id` から `phr_master.csv_format_versions` を探索する。
-7. `scripts/lib/csv/csv_loader.py` の `load_csv_result()` でCSVを読み、文字コード、delimiter、ヘッダー、行数を取得する。
+7. `scripts/lib/csv/csv_loader.py` の `load_csv_result()` でCSVを読み、文字コード、delimiter、quote、ヘッダー、行数を取得する。formatがfallbackを許可する場合は登録文字コードを先に試し、UTF-8 BOM / UTF-8 / CP932も候補にする。
 8. 実CSVのヘッダー構造から `header_sha256` を算出し、採用formatの `csv_format_versions.header_sha256` と照合する。
 9. ヘッダー不一致の場合は、rule/template側の許可設定と `file_receipts` 側の確認Goを確認し、未確認なら停止する。
 10. `etl_runs` にCSV取込Runを開始記録する。
@@ -484,6 +484,8 @@ CSVに基準下限、基準上限、判定が含まれない場合は未設定�
 3. context/occurrenceを解決した `normalized_columns` を列順込みで作る。
 4. `normalized_columns` をJSON正規化し、SHA-256を算出する。
 5. `csv_format_versions.header_sha256` と一致するか確認する。
+
+文字コードfallbackはヘッダー表記揺れの吸収ではない。候補文字コードでdecode・parseした結果が登録済み `header_sha256` と完全一致した場合だけ採用し、採用した文字コードを `file_receipts.actual_character_encoding` に保存する。delimiterは登録値固定とし、quoteは `quote_char` をCSV parserへ渡す。引用符なしの行も同じparser設定で受理する。
 
 不一致時の初期方針:
 
@@ -769,7 +771,7 @@ rows = loader.iter_rows()
 row_count = loader.count_rows()
 ```
 
-一方で、`docs/spec/common_lib/csv_loader.md` は `CsvLoadResult` / `CsvHeaderSet`、`disp_mode`、delimiter自動判定などを想定しており、現実装と一部差分がある。
+`docs/spec/common_lib/csv_loader.md` は、既存互換の `load_csv()` / `CSVLoader` と、構造化結果を返す `load_csv_result()` / `CsvLoadResult` の現行APIに同期済みである。
 
 `02_02_exam_result_csv_import` では、CSV読込本体スクリプトを太らせないため、`CsvLoadResult` / `CsvHeaderSet` 形式を共通lib側に追加する方針とする。
 既存の `load_csv()` と `CSVLoader` は既存利用スクリプトへの影響を避けるため互換維持し、新しい関数またはオプションで構造化結果を返す。
@@ -783,6 +785,7 @@ load_csv_result(
     header_count: int = 1,
     delimiter: str | None = None,
     encoding: str | None = None,
+    quote_char: str = '"',
     count_rows: bool = True,
 ) -> CsvLoadResult
 ```
@@ -795,6 +798,7 @@ load_csv_result(
 - `path`: 読み込んだCSVファイルパス。
 - `encoding`: 実際に使用した文字コード。
 - `delimiter`: 実際に使用した区切り文字。
+- `quote_char`: parserへ渡した引用符文字。
 - `header`: `CsvHeaderSet`。ヘッダー行、正規化列、header hash算出材料を持つ。
 - `rows`: データ行のlist。初期実装では全件保持でもよいが、大容量化する場合はiterator化を検討する。
 - `data_start_row_no`: CSV上のデータ開始行番号。

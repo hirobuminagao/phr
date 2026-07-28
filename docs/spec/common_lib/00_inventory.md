@@ -132,7 +132,7 @@ health_exam_result v2 の実装設計に入る前に、既存の共通lib資産�
 | `docs/spec/common/etl_common_lib.md` | `scripts/lib/etl/runs.py`, `metrics.py`, `errors.py`, `ddl.py`, `progress.py` | 概ね対応。health_exam_result v2 のRun単位処理＋file単位transactionとの整合メモは追加検討。 |
 | `docs/spec/common/etl_run_lifecycle.md` | `scripts/lib/etl/runs.py`, `scripts/lib/etl/metrics.py`, `scripts/lib/etl/errors.py` | 対応。ただし現specは「transaction境界はrun単位」を標準としており、health_exam_result v2 の `02_import_xml.py` は例外設計が必要。 |
 | `docs/spec/common/subscriber_audit_insert.md` | `scripts/lib/db/insert/subscriber_audit.py` | 対応。health_exam_result v2 では直接利用可能性は低い。 |
-| `docs/spec/common_lib/csv_loader.md` | `scripts/lib/csv/csv_loader.py` | 一部不一致。specは `CsvLoadResult` / `disp_mode` / delimiter自動判定 / `count_rows` 引数を想定するが、現実装は `CSVLoader` 返却、delimiter既定`,`、`disp_mode`なし。 |
+| `docs/spec/common_lib/csv_loader.md` | `scripts/lib/csv/csv_loader.py` | 同期済み。既存 `load_csv()` / `CSVLoader` と追加 `load_csv_result()` / `CsvLoadResult` を記載。 |
 
 ---
 
@@ -187,7 +187,7 @@ health_exam_result v2 の実装設計に入る前に、既存の共通lib資産�
 | 実装なし・spec不足 | file SHA256 / XML SHA256 | `compare_hash.py` は用途違い。 | `file_receipts.file_sha256` / `xml_ledger.xml_sha256` の正となるため、先にspec化推奨。 |
 | 実装なし・spec不足 | ZIP展開共通lib | SHG/旧mediに個別実装あり。 | `02_import_xml.py` の中核。safe extract、文字化け、ZIP内相対パス、cleanup方針をspec化推奨。 |
 | 実装なし・spec不足 | XML parse基礎 | XML削除libはあるが、parse/read/discovery共通はない。 | XML原本読込、namespace、parse error、bytes hash の扱いをspec化推奨。 |
-| 実装あり・spec不一致 | `scripts/lib/csv/csv_loader.py` | `docs/spec/common_lib/csv_loader.md` と実装APIが一部不一致。 | v2初期はXML中心なので優先度中。将来CSV取込前に解消。 |
+| 実装・spec同期済み | `scripts/lib/csv/csv_loader.py` | `docs/spec/common_lib/csv_loader.md` と現行APIを同期済み。 | delimiter自動判定などの将来拡張は別途判断。 |
 | specはあるが実装調整要 | `scripts/lib/etl/*` | specはあるが `etl_run_lifecycle.md` はtransaction境界run単位を標準としている。 | health_exam_result v2 のRun単位処理＋file_receipt単位transactionを例外として追記した方がよい。 |
 | 実装あり・個別spec不足 | `scripts/lib/db/lookup/subscriber_identity.py` | lookup共通specはあるが、resolver返却形式の詳細specはない。 | subscriber照合に使うため、先にspec化推奨。 |
 | 実装あり・common_lib specなし | `scripts/lib/identity/*` | identity専用specは別に存在するが common_lib棚卸し上の対応は分散。 | 既存spec参照でよいが、health_exam_result向け利用手順メモがあると安全。 |

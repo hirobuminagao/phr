@@ -157,8 +157,11 @@ CSV構造の親設定。
 - `duplicate_row_policy`
 - `missing_basic_info_policy`
 - `character_encoding`
+- `encoding_fallback_policy`
 - `delimiter`
 - `quote_char`
+
+文字コードは `character_encoding` を第一候補とし、`encoding_fallback_policy = ALLOW_COMMON_ENCODINGS` の場合だけ UTF-8 BOM / UTF-8 / CP932を追加候補にする。候補で読めても `header_sha256` が登録値と一致しなければ停止する。採用文字コードは `file_receipts.actual_character_encoding` に記録する。delimiterは登録値固定、quoteはparser設定として利用し、引用符の有無だけでは停止しない。
 - `valid_from`
 - `valid_to`
 - `is_active`
@@ -279,6 +282,7 @@ CSVファイル単位の受領・処理状態を持つ。
 
 - `exam_facility_id`
 - `actual_header_sha256`
+- `actual_character_encoding`
 - `matched_csv_format_version_id`
   - scan時または `01_01_match_csv_format.py` の再照合で設定する。
 - `import_resume_approved`

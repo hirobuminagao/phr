@@ -68,16 +68,25 @@ scripts/lib/csv/csv_loader.py
 
 ---
 
-## 想定API
+## 現行API
 
 ```python
 load_csv(
     path: str,
-    *,
     header_count: int = 1,
-    disp_mode: int = 0,
-    delimiter: str | None = None,
-    count_rows: bool = False,
+    delimiter: str = ",",
+    encoding: str | None = None,
+    quote_char: str = '"',
+) -> CSVLoader
+
+load_csv_result(
+    path: str,
+    header_count: int = 1,
+    delimiter: str = ",",
+    encoding: str | None = None,
+    quote_char: str = '"',
+    active_header_row_no: int | None = None,
+    data_start_row_no: int | None = None,
 ) -> CsvLoadResult
 ```
 
@@ -92,50 +101,47 @@ load_csv(
   - `2` を指定した場合は、2行ヘッダー前提で処理する
   - 将来的には `3` 以上にも拡張可能とする
 
-- `disp_mode`
-  - 表示用ヘッダー生成モード
-  - 無指定時は `0`
-  - mode追加はライブラリ側で吸収し、呼び出し側の書き方は固定する
-
 - `delimiter`
-  - 明示指定時はその delimiter を使う
-  - 無指定時は自動判定する
+  - 無指定時は `,`
+  - 現行実装では自動判定しない
 
-- `count_rows`
-  - `True` の場合、行数をカウントする
-  - `False` の場合、行数カウントは省略可能とする
+- `encoding`
+  - 明示指定時はその文字コードを使う
+  - 未指定時は UTF-8 BOM / UTF-8 / CP932 の簡易判定を使う
+
+- `quote_char`
+  - `csv.reader` へ渡す引用符文字
+  - 引用符が存在しないCSVも同じ設定で読み込める
+
+- `active_header_row_no`
+  - `load_csv_result()` で列名として扱うヘッダー行番号
+
+- `data_start_row_no`
+  - `load_csv_result()` が返すCSV上のデータ開始行番号
 
 ---
 
 ## 戻り値規格
 
-戻り値は、少なくとも以下の情報を保持する規格化オブジェクトとする。
+既存 `load_csv()` は互換維持のため `CSVLoader` を返す。構造化結果が必要な処理は `load_csv_result()` を使う。
 
 ### CsvHeaderSet
 
-- `key_headers`
-  - 実処理で使うヘッダー名一覧
-
-- `disp_headers`
-  - 表示・ログ用ヘッダー名一覧
-
-- `header_index_map`
-  - `key_headers` を基準にした `header -> index` 辞書
-
-- `header_count`
-  - 実際に処理したヘッダー行数
+- `header_rows`
+- `active_header_row_no`
+- `normalized_columns`
+  - `column_no`, `context`, `header_name`, `occurrence` を列順込みで保持する
+- `header_sha256`
 
 ### CsvLoadResult
 
 - `path`
-- `file_name`
 - `encoding`
 - `delimiter`
-- `bom_removed`
-- `headers` (`CsvHeaderSet`)
-- `total_line_count`
-- `data_row_count`
+- `quote_char`
+- `header_set` (`CsvHeaderSet`)
 - `rows`
+- `data_start_row_no`
 
 ---
 
@@ -144,40 +150,26 @@ load_csv(
 ### 基本方針
 
 - ヘッダー処理は `csv_loader` 側で共通化する
-- 呼び出し側は `header_count` / `disp_mode` を渡すだけでよい
+- 呼び出し側は `header_count` / `active_header_row_no` を渡す
 - ヘッダー処理ロジックの追加・変更はライブラリ側だけで吸収する
 
 ### 1行ヘッダー
 
 - `header_count=1`
-- `key_headers` = 1行目
-- `disp_headers` = 1行目
+- `header_rows` に1行目を保持する
+- `normalized_columns` は1行目を列名として構築する
 
 ### 2行ヘッダー
 
 - `header_count=2`
-- `key_headers` は最下段ヘッダーを基準とする
-- `disp_headers` は `disp_mode` に応じて生成する
-
-### disp_mode
-
-初期仕様では以下を持つ。
-
-- `0`
-  - `disp_headers = key_headers`
-
-- `1`
-  - 上段 + 下段を結合した表示ヘッダーを生成する
-  - 例: `基本情報 / 氏名（カナ）`
-
-将来 `disp_mode` の種類が増えても、呼び出し側のAPIは変えない。
+- `active_header_row_no` の行を列名として使う
+- 他のヘッダー行は `context` の生成材料として保持する
 
 ---
 
 ## BOM処理
 
 - UTF-8 BOM は `csv_loader` 側で除去する
-- BOM除去有無は `bom_removed` に保持する
 - 呼び出し側で BOM を意識させない
 
 ---
@@ -187,28 +179,14 @@ load_csv(
 ### 基本方針
 
 - `delimiter` が明示指定されている場合は、その値を使用する
-- 無指定の場合はライブラリ側で自動判定する
-
-### 初期対応候補
-
-- `,`
-- `\t`
-- `;`
+- 現行実装では無指定時に `,` を使用する
+- delimiter自動判定やfallbackは現行実装に含めない
 
 ---
 
 ## 行数カウント
 
-### 基本方針
-
-- `count_rows=True` の場合のみ行数を数える
-- 返却値は以下を基本とする
-
-- `total_line_count`
-  - ヘッダー含む総行数
-
-- `data_row_count`
-  - ヘッダー除外後のデータ行数
+`CSVLoader.count_rows()` で読込済み行数を取得する。`load_csv_result()` は初期実装ではデータ行を `rows` に保持する。
 
 ---
 
@@ -216,8 +194,8 @@ load_csv(
 
 ### 基本方針
 
-- `header_index_map` は `key_headers` を基準に作る
-- 後続の mapping / rule は `key_headers` を使って値取得する
+- `CSVLoader.get_header_dict()` は最終ヘッダー行を基準に辞書化する
+- 同名ヘッダーを一意に扱う処理では、`CsvHeaderSet.normalized_columns` の `context` / `occurrence` / `column_no` を使う
 
 ### やらないこと
 
@@ -246,15 +224,15 @@ load_csv(
 ## 利用イメージ
 
 ```python
-result = load_csv(
+result = load_csv_result(
     path=csv_path,
     header_count=2,
-    disp_mode=1,
-    count_rows=True,
+    active_header_row_no=2,
+    encoding="CP932",
+    quote_char='"',
 )
 
-headers = result.headers.key_headers
-header_map = result.headers.header_index_map
+headers = result.header_set.normalized_columns
 encoding = result.encoding
 rows = result.rows
 ```
@@ -265,15 +243,15 @@ rows = result.rows
 
 - CSV読み込みの入口を統一する
 - 各importスクリプトで毎回ヘッダー処理を書かない
-- 後から `disp_mode` や `header_count` の対応を増やしても、呼び出し側を変えない
+- 既存 `load_csv()` / `CSVLoader` の戻り値と主要メソッドを維持する
+- 構造化されたヘッダー情報は `load_csv_result()` に集約する
 - 共通化できるI/O処理は共通ライブラリへ寄せる
 
 ---
 
 ## 本specで次に詰めること
 
-- `CsvLoadResult` / `CsvHeaderSet` の最終データ構造
 - delimiter 自動判定の実装方針
-- 文字コード判定ロジック
+- 文字コードfallbackは利用側のformat照合で制御し、共通loader単体の自動判定とどう統合するか
 - 空行・不正列数行の扱い
 - 例外クラス設計

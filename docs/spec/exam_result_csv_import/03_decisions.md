@@ -44,7 +44,7 @@ Draft.
 - 現行の `health_exam_result.medical_folder_aliases` 登録内容は、原則そのまま新しいaliasテーブルへ移す。
 - aliasテーブルには新しい健診機関マスタのIDを保持する。
 - `01_scan_files.py` は、フォルダaliasから健診機関IDを確定し、後続処理へ引き継げる状態で `file_receipts` へ登録する。
-- `01_scan_files.py` は、CSVファイルについてはscan時に登録済みCSV formatとの照合も行い、`actual_header_sha256` / `matched_csv_format_version_id` / `status` へ反映する。
+- `01_scan_files.py` は、CSVファイルについてはscan時に登録済みCSV formatとの照合も行い、`actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` / `status` へ反映する。
 - `file_receipts` には、CSV取込の後続処理が参照できるように `exam_facility_id` を追加する。
 - 健診機関コード・名称のスナップショットは、既存 `file_receipts.facility_code` / `facility_name` を利用する。
 - フォルダaliasから健診機関を解決する処理は、個別スクリプトへSQLを直書きせず、`scripts/lib/db/lookup/exam_facility.py` の共通lookup libとして追加する案を基本とする。
@@ -134,7 +134,7 @@ Draft.
 - 既存XML/ZIP取込では、暗号ZIPのパスワード解決時に `file_receipts.facility_code` / `submitter_facility_code` / 受領フォルダ名を参照するため、この変更はZIPパスワード解決の影響範囲に含める。
 - 初期実装では `facility_folder_name` 一致を既存互換として維持し、`exam_facility_id` によるパスワード解決は追加しない。
 - `file_receipts` はXML側の実装に寄せ、ファイル単位の現在状態は既存 `status` / `summary_message` / `processable_count` / `content_checked_at` / `processed_at` で表現する。
-- `file_receipts` にはCSV実ファイルのヘッダー照合情報として `actual_header_sha256` と `matched_csv_format_version_id` を追加する案を基本とする。
+- `file_receipts` にはCSV実ファイルの照合情報として `actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` を保持する。
 - scan時点でCSV formatが1件に確定できた場合は `matched_csv_format_version_id` を入れて `READY` とし、0件または複数件の場合は `WAITING_CONFIRM` とする。
 - 初回scan時にmapping未登録で `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` を再実行してformat照合だけを再適用する。
 - CSV行単位の加入者突合は、XML import と同じく基本情報抽出、`generate_identity_bundle()`、`resolve_subscriber_identity()` の流れに揃える。
@@ -303,6 +303,12 @@ Draft.
 - `etl_errors` には初期実装で rule_id / condition_id / namecode 専用カラムを追加しない。既存 `field` / `field_value` / `message` に寄せ、必要になったら後続で補助カラム追加を検討する。
 - CSV取込の事前停止は最小限とし、目的は「まず取り込む」「エラー・不足・警告を明確にする」こととする。
 - 停止候補は、必要なmapping列を安全に解決できない場合、列番号指定ruleにより誤登録リスクが高い場合などに限定する。
+- `csv_format_versions.character_encoding` は想定文字コードとして保持し、`encoding_fallback_policy` で文字コードfallback可否を制御する。
+- 初期値は `ALLOW_COMMON_ENCODINGS` とし、登録文字コード、UTF-8 BOM、UTF-8、CP932の順で重複を除いて読込候補にする。`STRICT` の場合は登録文字コードだけを使う。
+- fallbackで別文字コードを試しても、登録済み `header_sha256` と一致した場合だけformat一致とする。文字化けした読込結果やヘッダー表記揺れを推測採用しない。
+- 実際に採用した文字コードは `file_receipts.actual_character_encoding` に保存する。
+- `quote_char` はCSV parserへ実際に渡す。引用符が存在しないCSVも同じ設定で読めるため、引用符の有無だけではformat不一致にしない。
+- delimiterは初期実装では登録値を固定使用し、自動fallbackの対象にしない。
 
 ### Source CSV Check
 

@@ -19,6 +19,7 @@ CREATE TABLE `phr_master`.`csv_format_versions` (
   `duplicate_row_policy` varchar(64) NOT NULL DEFAULT 'SKIP_CHECKED_OK',
   `missing_basic_info_policy` varchar(64) NOT NULL DEFAULT 'IMPORT_AND_CHECK_LATER',
   `character_encoding` varchar(32) NOT NULL DEFAULT 'CP932',
+  `encoding_fallback_policy` varchar(32) NOT NULL DEFAULT 'ALLOW_COMMON_ENCODINGS',
   `delimiter` varchar(8) NOT NULL DEFAULT ',',
   `quote_char` varchar(8) DEFAULT '"',
   `valid_from` date DEFAULT NULL,

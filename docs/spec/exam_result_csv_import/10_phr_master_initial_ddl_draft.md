@@ -299,6 +299,7 @@ CREATE TABLE `phr_master`.`csv_format_versions` (
   `duplicate_row_policy` varchar(64) NOT NULL DEFAULT 'SKIP_CHECKED_OK',
   `missing_basic_info_policy` varchar(64) NOT NULL DEFAULT 'IMPORT_AND_CHECK_LATER',
   `character_encoding` varchar(32) NOT NULL DEFAULT 'CP932',
+  `encoding_fallback_policy` varchar(32) NOT NULL DEFAULT 'ALLOW_COMMON_ENCODINGS',
   `delimiter` varchar(8) NOT NULL DEFAULT ',',
   `quote_char` varchar(8) DEFAULT '"',
   `valid_from` date DEFAULT NULL,
@@ -346,7 +347,7 @@ COLLATE=utf8mb4_ja_0900_as_cs;
 
 `header_sha256` は、CSVテンプレート登録時に確認したヘッダー構造の指紋である。
 実取込時には対象CSVから同じ手順でヘッダー指紋を算出し、`csv_format_versions.header_sha256` と照合する。
-scan時点でも同じ照合を行い、`file_receipts.actual_header_sha256` / `matched_csv_format_version_id` に保存する。
+scan時点でも同じ照合を行い、`file_receipts.actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` に保存する。
 同一施設・同一header shaに複数の有効formatが存在する場合、`is_default_for_facility = 1` が1件だけなら採用し、それ以外は確認待ちにする。
 不一致の場合は、未確認の新規列・削除列・列順変更などテンプレート変更の可能性があるため、初期実装では自動続行しない。
 続行する場合は、format側で確認後Goを許可し、かつ `file_receipts` 側に人が内容確認済みでGoした証跡がある場合に限る。
@@ -378,6 +379,9 @@ JSONは検索・制御の主軸ではなく、確認用snapshotとして使う�
 
 `header_sha256` の算出対象は、文字コード変換後、前後空白除去、改行差異吸収などの標準化後に、列順込みの `normalized_columns` 配列をJSON正規化したものとする案を基本とする。
 列順を含めることで、同一ヘッダー名でも列順変更を検知できる。
+
+`character_encoding` は想定文字コードを表す。`encoding_fallback_policy = ALLOW_COMMON_ENCODINGS` の場合は、登録値を第一候補とし、UTF-8 BOM、UTF-8、CP932を候補として試す。別文字コードで読めただけでは採用せず、登録済み `header_sha256` と一致した場合だけformat一致とする。`STRICT` の場合は登録値だけで読む。
+実際に採用した文字コードは `file_receipts.actual_character_encoding` に保存する。delimiterは登録値固定とする。`quote_char` はCSV parserへ渡すが、引用符なしCSVも通常どおり読み込めるため、引用符の有無自体は照合条件にしない。
 
 同一ヘッダー名が複数列に出るCSVでは、`occurrence` を `context + name` ごとの左からの出現順として採番する。
 たとえば同一context内に `値` が3回出る場合、左から `occurrence = 1`, `2`, `3` とする。
@@ -750,7 +754,8 @@ XML取込では、暗号ZIPのパスワード解決時に `file_receipts.facilit
 ALTER TABLE `health_exam_result`.`file_receipts`
   ADD COLUMN `exam_facility_id` bigint unsigned DEFAULT NULL AFTER `facility_name`,
   ADD COLUMN `actual_header_sha256` char(64) DEFAULT NULL AFTER `exam_facility_id`,
-  ADD COLUMN `matched_csv_format_version_id` bigint unsigned DEFAULT NULL AFTER `actual_header_sha256`,
+  ADD COLUMN `actual_character_encoding` varchar(32) DEFAULT NULL AFTER `actual_header_sha256`,
+  ADD COLUMN `matched_csv_format_version_id` bigint unsigned DEFAULT NULL AFTER `actual_character_encoding`,
   ADD COLUMN `import_resume_approved` tinyint(1) NOT NULL DEFAULT 0 AFTER `summary_message`,
   ADD COLUMN `import_resume_approved_at` datetime(3) DEFAULT NULL AFTER `import_resume_approved`,
   ADD COLUMN `import_resume_approved_by` varchar(190) DEFAULT NULL AFTER `import_resume_approved_at`,
@@ -797,7 +802,7 @@ CSV原本の健診機関由来判定は証跡として保持する。最低限�
 1. `01_scan_files.py` は受領フォルダ名から `phr_master.medical_folder_aliases` を引き、`exam_facility_id` を確定する。
 2. `01_scan_files.py` は `health_exam_result.file_receipts` に `exam_facility_id` を登録し、既存 `facility_code` / `facility_name` にlookupした健診機関コード・名称をスナップショットとして登録する。
 3. XML/ZIP取込では、暗号ZIPのパスワード解決時に既存通り `file_receipts.facility_code` / `submitter_facility_code` / 受領フォルダ名を候補にする。
-4. `01_scan_files.py` はCSVファイルについて、共通format照合処理で `actual_header_sha256` を算出し、`matched_csv_format_version_id` を可能なら設定する。
+4. `01_scan_files.py` はCSVファイルについて、共通format照合処理で `actual_header_sha256` を算出し、採用した `actual_character_encoding` と `matched_csv_format_version_id` を可能なら設定する。
 5. 初回scan時にmapping未登録または複数候補で止まったCSVは、mapping登録/default設定後に `01_01_match_csv_format.py` でformat照合だけを再適用する。
 6. `02_02_exam_result_csv_import` は `file_receipts` 起点で対象CSVを取得する。
 7. `02_02_exam_result_csv_import` は実行開始を `etl_runs` に記録する。

@@ -181,6 +181,7 @@ def update_receipt_match(
     config: MatchConfig,
     receipt_id: int,
     actual_header_sha256: str | None,
+    actual_character_encoding: str | None,
     matched_csv_format_version_id: int | None,
     status: str,
     summary_message: str,
@@ -189,24 +190,30 @@ def update_receipt_match(
         f"""
         UPDATE {qname(config.health_db)}.file_receipts
         SET actual_header_sha256 = %s,
+            actual_character_encoding = %s,
             matched_csv_format_version_id = %s,
             status = %s,
             summary_message = %s,
             content_checked_at = CURRENT_TIMESTAMP(3)
         WHERE id = %s
         """,
-        (actual_header_sha256, matched_csv_format_version_id, status, summary_message, receipt_id),
+        (actual_header_sha256, actual_character_encoding, matched_csv_format_version_id, status, summary_message, receipt_id),
     )
 
 
-def match_receipt(cur: Any, *, config: MatchConfig, receipt: dict[str, Any]) -> tuple[str, str | None, int | None, str]:
+def match_receipt(
+    cur: Any,
+    *,
+    config: MatchConfig,
+    receipt: dict[str, Any],
+) -> tuple[str, str | None, str | None, int | None, str]:
     exam_facility_id = receipt.get("exam_facility_id")
     if exam_facility_id is None:
-        return "ERROR", None, None, "CSV format match failed: exam_facility_id is not set."
+        return "ERROR", None, None, None, "CSV format match failed: exam_facility_id is not set."
 
     source_path = compact_text(receipt.get("source_path"))
     if source_path is None:
-        return "ERROR", None, None, "CSV format match failed: source_path is not set."
+        return "ERROR", None, None, None, "CSV format match failed: source_path is not set."
 
     result = match_csv_format_for_file(
         cur,
@@ -214,7 +221,13 @@ def match_receipt(cur: Any, *, config: MatchConfig, receipt: dict[str, Any]) -> 
         exam_facility_id=int(exam_facility_id),
         master_db=config.master_db,
     )
-    return result.result, result.actual_header_sha256, result.csv_format_version_id, result.message
+    return (
+        result.result,
+        result.actual_header_sha256,
+        result.actual_character_encoding,
+        result.csv_format_version_id,
+        result.message,
+    )
 
 
 def run_match(conn: Any, config: MatchConfig) -> MatchSummary:
@@ -233,7 +246,7 @@ def run_match(conn: Any, config: MatchConfig) -> MatchSummary:
             receipt_id = int(receipt["id"])
             src_file = compact_text(receipt.get("source_path"))
             try:
-                result, actual_header_sha256, csv_format_version_id, message = match_receipt(
+                result, actual_header_sha256, actual_character_encoding, csv_format_version_id, message = match_receipt(
                     cur,
                     config=config,
                     receipt=receipt,
@@ -246,6 +259,7 @@ def run_match(conn: Any, config: MatchConfig) -> MatchSummary:
                         config=config,
                         receipt_id=receipt_id,
                         actual_header_sha256=None,
+                        actual_character_encoding=None,
                         matched_csv_format_version_id=None,
                         status=FILE_STATUS_WAITING_CONFIRM,
                         summary_message=f"CSV format match failed: {type(exc).__name__}",
@@ -280,6 +294,7 @@ def run_match(conn: Any, config: MatchConfig) -> MatchSummary:
                     config=config,
                     receipt_id=receipt_id,
                     actual_header_sha256=actual_header_sha256,
+                    actual_character_encoding=actual_character_encoding,
                     matched_csv_format_version_id=csv_format_version_id,
                     status=status,
                     summary_message=message,

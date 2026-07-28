@@ -42,11 +42,13 @@ class CSVLoader:
         header_count: int = 1,
         delimiter: str = ",",
         encoding: Optional[str] = None,
+        quote_char: str = '"',
     ):
         self.path = path
         self.header_count = header_count
         self.delimiter = delimiter
         self.encoding = encoding
+        self.quote_char = quote_char or '"'
 
         self._headers: List[List[str]] = []
         self._rows: List[List[str]] = []
@@ -59,7 +61,7 @@ class CSVLoader:
         self.encoding = enc
 
         with codecs.open(self.path, "r", encoding=enc) as f:
-            reader = csv.reader(f, delimiter=self.delimiter)
+            reader = csv.reader(f, delimiter=self.delimiter, quotechar=self.quote_char)
 
             for i, row in enumerate(reader):
                 row = self._normalize_row(row)
@@ -135,12 +137,14 @@ def load_csv(
     header_count: int = 1,
     delimiter: str = ",",
     encoding: Optional[str] = None,
+    quote_char: str = '"',
 ) -> CSVLoader:
     loader = CSVLoader(
         path=path,
         header_count=header_count,
         delimiter=delimiter,
         encoding=encoding,
+        quote_char=quote_char,
     )
     loader.load()
     return loader
@@ -232,7 +236,13 @@ def load_csv_result(
 ) -> CsvLoadResult:
     """Load CSV into a structured result without changing the existing CSVLoader API."""
 
-    loader = CSVLoader(path=path, header_count=header_count, delimiter=delimiter, encoding=encoding)
+    loader = CSVLoader(
+        path=path,
+        header_count=header_count,
+        delimiter=delimiter,
+        encoding=encoding,
+        quote_char=quote_char,
+    )
     loader.load()
     header_rows = loader.get_headers()
     header_columns = _build_header_columns(header_rows, active_header_row_no)

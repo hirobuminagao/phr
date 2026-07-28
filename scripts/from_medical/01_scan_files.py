@@ -362,6 +362,7 @@ def insert_file_receipt(
     facility_code: str | None,
     facility_name: str | None,
     actual_header_sha256: str | None,
+    actual_character_encoding: str | None,
     matched_csv_format_version_id: int | None,
     status: str,
     summary_message: str | None,
@@ -382,6 +383,7 @@ def insert_file_receipt(
             facility_name,
             exam_facility_id,
             actual_header_sha256,
+            actual_character_encoding,
             matched_csv_format_version_id,
             processable_count,
             storage_folder_type,
@@ -393,7 +395,7 @@ def insert_file_receipt(
             received_at
         )
         VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s,
             CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
         )
         """,
@@ -411,6 +413,7 @@ def insert_file_receipt(
             facility_name,
             exam_facility_id,
             actual_header_sha256,
+            actual_character_encoding,
             matched_csv_format_version_id,
             STORAGE_FOLDER_TYPE,
             status,
@@ -548,6 +551,7 @@ def scan_alias_files(
         receipt_status = FILE_STATUS_DISCOVERED
         summary_message: str | None = None
         actual_header_sha256: str | None = None
+        actual_character_encoding: str | None = None
         matched_csv_format_version_id: int | None = None
 
         if file_type == "CSV":
@@ -558,6 +562,7 @@ def scan_alias_files(
                 master_db=master_db,
             )
             actual_header_sha256 = match_result.actual_header_sha256
+            actual_character_encoding = match_result.actual_character_encoding
             matched_csv_format_version_id = match_result.csv_format_version_id
             summary_message = match_result.message
             if match_result.result == "MATCHED":
@@ -603,6 +608,7 @@ def scan_alias_files(
                 facility_code=alias.get("exam_facility_code"),
                 facility_name=alias.get("exam_facility_name"),
                 actual_header_sha256=actual_header_sha256,
+                actual_character_encoding=actual_character_encoding,
                 matched_csv_format_version_id=matched_csv_format_version_id,
                 status=receipt_status,
                 summary_message=summary_message,

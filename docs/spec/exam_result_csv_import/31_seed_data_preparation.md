@@ -38,6 +38,7 @@ Draft.
 - `active_header_row_no = 1`
 - `data_start_row_no = 2`
 - `character_encoding = CP932`
+- `encoding_fallback_policy = ALLOW_COMMON_ENCODINGS`
 - `header_sha256 = 5d03088d9aec595715455bdc35b66ee8fa8c7d9d023d61e14d51de52ce98dfd0`
 
 初期seedに含める基本情報:
@@ -103,6 +104,7 @@ Draft.
 - `active_header_row_no = 2`
 - `data_start_row_no = 3`
 - `character_encoding = CP932`
+- `encoding_fallback_policy = ALLOW_COMMON_ENCODINGS`
 - `header_sha256 = 25e510f122f072d17b2b534cbe847d473fb90230ed2219d3bc3e0d2fbba55867`
 
 初期seedに含める基本情報:

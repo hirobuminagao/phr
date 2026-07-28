@@ -1208,3 +1208,21 @@ CSV取込本体で初めてmapping未登録が判明すると、初回受領時�
 - `csv_format_versions` に `is_default_for_facility` を追加し、同一施設・同一header shaで複数候補がある場合にdefaultを1件だけ選べるようにする。
 - defaultも一意でない場合は、自動選択せず `WAITING_CONFIRM` とする。
 - `02_02_exam_result_csv_import` は `file_receipts.matched_csv_format_version_id` があればそれを優先し、実CSVのheader shaが登録formatと一致することを再確認してから取込む。
+
+---
+
+## DH-20260728-03 / 2026-07-28 JST
+
+### テーマ
+
+CSV文字コードfallbackとquote設定の実装方針
+
+### 決定事項
+
+- `csv_format_versions.character_encoding` は想定文字コードとして維持する。
+- `encoding_fallback_policy` を追加し、`STRICT` と `ALLOW_COMMON_ENCODINGS` を扱う。
+- 初期値は `ALLOW_COMMON_ENCODINGS` とし、登録文字コードを第一候補に、UTF-8 BOM、UTF-8、CP932を重複除外して試す。
+- 別文字コードでdecodeできただけでは採用せず、登録済み `header_sha256` と一致した場合だけformat一致とする。
+- 採用文字コードは `file_receipts.actual_character_encoding` に保存し、scan、再照合、CSV取込で同じ共通処理を使う。
+- `quote_char` は共通CSV loaderから `csv.reader` へ渡す。引用符がないCSVも同じ設定で読めるため、引用符有無だけで停止しない。
+- delimiterは初期実装では登録値固定とし、自動fallbackしない。

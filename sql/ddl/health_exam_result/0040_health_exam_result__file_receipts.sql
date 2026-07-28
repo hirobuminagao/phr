@@ -18,6 +18,7 @@ CREATE TABLE `health_exam_result`.`file_receipts` (
   `facility_name` varchar(255) DEFAULT NULL,
   `exam_facility_id` bigint unsigned DEFAULT NULL,
   `actual_header_sha256` char(64) DEFAULT NULL,
+  `actual_character_encoding` varchar(32) DEFAULT NULL,
   `matched_csv_format_version_id` bigint unsigned DEFAULT NULL,
   `storage_folder_type` varchar(64) DEFAULT NULL,
   `status` varchar(32) NOT NULL DEFAULT 'DISCOVERED',

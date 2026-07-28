@@ -19,7 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.lib.csv.csv_loader import CsvLoadResult, row_sha256
-from scripts.lib.csv.exam_result_format_matcher import load_csv_for_format as shared_load_csv_for_format
+from scripts.lib.csv.exam_result_format_matcher import load_csv_matching_registered_header
 from scripts.lib.csv.exam_result_mapping_extractor import ExtractedCsvRuleValue, extract_row_values
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingRule, get_csv_format_version_by_id, load_csv_mapping_rules
@@ -354,10 +354,6 @@ def fetch_active_format_candidates(
     return [dict(row) for row in cur.fetchall()]
 
 
-def load_csv_for_format(path: str, fmt: Mapping[str, Any]) -> CsvLoadResult:
-    return shared_load_csv_for_format(path, dict(fmt))
-
-
 def resolve_format(
     cur: Any,
     *,
@@ -377,9 +373,8 @@ def resolve_format(
             master_db=config.master_db,
         )
         if fmt is not None and int(fmt.get("exam_facility_id") or 0) == int(exam_facility_id):
-            csv_result = load_csv_for_format(source_path, fmt)
-            actual_header_sha256 = csv_result.header_set.header_sha256
-            if actual_header_sha256 == fmt.get("header_sha256"):
+            csv_result, actual_header_sha256 = load_csv_matching_registered_header(source_path, fmt)
+            if csv_result is not None:
                 return fmt, csv_result, actual_header_sha256
             return None, None, actual_header_sha256
 
@@ -389,9 +384,8 @@ def resolve_format(
         config=config,
         exam_facility_id=int(exam_facility_id),
     ):
-        csv_result = load_csv_for_format(source_path, candidate)
-        actual_header_sha256 = csv_result.header_set.header_sha256
-        if actual_header_sha256 == candidate.get("header_sha256"):
+        csv_result, actual_header_sha256 = load_csv_matching_registered_header(source_path, candidate)
+        if csv_result is not None:
             return candidate, csv_result, actual_header_sha256
     return None, None, actual_header_sha256
 
@@ -402,6 +396,7 @@ def update_file_receipt_header(
     config: ImportConfig,
     file_receipt_id: int,
     actual_header_sha256: str | None,
+    actual_character_encoding: str | None,
     csv_format_version_id: int | None,
     status: str | None = None,
     summary_message: str | None = None,
@@ -410,13 +405,21 @@ def update_file_receipt_header(
         f"""
         UPDATE {qname(config.health_db)}.file_receipts
         SET actual_header_sha256 = %s,
+            actual_character_encoding = %s,
             matched_csv_format_version_id = %s,
             status = COALESCE(%s, status),
             summary_message = COALESCE(%s, summary_message),
             content_checked_at = CURRENT_TIMESTAMP(3)
         WHERE id = %s
         """,
-        (actual_header_sha256, csv_format_version_id, status, summary_message, file_receipt_id),
+        (
+            actual_header_sha256,
+            actual_character_encoding,
+            csv_format_version_id,
+            status,
+            summary_message,
+            file_receipt_id,
+        ),
     )
 
 
@@ -806,6 +809,7 @@ def process_file_receipt(
             config=config,
             file_receipt_id=file_receipt_id,
             actual_header_sha256=actual_header_sha256,
+            actual_character_encoding=None,
             csv_format_version_id=None,
             status=FILE_STATUS_WAITING_CONFIRM,
             summary_message="CSV header did not match registered format.",
@@ -829,6 +833,7 @@ def process_file_receipt(
         config=config,
         file_receipt_id=file_receipt_id,
         actual_header_sha256=csv_result.header_set.header_sha256,
+        actual_character_encoding=csv_result.encoding,
         csv_format_version_id=int(fmt["csv_format_version_id"]),
         status=FILE_STATUS_READY,
         summary_message=f"CSV format matched: {fmt.get('mapping_version')}",

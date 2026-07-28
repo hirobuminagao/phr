@@ -17,6 +17,7 @@ class CsvFormatMatchResult:
     csv_format_version_id: int | None
     message: str
     mapping_version: str | None = None
+    actual_character_encoding: str | None = None
 
 
 def compact_text(value: Any) -> str | None:
@@ -30,19 +31,57 @@ def qname(name: str) -> str:
     return f"`{name.replace('`', '``')}`"
 
 
-def load_csv_for_format(path: str, fmt: dict[str, Any]) -> CsvLoadResult:
+def load_csv_for_format(
+    path: str,
+    fmt: dict[str, Any],
+    *,
+    encoding: str | None = None,
+) -> CsvLoadResult:
     header_count = max(int(fmt.get("data_start_row_no") or 2) - 1, 0)
     return load_csv_result(
         path,
         header_count=header_count,
         delimiter=str(fmt.get("delimiter") or ","),
-        encoding=compact_text(fmt.get("character_encoding")),
+        encoding=encoding or compact_text(fmt.get("character_encoding")),
         quote_char=str(fmt.get("quote_char") or '"'),
         active_header_row_no=(
             int(fmt["active_header_row_no"]) if fmt.get("active_header_row_no") is not None else None
         ),
         data_start_row_no=int(fmt.get("data_start_row_no") or header_count + 1),
     )
+
+
+def encoding_candidates(fmt: dict[str, Any]) -> list[str]:
+    registered = compact_text(fmt.get("character_encoding")) or "CP932"
+    policy = compact_text(fmt.get("encoding_fallback_policy")) or "STRICT"
+    candidates = [registered]
+    if policy == "ALLOW_COMMON_ENCODINGS":
+        candidates.extend(["utf-8-sig", "utf-8", "cp932"])
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = candidate.lower().replace("_", "-")
+        if key not in seen:
+            seen.add(key)
+            result.append(candidate)
+    return result
+
+
+def load_csv_matching_registered_header(
+    path: str,
+    fmt: dict[str, Any],
+) -> tuple[CsvLoadResult | None, str | None]:
+    last_header_sha256: str | None = None
+    for encoding in encoding_candidates(fmt):
+        try:
+            csv_result = load_csv_for_format(path, fmt, encoding=encoding)
+        except UnicodeError:
+            continue
+        last_header_sha256 = csv_result.header_set.header_sha256
+        if last_header_sha256 == fmt.get("header_sha256"):
+            return csv_result, last_header_sha256
+    return None, last_header_sha256
 
 
 def fetch_active_format_candidates(
@@ -90,8 +129,11 @@ def match_csv_format_for_file(
 
     actual_header_sha256: str | None = None
     for candidate in candidates:
-        csv_result = load_csv_for_format(source_path, candidate)
-        actual_header_sha256 = csv_result.header_set.header_sha256
+        csv_result, candidate_header_sha256 = load_csv_matching_registered_header(source_path, candidate)
+        if candidate_header_sha256 is not None:
+            actual_header_sha256 = candidate_header_sha256
+        if csv_result is None:
+            continue
         matches = find_csv_format_versions_by_header(
             cur,
             exam_facility_id=exam_facility_id,
@@ -108,6 +150,7 @@ def match_csv_format_for_file(
                 csv_format_version_id=int(fmt["csv_format_version_id"]),
                 message=f"CSV format matched: {fmt.get('mapping_version')}",
                 mapping_version=compact_text(fmt.get("mapping_version")),
+                actual_character_encoding=csv_result.encoding,
             )
         default_matches = [fmt for fmt in matches if int(fmt.get("is_default_for_facility") or 0) == 1]
         if len(default_matches) == 1:
@@ -118,6 +161,7 @@ def match_csv_format_for_file(
                 csv_format_version_id=int(fmt["csv_format_version_id"]),
                 message=f"CSV format matched by facility default: {fmt.get('mapping_version')}",
                 mapping_version=compact_text(fmt.get("mapping_version")),
+                actual_character_encoding=csv_result.encoding,
             )
         versions = ", ".join(str(fmt.get("mapping_version")) for fmt in matches)
         return CsvFormatMatchResult(
@@ -133,4 +177,3 @@ def match_csv_format_for_file(
         csv_format_version_id=None,
         message="CSV format not found: header did not match registered format.",
     )
-
