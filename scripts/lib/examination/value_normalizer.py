@@ -82,6 +82,13 @@ def _compact_text(value: Any) -> str | None:
     return normalized
 
 
+def _raw_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _item_data_type(item: Mapping[str, Any]) -> str | None:
     value = item.get("data_type") or item.get("xml_value_type")
     return _compact_text(value)
@@ -101,6 +108,7 @@ def _ok(
     code_system: str | None = None,
     code_value: str | None = None,
     code_display: str | None = None,
+    normalize_reason: str | None = None,
 ) -> NormalizedExamValue:
     return NormalizedExamValue(
         raw_value=raw_value,
@@ -113,7 +121,7 @@ def _ok(
         code_value=code_value,
         code_display=code_display,
         normalize_status="OK",
-        normalize_reason=None,
+        normalize_reason=normalize_reason,
         validation_status="VALID",
         validation_reason=None,
     )
@@ -180,10 +188,11 @@ def normalize_exam_item_value(
     """Normalize one exam item value for CSV/XML style result insertion."""
 
     item = exam_item or get_exam_item(cur, namecode, dev_db=dev_db)
+    raw_text = _raw_text(raw_value)
     value = _compact_text(raw_value)
     unit = _compact_text(raw_unit)
 
-    if value is None:
+    if raw_text is None or value is None:
         return _skipped(
             raw_value=None,
             raw_value_type=None,
@@ -193,7 +202,7 @@ def normalize_exam_item_value(
 
     if item is None:
         return _error(
-            raw_value=value,
+            raw_value=raw_text,
             raw_value_type=None,
             raw_unit=unit,
             reason="EXAM_ITEM_MASTER_NOT_FOUND",
@@ -204,7 +213,7 @@ def normalize_exam_item_value(
 
     if value in NO_RESULT_WORDS:
         return _skipped(
-            raw_value=value,
+            raw_value=raw_text,
             raw_value_type=data_type,
             raw_unit=unit,
             reason="RAW_VALUE_NO_RESULT",
@@ -212,7 +221,7 @@ def normalize_exam_item_value(
 
     if value in UNMEASURABLE_WORDS:
         return _skipped(
-            raw_value=value,
+            raw_value=raw_text,
             raw_value_type=data_type,
             raw_unit=unit,
             reason="RAW_VALUE_UNMEASURABLE",
@@ -220,7 +229,7 @@ def normalize_exam_item_value(
 
     if unit and expected_unit and unit != expected_unit:
         return _error(
-            raw_value=value,
+            raw_value=raw_text,
             raw_value_type=data_type,
             raw_unit=unit,
             reason="UNIT_MISMATCH",
@@ -230,7 +239,7 @@ def normalize_exam_item_value(
         result_code_oid = _compact_text(item.get("result_code_oid"))
         if result_code_oid is None:
             return _error(
-                raw_value=value,
+                raw_value=raw_text,
                 raw_value_type=data_type,
                 raw_unit=unit,
                 reason="RESULT_CODE_OID_MISSING",
@@ -238,23 +247,33 @@ def normalize_exam_item_value(
         variant = get_norm_variant(
             cur,
             result_code_oid=result_code_oid,
-            raw_value_utf8=value,
+            raw_value_utf8=raw_text,
             master_db=master_db,
         )
+        normalize_reason = "RAW_VALUE_EXACT_MATCH"
+        if variant is None and value != raw_text:
+            variant = get_norm_variant(
+                cur,
+                result_code_oid=result_code_oid,
+                raw_value_utf8=value,
+                master_db=master_db,
+            )
+            normalize_reason = "RAW_VALUE_NORMALIZED_MATCH"
         if variant is None:
             return _error(
-                raw_value=value,
+                raw_value=raw_text,
                 raw_value_type=data_type,
                 raw_unit=unit,
                 reason="NORMALIZE_VARIANT_NOT_FOUND",
             )
         return _ok(
-            raw_value=value,
+            raw_value=raw_text,
             raw_value_type=data_type,
             raw_unit=unit,
             code_system=_compact_text(variant.get("code_system")),
             code_value=_compact_text(variant.get("normalized_code")),
             code_display=_compact_text(variant.get("display_name")),
+            normalize_reason=normalize_reason,
         )
 
     if data_type in NUMERIC_DATA_TYPES:
@@ -262,13 +281,13 @@ def normalize_exam_item_value(
             numeric_value = Decimal(value.replace(",", ""))
         except InvalidOperation:
             return _error(
-                raw_value=value,
+                raw_value=raw_text,
                 raw_value_type=data_type,
                 raw_unit=unit,
                 reason="INVALID_VALUE_TYPE",
             )
         return _ok(
-            raw_value=value,
+            raw_value=raw_text,
             raw_value_type=data_type,
             raw_unit=unit,
             normalized_value=format(numeric_value, "f"),
@@ -277,7 +296,7 @@ def normalize_exam_item_value(
 
     if data_type in TEXT_DATA_TYPES or data_type is None:
         return _ok(
-            raw_value=value,
+            raw_value=raw_text,
             raw_value_type=data_type,
             raw_unit=unit,
             normalized_value=value,

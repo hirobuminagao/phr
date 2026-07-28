@@ -15,6 +15,7 @@ CREATE TABLE `phr_master`.`csv_format_versions` (
   `header_hash_status` varchar(32) NOT NULL DEFAULT 'UNVERIFIED',
   `header_mismatch_policy` varchar(64) NOT NULL DEFAULT 'ALLOW_AFTER_CONFIRM',
   `allow_column_no_rules` tinyint(1) NOT NULL DEFAULT 0,
+  `is_default_for_facility` tinyint(1) NOT NULL DEFAULT 0,
   `duplicate_row_policy` varchar(64) NOT NULL DEFAULT 'SKIP_CHECKED_OK',
   `missing_basic_info_policy` varchar(64) NOT NULL DEFAULT 'IMPORT_AND_CHECK_LATER',
   `character_encoding` varchar(32) NOT NULL DEFAULT 'CP932',
@@ -31,6 +32,7 @@ CREATE TABLE `phr_master`.`csv_format_versions` (
   UNIQUE KEY `uq_csv_format_versions_facility_version` (`exam_facility_id`, `mapping_version`),
   KEY `idx_csv_format_versions_header_sha256` (`header_sha256`),
   KEY `idx_csv_format_versions_header_mismatch_policy` (`header_mismatch_policy`),
+  KEY `idx_csv_format_versions_facility_default` (`exam_facility_id`, `is_default_for_facility`, `is_active`),
   KEY `idx_csv_format_versions_facility_active` (`exam_facility_id`, `is_active`),
   KEY `idx_csv_format_versions_validity` (`valid_from`, `valid_to`)
 )

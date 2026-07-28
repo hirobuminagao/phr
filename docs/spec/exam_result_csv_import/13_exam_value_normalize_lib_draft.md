@@ -128,7 +128,7 @@ SELECT
   priority
 FROM `{master_db}`.`norm_variants`
 WHERE result_code_oid = %s
-  AND raw_value_utf8 = %s
+  AND BINARY raw_value_utf8 = BINARY %s
   AND is_active = 1
 ORDER BY priority, variant_id
 LIMIT 1;
@@ -136,6 +136,13 @@ LIMIT 1;
 
 初期案では `raw_token_norm` は利用しない。
 既存方針に合わせ、`result_code_oid + raw_value_utf8` の完全一致を基本とする。
+この完全一致はbinary比較とし、`-` / `－` / `ー` などの見た目が近い別文字をSQL照合順序で同一扱いしない。
+CD/CO系で辞書一致によりOKになった場合は、`normalize_reason` に以下を保持する。
+
+- `RAW_VALUE_EXACT_MATCH`: 原文raw値がそのまま `norm_variants.raw_value_utf8` に一致した。
+- `RAW_VALUE_NORMALIZED_MATCH`: 原文raw値では一致せず、共通前処理後トークンが `norm_variants.raw_value_utf8` に一致した。
+
+この区別により、処理結果としてはOKでも、原本の値が辞書値そのものだったのか、normalize前処理により採用値へ到達したのかを後から確認できる。
 CSV健診結果取込の初期実装では `master_db = "phr_master"` として呼び出す。
 `phr_master` へ移設した後は同じlookup APIの `master_db` を差し替えるだけにする。
 
@@ -439,7 +446,8 @@ normalize lib単体に空値が渡された場合は以下を返す。
 
 - 非測定値語に一致した場合は、`norm_variants` を引かず分類済みreasonを返す
 - `item_master.result_code_oid` が存在する場合のみ `norm_variants` を利用する案を基本とする
-- `norm_variants` は `result_code_oid + raw_value_utf8` の完全一致でraw値を正規コードへ変換する
+- `norm_variants` は `result_code_oid + raw_value_utf8` のbinary完全一致でraw値を正規コードへ変換する
+- 辞書一致OKの場合は `RAW_VALUE_EXACT_MATCH` / `RAW_VALUE_NORMALIZED_MATCH` を `normalize_reason` に残す
 - 辞書未一致の場合は `NORMALIZE_VARIANT_NOT_FOUND`
 - `CD` / `CO` 以外では初期案として `norm_variants` を利用しない
 - `CO` で `result_code_oid` がない場合は、初期案では `ERROR` とし、仕様拡張対象にする

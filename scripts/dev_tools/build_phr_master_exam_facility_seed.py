@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,7 @@ from pathlib import Path
 DEFAULT_PREF_CSV = Path("docs/spec/exam_result_csv_import/downloads/Pref_00.csv")
 DEFAULT_ALIAS_SEED = Path("sql/seed/health_exam_result/0010_health_exam_result__medical_folder_aliases_event2.sql")
 DEFAULT_OUTPUT = Path("sql/seed/phr_master/0000_generated_exam_facilities_and_aliases_event2.sql")
+DEFAULT_PREF_SOURCE_NAME = "社会保険診療報酬支払基金 全国特定健診・特定保健指導機関CSV"
 
 
 ADOPTED_ALIAS_CODES = {
@@ -153,7 +155,24 @@ def write_insert_header(fp, table: str, columns: list[str]) -> None:
     fp.write("\n) VALUES\n")
 
 
-def write_exam_facilities(fp, facilities: dict[str, PrefFacility], display_names: dict[str, str], chunk_size: int) -> None:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_exam_facilities(
+    fp,
+    facilities: dict[str, PrefFacility],
+    display_names: dict[str, str],
+    *,
+    source_name: str,
+    source_file_name: str,
+    source_file_sha256: str,
+    chunk_size: int,
+) -> None:
     columns = [
         "exam_facility_code",
         "exam_facility_name",
@@ -165,6 +184,10 @@ def write_exam_facilities(fp, facilities: dict[str, PrefFacility], display_names
         "phone_number",
         "website_url",
         "management_entity",
+        "data_source_name",
+        "data_source_file_name",
+        "data_source_file_sha256",
+        "data_source_note",
         "is_active",
         "created_at",
         "updated_at",
@@ -189,6 +212,10 @@ def write_exam_facilities(fp, facilities: dict[str, PrefFacility], display_names
                         sql_string(row.phone_number),
                         sql_string(row.website_url),
                         sql_string(row.management_entity),
+                        sql_string(source_name),
+                        sql_string(source_file_name),
+                        sql_string(source_file_sha256),
+                        sql_string("公開CSV由来。社内作業データ、受領CSV、機微情報を含まない。"),
                         "1",
                         "CURRENT_TIMESTAMP(3)",
                         "CURRENT_TIMESTAMP(3)",
@@ -206,6 +233,10 @@ def write_exam_facilities(fp, facilities: dict[str, PrefFacility], display_names
         fp.write("  `phone_number` = VALUES(`phone_number`),\n")
         fp.write("  `website_url` = VALUES(`website_url`),\n")
         fp.write("  `management_entity` = VALUES(`management_entity`),\n")
+        fp.write("  `data_source_name` = VALUES(`data_source_name`),\n")
+        fp.write("  `data_source_file_name` = VALUES(`data_source_file_name`),\n")
+        fp.write("  `data_source_file_sha256` = VALUES(`data_source_file_sha256`),\n")
+        fp.write("  `data_source_note` = VALUES(`data_source_note`),\n")
         fp.write("  `is_active` = VALUES(`is_active`),\n")
         fp.write("  `updated_at` = CURRENT_TIMESTAMP(3);\n\n")
 
@@ -281,19 +312,30 @@ def main() -> int:
     parser.add_argument("--alias-seed", type=Path, default=DEFAULT_ALIAS_SEED)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--chunk-size", type=int, default=1000)
+    parser.add_argument("--pref-source-name", default=DEFAULT_PREF_SOURCE_NAME)
     args = parser.parse_args()
 
     facilities = read_pref_facilities(args.pref_csv)
     aliases = read_aliases(args.alias_seed)
     display_names = build_display_names(aliases)
+    pref_sha256 = file_sha256(args.pref_csv)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8", newline="\n") as fp:
         fp.write("-- Generated seed for phr_master exam facilities and folder aliases.\n")
         fp.write("-- Source: 支払基金 Pref_00.csv + health_exam_result medical_folder_aliases event2 seed.\n")
+        fp.write(f"-- Pref CSV sha256: {pref_sha256}\n")
         fp.write("-- Review before applying.\n\n")
         fp.write("START TRANSACTION;\n\n")
-        write_exam_facilities(fp, facilities, display_names, args.chunk_size)
+        write_exam_facilities(
+            fp,
+            facilities,
+            display_names,
+            source_name=args.pref_source_name,
+            source_file_name=args.pref_csv.name,
+            source_file_sha256=pref_sha256,
+            chunk_size=args.chunk_size,
+        )
         write_aliases(fp, aliases)
         fp.write("COMMIT;\n")
 

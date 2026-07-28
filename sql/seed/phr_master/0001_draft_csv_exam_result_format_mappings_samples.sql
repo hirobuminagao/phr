@@ -106,7 +106,6 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ('hirooka.basic.exam_date', 'HIROOKA', 'LEDGER_FIELD', 'exam_date', NULL, NULL, '受診日付', 1, 'VALUE', NULL, NULL, 1, 10, 'basic: exam date'),
 ('hirooka.basic.facility_code', 'HIROOKA', 'LEDGER_FIELD', 'facility_code', NULL, NULL, '健診機関番号', 1, 'VALUE', NULL, NULL, 0, 20, 'basic: source facility code'),
 ('hirooka.basic.facility_name', 'HIROOKA', 'LEDGER_FIELD', 'facility_name', NULL, NULL, '健診機関名称', 1, 'VALUE', NULL, NULL, 0, 30, 'basic: source facility name'),
-('hirooka.basic.program_code', 'HIROOKA', 'LEDGER_FIELD', 'program_code', NULL, NULL, 'コース名称', 1, 'VALUE', NULL, NULL, 0, 40, 'basic: course/program label'),
 ('hirooka.basic.name_full_raw', 'HIROOKA', 'LEDGER_FIELD', 'name_full_raw', NULL, NULL, '氏名', 1, 'VALUE', NULL, NULL, 0, 50, 'basic: raw full name'),
 ('hirooka.basic.name_kana_raw', 'HIROOKA', 'LEDGER_FIELD', 'name_kana_raw', NULL, NULL, 'カナ氏名', 1, 'VALUE', NULL, NULL, 0, 60, 'basic: raw kana name; sample is blank'),
 ('hirooka.basic.gender_raw', 'HIROOKA', 'LEDGER_FIELD', 'gender_raw', NULL, NULL, '性別', 1, 'VALUE', NULL, NULL, 0, 70, 'basic: raw gender'),

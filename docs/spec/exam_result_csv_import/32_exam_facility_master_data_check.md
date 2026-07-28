@@ -126,12 +126,14 @@ alias先頭10桁と支払基金CSVの `機関コード` は一致する。
 1. ヒロオカ、ハートクロスは支払基金CSVで確定できる。
 2. 既存aliasの大半は、先頭10桁コードで支払基金CSVと突合できる。
 3. 受領フォルダ先頭10桁は医療機関番号候補として扱い、名称の自動名寄せではなくコードを起点に `exam_facility_id` を決める。
-4. `exam_facilities` 初期seedは、支払基金CSV全件ではなく、まず既存aliasに紐づく179件と、採用コードを確定した追加7件を対象に作るのが実装検証向きである。
+4. `exam_facilities` 初期seedは、支払基金CSV全件を物理保存する。
 5. 支払基金CSVに一致しない8件のうち、7件は過去CSV/XML実績または確認済みコードで支払基金CSVへ紐付ける。
 6. 浦和医師会 健診センターは保留し、データ受領時にCSV/XML内の健診機関番号で紐付ける。
 7. 旧仮フォルダ `202604開院_福岡労働衛生研究所　健診スクエア博多` は `exam_facilities` 対象外とする。
 8. 名前差分は多いため、名称の自動名寄せで `exam_facility_id` を決めない。
 9. `medical_folder_aliases.exam_facility_id` は、alias先頭10桁または確認済み採用コードと `exam_facilities.medical_institution_code` の対応で初期付与する。
+10. `exam_facilities` 初期seedの全行に、支払基金公開CSV由来であることを示す `data_source_*` を入れる。
+11. `data_source_note` で、社内作業データ、受領CSV、機微情報を含まないことを明示する。
 
 ## Future Medical Institution Master
 
@@ -147,9 +149,10 @@ alias先頭10桁と支払基金CSVの `機関コード` は一致する。
 
 次は、`exam_facilities` 初期seed作成方針を以下に固定する。
 
-- 支払基金CSVから、既存aliasとコード一致する施設を抽出して `exam_facilities` seedを作る。
+- 支払基金CSV全件から `exam_facilities` seedを作る。
 - `exam_facility_code = medical_institution_code` とする。
 - `exam_facility_display_name` はalias名を使うか、支払基金CSVの `機関名` を使うかを決める。
 - `exam_facility_name` は支払基金CSVの正式名、`exam_facility_display_name` はalias側の短い名前とする。
 - `medical_folder_aliases` 移設seedでは、コード一致または確認済み採用コードで `exam_facility_id` を付与する。
+- `exam_facilities` seedには、支払基金公開CSV由来であることを示すsource情報を全行に入れる。
 - 浦和医師会 健診センターは `exam_facility_id = NULL` の確認対象として扱う。

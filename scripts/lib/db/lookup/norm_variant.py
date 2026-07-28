@@ -43,7 +43,7 @@ def get_norm_variant(
             priority
         FROM `{master_db}`.`norm_variants`
         WHERE result_code_oid = %s
-          AND raw_value_utf8 = %s
+          AND BINARY raw_value_utf8 = BINARY %s
           AND is_active = 1
         ORDER BY priority, variant_id
         LIMIT 1
@@ -78,7 +78,7 @@ def get_norm_variants(
     if not normalized_keys:
         return {}
 
-    conditions = " OR ".join(["(result_code_oid = %s AND raw_value_utf8 = %s)"] * len(normalized_keys))
+    conditions = " OR ".join(["(result_code_oid = %s AND BINARY raw_value_utf8 = BINARY %s)"] * len(normalized_keys))
     params: list[str] = []
     for oid, value in normalized_keys:
         params.extend([oid, value])

@@ -1155,3 +1155,56 @@ CSVファイル単位の現在状態は既存 `status` / `summary_message` と�
 
 これは健診結果そのものの品質問題ではなく、健診機関システムから出力されるCSV仕様、namecode付与、列内容の整合性に関する確認事項である。
 システム側が過剰に推測して救済すると、別項目への誤登録につながるため、初期実装では明示的にエラー・確認事項として扱う。
+
+---
+
+## DH-20260728-01 / 2026-07-28 JST
+
+### テーマ
+
+`exam_facilities` のデータソース明示
+
+### 背景
+
+`exam_facilities` 初期データは、社内作業データや受領CSVから独自作成したものではなく、社会保険診療報酬支払基金の公開CSV `Pref_00.csv` を元に作成する。
+この前提がDB上で見えないと、後続レビューや運用時に「会社で作った独自マスタなのか」「機微情報を含む作業データなのか」が判別しづらくなる。
+
+### 決定事項
+
+- `exam_facilities` に `data_source_name`, `data_source_file_name`, `data_source_file_sha256`, `data_source_note` を追加する。
+- 支払基金CSV由来の初期データには、全行に同じsource情報を入れる。
+- `data_source_name` は `社会保険診療報酬支払基金 全国特定健診・特定保健指導機関CSV` とする。
+- `data_source_file_name` は `Pref_00.csv` とする。
+- `data_source_file_sha256` は project 配下に保存した `docs/spec/exam_result_csv_import/downloads/Pref_00.csv` のsha256を入れる。
+- 現時点のsha256は `6fd3348a13da4a0f6143ba6ace7a9646e1684d6af070b6f29125e98ec0b8915e`。
+- `data_source_note` には `公開CSV由来。社内作業データ、受領CSV、機微情報を含まない。` を入れる。
+
+### 補足
+
+DH-20260723-05 では「データソースが支払基金CSVであることを表す専用カラムは、初期DDL案には含めない」としていたが、後続協議でsourceをDB上でも明示する方針へ変更した。
+
+---
+
+## DH-20260728-02 / 2026-07-28 JST
+
+### テーマ
+
+CSV format照合をscan直後の共通処理にする
+
+### 背景
+
+CSV取込本体で初めてmapping未登録が判明すると、初回受領時の状況把握が遅れる。
+一方で、初回scan時にmappingが未登録だったCSVは、mapping登録後にformat照合だけを再適用できる必要がある。
+また、同じ健診機関に複数のmapping versionがある場合、どれを使うかを人がdefault設定できる余地が必要である。
+
+### 決定事項
+
+- CSV format照合の共通処理は `scripts/lib/csv/exam_result_format_matcher.py` に置く。
+- `01_scan_files.py` はCSVを `file_receipts` に登録する際、この共通処理で `actual_header_sha256` と `matched_csv_format_version_id` を設定する。
+- formatが1件に確定したCSVは `READY` とする。
+- format未登録、header不一致、複数候補は `WAITING_CONFIRM` とする。
+- mapping登録後の再照合入口として `01_01_match_csv_format.py` を追加する。
+- `01_01_match_csv_format.py` はフォルダscanをやり直さず、既存 `file_receipts` のCSVに対してformat照合だけを再適用する。
+- `csv_format_versions` に `is_default_for_facility` を追加し、同一施設・同一header shaで複数候補がある場合にdefaultを1件だけ選べるようにする。
+- defaultも一意でない場合は、自動選択せず `WAITING_CONFIRM` とする。
+- `02_02_exam_result_csv_import` は `file_receipts.matched_csv_format_version_id` があればそれを優先し、実CSVのheader shaが登録formatと一致することを再確認してから取込む。

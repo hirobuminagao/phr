@@ -1,8 +1,8 @@
 CREATE TABLE `phr_master`.`norm_variants` (
   `variant_id` bigint NOT NULL AUTO_INCREMENT COMMENT '揺れ辞書ID',
   `result_code_oid` varchar(128) NOT NULL COMMENT '結果コードOID（CD/COの辞書キー）',
-  `raw_token_norm` varchar(190) NOT NULL COMMENT '入力値を前処理した照合トークン',
-  `raw_value_utf8` varchar(190) NOT NULL DEFAULT '' COMMENT '入力値（揺れ受け止め用：照合キー本命）',
+  `raw_token_norm` varchar(190) COLLATE utf8mb4_bin NOT NULL COMMENT '入力値を前処理した照合トークン',
+  `raw_value_utf8` varchar(190) COLLATE utf8mb4_bin NOT NULL DEFAULT '' COMMENT '入力値（揺れ受け止め用：照合キー本命）',
   `normalized_code` varchar(64) NOT NULL COMMENT '正規化後コード',
   `code_system` varchar(190) DEFAULT NULL COMMENT 'codeSystem',
   `display_name` varchar(255) DEFAULT NULL COMMENT 'displayName',

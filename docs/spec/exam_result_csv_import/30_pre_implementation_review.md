@@ -94,6 +94,10 @@ Draft for implementation review.
 - `phone_number`
 - `website_url`
 - `management_entity`
+- `data_source_name`
+- `data_source_file_name`
+- `data_source_file_sha256`
+- `data_source_note`
 - `note`
 - `is_active`
 
@@ -119,6 +123,7 @@ Draft for implementation review.
 
 - `exam_facility_name` は支払基金CSVの正式名とする。
 - `exam_facility_display_name` はalias側の短い名前とする。
+- 支払基金CSVから初期投入した行には、公開CSV由来であることを示すsource情報を保持し、社内作業データや機微情報ではないことをDB上で説明できるようにする。
 - 浦和医師会 健診センターは `exam_facility_id = NULL` の確認対象として扱う。
 
 ### phr_master.medical_folder_aliases
@@ -132,6 +137,7 @@ Draft for implementation review.
 
 CSV構造の親設定。
 健診機関単位ではなく、健診機関内のmapping version単位でCSV構造を持つ。
+同一施設・同一header shaに複数の有効formatが存在する場合に備え、施設内default指定を持つ。
 
 主な項目:
 
@@ -274,6 +280,7 @@ CSVファイル単位の受領・処理状態を持つ。
 - `exam_facility_id`
 - `actual_header_sha256`
 - `matched_csv_format_version_id`
+  - scan時または `01_01_match_csv_format.py` の再照合で設定する。
 - `import_resume_approved`
 - `import_resume_approved_at`
 - `import_resume_approved_by`
@@ -396,6 +403,7 @@ CSV取込時にnormalizeまで行う。
 - `未実施`, `未受診`, `キャンセル`, `測定不能` などの非測定値語は、CD/CO名寄せとは別の共通前処理で扱う。
 - 非測定値語辞書は初期実装ではYAMLファイルとして管理する。
 - 実施されていない語は `RAW_VALUE_NO_RESULT`、測定できなかった語は `RAW_VALUE_UNMEASURABLE`、型に合わない未知文字列は `INVALID_VALUE_TYPE` として分類する。
+- CD/CO系で辞書一致OKになった場合は、`RAW_VALUE_EXACT_MATCH` / `RAW_VALUE_NORMALIZED_MATCH` により、原文一致か前処理後一致かを区別する。
 - `あり` / `なし` は初期の共通ノイズ辞書に含めない。
 - `異常なし` / `所見なし` も項目によって結果値として意味を持つため、共通ノイズ辞書には含めない。
 - 数値系 `data_type` は `PQ`, `INT`, `REAL` とする。
@@ -414,6 +422,7 @@ CSV取込時にnormalizeまで行う。
 ### Header Fingerprint
 
 実CSVからheader fingerprintを算出し、`csv_format_versions.header_sha256` と照合する。
+scan時点で照合できる場合は `file_receipts.matched_csv_format_version_id` に保存し、import時はそのIDを優先する。
 
 基本方針:
 

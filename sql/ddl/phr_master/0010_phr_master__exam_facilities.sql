@@ -11,6 +11,10 @@ CREATE TABLE `phr_master`.`exam_facilities` (
   `phone_number` varchar(64) DEFAULT NULL,
   `website_url` varchar(512) DEFAULT NULL,
   `management_entity` varchar(255) DEFAULT NULL,
+  `data_source_name` varchar(255) DEFAULT NULL,
+  `data_source_file_name` varchar(255) DEFAULT NULL,
+  `data_source_file_sha256` char(64) DEFAULT NULL,
+  `data_source_note` text,
   `note` text,
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -21,6 +25,7 @@ CREATE TABLE `phr_master`.`exam_facilities` (
   KEY `idx_exam_facilities_medical_institution_code` (`medical_institution_code`),
   KEY `idx_exam_facilities_reservation_system_code` (`reservation_system_medical_institution_code`),
   KEY `idx_exam_facilities_type` (`exam_facility_type`),
+  KEY `idx_exam_facilities_data_source` (`data_source_name`),
   KEY `idx_exam_facilities_name` (`exam_facility_name`),
   KEY `idx_exam_facilities_active` (`is_active`)
 )

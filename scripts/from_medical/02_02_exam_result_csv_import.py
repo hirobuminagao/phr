@@ -18,10 +18,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.lib.csv.csv_loader import CsvLoadResult, load_csv_result, row_sha256
+from scripts.lib.csv.csv_loader import CsvLoadResult, row_sha256
+from scripts.lib.csv.exam_result_format_matcher import load_csv_for_format as shared_load_csv_for_format
 from scripts.lib.csv.exam_result_mapping_extractor import ExtractedCsvRuleValue, extract_row_values
 from scripts.lib.db.config import load_mysql_base_params
-from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingRule, load_csv_mapping_rules
+from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingRule, get_csv_format_version_by_id, load_csv_mapping_rules
 from scripts.lib.db.lookup.exam_item_master import get_exam_item
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -51,6 +52,16 @@ SUBSCRIBER_MATCH_IDENTITY_ERROR = "IDENTITY_ERROR"
 SUBSCRIBER_MATCH_MULTIPLE = "MULTIPLE_MATCH"
 SUBSCRIBER_METHOD_IDENTITY_HASH = "identity_hash"
 SUBSCRIBER_METHOD_PERSON_ID_CUSTOM = "person_id_custom"
+CDA_SECTION_CODE_SYSTEM = "1.2.392.200119.6.1010"
+CDA_SECTION_NAMES = {
+    "01010": "特定健診・問診結果セクション",
+    "01020": "広域連合保健事業セクション",
+    "01030": "労働安全衛生法健診結果セクション",
+    "01040": "学校保健安全法健診結果セクション",
+    "01060": "がん検診セクション",
+    "01090": "肝炎検診セクション",
+    "01990": "任意追加項目セクション",
+}
 
 
 @dataclass(frozen=True)
@@ -148,6 +159,13 @@ def normalize_gender_match(value: Any) -> str | None:
     if not result.get("ok"):
         return None
     return cast(str | None, result.get("match"))
+
+
+def section_name_for_code(section_code: Any) -> str | None:
+    code = compact_text(section_code)
+    if code is None:
+        return None
+    return CDA_SECTION_NAMES.get(code)
 
 
 def build_csv_identity(ledger_fields: Mapping[str, Any]) -> dict[str, Any]:
@@ -337,17 +355,7 @@ def fetch_active_format_candidates(
 
 
 def load_csv_for_format(path: str, fmt: Mapping[str, Any]) -> CsvLoadResult:
-    data_start_row_no = int(fmt.get("data_start_row_no") or 2)
-    header_count = max(data_start_row_no - 1, 0)
-    return load_csv_result(
-        path,
-        header_count=header_count,
-        delimiter=str(fmt.get("delimiter") or ","),
-        encoding=compact_text(fmt.get("character_encoding")),
-        quote_char=str(fmt.get("quote_char") or '"'),
-        active_header_row_no=cast(int | None, fmt.get("active_header_row_no")),
-        data_start_row_no=data_start_row_no,
-    )
+    return shared_load_csv_for_format(path, dict(fmt))
 
 
 def resolve_format(
@@ -361,6 +369,20 @@ def resolve_format(
         return None, None, None
 
     source_path = str(file_receipt["source_path"])
+    matched_format_id = file_receipt.get("matched_csv_format_version_id")
+    if matched_format_id is not None:
+        fmt = get_csv_format_version_by_id(
+            cur,
+            int(matched_format_id),
+            master_db=config.master_db,
+        )
+        if fmt is not None and int(fmt.get("exam_facility_id") or 0) == int(exam_facility_id):
+            csv_result = load_csv_for_format(source_path, fmt)
+            actual_header_sha256 = csv_result.header_set.header_sha256
+            if actual_header_sha256 == fmt.get("header_sha256"):
+                return fmt, csv_result, actual_header_sha256
+            return None, None, actual_header_sha256
+
     actual_header_sha256: str | None = None
     for candidate in fetch_active_format_candidates(
         cur,
@@ -682,7 +704,8 @@ def insert_exam_item_value(
         INSERT INTO {qname(config.health_db)}.exam_item_values (
             event_id, ledger_type, ledger_id,
             subscriber_id, hia_subscriber_id,
-            namecode, occurrence_no,
+            namecode, section_code, section_code_system, section_name,
+            occurrence_no,
             raw_value, raw_value_type, raw_unit,
             normalized_value, normalized_unit,
             nullflavor, code_system, code_value, code_display,
@@ -694,7 +717,8 @@ def insert_exam_item_value(
         VALUES (
             %s, %s, %s,
             %s, %s,
-            %s, 1,
+            %s, %s, %s, %s,
+            1,
             %s, %s, %s,
             %s, %s,
             %s, %s, %s, %s,
@@ -711,6 +735,9 @@ def insert_exam_item_value(
             subscriber_id,
             hia_subscriber_id,
             rule.target_namecode,
+            item.get("section_code") if item else None,
+            CDA_SECTION_CODE_SYSTEM if item and item.get("section_code") else None,
+            section_name_for_code(item.get("section_code")) if item else None,
             columns["raw_value"],
             columns["raw_value_type"],
             columns["raw_unit"],
@@ -949,8 +976,30 @@ def run_import(conn: Any, config: ImportConfig) -> ImportSummary:
         )
         conn.commit()
         return summary
-    except Exception:
+    except Exception as exc:
         conn.rollback()
+        error_cur = dict_cursor(conn)
+        try:
+            record_error(
+                error_cur,
+                run_id=run_id,
+                summary=summary,
+                src_file=None,
+                row_no=None,
+                field="UNEXPECTED",
+                error_code="UNEXPECTED_CSV_IMPORT_ERROR",
+                message=f"unexpected csv import error: {type(exc).__name__}: {exc}",
+            )
+            etl_finish_run(
+                error_cur,
+                run_id,
+                summary.to_metrics(),
+                status_override="failed",
+                extra_notes=summary.to_message(),
+            )
+            conn.commit()
+        finally:
+            error_cur.close()
         raise
     finally:
         cur.close()

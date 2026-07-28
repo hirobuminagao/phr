@@ -51,6 +51,7 @@ CSV取込側で必要になる処理テーブル案は以下とする。
   - CSVファイル単位の受領台帳として利用する。
   - `exam_facility_id` を追加する案は `10_phr_master_initial_ddl_draft.md` に記載する。
   - 既存 `facility_code` / `facility_name` は、scan時にlookupした健診機関コード・名称のスナップショットとして利用する案とする。
+  - CSVファイルでは、scan時または再照合時に `actual_header_sha256` / `matched_csv_format_version_id` を保持する。
 - `csv_row_ledger`
   - CSVデータ行単位の基本情報Ledger。
   - 受診者識別、健診日、加入者照合状態、行処理状態を保持する。
@@ -447,18 +448,20 @@ CSVに基準下限、基準上限、判定が含まれない場合は未設定�
 
 1. `01_scan_files.py` がCSVを `file_receipts` に登録する。
 2. `01_scan_files.py` が `phr_master.medical_folder_aliases` から `exam_facility_id` を確定し、`file_receipts` にスナップショットを持たせる。
-3. `02_02_exam_result_csv_import` が新規CSVと、過去に停止したが確認Go済みのCSVを同じRunで取得する。
-4. `file_receipts.exam_facility_id` から `phr_master.csv_format_versions` を選択する。
-5. `scripts/lib/csv/csv_loader.py` の `load_csv()` でCSVを読み、文字コード、delimiter、ヘッダー、行数を取得する。
-6. 実CSVのヘッダー構造から `header_sha256` を算出し、`csv_format_versions.header_sha256` と照合する。
-7. ヘッダー不一致の場合は、rule/template側の許可設定と `file_receipts` 側の確認Goを確認し、未確認なら停止する。
-8. `etl_runs` にCSV取込Runを開始記録する。
-9. データ行ごとに `csv_row_ledger` を作成する。
-10. 基本情報マッピングでCSV列を `csv_row_ledger` に反映する。
-11. identity生成、加入者照合を実行し、`subscriber_match_status` を更新する。
-12. 検査結果値マッピングで `exam_item_values` を登録する。
-13. CSV由来raw値を入力にnormalizeし、`normalized_value`, `normalized_unit`, `normalize_status`, `normalize_reason`, `validation_status`, `validation_reason`, `normalized_at` へ反映する。
-14. 行単位、file_receipts単位、etl_runs単位の状態を集約する。
+3. `01_scan_files.py` がCSV format照合共通処理を呼び、`actual_header_sha256` / `matched_csv_format_version_id` / `status` を設定する。
+4. 初回mapping未登録、複数候補、default未決定などで `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` でformat照合だけを再適用する。
+5. `02_02_exam_result_csv_import` が新規CSVと、過去に停止したが確認Go済みのCSVを同じRunで取得する。
+6. `02_02_exam_result_csv_import` は `file_receipts.matched_csv_format_version_id` があればそれを優先し、なければ `file_receipts.exam_facility_id` から `phr_master.csv_format_versions` を探索する。
+7. `scripts/lib/csv/csv_loader.py` の `load_csv_result()` でCSVを読み、文字コード、delimiter、ヘッダー、行数を取得する。
+8. 実CSVのヘッダー構造から `header_sha256` を算出し、採用formatの `csv_format_versions.header_sha256` と照合する。
+9. ヘッダー不一致の場合は、rule/template側の許可設定と `file_receipts` 側の確認Goを確認し、未確認なら停止する。
+10. `etl_runs` にCSV取込Runを開始記録する。
+11. データ行ごとに `csv_row_ledger` を作成する。
+12. 基本情報マッピングでCSV列を `csv_row_ledger` に反映する。
+13. identity生成、加入者照合を実行し、`subscriber_match_status` を更新する。
+14. 検査結果値マッピングで `exam_item_values` を登録する。
+15. CSV由来raw値を入力にnormalizeし、`normalized_value`, `normalized_unit`, `normalize_status`, `normalize_reason`, `validation_status`, `validation_reason`, `normalized_at` へ反映する。
+16. 行単位、file_receipts単位、etl_runs単位の状態を集約する。
 
 ## Header Fingerprint Check
 
@@ -627,6 +630,7 @@ CSV取込ではリアルタイム性を求めないため、初期実装は1人/
 - `未実施`, `未受診`, `実施せず`, `キャンセル`, `中止`, `拒否`, `対象外` などは完全空ではないため、`exam_item_values.raw_value` に原文を残し、`normalize_reason = RAW_VALUE_NO_RESULT` として扱う。
 - `測定不能`, `判定不能`, `検体不良`, `採血不可`, `測定不可` などは完全空ではないため、`exam_item_values.raw_value` に原文を残し、`normalize_reason = RAW_VALUE_UNMEASURABLE` として扱う。
 - `未実施` / `測定不能` / `判定不能` などは、entry内の項目結果値として出てくる実施状態・測定可否であり、健診機関由来のABC等の健診判定とは別に扱う。
+- CD/CO系で辞書一致OKになった場合は、`normalize_reason = RAW_VALUE_EXACT_MATCH` / `RAW_VALUE_NORMALIZED_MATCH` とし、原文一致か前処理後一致かを区別する。
 - 型に合わない未知文字列は、`exam_item_values.raw_value` に原文を残し、`normalize_reason = INVALID_VALUE_TYPE` として扱う。
 - `あり` / `なし` は共通ノイズ扱いせず、項目別ルール、CD/CO辞書、または変換ルールで扱う。
 - 健診日など基本情報が不足していても、CSV取込段階ではskipしない。

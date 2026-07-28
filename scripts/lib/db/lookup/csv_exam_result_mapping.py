@@ -91,6 +91,40 @@ def find_csv_format_version(
     return dict(row) if row else None
 
 
+def find_csv_format_versions_by_header(
+    cur: Any,
+    *,
+    exam_facility_id: int,
+    header_sha256: str,
+    exam_date: date | None = None,
+    master_db: str = PHR_MASTER,
+) -> list[dict[str, Any]]:
+    """Find all active CSV format versions for a facility/header fingerprint."""
+
+    params: list[Any] = [exam_facility_id, header_sha256]
+    validity_sql = ""
+    if exam_date is not None:
+        validity_sql = """
+          AND (valid_from IS NULL OR valid_from <= %s)
+          AND (valid_to IS NULL OR valid_to >= %s)
+        """
+        params.extend([exam_date, exam_date])
+
+    cur.execute(
+        f"""
+        SELECT *
+        FROM `{master_db}`.`csv_format_versions`
+        WHERE exam_facility_id = %s
+          AND header_sha256 = %s
+          AND is_active = 1
+          {validity_sql}
+        ORDER BY is_default_for_facility DESC, valid_from DESC, csv_format_version_id DESC
+        """,
+        tuple(params),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def get_csv_format_version_by_id(
     cur: Any,
     csv_format_version_id: int,

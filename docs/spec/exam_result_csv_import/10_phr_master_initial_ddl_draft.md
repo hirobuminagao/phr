@@ -31,7 +31,7 @@ Draft.
 このCSVの `機関コード` は、`exam_facilities.medical_institution_code` の候補値として保持できる。
 ただし、受領CSVの健診機関を一意に確定する親IDは `exam_facility_id` とし、外部コードとは分ける。
 `機関種別`、`ホームページ`、`経営主体` も健診機関確認用の属性として `exam_facilities` に保持する。
-データソースが支払基金CSVであることを表す専用カラムは、初期DDL案には含めない。
+また、初期投入した健診機関データが社内作業データではなく公開CSV由来であることを明示するため、`data_source_name`, `data_source_file_name`, `data_source_file_sha256`, `data_source_note` を保持する。
 
 ## Initial Tables
 
@@ -85,6 +85,10 @@ CREATE TABLE `phr_master`.`exam_facilities` (
   `phone_number` varchar(64) DEFAULT NULL,
   `website_url` varchar(1024) DEFAULT NULL,
   `management_entity` varchar(255) DEFAULT NULL,
+  `data_source_name` varchar(255) DEFAULT NULL,
+  `data_source_file_name` varchar(255) DEFAULT NULL,
+  `data_source_file_sha256` char(64) DEFAULT NULL,
+  `data_source_note` text,
   `note` text,
   `is_active` tinyint(1) NOT NULL DEFAULT 1,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -95,6 +99,7 @@ CREATE TABLE `phr_master`.`exam_facilities` (
   KEY `idx_exam_facilities_medical_institution_code` (`medical_institution_code`),
   KEY `idx_exam_facilities_reservation_system_code` (`reservation_system_medical_institution_code`),
   KEY `idx_exam_facilities_type` (`exam_facility_type`),
+  KEY `idx_exam_facilities_data_source` (`data_source_name`),
   KEY `idx_exam_facilities_name` (`exam_facility_name`),
   KEY `idx_exam_facilities_active` (`is_active`)
 )
@@ -220,14 +225,15 @@ CD/CO系の結果値名寄せ辞書。
 既存 `dev_phr.norm_variants` を `phr_master` へ移設し、CSV取込と将来のXML由来normalizeで共通参照する。
 
 初期実装では、`result_code_oid + raw_value_utf8` の完全一致で辞書を引く。
+ここでの完全一致はbinary比較を意味し、`-` / `－` / `ー` などの見た目が近い別文字をMySQL照合順序で同一扱いしない。
 `raw_token_norm` は既存DDLに合わせて保持するが、初期の照合キー本命にはしない。
 
 ```sql
 CREATE TABLE `phr_master`.`norm_variants` (
   `variant_id` bigint NOT NULL AUTO_INCREMENT COMMENT '揺れ辞書ID',
   `result_code_oid` varchar(128) NOT NULL COMMENT '結果コードOID（CD/CO系の辞書キー）',
-  `raw_token_norm` varchar(190) NOT NULL COMMENT '入力値を前処理した照合トークン',
-  `raw_value_utf8` varchar(190) NOT NULL DEFAULT '' COMMENT '入力値（揺れ受け止め用：照合キー本命）',
+  `raw_token_norm` varchar(190) COLLATE utf8mb4_bin NOT NULL COMMENT '入力値を前処理した照合トークン',
+  `raw_value_utf8` varchar(190) COLLATE utf8mb4_bin NOT NULL DEFAULT '' COMMENT '入力値（揺れ受け止め用：照合キー本命）',
   `normalized_code` varchar(64) NOT NULL COMMENT '正規化後コード',
   `code_system` varchar(190) DEFAULT NULL COMMENT 'codeSystem',
   `display_name` varchar(255) DEFAULT NULL COMMENT '運用表示名',
@@ -289,6 +295,7 @@ CREATE TABLE `phr_master`.`csv_format_versions` (
   `header_hash_status` varchar(32) NOT NULL DEFAULT 'UNVERIFIED',
   `header_mismatch_policy` varchar(64) NOT NULL DEFAULT 'ALLOW_AFTER_CONFIRM',
   `allow_column_no_rules` tinyint(1) NOT NULL DEFAULT 0,
+  `is_default_for_facility` tinyint(1) NOT NULL DEFAULT 0,
   `duplicate_row_policy` varchar(64) NOT NULL DEFAULT 'SKIP_CHECKED_OK',
   `missing_basic_info_policy` varchar(64) NOT NULL DEFAULT 'IMPORT_AND_CHECK_LATER',
   `character_encoding` varchar(32) NOT NULL DEFAULT 'CP932',
@@ -305,6 +312,7 @@ CREATE TABLE `phr_master`.`csv_format_versions` (
   UNIQUE KEY `uq_csv_format_versions_facility_version` (`exam_facility_id`, `mapping_version`),
   KEY `idx_csv_format_versions_header_sha256` (`header_sha256`),
   KEY `idx_csv_format_versions_header_mismatch_policy` (`header_mismatch_policy`),
+  KEY `idx_csv_format_versions_facility_default` (`exam_facility_id`, `is_default_for_facility`, `is_active`),
   KEY `idx_csv_format_versions_facility_active` (`exam_facility_id`, `is_active`),
   KEY `idx_csv_format_versions_validity` (`valid_from`, `valid_to`)
 )
@@ -338,6 +346,8 @@ COLLATE=utf8mb4_ja_0900_as_cs;
 
 `header_sha256` は、CSVテンプレート登録時に確認したヘッダー構造の指紋である。
 実取込時には対象CSVから同じ手順でヘッダー指紋を算出し、`csv_format_versions.header_sha256` と照合する。
+scan時点でも同じ照合を行い、`file_receipts.actual_header_sha256` / `matched_csv_format_version_id` に保存する。
+同一施設・同一header shaに複数の有効formatが存在する場合、`is_default_for_facility = 1` が1件だけなら採用し、それ以外は確認待ちにする。
 不一致の場合は、未確認の新規列・削除列・列順変更などテンプレート変更の可能性があるため、初期実装では自動続行しない。
 続行する場合は、format側で確認後Goを許可し、かつ `file_receipts` 側に人が内容確認済みでGoした証跡がある場合に限る。
 一致する場合、`header_snapshot_json` に含まれる未マッピング列は意図した欠落列として扱い、未マッピングであること自体はエラーにしない。
@@ -787,15 +797,16 @@ CSV原本の健診機関由来判定は証跡として保持する。最低限�
 1. `01_scan_files.py` は受領フォルダ名から `phr_master.medical_folder_aliases` を引き、`exam_facility_id` を確定する。
 2. `01_scan_files.py` は `health_exam_result.file_receipts` に `exam_facility_id` を登録し、既存 `facility_code` / `facility_name` にlookupした健診機関コード・名称をスナップショットとして登録する。
 3. XML/ZIP取込では、暗号ZIPのパスワード解決時に既存通り `file_receipts.facility_code` / `submitter_facility_code` / 受領フォルダ名を候補にする。
-4. `02_02_exam_result_csv_import` は `file_receipts` 起点で対象CSVを取得する。
-5. `02_02_exam_result_csv_import` は実行開始を `etl_runs` に記録する。
-6. `02_02_exam_result_csv_import` は `exam_facility_id` から `csv_format_versions` を選択する。
-7. 実CSVのヘッダーから `actual_header_sha256` を算出し、`csv_format_versions.header_sha256` と照合する。
-8. 対象formatに紐づく `csv_exam_result_mapping_rules` / `csv_exam_result_mapping_conditions` を取得する。
-9. `target_kind = 'LEDGER_FIELD'` のruleはCSV行台帳の基本情報へ反映する。
-10. `target_kind = 'EXAM_ITEM_VALUE'` のruleは条件成立時に `exam_item_values` を作成し、`source_role = VALUE` を `raw_value`、`LOWER_LIMIT` / `UPPER_LIMIT` をCSV由来下限/上限として反映する。`JUDGEMENT` は健診機関由来の健診判定列を表し、初期実装では原本証跡として扱い、PHR側判定には使わない。
-11. normalize共通libを呼び、normalize系カラムへ反映する。
-12. 行単位の状態は `csv_row_ledger`、ファイル単位の現在状態は `file_receipts`、実行履歴は `etl_runs` / `etl_errors` に記録する。
+4. `01_scan_files.py` はCSVファイルについて、共通format照合処理で `actual_header_sha256` を算出し、`matched_csv_format_version_id` を可能なら設定する。
+5. 初回scan時にmapping未登録または複数候補で止まったCSVは、mapping登録/default設定後に `01_01_match_csv_format.py` でformat照合だけを再適用する。
+6. `02_02_exam_result_csv_import` は `file_receipts` 起点で対象CSVを取得する。
+7. `02_02_exam_result_csv_import` は実行開始を `etl_runs` に記録する。
+8. `02_02_exam_result_csv_import` は `matched_csv_format_version_id` があればそれを優先し、実CSVのheader shaが登録formatと一致することを再確認する。
+9. 対象formatに紐づく `csv_exam_result_mapping_rules` / `csv_exam_result_mapping_conditions` を取得する。
+10. `target_kind = 'LEDGER_FIELD'` のruleはCSV行台帳の基本情報へ反映する。
+11. `target_kind = 'EXAM_ITEM_VALUE'` のruleは条件成立時に `exam_item_values` を作成し、`source_role = VALUE` を `raw_value`、`LOWER_LIMIT` / `UPPER_LIMIT` をCSV由来下限/上限として反映する。`JUDGEMENT` は健診機関由来の健診判定列を表し、初期実装では原本証跡として扱い、PHR側判定には使わない。
+12. normalize共通libを呼び、normalize系カラムへ反映する。
+13. 行単位の状態は `csv_row_ledger`、ファイル単位の現在状態は `file_receipts`、実行履歴は `etl_runs` / `etl_errors` に記録する。
 
 ## Remaining Points
 

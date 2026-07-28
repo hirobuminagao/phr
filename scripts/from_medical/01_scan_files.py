@@ -28,6 +28,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import PHR_MASTER
+from scripts.lib.csv.exam_result_format_matcher import match_csv_format_for_file
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import log_error as etl_log_error
@@ -48,6 +49,8 @@ ETL_STATUS_FAILED = "failed"
 FILE_ROLE = "FROM_MEDICAL"
 STORAGE_FOLDER_TYPE = "MEDICAL_RESULT_ROOT"
 FILE_STATUS_DISCOVERED = "DISCOVERED"
+FILE_STATUS_READY = "READY"
+FILE_STATUS_WAITING_CONFIRM = "WAITING_CONFIRM"
 TARGET_EXTS = {"zip": "ZIP", "xml": "XML", "csv": "CSV"}
 SKIP_PREFIXES = (".", "~$")
 SKIP_SUFFIXES = (".tmp", ".part", ".crdownload")
@@ -79,6 +82,9 @@ class ScanSummary:
     files_inserted: int = 0
     files_duplicate: int = 0
     files_skipped: int = 0
+    csv_format_matched: int = 0
+    csv_format_not_found: int = 0
+    csv_format_multiple: int = 0
     errors: int = 0
     fatal_error: bool = False
     ext_counts: dict[str, int] = field(default_factory=dict)
@@ -98,12 +104,17 @@ class ScanSummary:
             f"inserted={self.files_inserted}",
             f"duplicate={self.files_duplicate}",
             f"skipped={self.files_skipped}",
+            f"csv_format_matched={self.csv_format_matched}",
             f"errors={self.errors}",
         ]
         if self.unknown_folders:
             parts.append(f"unknown_folders={self.unknown_folders}")
         if self.edit_folders_missing:
             parts.append(f"missing_edit_folders={self.edit_folders_missing}")
+        if self.csv_format_not_found:
+            parts.append(f"csv_format_not_found={self.csv_format_not_found}")
+        if self.csv_format_multiple:
+            parts.append(f"csv_format_multiple={self.csv_format_multiple}")
         return "scan_files " + " ".join(parts)
 
     def print(self) -> None:
@@ -121,6 +132,11 @@ class ScanSummary:
             f"skipped={self.files_skipped}"
         )
         print(f"  folders: unknown={self.unknown_folders} missing_edit={self.edit_folders_missing}")
+        print(
+            "  csv_format: "
+            f"matched={self.csv_format_matched} not_found={self.csv_format_not_found} "
+            f"multiple={self.csv_format_multiple}"
+        )
         print(f"  errors={self.errors}")
         if self.ext_counts:
             print("  ext_counts=" + ", ".join(f"{k}:{v}" for k, v in sorted(self.ext_counts.items())))
@@ -345,6 +361,10 @@ def insert_file_receipt(
     exam_facility_id: int | None,
     facility_code: str | None,
     facility_name: str | None,
+    actual_header_sha256: str | None,
+    matched_csv_format_version_id: int | None,
+    status: str,
+    summary_message: str | None,
 ) -> int:
     cur.execute(
         """
@@ -361,16 +381,19 @@ def insert_file_receipt(
             facility_code,
             facility_name,
             exam_facility_id,
+            actual_header_sha256,
+            matched_csv_format_version_id,
             processable_count,
             storage_folder_type,
             status,
+            summary_message,
             etl_run_id,
             first_seen_at,
             last_seen_at,
             received_at
         )
         VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s,
             CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
         )
         """,
@@ -387,8 +410,11 @@ def insert_file_receipt(
             facility_code,
             facility_name,
             exam_facility_id,
+            actual_header_sha256,
+            matched_csv_format_version_id,
             STORAGE_FOLDER_TYPE,
-            FILE_STATUS_DISCOVERED,
+            status,
+            summary_message,
             run_id,
         ),
     )
@@ -450,6 +476,7 @@ def scan_alias_files(
     dry_run: bool,
     limit: int,
     chunk_size: int,
+    master_db: str,
 ) -> bool:
     if limit and summary.files_target >= limit:
         return False
@@ -517,6 +544,50 @@ def scan_alias_files(
         if run_id is None:
             raise RuntimeError("run_id is required when registering file_receipts")
 
+        exam_facility_id = int(alias["exam_facility_id"]) if alias.get("exam_facility_id") is not None else None
+        receipt_status = FILE_STATUS_DISCOVERED
+        summary_message: str | None = None
+        actual_header_sha256: str | None = None
+        matched_csv_format_version_id: int | None = None
+
+        if file_type == "CSV":
+            match_result = match_csv_format_for_file(
+                cur,
+                source_path=str(path),
+                exam_facility_id=exam_facility_id,
+                master_db=master_db,
+            )
+            actual_header_sha256 = match_result.actual_header_sha256
+            matched_csv_format_version_id = match_result.csv_format_version_id
+            summary_message = match_result.message
+            if match_result.result == "MATCHED":
+                receipt_status = FILE_STATUS_READY
+                summary.csv_format_matched += 1
+            elif match_result.result == "MULTIPLE":
+                receipt_status = FILE_STATUS_WAITING_CONFIRM
+                summary.csv_format_multiple += 1
+                summary.errors += 1
+                record_scan_error(
+                    cur,
+                    run_id=run_id,
+                    field="CSV_FORMAT_MATCH",
+                    error_code="CSV_FORMAT_MULTIPLE",
+                    message=match_result.message,
+                    field_value=str(path),
+                )
+            else:
+                receipt_status = FILE_STATUS_WAITING_CONFIRM
+                summary.csv_format_not_found += 1
+                summary.errors += 1
+                record_scan_error(
+                    cur,
+                    run_id=run_id,
+                    field="CSV_FORMAT_MATCH",
+                    error_code=f"CSV_FORMAT_{match_result.result}",
+                    message=match_result.message,
+                    field_value=str(path),
+                )
+
         try:
             insert_file_receipt(
                 cur,
@@ -528,11 +599,13 @@ def scan_alias_files(
                 file_sha256=file_hash,
                 file_size=int(stat.st_size),
                 run_id=run_id,
-                exam_facility_id=(
-                    int(alias["exam_facility_id"]) if alias.get("exam_facility_id") is not None else None
-                ),
+                exam_facility_id=exam_facility_id,
                 facility_code=alias.get("exam_facility_code"),
                 facility_name=alias.get("exam_facility_name"),
+                actual_header_sha256=actual_header_sha256,
+                matched_csv_format_version_id=matched_csv_format_version_id,
+                status=receipt_status,
+                summary_message=summary_message,
             )
             summary.files_inserted += 1
         except Exception as exc:
@@ -671,6 +744,7 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                     dry_run=config.dry_run,
                     limit=config.limit,
                     chunk_size=chunk_size,
+                    master_db=config.master_db,
                 )
                 if not keep_scanning:
                     break

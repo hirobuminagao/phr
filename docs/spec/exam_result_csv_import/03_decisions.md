@@ -44,6 +44,7 @@ Draft.
 - 現行の `health_exam_result.medical_folder_aliases` 登録内容は、原則そのまま新しいaliasテーブルへ移す。
 - aliasテーブルには新しい健診機関マスタのIDを保持する。
 - `01_scan_files.py` は、フォルダaliasから健診機関IDを確定し、後続処理へ引き継げる状態で `file_receipts` へ登録する。
+- `01_scan_files.py` は、CSVファイルについてはscan時に登録済みCSV formatとの照合も行い、`actual_header_sha256` / `matched_csv_format_version_id` / `status` へ反映する。
 - `file_receipts` には、CSV取込の後続処理が参照できるように `exam_facility_id` を追加する。
 - 健診機関コード・名称のスナップショットは、既存 `file_receipts.facility_code` / `facility_name` を利用する。
 - フォルダaliasから健診機関を解決する処理は、個別スクリプトへSQLを直書きせず、`scripts/lib/db/lookup/exam_facility.py` の共通lookup libとして追加する案を基本とする。
@@ -64,7 +65,8 @@ Draft.
 - `namecode` から型・単位を返すlookupは、既存 `scripts/lib/db/lookup/exam_item_master.py` の `get_exam_item()` / `get_exam_items()` を利用する案を基本とする。
 - CD/CO系の結果値名寄せは `phr_master.norm_variants` を利用する。
 - `norm_variants` 参照は個別スクリプトへSQLを直書きせず、`scripts/lib/db/lookup/norm_variant.py` の共通lookup libとして追加する案を基本とする。
-- 初期案では、CD/CO系かつ `exam_item_master.result_code_oid` が存在する場合のみ、`result_code_oid + raw_value_utf8` の完全一致で `norm_variants` を引く。
+- 初期案では、CD/CO系かつ `exam_item_master.result_code_oid` が存在する場合のみ、`result_code_oid + raw_value_utf8` の完全一致で `norm_variants` を引く。この完全一致はbinary比較とし、`-` / `－` / `ー` などをSQL照合順序で同一扱いしない。
+- CD/CO系で `norm_variants` に一致してOKになった場合、`normalize_reason` に `RAW_VALUE_EXACT_MATCH` または `RAW_VALUE_NORMALIZED_MATCH` を入れ、原文一致でOKになったのか、前処理後トークンでOKになったのかを区別する。
 - CD/CO系で `norm_variants` に一致しない場合は、`normalize_status = ERROR`, `validation_status = INVALID`, `validation_reason = NORMALIZE_VARIANT_NOT_FOUND` とする案を基本とする。
 - `norm_variants` は旧「紙→Excel→DB 2テーブル直接投入→normalize→export」フローで実利用されている資産であり、今後はnormalize共通libから参照する。
 - `norm_variants` はCSV健診結果取込で必要な共通マスタとして `phr_master` 初期DDLに含める。テーブル責務はCD/CO系結果値名寄せ辞書とする。
@@ -104,9 +106,11 @@ Draft.
 - 正式名は `exam_facility_name`、表示用の短い名称は `exam_facility_display_name` とする。
 - 受領フォルダ名や既存XML由来の `facility_code` / `facility_name` は、親マスタのIDとは別の由来値として扱う。
 - 初期カラムは、識別・表示・有効/無効・監査日時を中心に最小構成とする。
-- 具体的な初期候補は `exam_facility_id`, `exam_facility_code`, `exam_facility_name`, `exam_facility_display_name`, `exam_facility_type`, `medical_institution_code`, `reservation_system_medical_institution_code`, `postal_code`, `address`, `phone_number`, `website_url`, `management_entity`, `note`, `is_active`, `created_at`, `updated_at` とする。
+- 具体的な初期候補は `exam_facility_id`, `exam_facility_code`, `exam_facility_name`, `exam_facility_display_name`, `exam_facility_type`, `medical_institution_code`, `reservation_system_medical_institution_code`, `postal_code`, `address`, `phone_number`, `website_url`, `management_entity`, `data_source_name`, `data_source_file_name`, `data_source_file_sha256`, `data_source_note`, `note`, `is_active`, `created_at`, `updated_at` とする。
 - 支払基金CSVの `機関種別`, `ホームページ`, `経営主体` は、それぞれ `exam_facility_type`, `website_url`, `management_entity` へ保持する案を基本とする。
-- 支払基金CSVの `機関コード` は `medical_institution_code` へ保持する案を基本とし、支払基金専用カラムは初期DDL案には含めない。
+- 支払基金CSVの `機関コード` は `medical_institution_code` へ保持する案を基本とする。
+- 初期投入した健診機関データが社内作業データではなく公開CSV由来であることを明示するため、全行に `data_source_name`, `data_source_file_name`, `data_source_file_sha256`, `data_source_note` を保持する。
+- 支払基金CSV由来行の `data_source_name` は `社会保険診療報酬支払基金 全国特定健診・特定保健指導機関CSV` とする。
 - 既存受領フォルダは医療機関番号を先頭10桁にして作成されている運用と考え、alias先頭10桁は `medical_institution_code` 候補として扱う。
 - 全国CSVに見つからない番号は、地方厚生局・都道府県単位のオープンデータや別年度/別区分の公開データに存在する可能性があるが、初期実装では支払基金CSV、過去CSV/XML実績、受領データ内の番号で確認できた範囲のみ採用する。
 - 契約・請求側との接続が必要になった段階で、医療機関番号を正規管理する `medical_institutions` 相当のマスタを後続追加し、`exam_facilities` と紐づける方針を検討する。
@@ -131,6 +135,8 @@ Draft.
 - 初期実装では `facility_folder_name` 一致を既存互換として維持し、`exam_facility_id` によるパスワード解決は追加しない。
 - `file_receipts` はXML側の実装に寄せ、ファイル単位の現在状態は既存 `status` / `summary_message` / `processable_count` / `content_checked_at` / `processed_at` で表現する。
 - `file_receipts` にはCSV実ファイルのヘッダー照合情報として `actual_header_sha256` と `matched_csv_format_version_id` を追加する案を基本とする。
+- scan時点でCSV formatが1件に確定できた場合は `matched_csv_format_version_id` を入れて `READY` とし、0件または複数件の場合は `WAITING_CONFIRM` とする。
+- 初回scan時にmapping未登録で `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` を再実行してformat照合だけを再適用する。
 - CSV行単位の加入者突合は、XML import と同じく基本情報抽出、`generate_identity_bundle()`、`resolve_subscriber_identity()` の流れに揃える。
 - 加入者突合、健診結果値処理、check/export状態は、XML側の `xml_ledger` に相当するCSV行台帳 `csv_row_ledger` へ持たせる。
 - `file_receipts` に `subscriber_match_*` / `exam_item_*` / `csv_status` / `csv_reason` を追加する案は採用しない。
@@ -147,7 +153,7 @@ Draft.
 - CSVテンプレートのマッピングは、`csv_exam_result_mapping_rules` / `csv_exam_result_mapping_conditions` を主案とする。
 - `csv_column_mappings` は初期検討時の旧暫定案として扱い、初期DDLの主対象にはしない。
 - CSV結果値変換ルールテーブル `csv_value_transform_rules` は初期DDL対象から外す。
-- `csv_format_versions` は、健診機関ID、mapping version、対象ファイル種別、ヘッダー有無、文字コード、区切り文字、有効期間、有効/無効を持つ構成を基本とする。
+- `csv_format_versions` は、健診機関ID、mapping version、対象ファイル種別、ヘッダー有無、文字コード、区切り文字、有効期間、有効/無効、施設内default指定を持つ構成を基本とする。
 - `csv_exam_result_mapping_rules` は、format version、登録先種別、登録先namecodeまたは基本情報field、排他/複数entry制御、必須/任意を持つ構成を基本とする。
 - `csv_exam_result_mapping_conditions` は、CSV列識別、値/下限/上限/判定/方式などのsource role、条件値、OR/AND groupを持つ構成を基本とする。
 - CSV列識別は、ヘッダー名と列番号の両方を保持できるようにする。
@@ -185,6 +191,7 @@ Draft.
 - `csv_format_versions` に `header_mismatch_policy`, `allow_column_no_rules`, `duplicate_row_policy`, `missing_basic_info_policy` を持たせる案を基本とする。
 - `header_mismatch_policy` の初期値は `ALLOW_AFTER_CONFIRM` とする。
 - ヘッダー不一致時の続行は、format側の `header_mismatch_policy`、実CSVで必要列を解決できるか、`file_receipts` 側の確認済みGo証跡を組み合わせて制御するが、人の確認なしに自動続行はしない。
+- 同一施設・同一header shaに複数の有効formatが存在する場合、`csv_format_versions.is_default_for_facility = 1` が1件だけならそれを採用し、defaultも一意でない場合は `WAITING_CONFIRM` とする。
 - `allow_column_no_rules` は列番号指定ruleを許すかを表し、初期値は許可しない方針とする。
 - `duplicate_row_policy` は同一 `row_sha256` の扱いを表し、初期値はcheck済みOK行をskipする方針とする。
 - `missing_basic_info_policy` は健診日など基本情報不足時の扱いを表し、初期値は取込を進めて後続checkで扱う方針とする。
@@ -271,6 +278,7 @@ Draft.
 - check済みでOK扱いの同一 `row_sha256` は再取込時にskipする。
 - check済みOKの既存行はskipし、未完了、WARNING、ERROR、check未実行は再処理対象とする。
 - CSV取込Runは、新規CSVだけでなく、過去にヘッダー不一致等で停止したが `file_receipts` 側で確認Goが出ているCSVも同じ入口で処理対象にする。
+- CSV format照合の共通処理は `scripts/lib/csv/exam_result_format_matcher.py` に置き、`01_scan_files.py` と `01_01_match_csv_format.py` の両方から利用する。
 - 停止済みCSVの再投入Goは、別モードを作らず通常Run内で拾い、未完了の後続処理を進める案を基本とする。
 - CSV由来の `VALUE` が完全空セルの場合は `exam_item_values` 行を作らない。
 - CSV由来の下限・上限・判定だけが存在し、`VALUE` が完全空セルの場合も `exam_item_values` 行を作らない。
