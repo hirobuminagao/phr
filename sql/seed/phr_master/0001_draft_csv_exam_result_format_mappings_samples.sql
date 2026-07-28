@@ -179,7 +179,52 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ('hirooka.exam.objective_symptoms_text', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N066160800000049', NULL, '他覚症状', 1, 'VALUE', NULL, NULL, 0, 1270, 'objective symptoms text'),
 ('hirooka.exam.work_history', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N051000000000049', NULL, '業務歴', 1, 'VALUE', NULL, NULL, 0, 1280, 'work history text'),
 ('hirooka.exam.metabolic', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N501000000000011', NULL, 'メタボリックシンドローム判定', 1, 'VALUE', NULL, NULL, 1, 1290, 'standard CD value, not facility ABC judgement'),
-('hirooka.exam.guidance_level', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N506000000000011', NULL, '保健指導区分', 1, 'VALUE', NULL, NULL, 1, 1300, 'standard CD value, not facility ABC judgement');
+('hirooka.exam.guidance_level', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N506000000000011', NULL, '保健指導区分', 1, 'VALUE', NULL, NULL, 1, 1300, 'standard CD value, not facility ABC judgement'),
+('hirooka.exam.sbp_first', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9A751000000000001', NULL, '1回目 収縮期', 1, 'VALUE', NULL, NULL, 0, 1310, 'first systolic blood pressure'),
+('hirooka.exam.dbp_first', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9A761000000000001', NULL, '1回目 拡張期', 1, 'VALUE', NULL, NULL, 0, 1320, 'first diastolic blood pressure'),
+('hirooka.exam.sbp_second', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9A752000000000001', NULL, '2回目 収縮期', 1, 'VALUE', NULL, NULL, 0, 1330, 'second systolic blood pressure'),
+('hirooka.exam.dbp_second', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9A762000000000001', NULL, '2回目 拡張期', 1, 'VALUE', NULL, NULL, 0, 1340, 'second diastolic blood pressure'),
+('hirooka.exam.vision_right_uncorrected', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9E160162100000001', NULL, '裸眼遠点視力（右）', 1, 'VALUE', NULL, NULL, 0, 1350, 'uncorrected visual acuity right'),
+('hirooka.exam.vision_left_uncorrected', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9E160162200000001', NULL, '裸眼遠点視力（左）', 1, 'VALUE', NULL, NULL, 0, 1360, 'uncorrected visual acuity left'),
+('hirooka.exam.vision_right_corrected', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9E160162500000001', NULL, '矯正遠点視力（右）', 1, 'VALUE', NULL, NULL, 0, 1370, 'corrected visual acuity right'),
+('hirooka.exam.vision_left_corrected', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9E160162600000001', NULL, '矯正遠点視力（左）', 1, 'VALUE', NULL, NULL, 0, 1380, 'corrected visual acuity left'),
+('hirooka.exam.obesity_degree', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N026000000000002', NULL, '肥満度', 1, 'VALUE', NULL, NULL, 0, 1385, 'obesity degree percent'),
+('hirooka.exam.urine_occult_blood', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '1A100000000190111', NULL, '尿潜血', 1, 'VALUE', NULL, NULL, 0, 1390, 'urine occult blood visual method'),
+('hirooka.exam.wbc', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '2A010000001930101', NULL, '白血球数', 1, 'VALUE', NULL, NULL, 0, 1400, 'white blood cell count'),
+('hirooka.exam.hematocrit', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '2A040000001930102', NULL, 'ヘマトクリット', 1, 'VALUE', NULL, NULL, 0, 1410, 'hematocrit'),
+('hirooka.exam.platelet', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '2A050000001930101', NULL, '血小板数', 1, 'VALUE', NULL, NULL, 0, 1420, 'platelet count'),
+('hirooka.exam.uric_acid', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '3C020000002327101', NULL, '尿酸', 1, 'VALUE', NULL, NULL, 0, 1430, 'serum uric acid'),
+('hirooka.exam.total_protein', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '3A010000002327101', NULL, '総蛋白', 1, 'VALUE', NULL, NULL, 0, 1440, 'total protein'),
+('hirooka.exam.total_cholesterol', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '3F050000002327101', NULL, '総コレステロール', 1, 'VALUE', NULL, NULL, 0, 1450, 'total cholesterol'),
+('hirooka.exam.heart_rate', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N121000000000001', NULL, '心拍数', 1, 'VALUE', NULL, NULL, 0, 1460, 'heart rate'),
+('hirooka.exam.abdominal_ultrasound_finding_text', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9F130160800000049', NULL, '腹部超音波所見', 1, 'VALUE', NULL, NULL, 0, 1470, 'abdominal ultrasound finding text'),
+('hirooka.exam.gastric_xray_finding_text', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N256160800000049', NULL, '胃部Ｘ線所見', 1, 'VALUE', NULL, NULL, 0, 1480, 'upper GI X-ray finding text'),
+('hirooka.exam.gastric_endoscopy_finding_text', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N266160800000049', NULL, '胃部内視鏡所見', 1, 'VALUE', NULL, NULL, 0, 1490, 'upper GI endoscopy finding text'),
+('hirooka.exam.fecal_occult_blood_first', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '1B030000001599811', NULL, '便潜血（1回目）', 1, 'VALUE', NULL, NULL, 0, 1500, 'fecal occult blood first occurrence'),
+('hirooka.exam.fecal_occult_blood_second', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '1B030000001599811', NULL, '便潜血（2回目）', 1, 'VALUE', NULL, NULL, 0, 1510, 'fecal occult blood second occurrence'),
+('hirooka.exam.medication_bp', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N701000000000011', NULL, '１．服薬歴（血圧）', 1, 'VALUE', NULL, NULL, 0, 1600, 'questionnaire medication blood pressure'),
+('hirooka.exam.medication_glucose', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N706000000000011', NULL, '２．服薬歴（血糖）', 1, 'VALUE', NULL, NULL, 0, 1610, 'questionnaire medication glucose'),
+('hirooka.exam.medication_lipid', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N711000000000011', NULL, '３．服薬歴（脂質）', 1, 'VALUE', NULL, NULL, 0, 1620, 'questionnaire medication lipid'),
+('hirooka.exam.history_stroke', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N716000000000011', NULL, '４．既往歴（脳卒中）', 1, 'VALUE', NULL, NULL, 0, 1630, 'questionnaire stroke history'),
+('hirooka.exam.history_heart', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N721000000000011', NULL, '５．既往歴（心疾患）', 1, 'VALUE', NULL, NULL, 0, 1640, 'questionnaire heart disease history'),
+('hirooka.exam.history_renal', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N726000000000011', NULL, '６．既往歴（慢性腎不全）', 1, 'VALUE', NULL, NULL, 0, 1650, 'questionnaire renal failure history'),
+('hirooka.exam.history_anemia', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N731000000000011', NULL, '７．既往歴（貧血）', 1, 'VALUE', NULL, NULL, 0, 1660, 'questionnaire anemia history'),
+('hirooka.exam.smoking', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N736000000000011', NULL, '８．喫煙', 1, 'VALUE', NULL, NULL, 0, 1670, 'questionnaire smoking'),
+('hirooka.exam.weight_change', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N741000000000011', NULL, '９．２０歳の時の体重から10㎏以上増加していますか。', 1, 'VALUE', NULL, NULL, 0, 1680, 'questionnaire weight change'),
+('hirooka.exam.exercise', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N746000000000011', NULL, '10．運動', 1, 'VALUE', NULL, NULL, 0, 1690, 'questionnaire exercise'),
+('hirooka.exam.physical_activity', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N751000000000011', NULL, '11．日常の歩行・身体活動', 1, 'VALUE', NULL, NULL, 0, 1700, 'questionnaire physical activity'),
+('hirooka.exam.walking_speed', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N756000000000011', NULL, '12．歩行速度', 1, 'VALUE', NULL, NULL, 0, 1710, 'questionnaire walking speed'),
+('hirooka.exam.chewing', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N872000000000011', NULL, '13．食事をかんで食べる時', 1, 'VALUE', NULL, NULL, 0, 1720, 'questionnaire chewing'),
+('hirooka.exam.eating_speed', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N766000000000011', NULL, '14．食べる速度', 1, 'VALUE', NULL, NULL, 0, 1730, 'questionnaire eating speed'),
+('hirooka.exam.late_dinner', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N771000000000011', NULL, '15．遅い夕食', 1, 'VALUE', NULL, NULL, 0, 1740, 'questionnaire late dinner'),
+('hirooka.exam.snacking', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N782000000000011', NULL, '16．朝昼夕の３食以外', 1, 'VALUE', NULL, NULL, 0, 1750, 'questionnaire snacking'),
+('hirooka.exam.breakfast', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N781000000000011', NULL, '17．朝食ぬき', 1, 'VALUE', NULL, NULL, 0, 1760, 'questionnaire breakfast skipping'),
+('hirooka.exam.drinking_frequency', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N786000000000011', NULL, '18．飲酒の頻度', 1, 'VALUE', NULL, NULL, 0, 1770, 'questionnaire drinking frequency'),
+('hirooka.exam.drinking_amount', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N791000000000011', NULL, '19．飲酒量', 1, 'VALUE', NULL, NULL, 0, 1780, 'questionnaire drinking amount'),
+('hirooka.exam.sleep', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N796000000000011', NULL, '20．睡眠で休養が十分とれていますか。', 1, 'VALUE', NULL, NULL, 0, 1790, 'questionnaire sleep'),
+('hirooka.exam.lifestyle_improvement', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N801000000000011', NULL, '21．生活習慣の改善', 1, 'VALUE', NULL, NULL, 0, 1800, 'questionnaire lifestyle improvement'),
+('hirooka.exam.guidance_history', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N808000000000011', NULL, '22．保健指導受診歴', 1, 'VALUE', NULL, NULL, 0, 1810, 'questionnaire specific health guidance history'),
+('hirooka.exam.postprandial_time', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N141000000000011', NULL, '健診前の食事状況', 1, 'VALUE', NULL, NULL, 0, 1820, 'postprandial time category');
 
 INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
   `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
@@ -223,6 +268,37 @@ ON DUPLICATE KEY UPDATE
   `note` = VALUES(`note`),
   `updated_at` = CURRENT_TIMESTAMP(3);
 
+-- Hirooka finding text is used to derive standard finding-presence CD values.
+-- Facility ABC/category judgement columns are not used.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
+  `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
+  `target_namecode`, `method_structure_type`, `value_source_type`, `fixed_value`,
+  `is_required`, `priority`, `is_active`, `note`
+) VALUES
+  (@hirooka_csv_format_version_id, 'hirooka.exam.ecg_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1820, 1, 'draft seed:hirooka.exam.ecg_presence_normal:異常所見なし -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.ecg_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1830, 1, 'draft seed:hirooka.exam.ecg_presence_abnormal:所見本文あり -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.chest_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1840, 1, 'draft seed:hirooka.exam.chest_xray_presence_normal:異常所見なし -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.chest_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1850, 1, 'draft seed:hirooka.exam.chest_xray_presence_abnormal:所見本文あり -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.abdominal_ultrasound_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9F130160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1860, 1, 'draft seed:hirooka.exam.abdominal_ultrasound_presence_normal:異常所見なし -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.abdominal_ultrasound_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9F130160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1870, 1, 'draft seed:hirooka.exam.abdominal_ultrasound_presence_abnormal:所見本文あり -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1880, 1, 'draft seed:hirooka.exam.gastric_xray_presence_normal:異常所見なし -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1890, 1, 'draft seed:hirooka.exam.gastric_xray_presence_abnormal:所見本文あり -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_endoscopy_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1900, 1, 'draft seed:hirooka.exam.gastric_endoscopy_presence_normal:異常所見なし -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_endoscopy_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1910, 1, 'draft seed:hirooka.exam.gastric_endoscopy_presence_abnormal:所見本文あり -> 所見あり CD=1')
+ON DUPLICATE KEY UPDATE
+  `target_kind` = VALUES(`target_kind`),
+  `target_resolution_type` = VALUES(`target_resolution_type`),
+  `selection_mode` = VALUES(`selection_mode`),
+  `target_namecode` = VALUES(`target_namecode`),
+  `method_structure_type` = VALUES(`method_structure_type`),
+  `value_source_type` = VALUES(`value_source_type`),
+  `fixed_value` = VALUES(`fixed_value`),
+  `is_required` = VALUES(`is_required`),
+  `priority` = VALUES(`priority`),
+  `is_active` = VALUES(`is_active`),
+  `note` = VALUES(`note`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
 DELETE c
 FROM `phr_master`.`csv_exam_result_mapping_conditions` c
 JOIN `phr_master`.`csv_exam_result_mapping_rules` r
@@ -256,6 +332,60 @@ JOIN `phr_master`.`csv_exam_result_mapping_rules` r
   ON r.`csv_format_version_id` = @hirooka_csv_format_version_id
  AND r.`note` LIKE CONCAT('draft seed:', s.`seed_key`, ':%')
 WHERE s.`format_key` = 'HIROOKA';
+
+-- The normal and abnormal branches are mutually exclusive. Abnormal means a
+-- non-empty finding text other than the facility's explicit no-finding token.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_name`, `header_occurrence`, `operator`, `expected_value`,
+  `source_role`, `priority`, `is_active`, `note`
+)
+SELECT r.`csv_exam_result_mapping_rule_id`, 1, 'CELL_VALUE', 'HEADER_NAME', x.`header_name`, 1,
+       x.`operator`, x.`expected_value`, 'QUALIFIER', x.`priority`, 1,
+       CONCAT('draft derived condition:', r.`rule_key`)
+FROM `phr_master`.`csv_exam_result_mapping_rules` r
+JOIN (
+  SELECT 'hirooka.exam.ecg_presence_normal' AS `rule_key`, '安静時心電図所見' AS `header_name`, 'EQUALS' AS `operator`, '異常所見なし' AS `expected_value`, 100 AS `priority`
+  UNION ALL SELECT 'hirooka.exam.ecg_presence_abnormal', '安静時心電図所見', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.ecg_presence_abnormal', '安静時心電図所見', 'NOT_EQUALS', '異常所見なし', 110
+  UNION ALL SELECT 'hirooka.exam.chest_xray_presence_normal', '胸部Ｘ線所見', 'EQUALS', '異常所見なし', 100
+  UNION ALL SELECT 'hirooka.exam.chest_xray_presence_abnormal', '胸部Ｘ線所見', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.chest_xray_presence_abnormal', '胸部Ｘ線所見', 'NOT_EQUALS', '異常所見なし', 110
+  UNION ALL SELECT 'hirooka.exam.abdominal_ultrasound_presence_normal', '腹部超音波所見', 'EQUALS', '異常所見なし', 100
+  UNION ALL SELECT 'hirooka.exam.abdominal_ultrasound_presence_abnormal', '腹部超音波所見', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.abdominal_ultrasound_presence_abnormal', '腹部超音波所見', 'NOT_EQUALS', '異常所見なし', 110
+  UNION ALL SELECT 'hirooka.exam.gastric_xray_presence_normal', '胃部Ｘ線所見', 'EQUALS', '異常所見なし', 100
+  UNION ALL SELECT 'hirooka.exam.gastric_xray_presence_abnormal', '胃部Ｘ線所見', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.gastric_xray_presence_abnormal', '胃部Ｘ線所見', 'NOT_EQUALS', '異常所見なし', 110
+  UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_presence_normal', '胃部内視鏡所見', 'EQUALS', '異常所見なし', 100
+  UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_presence_abnormal', '胃部内視鏡所見', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_presence_abnormal', '胃部内視鏡所見', 'NOT_EQUALS', '異常所見なし', 110
+) x ON x.`rule_key` = r.`rule_key`
+WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id;
+
+-- Do not store the no-finding token as ST text; retain ST only for abnormal rows.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_name`, `header_occurrence`, `operator`, `expected_value`,
+  `source_role`, `priority`, `is_active`, `note`
+)
+SELECT r.`csv_exam_result_mapping_rule_id`, 1, 'CELL_VALUE', 'HEADER_NAME', x.`header_name`, 1,
+       x.`operator`, x.`expected_value`, 'QUALIFIER', x.`priority`, 1,
+       CONCAT('draft abnormal finding condition:', r.`rule_key`)
+FROM `phr_master`.`csv_exam_result_mapping_rules` r
+JOIN (
+  SELECT 'hirooka.exam.ecg_finding_text' AS `rule_key`, '安静時心電図所見' AS `header_name`, 'NOT_EMPTY' AS `operator`, NULL AS `expected_value`, 110 AS `priority`
+  UNION ALL SELECT 'hirooka.exam.ecg_finding_text', '安静時心電図所見', 'NOT_EQUALS', '異常所見なし', 120
+  UNION ALL SELECT 'hirooka.exam.chest_xray_finding_text', '胸部Ｘ線所見', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'hirooka.exam.chest_xray_finding_text', '胸部Ｘ線所見', 'NOT_EQUALS', '異常所見なし', 120
+  UNION ALL SELECT 'hirooka.exam.abdominal_ultrasound_finding_text', '腹部超音波所見', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'hirooka.exam.abdominal_ultrasound_finding_text', '腹部超音波所見', 'NOT_EQUALS', '異常所見なし', 120
+  UNION ALL SELECT 'hirooka.exam.gastric_xray_finding_text', '胃部Ｘ線所見', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'hirooka.exam.gastric_xray_finding_text', '胃部Ｘ線所見', 'NOT_EQUALS', '異常所見なし', 120
+  UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_finding_text', '胃部内視鏡所見', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_finding_text', '胃部内視鏡所見', 'NOT_EQUALS', '異常所見なし', 120
+) x ON x.`rule_key` = r.`rule_key`
+WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id;
 
 -- ============================================================
 -- Heartcross Akasaka / sample 001
