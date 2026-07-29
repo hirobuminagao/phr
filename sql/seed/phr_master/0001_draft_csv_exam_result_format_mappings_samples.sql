@@ -6,6 +6,7 @@
 -- - It covers CSV format versions and initial VALUE-focused mappings for:
 --   - Hirooka Clinic sample Pattern A
 --   - Healthcare Clinic Atsugi sample Pattern A
+--   - Shibuya Westhills Clinic sample Pattern A
 --   - Heartcross Akasaka sample Pattern B
 -- - Facility-derived judgement columns are intentionally not mapped in the initial seed.
 --
@@ -34,6 +35,12 @@ SELECT `exam_facility_id`
   INTO @atsugi_exam_facility_id
 FROM `phr_master`.`exam_facilities`
 WHERE `medical_institution_code` = '1412910586'
+LIMIT 1;
+
+SELECT `exam_facility_id`
+  INTO @shibuya_westhills_exam_facility_id
+FROM `phr_master`.`exam_facilities`
+WHERE `medical_institution_code` = '1311333301'
 LIMIT 1;
 
 -- ============================================================
@@ -564,6 +571,175 @@ JOIN `phr_master`.`csv_exam_result_mapping_rules` hirooka_rule
 JOIN `phr_master`.`csv_exam_result_mapping_rules` atsugi_rule
   ON atsugi_rule.`csv_format_version_id` = @atsugi_csv_format_version_id
  AND atsugi_rule.`rule_key` = REPLACE(hirooka_rule.`rule_key`, 'hirooka.', 'atsugi.')
+WHERE hirooka_rule.`csv_format_version_id` = @hirooka_csv_format_version_id;
+
+-- ============================================================
+-- Shibuya Westhills Clinic / sample 001
+-- ============================================================
+--
+-- Shibuya Westhills sample uses the same Pattern A 830-column single-row
+-- Japanese header style as Hirooka/Atsugi. The confirmed Pattern A result-value
+-- mappings can be reused as facility-specific seed data.
+
+INSERT INTO `phr_master`.`csv_format_versions` (
+  `exam_facility_id`,
+  `mapping_version`,
+  `file_type`,
+  `format_name`,
+  `has_header`,
+  `header_mode`,
+  `header_structure_type`,
+  `header_context_rule`,
+  `active_header_row_no`,
+  `data_start_row_no`,
+  `header_sha256`,
+  `header_hash_status`,
+  `header_mismatch_policy`,
+  `allow_column_no_rules`,
+  `duplicate_row_policy`,
+  `missing_basic_info_policy`,
+  `character_encoding`,
+  `encoding_fallback_policy`,
+  `delimiter`,
+  `quote_char`,
+  `note`,
+  `is_active`
+) VALUES (
+  @shibuya_westhills_exam_facility_id,
+  'SHIBUYA_WESTHILLS_2026_05_PATTERN_A_V1',
+  'CSV',
+  '渋谷ウエストヒルズクリニック 2026-05 sample Pattern A',
+  1,
+  'SINGLE',
+  'SIMPLE_HEADER',
+  'NONE',
+  1,
+  2,
+  '5d03088d9aec595715455bdc35b66ee8fa8c7d9d023d61e14d51de52ce98dfd0',
+  'VERIFIED',
+  'ALLOW_AFTER_CONFIRM',
+  0,
+  'SKIP_CHECKED_OK',
+  'IMPORT_AND_CHECK_LATER',
+  'CP932',
+  'ALLOW_COMMON_ENCODINGS',
+  ',',
+  '"',
+  'draft seed: shibuya westhills sample. Pattern A 830-column header.',
+  1
+)
+ON DUPLICATE KEY UPDATE
+  `file_type` = VALUES(`file_type`),
+  `format_name` = VALUES(`format_name`),
+  `has_header` = VALUES(`has_header`),
+  `header_mode` = VALUES(`header_mode`),
+  `header_structure_type` = VALUES(`header_structure_type`),
+  `header_context_rule` = VALUES(`header_context_rule`),
+  `active_header_row_no` = VALUES(`active_header_row_no`),
+  `data_start_row_no` = VALUES(`data_start_row_no`),
+  `header_sha256` = VALUES(`header_sha256`),
+  `header_hash_status` = VALUES(`header_hash_status`),
+  `header_mismatch_policy` = VALUES(`header_mismatch_policy`),
+  `allow_column_no_rules` = VALUES(`allow_column_no_rules`),
+  `duplicate_row_policy` = VALUES(`duplicate_row_policy`),
+  `missing_basic_info_policy` = VALUES(`missing_basic_info_policy`),
+  `character_encoding` = VALUES(`character_encoding`),
+  `encoding_fallback_policy` = VALUES(`encoding_fallback_policy`),
+  `delimiter` = VALUES(`delimiter`),
+  `quote_char` = VALUES(`quote_char`),
+  `note` = VALUES(`note`),
+  `is_active` = VALUES(`is_active`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+SELECT `csv_format_version_id`
+  INTO @shibuya_westhills_csv_format_version_id
+FROM `phr_master`.`csv_format_versions`
+WHERE `exam_facility_id` = @shibuya_westhills_exam_facility_id
+  AND `mapping_version` = 'SHIBUYA_WESTHILLS_2026_05_PATTERN_A_V1'
+LIMIT 1;
+
+INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
+  `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
+  `selection_group_code`, `target_namecode`, `target_identity_item_code`, `target_field`,
+  `method_structure_type`, `value_source_type`, `fixed_value`, `value_join_separator`,
+  `raw_value_type`, `raw_unit`, `is_required`, `priority`, `is_active`, `note`
+)
+SELECT
+  @shibuya_westhills_csv_format_version_id,
+  REPLACE(r.`rule_key`, 'hirooka.', 'shibuya_westhills.'),
+  r.`target_kind`,
+  r.`target_resolution_type`,
+  r.`selection_mode`,
+  r.`selection_group_code`,
+  r.`target_namecode`,
+  r.`target_identity_item_code`,
+  r.`target_field`,
+  r.`method_structure_type`,
+  r.`value_source_type`,
+  r.`fixed_value`,
+  r.`value_join_separator`,
+  r.`raw_value_type`,
+  r.`raw_unit`,
+  r.`is_required`,
+  r.`priority`,
+  r.`is_active`,
+  REPLACE(r.`note`, 'hirooka', 'shibuya_westhills')
+FROM `phr_master`.`csv_exam_result_mapping_rules` r
+WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id
+ON DUPLICATE KEY UPDATE
+  `target_kind` = VALUES(`target_kind`),
+  `target_resolution_type` = VALUES(`target_resolution_type`),
+  `selection_mode` = VALUES(`selection_mode`),
+  `selection_group_code` = VALUES(`selection_group_code`),
+  `target_namecode` = VALUES(`target_namecode`),
+  `target_identity_item_code` = VALUES(`target_identity_item_code`),
+  `target_field` = VALUES(`target_field`),
+  `method_structure_type` = VALUES(`method_structure_type`),
+  `value_source_type` = VALUES(`value_source_type`),
+  `fixed_value` = VALUES(`fixed_value`),
+  `value_join_separator` = VALUES(`value_join_separator`),
+  `raw_value_type` = VALUES(`raw_value_type`),
+  `raw_unit` = VALUES(`raw_unit`),
+  `is_required` = VALUES(`is_required`),
+  `priority` = VALUES(`priority`),
+  `is_active` = VALUES(`is_active`),
+  `note` = VALUES(`note`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+DELETE c
+FROM `phr_master`.`csv_exam_result_mapping_conditions` c
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+WHERE r.`csv_format_version_id` = @shibuya_westhills_csv_format_version_id;
+
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_context`, `header_name`, `header_occurrence`, `column_no`,
+  `operator`, `expected_value`, `expected_value_normalized`, `source_role`,
+  `priority`, `is_active`, `note`
+)
+SELECT
+  shibuya_rule.`csv_exam_result_mapping_rule_id`,
+  c.`condition_group_no`,
+  c.`condition_type`,
+  c.`locator_type`,
+  c.`header_context`,
+  c.`header_name`,
+  c.`header_occurrence`,
+  c.`column_no`,
+  c.`operator`,
+  c.`expected_value`,
+  c.`expected_value_normalized`,
+  c.`source_role`,
+  c.`priority`,
+  c.`is_active`,
+  REPLACE(c.`note`, 'hirooka', 'shibuya_westhills')
+FROM `phr_master`.`csv_exam_result_mapping_conditions` c
+JOIN `phr_master`.`csv_exam_result_mapping_rules` hirooka_rule
+  ON hirooka_rule.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+JOIN `phr_master`.`csv_exam_result_mapping_rules` shibuya_rule
+  ON shibuya_rule.`csv_format_version_id` = @shibuya_westhills_csv_format_version_id
+ AND shibuya_rule.`rule_key` = REPLACE(hirooka_rule.`rule_key`, 'hirooka.', 'shibuya_westhills.')
 WHERE hirooka_rule.`csv_format_version_id` = @hirooka_csv_format_version_id;
 
 -- ============================================================
