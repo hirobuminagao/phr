@@ -17,6 +17,8 @@ INSERT INTO `phr_master`.`norm_variants` (
   `is_active`,
   `note`
 ) VALUES
+  ('1.2.392.200119.6.2001', '1', '1', '1', '1.2.392.200119.6.2001', '特記事項あり', 1, 1, 1, 'CSV import core: finding presence code'),
+  ('1.2.392.200119.6.2001', '2', '2', '2', '1.2.392.200119.6.2001', '特記事項なし', 1, 2, 1, 'CSV import core: finding absence code'),
   ('1.2.392.200119.6.2102', '(-)', '(-)', '1', '1.2.392.200119.6.2102', '－', 0, 90, 1, 'CSV sample alias: urine qualitative minus with parentheses'),
   ('1.2.392.200119.6.2102', '(±)', '(±)', '2', '1.2.392.200119.6.2102', '±', 0, 90, 1, 'CSV sample alias: urine qualitative plus-minus with parentheses'),
   ('1.2.392.200119.6.2102', '(+)', '(+)', '3', '1.2.392.200119.6.2102', '1＋', 0, 90, 1, 'CSV sample alias: urine qualitative one-plus with parentheses'),
