@@ -84,6 +84,8 @@ Draft.
 - `未実施`, `未受診`, `実施せず`, `キャンセル`, `中止`, `拒否`, `対象外` など、実施されていないことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_NO_RESULT`, `validation_status = WARNING` として扱う。
 - `測定不能`, `判定不能`, `検体不良`, `採血不可`, `測定不可` など、測定できなかったことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_UNMEASURABLE`, `validation_status = WARNING` として扱う。
 - 型に合わない未知文字列は、元値を `exam_item_values.raw_value` に残し、`normalize_status = ERROR`, `normalize_reason = INVALID_VALUE_TYPE`, `validation_status = INVALID` として扱う。
+- 数値系項目の `<0.1` / `0.1未満` のような下限未満表現は、XMLのPQで比較演算子を表現できないため、元値を `exam_item_values.raw_value` に残し、数値部を `exam_item_values.normalized_value` に保持する。
+- 下限未満表現を数値部へ寄せた場合は、`normalize_status = OK`, `normalize_reason = RAW_VALUE_NUMERIC_COMPARATOR_NORMALIZED`, `validation_status = VALID` とする。
 - `あり` / `なし` は結果値として意味を持つ可能性があるため、初期の共通ノイズ辞書には含めず、項目別ルール、CD/CO辞書、または変換ルールで扱う。
 - 数値系 `data_type` は初期実装では `PQ`, `INT`, `REAL` とする。現行exportの数値型は `PQ` だが、旧 `norm_rules` との互換として `INT` / `REAL` も受ける。
 - `raw_unit` と `item_master.unit` が異なる場合、初期実装では単位変換せず、`normalize_status = ERROR`, `normalize_reason = UNIT_MISMATCH`, `validation_status = INVALID` とする。

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Any, Mapping
 
 from scripts.lib.db.lookup.exam_item_master import get_exam_item
@@ -41,6 +42,8 @@ UNMEASURABLE_WORDS = {
 NUMERIC_DATA_TYPES = {"PQ", "INT", "REAL"}
 CODE_DATA_TYPES = {"CD", "CO"}
 TEXT_DATA_TYPES = {"ST", "TX"}
+NUMERIC_LESS_THAN_PATTERN = re.compile(r"^(?:<|＜)\s*([+-]?\d+(?:\.\d+)?)$")
+NUMERIC_LESS_THAN_JA_PATTERN = re.compile(r"^([+-]?\d+(?:\.\d+)?)\s*未満$")
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,15 @@ def _item_data_type(item: Mapping[str, Any]) -> str | None:
 
 def _item_unit(item: Mapping[str, Any]) -> str | None:
     return _compact_text(item.get("unit") or item.get("ucum_unit") or item.get("display_unit"))
+
+
+def _numeric_text(value: str) -> tuple[str, str | None]:
+    compact = value.replace(",", "")
+    for pattern in (NUMERIC_LESS_THAN_PATTERN, NUMERIC_LESS_THAN_JA_PATTERN):
+        match = pattern.match(compact)
+        if match:
+            return match.group(1), "RAW_VALUE_NUMERIC_COMPARATOR_NORMALIZED"
+    return compact, None
 
 
 def _ok(
@@ -277,8 +289,9 @@ def normalize_exam_item_value(
         )
 
     if data_type in NUMERIC_DATA_TYPES:
+        numeric_text, normalize_reason = _numeric_text(value)
         try:
-            numeric_value = Decimal(value.replace(",", ""))
+            numeric_value = Decimal(numeric_text)
         except InvalidOperation:
             return _error(
                 raw_value=raw_text,
@@ -292,6 +305,7 @@ def normalize_exam_item_value(
             raw_unit=unit,
             normalized_value=format(numeric_value, "f"),
             normalized_unit=expected_unit or unit,
+            normalize_reason=normalize_reason,
         )
 
     if data_type in TEXT_DATA_TYPES or data_type is None:

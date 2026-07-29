@@ -39,14 +39,15 @@ Local Docker import verification result:
 - Rows inserted on first run: 5
 - Exam item values: 316
 - Script errors: 0
-- Normalize/validation result: `314 OK / 2 ERROR`
+- Normalize/validation result after comparator normalization: `316 OK / 0 ERROR`
 
-The remaining normalize errors are pending decision:
+The sample contains comparator-style numeric values:
 
 | namecode | item | raw value | reason |
 | --- | --- | --- | --- |
-| `9E160162100000001` | 視力(右) | `<0.1` | Current PQ normalize accepts numeric values only |
-| `9E160162200000001` | 視力(左) | `<0.1` | Current PQ normalize accepts numeric values only |
+| `9E160162100000001` | 視力(右) | `<0.1` | Normalized to `0.1` with raw evidence preserved |
+| `9E160162200000001` | 視力(左) | `<0.1` | Normalized to `0.1` with raw evidence preserved |
 
-`<0.1` is not a dictionary alias issue. It needs a separate decision on how to
-preserve or export comparator-style numeric values.
+`<0.1` is not a dictionary alias issue. Because XML PQ cannot express the
+comparison operator, the CSV raw value is preserved in `raw_value` and the
+numeric threshold is stored in `normalized_value`.

@@ -423,6 +423,8 @@ normalize lib単体に空値が渡された場合は以下を返す。
 - 非測定値語に一致した場合は、数値変換を試みず分類済みreasonを返す
 - raw値を数値文字列へ変換する
 - 全角数字、カンマ、前後空白は軽く正規化する
+- `<0.1` / `0.1未満` のような下限未満表現は、raw値を証跡として残し、比較記号や `未満` を外した数値部を `normalized_value` に保持する
+- 下限未満表現を数値部へ寄せた場合は、`normalize_reason = RAW_VALUE_NUMERIC_COMPARATOR_NORMALIZED` とする
 - 数値変換できない場合は `INVALID_VALUE_TYPE`
 - 単位は原則 `item_master.unit` を正とする
 - 初期実装で数値系として扱う `data_type` は `PQ`, `INT`, `REAL` とする
