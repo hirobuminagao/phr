@@ -308,7 +308,21 @@ INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
   (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1880, 1, 'draft seed:hirooka.exam.gastric_xray_presence_normal:異常所見なし -> 所見なし CD=2'),
   (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1890, 1, 'draft seed:hirooka.exam.gastric_xray_presence_abnormal:所見本文あり -> 所見あり CD=1'),
   (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_endoscopy_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1900, 1, 'draft seed:hirooka.exam.gastric_endoscopy_presence_normal:異常所見なし -> 所見なし CD=2'),
-  (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_endoscopy_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1910, 1, 'draft seed:hirooka.exam.gastric_endoscopy_presence_abnormal:所見本文あり -> 所見あり CD=1')
+  (@hirooka_csv_format_version_id, 'hirooka.exam.gastric_endoscopy_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1910, 1, 'draft seed:hirooka.exam.gastric_endoscopy_presence_abnormal:所見本文あり -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.medical_history_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N056000000000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1920, 1, 'draft seed:hirooka.exam.medical_history_presence_normal:特になし -> 既往歴なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.medical_history_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N056000000000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1930, 1, 'draft seed:hirooka.exam.medical_history_presence_abnormal:既往歴本文あり -> CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.subjective_symptoms_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N061000000000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1940, 1, 'draft seed:hirooka.exam.subjective_symptoms_presence_normal:特になし -> 自覚症状なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.subjective_symptoms_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N061000000000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1950, 1, 'draft seed:hirooka.exam.subjective_symptoms_presence_abnormal:自覚症状本文あり -> CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.objective_symptoms_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N066000000000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1960, 1, 'draft seed:hirooka.exam.objective_symptoms_presence_normal:特になし -> 他覚症状なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.objective_symptoms_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N066000000000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1970, 1, 'draft seed:hirooka.exam.objective_symptoms_presence_abnormal:他覚症状本文あり -> CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_right_1000_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163100000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1980, 1, 'draft seed:hirooka.exam.hearing_right_1000_normal:判定A -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_right_1000_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163100000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1990, 1, 'draft seed:hirooka.exam.hearing_right_1000_abnormal:判定A以外 -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_left_1000_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163500000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 2000, 1, 'draft seed:hirooka.exam.hearing_left_1000_normal:判定A -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_left_1000_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163500000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 2010, 1, 'draft seed:hirooka.exam.hearing_left_1000_abnormal:判定A以外 -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_right_4000_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163200000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 2020, 1, 'draft seed:hirooka.exam.hearing_right_4000_normal:判定A -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_right_4000_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163200000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 2030, 1, 'draft seed:hirooka.exam.hearing_right_4000_abnormal:判定A以外 -> 所見あり CD=1'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_left_4000_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163600000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 2040, 1, 'draft seed:hirooka.exam.hearing_left_4000_normal:判定A -> 所見なし CD=2'),
+  (@hirooka_csv_format_version_id, 'hirooka.exam.hearing_left_4000_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9D100163600000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 2050, 1, 'draft seed:hirooka.exam.hearing_left_4000_abnormal:判定A以外 -> 所見あり CD=1')
 ON DUPLICATE KEY UPDATE
   `target_kind` = VALUES(`target_kind`),
   `target_resolution_type` = VALUES(`target_resolution_type`),
@@ -384,6 +398,27 @@ JOIN (
   UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_presence_normal', '胃部内視鏡所見', 'EQUALS', '異常所見なし', 100
   UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_presence_abnormal', '胃部内視鏡所見', 'NOT_EMPTY', NULL, 100
   UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_presence_abnormal', '胃部内視鏡所見', 'NOT_EQUALS', '異常所見なし', 110
+  UNION ALL SELECT 'hirooka.exam.medical_history_presence_normal', '既往歴', 'EQUALS', '特になし、', 100
+  UNION ALL SELECT 'hirooka.exam.medical_history_presence_abnormal', '既往歴', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.medical_history_presence_abnormal', '既往歴', 'NOT_EQUALS', '特になし、', 110
+  UNION ALL SELECT 'hirooka.exam.subjective_symptoms_presence_normal', '自覚症状', 'EQUALS', '特になし', 100
+  UNION ALL SELECT 'hirooka.exam.subjective_symptoms_presence_abnormal', '自覚症状', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.subjective_symptoms_presence_abnormal', '自覚症状', 'NOT_EQUALS', '特になし', 110
+  UNION ALL SELECT 'hirooka.exam.objective_symptoms_presence_normal', '他覚症状', 'EQUALS', '特になし', 100
+  UNION ALL SELECT 'hirooka.exam.objective_symptoms_presence_abnormal', '他覚症状', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.objective_symptoms_presence_abnormal', '他覚症状', 'NOT_EQUALS', '特になし', 110
+  UNION ALL SELECT 'hirooka.exam.hearing_right_1000_normal', '右）1000Hz 判定', 'EQUALS', 'Ａ', 100
+  UNION ALL SELECT 'hirooka.exam.hearing_right_1000_abnormal', '右）1000Hz 判定', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.hearing_right_1000_abnormal', '右）1000Hz 判定', 'NOT_EQUALS', 'Ａ', 110
+  UNION ALL SELECT 'hirooka.exam.hearing_left_1000_normal', '左）1000Hz 判定', 'EQUALS', 'Ａ', 100
+  UNION ALL SELECT 'hirooka.exam.hearing_left_1000_abnormal', '左）1000Hz 判定', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.hearing_left_1000_abnormal', '左）1000Hz 判定', 'NOT_EQUALS', 'Ａ', 110
+  UNION ALL SELECT 'hirooka.exam.hearing_right_4000_normal', '右）4000Hz 判定', 'EQUALS', 'Ａ', 100
+  UNION ALL SELECT 'hirooka.exam.hearing_right_4000_abnormal', '右）4000Hz 判定', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.hearing_right_4000_abnormal', '右）4000Hz 判定', 'NOT_EQUALS', 'Ａ', 110
+  UNION ALL SELECT 'hirooka.exam.hearing_left_4000_normal', '左）4000Hz 判定', 'EQUALS', 'Ａ', 100
+  UNION ALL SELECT 'hirooka.exam.hearing_left_4000_abnormal', '左）4000Hz 判定', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'hirooka.exam.hearing_left_4000_abnormal', '左）4000Hz 判定', 'NOT_EQUALS', 'Ａ', 110
 ) x ON x.`rule_key` = r.`rule_key`
 WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id;
 
@@ -408,6 +443,12 @@ JOIN (
   UNION ALL SELECT 'hirooka.exam.gastric_xray_finding_text', '胃部Ｘ線所見', 'NOT_EQUALS', '異常所見なし', 120
   UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_finding_text', '胃部内視鏡所見', 'NOT_EMPTY', NULL, 110
   UNION ALL SELECT 'hirooka.exam.gastric_endoscopy_finding_text', '胃部内視鏡所見', 'NOT_EQUALS', '異常所見なし', 120
+  UNION ALL SELECT 'hirooka.exam.medical_history_text', '既往歴', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'hirooka.exam.medical_history_text', '既往歴', 'NOT_EQUALS', '特になし、', 120
+  UNION ALL SELECT 'hirooka.exam.subjective_symptoms_text', '自覚症状', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'hirooka.exam.subjective_symptoms_text', '自覚症状', 'NOT_EQUALS', '特になし', 120
+  UNION ALL SELECT 'hirooka.exam.objective_symptoms_text', '他覚症状', 'NOT_EMPTY', NULL, 110
+  UNION ALL SELECT 'hirooka.exam.objective_symptoms_text', '他覚症状', 'NOT_EQUALS', '特になし', 120
 ) x ON x.`rule_key` = r.`rule_key`
 WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id;
 
@@ -1286,7 +1327,11 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ('oroku.exam.vision_right_uncorrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162100000001', NULL, '視力裸眼（右）', 1, 'VALUE', NULL, NULL, 0, 1310, 'uncorrected visual acuity right'),
 ('oroku.exam.vision_left_uncorrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162200000001', NULL, '視力裸眼（左）', 1, 'VALUE', NULL, NULL, 0, 1320, 'uncorrected visual acuity left'),
 ('oroku.exam.vision_right_corrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162500000001', NULL, '視力矯正（右）', 1, 'VALUE', NULL, NULL, 0, 1330, 'corrected visual acuity right'),
-('oroku.exam.vision_left_corrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162600000001', NULL, '視力矯正（左）', 1, 'VALUE', NULL, NULL, 0, 1340, 'corrected visual acuity left');
+('oroku.exam.vision_left_corrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162600000001', NULL, '視力矯正（左）', 1, 'VALUE', NULL, NULL, 0, 1340, 'corrected visual acuity left'),
+('oroku.exam.hearing_right_1000', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9D100163100000011', NULL, 'オージオ（右）1000Ｈｚ', 1, 'VALUE', NULL, NULL, 0, 1350, 'hearing right 1000Hz explicit finding code from second source'),
+('oroku.exam.hearing_left_1000', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9D100163500000011', NULL, 'オージオ（左）1000Ｈｚ', 1, 'VALUE', NULL, NULL, 0, 1360, 'hearing left 1000Hz explicit finding code from second source'),
+('oroku.exam.hearing_right_4000', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9D100163200000011', NULL, 'オージオ（右）4000Ｈｚ', 1, 'VALUE', NULL, NULL, 0, 1370, 'hearing right 4000Hz explicit finding code from second source'),
+('oroku.exam.hearing_left_4000', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9D100163600000011', NULL, 'オージオ（左）4000Ｈｚ', 1, 'VALUE', NULL, NULL, 0, 1380, 'hearing left 4000Hz explicit finding code from second source');
 
 INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
   `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
