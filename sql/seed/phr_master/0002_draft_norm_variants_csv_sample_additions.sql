@@ -87,6 +87,8 @@ INSERT INTO `phr_master`.`norm_variants` (
   ('1.2.392.200119.6.2002', '2', '2', '2', '1.2.392.200119.6.2002', '異常所見なし', 0, 90, 1, 'CSV sample core alias: finding presence code'),
   ('1.2.392.200119.6.2002', '異常所見あり', '異常所見あり', '1', '1.2.392.200119.6.2002', '異常所見あり', 0, 90, 1, 'CSV sample core alias: finding presence'),
   ('1.2.392.200119.6.2002', '異常所見なし', '異常所見なし', '2', '1.2.392.200119.6.2002', '異常所見なし', 0, 90, 1, 'CSV sample core alias: finding presence'),
+  ('1.2.392.200119.6.2002', '所見あり', '所見あり', '1', '1.2.392.200119.6.2002', '所見あり', 0, 90, 1, 'CSV sample core alias: finding presence short text'),
+  ('1.2.392.200119.6.2002', '所見なし', '所見なし', '2', '1.2.392.200119.6.2002', '所見なし', 0, 90, 1, 'CSV sample core alias: finding presence short text'),
   ('1.2.392.200119.6.2004', '速い', '速い', '1', '1.2.392.200119.6.2004', '速い', 0, 90, 1, 'CSV sample core alias: eating speed'),
   ('1.2.392.200119.6.2004', 'ふつう', 'ふつう', '2', '1.2.392.200119.6.2004', 'ふつう', 0, 90, 1, 'CSV sample core alias: eating speed'),
   ('1.2.392.200119.6.2004', '遅い', '遅い', '3', '1.2.392.200119.6.2004', '遅い', 0, 90, 1, 'CSV sample core alias: eating speed'),
@@ -96,7 +98,8 @@ INSERT INTO `phr_master`.`norm_variants` (
   ('1.2.392.200119.6.2102', '4', '4', '4', '1.2.392.200119.6.2102', '2＋', 0, 90, 1, 'CSV sample core alias: urine qualitative code'),
   ('1.2.392.200119.6.2102', '5', '5', '5', '1.2.392.200119.6.2102', '3＋', 0, 90, 1, 'CSV sample core alias: urine qualitative code'),
   ('1.2.392.200119.6.2202', '食後3.5時間以上10時間未満', '食後3.5時間以上10時間未満', '3', '1.2.392.200119.6.2202', '食後3.5時間以上10時間未満', 0, 90, 1, 'CSV sample core alias: postprandial time'),
-  ('1.2.392.200119.6.24040', 'やめた', 'やめた', '7', '1.2.392.200119.6.24040', 'やめた', 0, 90, 1, 'CSV sample core alias: drinking frequency')
+  ('1.2.392.200119.6.24040', 'やめた', 'やめた', '7', '1.2.392.200119.6.24040', 'やめた', 0, 90, 1, 'CSV sample core alias: drinking frequency'),
+  ('1.2.392.200119.6.24060', 'いいえ', 'いいえ', '3', '1.2.392.200119.6.24060', 'いいえ', 0, 90, 1, 'CSV sample core alias: smoking no')
 ON DUPLICATE KEY UPDATE
   `raw_token_norm` = VALUES(`raw_token_norm`),
   `normalized_code` = VALUES(`normalized_code`),
