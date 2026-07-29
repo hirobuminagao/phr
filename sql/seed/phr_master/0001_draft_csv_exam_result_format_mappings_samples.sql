@@ -110,6 +110,9 @@ WHERE `exam_facility_id` = @hirooka_exam_facility_id
   AND `mapping_version` = 'HIROOKA_2026_05_PATTERN_A_V1'
 LIMIT 1;
 
+-- A failed execution can leave a temporary table in the same client session.
+DROP TEMPORARY TABLE IF EXISTS `tmp_csv_exam_mapping_seed`;
+
 CREATE TEMPORARY TABLE `tmp_csv_exam_mapping_seed` (
   `seed_key` varchar(128) NOT NULL,
   `format_key` varchar(32) NOT NULL,
@@ -786,6 +789,6 @@ JOIN (
 ) x ON x.`rule_key` = r.`rule_key`
 WHERE r.`csv_format_version_id` = @heartcross_csv_format_version_id;
 
-DROP TEMPORARY TABLE `tmp_csv_exam_mapping_seed`;
+DROP TEMPORARY TABLE IF EXISTS `tmp_csv_exam_mapping_seed`;
 
 COMMIT;
