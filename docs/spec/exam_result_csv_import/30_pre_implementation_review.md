@@ -2,10 +2,12 @@
 
 ## Status
 
-Draft for implementation review.
+Historical pre-implementation baseline.
 
-このドキュメントは、`02_02_exam_result_csv_import` 実装前に、現時点の決定事項、実装対象、未決事項、レビュー観点を1枚に集約する。
-実装前レビュー時点の集約は本ドキュメントを正とする。
+この文書は実装着手時点の判断材料を保存するものであり、2026-07-29時点の現在正ではない。
+決定事項は `03_decisions.md`、実装到達点・残課題・CSVからXML作成への引継ぎは `33_implementation_status_and_xml_handoff.md` を参照する。
+
+このドキュメントは、`02_02_exam_result_csv_import` 実装前に、当時の決定事項、実装対象、未決事項、レビュー観点を1枚に集約するために作成したものである。
 詳細な履歴は `05_design_history.md`、採用済み決定は `03_decisions.md`、DDL案は `10_phr_master_initial_ddl_draft.md`、処理詳細は `11_csv_import_processing_design_draft.md` を参照する。
 
 ## Implementation Goal

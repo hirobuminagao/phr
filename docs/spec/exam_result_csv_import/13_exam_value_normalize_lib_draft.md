@@ -2,10 +2,12 @@
 
 ## Status
 
-Draft.
+Implemented baseline with follow-up items.
 
-このドキュメントは、CSV健診結果取込で利用する健診結果値normalize共通libの設計案を整理する。
-現時点では実装変更は行わず、`02_02_exam_result_csv_import` と後続のXML由来再normalizeで共通利用する前提仕様として扱う。
+共通normalizeは `scripts/lib/examination/value_normalizer.py`、辞書lookupは `scripts/lib/db/lookup/norm_variant.py` に実装済みである。
+現状は非測定値語をPython定数で保持し、CSV取込では辞書を単品参照している。採用済みのYAML管理と一括参照は未実装であり、`33_implementation_status_and_xml_handoff.md` に差分を明記する。
+
+このドキュメントは、CSV健診結果取込で利用する健診結果値normalize共通libの設計案を整理したものである。
 
 ## Existing Context
 

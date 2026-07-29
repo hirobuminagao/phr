@@ -2,10 +2,11 @@
 
 ## Status
 
-Draft.
+Current as of 2026-07-29.
 
 このドキュメントは `02_02_exam_result_csv_import` の前提となるマスタ整備、および `phr_master` 新設に関する採用済み決定事項を管理する。
 協議経緯は `05_design_history.md` に記録し、本ファイルには実装・DDL・seed・migration の前提にできる内容だけを反映する。
+実装到達点と採用済みだが未実装の範囲は `33_implementation_status_and_xml_handoff.md` を参照する。
 
 ## Decisions
 
@@ -324,6 +325,10 @@ Draft.
 - 実際に採用した文字コードは `file_receipts.actual_character_encoding` に保存する。
 - `quote_char` はCSV parserへ実際に渡す。引用符が存在しないCSVも同じ設定で読めるため、引用符の有無だけではformat不一致にしない。
 - delimiterは初期実装では登録値を固定使用し、自動fallbackの対象にしない。
+- `csv_row_ledger.health_exam_report_category` は、施設・format version別のmapping ruleで明示的に得られた値だけを保存する。
+- CSVに報告区分またはその確定済み変換元がない場合は `health_exam_report_category = NULL` とし、コース名称、検査項目構成、特定健診判定などから自動推測しない。
+- 報告区分の値・取得元が判明した時点で、`target_kind = LEDGER_FIELD`, `target_field = health_exam_report_category` のmapping ruleを追加する。未設定はCSV取込エラーにしない。
+- 施設側コースコードは `program_code` に原文を保持し、報告区分との対応が未確定な段階では `health_exam_report_category` へ変換しない。
 
 ### Source CSV Check
 

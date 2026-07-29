@@ -490,6 +490,7 @@ def upsert_row_ledger(
         "insurance_branch_number_raw": ledger_fields.get("insurance_branch_number_raw"),
         "birthdate": parse_date_value(ledger_fields.get("birthdate")),
         "gender_raw": ledger_fields.get("gender_raw"),
+        "health_exam_report_category": ledger_fields.get("health_exam_report_category"),
         "program_code": ledger_fields.get("program_code"),
         "postal_code": ledger_fields.get("postal_code"),
         "address": ledger_fields.get("address"),
@@ -511,7 +512,8 @@ def upsert_row_ledger(
                 insurer_number, exam_facility_id, facility_code, facility_name,
                 exam_date, name_full_raw, name_kana_raw,
                 insurance_symbol_raw, insurance_number_raw, insurance_branch_number_raw,
-                birthdate, gender_raw, program_code, postal_code, address, person_id_custom,
+                birthdate, gender_raw, health_exam_report_category, program_code,
+                postal_code, address, person_id_custom,
                 subscriber_match_status, exam_item_status, exam_item_count,
                 exam_item_error_count, exam_item_reason, row_status, row_reason
             )
@@ -521,7 +523,7 @@ def upsert_row_ledger(
                 %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s,
-                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s, %s
             )
@@ -548,6 +550,7 @@ def upsert_row_ledger(
                 params["insurance_branch_number_raw"],
                 params["birthdate"],
                 params["gender_raw"],
+                params["health_exam_report_category"],
                 params["program_code"],
                 params["postal_code"],
                 params["address"],
@@ -584,6 +587,7 @@ def upsert_row_ledger(
             insurance_branch_number_raw = %s,
             birthdate = %s,
             gender_raw = %s,
+            health_exam_report_category = %s,
             program_code = %s,
             postal_code = %s,
             address = %s,
@@ -615,6 +619,7 @@ def upsert_row_ledger(
             params["insurance_branch_number_raw"],
             params["birthdate"],
             params["gender_raw"],
+            params["health_exam_report_category"],
             params["program_code"],
             params["postal_code"],
             params["address"],

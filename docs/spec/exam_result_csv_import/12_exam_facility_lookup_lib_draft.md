@@ -2,10 +2,12 @@
 
 ## Status
 
-Draft.
+Implemented.
 
-このドキュメントは、受領フォルダ名から健診機関を解決する共通lookup libの設計案を整理する。
-現時点では実装変更は行わず、`02_02_exam_result_csv_import` と `01_scan_files.py` の前提仕様として扱う。
+共通lookupは `scripts/lib/db/lookup/exam_facility.py` に実装済みで、`01_scan_files.py` から利用している。
+本書はAPI設計の経緯として残し、実際の挙動は実装とテストを正とする。
+
+このドキュメントは、受領フォルダ名から健診機関を解決する共通lookup libの設計案を整理したものである。
 
 ## Purpose
 

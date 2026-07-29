@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`phr_master` は、`02_02_exam_result_csv_import` を設計・実装する前提として、健診機関、CSVフォーマット、項目マッピング、結果値normalize辞書などの共通マスタを整理するためのマスタ用DBである。
+`phr_master` は、`02_02_exam_result_csv_import` の健診機関、CSVフォーマット、項目マッピング、結果値normalize辞書などを管理するマスタ用DBである。
 
 このディレクトリでは、CSV健診結果取込に必要なマスタ境界を整理する。
 `phr_master` 新設そのものは目的ではなく、受領CSVを健診機関別に解釈して `exam_item_values` へ登録するための前提整備として扱う。
@@ -15,8 +15,9 @@
 
 ## Documents
 
-実装前レビューでは、現在正は `03_decisions.md` と `30_pre_implementation_review.md` とする。
-`05_design_history.md` は協議履歴であり、旧案や却下済み案が残っていても現在正とは限らない。
+2026-07-29時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `33_implementation_status_and_xml_handoff.md` である。
+実際のカラム・処理挙動は適用対象のDDL、migration、seed、コードを優先する。
+`05_design_history.md` は協議履歴、`30_pre_implementation_review.md` は実装着手時の基準点であり、旧案や当時の未決事項が残っていても現在正とは限らない。
 
 - `03_decisions.md`
   - 採用済みの決定事項。
@@ -25,8 +26,8 @@
   - 協議内容と意思決定の経緯。
   - `03_decisions.md` と差分がある場合は `03_decisions.md` を優先する。
 - `10_phr_master_initial_ddl_draft.md`
-  - `phr_master` 初期DDL案と、支払基金CSVの調査結果。
-  - 現時点では検討用であり、DDL適用・migration・seed・スクリプト変更は行わない。
+  - `phr_master` 初期DDLの設計基準と、支払基金CSVの調査結果。
+  - 実DDLは `sql/ddl/phr_master/` と `sql/migrations/phr_master/` を正とする。
 - `11_csv_import_processing_design_draft.md`
   - `02_02_exam_result_csv_import` の処理側設計案。
   - `file_receipts`、CSV行台帳、`exam_item_values` 登録までの接続を整理する。
@@ -51,14 +52,17 @@
   - ハートクロス健診プラザ赤坂駅前CSVサンプルをパターンB代表として調査したメモ。
   - 2行ヘッダー、2行目コード/namecode指定、健診日未含有の扱いを整理する。
 - `30_pre_implementation_review.md`
-  - 実装前レビュー用の集約ドキュメント。
-  - 決定済み事項、実装範囲、テーブル方針、処理方針、残レビュー項目をまとめる。
+  - 実装着手時点のレビュー基準を残す履歴ドキュメント。
+  - 現在の実装状況や残課題の判定には単独で使用しない。
 - `31_seed_data_preparation.md`
   - CSVフォーマット関連seedの整備メモ。
   - レビュー用SQL、含める初期データ、実投入前の判断点を整理する。
 - `32_exam_facility_master_data_check.md`
   - 支払基金CSVと既存 `medical_folder_aliases` seed の突合結果。
   - ヒロオカ/ハートクロスの存在確認、alias全体のコード一致状況、未一致施設を整理する。
+- `33_implementation_status_and_xml_handoff.md`
+  - 2026-07-29時点の実装、DDL、seed、テストと決定事項の同期結果。
+  - 実装済み範囲、未実装の汎用機能、施設確認待ち、CSVからXML作成へ渡せる情報と次の決定事項を整理する。
 
 ## ADR Policy
 

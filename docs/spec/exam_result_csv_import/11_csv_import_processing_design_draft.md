@@ -2,12 +2,13 @@
 
 ## Status
 
-Draft.
+Implemented baseline with deferred general-purpose rules.
+
+2026-07-29時点で、受領CSVのformat照合、行台帳、加入者突合、結果値normalize、`exam_item_values` 登録、CSV行の法定チェックまで実装済みである。
+本書は処理設計の基準として残し、実際の到達点と未実装範囲は `33_implementation_status_and_xml_handoff.md` を正とする。
 
 このドキュメントは `02_02_exam_result_csv_import` の処理側設計を整理する。
 `phr_master` の初期DDL案は `10_phr_master_initial_ddl_draft.md` に置き、本ドキュメントでは `health_exam_result` 側の受領台帳、CSV行台帳、`exam_item_values` 登録までの接続を扱う。
-
-現時点ではDDL適用、migration作成、seed作成、スクリプト変更は行わない。
 
 ## Related Existing Decisions
 
@@ -224,6 +225,10 @@ COLLATE=utf8mb4_ja_0900_as_cs;
 - `exam_facility_postal_code`
 - `exam_facility_address`
 - `exam_facility_phone_number`
+
+`health_exam_report_category` はmapping ruleで明示的に抽出・固定設定された値のみINSERT/UPDATEする。
+報告区分の取得元が未判明の場合はNULLのままとし、コース名称や検査項目構成から推測しない。
+後日対応が確定した場合は、施設・format version別ruleの追加で保存できる構造とする。
 
 CSV固有:
 

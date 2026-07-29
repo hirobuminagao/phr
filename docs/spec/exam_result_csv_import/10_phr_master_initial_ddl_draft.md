@@ -2,10 +2,13 @@
 
 ## Status
 
-Draft.
+Historical design baseline. Implemented.
 
-このドキュメントは `02_02_exam_result_csv_import` の設計前調査として、`phr_master` に初期作成するテーブルのDDL案を整理する。
-ここに記載するSQLは検討用であり、現時点ではDDL適用、migration作成、seed作成、スクリプト変更は行わない。
+2026-07-29時点では初期DDLとmigrationを作成済みである。
+実際のDB定義は `sql/ddl/phr_master/` と `sql/migrations/phr_master/` を正とし、本書のSQLは設計経緯の確認用とする。
+現在の実装状況と未実装範囲は `33_implementation_status_and_xml_handoff.md` を参照する。
+
+このドキュメントは `02_02_exam_result_csv_import` の設計前調査として、`phr_master` に初期作成するテーブルのDDL案を整理したものである。
 
 ## Source CSV Check
 

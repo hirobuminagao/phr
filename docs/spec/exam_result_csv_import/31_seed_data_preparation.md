@@ -2,10 +2,12 @@
 
 ## Status
 
-Draft.
+Implemented and expanded.
 
-このドキュメントは、CSVフォーマット関連の初期seedを作るための整備メモである。
-現時点ではDDL適用、migration適用、本番seed投入は行わない。
+2026-07-29時点で、健診機関・alias、CSV format/mapping、CSVサンプル用normalize辞書のseedを作成済みである。
+本書の初期2施設だけを前提とした記載は作成時点の履歴として残し、現在の適用対象と未整備範囲は `33_implementation_status_and_xml_handoff.md` を正とする。
+
+このドキュメントは、CSVフォーマット関連の初期seedを作るための整備メモとして作成したものである。
 
 ## Draft SQL
 
@@ -166,9 +168,9 @@ seedは再実行可能なupsert/delete+insert構成とし、SQL末尾で `COMMIT
 
 ハートクロスの心電図判定と胸部X線判定は、判定等級そのものを保存せず、条件付きルールで標準の所見有無CDを生成する。異常時は対応する所見本文もSTへ格納する。総合判定は施設由来判定として初期seedでは `exam_item_values` へマッピングしない。
 
-## Not Included Yet
+## Not Included in the Initial Draft
 
-このseedドラフトには以下をまだ含めない。
+初期2施設のseedドラフトには以下を含めていなかった。
 
 - `exam_facilities` の実ID確定後の本投入値
 - `medical_folder_aliases` の移設seed
@@ -179,9 +181,9 @@ seedは再実行可能なupsert/delete+insert構成とし、SQL末尾で `COMMIT
 - `header_snapshot_json` の完全な列配列
 - FastAPIテンプレート登録API
 
-## Required Decisions Before Actual Insert
+## Decisions Identified Before the Initial Insert
 
-実投入前に必要な判断は以下である。
+初回投入前のレビューでは以下を判断対象としていた。
 
 1. `header_snapshot_json` をSQLに直接持たせるか、CSVから生成するseed補助スクリプトで作るか。
 2. ハートクロスの健診日を、別データ補完、前処理、または健診機関回答後のmapping追加のどれで扱うか。
@@ -196,5 +198,6 @@ seedは再実行可能なupsert/delete+insert構成とし、SQL末尾で `COMMIT
 
 ## Current Recommendation
 
-初期実装に入る前の次作業は、`exam_facilities` と `medical_folder_aliases` のseedを先に確定し、CSV format seedでは固定ID直書きではなく `medical_institution_code` によるJOIN/変数解決で本投入形へ寄せることである。
-その後、`norm_variants` と非測定値語YAMLをサンプル値に合わせて最小追加する。
+当初推奨していた `exam_facilities` / `medical_folder_aliases` の先行投入と、`medical_institution_code` からformat対象施設を解決する構成は実装済みである。
+現在は5施設のformat/mapping seedとサンプルで利用した `norm_variants` 追加seedまで整備済みである。
+非測定値語YAML、`ANNEX2_IDENTITY` 197件、入力支援bundle、完全な `header_snapshot_json` は未整備であり、現行5施設のCSV取込を止める要件ではないが汎用化の残課題とする。
