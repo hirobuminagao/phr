@@ -36,6 +36,7 @@ def rule(
     value_source_type: str = "SOURCE",
     fixed_value: str | None = None,
     value_join_separator: str | None = None,
+    value_exclude_values: tuple[str, ...] = (),
 ) -> CsvMappingRule:
     return CsvMappingRule(
         rule_id=1,
@@ -52,6 +53,7 @@ def rule(
         value_source_type=value_source_type,
         fixed_value=fixed_value,
         value_join_separator=value_join_separator,
+        value_exclude_values=value_exclude_values,
         raw_value_type=None,
         raw_unit=None,
         is_required=False,
@@ -92,6 +94,22 @@ def test_multiple_value_columns_are_joined_while_blank_values_are_ignored() -> N
 
     assert result.values_by_role["VALUE"] == "心雑音 要受診 / 高血圧 要観察"
     assert blank_result.values_by_role["VALUE"] == "心雑音 要受診"
+
+
+def test_multiple_value_columns_ignore_configured_noise_values() -> None:
+    mapping = rule(
+        condition(1, condition_type="HEADER_MATCH", column_no=1),
+        condition(2, condition_type="HEADER_MATCH", column_no=2),
+        condition(3, condition_type="HEADER_MATCH", column_no=3),
+        value_join_separator=" / ",
+        value_exclude_values=("異常なし/",),
+    )
+
+    result = extract_rule_value(["脂肪肝/", "異常なし/", "腎嚢胞/"], mapping)
+    only_noise_result = extract_rule_value(["異常なし/", "", "異常なし/"], mapping)
+
+    assert result.values_by_role["VALUE"] == "脂肪肝/ / 腎嚢胞/"
+    assert only_noise_result.values_by_role["VALUE"] is None
 
 
 def test_multiple_value_columns_require_explicit_join_separator() -> None:

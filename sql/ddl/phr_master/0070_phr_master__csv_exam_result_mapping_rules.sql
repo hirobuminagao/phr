@@ -13,6 +13,7 @@ CREATE TABLE `phr_master`.`csv_exam_result_mapping_rules` (
   `value_source_type` varchar(32) NOT NULL DEFAULT 'SOURCE',
   `fixed_value` text,
   `value_join_separator` varchar(32) DEFAULT NULL,
+  `value_exclude_values` text,
   `raw_value_type` varchar(32) DEFAULT NULL,
   `raw_unit` varchar(64) DEFAULT NULL,
   `is_required` tinyint(1) NOT NULL DEFAULT 0,

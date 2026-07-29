@@ -7,6 +7,7 @@
 --   - Hirooka Clinic sample Pattern A
 --   - Healthcare Clinic Atsugi sample Pattern A
 --   - Shibuya Westhills Clinic sample Pattern A
+--   - Oroku Hospital joined sample Pattern C
 --   - Heartcross Akasaka sample Pattern B
 -- - Facility-derived judgement columns are intentionally not mapped in the initial seed.
 --
@@ -41,6 +42,12 @@ SELECT `exam_facility_id`
   INTO @shibuya_westhills_exam_facility_id
 FROM `phr_master`.`exam_facilities`
 WHERE `medical_institution_code` = '1311333301'
+LIMIT 1;
+
+SELECT `exam_facility_id`
+  INTO @oroku_exam_facility_id
+FROM `phr_master`.`exam_facilities`
+WHERE `medical_institution_code` = '4710114044'
 LIMIT 1;
 
 -- ============================================================
@@ -1140,6 +1147,465 @@ JOIN (
   UNION ALL SELECT 'heartcross.exam.chest_xray_finding_text', '9N206160700000011', 'NOT_EQUALS', '異常なし', 120
 ) x ON x.`rule_key` = r.`rule_key`
 WHERE r.`csv_format_version_id` = @heartcross_csv_format_version_id;
+
+-- ============================================================
+-- Oroku Hospital / joined sample 001
+-- ============================================================
+--
+-- Oroku sample is a joined CSV. The second source starts at column 124 and is
+-- used as the template base. Insurance symbol/number are expected as appended
+-- trailing columns in production; insurer number is carried by file_receipts.
+
+INSERT INTO `phr_master`.`csv_format_versions` (
+  `exam_facility_id`,
+  `mapping_version`,
+  `file_type`,
+  `format_name`,
+  `has_header`,
+  `header_mode`,
+  `header_structure_type`,
+  `header_context_rule`,
+  `active_header_row_no`,
+  `data_start_row_no`,
+  `header_sha256`,
+  `header_hash_status`,
+  `header_mismatch_policy`,
+  `allow_column_no_rules`,
+  `duplicate_row_policy`,
+  `missing_basic_info_policy`,
+  `character_encoding`,
+  `encoding_fallback_policy`,
+  `delimiter`,
+  `quote_char`,
+  `note`,
+  `is_active`
+) VALUES (
+  @oroku_exam_facility_id,
+  'OROKU_2026_05_JOINED_PATTERN_C_V1',
+  'CSV',
+  '小禄病院 2026-05 joined sample Pattern C',
+  1,
+  'SINGLE',
+  'SIMPLE_HEADER',
+  'NONE',
+  1,
+  2,
+  'd2c027cceebffc5ebc22407896cab777db3f021b1be701650413e8f3da4f609c',
+  'VERIFIED',
+  'ALLOW_AFTER_CONFIRM',
+  0,
+  'SKIP_CHECKED_OK',
+  'IMPORT_AND_CHECK_LATER',
+  'utf-8-sig',
+  'ALLOW_COMMON_ENCODINGS',
+  ',',
+  '"',
+  'draft seed: oroku joined sample. second source is template base; insurance symbol/number are appended trailing columns; insurer number comes from file_receipts.',
+  1
+)
+ON DUPLICATE KEY UPDATE
+  `file_type` = VALUES(`file_type`),
+  `format_name` = VALUES(`format_name`),
+  `has_header` = VALUES(`has_header`),
+  `header_mode` = VALUES(`header_mode`),
+  `header_structure_type` = VALUES(`header_structure_type`),
+  `header_context_rule` = VALUES(`header_context_rule`),
+  `active_header_row_no` = VALUES(`active_header_row_no`),
+  `data_start_row_no` = VALUES(`data_start_row_no`),
+  `header_sha256` = VALUES(`header_sha256`),
+  `header_hash_status` = VALUES(`header_hash_status`),
+  `header_mismatch_policy` = VALUES(`header_mismatch_policy`),
+  `allow_column_no_rules` = VALUES(`allow_column_no_rules`),
+  `duplicate_row_policy` = VALUES(`duplicate_row_policy`),
+  `missing_basic_info_policy` = VALUES(`missing_basic_info_policy`),
+  `character_encoding` = VALUES(`character_encoding`),
+  `encoding_fallback_policy` = VALUES(`encoding_fallback_policy`),
+  `delimiter` = VALUES(`delimiter`),
+  `quote_char` = VALUES(`quote_char`),
+  `note` = VALUES(`note`),
+  `is_active` = VALUES(`is_active`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+SELECT `csv_format_version_id`
+  INTO @oroku_csv_format_version_id
+FROM `phr_master`.`csv_format_versions`
+WHERE `exam_facility_id` = @oroku_exam_facility_id
+  AND `mapping_version` = 'OROKU_2026_05_JOINED_PATTERN_C_V1'
+LIMIT 1;
+
+DELETE FROM `tmp_csv_exam_mapping_seed`;
+
+INSERT INTO `tmp_csv_exam_mapping_seed` (
+  `seed_key`, `format_key`, `target_kind`, `target_field`, `target_namecode`,
+  `header_context`, `header_name`, `header_occurrence`, `source_role`,
+  `raw_value_type`, `raw_unit`, `is_required`, `priority`, `note`
+) VALUES
+-- Oroku basic information. Insurer number is intentionally not mapped from CSV.
+('oroku.basic.exam_date', 'OROKU', 'LEDGER_FIELD', 'exam_date', NULL, NULL, '健診実施日', 1, 'VALUE', NULL, NULL, 1, 10, 'basic: exam date from second source'),
+('oroku.basic.facility_code', 'OROKU', 'LEDGER_FIELD', 'facility_code', NULL, NULL, '医療機関コード', 1, 'VALUE', NULL, NULL, 0, 20, 'basic: facility code from second source'),
+('oroku.basic.name_full_raw', 'OROKU', 'LEDGER_FIELD', 'name_full_raw', NULL, NULL, '氏名（漢字）', 1, 'VALUE', NULL, NULL, 0, 50, 'basic: full name from second source'),
+('oroku.basic.name_kana_raw', 'OROKU', 'LEDGER_FIELD', 'name_kana_raw', NULL, NULL, '氏名（カナ）', 1, 'VALUE', NULL, NULL, 1, 60, 'basic: kana name from second source'),
+('oroku.basic.gender_raw', 'OROKU', 'LEDGER_FIELD', 'gender_raw', NULL, NULL, '性別', 2, 'VALUE', NULL, NULL, 1, 70, 'basic: gender from second source'),
+('oroku.basic.birthdate', 'OROKU', 'LEDGER_FIELD', 'birthdate', NULL, NULL, '生年月日', 2, 'VALUE', NULL, NULL, 1, 80, 'basic: birthdate from second source'),
+('oroku.basic.program_code', 'OROKU', 'LEDGER_FIELD', 'program_code', NULL, NULL, '健診コースコード', 1, 'VALUE', NULL, NULL, 0, 90, 'basic: course code from second source'),
+('oroku.basic.insurance_symbol_raw', 'OROKU', 'LEDGER_FIELD', 'insurance_symbol_raw', NULL, NULL, '保険記号', 1, 'VALUE', NULL, NULL, 1, 120, 'basic: insurance symbol appended for production'),
+('oroku.basic.insurance_number_raw', 'OROKU', 'LEDGER_FIELD', 'insurance_number_raw', NULL, NULL, '保険番号', 1, 'VALUE', NULL, NULL, 1, 130, 'basic: insurance number appended for production'),
+
+-- Oroku exam item values. Facility judgement/category columns are not mapped.
+('oroku.exam.height', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9N001000000000001', NULL, '身長', 2, 'VALUE', NULL, NULL, 1, 1000, 'height from second source'),
+('oroku.exam.weight', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9N006000000000001', NULL, '体重', 2, 'VALUE', NULL, NULL, 1, 1010, 'weight from second source'),
+('oroku.exam.bmi', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9N011000000000001', NULL, 'ＢＭＩ', 1, 'VALUE', NULL, NULL, 1, 1020, 'BMI from second source'),
+('oroku.exam.waist', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9N016160100000001', NULL, '腹囲', 1, 'VALUE', NULL, NULL, 1, 1030, 'waist circumference from second source'),
+('oroku.exam.sbp_first', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9A751000000000001', NULL, '血圧座位最高（1回目）', 1, 'VALUE', NULL, NULL, 1, 1040, 'first systolic blood pressure'),
+('oroku.exam.dbp_first', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9A761000000000001', NULL, '血圧座位最低（1回目）', 1, 'VALUE', NULL, NULL, 1, 1050, 'first diastolic blood pressure'),
+('oroku.exam.urine_protein', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '1A010000000191111', NULL, '尿蛋白', 2, 'VALUE', NULL, NULL, 1, 1060, 'urine protein machine-read code from second source'),
+('oroku.exam.urine_sugar', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '1A020000000191111', NULL, '尿糖', 2, 'VALUE', NULL, NULL, 1, 1070, 'urine sugar machine-read code from second source'),
+('oroku.exam.urine_occult_blood', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '1A100000000191111', NULL, '尿潜血', 2, 'VALUE', NULL, NULL, 0, 1080, 'urine occult blood machine-read code from second source'),
+('oroku.exam.urine_specific_gravity', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '1A030000000190301', NULL, '尿比重', 1, 'VALUE', NULL, NULL, 0, 1090, 'urine specific gravity from first source'),
+('oroku.exam.urine_ph', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '1A990000000300052', NULL, '尿pH', 1, 'VALUE', NULL, NULL, 0, 1100, 'urine pH from first source; JLAC10 1A990-0000-003-000-52'),
+('oroku.exam.rbc', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '2A020000001930101', NULL, '赤血球数', 1, 'VALUE', NULL, NULL, 0, 1110, 'red blood cell count'),
+('oroku.exam.hemoglobin', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '2A030000001930101', NULL, '血色素量', 1, 'VALUE', NULL, NULL, 0, 1120, 'hemoglobin'),
+('oroku.exam.hematocrit', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '2A040000001930102', NULL, 'ヘマトクリット値', 1, 'VALUE', NULL, NULL, 0, 1130, 'hematocrit'),
+('oroku.exam.platelet', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '2A050000001930101', NULL, '血小板数', 2, 'VALUE', NULL, NULL, 0, 1140, 'platelet count from second source'),
+('oroku.exam.ast', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3B035000002327201', NULL, 'ＧＯＴ（ＡＳＴ）', 1, 'VALUE', NULL, NULL, 1, 1150, 'AST JSCC'),
+('oroku.exam.alt', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3B045000002327201', NULL, 'ＧＰＴ（ＡＬＴ）', 1, 'VALUE', NULL, NULL, 1, 1160, 'ALT JSCC'),
+('oroku.exam.ggt', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3B090000002327101', NULL, 'γ－ＧＴ（γ－ＧＴＰ）', 1, 'VALUE', NULL, NULL, 1, 1170, 'gamma-GTP JSCC'),
+('oroku.exam.tg_fasting', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3F015000002327101', NULL, '空腹時中性脂肪', 1, 'VALUE', NULL, NULL, 1, 1180, 'fasting TG'),
+('oroku.exam.hdl', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3F070000002327101', NULL, 'ＨＤＬ－コレステロール', 1, 'VALUE', NULL, NULL, 1, 1190, 'HDL cholesterol'),
+('oroku.exam.ldl', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3F077000002327101', NULL, 'ＬＤＬ－コレステロール', 1, 'VALUE', NULL, NULL, 1, 1200, 'LDL cholesterol'),
+('oroku.exam.non_hdl', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3F069000002391901', NULL, 'non HDL-コレステロール', 2, 'VALUE', NULL, NULL, 1, 1210, 'non-HDL cholesterol from second source'),
+('oroku.exam.glucose_fasting', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3D010000001927201', NULL, '空腹時血糖', 2, 'VALUE', NULL, NULL, 1, 1220, 'fasting glucose from second source'),
+('oroku.exam.hba1c', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3D046000001920402', NULL, 'ＨｂＡ１ｃ', 1, 'VALUE', NULL, NULL, 1, 1230, 'HbA1c HPLC'),
+('oroku.exam.creatinine', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3C015000002327101', NULL, 'クレアチニン', 2, 'VALUE', NULL, NULL, 0, 1240, 'serum creatinine from second source'),
+('oroku.exam.egfr', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '8A065000002391901', NULL, 'eGFR', 2, 'VALUE', NULL, NULL, 0, 1250, 'eGFR from second source'),
+('oroku.exam.uric_acid', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3C020000002327101', NULL, '尿酸', 2, 'VALUE', NULL, NULL, 0, 1260, 'serum uric acid from second source'),
+('oroku.exam.total_cholesterol', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3F050000002327101', NULL, '総コレステロール', 2, 'VALUE', NULL, NULL, 0, 1270, 'total cholesterol from second source'),
+('oroku.exam.total_protein', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '3A010000002327101', NULL, '血清総蛋白', 1, 'VALUE', NULL, NULL, 0, 1280, 'total protein'),
+('oroku.exam.ca19_9', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '5D130000002399901', NULL, 'ＣＡ１９－９', 1, 'VALUE', NULL, NULL, 0, 1290, 'CA19-9 tumor marker from second source'),
+('oroku.exam.ca125', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '5D100000002399901', NULL, 'ＣＡ１２５', 1, 'VALUE', NULL, NULL, 0, 1300, 'CA125 tumor marker from second source'),
+('oroku.exam.vision_right_uncorrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162100000001', NULL, '視力裸眼（右）', 1, 'VALUE', NULL, NULL, 0, 1310, 'uncorrected visual acuity right'),
+('oroku.exam.vision_left_uncorrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162200000001', NULL, '視力裸眼（左）', 1, 'VALUE', NULL, NULL, 0, 1320, 'uncorrected visual acuity left'),
+('oroku.exam.vision_right_corrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162500000001', NULL, '視力矯正（右）', 1, 'VALUE', NULL, NULL, 0, 1330, 'corrected visual acuity right'),
+('oroku.exam.vision_left_corrected', 'OROKU', 'EXAM_ITEM_VALUE', NULL, '9E160162600000001', NULL, '視力矯正（左）', 1, 'VALUE', NULL, NULL, 0, 1340, 'corrected visual acuity left');
+
+INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
+  `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
+  `selection_group_code`, `target_namecode`, `target_identity_item_code`, `target_field`,
+  `method_structure_type`, `raw_value_type`, `raw_unit`,
+  `is_required`, `priority`, `is_active`, `note`
+)
+SELECT
+  @oroku_csv_format_version_id,
+  `seed_key`,
+  `target_kind`,
+  CASE WHEN `target_kind` = 'EXAM_ITEM_VALUE' THEN 'SINGLE_NAMECODE' ELSE 'LEDGER_FIELD' END,
+  'DIRECT',
+  NULL,
+  `target_namecode`,
+  NULL,
+  `target_field`,
+  'SINGLE_COLUMN',
+  `raw_value_type`,
+  `raw_unit`,
+  `is_required`,
+  `priority`,
+  1,
+  CONCAT('draft seed:', `seed_key`, ':', COALESCE(`note`, ''))
+FROM `tmp_csv_exam_mapping_seed`
+WHERE `format_key` = 'OROKU'
+ON DUPLICATE KEY UPDATE
+  `target_kind` = VALUES(`target_kind`),
+  `target_resolution_type` = VALUES(`target_resolution_type`),
+  `selection_mode` = VALUES(`selection_mode`),
+  `selection_group_code` = VALUES(`selection_group_code`),
+  `target_namecode` = VALUES(`target_namecode`),
+  `target_identity_item_code` = VALUES(`target_identity_item_code`),
+  `target_field` = VALUES(`target_field`),
+  `method_structure_type` = VALUES(`method_structure_type`),
+  `raw_value_type` = VALUES(`raw_value_type`),
+  `raw_unit` = VALUES(`raw_unit`),
+  `is_required` = VALUES(`is_required`),
+  `priority` = VALUES(`priority`),
+  `is_active` = VALUES(`is_active`),
+  `note` = VALUES(`note`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+-- Oroku finding text and derived finding-presence CD values.
+-- Finding text is a result value. Multi-column findings are joined in one ST
+-- value when at least one source column has an abnormal finding.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
+  `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`, `selection_mode`,
+  `target_namecode`, `method_structure_type`, `value_source_type`, `fixed_value`,
+  `value_join_separator`, `value_exclude_values`, `is_required`, `priority`, `is_active`, `note`
+) VALUES
+  (@oroku_csv_format_version_id, 'oroku.exam.fundus_finding_text', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9E100160900000049', 'MULTI_COLUMN', 'SOURCE', NULL, ' / ', '異常なし/', 0, 1800, 1, 'draft seed:oroku.exam.fundus_finding_text:眼底カメラ右左所見を結合'),
+  (@oroku_csv_format_version_id, 'oroku.exam.ecg_finding_text', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160800000049', 'SINGLE_COLUMN', 'SOURCE', NULL, NULL, NULL, 0, 1810, 1, 'draft seed:oroku.exam.ecg_finding_text:心電図所見'),
+  (@oroku_csv_format_version_id, 'oroku.exam.ecg_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '2', NULL, NULL, 0, 1820, 1, 'draft seed:oroku.exam.ecg_presence_normal:異常所見なし -> 所見なし CD=2'),
+  (@oroku_csv_format_version_id, 'oroku.exam.ecg_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '1', NULL, NULL, 0, 1830, 1, 'draft seed:oroku.exam.ecg_presence_abnormal:所見本文あり -> 所見あり CD=1'),
+  (@oroku_csv_format_version_id, 'oroku.exam.chest_xray_finding_text', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N206160800000049', 'SINGLE_COLUMN', 'SOURCE', NULL, NULL, NULL, 0, 1840, 1, 'draft seed:oroku.exam.chest_xray_finding_text:胸部X線所見'),
+  (@oroku_csv_format_version_id, 'oroku.exam.chest_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '2', NULL, NULL, 0, 1850, 1, 'draft seed:oroku.exam.chest_xray_presence_normal:異常所見なし -> 所見なし CD=2'),
+  (@oroku_csv_format_version_id, 'oroku.exam.chest_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '1', NULL, NULL, 0, 1860, 1, 'draft seed:oroku.exam.chest_xray_presence_abnormal:所見本文あり -> 所見あり CD=1'),
+  (@oroku_csv_format_version_id, 'oroku.exam.chest_ct_finding_text', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N251160800000049', 'SINGLE_COLUMN', 'SOURCE', NULL, NULL, NULL, 0, 1870, 1, 'draft seed:oroku.exam.chest_ct_finding_text:胸部CT所見'),
+  (@oroku_csv_format_version_id, 'oroku.exam.chest_ct_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N251160700000011', 'SINGLE_COLUMN', 'FIXED', '1', NULL, NULL, 0, 1880, 1, 'draft seed:oroku.exam.chest_ct_presence_abnormal:胸部CT所見本文あり -> 所見あり CD=1'),
+  (@oroku_csv_format_version_id, 'oroku.exam.gastric_xray_finding_text', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160800000049', 'MULTI_COLUMN', 'SOURCE', NULL, ' / ', '異常なし/', 0, 1890, 1, 'draft seed:oroku.exam.gastric_xray_finding_text:胃部X線所見1-3を結合'),
+  (@oroku_csv_format_version_id, 'oroku.exam.gastric_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '2', NULL, NULL, 0, 1900, 1, 'draft seed:oroku.exam.gastric_xray_presence_normal:全所見列が異常なし -> 所見なし CD=2'),
+  (@oroku_csv_format_version_id, 'oroku.exam.gastric_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '1', NULL, NULL, 0, 1910, 1, 'draft seed:oroku.exam.gastric_xray_presence_abnormal:いずれかの所見列に異常本文あり -> 所見あり CD=1'),
+  (@oroku_csv_format_version_id, 'oroku.exam.gastric_endoscopy_finding_text', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160800000049', 'MULTI_COLUMN', 'SOURCE', NULL, ' / ', '異常なし/', 0, 1920, 1, 'draft seed:oroku.exam.gastric_endoscopy_finding_text:胃内視鏡所見1-3を結合'),
+  (@oroku_csv_format_version_id, 'oroku.exam.gastric_endoscopy_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160700000011', 'SINGLE_COLUMN', 'FIXED', '2', NULL, NULL, 0, 1930, 1, 'draft seed:oroku.exam.gastric_endoscopy_presence_normal:全所見列が異常なし -> 所見なし CD=2'),
+  (@oroku_csv_format_version_id, 'oroku.exam.gastric_endoscopy_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N266160700000011', 'SINGLE_COLUMN', 'FIXED', '1', NULL, NULL, 0, 1940, 1, 'draft seed:oroku.exam.gastric_endoscopy_presence_abnormal:いずれかの所見列に異常本文あり -> 所見あり CD=1'),
+  (@oroku_csv_format_version_id, 'oroku.exam.abdominal_ultrasound_finding_text', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9F130160800000049', 'MULTI_COLUMN', 'SOURCE', NULL, ' / ', '異常なし/', 0, 1950, 1, 'draft seed:oroku.exam.abdominal_ultrasound_finding_text:腹部超音波所見1-5を結合'),
+  (@oroku_csv_format_version_id, 'oroku.exam.abdominal_ultrasound_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9F130160700000011', 'SINGLE_COLUMN', 'FIXED', '2', NULL, NULL, 0, 1960, 1, 'draft seed:oroku.exam.abdominal_ultrasound_presence_normal:全所見列が異常なし -> 所見なし CD=2'),
+  (@oroku_csv_format_version_id, 'oroku.exam.abdominal_ultrasound_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9F130160700000011', 'SINGLE_COLUMN', 'FIXED', '1', NULL, NULL, 0, 1970, 1, 'draft seed:oroku.exam.abdominal_ultrasound_presence_abnormal:いずれかの所見列に異常本文あり -> 所見あり CD=1')
+ON DUPLICATE KEY UPDATE
+  `target_kind` = VALUES(`target_kind`),
+  `target_resolution_type` = VALUES(`target_resolution_type`),
+  `selection_mode` = VALUES(`selection_mode`),
+  `target_namecode` = VALUES(`target_namecode`),
+  `method_structure_type` = VALUES(`method_structure_type`),
+  `value_source_type` = VALUES(`value_source_type`),
+  `fixed_value` = VALUES(`fixed_value`),
+  `value_join_separator` = VALUES(`value_join_separator`),
+  `value_exclude_values` = VALUES(`value_exclude_values`),
+  `is_required` = VALUES(`is_required`),
+  `priority` = VALUES(`priority`),
+  `is_active` = VALUES(`is_active`),
+  `note` = VALUES(`note`),
+  `updated_at` = CURRENT_TIMESTAMP(3);
+
+DELETE c
+FROM `phr_master`.`csv_exam_result_mapping_conditions` c
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+WHERE r.`csv_format_version_id` = @oroku_csv_format_version_id;
+
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_context`, `header_name`, `header_occurrence`, `column_no`,
+  `operator`, `expected_value`, `expected_value_normalized`, `source_role`,
+  `priority`, `is_active`, `note`
+)
+SELECT
+  r.`csv_exam_result_mapping_rule_id`,
+  1,
+  'HEADER_MATCH',
+  'HEADER_NAME',
+  s.`header_context`,
+  s.`header_name`,
+  s.`header_occurrence`,
+  NULL,
+  'PRESENT',
+  NULL,
+  NULL,
+  s.`source_role`,
+  100,
+  1,
+  CONCAT('draft condition:', s.`seed_key`)
+FROM `tmp_csv_exam_mapping_seed` s
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_format_version_id` = @oroku_csv_format_version_id
+ AND r.`note` LIKE CONCAT('draft seed:', s.`seed_key`, ':%')
+WHERE s.`format_key` = 'OROKU';
+
+DROP TEMPORARY TABLE IF EXISTS `tmp_oroku_finding_condition_seed`;
+
+CREATE TEMPORARY TABLE `tmp_oroku_finding_condition_seed` (
+  `rule_key` varchar(191) NOT NULL,
+  `condition_group_no` int NOT NULL,
+  `condition_type` varchar(32) NOT NULL,
+  `header_name` varchar(255) NOT NULL,
+  `operator` varchar(32) NOT NULL,
+  `expected_value` varchar(255) NULL,
+  `source_role` varchar(32) NOT NULL,
+  `priority` int NOT NULL
+) ENGINE=Memory DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_ja_0900_as_cs;
+
+INSERT INTO `tmp_oroku_finding_condition_seed` (
+  `rule_key`, `condition_group_no`, `condition_type`, `header_name`,
+  `operator`, `expected_value`, `source_role`, `priority`
+) VALUES
+-- Fundus finding text: output one ST when either side has an abnormal finding.
+('oroku.exam.fundus_finding_text', 1, 'HEADER_MATCH', '眼底カメラ（右）', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.fundus_finding_text', 1, 'HEADER_MATCH', '眼底カメラ（左）', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.fundus_finding_text', 1, 'CELL_VALUE', '眼底カメラ（右）', 'NOT_EMPTY', NULL, 'QUALIFIER', 120),
+('oroku.exam.fundus_finding_text', 1, 'CELL_VALUE', '眼底カメラ（右）', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 130),
+('oroku.exam.fundus_finding_text', 2, 'HEADER_MATCH', '眼底カメラ（右）', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.fundus_finding_text', 2, 'HEADER_MATCH', '眼底カメラ（左）', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.fundus_finding_text', 2, 'CELL_VALUE', '眼底カメラ（左）', 'NOT_EMPTY', NULL, 'QUALIFIER', 120),
+('oroku.exam.fundus_finding_text', 2, 'CELL_VALUE', '眼底カメラ（左）', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 130),
+
+-- ECG finding/presence.
+('oroku.exam.ecg_finding_text', 1, 'HEADER_MATCH', '心電図　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.ecg_finding_text', 1, 'CELL_VALUE', '心電図　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.ecg_finding_text', 1, 'CELL_VALUE', '心電図　所見1', 'NOT_EQUALS', '異常(所見)なし/', 'QUALIFIER', 120),
+('oroku.exam.ecg_presence_normal', 1, 'HEADER_MATCH', '心電図　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.ecg_presence_normal', 1, 'CELL_VALUE', '心電図　所見1', 'EQUALS', '異常(所見)なし/', 'QUALIFIER', 110),
+('oroku.exam.ecg_presence_abnormal', 1, 'HEADER_MATCH', '心電図　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.ecg_presence_abnormal', 1, 'CELL_VALUE', '心電図　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.ecg_presence_abnormal', 1, 'CELL_VALUE', '心電図　所見1', 'NOT_EQUALS', '異常(所見)なし/', 'QUALIFIER', 120),
+
+-- Chest X-ray finding/presence.
+('oroku.exam.chest_xray_finding_text', 1, 'HEADER_MATCH', '胸部Ｘ線所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.chest_xray_finding_text', 1, 'CELL_VALUE', '胸部Ｘ線所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.chest_xray_finding_text', 1, 'CELL_VALUE', '胸部Ｘ線所見1', 'NOT_EQUALS', '異常所見なし/', 'QUALIFIER', 120),
+('oroku.exam.chest_xray_presence_normal', 1, 'HEADER_MATCH', '胸部Ｘ線所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.chest_xray_presence_normal', 1, 'CELL_VALUE', '胸部Ｘ線所見1', 'EQUALS', '異常所見なし/', 'QUALIFIER', 110),
+('oroku.exam.chest_xray_presence_abnormal', 1, 'HEADER_MATCH', '胸部Ｘ線所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.chest_xray_presence_abnormal', 1, 'CELL_VALUE', '胸部Ｘ線所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.chest_xray_presence_abnormal', 1, 'CELL_VALUE', '胸部Ｘ線所見1', 'NOT_EQUALS', '異常所見なし/', 'QUALIFIER', 120),
+
+-- Chest CT has finding text only when a finding column is populated.
+('oroku.exam.chest_ct_finding_text', 1, 'HEADER_MATCH', '胸部ＣＴ　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.chest_ct_finding_text', 1, 'CELL_VALUE', '胸部ＣＴ　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.chest_ct_presence_abnormal', 1, 'HEADER_MATCH', '胸部ＣＴ　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.chest_ct_presence_abnormal', 1, 'CELL_VALUE', '胸部ＣＴ　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+
+-- Gastric X-ray finding text/presence. All source finding columns are joined
+-- for the ST rule; each group is triggered by one abnormal source column.
+('oroku.exam.gastric_xray_finding_text', 1, 'HEADER_MATCH', '胃部Ｘ線　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_xray_finding_text', 1, 'HEADER_MATCH', '胃部Ｘ線　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.gastric_xray_finding_text', 1, 'HEADER_MATCH', '胃部Ｘ線　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.gastric_xray_finding_text', 1, 'CELL_VALUE', '胃部Ｘ線　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 130),
+('oroku.exam.gastric_xray_finding_text', 1, 'CELL_VALUE', '胃部Ｘ線　所見1', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 140),
+('oroku.exam.gastric_xray_finding_text', 2, 'HEADER_MATCH', '胃部Ｘ線　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_xray_finding_text', 2, 'HEADER_MATCH', '胃部Ｘ線　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.gastric_xray_finding_text', 2, 'HEADER_MATCH', '胃部Ｘ線　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.gastric_xray_finding_text', 2, 'CELL_VALUE', '胃部Ｘ線　所見2', 'NOT_EMPTY', NULL, 'QUALIFIER', 130),
+('oroku.exam.gastric_xray_finding_text', 2, 'CELL_VALUE', '胃部Ｘ線　所見2', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 140),
+('oroku.exam.gastric_xray_finding_text', 3, 'HEADER_MATCH', '胃部Ｘ線　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_xray_finding_text', 3, 'HEADER_MATCH', '胃部Ｘ線　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.gastric_xray_finding_text', 3, 'HEADER_MATCH', '胃部Ｘ線　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.gastric_xray_finding_text', 3, 'CELL_VALUE', '胃部Ｘ線　所見3', 'NOT_EMPTY', NULL, 'QUALIFIER', 130),
+('oroku.exam.gastric_xray_finding_text', 3, 'CELL_VALUE', '胃部Ｘ線　所見3', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 140),
+('oroku.exam.gastric_xray_presence_normal', 1, 'HEADER_MATCH', '胃部Ｘ線　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_xray_presence_normal', 1, 'CELL_VALUE', '胃部Ｘ線　所見1', 'EQUALS', '異常なし/', 'QUALIFIER', 110),
+('oroku.exam.gastric_xray_presence_normal', 1, 'CELL_VALUE', '胃部Ｘ線　所見2', 'EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.gastric_xray_presence_normal', 1, 'CELL_VALUE', '胃部Ｘ線　所見3', 'EQUALS', '異常なし/', 'QUALIFIER', 130),
+('oroku.exam.gastric_xray_presence_abnormal', 1, 'HEADER_MATCH', '胃部Ｘ線　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_xray_presence_abnormal', 1, 'CELL_VALUE', '胃部Ｘ線　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.gastric_xray_presence_abnormal', 1, 'CELL_VALUE', '胃部Ｘ線　所見1', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.gastric_xray_presence_abnormal', 2, 'HEADER_MATCH', '胃部Ｘ線　所見2', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_xray_presence_abnormal', 2, 'CELL_VALUE', '胃部Ｘ線　所見2', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.gastric_xray_presence_abnormal', 2, 'CELL_VALUE', '胃部Ｘ線　所見2', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.gastric_xray_presence_abnormal', 3, 'HEADER_MATCH', '胃部Ｘ線　所見3', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_xray_presence_abnormal', 3, 'CELL_VALUE', '胃部Ｘ線　所見3', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.gastric_xray_presence_abnormal', 3, 'CELL_VALUE', '胃部Ｘ線　所見3', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+
+-- Gastric endoscopy finding text/presence.
+('oroku.exam.gastric_endoscopy_finding_text', 1, 'HEADER_MATCH', '胃内視鏡　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_endoscopy_finding_text', 1, 'HEADER_MATCH', '胃内視鏡　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.gastric_endoscopy_finding_text', 1, 'HEADER_MATCH', '胃内視鏡　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.gastric_endoscopy_finding_text', 1, 'CELL_VALUE', '胃内視鏡　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 130),
+('oroku.exam.gastric_endoscopy_finding_text', 1, 'CELL_VALUE', '胃内視鏡　所見1', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 140),
+('oroku.exam.gastric_endoscopy_finding_text', 2, 'HEADER_MATCH', '胃内視鏡　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_endoscopy_finding_text', 2, 'HEADER_MATCH', '胃内視鏡　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.gastric_endoscopy_finding_text', 2, 'HEADER_MATCH', '胃内視鏡　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.gastric_endoscopy_finding_text', 2, 'CELL_VALUE', '胃内視鏡　所見2', 'NOT_EMPTY', NULL, 'QUALIFIER', 130),
+('oroku.exam.gastric_endoscopy_finding_text', 2, 'CELL_VALUE', '胃内視鏡　所見2', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 140),
+('oroku.exam.gastric_endoscopy_finding_text', 3, 'HEADER_MATCH', '胃内視鏡　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_endoscopy_finding_text', 3, 'HEADER_MATCH', '胃内視鏡　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.gastric_endoscopy_finding_text', 3, 'HEADER_MATCH', '胃内視鏡　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.gastric_endoscopy_finding_text', 3, 'CELL_VALUE', '胃内視鏡　所見3', 'NOT_EMPTY', NULL, 'QUALIFIER', 130),
+('oroku.exam.gastric_endoscopy_finding_text', 3, 'CELL_VALUE', '胃内視鏡　所見3', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 140),
+('oroku.exam.gastric_endoscopy_presence_normal', 1, 'HEADER_MATCH', '胃内視鏡　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_endoscopy_presence_normal', 1, 'CELL_VALUE', '胃内視鏡　所見1', 'EQUALS', '異常なし/', 'QUALIFIER', 110),
+('oroku.exam.gastric_endoscopy_presence_normal', 1, 'CELL_VALUE', '胃内視鏡　所見2', 'EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.gastric_endoscopy_presence_normal', 1, 'CELL_VALUE', '胃内視鏡　所見3', 'EQUALS', '異常なし/', 'QUALIFIER', 130),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 1, 'HEADER_MATCH', '胃内視鏡　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 1, 'CELL_VALUE', '胃内視鏡　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 1, 'CELL_VALUE', '胃内視鏡　所見1', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 2, 'HEADER_MATCH', '胃内視鏡　所見2', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 2, 'CELL_VALUE', '胃内視鏡　所見2', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 2, 'CELL_VALUE', '胃内視鏡　所見2', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 3, 'HEADER_MATCH', '胃内視鏡　所見3', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 3, 'CELL_VALUE', '胃内視鏡　所見3', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.gastric_endoscopy_presence_abnormal', 3, 'CELL_VALUE', '胃内視鏡　所見3', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+
+-- Abdominal ultrasound finding text/presence.
+('oroku.exam.abdominal_ultrasound_finding_text', 1, 'HEADER_MATCH', '腹部超音波　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_finding_text', 1, 'HEADER_MATCH', '腹部超音波　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.abdominal_ultrasound_finding_text', 1, 'HEADER_MATCH', '腹部超音波　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.abdominal_ultrasound_finding_text', 1, 'HEADER_MATCH', '腹部超音波　所見4', 'PRESENT', NULL, 'VALUE', 130),
+('oroku.exam.abdominal_ultrasound_finding_text', 1, 'HEADER_MATCH', '腹部超音波　所見5', 'PRESENT', NULL, 'VALUE', 140),
+('oroku.exam.abdominal_ultrasound_finding_text', 1, 'CELL_VALUE', '腹部超音波　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 150),
+('oroku.exam.abdominal_ultrasound_finding_text', 1, 'CELL_VALUE', '腹部超音波　所見1', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 160),
+('oroku.exam.abdominal_ultrasound_finding_text', 2, 'HEADER_MATCH', '腹部超音波　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_finding_text', 2, 'HEADER_MATCH', '腹部超音波　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.abdominal_ultrasound_finding_text', 2, 'HEADER_MATCH', '腹部超音波　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.abdominal_ultrasound_finding_text', 2, 'HEADER_MATCH', '腹部超音波　所見4', 'PRESENT', NULL, 'VALUE', 130),
+('oroku.exam.abdominal_ultrasound_finding_text', 2, 'HEADER_MATCH', '腹部超音波　所見5', 'PRESENT', NULL, 'VALUE', 140),
+('oroku.exam.abdominal_ultrasound_finding_text', 2, 'CELL_VALUE', '腹部超音波　所見2', 'NOT_EMPTY', NULL, 'QUALIFIER', 150),
+('oroku.exam.abdominal_ultrasound_finding_text', 2, 'CELL_VALUE', '腹部超音波　所見2', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 160),
+('oroku.exam.abdominal_ultrasound_finding_text', 3, 'HEADER_MATCH', '腹部超音波　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_finding_text', 3, 'HEADER_MATCH', '腹部超音波　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.abdominal_ultrasound_finding_text', 3, 'HEADER_MATCH', '腹部超音波　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.abdominal_ultrasound_finding_text', 3, 'HEADER_MATCH', '腹部超音波　所見4', 'PRESENT', NULL, 'VALUE', 130),
+('oroku.exam.abdominal_ultrasound_finding_text', 3, 'HEADER_MATCH', '腹部超音波　所見5', 'PRESENT', NULL, 'VALUE', 140),
+('oroku.exam.abdominal_ultrasound_finding_text', 3, 'CELL_VALUE', '腹部超音波　所見3', 'NOT_EMPTY', NULL, 'QUALIFIER', 150),
+('oroku.exam.abdominal_ultrasound_finding_text', 3, 'CELL_VALUE', '腹部超音波　所見3', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 160),
+('oroku.exam.abdominal_ultrasound_finding_text', 4, 'HEADER_MATCH', '腹部超音波　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_finding_text', 4, 'HEADER_MATCH', '腹部超音波　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.abdominal_ultrasound_finding_text', 4, 'HEADER_MATCH', '腹部超音波　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.abdominal_ultrasound_finding_text', 4, 'HEADER_MATCH', '腹部超音波　所見4', 'PRESENT', NULL, 'VALUE', 130),
+('oroku.exam.abdominal_ultrasound_finding_text', 4, 'HEADER_MATCH', '腹部超音波　所見5', 'PRESENT', NULL, 'VALUE', 140),
+('oroku.exam.abdominal_ultrasound_finding_text', 4, 'CELL_VALUE', '腹部超音波　所見4', 'NOT_EMPTY', NULL, 'QUALIFIER', 150),
+('oroku.exam.abdominal_ultrasound_finding_text', 4, 'CELL_VALUE', '腹部超音波　所見4', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 160),
+('oroku.exam.abdominal_ultrasound_finding_text', 5, 'HEADER_MATCH', '腹部超音波　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_finding_text', 5, 'HEADER_MATCH', '腹部超音波　所見2', 'PRESENT', NULL, 'VALUE', 110),
+('oroku.exam.abdominal_ultrasound_finding_text', 5, 'HEADER_MATCH', '腹部超音波　所見3', 'PRESENT', NULL, 'VALUE', 120),
+('oroku.exam.abdominal_ultrasound_finding_text', 5, 'HEADER_MATCH', '腹部超音波　所見4', 'PRESENT', NULL, 'VALUE', 130),
+('oroku.exam.abdominal_ultrasound_finding_text', 5, 'HEADER_MATCH', '腹部超音波　所見5', 'PRESENT', NULL, 'VALUE', 140),
+('oroku.exam.abdominal_ultrasound_finding_text', 5, 'CELL_VALUE', '腹部超音波　所見5', 'NOT_EMPTY', NULL, 'QUALIFIER', 150),
+('oroku.exam.abdominal_ultrasound_finding_text', 5, 'CELL_VALUE', '腹部超音波　所見5', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 160),
+('oroku.exam.abdominal_ultrasound_presence_normal', 1, 'HEADER_MATCH', '腹部超音波　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_presence_normal', 1, 'CELL_VALUE', '腹部超音波　所見1', 'EQUALS', '異常なし/', 'QUALIFIER', 110),
+('oroku.exam.abdominal_ultrasound_presence_normal', 1, 'CELL_VALUE', '腹部超音波　所見2', 'EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.abdominal_ultrasound_presence_normal', 1, 'CELL_VALUE', '腹部超音波　所見3', 'EQUALS', '異常なし/', 'QUALIFIER', 130),
+('oroku.exam.abdominal_ultrasound_presence_normal', 1, 'CELL_VALUE', '腹部超音波　所見4', 'EQUALS', '異常なし/', 'QUALIFIER', 140),
+('oroku.exam.abdominal_ultrasound_presence_normal', 1, 'CELL_VALUE', '腹部超音波　所見5', 'EQUALS', '異常なし/', 'QUALIFIER', 150),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 1, 'HEADER_MATCH', '腹部超音波　所見1', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 1, 'CELL_VALUE', '腹部超音波　所見1', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 1, 'CELL_VALUE', '腹部超音波　所見1', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 2, 'HEADER_MATCH', '腹部超音波　所見2', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 2, 'CELL_VALUE', '腹部超音波　所見2', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 2, 'CELL_VALUE', '腹部超音波　所見2', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 3, 'HEADER_MATCH', '腹部超音波　所見3', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 3, 'CELL_VALUE', '腹部超音波　所見3', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 3, 'CELL_VALUE', '腹部超音波　所見3', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 4, 'HEADER_MATCH', '腹部超音波　所見4', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 4, 'CELL_VALUE', '腹部超音波　所見4', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 4, 'CELL_VALUE', '腹部超音波　所見4', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 5, 'HEADER_MATCH', '腹部超音波　所見5', 'PRESENT', NULL, 'VALUE', 100),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 5, 'CELL_VALUE', '腹部超音波　所見5', 'NOT_EMPTY', NULL, 'QUALIFIER', 110),
+('oroku.exam.abdominal_ultrasound_presence_abnormal', 5, 'CELL_VALUE', '腹部超音波　所見5', 'NOT_EQUALS', '異常なし/', 'QUALIFIER', 120);
+
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_context`, `header_name`, `header_occurrence`, `column_no`,
+  `operator`, `expected_value`, `expected_value_normalized`, `source_role`,
+  `priority`, `is_active`, `note`
+)
+SELECT
+  r.`csv_exam_result_mapping_rule_id`,
+  s.`condition_group_no`,
+  s.`condition_type`,
+  'HEADER_NAME',
+  NULL,
+  s.`header_name`,
+  1,
+  NULL,
+  s.`operator`,
+  s.`expected_value`,
+  NULL,
+  s.`source_role`,
+  s.`priority`,
+  1,
+  CONCAT('draft finding condition:', s.`rule_key`)
+FROM `tmp_oroku_finding_condition_seed` s
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_format_version_id` = @oroku_csv_format_version_id
+ AND r.`rule_key` = s.`rule_key`;
+
+DROP TEMPORARY TABLE IF EXISTS `tmp_oroku_finding_condition_seed`;
 
 DROP TEMPORARY TABLE IF EXISTS `tmp_csv_exam_mapping_seed`;
 

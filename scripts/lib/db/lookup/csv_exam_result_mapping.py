@@ -44,6 +44,7 @@ class CsvMappingRule:
     value_source_type: str
     fixed_value: str | None
     value_join_separator: str | None
+    value_exclude_values: tuple[str, ...]
     raw_value_type: str | None
     raw_unit: str | None
     is_required: bool
@@ -56,6 +57,13 @@ def _compact_text(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _split_text_values(value: Any) -> tuple[str, ...]:
+    text = _compact_text(value)
+    if text is None:
+        return ()
+    return tuple(part.strip() for part in text.splitlines() if part.strip())
 
 
 def find_csv_format_version(
@@ -279,6 +287,7 @@ def load_csv_mapping_rules(
                     if row.get("value_join_separator") is not None
                     else None
                 ),
+                value_exclude_values=_split_text_values(row.get("value_exclude_values")),
                 raw_value_type=_compact_text(row.get("raw_value_type")),
                 raw_unit=_compact_text(row.get("raw_unit")),
                 is_required=bool(row.get("is_required")),

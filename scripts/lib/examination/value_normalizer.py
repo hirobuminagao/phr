@@ -43,7 +43,7 @@ NUMERIC_DATA_TYPES = {"PQ", "INT", "REAL"}
 CODE_DATA_TYPES = {"CD", "CO"}
 TEXT_DATA_TYPES = {"ST", "TX"}
 NUMERIC_LESS_THAN_PATTERN = re.compile(r"^(?:<|＜)\s*([+-]?\d+(?:\.\d+)?)$")
-NUMERIC_LESS_THAN_JA_PATTERN = re.compile(r"^([+-]?\d+(?:\.\d+)?)\s*未満$")
+NUMERIC_LESS_THAN_JA_PATTERN = re.compile(r"^([+-]?\d+(?:\.\d+)?)\s*(?:未満|以下)$")
 
 
 @dataclass(frozen=True)

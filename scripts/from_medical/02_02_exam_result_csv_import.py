@@ -857,6 +857,8 @@ def process_file_receipt(
 
         extracted = extract_row_values(row, rules)
         ledger_fields = values_to_ledger_fields(extracted)
+        if not ledger_fields.get("insurer_number") and file_receipt.get("insurer_number"):
+            ledger_fields["insurer_number"] = file_receipt.get("insurer_number")
         row_errors: list[str] = []
         for result in extracted:
             if result.errors and result.rule.is_required:

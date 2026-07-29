@@ -84,7 +84,7 @@ Draft.
 - `未実施`, `未受診`, `実施せず`, `キャンセル`, `中止`, `拒否`, `対象外` など、実施されていないことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_NO_RESULT`, `validation_status = WARNING` として扱う。
 - `測定不能`, `判定不能`, `検体不良`, `採血不可`, `測定不可` など、測定できなかったことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_UNMEASURABLE`, `validation_status = WARNING` として扱う。
 - 型に合わない未知文字列は、元値を `exam_item_values.raw_value` に残し、`normalize_status = ERROR`, `normalize_reason = INVALID_VALUE_TYPE`, `validation_status = INVALID` として扱う。
-- 数値系項目の `<0.1` / `0.1未満` のような下限未満表現は、XMLのPQで比較演算子を表現できないため、元値を `exam_item_values.raw_value` に残し、数値部を `exam_item_values.normalized_value` に保持する。
+- 数値系項目の `<0.1` / `0.1未満` / `1.005以下` のような比較付き表現は、XMLのPQで比較演算子を表現できないため、元値を `exam_item_values.raw_value` に残し、数値部を `exam_item_values.normalized_value` に保持する。
 - 下限未満表現を数値部へ寄せた場合は、`normalize_status = OK`, `normalize_reason = RAW_VALUE_NUMERIC_COMPARATOR_NORMALIZED`, `validation_status = VALID` とする。
 - `あり` / `なし` は結果値として意味を持つ可能性があるため、初期の共通ノイズ辞書には含めず、項目別ルール、CD/CO辞書、または変換ルールで扱う。
 - 数値系 `data_type` は初期実装では `PQ`, `INT`, `REAL` とする。現行exportの数値型は `PQ` だが、旧 `norm_rules` との互換として `INT` / `REAL` も受ける。
@@ -92,13 +92,16 @@ Draft.
 - CSV値の機械的な前処理は、`identity_hash` と同じくDBルールではなく共通lib側へ寄せる。
 - 処理順は、完全空値判定、共通base normalize、非測定値語判定、型別normalize、単位チェックとする。
 - `transform_rule_code` は初期DDLに含めない。将来、項目別明示変換が必要になった時点で用途名と仕様を決めてmigration追加する。
-- 所見有無CDと所見本文STの組合せを施設別テンプレートで明示できるよう、mapping ruleは `value_source_type = SOURCE / FIXED`、`fixed_value`、`value_join_separator` を持つ。
+- 所見有無CDと所見本文STの組合せを施設別テンプレートで明示できるよう、mapping ruleは `value_source_type = SOURCE / FIXED`、`fixed_value`、`value_join_separator`、`value_exclude_values` を持つ。
 - `FIXED` は行条件が成立した場合だけ明示した固定値を生成する。医学的意味を文言から推測して固定値を決めない。
-- `SOURCE` で複数の `VALUE` 列を指定する場合は `value_join_separator` を必須とし、空欄列を除外してCSV列順に結合する。
+- `SOURCE` で複数の `VALUE` 列を指定する場合は `value_join_separator` を必須とし、空欄列と `value_exclude_values` に一致する値を除外してCSV列順に結合する。
+- `value_exclude_values` は改行区切りで保持する。元行証跡は `csv_row_ledger.raw_row_json` に残るため、`exam_item_values.raw_value` には取込結果として有用な値だけを残す。
 - ハートクロスへこの所見有無CD/STルールを適用するかは健診機関回答後に決定し、回答前のseedには反映しない。
 - `norm_variant` lookupは単品APIと一括APIの両方を持つ。CSV取込では一括APIで事前取得し、単品APIは少量処理・テスト・再normalize用に使う。
 - CSV直取込では、CSVデータ行単位の台帳として `health_exam_result.csv_row_ledger` を追加する案を基本とする。
 - CSV由来の `exam_item_values` は `ledger_type = 'CSV'`, `ledger_id = csv_row_ledger.csv_row_ledger_id` で由来を表す。
+- CSVに保険者番号を持たない施設フォーマットでは、`file_receipts.insurer_number` を `csv_row_ledger.insurer_number` と加入者identity生成の入力に利用する。
+- 保険記号・保険番号は加入者identity生成に必要なため、施設フォーマット側にない場合は本番取込前の整形でCSV末尾へ追加する方針とする。
 - `csv_loader` はCSV読込の共通部品として利用し、mapping適用、rule実行、normalize、identity生成、加入者照合は `csv_loader` の責務外とする。
 - CSVヘッダー読取は既存 `scripts/lib/csv/csv_loader.py` の `load_csv()` / `CSVLoader.get_headers()` / `CSVLoader.get_header_dict()` を利用する案を基本とする。
 - 既存 `csv_loader` 実装と `docs/spec/common_lib/csv_loader.md` の想定APIには差分があるため、既存利用スクリプトに影響を与えない追加APIとして `CsvLoadResult` / `CsvHeaderSet` 形式へ拡張する案を基本とする。

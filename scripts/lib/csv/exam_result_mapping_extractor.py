@@ -77,7 +77,12 @@ def _extract_role_values(
             separator = rule.value_join_separator
             if separator is None:
                 return {}, ["MULTIPLE_VALUE_SOURCES_REQUIRE_JOIN_SEPARATOR"]
-            nonempty = [value for value in values if value not in {None, ""}]
+            exclude_values = set(rule.value_exclude_values)
+            nonempty = [
+                value
+                for value in values
+                if value not in {None, ""} and value not in exclude_values
+            ]
             values_by_role[role] = separator.join(nonempty) if nonempty else None
         else:
             values_by_role[role] = values[0]

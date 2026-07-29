@@ -492,6 +492,7 @@ CREATE TABLE `phr_master`.`csv_exam_result_mapping_rules` (
   `value_source_type` varchar(32) NOT NULL DEFAULT 'SOURCE',
   `fixed_value` text,
   `value_join_separator` varchar(32) DEFAULT NULL,
+  `value_exclude_values` text,
   `raw_value_type` varchar(32) DEFAULT NULL,
   `raw_unit` varchar(64) DEFAULT NULL,
   `is_required` tinyint(1) NOT NULL DEFAULT 0,
@@ -676,6 +677,7 @@ DBに持たないもの:
 
 `csv_exam_result_mapping_rules.transform_rule_code` は初期DDLに含めない。
 条件成立時の固定値生成は `value_source_type = FIXED`、複数列結合は `value_join_separator` で明示する。
+複数列結合時に `異常なし/` など結果値としてはノイズになる文言を落とす場合は、`value_exclude_values` に改行区切りで保持する。元行証跡は `csv_row_ledger.raw_row_json` に残す。
 これを超える任意の項目別変換が必要になった時点で、用途名と仕様を決めてmigration追加する。
 
 ### exam_item_reference_ranges
