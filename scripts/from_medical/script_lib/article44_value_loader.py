@@ -59,6 +59,8 @@ def load_article44_value_map(
           raw_value_type,
           raw_value,
           raw_unit,
+          normalized_value,
+          normalized_unit,
           code_value,
           section_code
         FROM {qname(result_db)}.exam_item_values
@@ -150,7 +152,15 @@ def _group_rows_by_namecode(
             raise ValueError(f"SQL returned unexpected namecode: {namecode}")
         _require_columns(
             row,
-            ("raw_value_type", "raw_value", "raw_unit", "code_value", "section_code"),
+            (
+                "raw_value_type",
+                "raw_value",
+                "raw_unit",
+                "normalized_value",
+                "normalized_unit",
+                "code_value",
+                "section_code",
+            ),
         )
         grouped[namecode].append(row)
     return {namecode: tuple(namecode_rows) for namecode, namecode_rows in grouped.items()}
@@ -259,11 +269,12 @@ def _type_mismatch_value(
 
 def _build_pq_value(row: Mapping[str, object]) -> PQValue:
     raw_value = _optional_text(row, "raw_value")
-    unit = _optional_text(row, "raw_unit")
-    if raw_value is None:
+    value = _preferred_normalized_text(row)
+    unit = _optional_text(row, "normalized_unit") or _optional_text(row, "raw_unit")
+    if value is None:
         return PQValue(ValueState.NULL, None, None, unit, False, None, None)
 
-    stripped = raw_value.strip()
+    stripped = value.strip()
     if stripped == "":
         return PQValue(ValueState.EMPTY, raw_value, None, unit, False, None, None)
 
@@ -307,14 +318,22 @@ def _build_cd_value(row: Mapping[str, object]) -> CDValue:
 
 def _build_st_value(row: Mapping[str, object]) -> STValue:
     raw_text = _optional_text(row, "raw_value")
-    if raw_text is None:
+    value = _preferred_normalized_text(row)
+    if value is None:
         return STValue(ValueState.NULL, None, None, False, None, None)
 
-    text = _normalize_st_text(raw_text)
+    text = _normalize_st_text(value)
     if text == "":
         return STValue(ValueState.EMPTY, raw_text, "", False, None, None)
 
     return STValue(ValueState.PRESENT, raw_text, text, True, None, None)
+
+
+def _preferred_normalized_text(row: Mapping[str, object]) -> str | None:
+    normalized = _optional_text(row, "normalized_value")
+    if normalized is not None:
+        return normalized
+    return _optional_text(row, "raw_value")
 
 
 def _normalize_st_text(raw_text: str) -> str:

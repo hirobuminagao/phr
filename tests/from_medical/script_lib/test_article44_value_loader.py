@@ -27,8 +27,10 @@ def row(
     namecode: str | None,
     raw_value_type: str | None,
     raw_value: object = None,
+    normalized_value: object = None,
     code_value: object = None,
     unit: object = None,
+    normalized_unit: object = None,
     section_code: object = "01030",
     id: int = 1,
 ) -> dict[str, object]:
@@ -38,6 +40,8 @@ def row(
         "raw_value_type": raw_value_type,
         "raw_value": raw_value,
         "raw_unit": unit,
+        "normalized_value": normalized_value,
+        "normalized_unit": normalized_unit,
         "code_value": code_value,
         "section_code": section_code,
     }
@@ -252,6 +256,26 @@ def test_build_value_map_preserves_pq_unit_when_present() -> None:
     assert value.unit == "cm"
 
 
+def test_build_value_map_prefers_normalized_pq_value_and_unit() -> None:
+    value = build_one_value(
+        ExpectedValueType.PQ,
+        row(
+            namecode="x",
+            raw_value_type="PQ",
+            raw_value="0.1未満",
+            normalized_value="0.1",
+            unit="raw-unit",
+            normalized_unit="1",
+        ),
+    )
+
+    assert isinstance(value, PQValue)
+    assert value.raw_value == "0.1未満"
+    assert value.numeric_value == Decimal("0.1")
+    assert value.unit == "1"
+    assert value.is_valid is True
+
+
 def test_build_value_map_allows_missing_pq_unit() -> None:
     value = build_one_value(
         ExpectedValueType.PQ,
@@ -402,6 +426,23 @@ def test_build_value_map_normalizes_valid_st_value() -> None:
     assert isinstance(value, STValue)
     assert value.value_state == ValueState.PRESENT
     assert value.text == "finding text"
+    assert value.is_valid is True
+
+
+def test_build_value_map_prefers_normalized_st_value() -> None:
+    value = build_one_value(
+        ExpectedValueType.ST,
+        row(
+            namecode="x",
+            raw_value_type="ST",
+            raw_value="Ａ　Ｂ",
+            normalized_value="A B",
+        ),
+    )
+
+    assert isinstance(value, STValue)
+    assert value.raw_text == "Ａ　Ｂ"
+    assert value.text == "A B"
     assert value.is_valid is True
 
 
