@@ -61,3 +61,19 @@ def test_normalize_numeric_unknown_text_stays_invalid_value_type() -> None:
     assert result.normalize_status == "ERROR"
     assert result.normalize_reason == "INVALID_VALUE_TYPE"
     assert result.validation_status == "INVALID"
+
+
+def test_normalize_halfwidth_kana_cancel_is_no_result() -> None:
+    result = normalize_exam_item_value(
+        None,
+        namecode="1A030000000190301",
+        raw_value="ｷﾔﾝｾﾙ",
+        exam_item={"data_type": "PQ", "unit": "1"},
+    )
+
+    assert result.raw_value == "ｷﾔﾝｾﾙ"
+    assert result.raw_value_type == "PQ"
+    assert result.normalized_value is None
+    assert result.normalize_status == "SKIPPED"
+    assert result.normalize_reason == "RAW_VALUE_NO_RESULT"
+    assert result.validation_status == "WARNING"

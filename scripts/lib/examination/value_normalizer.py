@@ -29,6 +29,7 @@ NO_RESULT_WORDS = {
     "中止",
     "拒否",
     "対象外",
+    "キヤンセル",
 }
 
 UNMEASURABLE_WORDS = {

@@ -81,7 +81,7 @@ Draft.
 - 完全空セルは `exam_item_values` 行を作らない。
 - `未実施` / `測定不能` / `判定不能` などは、健診機関由来のABC等の健診判定ではなく、entry内の項目結果値そのものが示す実施状態・測定可否として扱う。
 - そのため、健診機関由来の健診判定を初期実装で保持・利用しない方針の影響を受けず、`exam_item_values.raw_value` とnormalize状態に残す。
-- `未実施`, `未受診`, `実施せず`, `キャンセル`, `中止`, `拒否`, `対象外` など、実施されていないことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_NO_RESULT`, `validation_status = WARNING` として扱う。
+- `未実施`, `未受診`, `実施せず`, `キャンセル`, `ｷﾔﾝｾﾙ`, `中止`, `拒否`, `対象外` など、実施されていないことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_NO_RESULT`, `validation_status = WARNING` として扱う。
 - `測定不能`, `判定不能`, `検体不良`, `採血不可`, `測定不可` など、測定できなかったことを示す語は、元値を `exam_item_values.raw_value` に残し、`normalize_status = SKIPPED`, `normalize_reason = RAW_VALUE_UNMEASURABLE`, `validation_status = WARNING` として扱う。
 - 型に合わない未知文字列は、元値を `exam_item_values.raw_value` に残し、`normalize_status = ERROR`, `normalize_reason = INVALID_VALUE_TYPE`, `validation_status = INVALID` として扱う。
 - 数値系項目の `<0.1` / `0.1未満` / `1.005以下` のような比較付き表現は、XMLのPQで比較演算子を表現できないため、元値を `exam_item_values.raw_value` に残し、数値部を `exam_item_values.normalized_value` に保持する。
