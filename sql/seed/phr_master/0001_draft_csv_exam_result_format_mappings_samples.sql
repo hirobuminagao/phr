@@ -422,6 +422,24 @@ JOIN (
 ) x ON x.`rule_key` = r.`rule_key`
 WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id;
 
+-- A configured finding column with an empty cell means no finding. Keep this
+-- separate from a missing header, which remains a template mismatch.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_name`, `header_occurrence`, `operator`, `expected_value`,
+  `source_role`, `priority`, `is_active`, `note`
+)
+SELECT r.`csv_exam_result_mapping_rule_id`, 2, 'CELL_VALUE', 'HEADER_NAME', x.`header_name`, 1,
+       'EMPTY', NULL, 'QUALIFIER', 100, 1,
+       CONCAT('draft empty means no finding:', r.`rule_key`)
+FROM `phr_master`.`csv_exam_result_mapping_rules` r
+JOIN (
+  SELECT 'hirooka.exam.medical_history_presence_normal' AS `rule_key`, '既往歴' AS `header_name`
+  UNION ALL SELECT 'hirooka.exam.subjective_symptoms_presence_normal', '自覚症状'
+  UNION ALL SELECT 'hirooka.exam.objective_symptoms_presence_normal', '他覚症状'
+) x ON x.`rule_key` = r.`rule_key`
+WHERE r.`csv_format_version_id` = @hirooka_csv_format_version_id;
+
 -- Do not store the no-finding token as ST text; retain ST only for abnormal rows.
 INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
   `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
@@ -1100,7 +1118,16 @@ INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
    'draft seed:heartcross.exam.chest_xray_presence_normal:異常なし -> 所見なし CD=2'),
   (@heartcross_csv_format_version_id, 'heartcross.exam.chest_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
    '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1400, 1,
-   'draft seed:heartcross.exam.chest_xray_presence_abnormal:異常判定かつ所見あり -> 所見あり CD=1')
+   'draft seed:heartcross.exam.chest_xray_presence_abnormal:異常判定かつ所見あり -> 所見あり CD=1'),
+  (@heartcross_csv_format_version_id, 'heartcross.exam.medical_history_presence_empty', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
+   '9N056000000000011', 'MULTI_COLUMN', 'FIXED', '2', 0, 1410, 1,
+   'draft seed:heartcross.exam.medical_history_presence_empty:対応2列が空欄 -> 既往歴なし CD=2'),
+  (@heartcross_csv_format_version_id, 'heartcross.exam.subjective_symptoms_presence_empty', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
+   '9N061000000000011', 'MULTI_COLUMN', 'FIXED', '2', 0, 1420, 1,
+   'draft seed:heartcross.exam.subjective_symptoms_presence_empty:対応2列が空欄 -> 自覚症状なし CD=2'),
+  (@heartcross_csv_format_version_id, 'heartcross.exam.objective_symptoms_presence_empty', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT',
+   '9N066000000000011', 'MULTI_COLUMN', 'FIXED', '2', 0, 1430, 1,
+   'draft seed:heartcross.exam.objective_symptoms_presence_empty:対応2列が空欄 -> 他覚症状なし CD=2')
 ON DUPLICATE KEY UPDATE
   `target_kind` = VALUES(`target_kind`),
   `target_resolution_type` = VALUES(`target_resolution_type`),
@@ -1148,6 +1175,28 @@ JOIN `phr_master`.`csv_exam_result_mapping_rules` r
   ON r.`csv_format_version_id` = @heartcross_csv_format_version_id
  AND r.`note` LIKE CONCAT('draft seed:', s.`seed_key`, ':%')
 WHERE s.`format_key` = 'HEARTCROSS';
+
+-- For these three paired finding fields, both configured cells being empty is
+-- an explicit no-finding result. The one abnormal objective-symptom sample is
+-- intentionally left on the existing direct rule pending facility response.
+INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
+  `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+  `locator_type`, `header_name`, `header_occurrence`, `operator`, `expected_value`,
+  `source_role`, `priority`, `is_active`, `note`
+)
+SELECT r.`csv_exam_result_mapping_rule_id`, 1, 'CELL_VALUE', 'HEADER_NAME', x.`header_name`, 1,
+       'EMPTY', NULL, 'QUALIFIER', x.`priority`, 1,
+       CONCAT('draft paired empty condition:', r.`rule_key`)
+FROM `phr_master`.`csv_exam_result_mapping_rules` r
+JOIN (
+  SELECT 'heartcross.exam.medical_history_presence_empty' AS `rule_key`, '9N056000000000011' AS `header_name`, 100 AS `priority`
+  UNION ALL SELECT 'heartcross.exam.medical_history_presence_empty', '9N056160400000049', 110
+  UNION ALL SELECT 'heartcross.exam.subjective_symptoms_presence_empty', '9N061000000000011', 100
+  UNION ALL SELECT 'heartcross.exam.subjective_symptoms_presence_empty', '9N061160800000049', 110
+  UNION ALL SELECT 'heartcross.exam.objective_symptoms_presence_empty', '9N066000000000011', 100
+  UNION ALL SELECT 'heartcross.exam.objective_symptoms_presence_empty', '9N066160800000049', 110
+) x ON x.`rule_key` = r.`rule_key`
+WHERE r.`csv_format_version_id` = @heartcross_csv_format_version_id;
 
 -- Branch conditions for standard finding-presence CD values.
 INSERT INTO `phr_master`.`csv_exam_result_mapping_conditions` (
