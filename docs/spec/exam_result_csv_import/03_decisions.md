@@ -101,6 +101,9 @@ Draft.
 - CSV直取込では、CSVデータ行単位の台帳として `health_exam_result.csv_row_ledger` を追加する案を基本とする。
 - CSV由来の `exam_item_values` は `ledger_type = 'CSV'`, `ledger_id = csv_row_ledger.csv_row_ledger_id` で由来を表す。
 - CSVに保険者番号を持たない施設フォーマットでは、`file_receipts.insurer_number` を `csv_row_ledger.insurer_number` と加入者identity生成の入力に利用する。
+- `03_check_exam_results.py` はXML由来だけでなくCSV由来も対象にする。
+- check結果は `exam_check_results.ledger_type` で `XML` / `CSV` を区別し、XMLは `xml_ledger_id`、CSVは `csv_row_ledger_id` に紐づける。
+- CSV由来のcheck状態は `csv_row_ledger.check_status` / `check_reason` に反映する。
 - 保険記号・保険番号は加入者identity生成に必要なため、施設フォーマット側にない場合は本番取込前の整形でCSV末尾へ追加する方針とする。
 - `csv_loader` はCSV読込の共通部品として利用し、mapping適用、rule実行、normalize、identity生成、加入者照合は `csv_loader` の責務外とする。
 - CSVヘッダー読取は既存 `scripts/lib/csv/csv_loader.py` の `load_csv()` / `CSVLoader.get_headers()` / `CSVLoader.get_header_dict()` を利用する案を基本とする。

@@ -680,12 +680,12 @@ def test_load_article44_value_map_uses_single_sql_and_fake_cursor_contract() -> 
     compact_sql = re.sub(r"\s+", " ", sql).strip()
 
     assert "exam_item_values" in compact_sql
-    assert "ledger_type = 'XML'" in compact_sql
+    assert "ledger_type = %s" in compact_sql
     assert "ledger_id = %s" in compact_sql
     assert "namecode IN" in compact_sql
     assert "section_code" in compact_sql
-    assert compact_sql.count("%s") == 1 + len(required_namecodes)
-    assert params == (123, "x", "y")
+    assert compact_sql.count("%s") == 2 + len(required_namecodes)
+    assert params == ("XML", 123, "x", "y")
     assert " JOIN " not in compact_sql.upper()
     assert " DISTINCT " not in compact_sql.upper()
     assert " GROUP BY " not in compact_sql.upper()
@@ -696,3 +696,22 @@ def test_load_article44_value_map_uses_single_sql_and_fake_cursor_contract() -> 
     assert cursor.commit_calls == 0
     assert cursor.rollback_calls == 0
     assert cursor.close_calls == 0
+
+
+def test_load_article44_value_map_can_load_csv_ledger_values() -> None:
+    cursor = FakeCursor([row(namecode="x", raw_value_type="PQ", raw_value="1")])
+    required_namecodes = (required("x", ExpectedValueType.PQ),)
+
+    value_map = load_article44_value_map(
+        cursor,
+        ledger_type="CSV",
+        ledger_id=456,
+        required_namecodes=required_namecodes,
+    )
+
+    sql, params = cursor.execute_calls[0]
+    compact_sql = re.sub(r"\s+", " ", sql).strip()
+
+    assert "ledger_type = %s" in compact_sql
+    assert params == ("CSV", 456, "x")
+    assert value_map["x"].is_valid is True

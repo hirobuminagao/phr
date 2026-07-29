@@ -28,7 +28,6 @@ from scripts.from_medical.script_lib.article44_checker import check_article44
 from scripts.from_medical.script_lib.article44_models import Article44Result, CheckResult
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
 from scripts.from_medical.script_lib.article44_value_loader import load_article44_value_map
-from scripts.lib.examination.lookup import fetch_target_ledgers
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK
 from scripts.lib.examination.models import STATUS_ALTERNATIVE, STATUS_CALCULATED, STATUS_INVALID, STATUS_MISSING, STATUS_OK
@@ -44,6 +43,10 @@ CHECK_STATUS_PENDING = "PENDING"
 CHECK_STATUS_OK = "OK"
 CHECK_STATUS_WARNING = "WARNING"
 CHECK_STATUS_NG = "NG"
+LEDGER_TYPE_XML = "XML"
+LEDGER_TYPE_CSV = "CSV"
+LEDGER_TYPE_ALL = "ALL"
+LEDGER_TYPES = {LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_ALL}
 
 ARTICLE44_OK_STATUSES = {STATUS_OK, STATUS_CALCULATED, STATUS_ALTERNATIVE}
 ARTICLE44_PROBLEM_STATUSES = {STATUS_MISSING, STATUS_INVALID}
@@ -83,6 +86,7 @@ class CheckConfig:
     dry_run: bool
     limit: int
     verbose: bool
+    ledger_type: str
 
 
 @dataclass
@@ -128,6 +132,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event-id", type=int, default=None, help="Override config event_id.")
     parser.add_argument("--dry-run", action="store_true", help="Read and report without DB writes.")
     parser.add_argument("--limit", type=int, default=None, help="Override maximum xml_ledger rows to process. 0 means unlimited.")
+    parser.add_argument(
+        "--ledger-type",
+        choices=(LEDGER_TYPE_ALL, LEDGER_TYPE_XML, LEDGER_TYPE_CSV),
+        default=None,
+        help="Ledger source to check. Default is ALL.",
+    )
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
     parser.add_argument("--dev-db", default=None, help="Override dev_phr schema name.")
@@ -148,6 +158,7 @@ def load_check_config(path: str | Path) -> CheckConfig:
         dry_run=bool(data.get("dry_run", False)),
         limit=int(data.get("limit", 0) or 0),
         verbose=False,
+        ledger_type=str(data.get("ledger_type") or LEDGER_TYPE_ALL).upper(),
     )
 
 
@@ -160,6 +171,7 @@ def resolve_config(args: argparse.Namespace) -> CheckConfig:
         dry_run=True if args.dry_run else config.dry_run,
         limit=args.limit if args.limit is not None else config.limit,
         verbose=bool(args.verbose),
+        ledger_type=(args.ledger_type or config.ledger_type).upper(),
     )
     validate_config(resolved)
     return resolved
@@ -170,6 +182,8 @@ def validate_config(config: CheckConfig) -> None:
         raise ValueError("event_id must be positive")
     if config.limit < 0:
         raise ValueError("limit must be >= 0")
+    if config.ledger_type not in LEDGER_TYPES:
+        raise ValueError(f"ledger_type must be one of {sorted(LEDGER_TYPES)}")
 
 
 def start_check_run(cur: Any, config: CheckConfig) -> int:
@@ -294,7 +308,8 @@ def print_dry_run_detail(
     article44_result: Article44Result,
 ) -> None:
     print("dry_run_detail:")
-    print(f"  xml_ledger_id={ledger['id']}")
+    print(f"  ledger_type={ledger['ledger_type']}")
+    print(f"  ledger_id={ledger['id']}")
     print(f"  subscriber_id={ledger.get('subscriber_id')}")
     print(f"  hia_subscriber_id={ledger.get('hia_subscriber_id')}")
     print(f"  legal_check_result={legal_result}")
@@ -325,7 +340,9 @@ def insert_check_result(
     specific_summary: str | None,
 ) -> None:
     row: dict[str, Any] = {
-        "xml_ledger_id": ledger["id"],
+        "ledger_type": ledger["ledger_type"],
+        "xml_ledger_id": ledger["id"] if ledger["ledger_type"] == LEDGER_TYPE_XML else None,
+        "csv_row_ledger_id": ledger["id"] if ledger["ledger_type"] == LEDGER_TYPE_CSV else None,
         "event_id": ledger["event_id"],
         "subscriber_id": ledger.get("subscriber_id"),
         "hia_subscriber_id": ledger.get("hia_subscriber_id"),
@@ -347,18 +364,40 @@ def insert_check_result(
     )
 
 
-def delete_existing_results(cur: Any, *, health_db: str, ledger_ids: list[int]) -> int:
-    if not ledger_ids:
+def delete_existing_results(
+    cur: Any,
+    *,
+    health_db: str,
+    ledger_refs: list[tuple[str, int]],
+) -> int:
+    if not ledger_refs:
         return 0
-    placeholders = ", ".join(["%s"] * len(ledger_ids))
-    cur.execute(
-        f"""
-        DELETE FROM {qname(health_db)}.exam_check_results
-        WHERE xml_ledger_id IN ({placeholders})
-        """,
-        tuple(ledger_ids),
-    )
-    return int(cur.rowcount or 0)
+    deleted = 0
+    xml_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_XML]
+    csv_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_CSV]
+    if xml_ids:
+        placeholders = ", ".join(["%s"] * len(xml_ids))
+        cur.execute(
+            f"""
+            DELETE FROM {qname(health_db)}.exam_check_results
+            WHERE ledger_type = %s
+              AND xml_ledger_id IN ({placeholders})
+            """,
+            (LEDGER_TYPE_XML, *xml_ids),
+        )
+        deleted += int(cur.rowcount or 0)
+    if csv_ids:
+        placeholders = ", ".join(["%s"] * len(csv_ids))
+        cur.execute(
+            f"""
+            DELETE FROM {qname(health_db)}.exam_check_results
+            WHERE ledger_type = %s
+              AND csv_row_ledger_id IN ({placeholders})
+            """,
+            (LEDGER_TYPE_CSV, *csv_ids),
+        )
+        deleted += int(cur.rowcount or 0)
+    return deleted
 
 
 def update_xml_ledger_check(
@@ -380,6 +419,118 @@ def update_xml_ledger_check(
     )
 
 
+def update_csv_row_ledger_check(
+    cur: Any,
+    *,
+    health_db: str,
+    ledger_id: int,
+    check_status: str,
+    check_reason: str | None,
+) -> None:
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db)}.csv_row_ledger
+        SET check_status = %s,
+            check_reason = %s
+        WHERE csv_row_ledger_id = %s
+        """,
+        (check_status, check_reason, ledger_id),
+    )
+
+
+def fetch_target_xml_ledgers(
+    cur: Any,
+    *,
+    health_db: str,
+    event_id: int,
+    limit: int = 0,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [event_id]
+    limit_sql = ""
+    if limit:
+        limit_sql = "LIMIT %s"
+        params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          'XML' AS ledger_type,
+          id,
+          event_id,
+          subscriber_id,
+          hia_subscriber_id
+        FROM {qname(health_db)}.xml_ledger
+        WHERE event_id = %s
+          AND xml_status = 'READY'
+        ORDER BY id
+        {limit_sql}
+        """,
+        tuple(params),
+    )
+    return list(cur.fetchall())
+
+
+def fetch_target_csv_ledgers(
+    cur: Any,
+    *,
+    health_db: str,
+    event_id: int,
+    limit: int = 0,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [event_id]
+    limit_sql = ""
+    if limit:
+        limit_sql = "LIMIT %s"
+        params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          'CSV' AS ledger_type,
+          csv_row_ledger_id AS id,
+          event_id,
+          subscriber_id,
+          hia_subscriber_id
+        FROM {qname(health_db)}.csv_row_ledger
+        WHERE event_id = %s
+          AND row_status IN ('READY', 'ERROR')
+        ORDER BY csv_row_ledger_id
+        {limit_sql}
+        """,
+        tuple(params),
+    )
+    return list(cur.fetchall())
+
+
+def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[str, Any]]:
+    if config.ledger_type == LEDGER_TYPE_XML:
+        return fetch_target_xml_ledgers(
+            cur,
+            health_db=config.health_db,
+            event_id=config.event_id,
+            limit=config.limit,
+        )
+    if config.ledger_type == LEDGER_TYPE_CSV:
+        return fetch_target_csv_ledgers(
+            cur,
+            health_db=config.health_db,
+            event_id=config.event_id,
+            limit=config.limit,
+        )
+    xml_ledgers = fetch_target_xml_ledgers(
+        cur,
+        health_db=config.health_db,
+        event_id=config.event_id,
+        limit=0,
+    )
+    csv_ledgers = fetch_target_csv_ledgers(
+        cur,
+        health_db=config.health_db,
+        event_id=config.event_id,
+        limit=0,
+    )
+    ledgers = [*xml_ledgers, *csv_ledgers]
+    return ledgers[: config.limit] if config.limit else ledgers
+
+
 def process_ledgers(
     health_conn: Any,
     health_cur: Any,
@@ -389,18 +540,19 @@ def process_ledgers(
 ) -> None:
     required_namecodes = fetch_article44_required_namecodes(dev_cur, dev_db=config.dev_db)
 
-    ledgers = fetch_target_ledgers(health_cur, health_db=config.health_db, event_id=config.event_id, limit=config.limit)
-    ledger_ids = [int(ledger["id"]) for ledger in ledgers]
+    ledgers = fetch_target_check_ledgers(health_cur, config=config)
+    ledger_refs = [(str(ledger["ledger_type"]), int(ledger["id"])) for ledger in ledgers]
     summary.ledgers_seen = len(ledgers)
 
     if not config.dry_run:
-        summary.rows_deleted = delete_existing_results(health_cur, health_db=config.health_db, ledger_ids=ledger_ids)
+        summary.rows_deleted = delete_existing_results(health_cur, health_db=config.health_db, ledger_refs=ledger_refs)
 
     for ledger in ledgers:
         ledger_id = int(ledger["id"])
         value_map = load_article44_value_map(
             health_cur,
-            xml_ledger_id=ledger_id,
+            ledger_type=str(ledger["ledger_type"]),
+            ledger_id=ledger_id,
             required_namecodes=required_namecodes,
             result_db=config.health_db,
         )
@@ -441,13 +593,22 @@ def process_ledgers(
             specific_summary=specific_summary,
         )
         summary.rows_inserted += 1
-        update_xml_ledger_check(
-            health_cur,
-            health_db=config.health_db,
-            ledger_id=ledger_id,
-            check_status=check_status,
-            check_reason=check_reason,
-        )
+        if ledger["ledger_type"] == LEDGER_TYPE_XML:
+            update_xml_ledger_check(
+                health_cur,
+                health_db=config.health_db,
+                ledger_id=ledger_id,
+                check_status=check_status,
+                check_reason=check_reason,
+            )
+        else:
+            update_csv_row_ledger_check(
+                health_cur,
+                health_db=config.health_db,
+                ledger_id=ledger_id,
+                check_status=check_status,
+                check_reason=check_reason,
+            )
         summary.ledgers_updated += 1
 
     if not config.dry_run:

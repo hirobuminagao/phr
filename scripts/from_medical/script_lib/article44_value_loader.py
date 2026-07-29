@@ -28,14 +28,24 @@ ARTICLE44_SECTION_CODE = "01030"
 def load_article44_value_map(
     cursor: Any,
     *,
-    xml_ledger_id: int,
+    xml_ledger_id: int | None = None,
+    ledger_type: str = "XML",
+    ledger_id: int | None = None,
     required_namecodes: tuple[RequiredNamecode, ...],
     result_db: str = "health_exam_result",
 ) -> ValueMap:
-    """Load required Article 44 values for one XML ledger."""
+    """Load required Article 44 values for one XML/CSV ledger."""
 
-    if not isinstance(xml_ledger_id, int) or isinstance(xml_ledger_id, bool) or xml_ledger_id <= 0:
-        raise ValueError(f"xml_ledger_id must be a positive integer: {xml_ledger_id!r}")
+    resolved_ledger_id = ledger_id if ledger_id is not None else xml_ledger_id
+    if (
+        not isinstance(resolved_ledger_id, int)
+        or isinstance(resolved_ledger_id, bool)
+        or resolved_ledger_id <= 0
+    ):
+        raise ValueError(f"ledger_id must be a positive integer: {resolved_ledger_id!r}")
+    resolved_ledger_type = ledger_type.strip().upper() if isinstance(ledger_type, str) else ""
+    if resolved_ledger_type not in {"XML", "CSV"}:
+        raise ValueError(f"ledger_type must be XML or CSV: {ledger_type!r}")
     _validate_required_namecodes(required_namecodes)
 
     namecodes = tuple(required.namecode for required in required_namecodes)
@@ -43,7 +53,7 @@ def load_article44_value_map(
     cursor.execute(
         f"""
         SELECT
-          ledger_id AS xml_ledger_id,
+          ledger_id,
           id,
           namecode,
           raw_value_type,
@@ -52,12 +62,12 @@ def load_article44_value_map(
           code_value,
           section_code
         FROM {qname(result_db)}.exam_item_values
-        WHERE ledger_type = 'XML'
+        WHERE ledger_type = %s
           AND ledger_id = %s
           AND namecode IN ({placeholders})
         ORDER BY namecode, id
         """,
-        (xml_ledger_id, *namecodes),
+        (resolved_ledger_type, resolved_ledger_id, *namecodes),
     )
     return _build_value_map(required_namecodes, cursor.fetchall())
 

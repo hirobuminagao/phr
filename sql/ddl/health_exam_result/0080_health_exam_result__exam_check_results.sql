@@ -1,6 +1,8 @@
 CREATE TABLE `health_exam_result`.`exam_check_results` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `xml_ledger_id` bigint unsigned NOT NULL,
+  `ledger_type` varchar(16) NOT NULL DEFAULT 'XML',
+  `xml_ledger_id` bigint unsigned DEFAULT NULL,
+  `csv_row_ledger_id` bigint unsigned DEFAULT NULL,
   `event_id` bigint NOT NULL,
   `subscriber_id` bigint unsigned DEFAULT NULL,
   `hia_subscriber_id` varchar(190) DEFAULT NULL,
@@ -59,6 +61,8 @@ CREATE TABLE `health_exam_result`.`exam_check_results` (
 
   PRIMARY KEY (`id`),
   KEY `idx_exam_check_results_xml_ledger` (`xml_ledger_id`),
+  KEY `idx_exam_check_results_ledger_type_xml` (`ledger_type`, `xml_ledger_id`),
+  KEY `idx_exam_check_results_ledger_type_csv` (`ledger_type`, `csv_row_ledger_id`),
   KEY `idx_exam_check_results_event` (`event_id`),
   KEY `idx_exam_check_results_subscriber` (`subscriber_id`),
   KEY `idx_exam_check_results_hia_subscriber` (`hia_subscriber_id`),
