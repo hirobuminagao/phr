@@ -113,7 +113,7 @@ seedは再実行可能なupsert/delete+insert構成とし、SQL末尾で `COMMIT
 - `data_start_row_no = 3`
 - `character_encoding = CP932`
 - `encoding_fallback_policy = ALLOW_COMMON_ENCODINGS`
-- `header_sha256 = 25e510f122f072d17b2b534cbe847d473fb90230ed2219d3bc3e0d2fbba55867`
+- `header_sha256 = 6ce5a7d844a2351c6f1ef97743f023e3c135cac2d669048fe032f4acfcc25544`
 
 初期seedに含める基本情報:
 

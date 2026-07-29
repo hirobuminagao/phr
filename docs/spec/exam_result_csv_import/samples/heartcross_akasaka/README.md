@@ -17,10 +17,10 @@ The sample is intended for two-row header, namecode-driven mapping, row ledger, 
 - Copied file: `docs/spec/exam_result_csv_import/samples/heartcross_akasaka/heartcross_akasaka_sample_001.csv`
 - Encoding: CP932
 - Rows: 7
-- Columns: 164
+- Columns: 166
 - Header rows: 2 rows
 - Data rows: 5
-- All rows have 164 columns.
+- All rows have 166 columns.
 - Header row 1: Japanese display header
 - Header row 2: ledger field code or exam item `namecode`
 - Pattern: B / two-row header, row 2 used as the active header
@@ -31,6 +31,9 @@ The sample is intended for two-row header, namecode-driven mapping, row ledger, 
 ## Notes
 
 - The sample contains no sensitive personal information; values were replaced with sample data before placement.
+- The last two columns are test additions: `GENDER` contains `男` / `女`, and
+  `EXAM_DATE` contains the provisional value `2026/05/01`.
+- The facility-provided source and final values for these two columns remain confirmation items.
 - This sample differs from Hirooka Pattern A because row 2 already contains stable field codes and `namecode` values.
 - Row 2 should be treated as the active header for mapping. This does not require a dedicated namecode-row mapping type.
 - Some headers contain the word `判定`, but not all are facility-level A/B/C style judgements.

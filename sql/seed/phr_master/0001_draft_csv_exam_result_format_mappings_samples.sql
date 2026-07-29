@@ -846,7 +846,7 @@ INSERT INTO `phr_master`.`csv_format_versions` (
   'UPPER_HEADER',
   2,
   3,
-  '25e510f122f072d17b2b534cbe847d473fb90230ed2219d3bc3e0d2fbba55867',
+  '6ce5a7d844a2351c6f1ef97743f023e3c135cac2d669048fe032f4acfcc25544',
   'VERIFIED',
   'ALLOW_AFTER_CONFIRM',
   0,
@@ -896,15 +896,17 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
   `header_context`, `header_name`, `header_occurrence`, `source_role`,
   `raw_value_type`, `raw_unit`, `is_required`, `priority`, `note`
 ) VALUES
--- Heartcross basic information. exam_date is intentionally absent pending facility/other-data confirmation.
+-- Heartcross basic information. Gender and exam date are appended test columns;
+-- the facility/other-data source remains pending confirmation.
 ('heartcross.basic.insurer_number', 'HEARTCROSS', 'LEDGER_FIELD', 'insurer_number', NULL, NULL, 'INSURER_NUMBER', 1, 'VALUE', NULL, NULL, 1, 10, 'basic: insurer number'),
 ('heartcross.basic.insurance_symbol_raw', 'HEARTCROSS', 'LEDGER_FIELD', 'insurance_symbol_raw', NULL, NULL, 'INSURANCE_CARD_SYMBOL', 1, 'VALUE', NULL, NULL, 1, 20, 'basic: insurance symbol'),
 ('heartcross.basic.insurance_number_raw', 'HEARTCROSS', 'LEDGER_FIELD', 'insurance_number_raw', NULL, NULL, 'INSURANCE_CARD_NUMBER', 1, 'VALUE', NULL, NULL, 1, 30, 'basic: insurance number'),
 ('heartcross.basic.insurance_branch_number_raw', 'HEARTCROSS', 'LEDGER_FIELD', 'insurance_branch_number_raw', NULL, NULL, 'INSURANCE_CARD_BRANCH_NUMBER', 1, 'VALUE', NULL, NULL, 0, 40, 'basic: insurance branch number; sample blank'),
 ('heartcross.basic.name_kana_raw', 'HEARTCROSS', 'LEDGER_FIELD', 'name_kana_raw', NULL, NULL, 'NAME_KANA', 1, 'VALUE', NULL, NULL, 1, 50, 'basic: kana name'),
 ('heartcross.basic.birthdate', 'HEARTCROSS', 'LEDGER_FIELD', 'birthdate', NULL, NULL, 'BIRTHDAY', 1, 'VALUE', NULL, NULL, 1, 60, 'basic: birthdate'),
-('heartcross.basic.gender_raw', 'HEARTCROSS', 'LEDGER_FIELD', 'gender_raw', NULL, NULL, 'GENDER_CODE', 1, 'VALUE', NULL, NULL, 1, 70, 'basic: provisional gender for local subscriber matching test'),
-('heartcross.basic.postal_code', 'HEARTCROSS', 'LEDGER_FIELD', 'postal_code', NULL, NULL, 'POSTALCODE', 1, 'VALUE', NULL, NULL, 0, 80, 'basic: postal code'),
+('heartcross.basic.gender_raw', 'HEARTCROSS', 'LEDGER_FIELD', 'gender_raw', NULL, NULL, 'GENDER', 1, 'VALUE', NULL, NULL, 1, 70, 'basic: appended test gender; 男/女 is normalized by the shared gender library'),
+('heartcross.basic.exam_date', 'HEARTCROSS', 'LEDGER_FIELD', 'exam_date', NULL, NULL, 'EXAM_DATE', 1, 'VALUE', NULL, NULL, 1, 80, 'basic: appended provisional exam date in YYYY/MM/DD format'),
+('heartcross.basic.postal_code', 'HEARTCROSS', 'LEDGER_FIELD', 'postal_code', NULL, NULL, 'POSTALCODE', 1, 'VALUE', NULL, NULL, 0, 90, 'basic: postal code'),
 
 -- Heartcross exam item values. Row 2 code/namecode is used as header_name.
 -- The following CSV columns are intentionally not mapped:

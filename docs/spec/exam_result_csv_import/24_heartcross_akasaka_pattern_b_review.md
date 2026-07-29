@@ -15,10 +15,10 @@ Draft.
 - 文字コード: CP932
 - 行数: 7行
 - データ行数: 5行
-- 列数: 164列
+- 列数: 166列（末尾2列は取込検証用の追加列）
 - ヘッダー行: 2行
 - データ開始行: 3行目
-- 全行列数: 164列で一致
+- 全行列数: 166列で一致
 - 値あり列数: 72列
 
 ## Pattern Classification
@@ -52,7 +52,7 @@ Draft.
 | blank row 2 codes | 0 |
 | row 1 sha256 | `3f63520c04fabe5ee463b4e14fde2bd580196c9968d9eeba3a0bb8e8a7fb5799` |
 | row 1+2 sha256 | `d8fbf9da281ed0cc3957ca18da1f6a8674a9e3e0816e968b07d2043453043613` |
-| `csv_format_versions.header_sha256` | `25e510f122f072d17b2b534cbe847d473fb90230ed2219d3bc3e0d2fbba55867` |
+| `csv_format_versions.header_sha256` | `6ce5a7d844a2351c6f1ef97743f023e3c135cac2d669048fe032f4acfcc25544` |
 
 初期実装では、2行ヘッダー全体をfingerprint対象にする。
 つまり、1行目の表示名だけでなく、2行目のfield code/namecodeも含めて `header_sha256` を算出する。
@@ -72,6 +72,8 @@ Draft.
 | 5 | 受診者カナ氏名 | `NAME_KANA` | 加入者突合 |
 | 6 | 受診者生年月日 | `BIRTHDAY` | 加入者突合 |
 | 7 | 受診者郵便番号 | `POSTALCODE` | 原本郵便番号。任意 |
+| 165 | 性別 | `GENDER` | 取込検証用追加列。`男` / `女` を共通libで正規化 |
+| 166 | 受診日 | `EXAM_DATE` | 取込検証用追加列。`YYYY/MM/DD` |
 
 確認結果:
 
@@ -82,14 +84,18 @@ Draft.
 - `NAME_KANA` は全5データ行で値あり。
 - `BIRTHDAY` は全5データ行で値あり。
 - `POSTALCODE` は全5データ行で値あり。
-- 健診日はCSV内に見当たらない。
+- 元の健診機関CSVには性別と健診日が見当たらない。
+- 取込検証用サンプルでは末尾に `GENDER` と `EXAM_DATE` を追加した。
+- `GENDER` は1人目を `男`、2～5人目を `女` とし、`EXAM_DATE` は全員
+  `2026/05/01` の暫定値とした。
 
 健診日の扱い:
 
 - ハートクロスCSV単体からは行ごとの `exam_date` を確定できない。
 - ただし、別データから健診日を特定できる見込みがあるため、CSV取込実装検証は止めない。
 - 初期設定は暫定テンプレートとして作成し、健診日取得元は健診機関回答待ちとする。
-- 実取込では、健診日が未解決の行は `csv_row_ledger.exam_date = NULL` とし、後続checkで不足として検知できる状態にする。
+- 実取込では、追加した `EXAM_DATE` を `csv_row_ledger.exam_date` へ格納する。
+- 健診機関からの正式な取得方法・値は引き続き確認事項とし、暫定値を本番値として扱わない。
 - 健診機関回答または別データ連携で健診日取得元が確定したら、基本情報mappingまたは前処理で `exam_date` を補完する。
 
 ## Important Result Columns
@@ -156,7 +162,7 @@ Draft.
 
 - 基本情報は `target_kind = LEDGER_FIELD` とし、2行目の `INSURER_NUMBER` などを `target_field` へ紐づける。
 - 検査結果値は `target_kind = EXAM_ITEM_VALUE` とし、2行目の `namecode` を `target_namecode` として使う。
-- 164列のうちnamecode列は157列。初期seedでは144種類のnamecodeをマッピング対象とする。
+- 元の164列のうちnamecode列は157列。末尾2列は基本情報であり、初期seedでは144種類のnamecodeをマッピング対象とする。
 - 心電図と胸部X線は、それぞれ正常・異常の2分岐ルールを持つため、検査値mapping ruleは計146件となる。
 - 標準体重・体脂肪率の意図的除外2列、3期質問項目 `9N806000000000011` の意図的除外1列、残る健診機関由来判定10列の計13列を未マッピング理由付きで管理する。
 - 第4期では保健指導に関する質問内容が受診歴へ変更されているため、ハートクロスCSVに残る3期項目 `9N806000000000011` はitem_masterへ追加せず、取り込まない。
