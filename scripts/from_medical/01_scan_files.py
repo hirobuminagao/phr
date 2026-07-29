@@ -26,6 +26,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.lookup.event import get_event_insurer_number
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import PHR_MASTER
 from scripts.lib.csv.exam_result_format_matcher import match_csv_format_for_file
@@ -358,6 +359,7 @@ def insert_file_receipt(
     file_sha256: str,
     file_size: int,
     run_id: int,
+    insurer_number: str | None,
     exam_facility_id: int | None,
     facility_code: str | None,
     facility_name: str | None,
@@ -379,6 +381,7 @@ def insert_file_receipt(
             relative_path,
             file_sha256,
             file_size,
+            insurer_number,
             facility_code,
             facility_name,
             exam_facility_id,
@@ -395,7 +398,7 @@ def insert_file_receipt(
             received_at
         )
         VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s,
             CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
         )
         """,
@@ -409,6 +412,7 @@ def insert_file_receipt(
             relative_path,
             file_sha256,
             file_size,
+            insurer_number,
             facility_code,
             facility_name,
             exam_facility_id,
@@ -473,6 +477,7 @@ def scan_alias_files(
     *,
     run_id: int | None,
     event_id: int,
+    insurer_number: str | None,
     root: Path,
     alias: dict[str, Any],
     summary: ScanSummary,
@@ -604,6 +609,7 @@ def scan_alias_files(
                 file_sha256=file_hash,
                 file_size=int(stat.st_size),
                 run_id=run_id,
+                insurer_number=insurer_number,
                 exam_facility_id=exam_facility_id,
                 facility_code=alias.get("exam_facility_code"),
                 facility_name=alias.get("exam_facility_name"),
@@ -647,6 +653,11 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
 
         try:
             root_text = get_result_root_path(cur, dev_db=config.dev_db, event_id=config.event_id)
+            insurer_number = get_event_insurer_number(
+                cur,
+                event_id=config.event_id,
+                dev_db=config.dev_db,
+            )
             summary.result_root_path = root_text
             if not root_text:
                 summary.errors += 1
@@ -663,6 +674,17 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                     finish_scan_run(cur, run_id=run_id, summary=summary, status=ETL_STATUS_FAILED)
                     conn.commit()
                 return summary
+
+            if not config.dry_run and insurer_number:
+                cur.execute(
+                    f"""
+                    UPDATE `{config.health_db}`.`file_receipts`
+                    SET insurer_number = %s
+                    WHERE event_id = %s
+                      AND insurer_number IS NULL
+                    """,
+                    (insurer_number, config.event_id),
+                )
 
             root = Path(root_text).expanduser()
             if not root.exists() or not root.is_dir():
@@ -744,6 +766,7 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                     cur,
                     run_id=run_id,
                     event_id=config.event_id,
+                    insurer_number=insurer_number,
                     root=root,
                     alias=alias,
                     summary=summary,

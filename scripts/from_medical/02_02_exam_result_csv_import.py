@@ -23,6 +23,7 @@ from scripts.lib.csv.exam_result_format_matcher import load_csv_matching_registe
 from scripts.lib.csv.exam_result_mapping_extractor import ExtractedCsvRuleValue, extract_row_values
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingRule, get_csv_format_version_by_id, load_csv_mapping_rules
+from scripts.lib.db.lookup.event import get_event_insurer_number
 from scripts.lib.db.lookup.exam_item_master import get_exam_item
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -778,6 +779,18 @@ def values_to_ledger_fields(extracted: list[ExtractedCsvRuleValue]) -> dict[str,
     return fields
 
 
+def resolve_insurer_number(
+    csv_value: Any,
+    file_receipt_value: Any,
+    event_value: Any,
+) -> str | None:
+    return (
+        compact_text(csv_value)
+        or compact_text(file_receipt_value)
+        or compact_text(event_value)
+    )
+
+
 def process_file_receipt(
     cur: Any,
     *,
@@ -787,6 +800,11 @@ def process_file_receipt(
     file_receipt: Mapping[str, Any],
 ) -> None:
     file_receipt_id = int(file_receipt["id"])
+    event_insurer_number = get_event_insurer_number(
+        cur,
+        event_id=int(file_receipt["event_id"]),
+        dev_db=config.dev_db,
+    )
     src_file = compact_text(file_receipt.get("source_path"))
     source_path = Path(str(file_receipt["source_path"]))
     current_file_sha256 = sha256_file(source_path)
@@ -857,8 +875,11 @@ def process_file_receipt(
 
         extracted = extract_row_values(row, rules)
         ledger_fields = values_to_ledger_fields(extracted)
-        if not ledger_fields.get("insurer_number") and file_receipt.get("insurer_number"):
-            ledger_fields["insurer_number"] = file_receipt.get("insurer_number")
+        ledger_fields["insurer_number"] = resolve_insurer_number(
+            ledger_fields.get("insurer_number"),
+            file_receipt.get("insurer_number"),
+            event_insurer_number,
+        )
         row_errors: list[str] = []
         for result in extracted:
             if result.errors and result.rule.is_required:

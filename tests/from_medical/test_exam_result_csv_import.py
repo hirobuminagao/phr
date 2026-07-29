@@ -6,6 +6,13 @@ import importlib
 csv_import = importlib.import_module("scripts.from_medical.02_02_exam_result_csv_import")
 
 
+def test_resolve_insurer_number_uses_csv_then_receipt_then_event() -> None:
+    assert csv_import.resolve_insurer_number("11111111", "22222222", "33333333") == "11111111"
+    assert csv_import.resolve_insurer_number(None, "22222222", "33333333") == "22222222"
+    assert csv_import.resolve_insurer_number("", None, "33333333") == "33333333"
+    assert csv_import.resolve_insurer_number(None, None, None) is None
+
+
 class FakeCursor:
     def __init__(self) -> None:
         self.sql = ""
