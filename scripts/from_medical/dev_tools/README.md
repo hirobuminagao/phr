@@ -54,3 +54,21 @@ FROM health_exam_result.exam_result_ledger_report
 WHERE event_id = 2
 ORDER BY ledger_type, ledger_id;
 ```
+
+## 健診機関別エラー率VIEW
+
+`20260730_010_health_exam_result_create_facility_error_rate_view.sql` を適用すると、
+`health_exam_result.exam_result_facility_error_rate` で健診機関別の人数と法定チェックエラー率を確認できます。
+
+```sql
+SELECT *
+FROM health_exam_result.exam_result_facility_error_rate
+WHERE event_id = 2
+ORDER BY error_rate_percent DESC, total_person_count DESC;
+```
+
+- エラーは最終法定チェックの `check_status = 'NG'` とする。
+- `error_rate_percent` は未チェックを含む全人数に対するエラー率とする。
+- `checked_error_rate_percent` は `OK / NG / WARNING` の判定済み人数だけを分母にする。
+- 人数は、同じ施設内で `subscriber_id`、次に `identity_hash` を使って名寄せする。どちらもない行だけledger単位で数える。
+- `source_result_count` は名寄せ前のXML/CSV ledger行数であり、`total_person_count` との差から重複元データの有無を確認できる。

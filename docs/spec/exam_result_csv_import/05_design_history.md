@@ -1344,3 +1344,19 @@ CSV健診結果から厚生労働省V08 XMLを出力する初期実装
 - 名称類似による自動名寄せは行わない。
 - 既存の旧名称aliasは削除せず、過去フォルダ名の再受領にも対応できるよう残す。
 - 実機一覧ファイルはrepositoryへ保存せず、差分seedと調査結果だけを保存する。
+
+---
+
+## DH-20260730-07 / 2026-07-30 JST
+
+### テーマ
+
+健診機関別の受診者エラー率VIEW
+
+### 決定・実装内容
+
+- `exam_result_ledger_report` を元に、健診機関別の人数と法定チェックエラー率を返す `exam_result_facility_error_rate` VIEWを追加する。
+- エラーは最終法定チェック結果 `check_status = 'NG'` と定義し、取込途中の `PENDING` はエラーに混ぜず別人数で表示する。
+- 全人数比 `error_rate_percent` と、判定済み人数比 `checked_error_rate_percent` の両方を表示する。
+- XML/CSVの重複計上を抑えるため、同一施設内で `subscriber_id`、次に `identity_hash` を使って受診者を数え、どちらもない行だけledger単位で数える。
+- 名寄せ前のledger行数は `source_result_count` として残し、人数との差を確認できるようにする。
