@@ -42,6 +42,97 @@ CSV行は以下をすべて満たす場合にXML出力候補とする。
 上記4条件は業務上の出力候補条件とする。
 XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致などが発生した場合は、出力候補であっても生成エラーとして扱う。
 
+## Export Selection and Logical Exam Records
+
+画面およびCLIの対象選択は、同じ選択modelと対象抽出処理を使用する。
+
+| selector | initial behavior |
+| --- | --- |
+| event | 必須。画面を開いたeventを固定する |
+| 健診機関 | 必須。複数選択可。全施設も明示選択とする |
+| 受領ファイル | 任意。`file_receipt_id` の複数選択可。未指定時は選択施設内の全対象CSV |
+| 健診年月 | 任意。`csv_row_ledger.exam_date` に対する単月 `YYYY-MM` 指定 |
+| 個人 | 任意。画面で表示された論理健診結果を複数選択可 |
+
+各selectorはAND条件で適用する。
+受領ファイルは対象行の抽出条件であり、ZIPの分割単位にはしない。
+同じ健診機関・保険者に属する複数ファイルの結果は、同じ出力Runでは1つのZIPへまとめる。
+ファイル別にZIPを分ける場合は別Runとして実行する。
+複数ファイル結合でも、選択されていない受領ファイルをexporterが暗黙に追加しない。
+結合に使う受領ファイルは画面またはCLIで明示選択し、画面は同一人物の補完候補ファイルを案内できる形とする。
+
+画面では、対象件数、出力可能件数、出力不可件数と理由を実行前に表示する。
+通常Runは `xml_export_status = 'EXPORTED'` を除外し、再出力は明示操作とする。
+
+### Logical Exam Record
+
+将来、同一人物の結果が複数の受領CSVに分かれ、一方のCSVにしか存在しない検査項目を組み合わせて1件のXMLを作る可能性がある。
+そのため、外部仕様およびexporter内部では `csv_row_ledger` 1行をそのまま1件の出力単位にしない。
+
+1件の個人XMLに対応する出力単位を「論理健診結果」とし、次の構造で扱う。
+
+```text
+LogicalExamRecord
+  candidate_key
+  event_id
+  exam_facility_id
+  insurer_number
+  subscriber_id
+  exam_date
+  health_exam_report_category
+  program_code
+  source_ledger_ids[]
+  source_file_receipt_ids[]
+  merged_exam_item_values[]
+```
+
+画面の個人選択は加入者単位ではなく、この論理健診結果単位とする。
+表示項目には氏名、カナ、生年月日、健診日、健診機関、構成元受領ファイルを含める。
+同一人物に別日または別プログラムの健診結果がある場合は、別の候補として表示する。
+
+初期実装でも `source_ledger_ids` はlistとして扱う。
+複数行結合をまだ有効にしない段階で同一候補に複数行が見つかった場合は、重複XMLを自動生成せず `MULTIPLE_SOURCE_ROWS_UNRESOLVED` として出力対象外にする。
+将来の結合対応では同じ候補を `COMBINE` modeで処理できるようにし、画面/APIの選択単位を変更しない。
+
+### Future Multi-Source Merge Rules
+
+複数受領ファイルからの結合は、自動推測ではなく、加入者突合済みの行と明示的な結合条件を使う。
+同一の論理健診結果にXML由来とCSV由来の値がある場合、正常なXMLを正常なCSVより優先する。
+XMLは厚生労働省標準様式によって構造、namecode、型、単位が明示されているため、canonical sourceとして扱う。
+基本の同一候補判定には以下を使用する。
+
+- `event_id`
+- `insurer_number`
+- `subscriber_id`
+- `exam_date`
+- 健診機関コード。XMLの `facility_code` と、CSVの `exam_facility_id` から解決した `exam_facilities.exam_facility_code` を同じcanonical codeへ揃える
+
+`health_exam_report_category` と `program_code` は同一候補判定keyには含めず、候補内で値を集約する。
+片方のsourceだけに値があればその値を採用し、複数の異なる有効値があれば `MERGE_BASE_FIELD_CONFLICT` として出力を停止する。
+健診日またはcanonical健診機関コードを解決できない行は、安全に同一候補と確定できる別ルールが設定されるまで自動結合しない。
+
+現行 `xml_ledger` は `health_exam_report_category` と `program_code` を保存していない。
+XML/CSV結合を有効にする前に、XMLの `ClinicalDocument/code` と `documentationOf/serviceEvent/code` から値を抽出し、`xml_ledger` に保存するmigrationとbackfillを行う。
+
+検査値の結合keyは、原則として `namecode + occurrence_no` とする。
+
+- XMLにしか存在しないnamecodeはXML値を採用する。
+- CSVにしか存在しないnamecodeは、不足項目の補完値としてCSV値を採用する。
+- XMLとCSVに同じkeyがあり、正規化後の値、単位、型が一致する場合はXMLを採用し、CSVをduplicateとして残す。
+- XMLとCSVに同じkeyがあり、有効値が異なる場合もXMLを採用する。CSVは削除せず `SUPERSEDED_BY_XML` とし、値の差異を確認できる状態にする。この差異だけではXML出力を停止しない。
+- CSV同士に同じkeyの異なる有効値がある場合は自動優先せず、`MERGE_VALUE_CONFLICT` として停止する。
+- XML同士に同じkeyの異なる有効値がある場合も自動優先せず、`MERGE_VALUE_CONFLICT` として停止する。
+- 一方が空値・未実施、他方が有効値の場合の採用可否は、未実施表現のXML方針と合わせて決定する。
+- XMLとCSVの基本情報が異なる場合も正常なXMLを優先し、CSV側の差異を警告として残す。
+- CSV同士またはXML同士で基本情報に異なる有効値がある場合は、`MERGE_BASE_FIELD_CONFLICT` とする。
+
+XML由来であっても、parse、normalize、validationに失敗した値は優先対象にしない。
+正常なXML値がなく正常なCSV値がある場合は、CSV値をactiveにできる。
+
+結合後も証跡を失わないよう、個人XMLごとに全 `source_ledger_ids` と `source_file_receipt_ids` を追跡する。
+出力成功時は、構成元となった全 `csv_row_ledger` に同じexport Runと出力先を関連付ける。
+出力履歴CSVと `ix08_V08.xml.totalRecordCount` の人数は、構成元CSV行数ではなく、生成した論理健診結果数とする。
+
 ## Output Path
 
 ### Official File Transfer Rules
@@ -327,7 +418,7 @@ scripts/from_medical/config/export_hia_xml.yml
   event_id、encoding、N、X、種別、XSD bundle ID、出力フォルダ名
 
 scripts/from_medical/script_lib/hia_xml_export_loader.py
-  csv_row_ledger / exam_item_values / exam_facilities の取得
+  csv_row_ledger / exam_item_values / exam_facilities の取得、論理健診結果候補の構築
 
 scripts/lib/examination/mhlw_v08_xml.py
   個人CDA、IX08、命名、XML書込、XSD検証、ZIP構成
