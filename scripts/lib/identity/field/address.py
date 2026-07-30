@@ -67,3 +67,21 @@ def build_address_match(
     # building はXML側で落としているため、matchも address_line のみを使用
     # subscribers側に合わせて英数字・記号を全角寄せ
     return to_fullwidth_ascii(address)
+
+
+def normalize_postal_code_export(postal_code: Any) -> str | None:
+    """郵便番号をXML出力用のXXX-XXXX形式へ正規化する。"""
+    digits = build_postal_code_match(postal_code)
+    if digits is None or len(digits) != 7:
+        return None
+    return f"{digits[:3]}-{digits[3:]}"
+
+
+def normalize_address_export(address: Any) -> str | None:
+    """住所を空白なし・全角寄せ・CP932換算80バイト以内にする。"""
+    value = build_address_match(address, None)
+    if value is None:
+        return None
+    value = "".join(ch for ch in value if ch not in " \t\r\n　")
+    encoded = value.encode("cp932", errors="ignore")[:80]
+    return encoded.decode("cp932", errors="ignore") or None

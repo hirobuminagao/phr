@@ -2,7 +2,7 @@
 
 ## Status
 
-Current as of 2026-07-29.
+Current as of 2026-07-30.
 
 この文書は、CSV健診結果取込について、採用済み決定事項と現行実装の差分を同期し、次工程のCSVからXML作成へ引き継ぐための現在正である。
 
@@ -33,8 +33,10 @@ Current as of 2026-07-29.
   -> exam_check_results
   -> csv_row_ledger.check_status / check_reason
 
-次工程
-  -> CSV台帳・結果値からXML作成
+04_export_hia_xml.py
+  -> V08個人XML + ix08_V08.xml
+  -> XSD検証
+  -> 公式命名ZIP + 出力履歴
 ```
 
 実行履歴の根は既存どおり `etl_runs` とし、CSV専用のrun親テーブルは追加していない。
@@ -58,6 +60,7 @@ Current as of 2026-07-29.
 - format未登録とヘッダー不一致を区別し、`WAITING_CONFIRM` と理由を残す。
 - `01_01_match_csv_format.py` で、初回scan後に追加したmappingを再照合できる。
 - CSV import通常対象は `READY` と、確認Go済みの `WAITING_CONFIRM` に限定する。
+- 同一event・同一相対パスへ別shaのファイルを再scanした場合、旧 `DISCOVERED` / `READY` / `WAITING_CONFIRM` は `SUPERSEDED` とし、現物と一致しない未処理receiptを後続Run対象から外す。取込済みreceiptは履歴として変更しない。
 - `DISCOVERED` はCSV import対象外である。
 - source fileがscan時の `file_sha256` と異なる場合は取込を行わない。
 
@@ -177,7 +180,7 @@ Current as of 2026-07-29.
   - 既往歴、自覚症状、他覚症状の元列は施設確認待ちである。
   - 現サンプルは2ファイルを事前結合した入力であり、ファイル結合ユーティリティは後続バージョンとする。
 - 報告区分
-  - 元CSVまたは確定済み変換元がないformatはNULLのままとする。
+  - 元CSVに正しい明示値がない場合は、eventの年齢判定規則で `10/010` または `40/990` を補完する。
 
 ## CSV to XML Handoff
 
@@ -214,18 +217,31 @@ CSV取込の再設計は不要である。XML出力について以下を確定�
 - 履歴は出力事実の保存に限定し、個人単位の業務状態や修正版の正本判定、後続データへの反映は今回行わない。
 - 人向け不足情報CSVの追加は後続で決め、初期実装を止めない。確認後の手動Goを表す `manual_export_approved` / `manual_export_reason` とは別概念である。
 
-初期実装では、既出力者を含めるかを対象抽出条件で選択できるようにし、ZIP・個人XMLの履歴構造を実装する。詳細は `34_csv_to_hia_xml_export_design_draft.md` を参照する。
+初期実装では、既出力者を含めるかを対象抽出条件で選択できるようにし、ZIP・個人XMLの履歴構造を実装済みである。詳細は `34_csv_to_hia_xml_export_design_draft.md` を参照する。
 
-### Implementation Direction
+### Implemented Export Components
 
-- 旧 `scripts/kenshin_list_pydir/scripts/medi_export_xml.py` はXML構造と既存出力仕様の参照元にする。
-- CSV台帳へ直接合わせるため、新しいfrom-medical処理から共通XML builderを呼ぶ構成を第一候補とする。
+- 旧 `scripts/kenshin_list_pydir/scripts/medi_export_xml.py` は変更せず、XML構造と既存出力仕様の参照元として残す。
+- `scripts/from_medical/04_export_hia_xml.py` から共通XML builderを呼び、健診機関・保険者単位のZIPを作成する。
+- `scripts/lib/examination/mhlw_v08_xml.py` で個人CDA、IX08、公式命名、XSD bundleコピーと検証を行う。
+- `xml_export_zips` / `xml_export_members` に正常出力履歴を追記し、失敗は `etl_errors` に残す。
+- `20260730_009_health_exam_result_create_xml_export_history.sql` が出力履歴と手動承認証跡のDB変更である。
 - DBのraw証跡は保持し、XMLには採用した正規化値だけを使う。
+- 付属2の一連検査グループ53 namecodeを `exam_item_master` へ保持し、詳細健診等を `COMP` / `RSON` で親observation配下へ出力する。
+- `interpretationCode` と `referenceRange` は原本CSVから明示的に取り込まれた場合だけ出力し、自動判定・単位変換は行わない。
 - 施設別の推測をexporterへ埋め込まず、確定したmappingまたは出力設定で明示する。
+
+### M4 End-to-End Result
+
+- ヒロオカfixture 7人のうち、ローカルsubscriber seedと一致する5人が `MATCHED / check OK`、基本情報不足の2人が停止となった。
+- 5人を1 ZIPへ出力し、個人XML5件、`ix08_V08.xml`、V08 XSD bundleを公式フォルダ構成で格納した。
+- 5個人XMLはすべてXSD適合し、付属2一連検査グループも実データ上で生成された。
+- `xml_export_zips` 1件、`xml_export_members` 5件、`csv_row_ledger.xml_export_status = EXPORTED` 5件を確認した。
+- 基本情報不足の2人は出力対象外のまま `PENDING` を維持した。
 
 ## Readiness Conclusion
 
 現行5 formatについて、CSV受領から `exam_item_values` 登録、normalize、加入者突合、法定チェックまでの基盤は実装済みである。
 高度な汎用mapping機能には未実装が残るが、現在の5サンプルをCSVからXMLへ進めることを妨げない。
 
-次工程はCSV解析やマッピングの作り直しではなく、残る出力管理の詳細を確定し、CSV台帳・結果値からXMLを組み立てる実装である。
+CSV台帳・結果値からXMLを組み立て、M4で個人XML、XSD検証、ZIP、DB履歴、業務向け出力履歴CSVまで一連確認済みである。次工程は実行環境へmigration・seedを適用し、対象施設の確認済みCSVで同じRunを行うことである。

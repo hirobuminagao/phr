@@ -133,6 +133,28 @@ alias先頭10桁と支払基金CSVの `機関コード` は一致する。
 8. 名前差分は多いため、名称の自動名寄せで `exam_facility_id` を決めない。
 9. `medical_folder_aliases.exam_facility_id` は、alias先頭10桁または確認済み採用コードと `exam_facilities.medical_institution_code` の対応で初期付与する。
 10. `exam_facilities` 初期seedの全行に、支払基金公開CSV由来であることを示す `data_source_*` を入れる。
+
+## Production Folder Recheck (2026-07-30)
+
+実機のevent 2ルート直下を再取得した `dirリスト.txt` と、初期alias seed 187件を完全一致で突合した。
+実機一覧そのものは社内フォルダ構成情報であるためrepositoryへ保存せず、確認結果と差分seedだけを残す。
+
+| result | count |
+| --- | ---: |
+| 実機フォルダ | 198 |
+| 初期alias seed | 187 |
+| 完全一致 | 185 |
+| 実機にあり初期aliasにない | 13 |
+| 初期aliasにあり実機にない | 2 |
+
+実機のみの13件は、11件の追加施設フォルダと2件の名称変更であった。
+全件をコードで既存 `exam_facilities` へ確定できるため、名称類似による推測は行わず、
+`0004_add_event2_actual_machine_folder_aliases.sql` で実機名を追加aliasとして登録する。
+
+- `2719109346_KKCウエルネス新大阪健診クリニック` は、確認済み採用コード `2720700059` へ紐付ける。
+- `4011229285_福岡労働衛生研究所　労衛研健診センター` は、既存の短いaliasも履歴互換のため残す。
+- `4010215970_福岡労働衛生研究所　健診スクエア博多` は正式採番済みフォルダであり、対象外とした旧仮フォルダ `202604開院_...` とは別物である。
+- 旧aliasは削除しない。物理フォルダが存在しないaliasはscanで未受領として正常skipする。
 11. `data_source_note` で、社内作業データ、受領CSV、機微情報を含まないことを明示する。
 
 ## Future Medical Institution Master

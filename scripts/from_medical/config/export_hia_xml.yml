@@ -1,0 +1,12 @@
+event_id: 2
+
+health_db: health_exam_result
+dev_db: dev_phr
+master_db: phr_master
+
+xsd_bundle_id: mhlw_v4_20230331_v08
+all_facilities: false
+include_exported: false
+dry_run: false
+limit: 0
+

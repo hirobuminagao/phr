@@ -4,12 +4,22 @@
 
 Implemented and expanded.
 
-2026-07-29時点で、健診機関・alias、CSV format/mapping、CSVサンプル用normalize辞書のseedを作成済みである。
+2026-07-30時点で、健診機関・alias、CSV format/mapping、CSVサンプル用normalize辞書のseedを作成済みである。
 本書の初期2施設だけを前提とした記載は作成時点の履歴として残し、現在の適用対象と未整備範囲は `33_implementation_status_and_xml_handoff.md` を正とする。
 
 このドキュメントは、CSVフォーマット関連の初期seedを作るための整備メモとして作成したものである。
 
 ## Draft SQL
+
+`phr_master` seedの適用順:
+
+1. `0000_generated_exam_facilities_and_aliases_event2.sql`
+2. `0001_draft_csv_exam_result_format_mappings_samples.sql`
+3. `0002_draft_norm_variants_csv_sample_additions.sql`
+4. `0003_disable_oroku_csv_facility_code_mapping.sql`
+5. `0004_add_event2_actual_machine_folder_aliases.sql`
+
+既に `0000` から `0003` を適用済みの環境は、実機フォルダ一覧との差分である `0004` だけを追加適用する。
 
 レビュー用SQL:
 

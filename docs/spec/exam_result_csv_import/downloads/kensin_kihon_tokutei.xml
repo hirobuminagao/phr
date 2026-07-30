@@ -1,0 +1,739 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="urn:hl7-org:v3 ../XSD/hc08_V08.xsd">
+  <typeId extension="POCD_HD000040" root="2.16.840.1.113883.1.3"/>
+  <id nullFlavor="NI"/>
+  <!-- 報告区分 -->
+  <code code="10" codeSystem="1.2.392.200119.6.1001"/>
+  <!-- ファイル作成日 -->
+  <effectiveTime value="20240420"/>
+  <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
+  <!-- 受診者情報 -->
+  <recordTarget>
+    <patientRole>
+      <!-- 保険者番号 -->
+      <id extension="99999999" root="1.2.392.200119.6.101"/>
+      <!-- 被保険者証等記号 -->
+      <id extension="１３１" root="1.2.392.200119.6.204"/>
+      <!-- 被保険者証等番号 -->
+      <id extension="123123123" root="1.2.392.200119.6.205"/>
+      <!-- 住所と郵便番号 -->
+      <addr>
+        東京都港区新橋９－９９－９
+        <postalCode>999-9999</postalCode>
+      </addr>
+      <patient>
+        <!-- 氏名 -->
+        <name>キキンタロウ</name>
+        <!-- 男女区分 -->
+        <administrativeGenderCode code="1" codeSystem="1.2.392.200119.6.1104"/>
+        <!-- 生年月日 -->
+        <birthTime value="19700516"/>
+      </patient>
+    </patientRole>
+  </recordTarget>
+  <!-- 特定健診情報ファイル作成機関情報 -->
+  <author>
+    <!-- ファイル作成日 -->
+    <time value="20240420"/>
+    <assignedAuthor>
+      <id nullFlavor="NI"/>
+      <representedOrganization>
+        <!-- 特定健診機関番号 -->
+        <id extension="9999999999" root="1.2.392.200119.6.102"/>
+        <!-- 名称 -->
+        <name>新橋第一診療所</name>
+        <!-- 電話番号 -->
+        <telecom value="tel:0335917441"/>
+        <!-- 所在地と郵便番号 -->
+        <addr>東京都港区新橋２－１－３
+          <postalCode>105-0001</postalCode>
+        </addr>
+      </representedOrganization>
+    </assignedAuthor>
+  </author>
+  <custodian>
+    <assignedCustodian>
+      <representedCustodianOrganization>
+        <id nullFlavor="NI"/>
+      </representedCustodianOrganization>
+    </assignedCustodian>
+  </custodian>
+  <!-- 受診券情報 -->
+  <participant typeCode="HLD">
+    <!-- 券面種別 -->
+    <functionCode code="1" codeSystem="1.2.392.200119.6.208"/>
+    <time>
+      <!-- 受診券有効期限 -->
+      <high value="20241031"/>
+    </time>
+    <associatedEntity classCode="IDENT">
+      <!-- 受診券整理番号 -->
+      <id extension="24500000001" root="1.2.392.200119.6.209.199999999"/>
+      <scopingOrganization>
+        <!-- 受診券発行保険者番号 -->
+        <id extension="99999999" root="1.2.392.200119.6.101"/>
+      </scopingOrganization>
+    </associatedEntity>
+  </participant>
+  <!-- 健診実施情報 -->
+  <documentationOf>
+    <serviceEvent>
+      <!-- 健診実施時のプログラム種別 -->
+      <code code="010" codeSystem="1.2.392.200119.6.1002" displayName="特定健診"/>
+      <!-- 健診実施年月日 -->
+      <effectiveTime value="20240415"/>
+      <performer typeCode="PRF">
+        <assignedEntity>
+          <id nullFlavor="NI"/>
+          <representedOrganization>
+            <!-- 健診実施機関番号 -->
+            <id extension="9999999999" root="1.2.392.200119.6.102"/>
+            <!-- 健診実施機関名称 -->
+            <name>新橋第一診療所</name>
+            <!-- 健診実施機関電話番号 -->
+            <telecom value="tel:0335917441"/>
+            <!-- 健診実施機関所在地と郵便番号 -->
+            <addr>東京都港区新橋２－１－３
+              <postalCode>105-0001</postalCode></addr>
+          </representedOrganization>
+        </assignedEntity>
+      </performer>
+    </serviceEvent>
+  </documentationOf>
+  <!-- 健診結果情報 -->
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <!-- ＣＤＡセクションのコード -->
+          <code code="01010" codeSystem="1.2.392.200119.6.1010" displayName="検査・問診結果セクション"/>
+          <title>検査・問診結果セクション</title>
+          <text>
+            <list>
+              <item>身長 162.3 cm</item>
+              <item>体重 65.5 kg</item>
+              <item>BMI 24.9 kg/m2</item>
+              <item>腹囲 70 cm</item>
+              <item>メタボリックシンドローム判定 非該当</item>
+              <item>保健指導区分 なし</item>
+            </list>
+          </text>
+          <!-- 健診（検査）結果 -->
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="false">
+              <code code="9N001000000000001" codeSystem="1.2.392.200119.6.1005" displayName="身長"/>
+              <value xsi:type="PQ" value="162.3" unit="cm"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="false">
+              <code code="9N006000000000001" codeSystem="1.2.392.200119.6.1005" displayName="体重"/>
+              <value xsi:type="PQ" value="65.5" unit="kg"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="false">
+              <code code="9N011000000000001" codeSystem="1.2.392.200119.6.1005" displayName="ＢＭＩ"/>
+              <value xsi:type="PQ" value="24.9" unit="kg/m2"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="false">
+              <code code="9N016160100000001" codeSystem="1.2.392.200119.6.1005" displayName="腹囲"/>
+              <value xsi:type="PQ" value="70" unit="cm"/>
+              <methodCode code="9N01610000" codeSystem="1.2.392.200119.6.1007"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N056000000000011"  displayName="既往歴"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2001"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N056160400000049"  displayName="具体的な既往歴"/>
+              <value xsi:type="ST">ヘルニア、膀胱炎</value>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N061000000000011"  displayName="自覚症状"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2001"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N061160800000049"  displayName="自覚症状所見"/>
+              <value xsi:type="ST">胃痛</value>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N066000000000011"  displayName="他覚症状"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2001"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9A751000000000001"  displayName="収縮期血圧（１回目）"/>
+              <value xsi:type="PQ" nullFlavor="NI"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9A752000000000001"  displayName="収縮期血圧（２回目）"/>
+              <value xsi:type="PQ" value="149" unit="mm[Hg]"/>
+              <interpretationCode code="H"/>
+              <methodCode code="9A75200000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="80" unit="mm[Hg]"/>
+                    <high value="130" unit="mm[Hg]"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="true">
+              <code code="9A755000000000001"  displayName="収縮期血圧（その他）"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9A761000000000001"  displayName="拡張期血圧（１回目）"/>
+              <value xsi:type="PQ" value="90" unit="mm[Hg]"/>
+              <interpretationCode code="H"/>
+              <methodCode code="9A76100000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="40" unit="mm[Hg]"/>
+                    <high value="80" unit="mm[Hg]"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9A762000000000001"  displayName="拡張期血圧（２回目）"/>
+              <value xsi:type="PQ" value="95" unit="mm[Hg]"/>
+              <interpretationCode code="H"/>
+              <methodCode code="9A76200000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="40" unit="mm[Hg]"/>
+                    <high value="80" unit="mm[Hg]"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="false">
+              <code code="9A765000000000001"  displayName="拡張期血圧（その他）"/>
+              <value xsi:type="CD" code="H" codeSystem="2.16.840.1.113883.5.83" displayName="以上"/>
+              <value xsi:type="PQ" value="150" unit="mm[Hg]"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="3F015129902327101"  displayName="随時中性脂肪（トリグリセリド）"/>
+              <value xsi:type="PQ" value="60" unit="mg/dL"/>
+              <interpretationCode code="N"/>
+              <methodCode code="3F01510000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="50" unit="mg/dL"/>
+                    <high value="149" unit="mg/dL"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="3F070000002327101"  displayName="ＨＤＬコレステロール"/>
+              <value xsi:type="PQ" value="45" unit="mg/dL"/>
+              <interpretationCode code="N"/>
+              <methodCode code="3F07010000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="40" unit="mg/dL"/>
+                    <high value="96" unit="mg/dL"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="3F077000002327101"  displayName="ＬＤＬコレステロール"/>
+              <value xsi:type="PQ" value="88" unit="mg/dL"/>
+              <interpretationCode code="N"/>
+              <methodCode code="3F07710000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="70" unit="mg/dL"/>
+                    <high value="140" unit="mg/dL"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="3B035000002327201"  displayName="ＡＳＴ（ＧＯＴ）"/>
+              <value xsi:type="PQ" value="32" unit="U/L"/>
+              <interpretationCode code="N"/>
+              <methodCode code="3B03510000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="10" unit="U/L"/>
+                    <high value="40" unit="U/L"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="3B045000002327201"  displayName="ＡＬＴ（ＧＰＴ）"/>
+              <value xsi:type="PQ" value="16" unit="U/L"/>
+              <interpretationCode code="N"/>
+              <methodCode code="3B04510000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="5" unit="U/L"/>
+                    <high value="30" unit="U/L"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="3B090000002327101"  displayName="γ－ＧＴ（γ－ＧＴＰ）"/>
+              <value xsi:type="PQ" value="55" unit="U/L"/>
+              <interpretationCode code="H"/>
+              <methodCode code="3B09010000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="0" unit="U/L"/>
+                    <high value="30" unit="U/L"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="3D046000001906202"  displayName="ＨｂＡ１ｃ"/>
+              <value xsi:type="PQ" value="7" unit="%"/>
+              <interpretationCode code="H"/>
+              <methodCode code="3D04610000"/>
+              <referenceRange>
+                <observationRange classCode="OBS" moodCode="EVN.CRT">
+                  <value xsi:type="IVL_PQ">
+                    <low value="4.3" unit="%"/>
+                    <high value="5.8" unit="%"/>
+                  </value>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N141000000000011"  displayName="採血時間（食後）"/>
+              <value xsi:type="CD" code="3" codeSystem="1.2.392.200119.6.2202"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="1A020000000191111"  displayName="尿糖"/>
+              <value xsi:type="CO" code="1" codeSystem="1.2.392.200119.6.2102"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="true">
+              <code code="1A010000000191111"  displayName="尿蛋白"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N501000000000011"  displayName="メタボリックシンドローム判定"/>
+              <value xsi:type="CD" code="3" codeSystem="1.2.392.200119.6.1008"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N506000000000011"  displayName="保健指導レベル"/>
+              <value xsi:type="CD" code="3" codeSystem="1.2.392.200119.6.3001"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N511000000000049"  displayName="医師の診断（判定）"/>
+              <value xsi:type="ST">肝機能がわずかに異常ですが支障はないと思われます。</value>
+              <author>
+                <time nullFlavor="NI"/>
+                <assignedAuthor>
+                  <id nullFlavor="NI"/>
+                  <assignedPerson>
+                    <name>基金次郎</name>
+                  </assignedPerson>
+                </assignedAuthor>
+              </author>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N512000000000011"  displayName="測定不可能・検査未実施の理由"/>
+              <value xsi:type="CD" code="3" codeSystem="1.2.392.200119.6.24080"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N701000000000011"  displayName="服薬１（血圧）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N706000000000011"  displayName="服薬２（血糖）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N711000000000011"  displayName="服薬３（脂質）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N736000000000011"  displayName="喫煙"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.24060"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code nullFlavor="NA"/>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="2A040000001930102"  displayName="ヘマトクリット値"/>
+                  <value xsi:type="PQ" value="34.6" unit="%"/>
+                  <interpretationCode code="L"/>
+                  <referenceRange>
+                    <observationRange classCode="OBS" moodCode="EVN.CRT">
+                      <value xsi:type="IVL_PQ">
+                        <low value="35.5" unit="%"/>
+                        <high value="48.9" unit="%"/>
+                      </value>
+                    </observationRange>
+                  </referenceRange>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="2A030000001930101"  displayName="血色素量(ヘモグロビン値)"/>
+                  <value xsi:type="PQ" value="12.9" unit="g/dL"/>
+                  <interpretationCode code="N"/>
+                  <referenceRange>
+                    <observationRange classCode="OBS" moodCode="EVN.CRT">
+                      <value xsi:type="IVL_PQ">
+                        <low value="12" unit="g/dL"/>
+                        <high value="16" unit="g/dL"/>
+                      </value>
+                    </observationRange>
+                  </referenceRange>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="2A020000001930101"  displayName="赤血球数"/>
+                  <value xsi:type="PQ" value="404" unit="10*4/mm3"/>
+                  <interpretationCode code="N"/>
+                  <referenceRange>
+                    <observationRange classCode="OBS" moodCode="EVN.CRT">
+                      <value xsi:type="IVL_PQ">
+                        <low value="360" unit="10*4/mm3"/>
+                        <high value="520" unit="10*4/mm3"/>
+                      </value>
+                    </observationRange>
+                  </referenceRange>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="RSON">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="2A020161001930149"  displayName="貧血検査実施理由"/>
+                  <value xsi:type="ST">医師の診察に基づき実施</value>
+                </observation>
+              </entryRelationship>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code nullFlavor="NA"/>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="9A110160700000011"  displayName="心電図（所見の有無）"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2002"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="9A110160800000049"  displayName="心電図（所見）"/>
+                  <value xsi:type="ST">洞性徐脈、低電位</value>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="RSON">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="9A110161600000011"  displayName="心電図（対象者）"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.18120"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="RSON">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="9A110161000000049"  displayName="心電図（実施理由）"/>
+                  <value xsi:type="ST">最近不整脈があるとの主訴により実施</value>
+                </observation>
+              </entryRelationship>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code nullFlavor="NA"/>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="9E100166000000011"  displayName="眼底検査（キースワグナー分類）"/>
+                  <value xsi:type="CO" code="4" codeSystem="1.2.392.200119.6.2110"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="RSON">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="9E100161600000011"  displayName="眼底検査（対象者）"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.18130"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="RSON">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="9E100161000000049"  displayName="眼底検査（実施理由）"/>
+                  <value xsi:type="ST">実施条件に該当し医師が必要と判断</value>
+                </observation>
+              </entryRelationship>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code nullFlavor="NA"/>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="3C015000002327101"  displayName="血清クレアチニン"/>
+                  <value xsi:type="PQ" value="16.00" unit="mg/dL"/>
+                  <interpretationCode code="N"/>
+                  <referenceRange>
+                    <observationRange classCode="OBS" moodCode="EVN.CRT">
+                      <value xsi:type="IVL_PQ">
+                        <low value="0.10" unit="mg/dL"/>
+                        <high value="20.00" unit="mg/dL"/>
+                      </value>
+                    </observationRange>
+                  </referenceRange>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="8A065000002391901"  displayName="eGFR"/>
+                  <value xsi:type="PQ" value="16" unit="ml/min/1.73m2"/>
+                  <interpretationCode code="N"/>
+                  <referenceRange>
+                    <observationRange classCode="OBS" moodCode="EVN.CRT">
+                      <value xsi:type="IVL_PQ">
+                        <low value="1" unit="ml/min/1.73m2"/>
+                        <high value="500" unit="ml/min/1.73m2"/>
+                      </value>
+                    </observationRange>
+                  </referenceRange>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="RSON">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="3C015161602399911"  displayName="血清クレアチニン（対象者）"/>
+                  <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.18110"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="RSON">
+                <observation classCode="OBS" moodCode="EVN">
+                  <code code="3C015161002399949"  displayName="血清クレアチニン（実施理由）"/>
+                  <value xsi:type="ST">医師の診察に基づき実施</value>
+                </observation>
+              </entryRelationship>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N716000000000011"  displayName="既往歴１（脳血管）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N721000000000011"  displayName="既往歴２（心血管）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N726000000000011"  displayName="既往歴３（腎不全・人工透析）"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N731000000000011"  displayName="貧血"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N741000000000011"  displayName="２０歳からの体重変化"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N746000000000011"  displayName="３０分以上の運動習慣"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N751000000000011"  displayName="歩行又は身体活動"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N756000000000011"  displayName="歩行速度"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N872000000000011"  displayName="咀嚼"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.18030"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N766000000000011"  displayName="食べ方1（早食い等）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2004"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N771000000000011"  displayName="食べ方２（就寝前）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N782000000000011"  displayName="食べ方３（間食）"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.18040"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N781000000000011"  displayName="食習慣"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N786000000000011"  displayName="飲酒"/>
+              <value xsi:type="CD" code="3" codeSystem="1.2.392.200119.6.24040"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N791000000000011"  displayName="飲酒量"/>
+              <value xsi:type="CO" code="1" codeSystem="1.2.392.200119.6.24050"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N796000000000011"  displayName="睡眠"/>
+              <value xsi:type="CD" code="2" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N801000000000011"  displayName="生活習慣の改善"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2007"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N808000000000011"  displayName="特定保健指導の受診歴"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.2003"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N950000000000011"  displayName="情報提供の方法"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.18050"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N807000000000011"  displayName="初回面接実施"/>
+              <value xsi:type="CD" code="1" codeSystem="1.2.392.200119.6.18060"/>
+            </observation>
+          </entry>
+        </section>
+      </component>
+      <component>
+        <section>
+          <!-- ＣＤＡセクションのコード -->
+          <code code="01990" codeSystem="1.2.392.200119.6.1010" />
+          <title>任意追加項目セクション</title>
+          <text/>
+          <!-- 健診（検査）結果 -->
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="false">
+              <code code="3F050000002327101"/>
+              <value xsi:type="PQ" value="169" unit="mg/dL"/>
+              <methodCode code="3F05010000" codeSystem="1.2.392.200119.6.1007"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN" negationInd="false">
+              <code code="1A100000000191111"/>
+              <value xsi:type="CO" code="1" codeSystem="1.2.392.200119.6.2102"/>
+              <methodCode code="1A10010000" codeSystem="1.2.392.200119.6.1007"/>
+            </observation>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <code code="9N026000000000002"/>
+              <value xsi:type="PQ" value="6.5" unit="%"/>
+            </observation>
+          </entry>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>

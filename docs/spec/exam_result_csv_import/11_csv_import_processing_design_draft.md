@@ -456,20 +456,22 @@ CSVに基準下限、基準上限、判定が含まれない場合は未設定�
 
 1. `01_scan_files.py` がCSVを `file_receipts` に登録する。
 2. `01_scan_files.py` が `phr_master.medical_folder_aliases` から `exam_facility_id` を確定し、`file_receipts` にスナップショットを持たせる。
+   aliasはeventで受領し得る既知施設一覧であり、対応する施設フォルダが未作成でもエラーにしない。実在する施設フォルダだけをscan対象とする。
 3. `01_scan_files.py` がCSV format照合共通処理を呼び、`actual_header_sha256` / `actual_character_encoding` / `matched_csv_format_version_id` / `status` を設定する。
 4. 初回mapping未登録、複数候補、default未決定などで `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` でformat照合だけを再適用する。
-5. `02_02_exam_result_csv_import` が `READY` のCSVと、過去に停止したが `import_resume_approved = 1` のCSVを同じRunで取得する。`DISCOVERED` は取込対象にしない。
-6. `02_02_exam_result_csv_import` は `file_receipts.matched_csv_format_version_id` があればそれを優先し、なければ `file_receipts.exam_facility_id` から `phr_master.csv_format_versions` を探索する。
-7. `scripts/lib/csv/csv_loader.py` の `load_csv_result()` でCSVを読み、文字コード、delimiter、quote、ヘッダー、行数を取得する。formatがfallbackを許可する場合は登録文字コードを先に試し、UTF-8 BOM / UTF-8 / CP932も候補にする。
-8. 実CSVのヘッダー構造から `header_sha256` を算出し、採用formatの `csv_format_versions.header_sha256` と照合する。
-9. ヘッダー不一致の場合は、rule/template側の許可設定と `file_receipts` 側の確認Goを確認し、未確認なら停止する。
-10. `etl_runs` にCSV取込Runを開始記録する。
-11. データ行ごとに `csv_row_ledger` を作成する。
-12. 基本情報マッピングでCSV列を `csv_row_ledger` に反映する。
-13. identity生成、加入者照合を実行し、`subscriber_match_status` を更新する。
-14. 検査結果値マッピングで `exam_item_values` を登録する。
-15. CSV由来raw値を入力にnormalizeし、`normalized_value`, `normalized_unit`, `normalize_status`, `normalize_reason`, `validation_status`, `validation_reason`, `normalized_at` へ反映する。
-16. 行単位、file_receipts単位、etl_runs単位の状態を集約する。
+5. 同一event・同一相対パスへ別shaのCSVが置かれた場合は新receiptを作り、現物と一致しなくなった旧未処理receiptを `SUPERSEDED` にする。旧 `IMPORTED` は履歴として残す。
+6. `02_02_exam_result_csv_import` が `READY` のCSVと、過去に停止したが `import_resume_approved = 1` のCSVを同じRunで取得する。`DISCOVERED` / `SUPERSEDED` は取込対象にしない。
+7. `02_02_exam_result_csv_import` は `file_receipts.matched_csv_format_version_id` があればそれを優先し、なければ `file_receipts.exam_facility_id` から `phr_master.csv_format_versions` を探索する。
+8. `scripts/lib/csv/csv_loader.py` の `load_csv_result()` でCSVを読み、文字コード、delimiter、quote、ヘッダー、行数を取得する。formatがfallbackを許可する場合は登録文字コードを先に試し、UTF-8 BOM / UTF-8 / CP932も候補にする。
+9. 実CSVのヘッダー構造から `header_sha256` を算出し、採用formatの `csv_format_versions.header_sha256` と照合する。
+10. ヘッダー不一致の場合は、rule/template側の許可設定と `file_receipts` 側の確認Goを確認し、未確認なら停止する。
+11. `etl_runs` にCSV取込Runを開始記録する。
+12. データ行ごとに `csv_row_ledger` を作成する。
+13. 基本情報マッピングでCSV列を `csv_row_ledger` に反映する。
+14. identity生成、加入者照合を実行し、`subscriber_match_status` を更新する。
+15. 検査結果値マッピングで `exam_item_values` を登録する。
+16. CSV由来raw値を入力にnormalizeし、`normalized_value`, `normalized_unit`, `normalize_status`, `normalize_reason`, `validation_status`, `validation_reason`, `normalized_at` へ反映する。
+17. 行単位、file_receipts単位、etl_runs単位の状態を集約する。
 
 ## Header Fingerprint Check
 

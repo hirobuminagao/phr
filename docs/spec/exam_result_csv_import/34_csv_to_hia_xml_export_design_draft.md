@@ -2,7 +2,7 @@
 
 ## Status
 
-Initial draft as of 2026-07-30.
+Initial implementation completed as of 2026-07-30. The confirmed behavior in this document is implemented; deferred items remain explicitly marked.
 
 この文書は、`csv_row_ledger` と `exam_item_values` から厚生労働省指定の健診結果XMLを生成する処理の叩き台である。
 確定済み条件と、実装前に確認が必要な不足情報を分けて記載する。
@@ -399,7 +399,9 @@ exporter側に別ロジックを重複実装せず、共通lib側の `export` �
 - `namecode_display_name`、`jun_no` は表示名と出力順に利用する。
 - `xml_method_code` など `exam_item_values` にないXMLメタデータだけ `dev_phr.exam_item_master` から補う。
 - 施設別ABC判定や総合判定は出力しない。
-- `interpretation_*` は施設判定とは分け、使用条件が確定するまで初期出力対象外とする。
+- `interpretation_*` は原本CSVから明示的にマッピング・正規化された値がある場合だけ出力する。値から自動判定しない。
+- `source_reference_lower` / `source_reference_upper` は原本CSVにある場合だけ `referenceRange` として出力する。単位は検査値と同じ `normalized_unit` を使用し、単位変換はしない。
+- 付属2の `一連検査グループ識別` / `一連検査グループ関係コード` がある項目は、親observationの下へ `COMP` / `RSON` で構造化する。施設別ruleから推測しない。
 
 ## Reuse and Replacement
 
@@ -424,18 +426,22 @@ exporter側に別ロジックを重複実装せず、共通lib側の `export` �
 - 検査値はrawではなく型別の正規化済みカラムを使う。
 - sectionはAnnex2 flagから再判定せず、取込時に確定した `section_code` を使う。
 - `occurrence_no` を反映する。
+- 付属2の一連検査グループを `exam_item_master` から再現する。
 - ETL run/errorと `csv_row_ledger.xml_export_status` を更新する。
 - 完成フォルダへ直接書かず、一時ディレクトリでXML生成・検証後に確定配置する。
 - 個人XMLとIX08をXSD検証してから出力成功とする。
 
-## Proposed Implementation Layout
+## Implemented Layout
 
 ```text
 scripts/from_medical/04_export_hia_xml.py
   DB対象抽出、grouping、ETL、状態更新、出力先制御、作業用出力履歴CSV
 
 scripts/from_medical/config/export_hia_xml.yml
-  event_id、encoding、N、X、種別、XSD bundle ID、出力フォルダ名
+  event_id、DB schema、XSD bundle ID、全施設指定、既出力者指定、dry-run、limit
+
+CLIの `--health-db` / `--dev-db` / `--master-db` でschema名を上書きできる。
+M4 Dockerでは `--dev-db m4_dev_phr` を指定し、実行環境では既定の `dev_phr` を使用する。
 
 scripts/from_medical/script_lib/hia_xml_export_loader.py
   csv_row_ledger / exam_item_values / exam_facilities の取得、論理健診結果候補の構築
@@ -450,9 +456,9 @@ scripts/lib/identity/export_fields.py
 旧 `medi_export_xml.py` は変更しない。
 新処理から旧スクリプトをimportするのではなく、確認済みのXML生成部分を共通moduleとして新設し、テストで旧出力構造との差分を管理する。
 
-## Current Missing Information
+## Input Preconditions and Remaining Information
 
-### Blocking Data
+### Report and Program Code Input
 
 現行5 formatでは、厚生労働省の報告区分・プログラムコードとして直接使用できる受領項目は確認できていない。
 
@@ -472,13 +478,20 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
 `event_id = 2` は2026年度の年齢基準日 `2026-11-30` を使用する。
 コース名称、検査項目構成、施設内コードからは推測しない。
 
-### Blocking Common Library Gap
+### Implemented Common Library Work
 
-- `normalize_insurance_symbol()` の `export` 判定は、元値の全角文字有無をNFKC前に評価できるよう修正が必要である。
-- 修正先は共通identity libとし、CSV XML exporterだけの専用変換は作らない。
-- `subscribers.insurance_symbol_export` とCSV XML出力で同じ結果になることをテストする。
-- 郵便番号、住所、電話番号のXML出力規則は旧exporterにのみ存在するため、identity共通fieldへ移す。
-- `export_fields.py` は共通fieldの戻り値を選択・集約するだけとし、変換ロジックを重複させない。
+- `normalize_insurance_symbol()` は元値の全角有無をNFKC前に判定し、数字だけは半角、それ以外は元値に全角が1文字でもあれば全体を全角へ寄せるよう修正した。
+- 郵便番号・住所のXML出力規則は `scripts/lib/identity/field/address.py`、電話番号は `scripts/lib/identity/field/phone_number.py` へ共通関数として移した。
+- `export_fields.py` は既存identity関数と上記共通field関数を組み合わせ、XML必須値を確定する薄いprojectionとして実装した。
+- 共通identity出力、候補判定、公式命名、個人CDAとIX08のV08 XSD検証をテストで固定した。
+- 支払基金公開サンプルを基準に、詳細健診項目の一連検査グループ、原本判定、基準範囲、negationIndの出力をテストへ追加した。
+
+### Applied Database Change
+
+- `20260730_009_health_exam_result_create_xml_export_history.sql` を追加した。
+- `csv_row_ledger` に手動許可の承認日時・承認者を追加した。
+- `xml_export_zips` と `xml_export_members` を追加し、`etl_runs` を親に出力事実を追記する。
+- 統合報告用snapshotにも手動許可の承認日時・承認者を引き継ぐ。
 
 ### Confirmed Export Decisions
 
@@ -539,5 +552,16 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
 - 不足情報は `etl_errors` に構造化して残し、Run終了時に項目別件数を表示する。
 - イベントルートの `xml作成_出力履歴/yyyymmdd_hhmmss/健診結果XML出力履歴.csv` に、健診機関別のアップロード対象ZIP件数を一覧化する。
 - XML/ZIPは `xml作成_出力履歴` 側へ複製しない。
+
+## M4 Verification
+
+2026-07-30に、ヒロオカfixtureを使用してscan、CSV import、加入者突合、法定チェック、XML出力を一連実行した。
+
+- 7人中5人は `MATCHED / check OK` として1 ZIPへ出力した。
+- 基本情報不足の2人は候補判定で停止し、ZIPへ含めなかった。
+- 個人XML5件はV08 XSDへ適合した。
+- 個人XML内で、付属2一連検査グループを親observation + `COMP` / `RSON` として確認した。
+- ZIP履歴1件、個人履歴5件、CSV台帳の出力済み状態5件を確認した。
+- 業務向け `健診結果XML出力履歴.csv` に健診機関コード、名称、フォルダ名、出力フォルダ、人数5を出力した。
 
 出力履歴は今回の実装対象とする。個人単位の業務状態や修正版の正本判定、不足情報CSVは後続判断とし、初期実装を止めない。

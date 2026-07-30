@@ -71,6 +71,8 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `resume_approved_at` datetime(3) DEFAULT NULL,
   `resume_approved_by` varchar(190) DEFAULT NULL,
   `resume_approved_reason` text,
+  `manual_export_approved_at` datetime(3) DEFAULT NULL,
+  `manual_export_approved_by` varchar(190) DEFAULT NULL,
 
   -- subscriberから報告時点の値を付加するブロック
   `relationship_name` varchar(190) DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.relationship_name',

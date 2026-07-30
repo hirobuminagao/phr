@@ -29,11 +29,14 @@ CREATE TABLE `dev_phr`.`exam_item_master` (
   `annex2_exec_requirement` varchar(32) DEFAULT NULL COMMENT '付属2 A列: 実施要件（MUST / OPTIONAL_BY_DOCTOR / EITHER_OK / REPORT_IF_AVAILABLE）',
   `annex2_legal_report_flag` tinyint(1) DEFAULT NULL COMMENT '付属2 B列: 法定報告フラグ（1=法定, 0=任意）',
   `cda_section_code_default` varchar(16) DEFAULT NULL COMMENT 'CDAデフォルトセクションコード（01010 / 01990）',
+  `annex2_series_group_identifier` char(17) DEFAULT NULL COMMENT '付属2: 一連検査グループ識別',
+  `annex2_series_group_relation_code` varchar(16) DEFAULT NULL COMMENT '付属2: 一連検査グループ関係コード（COMP / RSON）',
 
   PRIMARY KEY (`namecode`),
   KEY `idx_exam_item_category` (`category_name`),
   KEY `idx_exam_item_xml_value_type` (`xml_value_type`),
-  KEY `idx_exam_item_result_oid` (`result_code_oid`)
+  KEY `idx_exam_item_result_oid` (`result_code_oid`),
+  KEY `idx_exam_item_series_group` (`annex2_series_group_identifier`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

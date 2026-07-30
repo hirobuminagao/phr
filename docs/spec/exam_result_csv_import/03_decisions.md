@@ -159,6 +159,9 @@ Current as of 2026-07-29.
 - `WAITING_CONFIRM` はCSVの確認待ち状態として `file_receipts.status` に追加する。
 - CSV取込Runの通常対象は `file_receipts.status = READY` のCSVと、`WAITING_CONFIRM` だが `import_resume_approved = 1` のCSVに限定する。
 - `DISCOVERED` はformat照合前または取込準備未完了の状態として扱い、CSV取込Runの対象にはしない。
+- 同一event・同一相対パスへ別shaのファイルがscanされた場合は別 `file_receipts` として登録し、旧 `DISCOVERED` / `READY` / `WAITING_CONFIRM` を `SUPERSEDED` にする。旧 `IMPORTED` は受領・処理履歴として変更しない。
+- eventのactive aliasに対応する施設フォルダがまだ存在しないことは、未受領の正常状態として扱いscan errorにしない。
+- alias対応施設フォルダが存在するのに `02_健診結果（編集）` がない場合、実フォルダ名がalias未登録の場合、または実フォルダに対応するaliasが無効・健診機関未解決の場合だけフォルダ・aliasエラーとする。
 - CSV取込の `etl_runs.phase` は `IMPORT_CSV_EXAM_RESULTS` とする。
 - `file_receipts.etl_run_id` は既存XML側と同じくscan時runの参照として扱い、CSV取込runでは上書きしない。
 - CSV取込runは `csv_row_ledger.etl_run_id` と `etl_errors.run_id` に残す。
@@ -355,6 +358,13 @@ Current as of 2026-07-29.
 - 出力履歴は「誰をどのZIPへ出力したか」という事実を保存する責務に限定する。個人単位の業務状態、修正版の正本判定、後続業務データへの反映時点は後続版で決める。
 - XML基本情報の値生成・妥当性確認は、同じ処理を持つ既存identity共通libを必ず使用する。`export_fields.py` は既存関数を組み合わせる薄いprojectionとし、同じ正規化ロジックを再実装しない。
 - 人向けの不足情報CSVを追加するかは後続で決め、初期XML実装を止めない。`manual_export_approved` / `manual_export_reason` は不足情報CSVとは別概念とする。
+
+### Production Folder Aliases
+
+- event 2の実機ルート直下フォルダは2026-07-30時点で198件であり、初期alias seed 187件との完全一致は185件だった。
+- 実機だけに存在した13フォルダはすべてコードで既存 `exam_facilities` へ確定し、追加aliasとして登録する。
+- 同一施設の旧名称aliasは削除せず履歴互換として残す。物理フォルダがないaliasは未受領として正常skipする。
+- 実機フォルダ一覧そのものはrepositoryへ保存せず、差分seedと件数・判断結果だけを設計資料へ残す。
 
 ### Source CSV Check
 

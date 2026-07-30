@@ -129,7 +129,13 @@ def normalize_insurance_symbol(raw: str | None) -> dict:
     person_id_custom = strip_leading_zeros_keep_zero(person_id_digits)
 
     # 5. export
-    export = to_fullwidth_ascii(field_norm) if _needs_fullwidth_export(base) else field_norm
+    # base_normalize converts compatibility-width characters first. Inspect the
+    # original input so a symbol containing even one full-width character keeps
+    # the agreed all-full-width export representation.
+    if field_norm.isdigit():
+        export = field_norm
+    else:
+        export = to_fullwidth_ascii(field_norm) if _needs_fullwidth_export(raw) else field_norm
 
     return {
         "field_name": "insurance_symbol",

@@ -51,6 +51,8 @@ CREATE TABLE `health_exam_result`.`csv_row_ledger` (
   `xml_export_status` varchar(32) NOT NULL DEFAULT 'PENDING',
   `manual_export_approved` tinyint(1) NOT NULL DEFAULT 0,
   `manual_export_reason` text,
+  `manual_export_approved_at` datetime(3) DEFAULT NULL,
+  `manual_export_approved_by` varchar(190) DEFAULT NULL,
   `resume_approved` tinyint(1) NOT NULL DEFAULT 0,
   `resume_approved_at` datetime(3) DEFAULT NULL,
   `resume_approved_by` varchar(190) DEFAULT NULL,

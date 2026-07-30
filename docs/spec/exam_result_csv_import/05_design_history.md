@@ -1243,3 +1243,104 @@ CSV文字コードfallbackとquote設定の実装方針
 - XML取込では `ClinicalDocument/code` と `documentationOf/serviceEvent/code` の明示値を `xml_ledger` に保存する。
 - XML由来コードには年齢補完を適用しない。
 - 既存XMLは取込済みfile receiptを明示的に再処理してbackfillできるようにする。
+
+---
+
+## DH-20260730-02 / 2026-07-30 JST
+
+### テーマ
+
+CSV健診結果から厚生労働省V08 XMLを出力する初期実装
+
+### 決定・実装内容
+
+- `04_export_hia_xml.py` を業務順の出力入口とする。
+- 出力候補は報告区分・プログラムコード確定済み、加入者突合MATCHED、法定OKまたはMISSINGのみを理由として承認証跡つきで手動許可されたCSV行に限定する。
+- `VALID` の検査値だけを型別の正規化済みカラムからXMLへ出力する。
+- 個人CDAと `ix08_V08.xml` はリポジトリ内の公式V08 XSD bundleで検証し、1人でも失敗した健診機関・保険者単位のZIPは出力しない。
+- 正常ZIPと個人XMLは `etl_runs` 配下の `xml_export_zips` / `xml_export_members` へ追記する。
+- XML基本情報は既存identity共通libを使用し、郵便番号・住所・電話番号の不足していた出力処理も共通field層へ置く。
+- 実行環境では `20260730_009_health_exam_result_create_xml_export_history.sql` を適用してからdry-runを行う。
+
+---
+
+## DH-20260730-03 / 2026-07-30 JST
+
+### テーマ
+
+支払基金特定健診XMLサンプルと付属2に基づくXML構造の補完
+
+### 調査結果
+
+- 支払基金サンプル `kensin_kihon_tokutei.xml` は、基本、詳細、任意の各項目を含み、リポジトリ内V08 XSDへ適合した。
+- 詳細健診の貧血、心電図、眼底、血清クレアチニンは、親observation配下へ `COMP` / `RSON` で束ねられている。
+- 付属2 `001082795.xlsx` には、この構造の正となる `一連検査グループ識別` / `一連検査グループ関係コード` があり、53 namecodeに定義されている。
+- サンプルは原本判定を `interpretationCode`、原本基準値を `referenceRange`、実施なしを `negationInd` または `nullFlavor` で表現している。
+
+### 決定・実装内容
+
+- 一連検査グループは健診機関別ruleやnamecode文字列から推測せず、付属2マスタを正とする。
+- `exam_item_master` に付属2由来のグループ識別値と関係コードを追加し、初期seedへ53 namecodeを登録する。
+- CSVから出力する `interpretationCode` と基準範囲は、原本に明示されmappingされた場合だけ使用する。値からの自動判定、単位変換、施設固有ABC判定の流用は行わない。
+- XML builderはグループ項目を親observationの下へ構造化し、非グループ項目は従来どおりsection直下へ出力する。
+
+---
+
+## DH-20260730-04 / 2026-07-30 JST
+
+### テーマ
+
+同一パス差替えreceiptの対象外化とM4 CSV→XML一連検証
+
+### 調査結果
+
+- 同じ相対パスのCSVが別shaへ差し替わると、新receiptは追加される一方、旧内容の未処理receiptが `READY` のまま残り、後続Runでhash不一致を繰り返す状態があった。
+- ヒロオカの機微情報除去済みfixtureは基本情報が空だったため、ローカルsubscriber seedと一致する5人分だけテスト基本情報を設定し、残り2人を不足停止確認用に残した。
+
+### 決定・実装内容
+
+- 新shaのreceipt登録時、同一event・同一相対パスの旧 `DISCOVERED` / `READY` / `WAITING_CONFIRM` を `SUPERSEDED` とする。
+- 取込済みreceiptは受領・処理履歴であるためstatusを変更しない。
+- M4では5人が加入者MATCHED・法定OKとなり、2人は基本情報不足で停止した。
+- 5人分のV08個人XML、IX08、XSD bundleを公式命名ZIPへ出力し、XSD適合、付属2グループ構造、DB出力履歴、業務向け出力履歴CSVを確認した。
+
+---
+
+## DH-20260730-05 / 2026-07-30 JST
+
+### テーマ
+
+未受領aliasフォルダをscan errorにしない
+
+### 調査結果
+
+- event 2のalias seed 187件は、現在フォルダが存在する施設一覧ではなく、eventで受領し得る既知施設・フォルダ名の一覧である。
+- 旧scanはalias全件に `02_健診結果（編集）` の存在を要求し、M4で実在2施設以外の185施設を `EDIT_FOLDER_NOT_FOUND` としていた。
+- alias登録不備ではなく、alias masterと物理受領フォルダの責務をscanが混同していた。
+
+### 決定・実装内容
+
+- alias対応施設フォルダ自体が存在しない場合は未受領として正常skipする。
+- 実在する施設フォルダだけをscanし、その配下に編集フォルダがない場合は運用配置エラーとする。
+- 実在する未知フォルダ、無効alias、手動判断alias、健診機関未解決aliasは従来どおり明示エラーとする。
+
+---
+
+## DH-20260730-06 / 2026-07-30 JST
+
+### テーマ
+
+実機event 2フォルダ一覧とalias masterの再同期
+
+### 調査結果
+
+- 実機ルート直下には198施設フォルダがあり、初期alias seed 187件との完全一致は185件だった。
+- 実機のみの13件は、11件の追加施設フォルダと2件の名称変更だった。
+- 13件はすべて先頭コードまたは確認済み採用コードにより、既存 `exam_facilities` へ確定できた。
+
+### 決定・実装内容
+
+- 実機名13件を `0004_add_event2_actual_machine_folder_aliases.sql` で追加する。
+- 名称類似による自動名寄せは行わない。
+- 既存の旧名称aliasは削除せず、過去フォルダ名の再受領にも対応できるよう残す。
+- 実機一覧ファイルはrepositoryへ保存せず、差分seedと調査結果だけを保存する。

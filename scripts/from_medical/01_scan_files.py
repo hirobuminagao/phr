@@ -76,6 +76,7 @@ class ScanSummary:
     aliases_active: int = 0
     aliases_inactive: int = 0
     aliases_manual: int = 0
+    alias_folders_present: int = 0
     unknown_folders: int = 0
     edit_folders_missing: int = 0
     files_seen: int = 0
@@ -132,7 +133,11 @@ class ScanSummary:
             f"inserted={self.files_inserted} duplicate={self.files_duplicate} "
             f"skipped={self.files_skipped}"
         )
-        print(f"  folders: unknown={self.unknown_folders} missing_edit={self.edit_folders_missing}")
+        print(
+            "  folders: "
+            f"matched_alias={self.alias_folders_present} unknown={self.unknown_folders} "
+            f"missing_edit={self.edit_folders_missing}"
+        )
         print(
             "  csv_format: "
             f"matched={self.csv_format_matched} not_found={self.csv_format_not_found} "
@@ -428,6 +433,32 @@ def insert_file_receipt(
     return int(cur.lastrowid)
 
 
+def supersede_unprocessed_path_receipts(
+    cur: Any,
+    *,
+    event_id: int,
+    relative_path: str,
+    current_receipt_id: int,
+) -> None:
+    cur.execute(
+        """
+        UPDATE file_receipts
+        SET status = 'SUPERSEDED',
+            summary_message = CONCAT_WS(
+                ' | ',
+                NULLIF(summary_message, ''),
+                CONCAT('Superseded by file_receipt_id=', %s)
+            ),
+            last_seen_at = CURRENT_TIMESTAMP(3)
+        WHERE event_id = %s
+          AND relative_path = %s
+          AND id <> %s
+          AND status IN ('DISCOVERED', 'READY', 'WAITING_CONFIRM')
+        """,
+        (current_receipt_id, event_id, relative_path, current_receipt_id),
+    )
+
+
 def is_duplicate_key_error(exc: Exception) -> bool:
     return isinstance(exc, IntegrityError) and getattr(exc, "errno", None) == errorcode.ER_DUP_ENTRY
 
@@ -490,7 +521,11 @@ def scan_alias_files(
         return False
 
     src_folder_raw = str(alias["src_folder_raw"])
-    edit_dir = root / src_folder_raw / EDIT_FOLDER_NAME
+    facility_dir = root / src_folder_raw
+    if not facility_dir.exists() or not facility_dir.is_dir():
+        return True
+
+    edit_dir = facility_dir / EDIT_FOLDER_NAME
     if not edit_dir.exists() or not edit_dir.is_dir():
         summary.edit_folders_missing += 1
         summary.errors += 1
@@ -599,7 +634,7 @@ def scan_alias_files(
                 )
 
         try:
-            insert_file_receipt(
+            receipt_id = insert_file_receipt(
                 cur,
                 event_id=event_id,
                 source_path=str(path),
@@ -618,6 +653,12 @@ def scan_alias_files(
                 matched_csv_format_version_id=matched_csv_format_version_id,
                 status=receipt_status,
                 summary_message=summary_message,
+            )
+            supersede_unprocessed_path_receipts(
+                cur,
+                event_id=event_id,
+                relative_path=rel_path,
+                current_receipt_id=receipt_id,
             )
             summary.files_inserted += 1
         except Exception as exc:
@@ -705,6 +746,9 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
 
             aliases = fetch_aliases(cur, master_db=config.master_db, event_id=config.event_id)
             summary.aliases_total = len(aliases)
+            summary.aliases_active = sum(int(row.get("is_active") or 0) == 1 for row in aliases)
+            summary.aliases_inactive = summary.aliases_total - summary.aliases_active
+            summary.aliases_manual = sum(int(row.get("manual_judgement") or 0) == 1 for row in aliases)
             alias_names = {str(row["src_folder_raw"]) for row in aliases}
             scan_unknown_folders(
                 cur,
@@ -720,9 +764,16 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                 is_active = int(alias.get("is_active") or 0)
                 manual_judgement = int(alias.get("manual_judgement") or 0)
                 src_folder_raw = str(alias["src_folder_raw"])
+                facility_dir = root / src_folder_raw
+
+                # Alias rows are known/possible facilities for the event. A
+                # facility folder is created only when data is actually
+                # received, so its absence is not a scan error.
+                if not facility_dir.exists() or not facility_dir.is_dir():
+                    continue
+                summary.alias_folders_present += 1
 
                 if not is_active:
-                    summary.aliases_inactive += 1
                     summary.errors += 1
                     if not config.dry_run and run_id is not None:
                         record_scan_error(
@@ -736,7 +787,6 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                     continue
 
                 if manual_judgement:
-                    summary.aliases_manual += 1
                     summary.errors += 1
                     if not config.dry_run and run_id is not None:
                         record_scan_error(
@@ -746,7 +796,7 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                             error_code="ALIAS_MANUAL_JUDGEMENT",
                             message=f"manual_judgement alias skipped: {src_folder_raw}",
                             field_value=src_folder_raw,
-                    )
+                        )
                     continue
 
                 if alias.get("exam_facility_id") is None:
@@ -760,8 +810,8 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                             message=f"exam facility unresolved for alias: {src_folder_raw}",
                             field_value=src_folder_raw,
                         )
+                    continue
 
-                summary.aliases_active += 1
                 keep_scanning = scan_alias_files(
                     cur,
                     run_id=run_id,
