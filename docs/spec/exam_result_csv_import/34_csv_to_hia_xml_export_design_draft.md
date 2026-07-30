@@ -158,7 +158,7 @@ ZIPファイル名はルートフォルダ名に `.zip` を付けた名前でな
 | 提出元健診機関番号 | 健診機関番号10桁 | `exam_facilities.exam_facility_code` |
 | 提出先保険者番号 | 8桁。8桁未満は先頭ゼロ埋め | `csv_row_ledger.insurer_number` |
 | 提出年月日 | ZIPを提出する年月日 | XML/ZIP作成日と同一とし、exporterのRun日を使う |
-| 同日分割送信回数 `N` | 同一送付元・送付先の同日1回目は`0`。以後`1`から`9` | 初回は`0`。同日再出力時は既存送信分と重ならない値を指定する |
+| 同日分割送信回数 `N` | 同一送付元・送付先の同日1回目は`0`。以後`1`から`9` | 既存ZIPから自動採番する。CLI/APIで`0`から`9`の明示指定も可能とする |
 | 実施区分コード `X` | `1`: 特定健診情報 | 今回は`1` |
 
 したがって、公式規則上の最終ZIP名は以下となる。
@@ -206,6 +206,7 @@ ZIP内部は以下の構成とする。
 | `totalRecordCount/@value` | `DATA`内の個人XML数 | ZIPへ収録した結果件数 |
 
 `interactionType=6` とZIP名末尾の実施区分コード `_1` は別のコード体系である。
+個人XMLファイル名21桁目の種別1桁も表2の実施区分コードであり、今回の特定健診情報では `1` 固定とする。任意に選択する設定値にはしない。
 
 ### XSD Source and Versioning
 
@@ -452,7 +453,9 @@ scripts/lib/identity/export_fields.py
 - `health_exam_report_category`
 - `program_code`
 
-確定後はmapping ruleのfixed valueまたは確認済みコース変換ruleとして登録し、CSVを再取込する。
+報告区分と厚生労働省プログラムコードは、CSV mappingによって正しい値がledgerへ登録されている場合は、その値をXML出力に使用する。
+現時点では対象となるCSV項目を持つ健診機関がないため、予約データまたは健診機関への確認結果を基に人が登録する。システムはコース名称や施設内コードから推測しない。
+確認した値はmapping ruleのfixed valueまたは確認済みコース変換ruleとして登録し、CSVを再取込する。
 
 ### Blocking Common Library Gap
 
@@ -460,26 +463,32 @@ scripts/lib/identity/export_fields.py
 - 修正先は共通identity libとし、CSV XML exporterだけの専用変換は作らない。
 - `subscribers.insurance_symbol_export` とCSV XML出力で同じ結果になることをテストする。
 
-### Required Decisions
+### Confirmed Export Decisions
 
 1. 検査値のエラー状態
    - `validation_status = VALID` は出力する。
-   - `WARNING/SKIPPED` の未実施等をnullFlavorとして出すか、entryを省略するか。
-   - `INVALID` が任意項目だけにある場合、該当entryだけ除外して個人XMLは出すか、個人XML全体を止めるか。
+   - `WARNING/SKIPPED` の未実施等は初期版ではentryを省略し、nullFlavor変換は後続版で扱う。
+   - `INVALID` は該当entryを出力しない。
+   - 基本情報norm失敗、法定項目NG、XSD不一致は個人XML生成失敗とする。
 2. 伝送単位設定
-   - 1桁の同日分割送信回数。初回は `0`、同じ提出元・提出先への同日2回目以降は `1` から `9`。
-   - 個人XMLファイル名の種別1桁。
+   - 同日分割送信回数は、同じ提出元・提出先・作成日の既存ZIPから `0` から `9` を自動採番する。
+   - CLI/APIから `0` から `9` の数値を明示指定することもできる。
+   - 自動採番・明示指定とも、既存ZIPと衝突する場合は上書きせず停止する。
    - ルートフォルダ名およびZIP名末尾の `_1` は、今回の実施区分「特定健診情報」を表す。
-   - 個人XMLの種別は旧exporterと同じ `1` を候補とする。
-   - 同日分割送信回数を既存ZIPから自動採番するか、設定値として指定するかは実装前に決定する。
+   - 個人XMLファイル名21桁目の種別も、今回の特定健診情報を表す `1` 固定とする。
 3. ZIP
    - 最終成果物は `<健診機関番号>_<保険者番号>_<yyyymmdd><同日分割送信回数>_1.zip` とし、展開済みフォルダは残さない方針で確定する。
+   - ZIP単位は、健診機関、保険者、作成日、同日分割送信回数の組み合わせとする。
+   - ZIP対象者のうち1人でも個人XML生成またはXSD検証に失敗した場合、そのZIP全体を出力しない。
+   - 失敗したZIPと別のZIP単位は処理を継続できる。
 4. 健診機関番号の正
-   - `csv_row_ledger.facility_code` と `phr_master.exam_facilities.exam_facility_code` を一致必須にするか。
-   - 推奨はmaster値を出力し、ledger値と不一致なら停止する。
+   - `phr_master.exam_facilities.exam_facility_code` を正として出力する。
+   - `csv_row_ledger.facility_code` とmaster値が不一致の場合は、そのZIPを停止する。
 5. 健診機関情報
-   - `csv_row_ledger.exam_facility_postal_code` / address / phoneは現行importで未設定。
-   - export時に `exam_facilities` を参照するか、importerを修正して台帳へsnapshotを保存するか。
+   - export時に `exam_facilities` を参照し、名称、郵便番号、住所、電話番号を取得する。
+
+### Deferred Decisions
+
 6. 再出力
    - `xml_export_status = EXPORTED` を通常Runで除外し、明示オプション時だけ再出力するか。
 7. 出力証跡
@@ -489,19 +498,20 @@ scripts/lib/identity/export_fields.py
    - `etl_errors` とRunサマリーだけにするか。
    - 人が確認しやすい不足情報CSVを、送付用ZIPの外側へ併せて出すか。
    - ここでいう不足情報CSVは、確定済みの `健診結果XML出力履歴.csv` とは別物とする。
+   - 不足情報CSVの追加は初期XML実装を止めず、後続で決める。
+   - `manual_export_approved` / `manual_export_reason` は確認後の手動Goを表す列であり、不足情報CSVとは別概念である。
 
 ## Initial Recommendation
 
 - 出力候補条件は確定済み4条件をそのまま使う。
-- 基本情報norm失敗やXSD不一致は個人XML単位でERRORとし、他の正常者は継続する。
 - `VALID` の検査値だけを初期出力し、`INVALID` は出さない。
-- 未実施等の `WARNING/SKIPPED` はnullFlavor方針を決めるまで出力しない。
-- 同日初回の分割送信回数は `0`、個人XML種別は旧exporterと同じ `1` とする。
+- 未実施等の `WARNING/SKIPPED` は初期版ではentryを出力しない。
+- 同日分割送信回数は自動採番を既定とし、`0`から`9`の明示指定も許可する。個人XML種別は `1` 固定とする。
 - 健診機関情報は `exam_facilities` を正とし、受領時snapshotとの差異を検証する。
 - 出力は一時ディレクトリで作成し、個人XMLとIX08のXSD検証後に確定する。
-- 正常者のみでIX08件数とZIPを作る。
+- 1人でも生成・検証に失敗したZIP単位は成果物を作らず、別ZIP単位の処理は継続する。
 - 不足情報は `etl_errors` に構造化して残し、Run終了時に項目別件数を表示する。
 - イベントルートの `xml作成_出力履歴/yyyymmdd_hhmmss/健診結果XML出力履歴.csv` に、健診機関別のアップロード対象ZIP件数を一覧化する。
 - XML/ZIPは `xml作成_出力履歴` 側へ複製しない。
 
-この推奨のうち未確定部分は、実装前に順番に確認する。
+初期実装前に残る出力管理の詳細は、再出力の許可方法と出力証跡カラムである。不足情報CSVは後続判断とし、初期実装を止めない。

@@ -187,24 +187,22 @@ CSVからXMLを作成するための主要データは、すでに以下へ揃�
 - `file_receipts` / `etl_runs`
   - 受領ファイルと処理証跡
 
-### Decisions Required Before Export Implementation
+### Confirmed Export Handoff
 
-CSV取込の再設計は不要である。次工程では以下を順に決めれば実装へ入れる。
+CSV取込の再設計は不要である。XML出力について以下を確定した。
 
-1. XML出力対象行
-   - `row_status`、加入者突合、`check_status`、`manual_export_approved` のどの組み合わせを通常出力・確認後出力・対象外にするか。
-2. XMLへ出す項目値
-   - `VALID`、`WARNING/SKIPPED`、`INVALID` の扱いと、未実施値をnullFlavorへ変換するか。
-3. 報告区分
-   - 明示mappingのないNULLを出力停止にするか、出力単位の固定値を人が指定するか。旧exporterの無条件 `10` defaultはそのまま採用しない。
-4. XMLヘッダー情報
-   - author、custodian、健診機関、住所、作成日時、文書IDをどのDB値から作るか。
-5. entry構築
-   - PQ/CD/ST、section、occurrence、単位、所見有無CDと所見STの組み合わせをXML要素へどう写すか。
-6. 出力管理
-   - ファイル名、出力先、再出力、`xml_export_status`、ETL run/errorの更新規則。
-7. 基準範囲等
-   - source lower/upper、method、judgementを必要とするXMLがある場合、CSV importer側の未実装role保存を先に完成させる。
+- 出力対象は、報告区分とプログラムコードが設定済み、加入者突合が `MATCHED`、法定項目チェックが `OK` の行とする。
+- 報告区分とプログラムコードは、CSV mappingによって正しい値が登録されている場合はその値を使用する。
+- 現時点では対象となるCSV項目を持つ健診機関がないため、予約データまたは健診機関への確認結果を基に人が登録する。システムではコース名称や施設内コードから推測しない。
+- 検査値は `VALID` のみ出力し、`WARNING/SKIPPED` と `INVALID` のentryは初期版では省略する。
+- 基本情報norm失敗、法定項目NG、個人XML生成失敗、XSD検証失敗は出力失敗とする。
+- 健診機関情報は `phr_master.exam_facilities` を正とし、ledgerの健診機関コードと一致しなければ該当ZIPを停止する。
+- 同日分割送信回数は既存ZIPからの自動採番を既定とし、`0`から`9`の明示指定も許可する。初回の自動採番結果は `0` とする。
+- 個人XMLファイル名21桁目の種別は、特定健診情報を表す `1` 固定とする。
+- ZIP対象者のうち1人でもXML生成またはXSD検証に失敗した場合は、そのZIP全体を出力しない。別のZIP単位は処理を継続する。
+- 人向け不足情報CSVの追加は後続で決め、初期実装を止めない。確認後の手動Goを表す `manual_export_approved` / `manual_export_reason` とは別概念である。
+
+初期実装前に残る出力管理上の詳細は、再出力の許可方法と、出力済みRun・ZIP・個人XMLの証跡カラムである。詳細は `34_csv_to_hia_xml_export_design_draft.md` のDeferred Decisionsを参照する。
 
 ### Implementation Direction
 
@@ -218,4 +216,4 @@ CSV取込の再設計は不要である。次工程では以下を順に決め�
 現行5 formatについて、CSV受領から `exam_item_values` 登録、normalize、加入者突合、法定チェックまでの基盤は実装済みである。
 高度な汎用mapping機能には未実装が残るが、現在の5サンプルをCSVからXMLへ進めることを妨げない。
 
-次工程はCSV解析やマッピングの作り直しではなく、上記7点を決定してCSV台帳・結果値からXMLを組み立てる実装である。
+次工程はCSV解析やマッピングの作り直しではなく、残る出力管理の詳細を確定し、CSV台帳・結果値からXMLを組み立てる実装である。

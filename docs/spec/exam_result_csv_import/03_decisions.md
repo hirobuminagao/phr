@@ -331,6 +331,18 @@ Current as of 2026-07-29.
 - 報告区分の値・取得元が判明した時点で、`target_kind = LEDGER_FIELD`, `target_field = health_exam_report_category` のmapping ruleを追加する。未設定はCSV取込エラーにしない。
 - 施設側コースコードは `program_code` に原文を保持し、報告区分との対応が未確定な段階では `health_exam_report_category` へ変換しない。
 
+### CSV to HIA XML Export
+
+- `health_exam_report_category` と厚生労働省プログラムコードは、CSV mappingによって正しい値が登録されている場合は、その値をXML出力に使用する。
+- 現時点では対象となるCSV項目を持つ健診機関がないため、予約データまたは健診機関への確認結果を基に人が登録する。システム側でコース名称や施設内コードから推測しない。
+- XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
+- 同日分割送信回数は既存ZIPからの自動採番を既定とし、`0`から`9`の明示指定も可能にする。既存ZIPと衝突する番号では上書きしない。
+- 個人XMLファイル名21桁目の種別は、特定健診情報を表す実施区分コード `1` 固定とする。
+- XML出力の原子単位はZIPとする。同じ健診機関・保険者・作成日・同日分割送信回数の対象者に1人でも生成またはXSD検証失敗があれば、そのZIP全体を出力しない。
+- 失敗したZIPとは別のZIP単位は処理を継続する。
+- 健診機関情報は `phr_master.exam_facilities` を正とし、ledgerの健診機関コードと不一致の場合は該当ZIPを停止する。
+- 人向けの不足情報CSVを追加するかは後続で決め、初期XML実装を止めない。`manual_export_approved` / `manual_export_reason` は不足情報CSVとは別概念とする。
+
 ### Source CSV Check
 
 - 支払基金の全国CSV `Pref_00.csv` は `docs/spec/exam_result_csv_import/downloads/Pref_00.csv` に配置済みである。
