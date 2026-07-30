@@ -40,10 +40,6 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `source_created_at` datetime(3) NOT NULL COMMENT '元ledgerのcreated_at',
   `source_updated_at` datetime(3) NOT NULL COMMENT '元ledgerのupdated_at',
 
-  -- subscriberから報告時点の値を付加するブロック
-  `relationship_name` varchar(190) DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.relationship_name',
-  `qualification_lost_date` date DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.qualification_lost_date',
-
   -- csv_row_ledgerにだけ存在するカラムのブロック
   `file_receipt_id` bigint unsigned DEFAULT NULL,
   `source_etl_run_id` bigint unsigned DEFAULT NULL COMMENT 'CSV取込時のhealth_exam_result.etl_runs.run_id',
@@ -74,6 +70,9 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `resume_approved_by` varchar(190) DEFAULT NULL,
   `resume_approved_reason` text,
 
+  -- subscriberから報告時点の値を付加するブロック
+  `relationship_name` varchar(190) DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.relationship_name',
+  `qualification_lost_date` date DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.qualification_lost_date',
   `refreshed_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '報告行の更新日時',
 
   PRIMARY KEY (`report_row_id`),

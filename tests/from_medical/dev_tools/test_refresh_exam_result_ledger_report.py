@@ -54,15 +54,16 @@ def test_report_projection_covers_every_report_table_column() -> None:
     assert set(report.CSV_SOURCE_TO_REPORT.values()) <= set(report.REPORT_COLUMNS)
 
 
-def test_xml_and_subscriber_columns_form_one_ordered_block() -> None:
+def test_xml_columns_keep_source_order_and_subscriber_columns_are_at_end() -> None:
     expected_xml_block = list(report.XML_SOURCE_TO_REPORT.values())
     block_start = report.REPORT_COLUMNS.index("ledger_id")
     block_end = block_start + len(expected_xml_block)
 
     assert list(report.REPORT_COLUMNS[block_start:block_end]) == expected_xml_block
-    assert report.REPORT_COLUMNS[block_end : block_end + 2] == (
+    assert report.REPORT_COLUMNS[-3:] == (
         "relationship_name",
         "qualification_lost_date",
+        "refreshed_at",
     )
 
 

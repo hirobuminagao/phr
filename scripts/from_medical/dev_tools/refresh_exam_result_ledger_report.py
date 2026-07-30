@@ -175,8 +175,6 @@ REPORT_COLUMNS = (
     "manual_export_reason",
     "source_created_at",
     "source_updated_at",
-    "relationship_name",
-    "qualification_lost_date",
     "file_receipt_id",
     "source_etl_run_id",
     "src_row_no",
@@ -205,6 +203,8 @@ REPORT_COLUMNS = (
     "resume_approved_at",
     "resume_approved_by",
     "resume_approved_reason",
+    "relationship_name",
+    "qualification_lost_date",
     "refreshed_at",
 )
 
