@@ -18,6 +18,8 @@ CREATE TABLE `health_exam_result`.`xml_ledger` (
   `insurance_number_match` varchar(190) DEFAULT NULL,
   `birthdate` date DEFAULT NULL,
   `gender_code` varchar(16) DEFAULT NULL,
+  `report_category_code` varchar(32) DEFAULT NULL COMMENT '元XML ClinicalDocument/codeの報告区分コード',
+  `program_type_code` varchar(32) DEFAULT NULL COMMENT '元XML serviceEvent/codeの健診実施プログラム種別コード',
   `identity_hash` char(64) DEFAULT NULL,
   `person_id_custom` varchar(190) DEFAULT NULL,
   `subscriber_match_status` varchar(32) DEFAULT NULL,

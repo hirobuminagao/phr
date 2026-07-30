@@ -87,10 +87,80 @@ def observation_xml(
 
 class FakeCursor:
     def __init__(self) -> None:
+        self.lastrowid = 1
+        self.execute_calls: list[tuple[str, tuple[object, ...]]] = []
         self.executemany_calls: list[tuple[str, list[tuple[object, ...]]]] = []
+
+    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.execute_calls.append((sql, params))
 
     def executemany(self, sql: str, params: list[tuple[object, ...]]) -> None:
         self.executemany_calls.append((sql, params))
+
+
+def test_extract_basic_info_reads_report_and_program_codes() -> None:
+    root = ElementTree.fromstring(
+        """
+        <ClinicalDocument xmlns="urn:hl7-org:v3">
+          <code code="10"/>
+          <documentationOf>
+            <serviceEvent>
+              <code code="010"/>
+            </serviceEvent>
+          </documentationOf>
+        </ClinicalDocument>
+        """
+    )
+
+    basic = import_xml.extract_basic_info(root)
+
+    assert basic["report_category_code"] == "10"
+    assert basic["program_type_code"] == "010"
+
+
+def test_update_xml_ledger_report_codes_only_backfills_non_null_source_values() -> None:
+    cur = FakeCursor()
+    config = SimpleNamespace(health_db="health_exam_result")
+
+    import_xml.update_xml_ledger_report_codes(
+        cur,
+        config,
+        ledger_id=123,
+        report_category_code="10",
+        program_type_code="010",
+    )
+
+    sql, params = cur.execute_calls[0]
+    assert "report_category_code = COALESCE" in " ".join(sql.split())
+    assert "program_type_code = COALESCE" in " ".join(sql.split())
+    assert params == ("10", "010", 123)
+
+
+def test_insert_xml_ledger_includes_report_and_program_codes() -> None:
+    cur = FakeCursor()
+    config = SimpleNamespace(event_id=2, health_db="health_exam_result")
+
+    ledger_id, inserted = import_xml.insert_xml_ledger(
+        cur,
+        config,
+        xml_sha256="a" * 64,
+        xml_file_name="h0001.xml",
+        xml_status="READY",
+        xml_reason=None,
+        basic={
+            "report_category_code": "10",
+            "program_type_code": "010",
+        },
+        identity_bundle=None,
+        subscriber={"subscriber_match_status": "NOT_EXECUTED"},
+    )
+
+    sql, params = cur.execute_calls[0]
+    assert (ledger_id, inserted) == (1, True)
+    assert "report_category_code, program_type_code" in " ".join(sql.split())
+    assert "10" in params
+    assert "010" in params
+    assert sql.count("%s") == len(params)
 
 
 def test_extract_exam_items_adds_section_info_to_row() -> None:

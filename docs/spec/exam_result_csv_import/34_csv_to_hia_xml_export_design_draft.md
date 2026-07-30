@@ -120,8 +120,9 @@ XMLは厚生労働省標準様式によって構造、namecode、型、単位が
 片方のsourceだけに値があればその値を採用し、複数の異なる有効値があれば `MERGE_BASE_FIELD_CONFLICT` として出力を停止する。
 健診日またはcanonical健診機関コードを解決できない行は、安全に同一候補と確定できる別ルールが設定されるまで自動結合しない。
 
-現行 `xml_ledger` は `health_exam_report_category` と `program_code` を保存していない。
-XML/CSV結合を有効にする前に、XMLの `ClinicalDocument/code` と `documentationOf/serviceEvent/code` から値を抽出し、`xml_ledger` に保存するmigrationとbackfillを行う。
+`xml_ledger` はXMLの `ClinicalDocument/code` を `report_category_code`、`documentationOf/serviceEvent/code` を `program_type_code` として保存する。
+XML由来コードは元XMLの明示値を正とし、event年齢規則で上書きしない。
+既存XMLは `02_import_xml.py --include-imported` で再取込し、追加カラムをbackfillする。
 
 検査値の結合keyは、原則として `namecode + occurrence_no` とする。
 

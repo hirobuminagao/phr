@@ -1226,3 +1226,20 @@ CSV文字コードfallbackとquote設定の実装方針
 - 採用文字コードは `file_receipts.actual_character_encoding` に保存し、scan、再照合、CSV取込で同じ共通処理を使う。
 - `quote_char` は共通CSV loaderから `csv.reader` へ渡す。引用符がないCSVも同じ設定で読めるため、引用符有無だけで停止しない。
 - delimiterは初期実装では登録値固定とし、自動fallbackしない。
+
+---
+
+## DH-20260730-01 / 2026-07-30 JST
+
+### テーマ
+
+報告区分・プログラムコードのCSV年齢補完とXML明示値保存
+
+### 決定事項
+
+- CSVで正しい厚生労働省コードを受領できない場合は、eventの年齢基準日時点の満年齢により、40～74歳を `10/010`、それ以外を `40/990` としてledgerへ補完する。
+- `event_id = 2` は `2026-11-30` を年齢基準日とする。
+- CSVに正しい明示値がある場合は受領値を優先し、コース名称、検査構成、施設内コードからは推測しない。
+- XML取込では `ClinicalDocument/code` と `documentationOf/serviceEvent/code` の明示値を `xml_ledger` に保存する。
+- XML由来コードには年齢補完を適用しない。
+- 既存XMLは取込済みfile receiptを明示的に再処理してbackfillできるようにする。

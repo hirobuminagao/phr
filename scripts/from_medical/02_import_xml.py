@@ -238,6 +238,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--etl-run-id", type=int, default=None, help="Limit input file_receipts to a specific scan run.")
     parser.add_argument("--dry-run", action="store_true", help="Read and report without DB writes. DB reads are still required.")
     parser.add_argument("--limit", type=int, default=None, help="Override maximum file_receipts to process. 0 means unlimited.")
+    parser.add_argument(
+        "--include-imported",
+        action="store_true",
+        help="Also process file_receipts already marked IMPORTED.",
+    )
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
     parser.add_argument("--dev-db", default=None, help="Override dev_phr schema name.")
@@ -292,6 +297,9 @@ def load_import_config(path: str | Path) -> ImportConfig:
 
 def resolve_config(args: argparse.Namespace) -> ImportConfig:
     config = load_import_config(args.config)
+    file_statuses = config.input.file_statuses
+    if args.include_imported and FILE_STATUS_IMPORTED not in file_statuses:
+        file_statuses = (*file_statuses, FILE_STATUS_IMPORTED)
     return ImportConfig(
         event_id=args.event_id if args.event_id is not None else config.event_id,
         health_db=args.health_db if args.health_db is not None else config.health_db,
@@ -302,7 +310,7 @@ def resolve_config(args: argparse.Namespace) -> ImportConfig:
         chunk_size_mb=config.chunk_size_mb,
         input=InputConfig(
             file_status=config.input.file_status,
-            file_statuses=config.input.file_statuses,
+            file_statuses=file_statuses,
             file_types=config.input.file_types,
             etl_run_id=args.etl_run_id if args.etl_run_id is not None else config.input.etl_run_id,
         ),
@@ -497,6 +505,8 @@ def extract_basic_info(root: ElementTree.Element) -> dict[str, Any]:
         "name_kana_full_raw": None,
         "gender_code": None,
         "birthdate": None,
+        "report_category_code": None,
+        "program_type_code": None,
         "facility_code": None,
         "facility_name": None,
         "exam_date": None,
@@ -511,6 +521,16 @@ def extract_basic_info(root: ElementTree.Element) -> dict[str, Any]:
     info["gender_code"] = attr_at_path(
         root,
         ("ClinicalDocument", "recordTarget", "patientRole", "patient", "administrativeGenderCode"),
+        "code",
+    )
+    info["report_category_code"] = attr_at_path(
+        root,
+        ("ClinicalDocument", "code"),
+        "code",
+    )
+    info["program_type_code"] = attr_at_path(
+        root,
+        ("ClinicalDocument", "documentationOf", "serviceEvent", "code"),
         "code",
     )
     exam_raw = attr_at_first_path(
@@ -1016,6 +1036,7 @@ def insert_xml_ledger(
                 name_kana_raw,
                 insurance_symbol_raw, insurance_number_raw,
                 birthdate, gender_code,
+                report_category_code, program_type_code,
                 identity_hash, person_id_custom,
                 subscriber_match_status, subscriber_match_method, subscriber_match_reason,
                 xml_status, xml_reason
@@ -1026,6 +1047,7 @@ def insert_xml_ledger(
                 %s, %s, %s,
                 %s, %s, %s, %s,
                 %s,
+                %s, %s,
                 %s, %s,
                 %s, %s,
                 %s, %s,
@@ -1049,6 +1071,8 @@ def insert_xml_ledger(
                 basic.get("insurance_number_raw"),
                 parse_mysql_date(cast(str | None, basic.get("birthdate"))),
                 basic.get("gender_code"),
+                basic.get("report_category_code"),
+                basic.get("program_type_code"),
                 identity_hash,
                 person_id_custom,
                 subscriber.get("subscriber_match_status"),
@@ -1062,12 +1086,38 @@ def insert_xml_ledger(
         if exc.errno == errorcode.ER_DUP_ENTRY:
             existing = get_xml_ledger(cur, config, xml_sha256)
             if existing:
+                update_xml_ledger_report_codes(
+                    cur,
+                    config,
+                    ledger_id=int(existing["id"]),
+                    report_category_code=cast(str | None, basic.get("report_category_code")),
+                    program_type_code=cast(str | None, basic.get("program_type_code")),
+                )
                 return int(existing["id"]), False
         raise
     ledger_id = cur.lastrowid
     if ledger_id is None:
         raise RuntimeError("failed to get inserted xml_ledger.id")
     return int(ledger_id), True
+
+
+def update_xml_ledger_report_codes(
+    cur: Any,
+    config: ImportConfig,
+    *,
+    ledger_id: int,
+    report_category_code: str | None,
+    program_type_code: str | None,
+) -> None:
+    cur.execute(
+        f"""
+        UPDATE {qname(config.health_db)}.xml_ledger
+        SET report_category_code = COALESCE(%s, report_category_code),
+            program_type_code = COALESCE(%s, program_type_code)
+        WHERE id = %s
+        """,
+        (report_category_code, program_type_code, ledger_id),
+    )
 
 
 def insert_xml_file_link(
@@ -1345,7 +1395,7 @@ def process_xml_candidate(
     file_receipt_id = int(cast(Any, file_receipt.get("id")))
     xml_sha256 = sha256_bytes(candidate.data)
     existing = get_xml_ledger(health_cur, config, xml_sha256)
-    if existing:
+    if existing and existing.get("report_category_code") and existing.get("program_type_code"):
         ledger_id = int(existing["id"])
         result = XmlProcessResult(ok=True, existing_ledger=True)
         if config.dry_run:
@@ -1587,7 +1637,8 @@ def process_xml_candidate(
     if config.dry_run:
         return XmlProcessResult(
             ok=True,
-            new_ledger=True,
+            new_ledger=existing is None,
+            existing_ledger=existing is not None,
             link_inserted=True,
             exam_item_count=len(exam_items),
             error_count=local_error_count,

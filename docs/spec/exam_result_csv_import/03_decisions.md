@@ -337,6 +337,9 @@ Current as of 2026-07-29.
 
 - `health_exam_report_category` と厚生労働省プログラムコードは、CSV mappingによって正しい値が登録されている場合は、その値をXML出力に使用する。
 - mapping値がない場合はCSV取込時にevent年齢規則で補完されたledger値をXML出力に使用する。
+- XML取込では、元XMLの `ClinicalDocument/code` を `xml_ledger.report_category_code`、`documentationOf/serviceEvent/code` を `xml_ledger.program_type_code` に保存する。
+- XML由来コードは元XMLの明示値を正とし、event年齢規則による上書きや補完は行わない。
+- 既存XMLは `02_import_xml.py --include-imported` で再取込し、新カラムをbackfillできるようにする。
 - XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
 - 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、`csv_row_ledger.manual_export_approved` と必須の理由、承認者、承認日時を記録してXML出力を許可できる。
 - 手動出力許可は法定チェックNGの原因が `MISSING` のみの場合に限定し、`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致、XML生成・XSD検証エラーは通過させない。

@@ -96,6 +96,14 @@ Current as of 2026-07-29.
 - mapping対象がない、または値がNULLの場合は、eventの年齢判定規則により40～74歳を `10/010`、それ以外を `40/990` として不足値を補完する。
 - 施設側コースコード、コース名、検査構成から報告区分・プログラムコードを推測しない。
 
+### XML Report and Program Codes
+
+- `xml_ledger` に `report_category_code` と `program_type_code` を追加した。
+- `02_import_xml.py` は元XMLの `ClinicalDocument/code` と `documentationOf/serviceEvent/code` を抽出して、そのまま保存する。
+- XML由来コードは年齢から再判定しない。
+- `--include-imported` を指定すると、取込済みfile receiptも再読込し、既存ledgerのNULLカラムをbackfillする。
+- `exam_result_ledger_report` にもXML由来2カラムを追加し、報告用snapshotへ引き継ぐ。
+
 ### Exam Item Values and Normalize
 
 - `exam_item_values` は `ledger_type = 'CSV'`、`ledger_id = csv_row_ledger_id` で登録する。
