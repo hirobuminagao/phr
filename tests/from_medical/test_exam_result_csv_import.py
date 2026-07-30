@@ -13,6 +13,82 @@ def test_resolve_insurer_number_uses_csv_then_receipt_then_event() -> None:
     assert csv_import.resolve_insurer_number(None, None, None) is None
 
 
+def test_fill_missing_report_codes_uses_event_reference_age() -> None:
+    fields = {"birthdate": "1986/11/30"}
+
+    csv_import.fill_missing_report_codes(
+        fields,
+        event_age_rule={
+            "age_rule_type": "FIXED_DATE",
+            "age_reference_date": "2026-11-30",
+        },
+    )
+
+    assert fields["health_exam_report_category"] == "10"
+    assert fields["program_code"] == "010"
+
+
+def test_fill_missing_report_codes_uses_other_codes_outside_age_range() -> None:
+    fields = {"birthdate": "1986/12/01"}
+
+    csv_import.fill_missing_report_codes(
+        fields,
+        event_age_rule={
+            "age_rule_type": "FIXED_DATE",
+            "age_reference_date": "2026-11-30",
+        },
+    )
+
+    assert fields["health_exam_report_category"] == "40"
+    assert fields["program_code"] == "990"
+
+    fields = {"birthdate": "1951/11/30"}
+    csv_import.fill_missing_report_codes(
+        fields,
+        event_age_rule={
+            "age_rule_type": "FIXED_DATE",
+            "age_reference_date": "2026-11-30",
+        },
+    )
+
+    assert fields["health_exam_report_category"] == "40"
+    assert fields["program_code"] == "990"
+
+
+def test_fill_missing_report_codes_includes_age_74_boundary() -> None:
+    fields = {"birthdate": "1951/12/01"}
+
+    csv_import.fill_missing_report_codes(
+        fields,
+        event_age_rule={
+            "age_rule_type": "FIXED_DATE",
+            "age_reference_date": "2026-11-30",
+        },
+    )
+
+    assert fields["health_exam_report_category"] == "10"
+    assert fields["program_code"] == "010"
+
+
+def test_fill_missing_report_codes_preserves_received_values() -> None:
+    fields = {
+        "birthdate": "1986/11/30",
+        "health_exam_report_category": "40",
+        "program_code": "990",
+    }
+
+    csv_import.fill_missing_report_codes(
+        fields,
+        event_age_rule={
+            "age_rule_type": "FIXED_DATE",
+            "age_reference_date": "2026-11-30",
+        },
+    )
+
+    assert fields["health_exam_report_category"] == "40"
+    assert fields["program_code"] == "990"
+
+
 class FakeCursor:
     def __init__(self) -> None:
         self.sql = ""

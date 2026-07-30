@@ -92,8 +92,9 @@ Current as of 2026-07-29.
 - その行の `exam_item_values` はdelete+insertで再作成する。
 - 加入者突合は `generate_identity_bundle()` と `resolve_subscriber_identity()` を使い、XML側と同じidentity系共通libへ寄せている。
 - CSVに保険者番号がない場合は、`file_receipts`、eventの順で補完する。
-- `health_exam_report_category` は明示mapping値だけを保存し、コース名や検査構成から推測しない。
-- `program_code` は施設側の元値として保持し、報告区分へ自動変換しない。
+- `health_exam_report_category` と `program_code` は、正しい厚生労働省コードの明示mapping値があればその値を保存する。
+- mapping対象がない、または値がNULLの場合は、eventの年齢判定規則により40～74歳を `10/010`、それ以外を `40/990` として不足値を補完する。
+- 施設側コースコード、コース名、検査構成から報告区分・プログラムコードを推測しない。
 
 ### Exam Item Values and Normalize
 
@@ -193,7 +194,7 @@ CSV取込の再設計は不要である。XML出力について以下を確定�
 
 - 出力対象は、報告区分とプログラムコードが設定済み、加入者突合が `MATCHED` で、法定項目チェックが `OK` またはMISSINGのみを理由として手動出力許可された行とする。
 - 報告区分とプログラムコードは、CSV mappingによって正しい値が登録されている場合はその値を使用する。
-- 現時点では対象となるCSV項目を持つ健診機関がないため、予約データまたは健診機関への確認結果を基に人が登録する。システムではコース名称や施設内コードから推測しない。
+- mapping値がない場合は、CSV取込時にevent年齢規則から補完された値を使用する。event年齢規則または生年月日を解決できずNULLが残る場合だけ出力不可とする。
 - 検査値は `VALID` のみ出力し、`WARNING/SKIPPED` と `INVALID` のentryは初期版では省略する。
 - 妊娠中等によるMISSINGの手動出力許可後もcheck結果はNGのまま保持し、架空値を作らない。許可理由、承認者、承認日時は行台帳と出力履歴へ残す。
 - 基本情報norm失敗、手動許可条件を満たさない法定項目NG、個人XML生成失敗、XSD検証失敗は出力失敗とする。

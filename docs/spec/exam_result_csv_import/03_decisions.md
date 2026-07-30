@@ -325,16 +325,18 @@ Current as of 2026-07-29.
 - 実際に採用した文字コードは `file_receipts.actual_character_encoding` に保存する。
 - `quote_char` はCSV parserへ実際に渡す。引用符が存在しないCSVも同じ設定で読めるため、引用符の有無だけではformat不一致にしない。
 - delimiterは初期実装では登録値を固定使用し、自動fallbackの対象にしない。
-- `csv_row_ledger.health_exam_report_category` は、施設・format version別のmapping ruleで明示的に得られた値だけを保存する。
+- `csv_row_ledger.health_exam_report_category` と `program_code` は、施設・format version別のmapping ruleで正しい厚生労働省コードを明示的に得られた場合はその値を保存する。
 - 小禄病院CSVの `医療機関コード` は施設内コードであり、健診機関識別には使用しない。小禄の `facility_code` / `facility_name` は、scan時に `exam_facilities` から `file_receipts` へ保存したスナップショットを使用する。
-- CSVに報告区分またはその確定済み変換元がない場合は `health_exam_report_category = NULL` とし、コース名称、検査項目構成、特定健診判定などから自動推測しない。
-- 報告区分の値・取得元が判明した時点で、`target_kind = LEDGER_FIELD`, `target_field = health_exam_report_category` のmapping ruleを追加する。未設定はCSV取込エラーにしない。
-- 施設側コースコードは `program_code` に原文を保持し、報告区分との対応が未確定な段階では `health_exam_report_category` へ変換しない。
+- CSVに対応項目がない、または対応項目の値がNULLの場合は、`event.age_rule_type` と `event.age_reference_date` による満年齢判定で不足コードを補完する。
+- 満年齢40～74歳は `health_exam_report_category = 10`, `program_code = 010`、それ以外は `health_exam_report_category = 40`, `program_code = 990` とする。
+- `event.age_rule_type = EXAM_DATE` のeventでは健診日を年齢基準日とし、`FIXED_DATE` のeventでは `age_reference_date` を使う。`event_id = 2` は2026年度の `2026-11-30` を年齢基準日とする。
+- コース名称、検査項目構成、特定健診判定からは報告区分を推測しない。今回の自動補完はeventに明示された年齢判定規則だけを根拠とする。
+- 施設側コースコードは厚生労働省プログラムコードとして使用しない。小禄病院の `健診コースコード` mappingも無効化する。
 
 ### CSV to HIA XML Export
 
 - `health_exam_report_category` と厚生労働省プログラムコードは、CSV mappingによって正しい値が登録されている場合は、その値をXML出力に使用する。
-- 現時点では対象となるCSV項目を持つ健診機関がないため、予約データまたは健診機関への確認結果を基に人が登録する。システム側でコース名称や施設内コードから推測しない。
+- mapping値がない場合はCSV取込時にevent年齢規則で補完されたledger値をXML出力に使用する。
 - XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
 - 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、`csv_row_ledger.manual_export_approved` と必須の理由、承認者、承認日時を記録してXML出力を許可できる。
 - 手動出力許可は法定チェックNGの原因が `MISSING` のみの場合に限定し、`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致、XML生成・XSD検証エラーは通過させない。

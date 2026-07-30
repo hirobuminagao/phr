@@ -23,7 +23,7 @@ from scripts.lib.csv.exam_result_format_matcher import load_csv_matching_registe
 from scripts.lib.csv.exam_result_mapping_extractor import ExtractedCsvRuleValue, extract_row_values
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingRule, get_csv_format_version_by_id, load_csv_mapping_rules
-from scripts.lib.db.lookup.event import get_event_insurer_number
+from scripts.lib.db.lookup.event import get_event_age_rule, get_event_insurer_number
 from scripts.lib.db.lookup.exam_item_master import get_exam_item
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -33,6 +33,10 @@ from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import log_error as etl_log_error
 from scripts.lib.etl import start_run as etl_start_run
 from scripts.lib.examination.value_normalizer import normalize_exam_item_value
+from scripts.lib.examination.report_classification import (
+    classify_report_codes_by_age,
+    resolve_age_reference_date,
+)
 from scripts.lib.identity.field.gender_code import normalize_gender_code
 from scripts.lib.identity.generator import generate_identity_bundle, generate_person_id_custom
 
@@ -796,6 +800,39 @@ def resolve_insurer_number(
     )
 
 
+def fill_missing_report_codes(
+    ledger_fields: dict[str, Any],
+    *,
+    event_age_rule: Mapping[str, Any] | None,
+) -> None:
+    if compact_text(ledger_fields.get("health_exam_report_category")) is not None and compact_text(
+        ledger_fields.get("program_code")
+    ) is not None:
+        return
+
+    birthdate = parse_date_value(ledger_fields.get("birthdate"))
+    exam_date = parse_date_value(ledger_fields.get("exam_date"))
+    if birthdate is None or event_age_rule is None:
+        return
+
+    reference_date = resolve_age_reference_date(
+        age_rule_type=compact_text(event_age_rule.get("age_rule_type")),
+        age_reference_date=parse_date_value(event_age_rule.get("age_reference_date")),
+        exam_date=exam_date,
+    )
+    if reference_date is None:
+        return
+
+    report_category, program_code = classify_report_codes_by_age(
+        birthdate=birthdate,
+        reference_date=reference_date,
+    )
+    if compact_text(ledger_fields.get("health_exam_report_category")) is None:
+        ledger_fields["health_exam_report_category"] = report_category
+    if compact_text(ledger_fields.get("program_code")) is None:
+        ledger_fields["program_code"] = program_code
+
+
 def process_file_receipt(
     cur: Any,
     *,
@@ -806,6 +843,11 @@ def process_file_receipt(
 ) -> None:
     file_receipt_id = int(file_receipt["id"])
     event_insurer_number = get_event_insurer_number(
+        cur,
+        event_id=int(file_receipt["event_id"]),
+        dev_db=config.dev_db,
+    )
+    event_age_rule = get_event_age_rule(
         cur,
         event_id=int(file_receipt["event_id"]),
         dev_db=config.dev_db,
@@ -885,6 +927,7 @@ def process_file_receipt(
             file_receipt.get("insurer_number"),
             event_insurer_number,
         )
+        fill_missing_report_codes(ledger_fields, event_age_rule=event_age_rule)
         row_errors: list[str] = []
         for result in extracted:
             if result.errors and result.rule.is_required:

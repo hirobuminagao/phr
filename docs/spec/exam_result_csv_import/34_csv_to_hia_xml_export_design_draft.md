@@ -416,8 +416,8 @@ exporter側に別ロジックを重複実装せず、共通lib側の `export` �
 ### Change from the Old Exporter
 
 - 旧 `work_other` 2テーブルではなく `csv_row_ledger` / `exam_item_values` を読む。
-- `health_exam_report_category` の既定値 `10` を廃止し、空なら出力対象外とする。
-- `program_code` の既定値 `010` を廃止し、空なら出力対象外とする。
+- 全員一律の `10/010` 既定値は使わない。CSV取込時にevent年齢規則で40～74歳を `10/010`、それ以外を `40/990` として補完する。
+- event年齢規則または生年月日を解決できずコードが空のままの場合は出力対象外とする。
 - 健診機関番号・保険者番号の `000...` fallbackを廃止し、不正値はエラーにする。
 - 基本情報は `match` 優先ではなく共通libのnorm/export値を使う。
 - 検査値はrawではなく型別の正規化済みカラムを使う。
@@ -453,7 +453,7 @@ scripts/lib/identity/export_fields.py
 
 ### Blocking Data
 
-現行5 formatのseedを確認した結果は以下である。
+現行5 formatでは、厚生労働省の報告区分・プログラムコードとして直接使用できる受領項目は確認できていない。
 
 | format | report category | MHLW program code |
 | --- | --- | --- |
@@ -461,19 +461,15 @@ scripts/lib/identity/export_fields.py
 | ヘルスケアクリニック厚木 | 未設定 | 未設定 |
 | 渋谷ウェストヒルズ | 未設定 | 未設定 |
 | ハートクロス | 未設定 | 未設定 |
-| 小禄病院 | 未設定 | 未確定。CSVの施設内コースコード `1` / `2` のみ |
+| 小禄病院 | 未設定 | 未設定。CSVの施設内コースコード `1` / `2` は使用しない |
 
 ヒロオカ、厚木、渋谷のサンプルには `コース名称` があるが、既存決定どおり名称からコードを自動推測しない。
 小禄の `健診コースコード` も厚生労働省プログラムコードとの対応が確認できるまで直接使用しない。
 
-出力対象を作るため、facility / mapping version単位で以下の確定値または変換表が必要である。
-
-- `health_exam_report_category`
-- `program_code`
-
 報告区分と厚生労働省プログラムコードは、CSV mappingによって正しい値がledgerへ登録されている場合は、その値をXML出力に使用する。
-現時点では対象となるCSV項目を持つ健診機関がないため、予約データまたは健診機関への確認結果を基に人が登録する。システムはコース名称や施設内コードから推測しない。
-確認した値はmapping ruleのfixed valueまたは確認済みコース変換ruleとして登録し、CSVを再取込する。
+mapping対象がない、またはmapping値がNULLの場合は、CSV取込時に `event.age_rule_type` と `event.age_reference_date` を参照して満年齢を求め、40～74歳を `10/010`、それ以外を `40/990` として不足値を補完する。
+`event_id = 2` は2026年度の年齢基準日 `2026-11-30` を使用する。
+コース名称、検査項目構成、施設内コードからは推測しない。
 
 ### Blocking Common Library Gap
 

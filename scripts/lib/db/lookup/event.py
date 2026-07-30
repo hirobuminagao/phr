@@ -27,3 +27,22 @@ def get_event_insurer_number(
         return None
     value = str(row["insurer_number"]).strip()
     return value or None
+
+
+def get_event_age_rule(
+    cursor: Any,
+    *,
+    event_id: int,
+    dev_db: str = "dev_phr",
+) -> dict[str, Any] | None:
+    cursor.execute(
+        f"""
+        SELECT age_rule_type, age_reference_date
+        FROM {qname(dev_db)}.event
+        WHERE event_id = %s
+        LIMIT 1
+        """,
+        (event_id,),
+    )
+    row = cursor.fetchone()
+    return dict(row) if row else None

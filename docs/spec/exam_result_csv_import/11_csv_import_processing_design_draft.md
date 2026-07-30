@@ -226,8 +226,9 @@ COLLATE=utf8mb4_ja_0900_as_cs;
 - `exam_facility_address`
 - `exam_facility_phone_number`
 
-`health_exam_report_category` はmapping ruleで明示的に抽出・固定設定された値のみINSERT/UPDATEする。
-報告区分の取得元が未判明の場合はNULLのままとし、コース名称や検査項目構成から推測しない。
+`health_exam_report_category` と `program_code` は、mapping ruleで正しい厚生労働省コードを明示的に取得できた場合はその値をINSERT/UPDATEする。
+mapping対象がない、または値がNULLの場合は、eventの年齢判定規則により40～74歳を `10/010`、それ以外を `40/990` として不足値を補完する。
+コース名称、検査項目構成、施設内コードからは推測しない。
 後日対応が確定した場合は、施設・format version別ruleの追加で保存できる構造とする。
 
 CSV固有:

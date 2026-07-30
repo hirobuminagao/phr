@@ -1343,6 +1343,24 @@ SET `is_active` = 0,
 WHERE `csv_format_version_id` = @oroku_csv_format_version_id
   AND `rule_key` = 'oroku.basic.facility_code';
 
+-- 健診コースコードは施設内コードであり、厚生労働省プログラムコードではない。
+-- program_codeはeventの年齢基準日を使う共通判定で補完する。
+UPDATE `phr_master`.`csv_exam_result_mapping_conditions` c
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+SET c.`is_active` = 0,
+    c.`note` = 'disabled: facility-local course code is not an MHLW program code',
+    c.`updated_at` = CURRENT_TIMESTAMP(3)
+WHERE r.`csv_format_version_id` = @oroku_csv_format_version_id
+  AND r.`rule_key` = 'oroku.basic.program_code';
+
+UPDATE `phr_master`.`csv_exam_result_mapping_rules`
+SET `is_active` = 0,
+    `note` = 'disabled: facility-local course code is not an MHLW program code; derive from event age rule',
+    `updated_at` = CURRENT_TIMESTAMP(3)
+WHERE `csv_format_version_id` = @oroku_csv_format_version_id
+  AND `rule_key` = 'oroku.basic.program_code';
+
 DELETE FROM `tmp_csv_exam_mapping_seed`;
 
 INSERT INTO `tmp_csv_exam_mapping_seed` (
@@ -1356,7 +1374,6 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ('oroku.basic.name_kana_raw', 'OROKU', 'LEDGER_FIELD', 'name_kana_raw', NULL, NULL, '氏名（カナ）', 1, 'VALUE', NULL, NULL, 1, 60, 'basic: kana name from second source'),
 ('oroku.basic.gender_raw', 'OROKU', 'LEDGER_FIELD', 'gender_raw', NULL, NULL, '性別', 2, 'VALUE', NULL, NULL, 1, 70, 'basic: gender from second source'),
 ('oroku.basic.birthdate', 'OROKU', 'LEDGER_FIELD', 'birthdate', NULL, NULL, '生年月日', 2, 'VALUE', NULL, NULL, 1, 80, 'basic: birthdate from second source'),
-('oroku.basic.program_code', 'OROKU', 'LEDGER_FIELD', 'program_code', NULL, NULL, '健診コースコード', 1, 'VALUE', NULL, NULL, 0, 90, 'basic: course code from second source'),
 ('oroku.basic.insurance_symbol_raw', 'OROKU', 'LEDGER_FIELD', 'insurance_symbol_raw', NULL, NULL, '保険記号', 1, 'VALUE', NULL, NULL, 1, 120, 'basic: insurance symbol appended for production'),
 ('oroku.basic.insurance_number_raw', 'OROKU', 'LEDGER_FIELD', 'insurance_number_raw', NULL, NULL, '保険番号', 1, 'VALUE', NULL, NULL, 1, 130, 'basic: insurance number appended for production'),
 
