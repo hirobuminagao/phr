@@ -103,6 +103,44 @@ def test_upsert_row_ledger_inserts_mapped_report_category() -> None:
     assert cur.sql.count("%s") == len(cur.params)
 
 
+def test_upsert_row_ledger_uses_file_receipt_facility_snapshot_when_csv_is_unmapped() -> None:
+    cur = FakeCursor()
+    config = csv_import.ImportConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        dev_db="dev_phr",
+        master_db="phr_master",
+        dry_run=False,
+        limit=0,
+        include_imported=False,
+    )
+
+    csv_import.upsert_row_ledger(
+        cur,
+        config=config,
+        run_id=10,
+        file_receipt={
+            "id": 20,
+            "event_id": 2,
+            "exam_facility_id": 30,
+            "facility_code": "4710114044",
+            "facility_name": "医療法人　禄寿会　小禄病院",
+        },
+        fmt={"header_sha256": "a" * 64, "mapping_version": "OROKU_TEST"},
+        src_row_no=2,
+        row_hash="b" * 64,
+        raw_row_json="[]",
+        ledger_fields={},
+        row_status="READY",
+        row_reason=None,
+        exam_item_count=0,
+        exam_item_error_count=0,
+    )
+
+    assert "4710114044" in cur.params
+    assert "医療法人　禄寿会　小禄病院" in cur.params
+
+
 def test_upsert_row_ledger_updates_mapped_report_category() -> None:
     cur = FakeCursor()
     cur.fetchone_result = {"csv_row_ledger_id": 7}

@@ -73,6 +73,8 @@ Current as of 2026-07-29.
 | ハートクロス健診プラザ赤坂駅前 | `HEARTCROSS_2026_05_PATTERN_B_V1` | 2行 |
 | 医療法人 禄寿会 小禄病院 | `OROKU_2026_05_JOINED_PATTERN_C_V1` | 結合済みCSV |
 
+小禄病院CSVの `医療機関コード` は施設内コードのためmapping対象外とし、健診機関コード・名称は `file_receipts` のマスタ由来スナップショットを採用する。
+
 - ヘッダー名は完全一致で扱い、表記ゆれを推測しない。
 - UTF-8 BOM、UTF-8、CP932はformat設定に従ってfallback読込できる。
 - 採用文字コードは `file_receipts.actual_character_encoding` に残す。

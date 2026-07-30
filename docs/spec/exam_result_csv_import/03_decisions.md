@@ -326,6 +326,7 @@ Current as of 2026-07-29.
 - `quote_char` はCSV parserへ実際に渡す。引用符が存在しないCSVも同じ設定で読めるため、引用符の有無だけではformat不一致にしない。
 - delimiterは初期実装では登録値を固定使用し、自動fallbackの対象にしない。
 - `csv_row_ledger.health_exam_report_category` は、施設・format version別のmapping ruleで明示的に得られた値だけを保存する。
+- 小禄病院CSVの `医療機関コード` は施設内コードであり、健診機関識別には使用しない。小禄の `facility_code` / `facility_name` は、scan時に `exam_facilities` から `file_receipts` へ保存したスナップショットを使用する。
 - CSVに報告区分またはその確定済み変換元がない場合は `health_exam_report_category = NULL` とし、コース名称、検査項目構成、特定健診判定などから自動推測しない。
 - 報告区分の値・取得元が判明した時点で、`target_kind = LEDGER_FIELD`, `target_field = health_exam_report_category` のmapping ruleを追加する。未設定はCSV取込エラーにしない。
 - 施設側コースコードは `program_code` に原文を保持し、報告区分との対応が未確定な段階では `health_exam_report_category` へ変換しない。

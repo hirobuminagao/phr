@@ -1325,6 +1325,24 @@ WHERE `exam_facility_id` = @oroku_exam_facility_id
   AND `mapping_version` = 'OROKU_2026_05_JOINED_PATTERN_C_V1'
 LIMIT 1;
 
+-- CSVの「医療機関コード」は施設内コードであり、健診機関を識別できない。
+-- facility_codeはscan時にexam_facilitiesからfile_receiptsへ保存した値を使用する。
+UPDATE `phr_master`.`csv_exam_result_mapping_conditions` c
+JOIN `phr_master`.`csv_exam_result_mapping_rules` r
+  ON r.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+SET c.`is_active` = 0,
+    c.`note` = 'disabled: use exam_facilities snapshot from file_receipts',
+    c.`updated_at` = CURRENT_TIMESTAMP(3)
+WHERE r.`csv_format_version_id` = @oroku_csv_format_version_id
+  AND r.`rule_key` = 'oroku.basic.facility_code';
+
+UPDATE `phr_master`.`csv_exam_result_mapping_rules`
+SET `is_active` = 0,
+    `note` = 'disabled: CSV medical institution code is facility-local; use exam_facilities snapshot from file_receipts',
+    `updated_at` = CURRENT_TIMESTAMP(3)
+WHERE `csv_format_version_id` = @oroku_csv_format_version_id
+  AND `rule_key` = 'oroku.basic.facility_code';
+
 DELETE FROM `tmp_csv_exam_mapping_seed`;
 
 INSERT INTO `tmp_csv_exam_mapping_seed` (
@@ -1334,7 +1352,6 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ) VALUES
 -- Oroku basic information. Insurer number is intentionally not mapped from CSV.
 ('oroku.basic.exam_date', 'OROKU', 'LEDGER_FIELD', 'exam_date', NULL, NULL, '健診実施日', 1, 'VALUE', NULL, NULL, 1, 10, 'basic: exam date from second source'),
-('oroku.basic.facility_code', 'OROKU', 'LEDGER_FIELD', 'facility_code', NULL, NULL, '医療機関コード', 1, 'VALUE', NULL, NULL, 0, 20, 'basic: facility code from second source'),
 ('oroku.basic.name_full_raw', 'OROKU', 'LEDGER_FIELD', 'name_full_raw', NULL, NULL, '氏名（漢字）', 1, 'VALUE', NULL, NULL, 0, 50, 'basic: full name from second source'),
 ('oroku.basic.name_kana_raw', 'OROKU', 'LEDGER_FIELD', 'name_kana_raw', NULL, NULL, '氏名（カナ）', 1, 'VALUE', NULL, NULL, 1, 60, 'basic: kana name from second source'),
 ('oroku.basic.gender_raw', 'OROKU', 'LEDGER_FIELD', 'gender_raw', NULL, NULL, '性別', 2, 'VALUE', NULL, NULL, 1, 70, 'basic: gender from second source'),
