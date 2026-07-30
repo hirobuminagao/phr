@@ -126,9 +126,7 @@ def _add_exam_item_observation(parent: ET.Element, item: ExamItem) -> ET.Element
     value_type = (item.value_type or "ST").upper()
     has_value = bool(item.nullflavor or item.code_value is not None or item.normalized_value is not None)
     if has_value or not item.negation_ind:
-        # QName attributes do not inherit the default namespace, so the
-        # datatype must use an explicit HL7 namespace prefix for XSD validation.
-        value_attrs = {f"{{{NS_XSI}}}type": f"v3:{value_type}"}
+        value_attrs = {f"{{{NS_XSI}}}type": value_type}
         value = ET.SubElement(observation, _h("value"), value_attrs)
         if item.nullflavor:
             value.set("nullFlavor", item.nullflavor)
@@ -164,7 +162,7 @@ def _add_exam_item_observation(parent: ET.Element, item: ExamItem) -> ET.Element
             raise ValueError(f"{item.namecode}: reference range is only supported for PQ")
         reference_range = ET.SubElement(observation, _h("referenceRange"))
         observation_range = ET.SubElement(reference_range, _h("observationRange"), {"classCode": "OBS", "moodCode": "EVN.CRT"})
-        interval = ET.SubElement(observation_range, _h("value"), {f"{{{NS_XSI}}}type": "v3:IVL_PQ"})
+        interval = ET.SubElement(observation_range, _h("value"), {f"{{{NS_XSI}}}type": "IVL_PQ"})
         unit_attrs = {"unit": item.normalized_unit} if item.normalized_unit else {}
         if item.source_reference_lower is not None:
             ET.SubElement(interval, _h("low"), {"value": item.source_reference_lower, **unit_attrs})
@@ -180,7 +178,6 @@ def build_clinical_document(person: Person, facility: Facility, items: Iterable[
         _h("ClinicalDocument"),
         {
             f"{{{NS_XSI}}}schemaLocation": f"{NS_HL7} ../XSD/hc08_V08.xsd",
-            "xmlns:v3": NS_HL7,
         },
     )
     ET.SubElement(root, _h("typeId"), {"extension": "POCD_HD000040", "root": "2.16.840.1.113883.1.3"})

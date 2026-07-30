@@ -30,6 +30,11 @@ def test_generated_clinical_document_and_index_validate_against_v08() -> None:
 
     clinical = xml_bytes(build_clinical_document(person, facility, items, "20260730"))
     index = xml_bytes(build_ix08(facility.code, person.insurer_number, "20260730", 1))
+    assert b'xsi:type="v3:' not in clinical
+    assert b'xmlns:v3=' not in clinical
+    assert b'xsi:type="ST"' in clinical
+    assert b'xsi:type="PQ"' in clinical
+    assert b'xsi:type="CD"' in clinical
     validate_xml(clinical, XSD_ROOT / "hc08_V08.xsd")
     validate_xml(index, XSD_ROOT / "ix08_V08.xsd")
 
@@ -70,6 +75,7 @@ def test_annex2_series_group_reference_range_and_interpretation() -> None:
     ]
 
     content = xml_bytes(build_clinical_document(person, facility, items, "20260730"))
+    assert b'xsi:type="IVL_PQ"' in content
     validate_xml(content, XSD_ROOT / "hc08_V08.xsd")
 
     root = ElementTree.fromstring(content)
