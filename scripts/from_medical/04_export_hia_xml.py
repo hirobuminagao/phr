@@ -131,24 +131,48 @@ def _parse_file_date(value: Any) -> date:
     return datetime.strptime(str(value), "%Y%m%d").date()
 
 
+def _int_tuple(value: Any) -> tuple[int, ...]:
+    if value in (None, ""):
+        return ()
+    if isinstance(value, int):
+        return (value,)
+    if isinstance(value, str):
+        value = [part.strip() for part in value.split(",") if part.strip()]
+    if not isinstance(value, list | tuple):
+        raise ValueError(f"Expected int list, got {type(value).__name__}")
+    return tuple(int(item) for item in value)
+
+
+def _optional_split_no(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    split_no = int(value)
+    if split_no < 0 or split_no > 9:
+        raise ValueError("split_no must be 0-9")
+    return split_no
+
+
 def load_config(args: argparse.Namespace) -> ExportConfig:
     with Path(args.config).open("r", encoding="utf-8") as fp:
         data = cast(Mapping[str, Any], yaml.safe_load(fp) or {})
     event_id = args.event_id if args.event_id is not None else int(data.get("event_id") or 0)
     all_facilities = bool(args.all_facilities or data.get("all_facilities", False))
-    facility_ids = tuple(args.facility_id or ())
+    facility_ids = tuple(args.facility_id or ()) or _int_tuple(data.get("facility_ids"))
+    file_receipt_ids = tuple(args.file_receipt_id or ()) or _int_tuple(data.get("file_receipt_ids"))
+    ledger_ids = tuple(args.ledger_id or ()) or _int_tuple(data.get("ledger_ids"))
+    exam_month = args.exam_month if args.exam_month is not None else data.get("exam_month")
     if event_id <= 0:
         raise ValueError("event_id is required")
-    if not all_facilities and not facility_ids:
-        raise ValueError("Specify --facility-id or --all-facilities explicitly")
-    if args.exam_month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", args.exam_month):
+    if not all_facilities and not facility_ids and not file_receipt_ids and not ledger_ids:
+        raise ValueError("Specify --facility-id, --all-facilities, file_receipt_ids, or ledger_ids explicitly")
+    if exam_month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(exam_month)):
         raise ValueError("exam_month must be YYYY-MM")
     selectors = ExportSelectors(
         event_id=event_id,
         facility_ids=facility_ids,
-        file_receipt_ids=tuple(args.file_receipt_id or ()),
-        ledger_ids=tuple(args.ledger_id or ()),
-        exam_month=args.exam_month,
+        file_receipt_ids=file_receipt_ids,
+        ledger_ids=ledger_ids,
+        exam_month=None if not exam_month else str(exam_month),
         include_exported=bool(args.include_exported or data.get("include_exported", False)),
         limit=args.limit if args.limit is not None else int(data.get("limit") or 0),
     )
@@ -159,8 +183,8 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         master_db=str(args.master_db or data.get("master_db") or "phr_master"),
         xsd_bundle_id=str(data.get("xsd_bundle_id") or "mhlw_v4_20230331_v08"),
         all_facilities=all_facilities,
-        split_no=args.split_no,
-        file_date=_parse_file_date(args.file_date),
+        split_no=args.split_no if args.split_no is not None else _optional_split_no(data.get("split_no")),
+        file_date=_parse_file_date(args.file_date if args.file_date is not None else data.get("file_date")),
         dry_run=bool(args.dry_run or data.get("dry_run", False)),
     )
 

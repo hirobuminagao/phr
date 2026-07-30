@@ -6,7 +6,14 @@ master_db: phr_master
 
 xsd_bundle_id: mhlw_v4_20230331_v08
 all_facilities: false
+# YAML target selectors. Command-line options override these values.
+# Keep all lists empty unless the target should be fixed for this run.
+facility_ids: []
+file_receipt_ids: []
+ledger_ids: []
+exam_month:
 include_exported: false
 dry_run: false
 limit: 0
-
+split_no:
+file_date:

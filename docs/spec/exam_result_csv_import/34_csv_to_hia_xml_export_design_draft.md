@@ -438,7 +438,17 @@ scripts/from_medical/04_export_hia_xml.py
   DB対象抽出、grouping、ETL、状態更新、出力先制御、作業用出力履歴CSV
 
 scripts/from_medical/config/export_hia_xml.yml
-  event_id、DB schema、XSD bundle ID、全施設指定、既出力者指定、dry-run、limit
+  event_id、DB schema、XSD bundle ID、対象条件、既出力者指定、dry-run、limit、同日分割送信回数、提出日
+
+対象条件はYAMLで以下を指定できる。CLIで同じ条件を指定した場合はCLIを優先する。
+
+- `all_facilities`: `true` の場合、指定event内の全施設を対象にする。
+- `facility_ids`: 複数の健診機関IDを指定する。
+- `file_receipt_ids`: 受領ファイル単位で指定する。
+- `ledger_ids`: CSV行台帳単位で個人を指定する。
+- `exam_month`: `YYYY-MM` で受診月を指定する。全施設月指定を行う場合は `all_facilities: true` も明示する。
+
+誤出力防止のため、`all_facilities` / `facility_ids` / `file_receipt_ids` / `ledger_ids` のいずれもない場合は停止する。
 
 CLIの `--health-db` / `--dev-db` / `--master-db` でschema名を上書きできる。
 M4 Dockerでは `--dev-db m4_dev_phr` を指定し、実行環境では既定の `dev_phr` を使用する。
