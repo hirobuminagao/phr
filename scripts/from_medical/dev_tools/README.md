@@ -23,14 +23,16 @@ Get-Content sql/migrations/health_exam_result/20260730_005_health_exam_result_cr
 件数だけ確認します。この実行ではDBを変更しません。
 
 ```powershell
-python scripts/from_medical/dev_tools/refresh_exam_result_ledger_report.py --event-id 2 --dry-run
+python scripts/from_medical/dev_tools/refresh_exam_result_ledger_report.py --dry-run
 ```
 
 報告テーブルを更新します。
 
 ```powershell
-python scripts/from_medical/dev_tools/refresh_exam_result_ledger_report.py --event-id 2
+python scripts/from_medical/dev_tools/refresh_exam_result_ledger_report.py
 ```
+
+`--event-id` を省略した場合は `event_id=2` を対象にします。別イベントを更新する場合は、例えば `--event-id 3` のように明示します。
 
 更新は `event_id` 単位の `DELETE + INSERT` です。XML/CSVの元ledgerが両方とも0件の場合は、既存の報告行を消さずに停止します。実行履歴は `health_exam_result.etl_runs` に `phase=REPORT_EXAM_RESULT_LEDGER`、`source=FROM_MEDICAL` として記録します。
 

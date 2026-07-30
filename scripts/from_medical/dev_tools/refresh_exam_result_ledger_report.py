@@ -250,7 +250,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Refresh a report table from XML/CSV exam result ledgers."
     )
-    parser.add_argument("--event-id", type=int, required=True)
+    parser.add_argument("--event-id", type=int, default=2)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)

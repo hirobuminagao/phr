@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 from scripts.from_medical.dev_tools import refresh_exam_result_ledger_report as report
@@ -12,6 +13,14 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 def ddl_columns(path: Path) -> set[str]:
     text = path.read_text(encoding="utf-8")
     return set(re.findall(r"^\s*`([a-z0-9_]+)`\s+", text, flags=re.MULTILINE))
+
+
+def test_event_id_defaults_to_two(monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["refresh_exam_result_ledger_report.py"])
+
+    args = report.parse_args()
+
+    assert args.event_id == 2
 
 
 def test_source_mappings_cover_every_ledger_column() -> None:
