@@ -1,0 +1,94 @@
+CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
+  `report_row_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '報告用行ID',
+  `report_run_id` bigint unsigned NOT NULL COMMENT 'この報告行を生成したhealth_exam_result.etl_runs.run_id',
+  `ledger_type` varchar(16) NOT NULL COMMENT 'XMLまたはCSV',
+  `ledger_id` bigint unsigned NOT NULL COMMENT 'xml_ledger.idまたはcsv_row_ledger.csv_row_ledger_id',
+
+  `file_receipt_id` bigint unsigned DEFAULT NULL,
+  `source_etl_run_id` bigint unsigned DEFAULT NULL COMMENT 'CSV取込時のhealth_exam_result.etl_runs.run_id',
+  `src_row_no` int DEFAULT NULL,
+  `src_line_no` int DEFAULT NULL,
+  `row_sha256` char(64) DEFAULT NULL,
+  `raw_row_json` json DEFAULT NULL,
+  `actual_header_sha256` char(64) DEFAULT NULL,
+  `mapping_version` varchar(64) DEFAULT NULL,
+
+  `event_id` bigint NOT NULL,
+  `subscriber_id` bigint unsigned DEFAULT NULL,
+  `hia_subscriber_id` varchar(190) DEFAULT NULL,
+  `relationship_name` varchar(190) DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.relationship_name',
+  `qualification_lost_date` date DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.qualification_lost_date',
+
+  `xml_sha256` char(64) DEFAULT NULL,
+  `xml_file_name` varchar(255) DEFAULT NULL,
+  `document_id` varchar(190) DEFAULT NULL,
+  `insurer_number` varchar(20) DEFAULT NULL,
+  `exam_facility_id` bigint unsigned DEFAULT NULL,
+  `facility_code` varchar(64) DEFAULT NULL,
+  `facility_name` varchar(255) DEFAULT NULL,
+  `exam_date` date DEFAULT NULL,
+
+  `name_full_raw` varchar(255) DEFAULT NULL,
+  `name_kana_raw` varchar(255) DEFAULT NULL,
+  `name_kana_match` varchar(255) DEFAULT NULL,
+  `insurance_symbol_raw` varchar(190) DEFAULT NULL,
+  `insurance_symbol_match` varchar(190) DEFAULT NULL,
+  `insurance_number_raw` varchar(190) DEFAULT NULL,
+  `insurance_number_match` varchar(190) DEFAULT NULL,
+  `insurance_branch_number_raw` varchar(64) DEFAULT NULL,
+  `insurance_branch_number_match` varchar(64) DEFAULT NULL,
+  `birthdate` date DEFAULT NULL,
+  `gender_code` varchar(16) DEFAULT NULL,
+  `gender_raw` varchar(64) DEFAULT NULL,
+
+  `health_exam_report_category` varchar(64) DEFAULT NULL,
+  `program_code` varchar(64) DEFAULT NULL,
+  `postal_code` varchar(16) DEFAULT NULL,
+  `address` varchar(255) DEFAULT NULL,
+  `exam_facility_postal_code` varchar(16) DEFAULT NULL,
+  `exam_facility_address` varchar(255) DEFAULT NULL,
+  `exam_facility_phone_number` varchar(32) DEFAULT NULL,
+
+  `identity_hash` char(64) DEFAULT NULL,
+  `person_id_custom` varchar(190) DEFAULT NULL,
+  `subscriber_match_status` varchar(32) DEFAULT NULL,
+  `subscriber_match_method` varchar(64) DEFAULT NULL,
+  `subscriber_match_reason` text,
+
+  `exam_item_status` varchar(32) DEFAULT NULL,
+  `exam_item_count` int DEFAULT NULL,
+  `exam_item_error_count` int DEFAULT NULL,
+  `exam_item_reason` text,
+  `xml_status` varchar(32) DEFAULT NULL,
+  `xml_reason` text,
+  `row_status` varchar(32) DEFAULT NULL,
+  `row_reason` text,
+  `check_status` varchar(32) DEFAULT NULL,
+  `check_reason` text,
+  `xml_export_status` varchar(32) DEFAULT NULL,
+  `manual_export_approved` tinyint(1) NOT NULL DEFAULT 0,
+  `manual_export_reason` text,
+  `resume_approved` tinyint(1) DEFAULT NULL,
+  `resume_approved_at` datetime(3) DEFAULT NULL,
+  `resume_approved_by` varchar(190) DEFAULT NULL,
+  `resume_approved_reason` text,
+
+  `source_created_at` datetime(3) NOT NULL COMMENT '元ledgerのcreated_at',
+  `source_updated_at` datetime(3) NOT NULL COMMENT '元ledgerのupdated_at',
+  `refreshed_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '報告行の更新日時',
+
+  PRIMARY KEY (`report_row_id`),
+  UNIQUE KEY `uq_exam_result_ledger_report_source` (`ledger_type`, `ledger_id`),
+  KEY `idx_exam_result_ledger_report_event` (`event_id`),
+  KEY `idx_exam_result_ledger_report_subscriber` (`subscriber_id`),
+  KEY `idx_exam_result_ledger_report_facility` (`facility_code`),
+  KEY `idx_exam_result_ledger_report_exam_date` (`exam_date`),
+  KEY `idx_exam_result_ledger_report_run` (`report_run_id`),
+  CONSTRAINT `fk_exam_result_ledger_report_run`
+    FOREIGN KEY (`report_run_id`)
+    REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_ja_0900_as_cs
+COMMENT='XML/CSV健診結果ledgerの報告用カレントスナップショット';
