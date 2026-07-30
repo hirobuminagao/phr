@@ -1,0 +1,22 @@
+bundle_id: mhlw_v4_20230331_v08
+publisher: Ministry of Health, Labour and Welfare
+specification_version: "4"
+schema_file_version: V08
+published_on: 2023-03-31
+verified_on: 2026-07-30
+line_endings: LF
+trailing_whitespace_removed: true
+source_page: https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/xml_30799.html
+archive_specification: https://www.mhlw.go.jp/content/12400000/8-1A.pdf
+files:
+  ix08_V08.xsd: 0cae59dbe6f6e5d9c1335fa8ff46bb8af58b89dc2947a35fdf8c1d4fec2d14fc
+  su08_V08.xsd: 5be180da5aa998c6499f73f1ab01c2de52a88e1fa7feaf0bac2db206e1e03c4b
+  cc08_V08.xsd: fef15b152722397959f8cf4d818236dd8f32b1c6a8c4be8cf26751e9d3e5b8f7
+  gc08_V08.xsd: 0a368dbd45308c0bcc70d884b1860f7b676f86ce3da6d1c00b4f6bd6be1508b2
+  co08_V08.xsd: f3b35f50030759d0d949483b4bde7fb31e8aad9b70d7c88ef117e4e48dc3cdd8
+  hc08_V08.xsd: 0e6ac3a8bd3f05dbc10590f4ce98687a9574f43b3501befb1644b99796b78d19
+  hg08_V08.xsd: 654583e6154a8a5c25982dcb800c3f37280337ba400f59dd1e5a05d15c9c0599
+  coreschemas/datatypes-base_hcgv08.xsd: cb2158d4e59550eb0f02ee1d2a8f12e9d1881fb2587d6cd53c33f204a645cbe7
+  coreschemas/datatypes_hcgv08.xsd: d843a37a7d81df17bad052e0439781ce25ec49b439369640bdf773237ea3b47b
+  coreschemas/voc_hcgv08.xsd: 8b2f6f20f7018fccee8ddde0c5d2c1f5690fa7173e148eb01a0006fb2367856b
+  coreschemas/narrativeBlock_hcgv08.xsd: d827061fe5aa40c763ccbf79c5179862e1962d913fb91531ac8c5bbeeabc027e

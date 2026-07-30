@@ -63,6 +63,9 @@
 - `33_implementation_status_and_xml_handoff.md`
   - 2026-07-29時点の実装、DDL、seed、テストと決定事項の同期結果。
   - 実装済み範囲、未実装の汎用機能、施設確認待ち、CSVからXML作成へ渡せる情報と次の決定事項を整理する。
+- `34_csv_to_hia_xml_export_design_draft.md`
+  - CSV行台帳と正規化済み検査値から厚生労働省指定XMLを生成する初期設計。
+  - 出力条件、基本情報norm、旧exporterの流用範囲、不足情報、実装構成を整理する。
 
 ## ADR Policy
 

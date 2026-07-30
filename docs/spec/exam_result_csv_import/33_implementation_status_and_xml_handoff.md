@@ -170,6 +170,8 @@ Current as of 2026-07-29.
 
 ## CSV to XML Handoff
 
+2026-07-30以降の詳細設計は `34_csv_to_hia_xml_export_design_draft.md` を参照する。
+
 ### Available Inputs
 
 CSVからXMLを作成するための主要データは、すでに以下へ揃っている。
