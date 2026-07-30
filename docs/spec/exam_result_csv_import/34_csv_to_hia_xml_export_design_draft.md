@@ -34,10 +34,17 @@ CSV行は以下をすべて満たす場合にXML出力候補とする。
 1. `csv_row_ledger.health_exam_report_category` が空でない。
 2. `csv_row_ledger.program_code` が空でない。
 3. `csv_row_ledger.subscriber_match_status = 'MATCHED'`。
-4. `csv_row_ledger.check_status = 'OK'`。
+4. 次のいずれかを満たす。
+   - `csv_row_ledger.check_status = 'OK'`。
+   - 法定チェックNGの原因が `MISSING` のみで、`manual_export_approved = 1`、理由、承認者、承認日時が設定されている。
 
 `03_check_exam_results.py` の `check_status` は現状、法定チェック結果を基準に `OK` / `NG` を設定している。
-したがって4は法定チェックOKを意味する。
+したがって4は、法定チェックOKまたはMISSINGだけを理由として明示的に手動許可された状態を意味する。
+
+手動出力許可は、妊娠中等の確認済み理由により法定検査値がMISSINGとなる場合の例外とする。
+`exam_check_results` と `csv_row_ledger.check_status` は書き換えず、架空の検査値を作らない。MISSINGの該当entryはXMLへ出力しない。
+`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致は手動許可の対象外とする。
+既存の `manual_export_approved` / `manual_export_reason` に加え、`manual_export_approved_at` / `manual_export_approved_by` を `csv_row_ledger` へ追加する。手動許可時は理由、承認者、承認日時を必須とする。
 
 上記4条件は業務上の出力候補条件とする。
 XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致などが発生した場合は、出力候補であっても生成エラーとして扱う。
@@ -339,6 +346,7 @@ ZIPは各健診機関フォルダの `03_健診結果（アップロードデー
 XML基本情報は照合用 `match` ではなく、格納・出力用のnorm値を使う。
 元値は `csv_row_ledger` のCSV由来値とし、`subscribers` の値へ置き換えない。
 `subscribers` で使用している共通identity libと同じ関数を利用する。
+`export_fields.py` はこれらの既存関数を呼び出し、XML出力値のprojectionと必須項目エラーの集約だけを行う。同じ値生成・妥当性確認を再実装しない。
 
 | XML field | source | common function | output |
 | --- | --- | --- | --- |
@@ -348,6 +356,14 @@ XML基本情報は照合用 `match` ではなく、格納・出力用のnorm値�
 | 氏名カナ | `name_kana_raw` | `normalize_name_kana_full()` | `field_norm` |
 | 生年月日 | `birthdate` | `normalize_birthdate()` | XMLでは `match` のYYYYMMDD表現 |
 | 性別 | `gender_raw` / `gender_code` | `normalize_gender_code()` | `field_norm` |
+
+保険者番号の8桁化には既存 `zero_pad()` を使用する。
+郵便番号、住所、電話番号は、旧exporterにはXML出力処理がある一方、現在のidentity共通libには同一仕様の公開関数がない。
+この3項目は旧exporterから必要な規則を共通field層へ移し、CSV XML exporterから直接再実装しない。
+
+- 郵便番号と住所は既存 `scripts/lib/identity/field/address.py` を拡張する。
+- 電話番号は `scripts/lib/identity/field/phone_number.py` を共通fieldとして追加する。
+- 既存の `build_postal_code_match()` / `build_address_match()` は照合用であり、XML出力用の値として流用しない。
 
 保険証記号の出力方針は既存 `normalize_insurance_symbol()` の `export` を共通入口として使う。
 
@@ -427,7 +443,7 @@ scripts/lib/examination/mhlw_v08_xml.py
   個人CDA、IX08、命名、XML書込、XSD検証、ZIP構成
 
 scripts/lib/identity/export_fields.py
-  既存identity field関数を組み合わせたXML出力用基本情報projection
+  既存identity field関数を組み合わせたXML出力用基本情報projection。独自の正規化規則は持たない
 ```
 
 旧 `medi_export_xml.py` は変更しない。
@@ -464,6 +480,8 @@ scripts/lib/identity/export_fields.py
 - `normalize_insurance_symbol()` の `export` 判定は、元値の全角文字有無をNFKC前に評価できるよう修正が必要である。
 - 修正先は共通identity libとし、CSV XML exporterだけの専用変換は作らない。
 - `subscribers.insurance_symbol_export` とCSV XML出力で同じ結果になることをテストする。
+- 郵便番号、住所、電話番号のXML出力規則は旧exporterにのみ存在するため、identity共通fieldへ移す。
+- `export_fields.py` は共通fieldの戻り値を選択・集約するだけとし、変換ロジックを重複させない。
 
 ### Confirmed Export Decisions
 
@@ -471,7 +489,7 @@ scripts/lib/identity/export_fields.py
    - `validation_status = VALID` は出力する。
    - `WARNING/SKIPPED` の未実施等は初期版ではentryを省略し、nullFlavor変換は後続版で扱う。
    - `INVALID` は該当entryを出力しない。
-   - 基本情報norm失敗、法定項目NG、XSD不一致は個人XML生成失敗とする。
+   - 基本情報norm失敗、手動許可条件を満たさない法定項目NG、XSD不一致は個人XML生成失敗とする。
 2. 伝送単位設定
    - 同日分割送信回数は、同じ提出元・提出先・作成日の既存ZIPから `0` から `9` を自動採番する。
    - CLI/APIから `0` から `9` の数値を明示指定することもできる。
@@ -497,6 +515,7 @@ scripts/lib/identity/export_fields.py
 - ZIPが失敗した場合は出力履歴を登録せず、失敗内容を `etl_runs` / `etl_errors` に残す。
 - 再出力は過去履歴を更新・削除せず、別のZIP・個人XML履歴として追加する。
 - `csv_row_ledger.xml_export_status` は既出力判定用の技術状態として使用できるが、出力履歴の正本にはしない。
+- `xml_export_members` には、出力時点の `manual_export_approved`、理由、承認者、承認日時をsnapshotとして保存する。
 - 初回出力日時や出力回数は、専用履歴から取得する。
 - 履歴テーブルの責務は、誰を、いつ、どのRun・ZIP・個人XMLとして出力したかという事実の保存までとする。
 - 項目不足や誤りを修正して再出力した場合も、旧履歴は証跡として残す。どの出力を正本とするか、旧出力を無効化するかは初期版では判定しない。
