@@ -15,6 +15,7 @@ from scripts.lib.identity.primitive.digits import extract_digits, zero_pad
 class ExportSelectors:
     event_id: int
     facility_ids: tuple[int, ...] = ()
+    facility_codes: tuple[str, ...] = ()
     file_receipt_ids: tuple[int, ...] = ()
     ledger_ids: tuple[int, ...] = ()
     exam_month: str | None = None
@@ -77,6 +78,8 @@ def fetch_candidates(
     filters = ["crl.event_id = %s"]
     if selectors.facility_ids:
         filters.append(f"crl.exam_facility_id IN ({_in_clause(selectors.facility_ids, params)})")
+    if selectors.facility_codes:
+        filters.append(f"ef.exam_facility_code IN ({_in_clause(selectors.facility_codes, params)})")
     if selectors.file_receipt_ids:
         filters.append(f"crl.file_receipt_id IN ({_in_clause(selectors.file_receipt_ids, params)})")
     if selectors.ledger_ids:

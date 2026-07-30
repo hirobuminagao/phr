@@ -22,6 +22,7 @@ def args_for(config: Path, **overrides: object) -> argparse.Namespace:
         "config": str(config),
         "event_id": None,
         "facility_id": [],
+        "facility_code": [],
         "all_facilities": False,
         "file_receipt_id": [],
         "ledger_id": [],
@@ -50,6 +51,7 @@ def test_load_config_accepts_yaml_selectors(tmp_path: Path) -> None:
         tmp_path / "export.yml",
         event_id=2,
         facility_ids=[10, 20],
+        facility_codes=["0123456789", "9876543210"],
         file_receipt_ids=[101],
         ledger_ids=[1001, 1002],
         exam_month="2026-06",
@@ -62,6 +64,7 @@ def test_load_config_accepts_yaml_selectors(tmp_path: Path) -> None:
 
     assert config.selectors.event_id == 2
     assert config.selectors.facility_ids == (10, 20)
+    assert config.selectors.facility_codes == ("0123456789", "9876543210")
     assert config.selectors.file_receipt_ids == (101,)
     assert config.selectors.ledger_ids == (1001, 1002)
     assert config.selectors.exam_month == "2026-06"
@@ -71,11 +74,20 @@ def test_load_config_accepts_yaml_selectors(tmp_path: Path) -> None:
 
 
 def test_cli_selectors_override_yaml_lists(tmp_path: Path) -> None:
-    config_path = write_config(tmp_path / "export.yml", event_id=2, facility_ids=[10], file_receipt_ids=[101])
+    config_path = write_config(
+        tmp_path / "export.yml",
+        event_id=2,
+        facility_ids=[10],
+        facility_codes=["0123456789"],
+        file_receipt_ids=[101],
+    )
 
-    config = export_hia_xml.load_config(args_for(config_path, facility_id=[30], file_receipt_id=[202]))
+    config = export_hia_xml.load_config(
+        args_for(config_path, facility_id=[30], facility_code=["1111111111"], file_receipt_id=[202])
+    )
 
     assert config.selectors.facility_ids == (30,)
+    assert config.selectors.facility_codes == ("1111111111",)
     assert config.selectors.file_receipt_ids == (202,)
 
 

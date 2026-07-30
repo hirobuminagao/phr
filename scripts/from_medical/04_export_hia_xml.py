@@ -109,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event-id", type=int)
     scope = parser.add_mutually_exclusive_group()
     scope.add_argument("--facility-id", type=int, action="append", default=[])
+    scope.add_argument("--facility-code", action="append", default=[])
     scope.add_argument("--all-facilities", action="store_true")
     parser.add_argument("--file-receipt-id", type=int, action="append", default=[])
     parser.add_argument("--ledger-id", type=int, action="append", default=[])
@@ -143,6 +144,18 @@ def _int_tuple(value: Any) -> tuple[int, ...]:
     return tuple(int(item) for item in value)
 
 
+def _str_tuple(value: Any) -> tuple[str, ...]:
+    if value in (None, ""):
+        return ()
+    if isinstance(value, int):
+        return (str(value),)
+    if isinstance(value, str):
+        value = [part.strip() for part in value.split(",") if part.strip()]
+    if not isinstance(value, list | tuple):
+        raise ValueError(f"Expected string list, got {type(value).__name__}")
+    return tuple(str(item).strip() for item in value if str(item).strip())
+
+
 def _optional_split_no(value: Any) -> int | None:
     if value in (None, ""):
         return None
@@ -158,18 +171,22 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
     event_id = args.event_id if args.event_id is not None else int(data.get("event_id") or 0)
     all_facilities = bool(args.all_facilities or data.get("all_facilities", False))
     facility_ids = tuple(args.facility_id or ()) or _int_tuple(data.get("facility_ids"))
+    facility_codes = tuple(args.facility_code or ()) or _str_tuple(data.get("facility_codes"))
     file_receipt_ids = tuple(args.file_receipt_id or ()) or _int_tuple(data.get("file_receipt_ids"))
     ledger_ids = tuple(args.ledger_id or ()) or _int_tuple(data.get("ledger_ids"))
     exam_month = args.exam_month if args.exam_month is not None else data.get("exam_month")
     if event_id <= 0:
         raise ValueError("event_id is required")
-    if not all_facilities and not facility_ids and not file_receipt_ids and not ledger_ids:
-        raise ValueError("Specify --facility-id, --all-facilities, file_receipt_ids, or ledger_ids explicitly")
+    if not all_facilities and not facility_ids and not facility_codes and not file_receipt_ids and not ledger_ids:
+        raise ValueError(
+            "Specify --facility-id, --facility-code, --all-facilities, file_receipt_ids, or ledger_ids explicitly"
+        )
     if exam_month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(exam_month)):
         raise ValueError("exam_month must be YYYY-MM")
     selectors = ExportSelectors(
         event_id=event_id,
         facility_ids=facility_ids,
+        facility_codes=facility_codes,
         file_receipt_ids=file_receipt_ids,
         ledger_ids=ledger_ids,
         exam_month=None if not exam_month else str(exam_month),

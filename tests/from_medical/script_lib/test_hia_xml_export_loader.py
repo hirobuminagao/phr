@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from scripts.from_medical.script_lib.hia_xml_export_loader import (
+    ExportSelectors,
     check_reason_is_missing_only,
     decide_candidate,
     detect_unresolved_duplicates,
     facility_folder_name,
+    fetch_candidates,
     fetch_valid_items,
 )
 
@@ -98,3 +100,24 @@ def test_fetch_valid_items_passes_annex2_and_source_metadata() -> None:
     assert item.series_group_identifier == "2A020161001930149"
     assert item.series_group_relation_code == "COMP"
     assert "annex2_series_group_identifier" in cur.sql
+
+
+def test_fetch_candidates_can_filter_by_facility_code() -> None:
+    class Cursor:
+        def execute(self, sql: str, params: tuple[object, ...]) -> None:
+            self.sql = sql
+            self.params = params
+
+        def fetchall(self) -> list[dict]:
+            return []
+
+    cur = Cursor()
+    fetch_candidates(
+        cur,
+        selectors=ExportSelectors(event_id=2, facility_codes=("0123456789", "9876543210")),
+        health_db="health_exam_result",
+        master_db="phr_master",
+    )
+
+    assert "ef.exam_facility_code IN" in cur.sql
+    assert cur.params == (2, "0123456789", "9876543210")
