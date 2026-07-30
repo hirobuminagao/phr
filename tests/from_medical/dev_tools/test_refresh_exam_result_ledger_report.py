@@ -10,9 +10,13 @@ from scripts.from_medical.dev_tools import refresh_exam_result_ledger_report as 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def ddl_columns(path: Path) -> set[str]:
+def ddl_column_order(path: Path) -> list[str]:
     text = path.read_text(encoding="utf-8")
-    return set(re.findall(r"^\s*`([a-z0-9_]+)`\s+", text, flags=re.MULTILINE))
+    return re.findall(r"^\s*`([a-z0-9_]+)`\s+", text, flags=re.MULTILINE)
+
+
+def ddl_columns(path: Path) -> set[str]:
+    return set(ddl_column_order(path))
 
 
 def test_event_id_defaults_to_two(monkeypatch) -> None:
@@ -36,15 +40,30 @@ def test_source_mappings_cover_every_ledger_column() -> None:
 
 
 def test_report_projection_covers_every_report_table_column() -> None:
-    report_columns = ddl_columns(
+    report_ddl_path = (
         REPO_ROOT
         / "sql/ddl/health_exam_result/0100_health_exam_result__exam_result_ledger_report.sql"
     )
+    report_columns = ddl_columns(report_ddl_path)
+    report_column_order = ddl_column_order(report_ddl_path)
 
     assert len(report.REPORT_COLUMNS) == len(set(report.REPORT_COLUMNS))
     assert set(report.REPORT_COLUMNS) | {"report_row_id"} == report_columns
+    assert report_column_order == ["report_row_id", *report.REPORT_COLUMNS]
     assert set(report.XML_SOURCE_TO_REPORT.values()) <= set(report.REPORT_COLUMNS)
     assert set(report.CSV_SOURCE_TO_REPORT.values()) <= set(report.REPORT_COLUMNS)
+
+
+def test_xml_and_subscriber_columns_form_one_ordered_block() -> None:
+    expected_xml_block = list(report.XML_SOURCE_TO_REPORT.values())
+    block_start = report.REPORT_COLUMNS.index("ledger_id")
+    block_end = block_start + len(expected_xml_block)
+
+    assert list(report.REPORT_COLUMNS[block_start:block_end]) == expected_xml_block
+    assert report.REPORT_COLUMNS[block_end : block_end + 2] == (
+        "relationship_name",
+        "qualification_lost_date",
+    )
 
 
 def test_xml_insert_adds_subscriber_fields_and_nulls_csv_only_fields() -> None:

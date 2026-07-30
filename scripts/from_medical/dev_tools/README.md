@@ -13,12 +13,19 @@
 
 XMLとCSVは `ledger_type` で区別します。元ledgerの主キーは `ledger_id`、元ledgerの作成・更新日時は `source_created_at` / `source_updated_at` に格納します。CSVだけに存在する項目はXML行では `NULL`、XMLだけに存在する項目はCSV行では `NULL` です。
 
+`SELECT *` の列順は、報告管理列、`xml_ledger` 全項目の現行順、`relationship_name`、`qualification_lost_date`、CSV固有列の順です。XML項目と加入者2項目はExcel突合用に連続した一塊として保持します。
+
 実行前にmigrationを適用します。
 
 ```powershell
 Get-Content sql/migrations/health_exam_result/20260730_005_health_exam_result_create_exam_result_ledger_report.sql -Raw |
   mysql -u USER -p
+
+Get-Content sql/migrations/health_exam_result/20260730_006_health_exam_result_reorder_exam_result_ledger_report.sql -Raw |
+  mysql -u USER -p
 ```
+
+`005` を適用済みの環境では、列順を変更する `006` だけを追加適用します。
 
 件数だけ確認します。この実行ではDBを変更しません。
 
