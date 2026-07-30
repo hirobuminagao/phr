@@ -5,7 +5,7 @@ dev_db: dev_phr
 master_db: phr_master
 
 xsd_bundle_id: mhlw_v4_20230331_v08
-all_facilities: false
+all_facilities: true
 # YAML target selectors. Command-line options override these values.
 # Keep all lists empty unless the target should be fixed for this run.
 # facility_codes: exam_facilities.exam_facility_code, normally the 10-digit health exam facility code.
@@ -19,7 +19,7 @@ ledger_ids: []
 # exam_month: YYYY-MM. Use with all_facilities/facility_codes/facility_ids/file_receipt_ids/ledger_ids.
 exam_month:
 include_exported: false
-dry_run: true
+dry_run: false
 limit: 0
 # split_no: blank = auto 0-9, or specify 0-9 manually.
 split_no:
