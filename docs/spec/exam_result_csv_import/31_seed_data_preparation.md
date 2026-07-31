@@ -18,8 +18,17 @@ Implemented and expanded.
 3. `0002_draft_norm_variants_csv_sample_additions.sql`
 4. `0003_disable_oroku_csv_facility_code_mapping.sql`
 5. `0004_add_event2_actual_machine_folder_aliases.sql`
+6. `0005_add_heartcross_appended_postal_address_mapping.sql`
+7. `0006_add_murakami_iin_paper_csv_mapping.sql`
+8. `0007_add_urine_qualitative_dash_norm_variants.sql`
 
 既に `0000` から `0003` を適用済みの環境は、実機フォルダ一覧との差分である `0004` だけを追加適用する。
+
+`dev_phr` のローカル検証用seed:
+
+- `9999_local_sample_subscribers_for_csv_import.sql`
+
+これは m4 Docker の `m4_dev_phr` を対象にしたローカル検証専用seedである。実行環境には適用しない。
 
 レビュー用SQL:
 
