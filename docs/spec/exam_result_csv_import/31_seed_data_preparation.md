@@ -136,9 +136,14 @@ seedは再実行可能なupsert/delete+insert構成とし、SQL末尾で `COMMIT
 - NAME_KANA
 - BIRTHDAY
 - POSTALCODE
+- GENDER
+- EXAM_DATE
+- 住所
 
 ハートクロスCSVには健診日が存在しない。
 実装検証は止めず、`exam_date` は別データまたは健診機関回答で確定するまで暫定未設定とする。
+実行環境検証では末尾追加列 `GENDER` / `EXAM_DATE` / `住所` を使用する。
+郵便番号は既存 `POSTALCODE` を使用し、住所だけ末尾追加列から取り込む。
 
 初期seedに含める検査値:
 
