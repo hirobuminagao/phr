@@ -18,7 +18,7 @@ file_receipt_ids: []
 ledger_ids: []
 # exam_month: YYYY-MM. Use with all_facilities/facility_codes/facility_ids/file_receipt_ids/ledger_ids.
 exam_month:
-include_exported: true
+include_exported: false
 dry_run: false
 limit: 0
 # split_no: blank = auto 0-9, or specify 0-9 manually.
