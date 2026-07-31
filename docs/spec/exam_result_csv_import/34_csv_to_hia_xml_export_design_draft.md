@@ -4,8 +4,23 @@
 
 Initial implementation completed as of 2026-07-30. The confirmed behavior in this document is implemented; deferred items remain explicitly marked.
 
-この文書は、`csv_row_ledger` と `exam_item_values` から厚生労働省指定の健診結果XMLを生成する処理の叩き台である。
+この文書は、統合台帳 `exam_ledgers` と `exam_item_values` から厚生労働省指定の健診結果XMLを生成する処理の叩き台である。
 確定済み条件と、実装前に確認が必要な不足情報を分けて記載する。
+
+## Unified Ledger Direction
+
+CSV→XML出力まで一通り動作確認できたため、今後の改修はXML/CSV個別ledgerを直接拡張し続けるのではなく、統合台帳 `exam_ledgers` を中核にする。
+既存 `xml_ledger` / `csv_row_ledger` は直ちに廃止せず、移行元、原本証跡、後方互換のsource tableとして残す。
+
+`exam_ledgers` は、XML由来・CSV由来を問わず1人1健診結果を表す共通台帳とする。
+check、基本情報補正、加入者再突合、XML出力、出力履歴、HIAアップロード状態管理、画面表示は原則として `exam_ledgers.exam_ledger_id` を参照する。
+XML/CSV固有の情報は `source_type` とsource ledger IDで辿れるようにする。
+
+初期移行では以下を許容する。
+
+- 既存 `xml_ledger` / `csv_row_ledger` から `exam_ledgers` へ移行する。
+- 必要に応じて全ファイルを再scan/再importし、`exam_ledgers` を作り直す。
+- 個別ledgerの廃止タイミングは、実行環境で統合台帳ベースの取込、check、補正、XML出力が安定してから決める。
 
 ## Existing Exporter
 
@@ -29,22 +44,22 @@ scripts/kenshin_list_pydir/scripts/medi_export_xml.py
 
 ## Confirmed Export Eligibility
 
-CSV行は以下をすべて満たす場合にXML出力候補とする。
+統合ledgerは以下をすべて満たす場合にXML出力候補とする。
 
-1. `csv_row_ledger.health_exam_report_category` が空でない。
-2. `csv_row_ledger.program_code` が空でない。
-3. `csv_row_ledger.subscriber_match_status = 'MATCHED'`。
+1. `exam_ledgers.health_exam_report_category` が空でない。
+2. `exam_ledgers.program_code` が空でない。
+3. `exam_ledgers.subscriber_match_status = 'MATCHED'`。
 4. 次のいずれかを満たす。
-   - `csv_row_ledger.check_status = 'OK'`。
+   - `exam_ledgers.check_status = 'OK'`。
    - 法定チェックNGの原因が `MISSING` のみで、`manual_export_approved = 1`、理由、承認者、承認日時が設定されている。
 
 `03_check_exam_results.py` の `check_status` は現状、法定チェック結果を基準に `OK` / `NG` を設定している。
 したがって4は、法定チェックOKまたはMISSINGだけを理由として明示的に手動許可された状態を意味する。
 
 手動出力許可は、妊娠中等の確認済み理由により法定検査値がMISSINGとなる場合の例外とする。
-`exam_check_results` と `csv_row_ledger.check_status` は書き換えず、架空の検査値を作らない。MISSINGの該当entryはXMLへ出力しない。
+`exam_check_results` と `exam_ledgers.check_status` は書き換えず、架空の検査値を作らない。MISSINGの該当entryはXMLへ出力しない。
 `INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致は手動許可の対象外とする。
-既存の `manual_export_approved` / `manual_export_reason` に加え、`manual_export_approved_at` / `manual_export_approved_by` を `csv_row_ledger` へ追加する。手動許可時は理由、承認者、承認日時を必須とする。
+`manual_export_approved` / `manual_export_reason` / `manual_export_approved_at` / `manual_export_approved_by` は `exam_ledgers` へ持たせる。手動許可時は理由、承認者、承認日時を必須とする。
 
 上記4条件は業務上の出力候補条件とする。
 XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致などが発生した場合は、出力候補であっても生成エラーとして扱う。
@@ -58,7 +73,7 @@ XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致�
 | event | 必須。画面を開いたeventを固定する |
 | 健診機関 | 必須。複数選択可。全施設も明示選択とする |
 | 受領ファイル | 任意。`file_receipt_id` の複数選択可。未指定時は選択施設内の全対象CSV |
-| 健診年月 | 任意。`csv_row_ledger.exam_date` に対する単月 `YYYY-MM` 指定 |
+| 健診年月 | 任意。`exam_ledgers.exam_date` に対する単月 `YYYY-MM` 指定 |
 | 個人 | 任意。画面で表示された論理健診結果を複数選択可 |
 
 各selectorはAND条件で適用する。
@@ -76,7 +91,7 @@ XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致�
 ### Logical Exam Record
 
 将来、同一人物の結果が複数の受領CSVに分かれ、一方のCSVにしか存在しない検査項目を組み合わせて1件のXMLを作る可能性がある。
-そのため、外部仕様およびexporter内部では `csv_row_ledger` 1行をそのまま1件の出力単位にしない。
+そのため、外部仕様およびexporter内部では source ledger 1行をそのまま1件の出力単位にしない。
 
 1件の個人XMLに対応する出力単位を「論理健診結果」とし、次の構造で扱う。
 
@@ -345,7 +360,7 @@ ZIPは各健診機関フォルダの `03_健診結果（アップロードデー
 ## Basic Information Normalization
 
 XML基本情報は照合用 `match` ではなく、格納・出力用のnorm値を使う。
-元値は `csv_row_ledger` のCSV由来値とし、`subscribers` の値へ置き換えない。
+元値は `xml_ledger` または `csv_row_ledger` の原本由来値とし、`subscribers` の値へ直接置き換えない。
 `subscribers` で使用している共通identity libと同じ関数を利用する。
 `export_fields.py` はこれらの既存関数を呼び出し、XML出力値のprojectionと必須項目エラーの集約だけを行う。同じ値生成・妥当性確認を再実装しない。
 
@@ -381,6 +396,130 @@ exporter側に別ロジックを重複実装せず、共通lib側の `export` �
 
 住所・郵便番号・電話番号のXML出力normは旧exporterに実装されている。
 これらは旧ファイルから新しい共通export helperへ移し、CSV exporter固有処理として重複実装しない。
+
+### Address Completion for HIA Export
+
+厚生労働省V08 XSD上、受診者 `patientRole/addr` は `minOccurs=0` であり、XSD検証だけでは住所欠落をエラーにできない。
+一方、HIA受付では受診者住所・郵便番号が必須扱いとなるため、XML出力前の基本情報projectionで住所・郵便番号を解決する。
+
+住所補完は以下の順で行う。
+
+1. CSV/XML原本に住所・郵便番号がある場合は原本値をXML出力normへ通す。
+2. 業務上利用を許可された加入者住所等がある場合は、その値を補完候補にする。
+3. 郵便番号があり住所がない場合は、日本郵便の郵便番号データ由来の住所マスタから都道府県・市区町村・町域を補完する。
+4. 郵便番号でも住所を解決できない場合は、HIA提出用の代替値として郵便番号 `000-0000`、住所 `－` を使用する。
+
+郵便番号マスタは日本郵便公式の「住所の郵便番号（1レコード1行、UTF-8形式）」を元に作成する。
+個人住所の丁目、番地、建物名は郵便番号から推測しない。
+日本郵便データに含まれる「以下に掲載がない場合」等の表現はXMLへそのまま出力せず、住所文字列として使用できる表記へ整備する。
+
+日本郵便は郵便番号・デジタルアドレスAPIも提供しているが、初期実装では採用しない。
+APIはデータ更新の手間が少ない一方、ビジネスアカウント登録、API利用権限、通信可否、障害時の運用、呼び出し証跡管理が必要になる。
+今回の用途はHIA XML出力時の住所補完であり、リアルタイム性は不要なため、公式CSVを定期取得してmaster DBへ取り込む方式を採用する。
+
+採用する入力ファイルは「住所の郵便番号（1レコード1行、UTF-8形式）」とする。
+従来形式CSVは、町域が複数行に分割されるケースがあり、住所補完masterとして扱うには取込時の結合・解釈が増える。
+1レコード1行形式は文字コードがUTF-8で、郵便番号単位のmaster化に向くため、今回の補完処理の主入力とする。
+事業所の個別郵便番号CSVは、加入者住所補完の初期対象には含めない。
+会社・事業所宛の個別郵便番号が必要になった場合は、別masterとして追加し、通常住所masterより優先するかを後続で決める。
+実ファイル `utf_ken_all.csv` の精査結果とDDL案は `36_postal_code_master_design.md` に記載する。
+
+郵便番号マスタの初期候補は以下とする。
+
+| column | meaning |
+| --- | --- |
+| `postal_code` | 7桁またはXML出力用ハイフン付き郵便番号の元値 |
+| `prefecture` | 都道府県 |
+| `city` | 市区町村 |
+| `town_area_raw` | 日本郵便データの町域原文 |
+| `town_area_normalized` | XML出力用に整備した町域 |
+| `address_for_xml` | 都道府県・市区町村・整備済み町域を連結した補完住所 |
+| `source_file_name` | 取り込み元ファイル名 |
+| `source_file_updated_at` | 日本郵便データの更新日または取得確認日 |
+| `source_row_sha256` | 元行の同一性確認用hash |
+| `normalization_note` | 「以下に掲載がない場合」等を整備した理由 |
+| `created_at` / `updated_at` | 管理日時 |
+
+住所補完または代替値使用を行った場合、原本値は上書きせず、XMLに出した値、元値、補完元、補完理由、処理Run、処理日時を記帳する。
+
+基本情報補正はCSV由来とXML由来の両方を対象にする。
+`xml_ledger` と `csv_row_ledger` に現在XML出力で使う補正値を横持ちし、変更履歴は `ledger_type` / `ledger_id` でXML/CSVを区別する共通テーブルへ残す。
+補正対象は初期版では以下に限定する。
+
+- `insurer_number`
+- `insurance_symbol`
+- `insurance_number`
+- `insurance_branch_number`
+- `exam_ticket_number`
+- `exam_ticket_expires_on`
+- `name_kana`
+- `postal_code`
+- `address`
+
+`insurer_number` はCSVにない場合、取込時にeventまたはfile_receipt由来で自動補完する。
+XMLでは原本XML内の保険者番号を優先するが、欠落や明確な誤りがある場合は同じ補正機構で扱う。
+手修正対象というより、自動補完値と補完元を追跡する対象とする。
+
+各ledger側には、各補正項目ごとに補正値と最新変更履歴IDを持たせる。
+たとえば氏名カナなら以下のように扱う。
+
+```text
+name_kana_raw = 長尾
+name_kana_corrected = 佐藤
+name_kana_correction_history_id = 3
+```
+
+現行 `xml_ledger` はCSV側にある枝番、郵便番号、住所、受診券番号、受診券有効期限を十分に保持していない。
+XML由来も同じ画面・同じ出力projectionで補正するため、補正対象項目の原本値または補正値を受け止めるカラムを `xml_ledger` 側にも追加する。
+XMLに存在しない項目は原本値NULLとして保持し、補正値と履歴で補える状態にする。
+
+履歴テーブルは、項目ごとの変更チェーンを保持する。
+前回履歴IDを持つことで、`active` flagに依存せず、どの値からどの値へ変わったかを追えるようにする。
+
+```text
+exam_ledger_basic_info_correction_histories
+  correction_history_id
+  ledger_type
+  ledger_id
+  field_name
+  before_value
+  after_value
+  correction_source
+  correction_reason
+  previous_correction_history_id
+  etl_run_id
+  corrected_by
+  corrected_at
+  created_at
+```
+
+例:
+
+```text
+row原本値: 氏名カナ = 長尾
+履歴ID 1: field=name_kana, before=長尾, after=田中, previous=NULL
+履歴ID 3: field=name_kana, before=田中, after=佐藤, previous=1
+ledger現在値: name_kana_corrected=佐藤, name_kana_correction_history_id=3
+```
+
+XML出力projectionは、補正値がある項目は補正値を優先し、なければ原本値を使用する。
+どちらを採用したかと、参照した変更履歴IDはXML出力履歴または出力時snapshotに残す。
+
+修正画面では、加入者突合済みの行について `subscribers` テーブルの値を補正候補として表示する。
+候補表示は手入力の代替ではなく、入力支援と確認材料とする。
+利用者が `subscribers` 由来の候補を採用した場合も、直接ledger原本値を上書きせず、通常の補正操作として履歴テーブルへ記録する。
+この場合の `correction_source` は `SUBSCRIBER` とし、候補値を採用した事実、採用者、採用日時、理由を残す。
+
+`subscribers` から候補表示する初期項目は以下とする。
+
+- 保険証記号
+- 保険証番号
+- 枝番
+- 氏名カナ
+- 郵便番号
+- 住所
+
+受診券番号と受診券有効期限は `subscribers` に正となる値がない場合があるため、初期候補には含めず、必要になった時点で予約・受診券管理側の参照元を別途決める。
 
 ## Exam Item Values
 

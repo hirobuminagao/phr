@@ -1,0 +1,43 @@
+CREATE TABLE `phr_master`.`postal_code_addresses` (
+  `postal_code_address_id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `jis_code` char(5) NOT NULL COMMENT '全国地方公共団体コード',
+  `old_postal_code` varchar(5) DEFAULT NULL COMMENT '旧郵便番号5桁',
+  `postal_code` char(7) NOT NULL COMMENT '郵便番号7桁',
+  `postal_code_formatted` varchar(8) NOT NULL COMMENT 'NNN-NNNN形式の郵便番号',
+  `prefecture_kana` varchar(64) DEFAULT NULL,
+  `city_kana` varchar(128) DEFAULT NULL,
+  `town_area_kana` varchar(512) DEFAULT NULL,
+  `prefecture` varchar(64) NOT NULL,
+  `city` varchar(128) NOT NULL,
+  `town_area_raw` varchar(512) NOT NULL COMMENT '日本郵便CSVの町域名原文',
+  `town_area_normalized` varchar(512) NOT NULL DEFAULT '' COMMENT 'XML出力用に整備した町域名',
+  `address_for_xml` varchar(512) NOT NULL COMMENT 'XML出力用補完住所',
+  `is_multi_postal_town` tinyint(1) NOT NULL DEFAULT 0 COMMENT '一町域が二以上の郵便番号で表される',
+  `has_koaza_numbering` tinyint(1) NOT NULL DEFAULT 0 COMMENT '小字毎に番地が起番されている',
+  `has_chome` tinyint(1) NOT NULL DEFAULT 0 COMMENT '丁目を有する町域',
+  `is_multi_town_postal` tinyint(1) NOT NULL DEFAULT 0 COMMENT '一つの郵便番号で二以上の町域を表す',
+  `update_flag` varchar(1) NOT NULL DEFAULT '0' COMMENT '日本郵便CSVの更新表示',
+  `change_reason_code` varchar(1) NOT NULL DEFAULT '0' COMMENT '日本郵便CSVの変更理由',
+  `normalization_note` varchar(255) DEFAULT NULL,
+  `data_source_name` varchar(255) NOT NULL DEFAULT '日本郵便 住所の郵便番号 1レコード1行 UTF-8',
+  `data_source_file_name` varchar(255) NOT NULL,
+  `data_source_file_sha256` char(64) DEFAULT NULL,
+  `data_source_note` text,
+  `source_file_updated_at` datetime(3) DEFAULT NULL,
+  `source_row_sha256` char(64) NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+
+  PRIMARY KEY (`postal_code_address_id`),
+  UNIQUE KEY `uq_postal_code_addresses_source_row` (`source_row_sha256`),
+  KEY `idx_postal_code_addresses_postal_code` (`postal_code`),
+  KEY `idx_postal_code_addresses_formatted` (`postal_code_formatted`),
+  KEY `idx_postal_code_addresses_jis_postal` (`jis_code`, `postal_code`),
+  KEY `idx_postal_code_addresses_active_postal` (`is_active`, `postal_code`),
+  KEY `idx_postal_code_addresses_data_source` (`data_source_name`),
+  KEY `idx_postal_code_addresses_pref_city` (`prefecture`, `city`)
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_ja_0900_as_cs;

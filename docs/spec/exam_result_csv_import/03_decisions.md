@@ -111,6 +111,15 @@ Current as of 2026-07-29.
 - 既存 `csv_loader` 実装と `docs/spec/common_lib/csv_loader.md` の想定APIには差分があるため、既存利用スクリプトに影響を与えない追加APIとして `CsvLoadResult` / `CsvHeaderSet` 形式へ拡張する案を基本とする。
 - 既存 `load_csv()` の戻り値は `CSVLoader` のまま維持し、構造化結果が必要な処理向けに `load_csv_result()` などの追加APIを作る案を基本とする。
 
+### Unified Exam Ledger
+
+- CSV→XML出力まで一通り動作確認できたため、今後の補正、再突合、XML出力、出力画面、HIAアップロード状態管理は、XML/CSV個別ledgerではなく統合台帳 `exam_ledgers` を中核にする。
+- 既存 `xml_ledger` / `csv_row_ledger` は直ちに廃止しない。移行完了までは取込済みデータの移行元、既存スクリプトの後方互換、再scan/再import時の由来保持として扱う。
+- 新規改修では、可能な限り `exam_ledgers.exam_ledger_id` を参照する。`exam_item_values`、`exam_check_results`、基本情報補正履歴、XML出力履歴も統合ledger IDを正として扱えるようにする。
+- `exam_ledgers` はXML/CSV共通の1人1健診結果台帳とし、`source_type`, `source_xml_ledger_id`, `source_csv_row_ledger_id`, `file_receipt_id`, `event_id`, 加入者突合情報、基本情報、check/export状態、補正現在値を持つ。
+- XML/CSV固有の原本証跡は、既存個別ledgerまたはsource detailへ残す。統合台帳は業務処理・画面・XML出力の共通面とする。
+- 移行方法は2案を許容する。既存 `xml_ledger` / `csv_row_ledger` から `exam_ledgers` へデータ移行する方法、または全ファイルを再scan/再importして `exam_ledgers` を作り直す方法である。実行環境で安定確認してから個別ledger廃止タイミングを決める。
+
 ### Initial `exam_facilities` Shape
 
 - `exam_facilities` は健診機関そのものを表す親マスタとする。
@@ -357,6 +366,18 @@ Current as of 2026-07-29.
 - 再出力は通常運用として想定し、過去の出力履歴を更新・削除せず、新しいZIP・個人XML履歴として追加する。
 - 出力履歴は「誰をどのZIPへ出力したか」という事実を保存する責務に限定する。個人単位の業務状態、修正版の正本判定、後続業務データへの反映時点は後続版で決める。
 - XML基本情報の値生成・妥当性確認は、同じ処理を持つ既存identity共通libを必ず使用する。`export_fields.py` は既存関数を組み合わせる薄いprojectionとし、同じ正規化ロジックを再実装しない。
+- HIA受付では受診者住所・郵便番号が必須扱いとなるため、CSV/XMLに住所がない場合でも補正・代替値でXML出力できる運用を用意する。
+- 住所補完は、まずCSV/XML原本値、次に加入者住所等の業務的に利用許可された値、次に日本郵便の郵便番号データ由来の住所マスタを使用する。
+- 郵便番号マスタは日本郵便の公式「住所の郵便番号（1レコード1行、UTF-8形式）」を入力候補とし、郵便番号から都道府県・市区町村・町域までの住所を補完する。丁目、番地、建物名など個人住所の詳細は推測しない。
+- 日本郵便APIは初期実装では採用しない。ビジネスアカウント登録、API権限、通信可否、障害時運用が必要になるため、リアルタイム性を求めない今回の住所補完では公式CSVをmaster DBへ取り込む方式を採用する。
+- 従来形式CSVや事業所の個別郵便番号CSVは初期対象外とする。事業所個別郵便番号が必要になった場合は、通常住所masterとは別masterとして後続で追加する。
+- 日本郵便データに含まれる「以下に掲載がない場合」等の表現は、XML出力用にそのまま使わず、住所文字列として扱える表記へ整備する。整備規則と元表記は記録する。
+- 郵便番号からも住所を補完できない場合は、HIA提出用の代替値として郵便番号 `000-0000`、住所 `－`（全角ハイフン）を使用できる。
+- 住所補完または代替値使用を行った場合は、XMLに出した値、元値、補完元、補完理由、処理日時、処理者または処理Runを必ず記帳する。原本CSV/XML値そのものは上書きしない。
+- 基本情報の補正はCSVだけでなくXML取込にも必要である。`xml_ledger` と `csv_row_ledger` の両方に現在XML出力で使う補正値と項目別の最新変更履歴IDを持たせ、変更履歴は `ledger_type` / `ledger_id` でXML/CSVを区別する共通テーブルへ項目ごとの変更チェーンとして残す。
+- 初期の補正対象は `insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branch_number`, `exam_ticket_number`, `exam_ticket_expires_on`, `name_kana`, `postal_code`, `address` とする。
+- 補正履歴は `field_name`, `before_value`, `after_value`, `correction_source`, `correction_reason`, `previous_correction_history_id`, `etl_run_id`, `corrected_by`, `corrected_at` を持つ。`active` flagではなく、ledger側の最新履歴IDで現在値を示す。
+- 基本情報修正画面では、加入者突合済みの行に対して `subscribers` の保険証記号、保険証番号、枝番、氏名カナ、郵便番号、住所を補正候補として表示する。採用時は `correction_source = 'SUBSCRIBER'` の補正履歴として記録し、原本値を上書きしない。
 - 人向けの不足情報CSVを追加するかは後続で決め、初期XML実装を止めない。`manual_export_approved` / `manual_export_reason` は不足情報CSVとは別概念とする。
 
 ### Production Folder Aliases
