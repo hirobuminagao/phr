@@ -1,6 +1,8 @@
 -- Seed: Murakami Iin paper-to-CSV mapping.
--- Source sample: /Users/hiro/Downloads/紙からcsvサンプル.csv (not stored in repo; contains paper-derived sample rows).
--- Sample file sha256 at design time: 83cbddcfdea7e2c81f818b9f545594cbb458ebe410bdfdc631d4c3b11107a210
+-- Source sample: docs/spec/exam_result_csv_import/samples/murakami_iin/murakami_iin_paper_sample_001.csv
+-- Original local file: /Users/hiro/Downloads/紙からcsvサンプル.csv
+-- Original local file sha256 at design time: 83cbddcfdea7e2c81f818b9f545594cbb458ebe410bdfdc631d4c3b11107a210
+-- Workspace anonymized sample file sha256: 3c741e230800488acd7e23afcdef7b6f9e4ec42615d4abcfe375c5a8474baa11
 -- The CSV has two header rows: row 1 is the active key row; row 2 is Japanese context/label.
 
 USE `phr_master`;
