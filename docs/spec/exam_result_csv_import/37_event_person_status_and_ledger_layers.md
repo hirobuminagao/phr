@@ -208,6 +208,8 @@ HIAアップロード済み、アップロードエラー、再提出対象な�
    - `scripts/from_medical/dev_tools/sync_exam_ledgers.py` を追加済み。
 3. `event_person_statuses` を `event + subscriber` 単位で作成・更新するスクリプトを作る。
 4. `03_check_exam_results.py` を統合ledger単位でも実行できるようにする。
+   - `--ledger-type EXAM` で `exam_ledgers` を対象にする。
+   - 既存の `--ledger-type XML` / `CSV` 実行時も、対応する `exam_ledgers.check_status` / `check_reason` へ結果を反映する。
 5. 複数source候補を検出し、`MULTIPLE_SOURCE_ROWS_UNRESOLVED` を出せるようにする。
 6. 明示選択されたsourceを結合し、結合後 `exam_item_values` を作る。
 7. 結合後checkを実行し、`event_person_statuses` へ現在状態を反映する。

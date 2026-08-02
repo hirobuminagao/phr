@@ -1,6 +1,7 @@
 CREATE TABLE `health_exam_result`.`exam_check_results` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `ledger_type` varchar(16) NOT NULL DEFAULT 'XML',
+  `exam_ledger_id` bigint unsigned DEFAULT NULL,
   `xml_ledger_id` bigint unsigned DEFAULT NULL,
   `csv_row_ledger_id` bigint unsigned DEFAULT NULL,
   `event_id` bigint NOT NULL,
@@ -60,6 +61,7 @@ CREATE TABLE `health_exam_result`.`exam_check_results` (
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
   PRIMARY KEY (`id`),
+  KEY `idx_exam_check_results_exam_ledger` (`exam_ledger_id`),
   KEY `idx_exam_check_results_xml_ledger` (`xml_ledger_id`),
   KEY `idx_exam_check_results_ledger_type_xml` (`ledger_type`, `xml_ledger_id`),
   KEY `idx_exam_check_results_ledger_type_csv` (`ledger_type`, `csv_row_ledger_id`),

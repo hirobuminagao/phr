@@ -74,6 +74,16 @@ Get-Content sql/migrations/health_exam_result/20260802_002_health_exam_result_ad
 python scripts/from_medical/dev_tools/sync_exam_ledgers.py
 ```
 
+法定チェックを統合ledger単位で再実行する場合は、同期後に次を実行します。
+
+```powershell
+python scripts/from_medical/03_check_exam_results.py --ledger-type EXAM
+```
+
+既存どおり `--ledger-type XML` / `--ledger-type CSV` を実行した場合も、対応する
+`exam_ledgers.check_status` / `check_reason` へ結果を反映します。
+ただし複数sourceを結合した `COMBINED` ledger は、統合ledger単位のcheck対象です。
+
 件数だけ確認します。この実行ではDBを変更しません。
 
 ```powershell

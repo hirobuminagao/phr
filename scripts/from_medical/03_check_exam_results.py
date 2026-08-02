@@ -45,8 +45,9 @@ CHECK_STATUS_WARNING = "WARNING"
 CHECK_STATUS_NG = "NG"
 LEDGER_TYPE_XML = "XML"
 LEDGER_TYPE_CSV = "CSV"
+LEDGER_TYPE_EXAM = "EXAM"
 LEDGER_TYPE_ALL = "ALL"
-LEDGER_TYPES = {LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_ALL}
+LEDGER_TYPES = {LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM, LEDGER_TYPE_ALL}
 
 ARTICLE44_OK_STATUSES = {STATUS_OK, STATUS_CALCULATED, STATUS_ALTERNATIVE}
 ARTICLE44_PROBLEM_STATUSES = {STATUS_MISSING, STATUS_INVALID}
@@ -134,9 +135,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None, help="Override maximum xml_ledger rows to process. 0 means unlimited.")
     parser.add_argument(
         "--ledger-type",
-        choices=(LEDGER_TYPE_ALL, LEDGER_TYPE_XML, LEDGER_TYPE_CSV),
+        choices=(LEDGER_TYPE_ALL, LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM),
         default=None,
-        help="Ledger source to check. Default is ALL.",
+        help="Ledger source to check. EXAM uses unified exam_ledgers. Default is ALL.",
     )
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
@@ -341,6 +342,7 @@ def insert_check_result(
 ) -> None:
     row: dict[str, Any] = {
         "ledger_type": ledger["ledger_type"],
+        "exam_ledger_id": ledger.get("exam_ledger_id"),
         "xml_ledger_id": ledger["id"] if ledger["ledger_type"] == LEDGER_TYPE_XML else None,
         "csv_row_ledger_id": ledger["id"] if ledger["ledger_type"] == LEDGER_TYPE_CSV else None,
         "event_id": ledger["event_id"],
@@ -373,8 +375,20 @@ def delete_existing_results(
     if not ledger_refs:
         return 0
     deleted = 0
+    exam_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_EXAM]
     xml_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_XML]
     csv_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_CSV]
+    if exam_ids:
+        placeholders = ", ".join(["%s"] * len(exam_ids))
+        cur.execute(
+            f"""
+            DELETE FROM {qname(health_db)}.exam_check_results
+            WHERE ledger_type = %s
+              AND exam_ledger_id IN ({placeholders})
+            """,
+            (LEDGER_TYPE_EXAM, *exam_ids),
+        )
+        deleted += int(cur.rowcount or 0)
     if xml_ids:
         placeholders = ", ".join(["%s"] * len(xml_ids))
         cur.execute(
@@ -435,6 +449,52 @@ def update_csv_row_ledger_check(
         WHERE csv_row_ledger_id = %s
         """,
         (check_status, check_reason, ledger_id),
+    )
+
+
+def update_exam_ledger_check(
+    cur: Any,
+    *,
+    health_db: str,
+    exam_ledger_id: int,
+    check_status: str,
+    check_reason: str | None,
+) -> None:
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db)}.exam_ledgers
+        SET check_status = %s,
+            check_reason = %s
+        WHERE exam_ledger_id = %s
+        """,
+        (check_status, check_reason, exam_ledger_id),
+    )
+
+
+def update_exam_ledgers_by_source_check(
+    cur: Any,
+    *,
+    health_db: str,
+    ledger_type: str,
+    ledger_id: int,
+    check_status: str,
+    check_reason: str | None,
+) -> None:
+    if ledger_type == LEDGER_TYPE_XML:
+        source_column = "source_xml_ledger_id"
+    elif ledger_type == LEDGER_TYPE_CSV:
+        source_column = "source_csv_row_ledger_id"
+    else:
+        return
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db)}.exam_ledgers
+        SET check_status = %s,
+            check_reason = %s
+        WHERE source_type = %s
+          AND {qname(source_column)} = %s
+        """,
+        (check_status, check_reason, ledger_type, ledger_id),
     )
 
 
@@ -500,7 +560,53 @@ def fetch_target_csv_ledgers(
     return list(cur.fetchall())
 
 
+def fetch_target_exam_ledgers(
+    cur: Any,
+    *,
+    health_db: str,
+    event_id: int,
+    limit: int = 0,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [event_id]
+    limit_sql = ""
+    if limit:
+        limit_sql = "LIMIT %s"
+        params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          'EXAM' AS ledger_type,
+          exam_ledger_id AS id,
+          exam_ledger_id,
+          source_type,
+          source_xml_ledger_id,
+          source_csv_row_ledger_id,
+          event_id,
+          subscriber_id,
+          hia_subscriber_id
+        FROM {qname(health_db)}.exam_ledgers
+        WHERE event_id = %s
+          AND (
+            (source_type = 'XML' AND xml_status = 'READY')
+            OR (source_type = 'CSV' AND row_status IN ('READY', 'ERROR'))
+            OR source_type = 'COMBINED'
+          )
+        ORDER BY exam_ledger_id
+        {limit_sql}
+        """,
+        tuple(params),
+    )
+    return list(cur.fetchall())
+
+
 def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[str, Any]]:
+    if config.ledger_type == LEDGER_TYPE_EXAM:
+        return fetch_target_exam_ledgers(
+            cur,
+            health_db=config.health_db,
+            event_id=config.event_id,
+            limit=config.limit,
+        )
     if config.ledger_type == LEDGER_TYPE_XML:
         return fetch_target_xml_ledgers(
             cur,
@@ -531,6 +637,19 @@ def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[st
     return ledgers[: config.limit] if config.limit else ledgers
 
 
+def resolve_value_lookup_ref(ledger: Mapping[str, Any]) -> tuple[str, int]:
+    ledger_type = str(ledger["ledger_type"])
+    if ledger_type != LEDGER_TYPE_EXAM:
+        return ledger_type, int(ledger["id"])
+
+    source_type = str(ledger.get("source_type") or "")
+    if source_type == LEDGER_TYPE_XML and ledger.get("source_xml_ledger_id") is not None:
+        return LEDGER_TYPE_XML, int(ledger["source_xml_ledger_id"])
+    if source_type == LEDGER_TYPE_CSV and ledger.get("source_csv_row_ledger_id") is not None:
+        return LEDGER_TYPE_CSV, int(ledger["source_csv_row_ledger_id"])
+    return LEDGER_TYPE_EXAM, int(ledger["exam_ledger_id"])
+
+
 def process_ledgers(
     health_conn: Any,
     health_cur: Any,
@@ -549,10 +668,11 @@ def process_ledgers(
 
     for ledger in ledgers:
         ledger_id = int(ledger["id"])
+        value_ledger_type, value_ledger_id = resolve_value_lookup_ref(ledger)
         value_map = load_article44_value_map(
             health_cur,
-            ledger_type=str(ledger["ledger_type"]),
-            ledger_id=ledger_id,
+            ledger_type=value_ledger_type,
+            ledger_id=value_ledger_id,
             required_namecodes=required_namecodes,
             result_db=config.health_db,
         )
@@ -593,10 +713,26 @@ def process_ledgers(
             specific_summary=specific_summary,
         )
         summary.rows_inserted += 1
-        if ledger["ledger_type"] == LEDGER_TYPE_XML:
+        if ledger["ledger_type"] == LEDGER_TYPE_EXAM:
+            update_exam_ledger_check(
+                health_cur,
+                health_db=config.health_db,
+                exam_ledger_id=ledger_id,
+                check_status=check_status,
+                check_reason=check_reason,
+            )
+        elif ledger["ledger_type"] == LEDGER_TYPE_XML:
             update_xml_ledger_check(
                 health_cur,
                 health_db=config.health_db,
+                ledger_id=ledger_id,
+                check_status=check_status,
+                check_reason=check_reason,
+            )
+            update_exam_ledgers_by_source_check(
+                health_cur,
+                health_db=config.health_db,
+                ledger_type=LEDGER_TYPE_XML,
                 ledger_id=ledger_id,
                 check_status=check_status,
                 check_reason=check_reason,
@@ -605,6 +741,14 @@ def process_ledgers(
             update_csv_row_ledger_check(
                 health_cur,
                 health_db=config.health_db,
+                ledger_id=ledger_id,
+                check_status=check_status,
+                check_reason=check_reason,
+            )
+            update_exam_ledgers_by_source_check(
+                health_cur,
+                health_db=config.health_db,
+                ledger_type=LEDGER_TYPE_CSV,
                 ledger_id=ledger_id,
                 check_status=check_status,
                 check_reason=check_reason,
