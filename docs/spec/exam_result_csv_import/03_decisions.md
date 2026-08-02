@@ -119,6 +119,10 @@ Current as of 2026-07-29.
 - `exam_ledgers` はXML/CSV共通の1人1健診結果台帳とし、`source_type`, `source_xml_ledger_id`, `source_csv_row_ledger_id`, `file_receipt_id`, `event_id`, 加入者突合情報、基本情報、check/export状態、補正現在値を持つ。
 - XML/CSV固有の原本証跡は、既存個別ledgerまたはsource detailへ残す。統合台帳は業務処理・画面・XML出力の共通面とする。
 - 移行方法は2案を許容する。既存 `xml_ledger` / `csv_row_ledger` から `exam_ledgers` へデータ移行する方法、または全ファイルを再scan/再importして `exam_ledgers` を作り直す方法である。実行環境で安定確認してから個別ledger廃止タイミングを決める。
+- `exam_ledgers` の上位に、eventに対する人単位の現在状態を管理する `event_person_statuses` 相当のレイヤーを設ける。
+- `event_person_statuses` は、受領済み、突合済み、補正待ち、施設確認待ち、XML出力可能、XML出力済み、HIAアップロード済み、再提出対象など、人単位の業務状態を持つ。
+- XML出力候補判定は `exam_ledgers`、出力後の業務状態管理とHIAアップロード状態は `event_person_statuses` の責務とする。
+- 複数結果を1つにする処理は、source ledgerを直接出力するのではなく、結合後の `exam_ledgers` を作成または更新する処理として扱う。
 
 ### Initial `exam_facilities` Shape
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Refresh the report-only XML/CSV exam result ledger snapshot."""
+"""Refresh the report-only unified exam result ledger snapshot."""
 
 from __future__ import annotations
 
@@ -30,120 +30,10 @@ ETL_PHASE = "REPORT_EXAM_RESULT_LEDGER"
 ETL_SOURCE = "FROM_MEDICAL"
 
 
-def _same_columns(*columns: str) -> dict[str, str]:
-    return {column: column for column in columns}
-
-
-XML_SOURCE_TO_REPORT = {
-    "id": "ledger_id",
-    **_same_columns(
-        "event_id",
-        "subscriber_id",
-        "hia_subscriber_id",
-        "xml_sha256",
-        "xml_file_name",
-        "document_id",
-        "insurer_number",
-        "facility_code",
-        "facility_name",
-        "exam_date",
-        "name_kana_raw",
-        "name_kana_match",
-        "insurance_symbol_raw",
-        "insurance_symbol_match",
-        "insurance_number_raw",
-        "insurance_number_match",
-        "birthdate",
-        "gender_code",
-        "report_category_code",
-        "program_type_code",
-        "identity_hash",
-        "person_id_custom",
-        "subscriber_match_status",
-        "subscriber_match_method",
-        "subscriber_match_reason",
-        "exam_item_status",
-        "exam_item_reason",
-        "xml_status",
-        "xml_reason",
-        "check_status",
-        "check_reason",
-        "xml_export_status",
-        "manual_export_approved",
-        "manual_export_reason",
-    ),
-    "created_at": "source_created_at",
-    "updated_at": "source_updated_at",
-}
-
-CSV_SOURCE_TO_REPORT = {
-    "csv_row_ledger_id": "ledger_id",
-    "etl_run_id": "source_etl_run_id",
-    **_same_columns(
-        "file_receipt_id",
-        "event_id",
-        "src_row_no",
-        "src_line_no",
-        "row_sha256",
-        "raw_row_json",
-        "actual_header_sha256",
-        "mapping_version",
-        "subscriber_id",
-        "hia_subscriber_id",
-        "insurer_number",
-        "exam_facility_id",
-        "facility_code",
-        "facility_name",
-        "exam_date",
-        "name_full_raw",
-        "name_kana_raw",
-        "name_kana_match",
-        "insurance_symbol_raw",
-        "insurance_symbol_match",
-        "insurance_number_raw",
-        "insurance_number_match",
-        "insurance_branch_number_raw",
-        "insurance_branch_number_match",
-        "birthdate",
-        "gender_code",
-        "gender_raw",
-        "health_exam_report_category",
-        "program_code",
-        "postal_code",
-        "address",
-        "exam_facility_postal_code",
-        "exam_facility_address",
-        "exam_facility_phone_number",
-        "identity_hash",
-        "person_id_custom",
-        "subscriber_match_status",
-        "subscriber_match_method",
-        "subscriber_match_reason",
-        "exam_item_status",
-        "exam_item_count",
-        "exam_item_error_count",
-        "exam_item_reason",
-        "row_status",
-        "row_reason",
-        "check_status",
-        "check_reason",
-        "xml_export_status",
-        "manual_export_approved",
-        "manual_export_reason",
-        "manual_export_approved_at",
-        "manual_export_approved_by",
-        "resume_approved",
-        "resume_approved_at",
-        "resume_approved_by",
-        "resume_approved_reason",
-    ),
-    "created_at": "source_created_at",
-    "updated_at": "source_updated_at",
-}
-
 REPORT_COLUMNS = (
     "report_run_id",
     "ledger_type",
+    "exam_ledger_id",
     "ledger_id",
     "event_id",
     "subscriber_id",
@@ -231,32 +121,33 @@ class ReportSummary:
     dry_run: bool
     xml_source_rows: int = 0
     csv_source_rows: int = 0
+    combined_source_rows: int = 0
     existing_report_rows: int = 0
     deleted_rows: int = 0
-    xml_inserted_rows: int = 0
-    csv_inserted_rows: int = 0
+    inserted_rows_count: int = 0
 
     @property
     def source_rows(self) -> int:
-        return self.xml_source_rows + self.csv_source_rows
+        return self.xml_source_rows + self.csv_source_rows + self.combined_source_rows
 
     @property
     def inserted_rows(self) -> int:
-        return self.xml_inserted_rows + self.csv_inserted_rows
+        return self.inserted_rows_count
 
     def to_message(self) -> str:
         return (
             f"exam_result_ledger_report event_id={self.event_id} "
             f"source_xml={self.xml_source_rows} source_csv={self.csv_source_rows} "
+            f"source_combined={self.combined_source_rows} "
             f"existing={self.existing_report_rows} deleted={self.deleted_rows} "
-            f"inserted_xml={self.xml_inserted_rows} inserted_csv={self.csv_inserted_rows} "
+            f"inserted={self.inserted_rows_count} "
             f"dry_run={self.dry_run}"
         )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Refresh a report table from XML/CSV exam result ledgers."
+        description="Refresh a report table from unified exam_ledgers."
     )
     parser.add_argument("--event-id", type=int, default=2)
     parser.add_argument("--dry-run", action="store_true")
@@ -279,33 +170,63 @@ def validate_config(config: ReportConfig) -> None:
     qname(config.dev_db)
 
 
-def _source_map(ledger_type: str) -> tuple[str, dict[str, str]]:
-    if ledger_type == "XML":
-        return "xml_ledger", XML_SOURCE_TO_REPORT
-    if ledger_type == "CSV":
-        return "csv_row_ledger", CSV_SOURCE_TO_REPORT
-    raise ValueError(f"unsupported ledger_type: {ledger_type}")
+def source_count(cur: Any, *, schema: str, event_id: int, source_type: str) -> int:
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM {qname(schema)}.`exam_ledgers`
+        WHERE `event_id` = %s
+          AND `source_type` = %s
+        """,
+        (event_id, source_type),
+    )
+    row = cur.fetchone() or {}
+    return int(row.get("cnt") or 0)
 
 
-def build_insert_sql(config: ReportConfig, ledger_type: str) -> str:
-    source_table, source_map = _source_map(ledger_type)
-    report_to_source = {target: source for source, target in source_map.items()}
+def load_table_columns(cur: Any, *, schema: str, table: str) -> set[str]:
+    cur.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s
+          AND TABLE_NAME = %s
+        """,
+        (schema, table),
+    )
+    return {str(row["COLUMN_NAME"]) for row in cur.fetchall()}
+
+
+def build_insert_sql(config: ReportConfig, *, subscriber_columns: set[str]) -> str:
     select_expressions: list[str] = []
 
     for target in REPORT_COLUMNS:
         if target == "report_run_id":
             expression = "%s"
         elif target == "ledger_type":
-            expression = f"'{ledger_type}'"
+            expression = "l.`source_type`"
+        elif target == "exam_ledger_id":
+            expression = "l.`exam_ledger_id`"
+        elif target == "ledger_id":
+            expression = """
+                CASE l.`source_type`
+                    WHEN 'XML' THEN l.`source_xml_ledger_id`
+                    WHEN 'CSV' THEN l.`source_csv_row_ledger_id`
+                    ELSE l.`exam_ledger_id`
+                END
+            """
         elif target == "relationship_name":
-            expression = "s.`relationship_name`"
+            expression = "s.`relationship_name`" if "relationship_name" in subscriber_columns else "NULL"
         elif target == "qualification_lost_date":
-            expression = "s.`qualification_lost_date`"
+            expression = "s.`qualification_lost_date`" if "qualification_lost_date" in subscriber_columns else "NULL"
         elif target == "refreshed_at":
             expression = "CURRENT_TIMESTAMP(3)"
+        elif target == "source_created_at":
+            expression = "COALESCE(l.`source_created_at`, l.`created_at`)"
+        elif target == "source_updated_at":
+            expression = "COALESCE(l.`source_updated_at`, l.`updated_at`)"
         else:
-            source_column = report_to_source.get(target)
-            expression = f"l.{qname(source_column)}" if source_column else "NULL"
+            expression = f"l.{qname(target)}"
         select_expressions.append(f"{expression} AS {qname(target)}")
 
     insert_columns = ",\n            ".join(qname(column) for column in REPORT_COLUMNS)
@@ -316,7 +237,7 @@ def build_insert_sql(config: ReportConfig, ledger_type: str) -> str:
         )
         SELECT
             {select_columns}
-        FROM {qname(config.health_db)}.{qname(source_table)} AS l
+        FROM {qname(config.health_db)}.`exam_ledgers` AS l
         LEFT JOIN {qname(config.dev_db)}.`subscribers` AS s
           ON s.`id` = l.`subscriber_id`
         WHERE l.`event_id` = %s
@@ -345,10 +266,10 @@ def insert_ledger_rows(
     *,
     config: ReportConfig,
     report_run_id: int,
-    ledger_type: str,
 ) -> int:
+    subscriber_columns = load_table_columns(cur, schema=config.dev_db, table="subscribers")
     cur.execute(
-        build_insert_sql(config, ledger_type),
+        build_insert_sql(config, subscriber_columns=subscriber_columns),
         (report_run_id, config.event_id),
     )
     return int(cur.rowcount)
@@ -358,17 +279,13 @@ def load_summary(cur: Any, config: ReportConfig) -> ReportSummary:
     return ReportSummary(
         event_id=config.event_id,
         dry_run=config.dry_run,
-        xml_source_rows=count_rows(
+        xml_source_rows=source_count(cur, schema=config.health_db, event_id=config.event_id, source_type="XML"),
+        csv_source_rows=source_count(cur, schema=config.health_db, event_id=config.event_id, source_type="CSV"),
+        combined_source_rows=source_count(
             cur,
             schema=config.health_db,
-            table="xml_ledger",
             event_id=config.event_id,
-        ),
-        csv_source_rows=count_rows(
-            cur,
-            schema=config.health_db,
-            table="csv_row_ledger",
-            event_id=config.event_id,
+            source_type="COMBINED",
         ),
         existing_report_rows=count_rows(
             cur,
@@ -386,7 +303,7 @@ def refresh_report(conn: Any, config: ReportConfig) -> ReportSummary:
         summary = load_summary(cur, config)
         if summary.source_rows == 0:
             raise RuntimeError(
-                f"event_id={config.event_id} has no XML or CSV ledger rows; report was not changed"
+                f"event_id={config.event_id} has no exam_ledger rows; run sync_exam_ledgers.py first"
             )
         if config.dry_run:
             return summary
@@ -407,17 +324,10 @@ def refresh_report(conn: Any, config: ReportConfig) -> ReportSummary:
 
         try:
             summary.deleted_rows = delete_report_rows(cur, config)
-            summary.xml_inserted_rows = insert_ledger_rows(
+            summary.inserted_rows_count = insert_ledger_rows(
                 cur,
                 config=config,
                 report_run_id=run_id,
-                ledger_type="XML",
-            )
-            summary.csv_inserted_rows = insert_ledger_rows(
-                cur,
-                config=config,
-                report_run_id=run_id,
-                ledger_type="CSV",
             )
             etl_finish_run(
                 cur,

@@ -2,6 +2,7 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `report_row_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '報告用行ID',
   `report_run_id` bigint unsigned NOT NULL COMMENT 'この報告行を生成したhealth_exam_result.etl_runs.run_id',
   `ledger_type` varchar(16) NOT NULL COMMENT 'XMLまたはCSV',
+  `exam_ledger_id` bigint unsigned DEFAULT NULL COMMENT '統合ledger ID',
 
   -- xml_ledgerの全カラムを元の順番で保持するブロック
   `ledger_id` bigint unsigned NOT NULL COMMENT 'xml_ledger.idまたはcsv_row_ledger.csv_row_ledger_id',
@@ -80,6 +81,7 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `refreshed_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '報告行の更新日時',
 
   PRIMARY KEY (`report_row_id`),
+  UNIQUE KEY `uq_exam_result_ledger_report_exam_ledger` (`exam_ledger_id`),
   UNIQUE KEY `uq_exam_result_ledger_report_source` (`ledger_type`, `ledger_id`),
   KEY `idx_exam_result_ledger_report_event` (`event_id`),
   KEY `idx_exam_result_ledger_report_subscriber` (`subscriber_id`),

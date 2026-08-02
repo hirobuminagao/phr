@@ -69,6 +69,9 @@
 - `35_social_insurance_fund_xml_sample_review.md`
   - 社会保険診療報酬支払基金の特定健診XMLサンプルをV08 XSD・付属2と照合した結果。
   - 基本、詳細、任意項目と、一連検査グループ・基準範囲・判定の出力基準を整理する。
+- `37_event_person_status_and_ledger_layers.md`
+  - 複数結果結合、統合台帳、eventに対する人単位の状況管理レイヤーを整理する。
+  - `exam_ledgers` と `event_person_statuses` の責務分離、出力制御の置き場所、実装順をまとめる。
 
 ## ADR Policy
 
