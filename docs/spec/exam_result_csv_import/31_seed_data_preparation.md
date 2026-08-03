@@ -34,7 +34,7 @@ Implemented and expanded.
 
 `0009_fix_questionnaire_2003_norm_codes.sql` は、付属1の `1.2.392.200119.6.2003`（問診結果コード: `1=はい`, `2=いいえ`）に合わせ、旧辞書由来の `Y` / `N` 正規化値を `1` / `2` へ補正するseedである。
 
-`0010_add_questionnaire_variants_from_runtime_errors.sql` は、実行環境でCSV再取込後に残った問診系CD/COの表記揺れを追加する差分seedである。初期追加値は、喫煙の「以前は吸っていたが、最近 1 ヶ月間は吸っていない」と、飲酒頻度の「飲酒（週5～6日）」である。
+`0010_add_questionnaire_variants_from_runtime_errors.sql` は、実行環境でCSV再取込後に残ったCD/COの表記揺れを追加する差分seedである。初期追加値は、喫煙の「以前は吸っていたが、最近 1 ヶ月間は吸っていない」、飲酒頻度の「飲酒（週5～6日）」、脂質服薬の「コレステロール　薬剤治療中」、便潜血の「（＋）」である。
 `Y` / `N` や `true` / `false` はraw aliasとして受け止めてもよいが、CDの `normalized_code` は付属1のコード値に寄せる。
 
 `dev_phr` のローカル検証用seed:

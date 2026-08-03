@@ -38,6 +38,30 @@ INSERT INTO `phr_master`.`norm_variants` (
     90,
     1,
     'runtime alias: drinking frequency with item label'
+  ),
+  (
+    '1.2.392.200119.6.19100',
+    'コレステロール　薬剤治療中',
+    'コレステロール　薬剤治療中',
+    '1',
+    '1.2.392.200119.6.19100',
+    'はい',
+    0,
+    90,
+    1,
+    'runtime alias: medication lipid under treatment'
+  ),
+  (
+    '1.2.392.200119.6.2100',
+    '（＋）',
+    '（＋）',
+    '2',
+    '1.2.392.200119.6.2100',
+    '陽性',
+    0,
+    90,
+    1,
+    'runtime alias: fecal occult blood positive with full-width parentheses'
   )
 ON DUPLICATE KEY UPDATE
   `raw_token_norm` = VALUES(`raw_token_norm`),
