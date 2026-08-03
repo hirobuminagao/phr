@@ -223,6 +223,19 @@ def _digits(value: Any, width: int, field: str) -> str:
     return padded
 
 
+def exam_month_yyyymm(value: Any) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y%m")
+    if isinstance(value, date):
+        return value.strftime("%Y%m")
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return datetime.strptime(text, "%Y-%m-%d").strftime("%Y%m")
+    if re.fullmatch(r"\d{8}", text):
+        return datetime.strptime(text, "%Y%m%d").strftime("%Y%m")
+    raise ValueError(f"exam_date: invalid value {value!r}")
+
+
 def choose_split_no(facility_output_root: Path, facility_code: str, insurer_number: str, file_date: str, requested: int | None) -> int:
     pattern = re.compile(rf"^{re.escape(facility_code)}_{re.escape(insurer_number)}_{file_date}([0-9])_1\.zip$")
     used = {
@@ -368,7 +381,7 @@ def build_group(
     timestamp: str,
     group: list[dict[str, Any]],
     run_id: int | None,
-) -> tuple[Path | None, tuple[str, str, str, int]]:
+) -> tuple[Path | None, tuple[str, str, str, str, str, int]]:
     first = group[0]
     facility_code = _digits(first["master_facility_code"], 10, "facility_code")
     insurer_number = _digits(first["insurer_number"], 8, "insurer_number")
@@ -376,6 +389,10 @@ def build_group(
     if len(folder_names) != 1:
         raise ValueError(f"FACILITY_FOLDER_CONFLICT: {sorted(folder_names)}")
     folder_name = next(iter(folder_names))
+    exam_months = {exam_month_yyyymm(row.get("exam_date")) for row in group}
+    if len(exam_months) != 1:
+        raise ValueError(f"EXAM_MONTH_CONFLICT: {sorted(exam_months)}")
+    exam_month = next(iter(exam_months))
     for row in group:
         ledger_code = _digits(row.get("facility_code"), 10, "ledger.facility_code")
         if ledger_code != facility_code:
@@ -389,10 +406,11 @@ def build_group(
         phone=normalize_phone_number_export(first.get("master_facility_phone_number")),
     )
     output_root = result_root / folder_name / UPLOAD_DIR_NAME
+    month_output_root = output_root / timestamp / exam_month
     file_date = config.file_date.strftime("%Y%m%d")
-    split_no = choose_split_no(output_root, facility_code, insurer_number, file_date, config.split_no)
+    split_no = choose_split_no(month_output_root, facility_code, insurer_number, file_date, config.split_no)
     root_name = root_dir_name(facility_code, insurer_number, file_date, split_no)
-    final_dir = output_root / timestamp
+    final_dir = month_output_root
     final_zip = final_dir / f"{root_name}.zip"
     bundle_dir = DEFAULT_XSD_ROOT / config.xsd_bundle_id
     if not bundle_dir.is_dir():
@@ -442,7 +460,7 @@ def build_group(
         temp_zip = temp / final_zip.name
         make_zip(package_root, temp_zip)
         if config.dry_run:
-            return None, (facility_code, facility.name, folder_name, len(group))
+            return None, (facility_code, facility.name, folder_name, exam_month, final_zip.name, len(group))
 
         final_dir.mkdir(parents=True, exist_ok=True)
         if final_zip.exists():
@@ -465,19 +483,19 @@ def build_group(
     except Exception:
         final_zip.unlink(missing_ok=True)
         raise
-    return final_zip, (facility_code, facility.name, folder_name, len(group))
+    return final_zip, (facility_code, facility.name, folder_name, exam_month, final_zip.name, len(group))
 
 
-def write_operator_log(result_root: Path, timestamp: str, rows: list[tuple[str, str, str, int]]) -> Path:
+def write_operator_log(result_root: Path, timestamp: str, rows: list[tuple[str, str, str, str, str, int]]) -> Path:
     log_dir = result_root / HISTORY_DIR_NAME / timestamp
     log_dir.mkdir(parents=True, exist_ok=True)
     path = log_dir / "健診結果XML出力履歴.csv"
     temporary_path = path.with_suffix(".csv.tmp")
     with temporary_path.open("w", encoding="utf-8-sig", newline="") as fp:
         writer = csv.writer(fp)
-        writer.writerow(["健診機関コード", "健診機関名", "健診機関フォルダ名", "出力フォルダ", "人数"])
-        for facility_code, facility_name, folder_name, count in rows:
-            writer.writerow([facility_code, facility_name, folder_name, timestamp, count])
+        writer.writerow(["健診機関コード", "健診機関名", "健診機関フォルダ名", "出力フォルダ", "健診実施月", "ZIP名", "人数"])
+        for facility_code, facility_name, folder_name, exam_month, zip_name, count in rows:
+            writer.writerow([facility_code, facility_name, folder_name, timestamp, exam_month, zip_name, count])
     temporary_path.replace(path)
     return path
 
@@ -522,13 +540,13 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                             deduplicated.append(row)
                     ready = deduplicated
                 summary.candidates_ready = len(ready)
-                groups: dict[tuple[int, str], list[dict[str, Any]]] = defaultdict(list)
+                groups: dict[tuple[int, str, str], list[dict[str, Any]]] = defaultdict(list)
                 for row in ready:
                     insurer = _digits(row.get("insurer_number"), 8, "insurer_number")
-                    groups[(int(row["exam_facility_id"]), insurer)].append(row)
+                    groups[(int(row["exam_facility_id"]), insurer, exam_month_yyyymm(row.get("exam_date")))].append(row)
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                operator_rows: list[tuple[str, str, str, int]] = []
+                operator_rows: list[tuple[str, str, str, str, str, int]] = []
                 for _, group in groups.items():
                     try:
                         zip_path, operator_row = build_group(
