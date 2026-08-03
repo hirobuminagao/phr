@@ -21,8 +21,14 @@ Implemented and expanded.
 6. `0005_add_heartcross_appended_postal_address_mapping.sql`
 7. `0006_add_murakami_iin_paper_csv_mapping.sql`
 8. `0007_add_urine_qualitative_dash_norm_variants.sql`
+9. `0008_fill_base_norm_variants_from_export_sql.sql`
 
-既に `0000` から `0003` を適用済みの環境は、実機フォルダ一覧との差分である `0004` だけを追加適用する。
+既に `0000` から `0003` を適用済みの環境でも、旧export辞書を未投入の場合は `0008` を追加適用する。
+`0004` 以降は実装・検証で増えた差分seedであり、実行環境の最終適用済み地点に応じて追加適用する。
+
+`0008_fill_base_norm_variants_from_export_sql.sql` は、旧 `sql/export_sql/norm_variants.sql` の812件を `phr_master.norm_variants` へ補充するseedである。
+`INSERT IGNORE` のため、既に投入済みの辞書やCSVサンプルで追加済みの揺れは上書きしない。
+実行環境で旧export辞書を未投入のまま `0002` / `0007` だけを当てた場合、CD/CO項目の基本値まで `NORMALIZE_VARIANT_NOT_FOUND` になるため、追加seedとして適用する。
 
 `dev_phr` のローカル検証用seed:
 
