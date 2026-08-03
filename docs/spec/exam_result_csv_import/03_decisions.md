@@ -123,6 +123,8 @@ Current as of 2026-07-29.
 - `exam_ledgers` の上位に、eventに対する人単位の現在状態を管理する既存 `dev_phr.person_event` を使う。
 - 増減しやすい状態項目、check集計、出力状態、HIAアップロード状態、要対応理由は `dev_phr.person_event_status_items` に縦持ちする。
 - `person_event` は汎用イベント管理ではなく、健診イベントに対する人単位の進捗・確認状態に限定して使う。
+- `person_event` の母集団は結果受領者ではなく、`event_id` から解決した保険者番号に一致する `dev_phr.subscribers` 全員とする。
+- 資格喪失者も `person_event` 母集団から除外しない。資格喪失日は除外条件ではなく、状況確認・資格状態判定のための状態項目として扱う。
 - 予約申込、受診、結果ファイル受領、健診結果check、HIA状態、健保・事業所納品状態は、eventごとの人チェック項目として `person_event_status_items` に集約する。
 - 年度内複数受診や特殊健診を想定し、`person_event` は人×eventの親、個別の受診・結果は `exam_ledgers` の複数件として扱う。
 - 未突合ledgerはまだ人として確定していないため `person_event` を作らず、`exam_ledgers` 側の未突合状態として扱う。

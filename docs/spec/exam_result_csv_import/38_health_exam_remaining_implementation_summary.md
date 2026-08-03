@@ -58,12 +58,17 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 - `sync_exam_ledgers.py` によるbackfillは実装済み。
 - 完全な通常フロー組込みは未完了。
 
-### 2. Person Event Status Sync
+### 2. Person Event Population and Status Sync
 
 健診eventに対する人の状況管理を `dev_phr.person_event` / `person_event_status_items` に寄せる。
 
 必要なこと:
 
+- `event_id` から `dev_phr.event.insurer_number` を取得し、同じ保険者番号の `dev_phr.subscribers` を全件抽出する。
+- `event_id + subscriber_id` で `person_event` の母集団を作る。
+- 資格喪失者も除外しない。資格喪失日は状況確認用の状態として保持する。
+- `subscribers` の追加・氏名・資格喪失日・identity系情報更新に追従できるよう、母集団同期は再実行可能なupsertにする。
+- 結果状態同期は母集団系itemを削除せず、結果受領、check、XML出力状態だけを更新する。
 - `exam_ledgers` から人単位の受領件数、check件数、XML出力可否、出力済み件数を同期する。
 - HIAダッシュボード状態、資格状態、HIAダウンロードXML有無、健保納品、事業所納品をitemとして同期できるようにする。
 - 未突合ledgerは `person_event` にしない。
@@ -71,6 +76,7 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 現状:
 
 - `person_event_status_items` DDLと同期スクリプトの初期版は実装済み。
+- 現同期スクリプトは `exam_ledgers` に存在する突合済み加入者だけから `person_event` を作るため、未受領者を含むevent全体の母集団作成としては不足している。
 - HIA状態、予約、納品系sourceとの接続は未実装。
 
 ### 3. HIA Dashboard CSV New Format
@@ -222,17 +228,18 @@ XML出力後、人がHIAへアップロードしたか、その後健保・事�
 
 ## Proposed Priority
 
-1. HIAダッシュボードCSV新フォーマット対応。
-2. `exam_ledgers` / `person_event_status_items` の同期を通常運用に近づける。
-3. 基本情報補正のDB構造と履歴。
-4. 郵便番号マスタと住所補完。
-5. 複数source結合と `ledger_type = EXAM` の採用値生成。
-6. XML出力制御UI。
-7. HIAアップロード、HIAダウンロード、健保・事業所納品ステータス。
-8. 紙入力画面。
+1. `event_id` の保険者番号から `subscribers` 全員を抽出し、`person_event` 母集団を作る。
+2. HIAダッシュボードCSV新フォーマット対応。
+3. `exam_ledgers` / `person_event_status_items` の同期を通常運用に近づける。
+4. 基本情報補正のDB構造と履歴。
+5. 郵便番号マスタと住所補完。
+6. 複数source結合と `ledger_type = EXAM` の採用値生成。
+7. XML出力制御UI。
+8. HIAアップロード、HIAダウンロード、健保・事業所納品ステータス。
+9. 紙入力画面。
 
-納品が迫る場合は、1、3、4を先に進める。
-XMLとCSVを合わせて法定を満たす必要が出た時点で、5を優先する。
+納品が迫る場合は、1、2、4、5を先に進める。
+XMLとCSVを合わせて法定を満たす必要が出た時点で、6を優先する。
 
 ## Current Risk
 

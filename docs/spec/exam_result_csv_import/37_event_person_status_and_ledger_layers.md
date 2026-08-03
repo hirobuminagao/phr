@@ -103,6 +103,48 @@ exam_ledgers
 年度内複数受診を潰して1件にしない。
 画面では `person_event` から、その人に紐づく複数の `exam_ledgers` を展開して確認できる形を目指す。
 
+### Person Event Population Source
+
+`person_event` の母集団は、結果ファイルを受領した人ではなく、eventに紐づく保険者の加入者全員とする。
+
+初期作成手順は以下とする。
+
+```text
+dev_phr.event
+  event_idからinsurer_numberを取得
+        |
+        v
+dev_phr.subscribers
+  insurer_number一致の加入者を全件抽出
+  資格喪失者も除外しない
+        |
+        v
+dev_phr.person_event
+  event_id + subscriber_id で人単位の箱を作成
+        |
+        v
+dev_phr.person_event_status_items
+  資格状態、結果受領、check、HIA状態、納品状態をitemとして埋める
+```
+
+資格喪失日は対象者リストから除外するための条件に使わない。
+健診eventの状況確認では、資格喪失者も含めて「このevent上でどう扱うべきか」を確認する必要があるためである。
+資格喪失情報は `person_event_status_items` の資格状態item、または `person_event.gap_flag` / `gap_reason` の判断材料として扱う。
+
+現在の `sync_person_event_status_items.py` は `exam_ledgers` に存在し、かつ加入者突合済みの人だけを同期対象にしている。
+これは結果受領後の集計には使えるが、未受領者を含むevent全体の母集団作成としては不足している。
+そのため、次段階では以下の2ステップに分ける。
+
+1. `event_id` から `subscribers` を抽出し、`person_event` の母集団を作成・更新する。
+2. `exam_ledgers`、HIAダッシュボード、予約、納品などのsourceから `person_event_status_items` を更新する。
+
+`subscribers` はHIA取込や健保データ反映により、加入者追加、氏名・記号番号・資格喪失日・identity系情報の更新が発生する。
+そのため母集団作成は初回insertではなく、再実行可能なupsert処理とする。
+`subscribers` に追加された加入者は `person_event` へ追加し、既存加入者の `person_id_custom` / `identity_hash` / 資格喪失状態は最新の `subscribers` から再反映する。
+
+結果状態同期は、母集団系itemを消さない。
+`EVENT_POPULATION_STATUS`、`QUALIFICATION_STATUS`、`QUALIFICATION_LOST_DATE` は母集団同期の責務とし、健診結果同期は結果受領・check・XML出力に関するitemだけを更新する。
+
 ### Out of Scope
 
 以下は今回の人単位状態管理へ直接混ぜない。
@@ -255,6 +297,9 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
 初期 item_code:
 
 - `PERSON_STATUS`: 人単位の代表状態。`XML_EXPORTED`, `XML_EXPORTABLE`, `CHECK_NG`, `CHECK_PENDING`, `RESULT_RECEIVED` など。
+- `EVENT_POPULATION_STATUS`: event母集団上の状態。`IN_EVENT_INSURER_POPULATION`, `NOT_IN_SUBSCRIBER_MASTER` など。
+- `QUALIFICATION_LOST_DATE`: 加入者台帳上の資格喪失日。
+- `QUALIFICATION_STATUS`: event上で確認する資格状態。資格喪失者も母集団から除外せず、このitemで状態を表す。
 - `RESERVATION_APPLIED_AT`: 予約申込日。
 - `EXAM_VISITED_AT`: 受診日または受診日時。
 - `RESULT_FILE_RECEIVED_COUNT`: 結果ファイル受領件数。

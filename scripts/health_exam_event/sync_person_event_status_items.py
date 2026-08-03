@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -27,6 +27,22 @@ HEALTH_DB = "health_exam_result"
 DEV_DB = "dev_phr"
 ETL_PHASE = "SYNC_PERSON_EVENT_STATUS_ITEMS"
 ETL_SOURCE = "FROM_MEDICAL"
+RESULT_STATUS_ITEM_CODES = (
+    "PERSON_STATUS",
+    "RESULT_RECEIVED_COUNT",
+    "MATCHED_LEDGER_COUNT",
+    "CHECK_OK_LEDGER_COUNT",
+    "CHECK_NG_LEDGER_COUNT",
+    "CHECK_PENDING_LEDGER_COUNT",
+    "EXPORTABLE_LEDGER_COUNT",
+    "EXPORTED_LEDGER_COUNT",
+    "LATEST_EXAM_LEDGER_ID",
+    "LATEST_EXAM_DATE",
+    "LATEST_FACILITY_CODE",
+    "LATEST_FACILITY_NAME",
+    "REQUIRES_BASIC_INFO_CORRECTION",
+    "REQUIRES_MANUAL_EXPORT_APPROVAL",
+)
 
 
 @dataclass(frozen=True)
@@ -235,6 +251,7 @@ def upsert_person_events(cur: Any, config: SyncConfig) -> int:
 
 def delete_status_items(cur: Any, config: SyncConfig) -> int:
     dev = qname(config.dev_db)
+    placeholders = ", ".join(["%s"] * len(RESULT_STATUS_ITEM_CODES))
     cur.execute(
         f"""
         DELETE i
@@ -243,8 +260,9 @@ def delete_status_items(cur: Any, config: SyncConfig) -> int:
           ON p.`person_event_id` = i.`person_event_id`
         WHERE p.`event_id` = %s
           AND i.`source_system` = %s
+          AND i.`item_code` IN ({placeholders})
         """,
-        (config.event_id, ETL_SOURCE),
+        (config.event_id, ETL_SOURCE, *RESULT_STATUS_ITEM_CODES),
     )
     return int(cur.rowcount)
 

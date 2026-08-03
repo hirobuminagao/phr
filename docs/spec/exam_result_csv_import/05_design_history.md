@@ -1433,7 +1433,7 @@ XML/CSV個別ledgerから統合台帳 `exam_ledgers` への方針転換
 - 増減しやすい状態項目は `dev_phr.person_event_status_items` に `person_event_id + item_code` で縦持ちする。
 - `health_exam_result.event_person_statuses` 案は採用しない。
 - 未突合ledgerはまだ人として確定していないため `person_event` を作らず、`exam_ledgers` 側の未突合状態として残す。
-- `exam_ledgers` から `person_event` / `person_event_status_items` へ同期する `scripts/from_medical/dev_tools/sync_person_event_status_items.py` を追加する。
+- `exam_ledgers` から `person_event` / `person_event_status_items` へ同期する `scripts/health_exam_event/sync_person_event_status_items.py` を追加する。
 - 初期item_codeは、代表状態、受領件数、check件数、XML出力可能件数、XML出力済み件数、最新ledger参照、最新健診日、最新健診機関、補正待ち、手動出力許可有無とする。
 
 ---
@@ -1532,3 +1532,26 @@ HIAダッシュボード状態と健診人チェックの接続
 - 過年度eventの状態判定に `hia_dashboard_status` の最新値を直接使わず、必要に応じて年度スナップショットを参照する。
 - HIAダッシュボードCSV新フォーマットでは、HIA加入者IDが存在する場合は加入者照合の第一候補とする。
 - HIA取込の新フォーマット対応は、健診結果CSV取込とは別責務として実装する。
+
+---
+
+## DH-20260803-06 / 2026-08-03 JST
+
+### テーマ
+
+person_event母集団の作成元
+
+### 背景
+
+- `person_event` を `exam_ledgers` の突合済み結果から作るだけでは、結果未受領者が人チェック一覧に出ない。
+- 予約データはまだ取り込めていないため、予約を母集団の正本にすることもできない。
+- event_id=2 は特定の保険者・年度の健診eventであり、まずはeventの保険者番号に属する加入者全員を確認対象にする必要がある。
+- 資格喪失者も、event上でどう扱うべきか確認が必要であり、母集団から除外すると状況確認から漏れる。
+
+### 決定・実装内容
+
+- `person_event` の母集団は、結果受領者ではなく、`dev_phr.event.insurer_number` に一致する `dev_phr.subscribers` 全員とする。
+- 資格喪失者も母集団から除外しない。
+- 資格喪失日は除外条件ではなく、`person_event_status_items` の `QUALIFICATION_STATUS` / `QUALIFICATION_LOST_DATE` として保持する。
+- 母集団作成は `scripts/health_exam_event/sync_person_event_population.py` として独立させる。
+- `scripts/health_exam_event/sync_person_event_status_items.py` は、母集団作成済みの `person_event` に対して、健診結果受領、check、XML出力状態を埋める役割へ寄せる。

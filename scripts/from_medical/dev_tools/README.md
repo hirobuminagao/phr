@@ -38,47 +38,17 @@ python scripts/from_medical/dev_tools/sync_exam_ledgers.py
 
 `--event-id` を省略した場合は `event_id=2` を対象にします。
 
-## `sync_person_event_status_items.py`
-
-指定した `event_id` の `health_exam_result.exam_ledgers` を、既存の人単位親
-`dev_phr.person_event` と可変状態項目 `dev_phr.person_event_status_items`
-へ同期します。
-
-`person_event` は加入者が確定した人だけを対象にします。未突合ledgerは
-`exam_ledgers` の未突合状態として残し、加入者確定後に人単位へ反映します。
-`person_event_status_items` は `person_event_id + item_code` の縦持ちで、
-代表 `exam_ledger_id`、check件数、出力可能件数、出力済み件数などを保持します。
-
-実行前にmigrationを適用します。
-
-```powershell
-Get-Content sql/migrations/dev_phr/20260803_001_dev_phr_create_person_event.sql -Raw |
-  mysql -u USER -p
-
-Get-Content sql/migrations/dev_phr/20260803_002_dev_phr_create_person_event_status_items.sql -Raw |
-  mysql -u USER -p
-```
-
-件数だけ確認します。この実行ではDBを変更しません。
-
-```powershell
-python scripts/from_medical/dev_tools/sync_person_event_status_items.py --dry-run
-```
-
-人単位状態を更新します。
-
-```powershell
-python scripts/from_medical/dev_tools/sync_person_event_status_items.py
-```
-
 基本の実行順は以下です。
 
 ```text
 sync_exam_ledgers.py
 03_check_exam_results.py --ledger-type EXAM
-sync_person_event_status_items.py
+scripts/health_exam_event/sync_person_event_population.py
+scripts/health_exam_event/sync_person_event_status_items.py
 refresh_exam_result_ledger_report.py
 ```
+
+人単位event状態の同期は `scripts/health_exam_event/` に移動しました。
 
 ## `refresh_exam_result_ledger_report.py`
 
