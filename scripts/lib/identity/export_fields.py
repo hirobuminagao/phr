@@ -41,10 +41,13 @@ def _required(result: Mapping[str, Any], key: str, field_name: str) -> str:
 def build_xml_export_fields(
     row: Mapping[str, Any],
     *,
+    insurer_number_override: Any = None,
     postal_code_override: Any = None,
     address_override: Any = None,
 ) -> XmlExportFields:
-    insurer = normalize_insurer_number(row.get("insurer_number"))
+    insurer = normalize_insurer_number(
+        row.get("insurer_number") if insurer_number_override is None else insurer_number_override
+    )
     symbol = normalize_insurance_symbol(row.get("insurance_symbol_raw"))
     number = normalize_insurance_number(row.get("insurance_number_raw"))
     kana = normalize_name_kana_full(row.get("name_kana_raw"))

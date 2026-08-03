@@ -34,6 +34,10 @@ CREATE TABLE `health_exam_result`.`csv_row_ledger` (
   `address` varchar(255) DEFAULT NULL,
   `basic_info_status` varchar(32) DEFAULT NULL,
   `basic_info_reason` text DEFAULT NULL,
+  `insurer_number_source` varchar(32) DEFAULT NULL,
+  `insurer_number_completion_status` varchar(32) DEFAULT NULL,
+  `insurer_number_completion_reason` text DEFAULT NULL,
+  `insurer_number_export_value` varchar(20) DEFAULT NULL,
   `address_source` varchar(32) DEFAULT NULL,
   `address_completion_status` varchar(32) DEFAULT NULL,
   `address_completion_reason` text DEFAULT NULL,
@@ -85,6 +89,7 @@ CREATE TABLE `health_exam_result`.`csv_row_ledger` (
   KEY `idx_csv_row_ledger_row_status` (`row_status`),
   KEY `idx_csv_row_ledger_check_status` (`check_status`),
   KEY `idx_csv_row_ledger_basic_info_status` (`basic_info_status`),
+  KEY `idx_csv_row_ledger_insurer_number_completion_status` (`insurer_number_completion_status`),
   KEY `idx_csv_row_ledger_address_completion_status` (`address_completion_status`),
   KEY `idx_csv_row_ledger_export_status` (`xml_export_status`),
   KEY `idx_csv_row_ledger_resume_approved` (`resume_approved`)

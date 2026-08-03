@@ -502,6 +502,10 @@ def upsert_row_ledger(
         "address": ledger_fields.get("address"),
         "basic_info_status": basic_info.get("basic_info_status"),
         "basic_info_reason": basic_info.get("basic_info_reason"),
+        "insurer_number_source": basic_info.get("insurer_number_source"),
+        "insurer_number_completion_status": basic_info.get("insurer_number_completion_status"),
+        "insurer_number_completion_reason": basic_info.get("insurer_number_completion_reason"),
+        "insurer_number_export_value": basic_info.get("insurer_number_export_value"),
         "address_source": basic_info.get("address_source"),
         "address_completion_status": basic_info.get("address_completion_status"),
         "address_completion_reason": basic_info.get("address_completion_reason"),
@@ -527,7 +531,10 @@ def upsert_row_ledger(
                 insurance_symbol_raw, insurance_number_raw, insurance_branch_number_raw,
                 birthdate, gender_raw, health_exam_report_category, program_code,
                 postal_code, address,
-                basic_info_status, basic_info_reason, address_source,
+                basic_info_status, basic_info_reason,
+                insurer_number_source, insurer_number_completion_status,
+                insurer_number_completion_reason, insurer_number_export_value,
+                address_source,
                 address_completion_status, address_completion_reason,
                 address_completed_value, postal_code_completed_value,
                 person_id_custom,
@@ -542,6 +549,7 @@ def upsert_row_ledger(
                 %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s, %s
             )
@@ -574,6 +582,10 @@ def upsert_row_ledger(
                 params["address"],
                 params["basic_info_status"],
                 params["basic_info_reason"],
+                params["insurer_number_source"],
+                params["insurer_number_completion_status"],
+                params["insurer_number_completion_reason"],
+                params["insurer_number_export_value"],
                 params["address_source"],
                 params["address_completion_status"],
                 params["address_completion_reason"],
@@ -618,6 +630,10 @@ def upsert_row_ledger(
             address = %s,
             basic_info_status = %s,
             basic_info_reason = %s,
+            insurer_number_source = %s,
+            insurer_number_completion_status = %s,
+            insurer_number_completion_reason = %s,
+            insurer_number_export_value = %s,
             address_source = %s,
             address_completion_status = %s,
             address_completion_reason = %s,
@@ -657,6 +673,10 @@ def upsert_row_ledger(
             params["address"],
             params["basic_info_status"],
             params["basic_info_reason"],
+            params["insurer_number_source"],
+            params["insurer_number_completion_status"],
+            params["insurer_number_completion_reason"],
+            params["insurer_number_export_value"],
             params["address_source"],
             params["address_completion_status"],
             params["address_completion_reason"],
@@ -960,7 +980,7 @@ def process_file_receipt(
         ledger_fields["insurer_number"] = resolve_insurer_number(
             ledger_fields.get("insurer_number"),
             file_receipt.get("insurer_number"),
-            event_insurer_number,
+            None,
         )
         fill_missing_report_codes(ledger_fields, event_age_rule=event_age_rule)
         row_errors: list[str] = []
@@ -968,9 +988,19 @@ def process_file_receipt(
             if result.errors and result.rule.is_required:
                 row_errors.extend(result.errors)
 
+        basic_info = resolve_basic_info_completion(
+            cur,
+            row=ledger_fields,
+            event_insurer_number=event_insurer_number,
+            master_db=config.master_db,
+        )
+        basic_info_params = basic_info.as_db_params()
+        if basic_info_params.get("insurer_number_export_value"):
+            ledger_fields["insurer_number"] = basic_info_params["insurer_number_export_value"]
+        if basic_info_params.get("insurer_number_completion_status") in {"CONFLICT", "INVALID", "MISSING"}:
+            row_errors.append(str(basic_info_params.get("insurer_number_completion_reason") or "INSURER_NUMBER_ERROR"))
         identity = build_csv_identity(ledger_fields)
         subscriber = resolve_csv_subscriber(cur, config=config, identity=identity)
-        basic_info = resolve_basic_info_completion(cur, row=ledger_fields, master_db=config.master_db)
         item_results = [result for result in extracted if result.rule.target_kind == "EXAM_ITEM_VALUE"]
         raw_row_json = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
         ledger_id, action = upsert_row_ledger(
@@ -987,7 +1017,7 @@ def process_file_receipt(
             row_reason="; ".join(row_errors) if row_errors else None,
             exam_item_count=0,
             exam_item_error_count=len(row_errors),
-            basic_info=basic_info.as_db_params(),
+            basic_info=basic_info_params,
         )
         update_row_ledger_subscriber(
             cur,

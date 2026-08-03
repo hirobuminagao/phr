@@ -255,6 +255,11 @@ def resolve_export_postal_code(row: Mapping[str, Any]) -> str | None:
     return normalize_postal_code_export(row.get("postal_code_completed_value"))
 
 
+def resolve_export_insurer_number(row: Mapping[str, Any]) -> str | None:
+    """Return a prepared source/event insurer number for XML export."""
+    return cast(str | None, row.get("insurer_number_export_value") or row.get("insurer_number"))
+
+
 def make_zip(source_root: Path, zip_path: Path) -> None:
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(source_root.rglob("*")):
@@ -403,6 +408,7 @@ def build_group(
         for sequence, row in enumerate(group, start=1):
             fields = build_xml_export_fields(
                 row,
+                insurer_number_override=resolve_export_insurer_number(row),
                 postal_code_override=resolve_export_postal_code(row),
                 address_override=resolve_export_address(row),
             )

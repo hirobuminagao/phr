@@ -435,8 +435,19 @@ XML import側は将来のXML基本情報パース拡張に備えて同じ列を�
 | `address_completed_value` | 原本住所がない場合のXML出力用補完候補住所 |
 | `postal_code_completed_value` | XML出力用に整形済みの補完候補郵便番号 |
 
+保険者番号は他の基本情報と異なり、eventとの整合性判定を行う。
+初期実装では `event.insurer_number` を正とし、CSV/受領ファイル側に保険者番号がある場合は8桁正規化後にevent値と比較する。
+event値と一致すれば `insurer_number_source = SOURCE`、`insurer_number_completion_status = NOT_NEEDED` とする。
+CSV/受領ファイル側に保険者番号がない場合は `event.insurer_number` を採用し、`insurer_number_source = EVENT`、`insurer_number_completion_status = FILLED_FROM_EVENT` とする。
+CSV/受領ファイル側に保険者番号がありevent値と異なる場合は `CONFLICT` とし、import行の `row_reason` にもエラーとして残す。
+
+`dev_phr.fund_insurer_numbers` には同一健保の複数保険者番号が存在し得る。
+特例退職者等の扱いは健保ごとの運用判断が必要なため、初期実装では `fund_insurer_numbers` に存在する別番号であっても自動許可しない。
+複数保険者番号を許可するeventルールは後続で追加する。
+
 XML exporterは原本住所を優先し、原本住所がない場合に `address_completed_value` を使う。
-郵便番号も原本値を優先し、原本値がXML形式へ正規化できない場合に `postal_code_completed_value` を使う。
+保険者番号は `insurer_number_export_value` があればそれを使い、なければ原本 `insurer_number` をXML出力normへ通す。
+郵便番号は原本値を優先し、原本値がXML形式へ正規化できない場合に `postal_code_completed_value` を使う。
 exporterは郵便番号masterを直接lookupしない。
 
 郵便番号マスタは日本郵便公式の「住所の郵便番号（1レコード1行、UTF-8形式）」を元に作成する。
