@@ -376,6 +376,9 @@ Current as of 2026-07-29.
 - XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
 - 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、`csv_row_ledger.manual_export_approved` と必須の理由、承認者、承認日時を記録してXML出力を許可できる。
 - 手動出力許可は法定チェックNGの原因が `MISSING` のみの場合に限定し、`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致、XML生成・XSD検証エラーは通過させない。
+- XML不足をCSVで実値補完して法定OKにする処理と、妊娠中等の業務確認によりMISSINGのまま条件付き出力OKにする処理は別レーンとして扱う。
+- 条件付き出力OKでは架空の検査値を作らず、`check_status = NG` / `check_reason` を維持したまま `manual_export_approved` / `manual_export_reason` / `manual_export_approved_by` / `manual_export_approved_at` を記録する。
+- 初期のCSV補完診断対象は、視力 `4403004001`、聴力 `4403005001`、胸部X線 `4404001001`、心電図 `4411001001`、既往歴 `4401001001`、自覚症状 `4402001001`、他覚症状 `4402001002` の7分類とする。
 - 手動出力許可後も `exam_check_results` と `csv_row_ledger.check_status` は書き換えず、架空の検査値を作らない。該当entryはXMLへ出力しない。
 - 同日分割送信回数は既存ZIPからの自動採番を既定とし、`0`から`9`の明示指定も可能にする。既存ZIPと衝突する番号では上書きしない。
 - 個人XMLファイル名21桁目の種別は、特定健診情報を表す実施区分コード `1` 固定とする。

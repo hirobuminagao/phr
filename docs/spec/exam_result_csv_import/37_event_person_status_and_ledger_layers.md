@@ -356,6 +356,33 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
 - 基本情報のXML出力値が揃っている。
 - 検査値に出力不可の `INVALID` が残っていない。
 
+出力候補には以下の2種類を区別して扱う。
+
+1. 法定チェックOK
+   - source単体、または結合後の清書値で法定項目が満たされている状態。
+   - `check_status = OK` を基本とする。
+2. 条件付き出力OK
+   - 妊娠中、医師判断、施設回答等により、法定項目が実施不能・対象外・未提出であることを業務確認済みの状態。
+   - 架空の検査値は作らない。
+   - `check_status = NG` と `check_reason` は残したまま、`manual_export_approved = 1` と承認理由、承認者、承認日時で出力を許可する。
+   - 対象は `check_reason` が `MISSING` のみの場合に限定する。
+   - `INVALID`、`PARSE_ERROR`、加入者不一致、基本情報不足、健診機関不一致、XML生成/XSD検証エラーは条件付き出力OKで通過させない。
+
+条件付き出力OKの入力欄は、初期実装では既存 `manual_export_*` を使う。
+画面化時には少なくとも以下を入力できるようにする。
+
+| 項目 | 内容 |
+|---|---|
+| `manual_export_approved` | 出力許可フラグ |
+| `manual_export_reason` | 業務理由。例: `妊娠中のため胸部X線未実施。健診機関確認済み。` |
+| `manual_export_approved_by` | 承認者または入力者 |
+| `manual_export_approved_at` | 承認日時 |
+| 確認先 | 健診機関、担当者、メール、電話など。初期は `manual_export_reason` に含める |
+| 確認対象項目 | MISSINGの分類。初期は `check_reason` から読めるため別カラム化しない |
+
+後続で履歴性が必要になった場合は、`manual_export_approval_history` 等の専用履歴テーブルを追加する。
+初期はXML出力履歴 `xml_export_members` に出力時点の `manual_export_*` snapshotを保存することで、出力事実との紐付けを担保する。
+
 ### 出力後の業務状態
 
 「このeventでこの人は出力済みか、HIAへアップロード済みか、再提出対象か」は `person_event` / `person_event_status_items` の責務とする。
@@ -397,6 +424,40 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
 
 結合後の法定チェックは、source個別のcheckではなく、結合後の `exam_ledgers` + `exam_item_values` に対して実行する。
 これにより、単独CSVではMISSINGでも、別sourceで補完されれば法定OKにできる。
+
+### 初期補完診断対象
+
+XML側で法定項目が不足し、CSVで不足補完される可能性が高い初期対象は以下の7分類とする。
+
+| 同一性項目コード | 分類 | 補完診断で見る内容 |
+|---|---|---|
+| `4403004001` | 視力 | 左右視力など、法定チェックが要求する視力値 |
+| `4403005001` | 聴力 | 所見有無または聴力検査値。CSV施設により表現差あり |
+| `4404001001` | 胸部X線 | 所見有無CD、所見本文ST |
+| `4411001001` | 心電図 | 所見有無CD、所見本文ST |
+| `4401001001` | 既往歴 | 所見有無CD、既往歴本文ST |
+| `4402001001` | 自覚症状 | 所見有無CD、自覚症状本文ST |
+| `4402001002` | 他覚症状 | 所見有無CD、他覚症状本文ST |
+
+初期診断スクリプトはDBを更新せず、以下を見える化する。
+
+- XML source ledgerでMISSINGになっている分類。
+- 同一 `event_id + subscriber_id + exam_date + exam_facility_id + insurer_number` のCSV source ledger候補。
+- CSV source ledgerに補完可能なnamecode/値があるか。
+- XMLとCSVで同じ分類の値が衝突していないか。
+- 結合すれば法定チェックOKになりそうか。
+- 条件付き出力OKの対象にすべきMISSINGだけが残るか。
+
+診断結果の状態案:
+
+| 状態 | 意味 |
+|---|---|
+| `COMPLETABLE` | CSV補完により不足解消できる見込み |
+| `PARTIAL` | 一部は補完できるがMISSINGが残る |
+| `NO_CSV` | 同一人物・同一健診日のCSV候補がない |
+| `CONFLICT` | 自動採用できない値差異がある |
+| `MANUAL_APPROVAL_CANDIDATE` | MISSINGのみが残り、妊娠中等の条件付き出力OK候補 |
+| `NOT_TARGET` | 初期7分類以外の不足または対象外 |
 
 ## Implementation Steps
 
