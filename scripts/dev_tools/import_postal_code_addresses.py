@@ -25,7 +25,7 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx
 
 
-DEFAULT_SOURCE = Path("/Users/hiro/Downloads/utf_ken_all.csv")
+DEFAULT_SOURCE = PROJECT_ROOT / "scripts" / "dev_tools" / "import_csv" / "utf_ken_all.csv"
 DEFAULT_MASTER_DB = "phr_master"
 DEFAULT_SOURCE_NAME = "日本郵便 住所の郵便番号 1レコード1行 UTF-8"
 EXPECTED_COLUMNS = 15

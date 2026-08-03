@@ -39,6 +39,8 @@ logs/*
 
 # local tooling / scratch scripts
 local_ops/
+scripts/dev_tools/import_csv/*
+!scripts/dev_tools/import_csv/README.md
 
 # python
 __pycache__/

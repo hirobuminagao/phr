@@ -18,19 +18,21 @@ Get-Content sql/migrations/phr_master/20260731_004_phr_master_create_postal_code
 dry-runでCSVの内容を確認する。この実行ではDBを変更しない。
 
 ```powershell
-python scripts/dev_tools/import_postal_code_addresses.py --source C:\path\to\utf_ken_all.csv
+python scripts/dev_tools/import_postal_code_addresses.py
 ```
 
 DBへ反映する。
 
 ```powershell
-python scripts/dev_tools/import_postal_code_addresses.py --source C:\path\to\utf_ken_all.csv --apply
+python scripts/dev_tools/import_postal_code_addresses.py --apply
 ```
 
 既存行を全削除してから入れ直す。
 
 ```powershell
-python scripts/dev_tools/import_postal_code_addresses.py --source C:\path\to\utf_ken_all.csv --apply --replace
+python scripts/dev_tools/import_postal_code_addresses.py --apply --replace
 ```
 
-macOSのローカル検証では、`--source` 省略時に `/Users/hiro/Downloads/utf_ken_all.csv` を読む。
+`--source` 省略時は `scripts/dev_tools/import_csv/utf_ken_all.csv` を読む。
+日本郵便の最新版CSVを取得したら、この場所へ `utf_ken_all.csv` という名前で配置する。
+CSV本体はgit管理しない。
