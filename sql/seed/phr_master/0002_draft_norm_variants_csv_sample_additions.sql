@@ -78,6 +78,7 @@ INSERT INTO `phr_master`.`norm_variants` (
   ('1.2.392.200119.6.24040', '週に1~2日', '週に1~2日', '4', '1.2.392.200119.6.24040', '週1～2日', 0, 90, 1, 'Office delivery alias: drinking frequency ascii tilde'),
   ('1.2.392.200119.6.24040', '週に3~4日', '週に3~4日', '3', '1.2.392.200119.6.24040', '週3～4日', 0, 90, 1, 'Office delivery alias: drinking frequency ascii tilde'),
   ('1.2.392.200119.6.24040', '週に5~6日', '週に5~6日', '2', '1.2.392.200119.6.24040', '週5～6日', 0, 90, 1, 'Office delivery alias: drinking frequency ascii tilde'),
+  ('1.2.392.200119.6.24040', '飲酒（週5～6日）', '飲酒（週5～6日）', '2', '1.2.392.200119.6.24040', '週5～6日', 0, 90, 1, 'CSV sample alias: drinking frequency with item label'),
   ('1.2.392.200119.6.24040', '飲酒（毎日）', '飲酒（毎日）', '1', '1.2.392.200119.6.24040', '毎日', 0, 90, 1, 'Atsugi alias: drinking frequency every day'),
   ('1.2.392.200119.6.24050', '飲酒量（1合未満／日）', '飲酒量（1合未満／日）', '1', '1.2.392.200119.6.24050', '1合未満', 0, 90, 1, 'Hirooka alias: drinking amount'),
   ('1.2.392.200119.6.24050', '飲酒量（1～2合未満／日）', '飲酒量（1～2合未満／日）', '2', '1.2.392.200119.6.24050', '1～2合未満', 0, 90, 1, 'Hirooka alias: drinking amount'),
@@ -124,7 +125,8 @@ INSERT INTO `phr_master`.`norm_variants` (
   ('1.2.392.200119.6.2102', '5', '5', '5', '1.2.392.200119.6.2102', '3＋', 0, 90, 1, 'CSV sample core alias: urine qualitative code'),
   ('1.2.392.200119.6.2202', '食後3.5時間以上10時間未満', '食後3.5時間以上10時間未満', '3', '1.2.392.200119.6.2202', '食後3.5時間以上10時間未満', 0, 90, 1, 'CSV sample core alias: postprandial time'),
   ('1.2.392.200119.6.24040', 'やめた', 'やめた', '7', '1.2.392.200119.6.24040', 'やめた', 0, 90, 1, 'CSV sample core alias: drinking frequency'),
-  ('1.2.392.200119.6.24060', 'いいえ', 'いいえ', '3', '1.2.392.200119.6.24060', 'いいえ', 0, 90, 1, 'CSV sample core alias: smoking no')
+  ('1.2.392.200119.6.24060', 'いいえ', 'いいえ', '3', '1.2.392.200119.6.24060', 'いいえ', 0, 90, 1, 'CSV sample core alias: smoking no'),
+  ('1.2.392.200119.6.24060', '以前は吸っていたが、最近 1 ヶ月間は吸っていない', '以前は吸っていたが、最近 1 ヶ月間は吸っていない', '2', '1.2.392.200119.6.24060', '以前は吸っていたが、最近1ヶ月間は吸っていない', 0, 90, 1, 'CSV sample alias: smoking former smoker with spaces')
 ON DUPLICATE KEY UPDATE
   `raw_token_norm` = VALUES(`raw_token_norm`),
   `normalized_code` = VALUES(`normalized_code`),

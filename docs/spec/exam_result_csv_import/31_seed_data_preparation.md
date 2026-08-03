@@ -23,6 +23,7 @@ Implemented and expanded.
 8. `0007_add_urine_qualitative_dash_norm_variants.sql`
 9. `0008_fill_base_norm_variants_from_export_sql.sql`
 10. `0009_fix_questionnaire_2003_norm_codes.sql`
+11. `0010_add_questionnaire_variants_from_runtime_errors.sql`
 
 既に `0000` から `0003` を適用済みの環境でも、旧export辞書を未投入の場合は `0008` を追加適用する。
 `0004` 以降は実装・検証で増えた差分seedであり、実行環境の最終適用済み地点に応じて追加適用する。
@@ -32,6 +33,8 @@ Implemented and expanded.
 実行環境で旧export辞書を未投入のまま `0002` / `0007` だけを当てた場合、CD/CO項目の基本値まで `NORMALIZE_VARIANT_NOT_FOUND` になるため、追加seedとして適用する。
 
 `0009_fix_questionnaire_2003_norm_codes.sql` は、付属1の `1.2.392.200119.6.2003`（問診結果コード: `1=はい`, `2=いいえ`）に合わせ、旧辞書由来の `Y` / `N` 正規化値を `1` / `2` へ補正するseedである。
+
+`0010_add_questionnaire_variants_from_runtime_errors.sql` は、実行環境でCSV再取込後に残った問診系CD/COの表記揺れを追加する差分seedである。初期追加値は、喫煙の「以前は吸っていたが、最近 1 ヶ月間は吸っていない」と、飲酒頻度の「飲酒（週5～6日）」である。
 `Y` / `N` や `true` / `false` はraw aliasとして受け止めてもよいが、CDの `normalized_code` は付属1のコード値に寄せる。
 
 `dev_phr` のローカル検証用seed:
