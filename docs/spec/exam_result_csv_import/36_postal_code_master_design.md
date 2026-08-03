@@ -138,8 +138,10 @@ HIA提出を止めない運用では、最終fallbackとして郵便番号 `000-
 lookup層は候補取得と代表候補の提示までを責務とする。
 複数候補時に `prefecture + city` の代表住所を返す場合でも、それを採用するか、画面確認へ回すか、最終fallbackを使うかは呼び出し側の業務処理で決める。
 
-現行XML exporterは、受診者住所が空で郵便番号がある場合にのみlookupを使用する。
-原本住所がある場合は原本住所をXML出力normへ通して使い、lookupで置き換えない。
+現行CSV importは、加入者突合後に受診者住所が空で郵便番号がある場合のみlookupを使用し、補完候補と補完状態を `csv_row_ledger` へ保存する。
+`sync_exam_ledgers.py` は補完候補と状態を `exam_ledgers` へコピーする。
+XML exporterは郵便番号masterを直接lookupせず、原本住所または事前準備済みの補完候補を使う。
+原本住所がある場合は原本住所をXML出力normへ通して使い、lookup候補で置き換えない。
 lookup失敗時の `000-0000` / `－` 最終fallbackは、補正履歴テーブルまたは画面承認と合わせて後続実装とする。
 
 ## Loader

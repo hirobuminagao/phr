@@ -32,6 +32,13 @@ CREATE TABLE `health_exam_result`.`csv_row_ledger` (
   `program_code` varchar(64) DEFAULT NULL,
   `postal_code` varchar(16) DEFAULT NULL,
   `address` varchar(255) DEFAULT NULL,
+  `basic_info_status` varchar(32) DEFAULT NULL,
+  `basic_info_reason` text DEFAULT NULL,
+  `address_source` varchar(32) DEFAULT NULL,
+  `address_completion_status` varchar(32) DEFAULT NULL,
+  `address_completion_reason` text DEFAULT NULL,
+  `address_completed_value` varchar(255) DEFAULT NULL,
+  `postal_code_completed_value` varchar(16) DEFAULT NULL,
   `exam_facility_postal_code` varchar(16) DEFAULT NULL,
   `exam_facility_address` varchar(255) DEFAULT NULL,
   `exam_facility_phone_number` varchar(32) DEFAULT NULL,
@@ -77,6 +84,8 @@ CREATE TABLE `health_exam_result`.`csv_row_ledger` (
   KEY `idx_csv_row_ledger_subscriber_match_status` (`subscriber_match_status`),
   KEY `idx_csv_row_ledger_row_status` (`row_status`),
   KEY `idx_csv_row_ledger_check_status` (`check_status`),
+  KEY `idx_csv_row_ledger_basic_info_status` (`basic_info_status`),
+  KEY `idx_csv_row_ledger_address_completion_status` (`address_completion_status`),
   KEY `idx_csv_row_ledger_export_status` (`xml_export_status`),
   KEY `idx_csv_row_ledger_resume_approved` (`resume_approved`)
 )

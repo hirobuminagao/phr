@@ -48,6 +48,12 @@ def decide_candidate(row: Mapping[str, Any]) -> CandidateDecision:
     for field, reason in required:
         if row.get(field) in (None, ""):
             return CandidateDecision(False, reason)
+    if row.get("basic_info_status") == "NG":
+        return CandidateDecision(False, row.get("basic_info_reason") or "BASIC_INFO_NG")
+    if row.get("postal_code") in (None, "") and row.get("postal_code_completed_value") in (None, ""):
+        return CandidateDecision(False, "POSTAL_CODE_MISSING")
+    if row.get("address") in (None, "") and row.get("address_completed_value") in (None, ""):
+        return CandidateDecision(False, "ADDRESS_MISSING")
     if row.get("subscriber_match_status") != "MATCHED":
         return CandidateDecision(False, "SUBSCRIBER_NOT_MATCHED")
     if row.get("check_status") == "OK":

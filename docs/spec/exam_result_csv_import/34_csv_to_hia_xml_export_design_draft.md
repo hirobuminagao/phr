@@ -410,15 +410,34 @@ exporter側に別ロジックを重複実装せず、共通lib側の `export` �
 ### Address Completion for HIA Export
 
 厚生労働省V08 XSD上、受診者 `patientRole/addr` は `minOccurs=0` であり、XSD検証だけでは住所欠落をエラーにできない。
-一方、HIA受付では受診者住所・郵便番号が必須扱いとなるため、XML出力前の基本情報projectionで住所・郵便番号を解決する。
+一方、HIA受付では受診者住所・郵便番号が必須扱いとなるため、XML出力前に住所・郵便番号の利用可否を解決する。
+exporterは補完lookupや業務判断を行わず、importまたはledger同期までに準備された値をXMLへ詰めることに集中する。
 
 住所補完は以下の順で行う。
 
 1. CSV/XML原本に住所がある場合は原本値をXML出力normへ通す。
-2. 郵便番号があり住所がない場合は、日本郵便の郵便番号データ由来の住所マスタから都道府県・市区町村・町域を補完する。
+2. import時の加入者突合後、郵便番号があり住所がない場合は、日本郵便の郵便番号データ由来の住所マスタから都道府県・市区町村・町域を補完候補として保存する。
 3. 郵便番号lookupで安全に住所を解決できない場合は、憶測補完せずXML生成時の基本情報不足として扱う。
 
 業務上利用を許可された加入者住所等による補完、およびHIA提出用の最終代替値として郵便番号 `000-0000`、住所 `－` を使用する処理は、基本情報補正画面・補正履歴テーブルと合わせて後続で実装する。
+
+現行実装では、CSV importが加入者突合直後に `scripts/from_medical/script_lib/basic_info_completion.py` を呼び出し、`csv_row_ledger` に以下を保存する。
+`sync_exam_ledgers.py` は同じ値を `exam_ledgers` へコピーする。
+XML import側は将来のXML基本情報パース拡張に備えて同じ列を持つが、現時点では住所・郵便番号を抽出していないため原則NULLとする。
+
+| column | meaning |
+| --- | --- |
+| `basic_info_status` | XML出力に向けた基本情報状態。`OK` / `WARNING` / `NG` |
+| `basic_info_reason` | 基本情報状態の理由 |
+| `address_source` | `SOURCE` / `POSTAL_LOOKUP` / `NONE` |
+| `address_completion_status` | `NOT_NEEDED` / `AVAILABLE` / `NEED_REVIEW` / `NOT_FOUND` / `INVALID` / `MISSING` |
+| `address_completion_reason` | 郵便番号lookup結果などの理由 |
+| `address_completed_value` | 原本住所がない場合のXML出力用補完候補住所 |
+| `postal_code_completed_value` | XML出力用に整形済みの補完候補郵便番号 |
+
+XML exporterは原本住所を優先し、原本住所がない場合に `address_completed_value` を使う。
+郵便番号も原本値を優先し、原本値がXML形式へ正規化できない場合に `postal_code_completed_value` を使う。
+exporterは郵便番号masterを直接lookupしない。
 
 郵便番号マスタは日本郵便公式の「住所の郵便番号（1レコード1行、UTF-8形式）」を元に作成する。
 個人住所の丁目、番地、建物名は郵便番号から推測しない。

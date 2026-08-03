@@ -31,7 +31,6 @@ from scripts.from_medical.script_lib.hia_xml_export_loader import (
     fetch_valid_items,
 )
 from scripts.lib.db.config import load_mysql_base_params
-from scripts.lib.db.lookup.postal_code_address import lookup_postal_code_address_for_xml
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
@@ -240,18 +239,20 @@ def choose_split_no(facility_output_root: Path, facility_code: str, insurer_numb
     raise ValueError(f"split_no exhausted for {facility_code}/{insurer_number}/{file_date}")
 
 
-def resolve_export_address(cur: Any, *, config: ExportConfig, row: Mapping[str, Any]) -> str | None:
-    """Return source address or a postal-code-derived address for XML export."""
+def resolve_export_address(row: Mapping[str, Any]) -> str | None:
+    """Return a prepared source/completed address for XML export."""
     current = normalize_address_export(row.get("address"))
     if current:
         return current
-    postal_code = row.get("postal_code")
-    if postal_code in (None, ""):
-        return None
-    address, result = lookup_postal_code_address_for_xml(cur, postal_code, master_db=config.master_db)
-    if not result.ok or not address:
-        return None
-    return normalize_address_export(address)
+    return normalize_address_export(row.get("address_completed_value"))
+
+
+def resolve_export_postal_code(row: Mapping[str, Any]) -> str | None:
+    """Return a prepared source/completed postal code for XML export."""
+    current = normalize_postal_code_export(row.get("postal_code"))
+    if current:
+        return current
+    return normalize_postal_code_export(row.get("postal_code_completed_value"))
 
 
 def make_zip(source_root: Path, zip_path: Path) -> None:
@@ -402,7 +403,8 @@ def build_group(
         for sequence, row in enumerate(group, start=1):
             fields = build_xml_export_fields(
                 row,
-                address_override=resolve_export_address(cur, config=config, row=row),
+                postal_code_override=resolve_export_postal_code(row),
+                address_override=resolve_export_address(row),
             )
             if fields.insurer_number != insurer_number:
                 raise ValueError(f"INSURER_CONFLICT: ledger={fields.insurer_number} group={insurer_number}")

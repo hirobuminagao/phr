@@ -39,6 +39,7 @@ from scripts.lib.examination.report_classification import (
 )
 from scripts.lib.identity.field.gender_code import normalize_gender_code
 from scripts.lib.identity.generator import generate_identity_bundle, generate_person_id_custom
+from scripts.from_medical.script_lib.basic_info_completion import resolve_basic_info_completion
 
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
@@ -467,6 +468,7 @@ def upsert_row_ledger(
     row_reason: str | None,
     exam_item_count: int,
     exam_item_error_count: int,
+    basic_info: Mapping[str, Any],
 ) -> tuple[int, str]:
     file_receipt_id = int(file_receipt["id"])
     existing = get_existing_row_ledger(
@@ -498,6 +500,13 @@ def upsert_row_ledger(
         "program_code": ledger_fields.get("program_code"),
         "postal_code": ledger_fields.get("postal_code"),
         "address": ledger_fields.get("address"),
+        "basic_info_status": basic_info.get("basic_info_status"),
+        "basic_info_reason": basic_info.get("basic_info_reason"),
+        "address_source": basic_info.get("address_source"),
+        "address_completion_status": basic_info.get("address_completion_status"),
+        "address_completion_reason": basic_info.get("address_completion_reason"),
+        "address_completed_value": basic_info.get("address_completed_value"),
+        "postal_code_completed_value": basic_info.get("postal_code_completed_value"),
         "person_id_custom": ledger_fields.get("person_id_custom"),
         "subscriber_match_status": "NOT_EXECUTED",
         "exam_item_status": "ERROR" if exam_item_error_count else "READY",
@@ -517,7 +526,11 @@ def upsert_row_ledger(
                 exam_date, name_full_raw, name_kana_raw,
                 insurance_symbol_raw, insurance_number_raw, insurance_branch_number_raw,
                 birthdate, gender_raw, health_exam_report_category, program_code,
-                postal_code, address, person_id_custom,
+                postal_code, address,
+                basic_info_status, basic_info_reason, address_source,
+                address_completion_status, address_completion_reason,
+                address_completed_value, postal_code_completed_value,
+                person_id_custom,
                 subscriber_match_status, exam_item_status, exam_item_count,
                 exam_item_error_count, exam_item_reason, row_status, row_reason
             )
@@ -527,6 +540,7 @@ def upsert_row_ledger(
                 %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s, %s
@@ -558,6 +572,13 @@ def upsert_row_ledger(
                 params["program_code"],
                 params["postal_code"],
                 params["address"],
+                params["basic_info_status"],
+                params["basic_info_reason"],
+                params["address_source"],
+                params["address_completion_status"],
+                params["address_completion_reason"],
+                params["address_completed_value"],
+                params["postal_code_completed_value"],
                 params["person_id_custom"],
                 params["subscriber_match_status"],
                 params["exam_item_status"],
@@ -595,6 +616,13 @@ def upsert_row_ledger(
             program_code = %s,
             postal_code = %s,
             address = %s,
+            basic_info_status = %s,
+            basic_info_reason = %s,
+            address_source = %s,
+            address_completion_status = %s,
+            address_completion_reason = %s,
+            address_completed_value = %s,
+            postal_code_completed_value = %s,
             person_id_custom = %s,
             subscriber_match_status = %s,
             exam_item_status = %s,
@@ -627,6 +655,13 @@ def upsert_row_ledger(
             params["program_code"],
             params["postal_code"],
             params["address"],
+            params["basic_info_status"],
+            params["basic_info_reason"],
+            params["address_source"],
+            params["address_completion_status"],
+            params["address_completion_reason"],
+            params["address_completed_value"],
+            params["postal_code_completed_value"],
             params["person_id_custom"],
             params["subscriber_match_status"],
             params["exam_item_status"],
@@ -935,6 +970,7 @@ def process_file_receipt(
 
         identity = build_csv_identity(ledger_fields)
         subscriber = resolve_csv_subscriber(cur, config=config, identity=identity)
+        basic_info = resolve_basic_info_completion(cur, row=ledger_fields, master_db=config.master_db)
         item_results = [result for result in extracted if result.rule.target_kind == "EXAM_ITEM_VALUE"]
         raw_row_json = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
         ledger_id, action = upsert_row_ledger(
@@ -951,6 +987,7 @@ def process_file_receipt(
             row_reason="; ".join(row_errors) if row_errors else None,
             exam_item_count=0,
             exam_item_error_count=len(row_errors),
+            basic_info=basic_info.as_db_params(),
         )
         update_row_ledger_subscriber(
             cur,
