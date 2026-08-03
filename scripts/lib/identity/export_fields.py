@@ -38,7 +38,12 @@ def _required(result: Mapping[str, Any], key: str, field_name: str) -> str:
     return str(value)
 
 
-def build_xml_export_fields(row: Mapping[str, Any]) -> XmlExportFields:
+def build_xml_export_fields(
+    row: Mapping[str, Any],
+    *,
+    postal_code_override: Any = None,
+    address_override: Any = None,
+) -> XmlExportFields:
     insurer = normalize_insurer_number(row.get("insurer_number"))
     symbol = normalize_insurance_symbol(row.get("insurance_symbol_raw"))
     number = normalize_insurance_number(row.get("insurance_number_raw"))
@@ -60,6 +65,10 @@ def build_xml_export_fields(row: Mapping[str, Any]) -> XmlExportFields:
         gender_code=_required(gender, "field_norm", "gender_code"),
         birthdate=_required(birth, "match", "birthdate"),
         exam_date=_required(exam, "match", "exam_date"),
-        postal_code=normalize_postal_code_export(row.get("postal_code")),
-        address=normalize_address_export(row.get("address")),
+        postal_code=normalize_postal_code_export(
+            row.get("postal_code") if postal_code_override is None else postal_code_override
+        ),
+        address=normalize_address_export(
+            row.get("address") if address_override is None else address_override
+        ),
     )
