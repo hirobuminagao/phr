@@ -122,7 +122,14 @@ Current as of 2026-07-29.
 - 移行方法は2案を許容する。既存 `xml_ledger` / `csv_row_ledger` から `exam_ledgers` へデータ移行する方法、または全ファイルを再scan/再importして `exam_ledgers` を作り直す方法である。実行環境で安定確認してから個別ledger廃止タイミングを決める。
 - `exam_ledgers` の上位に、eventに対する人単位の現在状態を管理する既存 `dev_phr.person_event` を使う。
 - 増減しやすい状態項目、check集計、出力状態、HIAアップロード状態、要対応理由は `dev_phr.person_event_status_items` に縦持ちする。
+- `person_event` は汎用イベント管理ではなく、健診イベントに対する人単位の進捗・確認状態に限定して使う。
+- 予約申込、受診、結果ファイル受領、健診結果check、HIA状態、健保・事業所納品状態は、eventごとの人チェック項目として `person_event_status_items` に集約する。
+- 年度内複数受診や特殊健診を想定し、`person_event` は人×eventの親、個別の受診・結果は `exam_ledgers` の複数件として扱う。
 - 未突合ledgerはまだ人として確定していないため `person_event` を作らず、`exam_ledgers` 側の未突合状態として扱う。
+- HIAダッシュボードCSV由来の最新状態は `work_other.hia_dashboard_status`、年度最終状態は `work_other.hia_dashboard_year_end_status`、健診eventに対する人チェック状態は `person_event_status_items` として分ける。
+- 2025年度のHIA年度最終状態は `hia_dashboard_year_end_status` へスナップショット保管済みである。
+- 進行中年度のHIA状態は `hia_dashboard_status` を入力にできるが、過年度eventの状態判定に最新テーブルを直接使わない。
+- HIAダッシュボードCSVの新フォーマットでは先頭にHIA加入者IDが追加されているため、HIA加入者IDが存在する場合は加入者照合の第一候補として扱う。
 - XML出力候補判定は `exam_ledgers`、出力後の業務状態管理とHIAアップロード状態は `person_event` / `person_event_status_items` の責務とする。
 - CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
 - `exam_ledgers.xml_export_status` は、source ledgerの技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。

@@ -12,6 +12,9 @@ CSV/XML取込からXML出力まで一通り動いたため、次の実装は「�
 人単位状態は新しい横持ちテーブルを増やさず、既存 `dev_phr.person_event` を親にする。
 可変なチェック項目、出力状態、要対応理由は `dev_phr.person_event_status_items` に縦持ちする。
 
+本設計で扱う `person_event` は、汎用イベント管理ではなく、健診イベントに対する人単位の進捗・確認状態に限定する。
+予約、結果受領、健診結果check、HIA状態、健保・事業所納品確認を、eventごと・人ごとに見られることを目的とする。
+
 ## Layer Model
 
 ```text
@@ -37,6 +40,80 @@ health_exam_result.exam_ledgers
 
 未突合のledgerはまだ「人」として確定していないため、`person_event` は作らない。
 未突合、加入者確認待ち、施設確認待ちのsource状態は `exam_ledgers` で管理し、加入者確定後に `person_event` へ反映する。
+
+## Health Exam Person Check Scope
+
+今回の人単位状態管理は、以下の健診業務フローを横断して確認するためのものである。
+
+```text
+予約サイト
+  予約申込日
+  受診日
+
+健診機関からの結果受領
+  結果ファイル受領
+  健診機関視点では送信済み
+
+健診結果チェック
+  加入者突合
+  人の基本情報チェック
+  法定健診項目チェック
+  HIAアップロード用XML出力
+
+HIA状態チェック
+  HIAステータス
+  資格状況
+  情報更新履歴
+
+健保・事業所納品チェック
+  HIAからのダウンロードXML有無
+  健保への納品
+  事業所への納品
+```
+
+このため、`person_event` / `person_event_status_items` は「健診イベントにおける人の現在状態」を見るためのレイヤーとする。
+予約、結果、HIA、納品の詳細テーブルをすべて統合するのではなく、それぞれのsourceから必要な状態を集約して表示・判断できるようにする。
+
+### Current Event Example
+
+現在の `event_id = 2` は、以下のイベント枠として扱う。
+
+```text
+保険者: トランス・コスモス健康保険組合
+年度: 2026年度
+イベント: 定期健診
+```
+
+同一人物が年度内に複数回受診すること、また今後特殊健診系が追加されることを想定する。
+そのため、人単位の親は `event_id + subscriber_id` だが、健診結果そのものは `exam_ledgers` で複数件持てるようにする。
+
+例:
+
+```text
+person_event
+  event_id=2, subscriber_id=1001
+
+exam_ledgers
+  2026-05-20 定期健診
+  2026-09-10 特殊健診
+  2026-11-15 再検査または追加受領
+```
+
+`person_event` はその人のイベント全体の状態を示し、個別の受診・結果・結合・XML出力候補は `exam_ledgers` 側で扱う。
+年度内複数受診を潰して1件にしない。
+画面では `person_event` から、その人に紐づく複数の `exam_ledgers` を展開して確認できる形を目指す。
+
+### Out of Scope
+
+以下は今回の人単位状態管理へ直接混ぜない。
+
+- 汎用問い合わせタスク
+- 請求金額の確定
+- 予約サイトそのものの業務DB置き換え
+- HIA台帳取込そのものの正本化
+- 事業所納品ファイルの詳細生成
+
+ただし、各領域の状態を `person_event_status_items` のitemとして参照・集約する余地は残す。
 
 ## Value Layer Concept
 
@@ -125,6 +202,36 @@ source値:
 ファイル側を処理・証跡の層、人側を業務・納品の層として分ける。
 これにより、複数ファイル結合、基本情報補正、再出力、HIAアップロード状態管理を、原本値の上書きなしで扱える。
 
+## HIA Dashboard Status Layers
+
+HIAダッシュボードCSV由来の状態は、健診結果ledgerそのものとは別の観測情報として扱う。
+ただし、健診イベントに対する人の進捗確認では重要な入力になるため、次の3層に分けて接続する。
+
+```text
+work_other.hia_dashboard_status
+  HIAダッシュボードCSVの最新観測状態
+  CSV取込のたびに現在値として更新される
+
+work_other.hia_dashboard_year_end_status
+  年度末または年度最終状態の固定スナップショット
+  2025年度最終状態はこのテーブルへ退避済み
+
+dev_phr.person_event / person_event_status_items
+  健診eventに対する人単位の確認状態
+  HIA最新状態や年度スナップを必要なitemへ集約して表示・判断する
+```
+
+`hia_dashboard_status` は最新観測であり、年度が変わると状態が初期化または上書きされる可能性がある。
+そのため、過年度eventの状態判定に `hia_dashboard_status` の最新値を直接使わない。
+過年度の最終状態を参照する場合は `hia_dashboard_year_end_status` を使う。
+
+一方、進行中年度のeventでは `hia_dashboard_status` を現在状態の入力として利用できる。
+この場合も、HIA取込テーブルを人チェックの正本にはせず、`person_event_status_items` へ必要な状態を同期する。
+
+HIAダッシュボードCSV取込側は既存実装があるが、新フォーマットでは先頭にHIA加入者IDが追加されている。
+今後の改修では、HIA加入者IDがある場合はそれを優先して加入者照合し、旧来の漢字氏名照合は補助またはfallbackとして扱う。
+ただし、HIAダッシュボードCSVの取込・照合方式変更は、健診結果CSV取込そのものとは別責務とする。
+
 ## Responsibilities
 
 ### `dev_phr.person_event`
@@ -148,6 +255,9 @@ source値:
 初期 item_code:
 
 - `PERSON_STATUS`: 人単位の代表状態。`XML_EXPORTED`, `XML_EXPORTABLE`, `CHECK_NG`, `CHECK_PENDING`, `RESULT_RECEIVED` など。
+- `RESERVATION_APPLIED_AT`: 予約申込日。
+- `EXAM_VISITED_AT`: 受診日または受診日時。
+- `RESULT_FILE_RECEIVED_COUNT`: 結果ファイル受領件数。
 - `RESULT_RECEIVED_COUNT`: 受領済み健診結果数。
 - `MATCHED_LEDGER_COUNT`: 加入者突合済みledger数。
 - `CHECK_OK_LEDGER_COUNT`: 法定OKのledger数。
@@ -155,6 +265,11 @@ source値:
 - `CHECK_PENDING_LEDGER_COUNT`: 法定check未実行または保留のledger数。
 - `EXPORTABLE_LEDGER_COUNT`: XML出力候補ledger数。
 - `EXPORTED_LEDGER_COUNT`: XML出力済みledger数。
+- `HIA_STATUS`: HIA上の現在状態。
+- `HIA_QUALIFICATION_STATUS`: HIAまたは加入者台帳上の資格状態。
+- `HIA_DOWNLOADED_XML_COUNT`: HIAからダウンロードできたXML件数。
+- `INSURER_DELIVERY_STATUS`: 健保納品状態。
+- `EMPLOYER_DELIVERY_STATUS`: 事業所納品状態。
 - `LATEST_EXAM_LEDGER_ID`: 最新または代表の統合ledger参照。
 - `LATEST_EXAM_DATE`: 最新健診日。
 - `LATEST_FACILITY_CODE`: 最新健診機関コード。
