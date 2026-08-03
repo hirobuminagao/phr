@@ -37,6 +37,8 @@ python scripts/health_exam_event/sync_person_event_population.py
 `person_event_status_items` は `person_event_id + item_code` の縦持ちで、
 代表 `exam_ledger_id`、check件数、出力可能件数、出力済み件数などを保持します。
 このスクリプトは結果状態系のitemだけを更新し、母集団系の資格状態itemは削除しません。
+`person_event.gap_reason` は一覧用の短い代表理由として255文字に丸め、詳細理由は
+`person_event_status_items.reason` 側に保持します。
 実行履歴は `dev_phr.etl_runs.phase = 'apply'` として記録し、詳細処理名はnotesに残します。
 
 実行前にmigrationを適用します。

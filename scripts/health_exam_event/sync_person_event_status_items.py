@@ -229,7 +229,7 @@ def upsert_person_events(cur: Any, config: SyncConfig) -> int:
             CASE WHEN t.`check_ng_ledger_count` > 0 OR t.`requires_basic_info_correction` = 1 THEN 1 ELSE 0 END,
             CASE
               WHEN t.`requires_basic_info_correction` = 1 THEN 'BASIC_INFO_CORRECTION_REQUIRED'
-              WHEN t.`check_ng_ledger_count` > 0 THEN t.`latest_check_reason`
+              WHEN t.`check_ng_ledger_count` > 0 THEN LEFT(t.`latest_check_reason`, 255)
               ELSE NULL
             END,
             t.`last_observed_at`
