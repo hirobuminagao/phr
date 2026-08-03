@@ -1411,3 +1411,50 @@ XML/CSV個別ledgerから統合台帳 `exam_ledgers` への方針転換
 - `exam_ledgers` はXML/CSV共通の1人1健診結果台帳とし、source種別、source ledger ID、file_receipt、event、加入者突合情報、基本情報、check/export状態、補正現在値を持つ。
 - 移行は、既存個別ledgerからのデータ移行、または再scan/再importによる再構築のどちらも許容する。
 - 個別ledgerの廃止タイミングは、統合台帳ベースの取込、check、補正、XML出力が実行環境で安定してから決める。
+
+---
+
+## DH-20260803-01 / 2026-08-03 JST
+
+### テーマ
+
+人×イベント状態管理を既存 `person_event` と縦持ち状態項目へ寄せる
+
+### 背景
+
+- 統合ledgerの上位に人単位の状態管理が必要になった。
+- 当初は `health_exam_result.event_person_statuses` のような横持ち集約テーブルを検討した。
+- ただし既に `dev_phr.person_event` が人×イベント単位の親として存在しており、別テーブルを増やすと既存コンセプトと二重化する。
+- 今後、check項目、HIAアップロード状態、再提出対象、補正待ちなどの管理項目は増減する見込みがあるため、横持ち列を増やし続けると変更影響が大きい。
+
+### 決定・実装内容
+
+- 人単位の親は既存 `dev_phr.person_event` を使う。
+- 増減しやすい状態項目は `dev_phr.person_event_status_items` に `person_event_id + item_code` で縦持ちする。
+- `health_exam_result.event_person_statuses` 案は採用しない。
+- 未突合ledgerはまだ人として確定していないため `person_event` を作らず、`exam_ledgers` 側の未突合状態として残す。
+- `exam_ledgers` から `person_event` / `person_event_status_items` へ同期する `scripts/from_medical/dev_tools/sync_person_event_status_items.py` を追加する。
+- 初期item_codeは、代表状態、受領件数、check件数、XML出力可能件数、XML出力済み件数、最新ledger参照、最新健診日、最新健診機関、補正待ち、手動出力許可有無とする。
+
+---
+
+## DH-20260803-02 / 2026-08-03 JST
+
+### テーマ
+
+source値と清書値の二層化
+
+### 背景
+
+- 複数の結果ファイルから1つの論理健診結果を作る場合、原本ファイルに紐づく値と、最終的にXMLへ出す採用済み値の責務が異なる。
+- source値だけから毎回XML出力値を組み立てると、結合、補正、再出力時にJOINと採用判定が重くなり、状態も揺れやすい。
+- 一方で、出力都合でsource値を上書きすると、受領ファイルのraw値、normalize結果、エラー理由、健診機関確認の証跡を失う。
+
+### 決定・実装方針
+
+- 検査値は、ファイル由来のsource value layerと、納品・XML出力用のadopted value layerに分ける。
+- source value layerは、raw値、normalize値、validation、由来、処理run、エラー理由を保持する処理・証跡層とする。
+- adopted value layerは、出力に必要な最小限の採用済み値、採用元source値への参照、採用状態、採用理由を保持する業務・納品層とする。
+- 原本値は不変寄り、清書値は再生成可能と位置づける。
+- 初期実装では既存 `exam_item_values` を使い、`ledger_type = XML / CSV` をsource値、`ledger_type = EXAM` を清書値として扱う案を基本とする。
+- 清書値の責務が大きくなった場合のみ、後続で `adopted_exam_item_values` 等の専用テーブル分離を検討する。
