@@ -76,6 +76,22 @@ DBから値を取得する
 
 までとする。
 
+## Postal Code Address Lookup
+
+`postal_code_address.py` は `phr_master.postal_code_addresses` から郵便番号に対応する住所候補を返す。
+入力はハイフンあり・なしを受け、内部では7桁数字に正規化する。
+
+主API:
+
+```python
+lookup_postal_code_address(cur, "100-0001")
+lookup_postal_code_address_for_xml(cur, "1000001")
+```
+
+返却する `PostalAddressLookupResult` は、候補一覧、候補数、XML補完用の代表住所、理由を持つ。
+複数候補時に代表住所が返る場合でも、lookup層は業務採用可否を判断しない。
+呼び出し側は `reason` と `candidate_count` を見て、画面確認に回すか、HIA提出優先で市区町村までを採用するかを決める。
+
 ---
 
 # lookup / resolver / hydrate の分離

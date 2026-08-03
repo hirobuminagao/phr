@@ -101,7 +101,17 @@ lookup入力はハイフンあり・なしの両方を受け、内部では7桁�
 
 ## Lookup Behavior
 
-郵便番号から住所を補完するAPIまたは共通libは、以下を返す。
+郵便番号から住所を補完する共通libは `scripts/lib/db/lookup/postal_code_address.py` とする。
+健診結果CSV/XML出力、基本情報補正画面、HIA系処理などから再利用できるよう、個別スクリプトへSQLを直書きしない。
+
+主API:
+
+```text
+lookup_postal_code_address(cur, postal_code, master_db='phr_master')
+lookup_postal_code_address_for_xml(cur, postal_code, master_db='phr_master')
+```
+
+`lookup_postal_code_address()` は以下を返す。
 
 ```text
 PostalAddressLookupResult
@@ -124,6 +134,9 @@ PostalAddressLookupResult
 
 郵便番号が不正、7桁に正規化できない、またはmasterに存在しない場合はlookup失敗とする。
 HIA提出を止めない運用では、最終fallbackとして郵便番号 `000-0000`、住所 `－` を使い、理由を記録する。
+
+lookup層は候補取得と代表候補の提示までを責務とする。
+複数候補時に `prefecture + city` の代表住所を返す場合でも、それを採用するか、画面確認へ回すか、最終fallbackを使うかは呼び出し側の業務処理で決める。
 
 ## Loader
 
