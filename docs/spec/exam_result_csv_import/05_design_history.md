@@ -1555,3 +1555,24 @@ person_event母集団の作成元
 - 資格喪失日は除外条件ではなく、`person_event_status_items` の `QUALIFICATION_STATUS` / `QUALIFICATION_LOST_DATE` として保持する。
 - 母集団作成は `scripts/health_exam_event/sync_person_event_population.py` として独立させる。
 - `scripts/health_exam_event/sync_person_event_status_items.py` は、母集団作成済みの `person_event` に対して、健診結果受領、check、XML出力状態を埋める役割へ寄せる。
+
+---
+
+## DH-20260803-07 / 2026-08-03 JST
+
+### テーマ
+
+加入者基本情報の出力用projection
+
+### 背景
+
+- `subscribers` は初期から使われている中心テーブルであり、列名だけではraw/norm/match/exportの責務が明確でない箇所がある。
+- 健診XML出力では、保険証記号、保険証番号、氏名カナをHIA/XML用の値として扱う必要がある。
+- 一方、`insurance_symbol_match`、`insurance_number_match`、`name_kana_full_match` は照合用であり、HIA/XML出力値として使ってはならない。
+
+### 決定・実装内容
+
+- `scripts/lib/db/lookup/subscriber_export_projection.py` を追加し、`subscribers` からHIA/XML出力候補値を取り出す責務を共通libへ閉じ込める。
+- ledger側には `insurance_symbol_export_value`、`insurance_number_export_value`、`name_kana_export_value` と、それぞれの `source` / `reason` を保持する。
+- CSV取込時は、まずCSV原本値から `SOURCE` として出力値を作り、加入者突合が `MATCHED` の場合は `subscribers` 登録値から `SUBSCRIBER` として出力値を作り直す。
+- XML出力では、ledgerの `*_export_value` がある場合はそれを優先し、なければ従来どおりraw値をidentity共通libで正規化する。

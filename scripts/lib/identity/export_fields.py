@@ -48,9 +48,9 @@ def build_xml_export_fields(
     insurer = normalize_insurer_number(
         row.get("insurer_number") if insurer_number_override is None else insurer_number_override
     )
-    symbol = normalize_insurance_symbol(row.get("insurance_symbol_raw"))
-    number = normalize_insurance_number(row.get("insurance_number_raw"))
-    kana = normalize_name_kana_full(row.get("name_kana_raw"))
+    symbol = normalize_insurance_symbol(row.get("insurance_symbol_export_value") or row.get("insurance_symbol_raw"))
+    number = normalize_insurance_number(row.get("insurance_number_export_value") or row.get("insurance_number_raw"))
+    kana = normalize_name_kana_full(row.get("name_kana_export_value") or row.get("name_kana_raw"))
     gender = normalize_gender_code(row.get("gender_code") or row.get("gender_raw"))
     birth = normalize_date_to_ymd_and_compact(row.get("birthdate"), purpose="birthdate")
     exam = normalize_date_to_ymd_and_compact(row.get("exam_date"), purpose="exam_date")

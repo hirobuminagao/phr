@@ -400,6 +400,11 @@ Current as of 2026-07-29.
 - 補正履歴は `field_name`, `before_value`, `after_value`, `correction_source`, `correction_reason`, `previous_correction_history_id`, `etl_run_id`, `corrected_by`, `corrected_at` を持つ。`active` flagではなく、ledger側の最新履歴IDで現在値を示す。
 - 基本情報修正画面では、加入者突合済みの行に対して `subscribers` の保険証記号、保険証番号、枝番、氏名カナ、郵便番号、住所を補正候補として表示する。採用時は `correction_source = 'SUBSCRIBER'` の補正履歴として記録し、原本値を上書きしない。
 - 人向けの不足情報CSVを追加するかは後続で決め、初期XML実装を止めない。`manual_export_approved` / `manual_export_reason` は不足情報CSVとは別概念とする。
+- `*_match` は照合・検索専用であり、HIA/XML出力値としては使用しない。
+- 保険証記号、保険証番号、氏名カナは、ledgerに `*_export_value` / `*_export_source` / `*_export_reason` を持たせる。
+- CSV/XML原本から作る場合は `*_export_source = SOURCE`、加入者突合済みの `subscribers` 登録値から作る場合は `*_export_source = SUBSCRIBER` とする。
+- `subscribers` からHIA/XML出力用基本情報を読む処理は、`scripts/lib/db/lookup/subscriber_export_projection.py` に閉じ込める。`subscribers` 本体の列名やraw/norm/match/exportの混在は、出力処理側へ直接漏らさない。
+- `subscribers.insurance_symbol_export` は保険証記号の出力候補として使用できる。保険証番号は `subscribers.insurance_number`、氏名カナは `subscribers.name_kana_full` を元値として既存identity共通libへ通し、出力値を作る。
 
 ### Production Folder Aliases
 

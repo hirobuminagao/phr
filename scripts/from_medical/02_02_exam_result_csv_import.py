@@ -25,6 +25,10 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingRule, get_csv_format_version_by_id, load_csv_mapping_rules
 from scripts.lib.db.lookup.event import get_event_age_rule, get_event_insurer_number
 from scripts.lib.db.lookup.exam_item_master import get_exam_item
+from scripts.lib.db.lookup.subscriber_export_projection import (
+    load_subscriber_basic_export_projection_by_id,
+    resolve_basic_identity_export_values,
+)
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import PHR_MASTER
@@ -469,6 +473,7 @@ def upsert_row_ledger(
     exam_item_count: int,
     exam_item_error_count: int,
     basic_info: Mapping[str, Any],
+    basic_identity_export: Mapping[str, Any],
 ) -> tuple[int, str]:
     file_receipt_id = int(file_receipt["id"])
     existing = get_existing_row_ledger(
@@ -511,6 +516,15 @@ def upsert_row_ledger(
         "address_completion_reason": basic_info.get("address_completion_reason"),
         "address_completed_value": basic_info.get("address_completed_value"),
         "postal_code_completed_value": basic_info.get("postal_code_completed_value"),
+        "insurance_symbol_export_value": basic_identity_export.get("insurance_symbol_export_value"),
+        "insurance_symbol_export_source": basic_identity_export.get("insurance_symbol_export_source"),
+        "insurance_symbol_export_reason": basic_identity_export.get("insurance_symbol_export_reason"),
+        "insurance_number_export_value": basic_identity_export.get("insurance_number_export_value"),
+        "insurance_number_export_source": basic_identity_export.get("insurance_number_export_source"),
+        "insurance_number_export_reason": basic_identity_export.get("insurance_number_export_reason"),
+        "name_kana_export_value": basic_identity_export.get("name_kana_export_value"),
+        "name_kana_export_source": basic_identity_export.get("name_kana_export_source"),
+        "name_kana_export_reason": basic_identity_export.get("name_kana_export_reason"),
         "person_id_custom": ledger_fields.get("person_id_custom"),
         "subscriber_match_status": "NOT_EXECUTED",
         "exam_item_status": "ERROR" if exam_item_error_count else "READY",
@@ -521,6 +535,7 @@ def upsert_row_ledger(
         "row_reason": row_reason,
     }
     if existing is None:
+        insert_placeholders = ", ".join(["%s"] * 53)
         cur.execute(
             f"""
             INSERT INTO {qname(config.health_db)}.csv_row_ledger (
@@ -528,7 +543,12 @@ def upsert_row_ledger(
                 row_sha256, raw_row_json, actual_header_sha256, mapping_version,
                 insurer_number, exam_facility_id, facility_code, facility_name,
                 exam_date, name_full_raw, name_kana_raw,
-                insurance_symbol_raw, insurance_number_raw, insurance_branch_number_raw,
+                name_kana_export_value, name_kana_export_source, name_kana_export_reason,
+                insurance_symbol_raw,
+                insurance_symbol_export_value, insurance_symbol_export_source, insurance_symbol_export_reason,
+                insurance_number_raw,
+                insurance_number_export_value, insurance_number_export_source, insurance_number_export_reason,
+                insurance_branch_number_raw,
                 birthdate, gender_raw, health_exam_report_category, program_code,
                 postal_code, address,
                 basic_info_status, basic_info_reason,
@@ -541,18 +561,7 @@ def upsert_row_ledger(
                 subscriber_match_status, exam_item_status, exam_item_count,
                 exam_item_error_count, exam_item_reason, row_status, row_reason
             )
-            VALUES (
-                %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s,
-                %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s,
-                %s, %s, %s, %s
-            )
+            VALUES ({insert_placeholders})
             """,
             (
                 file_receipt_id,
@@ -571,8 +580,17 @@ def upsert_row_ledger(
                 params["exam_date"],
                 params["name_full_raw"],
                 params["name_kana_raw"],
+                params["name_kana_export_value"],
+                params["name_kana_export_source"],
+                params["name_kana_export_reason"],
                 params["insurance_symbol_raw"],
+                params["insurance_symbol_export_value"],
+                params["insurance_symbol_export_source"],
+                params["insurance_symbol_export_reason"],
                 params["insurance_number_raw"],
+                params["insurance_number_export_value"],
+                params["insurance_number_export_source"],
+                params["insurance_number_export_reason"],
                 params["insurance_branch_number_raw"],
                 params["birthdate"],
                 params["gender_raw"],
@@ -619,8 +637,17 @@ def upsert_row_ledger(
             exam_date = %s,
             name_full_raw = %s,
             name_kana_raw = %s,
+            name_kana_export_value = %s,
+            name_kana_export_source = %s,
+            name_kana_export_reason = %s,
             insurance_symbol_raw = %s,
+            insurance_symbol_export_value = %s,
+            insurance_symbol_export_source = %s,
+            insurance_symbol_export_reason = %s,
             insurance_number_raw = %s,
+            insurance_number_export_value = %s,
+            insurance_number_export_source = %s,
+            insurance_number_export_reason = %s,
             insurance_branch_number_raw = %s,
             birthdate = %s,
             gender_raw = %s,
@@ -662,8 +689,17 @@ def upsert_row_ledger(
             params["exam_date"],
             params["name_full_raw"],
             params["name_kana_raw"],
+            params["name_kana_export_value"],
+            params["name_kana_export_source"],
+            params["name_kana_export_reason"],
             params["insurance_symbol_raw"],
+            params["insurance_symbol_export_value"],
+            params["insurance_symbol_export_source"],
+            params["insurance_symbol_export_reason"],
             params["insurance_number_raw"],
+            params["insurance_number_export_value"],
+            params["insurance_number_export_source"],
+            params["insurance_number_export_reason"],
             params["insurance_branch_number_raw"],
             params["birthdate"],
             params["gender_raw"],
@@ -712,9 +748,21 @@ def update_row_ledger_subscriber(
     *,
     config: ImportConfig,
     ledger_id: int,
+    ledger_fields: Mapping[str, Any],
     identity: Mapping[str, Any],
     subscriber: Mapping[str, Any],
 ) -> None:
+    projection = None
+    if subscriber.get("subscriber_match_status") == SUBSCRIBER_MATCH_MATCHED:
+        projection = load_subscriber_basic_export_projection_by_id(
+            cur,
+            subscriber_id=cast(int | None, subscriber.get("subscriber_id")),
+            dev_db=config.dev_db,
+        )
+    export_values = resolve_basic_identity_export_values(
+        ledger_fields,
+        subscriber=projection,
+    ).as_db_params()
     cur.execute(
         f"""
         UPDATE {qname(config.health_db)}.csv_row_ledger
@@ -723,6 +771,15 @@ def update_row_ledger_subscriber(
             identity_hash = %s,
             person_id_custom = %s,
             name_kana_match = %s,
+            name_kana_export_value = %s,
+            name_kana_export_source = %s,
+            name_kana_export_reason = %s,
+            insurance_symbol_export_value = %s,
+            insurance_symbol_export_source = %s,
+            insurance_symbol_export_reason = %s,
+            insurance_number_export_value = %s,
+            insurance_number_export_source = %s,
+            insurance_number_export_reason = %s,
             gender_code = %s,
             subscriber_match_status = %s,
             subscriber_match_method = %s,
@@ -735,6 +792,15 @@ def update_row_ledger_subscriber(
             identity.get("identity_hash"),
             identity.get("person_id_custom"),
             identity.get("name_kana_match"),
+            export_values["name_kana_export_value"],
+            export_values["name_kana_export_source"],
+            export_values["name_kana_export_reason"],
+            export_values["insurance_symbol_export_value"],
+            export_values["insurance_symbol_export_source"],
+            export_values["insurance_symbol_export_reason"],
+            export_values["insurance_number_export_value"],
+            export_values["insurance_number_export_source"],
+            export_values["insurance_number_export_reason"],
             identity.get("gender_code"),
             subscriber.get("subscriber_match_status"),
             subscriber.get("subscriber_match_method"),
@@ -1001,6 +1067,10 @@ def process_file_receipt(
             row_errors.append(str(basic_info_params.get("insurer_number_completion_reason") or "INSURER_NUMBER_ERROR"))
         identity = build_csv_identity(ledger_fields)
         subscriber = resolve_csv_subscriber(cur, config=config, identity=identity)
+        source_export_values = resolve_basic_identity_export_values(
+            ledger_fields,
+            subscriber=None,
+        ).as_db_params()
         item_results = [result for result in extracted if result.rule.target_kind == "EXAM_ITEM_VALUE"]
         raw_row_json = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
         ledger_id, action = upsert_row_ledger(
@@ -1018,11 +1088,13 @@ def process_file_receipt(
             exam_item_count=0,
             exam_item_error_count=len(row_errors),
             basic_info=basic_info_params,
+            basic_identity_export=source_export_values,
         )
         update_row_ledger_subscriber(
             cur,
             config=config,
             ledger_id=ledger_id,
+            ledger_fields=ledger_fields,
             identity=identity,
             subscriber=subscriber,
         )
