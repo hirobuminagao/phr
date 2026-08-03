@@ -198,7 +198,7 @@ def read_source(path: Path) -> tuple[list[PostalCodeAddress], ImportSummary]:
     rows: list[PostalCodeAddress] = []
     postal_counts: dict[str, int] = {}
 
-    with path.open("r", encoding="utf-8", newline="") as fp:
+    with path.open("r", encoding="utf-8-sig", newline="") as fp:
         reader = csv.reader(fp)
         for raw_row in reader:
             summary.rows_read += 1
