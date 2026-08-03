@@ -25,8 +25,9 @@ from scripts.lib.etl import start_run as etl_start_run
 
 HEALTH_DB = "health_exam_result"
 DEV_DB = "dev_phr"
-ETL_PHASE = "SYNC_PERSON_EVENT_STATUS_ITEMS"
+ETL_PHASE = "apply"
 ETL_SOURCE = "FROM_MEDICAL"
+ETL_DETAIL = "SYNC_PERSON_EVENT_STATUS_ITEMS"
 RESULT_STATUS_ITEM_CODES = (
     "PERSON_STATUS",
     "RESULT_RECEIVED_COUNT",
@@ -403,7 +404,7 @@ def sync_person_event_status_items(conn: Any, config: SyncConfig) -> SyncSummary
                 run_id,
                 RunMetrics(rows_seen=summary.matched_ledgers, rows_inserted=summary.inserted_status_items),
                 status_override="success",
-                extra_notes=summary.to_message(),
+                extra_notes=f"{ETL_DETAIL} {summary.to_message()}",
             )
             conn.commit()
             return summary
@@ -414,7 +415,7 @@ def sync_person_event_status_items(conn: Any, config: SyncConfig) -> SyncSummary
                 run_id,
                 RunMetrics(rows_seen=summary.matched_ledgers, errors=1),
                 status_override="failed",
-                extra_notes=f"{summary.to_message()} error={type(exc).__name__}: {exc}",
+                extra_notes=f"{ETL_DETAIL} {summary.to_message()} error={type(exc).__name__}: {exc}",
             )
             conn.commit()
             raise

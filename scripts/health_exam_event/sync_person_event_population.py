@@ -24,8 +24,9 @@ from scripts.lib.etl import start_run as etl_start_run
 
 
 DEV_DB = "dev_phr"
-ETL_PHASE = "SYNC_PERSON_EVENT_POPULATION"
+ETL_PHASE = "apply"
 ETL_SOURCE = "FROM_MEDICAL"
+ETL_DETAIL = "SYNC_PERSON_EVENT_POPULATION"
 
 
 @dataclass(frozen=True)
@@ -304,7 +305,7 @@ def sync_person_event_population(conn: Any, config: SyncConfig) -> SyncSummary:
                 run_id,
                 RunMetrics(rows_seen=summary.subscriber_rows, rows_inserted=summary.changed_rows),
                 status_override="success",
-                extra_notes=summary.to_message(),
+                extra_notes=f"{ETL_DETAIL} {summary.to_message()}",
             )
             conn.commit()
             return summary
@@ -315,7 +316,7 @@ def sync_person_event_population(conn: Any, config: SyncConfig) -> SyncSummary:
                 run_id,
                 RunMetrics(rows_seen=summary.subscriber_rows, errors=1),
                 status_override="failed",
-                extra_notes=f"{summary.to_message()} error={type(exc).__name__}: {exc}",
+                extra_notes=f"{ETL_DETAIL} {summary.to_message()} error={type(exc).__name__}: {exc}",
             )
             conn.commit()
             raise

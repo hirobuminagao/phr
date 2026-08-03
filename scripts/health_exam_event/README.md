@@ -12,6 +12,7 @@
 `QUALIFICATION_STATUS` / `QUALIFICATION_LOST_DATE` として状態を保持します。
 `subscribers` に加入者が追加された場合や、氏名・資格喪失日・identity系情報が更新された場合も、
 このスクリプトを再実行すると `person_event` と母集団系status itemをupsertします。
+実行履歴は `dev_phr.etl_runs.phase = 'apply'` として記録し、詳細処理名はnotesに残します。
 
 件数だけ確認します。この実行ではDBを変更しません。
 
@@ -36,6 +37,7 @@ python scripts/health_exam_event/sync_person_event_population.py
 `person_event_status_items` は `person_event_id + item_code` の縦持ちで、
 代表 `exam_ledger_id`、check件数、出力可能件数、出力済み件数などを保持します。
 このスクリプトは結果状態系のitemだけを更新し、母集団系の資格状態itemは削除しません。
+実行履歴は `dev_phr.etl_runs.phase = 'apply'` として記録し、詳細処理名はnotesに残します。
 
 実行前にmigrationを適用します。
 
