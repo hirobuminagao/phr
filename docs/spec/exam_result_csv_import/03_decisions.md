@@ -117,6 +117,7 @@ Current as of 2026-07-29.
 - 既存 `xml_ledger` / `csv_row_ledger` は直ちに廃止しない。移行完了までは取込済みデータの移行元、既存スクリプトの後方互換、再scan/再import時の由来保持として扱う。
 - 新規改修では、可能な限り `exam_ledgers.exam_ledger_id` を参照する。`exam_item_values`、`exam_check_results`、基本情報補正履歴、XML出力履歴も統合ledger IDを正として扱えるようにする。
 - `exam_ledgers` はXML/CSV共通の1人1健診結果台帳とし、`source_type`, `source_xml_ledger_id`, `source_csv_row_ledger_id`, `file_receipt_id`, `event_id`, 加入者突合情報、基本情報、check/export状態、補正現在値を持つ。
+- 既存個別ledgerから統合ledgerへのbackfillは `sync_exam_ledgers.py` で行う。CSVは `csv_row_ledger.file_receipt_id`、XMLは `xml_file_links.file_receipt_id` から `file_receipts` へのリンクを復元する。
 - XML/CSV固有の原本証跡は、既存個別ledgerまたはsource detailへ残す。統合台帳は業務処理・画面・XML出力の共通面とする。
 - 移行方法は2案を許容する。既存 `xml_ledger` / `csv_row_ledger` から `exam_ledgers` へデータ移行する方法、または全ファイルを再scan/再importして `exam_ledgers` を作り直す方法である。実行環境で安定確認してから個別ledger廃止タイミングを決める。
 - `exam_ledgers` の上位に、eventに対する人単位の現在状態を管理する既存 `dev_phr.person_event` を使う。

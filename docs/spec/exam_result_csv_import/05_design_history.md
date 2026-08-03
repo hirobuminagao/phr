@@ -1479,3 +1479,8 @@ CSV→XML正式出力済み状態の保護
 - `sync_exam_ledgers.py` は、`xml_export_members` に該当source ledgerの出力履歴があれば `exam_ledgers.xml_export_status = 'EXPORTED'` として復元する。
 - 既存 `exam_ledgers.xml_export_status = 'EXPORTED'` は、source ledger側が `PENDING` でも上書きして戻さない。
 - 正式出力済みXML/ZIPは再出力しない運用を基本とする。
+
+### 追加実装
+
+- `sync_exam_ledgers.py` を既存個別ledgerから統合ledgerへのbackfillとして使う。
+- CSVは `csv_row_ledger.file_receipt_id`、XMLは `xml_file_links.file_receipt_id` から `exam_ledgers.file_receipt_id` と `exam_ledger_sources.file_receipt_id` を復元する。

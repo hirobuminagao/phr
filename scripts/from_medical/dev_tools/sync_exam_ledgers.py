@@ -123,6 +123,7 @@ def upsert_xml_ledgers(cur: Any, config: SyncConfig) -> int:
         f"""
         INSERT INTO {qname(config.health_db)}.`exam_ledgers` (
             `event_id`, `source_type`, `source_xml_ledger_id`,
+            `file_receipt_id`,
             `subscriber_id`, `hia_subscriber_id`, `identity_hash`, `person_id_custom`,
             `subscriber_match_status`, `subscriber_match_method`, `subscriber_match_reason`,
             `xml_sha256`, `xml_file_name`, `document_id`,
@@ -141,6 +142,7 @@ def upsert_xml_ledgers(cur: Any, config: SyncConfig) -> int:
         )
         SELECT
             l.`event_id`, 'XML', l.`id`,
+            link.`file_receipt_id`,
             l.`subscriber_id`, l.`hia_subscriber_id`, l.`identity_hash`, l.`person_id_custom`,
             l.`subscriber_match_status`, l.`subscriber_match_method`, l.`subscriber_match_reason`,
             l.`xml_sha256`, l.`xml_file_name`, l.`document_id`,
@@ -167,8 +169,17 @@ def upsert_xml_ledgers(cur: Any, config: SyncConfig) -> int:
             l.`manual_export_approved`, l.`manual_export_reason`,
             'SOURCE_SINGLE', l.`created_at`, l.`updated_at`
         FROM {qname(config.health_db)}.`xml_ledger` AS l
+        LEFT JOIN (
+            SELECT
+                `xml_ledger_id`,
+                MIN(`file_receipt_id`) AS `file_receipt_id`
+            FROM {qname(config.health_db)}.`xml_file_links`
+            GROUP BY `xml_ledger_id`
+        ) AS link
+          ON link.`xml_ledger_id` = l.`id`
         WHERE l.`event_id` = %s
         ON DUPLICATE KEY UPDATE
+            `file_receipt_id` = VALUES(`file_receipt_id`),
             `subscriber_id` = VALUES(`subscriber_id`),
             `hia_subscriber_id` = VALUES(`hia_subscriber_id`),
             `identity_hash` = VALUES(`identity_hash`),
@@ -348,7 +359,7 @@ def upsert_csv_ledgers(cur: Any, config: SyncConfig) -> int:
 def upsert_source_rows(cur: Any, config: SyncConfig, source_type: str) -> int:
     if source_type == "XML":
         source_id_column = "source_xml_ledger_id"
-        file_expr = "NULL"
+        file_expr = "el.`file_receipt_id`"
     elif source_type == "CSV":
         source_id_column = "source_csv_row_ledger_id"
         file_expr = "el.`file_receipt_id`"

@@ -10,6 +10,12 @@
 
 このスクリプトは取込本体を変更せず、既存ledgerを統合ledgerへ寄せるためのブリッジです。
 既存sourceを再読込した場合も、source ledger ID単位でupsertします。
+実行環境で既に取り込んだ `xml_ledger` / `csv_row_ledger` を統合ledgerへ反映する
+backfillとしても使用します。
+
+CSVは `csv_row_ledger.file_receipt_id`、XMLは `xml_file_links.file_receipt_id` から
+`exam_ledgers.file_receipt_id` と `exam_ledger_sources.file_receipt_id` を復元します。
+CSV→XML出力済み状態は `xml_export_members` を正本として参照し、`EXPORTED` を未出力へ戻しません。
 
 実行前にmigrationを適用します。
 
