@@ -123,6 +123,8 @@ Current as of 2026-07-29.
 - 増減しやすい状態項目、check集計、出力状態、HIAアップロード状態、要対応理由は `dev_phr.person_event_status_items` に縦持ちする。
 - 未突合ledgerはまだ人として確定していないため `person_event` を作らず、`exam_ledgers` 側の未突合状態として扱う。
 - XML出力候補判定は `exam_ledgers`、出力後の業務状態管理とHIAアップロード状態は `person_event` / `person_event_status_items` の責務とする。
+- CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
+- `exam_ledgers.xml_export_status` は、source ledgerの技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。
 - 複数結果を1つにする処理は、source ledgerを直接出力するのではなく、結合後の `exam_ledgers` を作成または更新する処理として扱う。
 - 検査値は、ファイル由来のsource値と、納品・XML出力用の清書値を分けて扱う。
 - source値はraw、normalize、validation、由来、エラーを持つ処理・証跡層とする。

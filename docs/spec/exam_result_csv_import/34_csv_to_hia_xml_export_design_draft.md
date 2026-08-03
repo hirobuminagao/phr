@@ -675,6 +675,8 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
 - ZIPが失敗した場合は出力履歴を登録せず、失敗内容を `etl_runs` / `etl_errors` に残す。
 - 再出力は過去履歴を更新・削除せず、別のZIP・個人XML履歴として追加する。
 - `csv_row_ledger.xml_export_status` は既出力判定用の技術状態として使用できるが、出力履歴の正本にはしない。
+- 再scan/importや統合ledger同期でsource ledger側の `xml_export_status` が未出力へ戻っても、`xml_export_members` に出力事実がある場合は `exam_ledgers.xml_export_status = 'EXPORTED'` として復元する。
+- 正式出力済みXML/ZIPは再出力しないことを基本とし、再出力が必要な場合は別途再出力理由と履歴管理を決める。
 - `xml_export_members` には、出力時点の `manual_export_approved`、理由、承認者、承認日時をsnapshotとして保存する。
 - 初回出力日時や出力回数は、専用履歴から取得する。
 - 履歴テーブルの責務は、誰を、いつ、どのRun・ZIP・個人XMLとして出力したかという事実の保存までとする。

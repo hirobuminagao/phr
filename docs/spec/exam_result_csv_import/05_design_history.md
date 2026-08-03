@@ -1458,3 +1458,24 @@ source値と清書値の二層化
 - 原本値は不変寄り、清書値は再生成可能と位置づける。
 - 初期実装では既存 `exam_item_values` を使い、`ledger_type = XML / CSV` をsource値、`ledger_type = EXAM` を清書値として扱う案を基本とする。
 - 清書値の責務が大きくなった場合のみ、後続で `adopted_exam_item_values` 等の専用テーブル分離を検討する。
+
+---
+
+## DH-20260803-03 / 2026-08-03 JST
+
+### テーマ
+
+CSV→XML正式出力済み状態の保護
+
+### 背景
+
+- 実行環境ではCSV→XML出力を既に実行しており、生成済みXML/ZIPを正式出力として扱う。
+- 再出力は混乱の元になるため、scan/import/checkを再実行しても、出力済み事実を未出力へ戻してはならない。
+- `csv_row_ledger.xml_export_status` や `exam_ledgers.xml_export_status` は技術状態として再同期で揺れる可能性がある。
+
+### 決定・実装内容
+
+- 正常完成した出力の正本は `xml_export_zips` / `xml_export_members` とする。
+- `sync_exam_ledgers.py` は、`xml_export_members` に該当source ledgerの出力履歴があれば `exam_ledgers.xml_export_status = 'EXPORTED'` として復元する。
+- 既存 `exam_ledgers.xml_export_status = 'EXPORTED'` は、source ledger側が `PENDING` でも上書きして戻さない。
+- 正式出力済みXML/ZIPは再出力しない運用を基本とする。

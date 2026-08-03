@@ -153,7 +153,17 @@ def upsert_xml_ledgers(cur: Any, config: SyncConfig) -> int:
             l.`report_category_code`, l.`program_type_code`,
             l.`exam_item_status`, l.`exam_item_reason`,
             l.`xml_status`, l.`xml_reason`,
-            l.`check_status`, l.`check_reason`, l.`xml_export_status`,
+            l.`check_status`, l.`check_reason`,
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                FROM {qname(config.health_db)}.`xml_export_members` AS xem
+                WHERE xem.`event_id` = l.`event_id`
+                  AND xem.`ledger_type` = 'XML'
+                  AND xem.`ledger_id` = l.`id`
+              ) THEN 'EXPORTED'
+              ELSE l.`xml_export_status`
+            END,
             l.`manual_export_approved`, l.`manual_export_reason`,
             'SOURCE_SINGLE', l.`created_at`, l.`updated_at`
         FROM {qname(config.health_db)}.`xml_ledger` AS l
@@ -191,7 +201,12 @@ def upsert_xml_ledgers(cur: Any, config: SyncConfig) -> int:
             `xml_reason` = VALUES(`xml_reason`),
             `check_status` = VALUES(`check_status`),
             `check_reason` = VALUES(`check_reason`),
-            `xml_export_status` = VALUES(`xml_export_status`),
+            `xml_export_status` = CASE
+                WHEN {qname(config.health_db)}.`exam_ledgers`.`xml_export_status` = 'EXPORTED'
+                    THEN {qname(config.health_db)}.`exam_ledgers`.`xml_export_status`
+                WHEN VALUES(`xml_export_status`) = 'EXPORTED' THEN VALUES(`xml_export_status`)
+                ELSE VALUES(`xml_export_status`)
+            END,
             `manual_export_approved` = VALUES(`manual_export_approved`),
             `manual_export_reason` = VALUES(`manual_export_reason`),
             `source_updated_at` = VALUES(`source_updated_at`)
@@ -244,7 +259,17 @@ def upsert_csv_ledgers(cur: Any, config: SyncConfig) -> int:
             l.`exam_facility_postal_code`, l.`exam_facility_address`, l.`exam_facility_phone_number`,
             l.`exam_item_status`, l.`exam_item_count`, l.`exam_item_error_count`, l.`exam_item_reason`,
             l.`row_status`, l.`row_reason`,
-            l.`check_status`, l.`check_reason`, l.`xml_export_status`,
+            l.`check_status`, l.`check_reason`,
+            CASE
+              WHEN EXISTS (
+                SELECT 1
+                FROM {qname(config.health_db)}.`xml_export_members` AS xem
+                WHERE xem.`event_id` = l.`event_id`
+                  AND xem.`ledger_type` = 'CSV'
+                  AND xem.`ledger_id` = l.`csv_row_ledger_id`
+              ) THEN 'EXPORTED'
+              ELSE l.`xml_export_status`
+            END,
             l.`manual_export_approved`, l.`manual_export_reason`,
             l.`manual_export_approved_at`, l.`manual_export_approved_by`,
             l.`resume_approved`, l.`resume_approved_at`, l.`resume_approved_by`, l.`resume_approved_reason`,
@@ -299,7 +324,12 @@ def upsert_csv_ledgers(cur: Any, config: SyncConfig) -> int:
             `row_reason` = VALUES(`row_reason`),
             `check_status` = VALUES(`check_status`),
             `check_reason` = VALUES(`check_reason`),
-            `xml_export_status` = VALUES(`xml_export_status`),
+            `xml_export_status` = CASE
+                WHEN {qname(config.health_db)}.`exam_ledgers`.`xml_export_status` = 'EXPORTED'
+                    THEN {qname(config.health_db)}.`exam_ledgers`.`xml_export_status`
+                WHEN VALUES(`xml_export_status`) = 'EXPORTED' THEN VALUES(`xml_export_status`)
+                ELSE VALUES(`xml_export_status`)
+            END,
             `manual_export_approved` = VALUES(`manual_export_approved`),
             `manual_export_reason` = VALUES(`manual_export_reason`),
             `manual_export_approved_at` = VALUES(`manual_export_approved_at`),
