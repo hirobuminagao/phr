@@ -184,7 +184,7 @@ def upsert_person_events(cur: Any, config: SyncConfig) -> int:
             `identity_hash` = VALUES(`identity_hash`),
             `is_eligible` = VALUES(`is_eligible`),
             `last_observed_at` = GREATEST(
-                COALESCE(`last_observed_at`, TIMESTAMP '1970-01-01 00:00:00'),
+                COALESCE({dev}.`person_event`.`last_observed_at`, TIMESTAMP '1970-01-01 00:00:00'),
                 COALESCE(VALUES(`last_observed_at`), TIMESTAMP '1970-01-01 00:00:00')
             )
         """
