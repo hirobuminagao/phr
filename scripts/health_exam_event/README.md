@@ -63,12 +63,34 @@ python scripts/health_exam_event/sync_person_event_status_items.py --dry-run
 python scripts/health_exam_event/sync_person_event_status_items.py
 ```
 
+## `sync_person_event_hia_dashboard_status.py`
+
+`work_other.hia_dashboard_status` に保持したHIAダッシュボード現在状態を、
+`dev_phr.person_event` と `dev_phr.person_event_status_items` へ同期します。
+
+このスクリプトは履歴を持たず、HIA状態系のstatus itemを毎回削除して最新値を再INSERTします。
+HIA側の値変更履歴は `work_other.hia_dashboard_status_history` を正とします。
+
+件数だけ確認します。この実行ではDBを変更しません。
+
+```powershell
+python scripts/health_exam_event/sync_person_event_hia_dashboard_status.py --dry-run
+```
+
+HIAダッシュボード状態を人単位event状態へ反映します。
+
+```powershell
+python scripts/health_exam_event/sync_person_event_hia_dashboard_status.py
+```
+
 ## 基本の実行順
 
 ```text
+scripts/hia/import_dashboard_csv.py
 scripts/from_medical/dev_tools/sync_exam_ledgers.py
 scripts/from_medical/03_check_exam_results.py --ledger-type EXAM
 scripts/health_exam_event/sync_person_event_population.py
+scripts/health_exam_event/sync_person_event_hia_dashboard_status.py
 scripts/health_exam_event/sync_person_event_status_items.py
 scripts/from_medical/dev_tools/refresh_exam_result_ledger_report.py
 ```
