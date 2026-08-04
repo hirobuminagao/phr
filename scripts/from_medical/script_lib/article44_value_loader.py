@@ -1,4 +1,4 @@
-"""Load and normalize Article 44 examination values for one XML ledger."""
+"""Load and normalize Article 44 examination values for one ledger."""
 
 from __future__ import annotations
 
@@ -33,8 +33,9 @@ def load_article44_value_map(
     ledger_id: int | None = None,
     required_namecodes: tuple[RequiredNamecode, ...],
     result_db: str = "health_exam_result",
+    dev_db: str = "dev_phr",
 ) -> ValueMap:
-    """Load required Article 44 values for one XML/CSV ledger."""
+    """Load required Article 44 values for one imported exam ledger or export case."""
 
     resolved_ledger_id = ledger_id if ledger_id is not None else xml_ledger_id
     if (
@@ -44,33 +45,57 @@ def load_article44_value_map(
     ):
         raise ValueError(f"ledger_id must be a positive integer: {resolved_ledger_id!r}")
     resolved_ledger_type = ledger_type.strip().upper() if isinstance(ledger_type, str) else ""
-    if resolved_ledger_type not in {"XML", "CSV"}:
-        raise ValueError(f"ledger_type must be XML or CSV: {ledger_type!r}")
+    if resolved_ledger_type not in {"EXAM", "XML", "CSV", "EXPORT_CASE"}:
+        raise ValueError(f"ledger_type must be EXAM, XML, CSV, or EXPORT_CASE: {ledger_type!r}")
     _validate_required_namecodes(required_namecodes)
 
     namecodes = tuple(required.namecode for required in required_namecodes)
     placeholders = ", ".join(["%s"] * len(namecodes))
-    cursor.execute(
-        f"""
-        SELECT
-          ledger_id,
-          id,
-          namecode,
-          raw_value_type,
-          raw_value,
-          raw_unit,
-          normalized_value,
-          normalized_unit,
-          code_value,
-          section_code
-        FROM {qname(result_db)}.exam_item_values
-        WHERE ledger_type = %s
-          AND ledger_id = %s
-          AND namecode IN ({placeholders})
-        ORDER BY namecode, id
-        """,
-        (resolved_ledger_type, resolved_ledger_id, *namecodes),
-    )
+    if resolved_ledger_type == "EXPORT_CASE":
+        cursor.execute(
+            f"""
+            SELECT
+              cv.`exam_export_case_id` AS ledger_id,
+              cv.`exam_export_case_value_id` AS id,
+              cv.`namecode`,
+              im.`xml_value_type` AS raw_value_type,
+              cv.`normalized_value` AS raw_value,
+              cv.`normalized_unit` AS raw_unit,
+              cv.`normalized_value`,
+              cv.`normalized_unit`,
+              cv.`code_value`,
+              im.`cda_section_code_default` AS section_code
+            FROM {qname(result_db)}.exam_export_case_values AS cv
+            LEFT JOIN {qname(dev_db)}.exam_item_master AS im
+              ON im.`namecode` = cv.`namecode`
+            WHERE cv.`exam_export_case_id` = %s
+              AND cv.`namecode` IN ({placeholders})
+            ORDER BY cv.`namecode`, cv.`exam_export_case_value_id`
+            """,
+            (resolved_ledger_id, *namecodes),
+        )
+    else:
+        cursor.execute(
+            f"""
+            SELECT
+              ledger_id,
+              id,
+              namecode,
+              raw_value_type,
+              raw_value,
+              raw_unit,
+              normalized_value,
+              normalized_unit,
+              code_value,
+              section_code
+            FROM {qname(result_db)}.exam_item_values
+            WHERE ledger_type = %s
+              AND ledger_id = %s
+              AND namecode IN ({placeholders})
+            ORDER BY namecode, id
+            """,
+            (resolved_ledger_type, resolved_ledger_id, *namecodes),
+        )
     return _build_value_map(required_namecodes, cursor.fetchall())
 
 

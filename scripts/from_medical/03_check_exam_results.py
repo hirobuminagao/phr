@@ -46,8 +46,9 @@ CHECK_STATUS_NG = "NG"
 LEDGER_TYPE_XML = "XML"
 LEDGER_TYPE_CSV = "CSV"
 LEDGER_TYPE_EXAM = "EXAM"
+LEDGER_TYPE_EXPORT_CASE = "EXPORT_CASE"
 LEDGER_TYPE_ALL = "ALL"
-LEDGER_TYPES = {LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM, LEDGER_TYPE_ALL}
+LEDGER_TYPES = {LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM, LEDGER_TYPE_EXPORT_CASE, LEDGER_TYPE_ALL}
 
 ARTICLE44_OK_STATUSES = {STATUS_OK, STATUS_CALCULATED, STATUS_ALTERNATIVE}
 ARTICLE44_PROBLEM_STATUSES = {STATUS_MISSING, STATUS_INVALID}
@@ -135,9 +136,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None, help="Override maximum xml_ledger rows to process. 0 means unlimited.")
     parser.add_argument(
         "--ledger-type",
-        choices=(LEDGER_TYPE_ALL, LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM),
+        choices=(LEDGER_TYPE_ALL, LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM, LEDGER_TYPE_EXPORT_CASE),
         default=None,
-        help="Ledger source to check. EXAM uses unified exam_ledgers. Default is ALL.",
+        help="Ledger source to check. EXPORT_CASE uses exam_export_cases. EXAM uses imported exam_ledgers. Default is ALL.",
     )
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
@@ -343,6 +344,7 @@ def insert_check_result(
     row: dict[str, Any] = {
         "ledger_type": ledger["ledger_type"],
         "exam_ledger_id": ledger.get("exam_ledger_id"),
+        "exam_export_case_id": ledger["id"] if ledger["ledger_type"] == LEDGER_TYPE_EXPORT_CASE else None,
         "xml_ledger_id": ledger["id"] if ledger["ledger_type"] == LEDGER_TYPE_XML else None,
         "csv_row_ledger_id": ledger["id"] if ledger["ledger_type"] == LEDGER_TYPE_CSV else None,
         "event_id": ledger["event_id"],
@@ -376,6 +378,7 @@ def delete_existing_results(
         return 0
     deleted = 0
     exam_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_EXAM]
+    case_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_EXPORT_CASE]
     xml_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_XML]
     csv_ids = [ledger_id for ledger_type, ledger_id in ledger_refs if ledger_type == LEDGER_TYPE_CSV]
     if exam_ids:
@@ -387,6 +390,17 @@ def delete_existing_results(
               AND exam_ledger_id IN ({placeholders})
             """,
             (LEDGER_TYPE_EXAM, *exam_ids),
+        )
+        deleted += int(cur.rowcount or 0)
+    if case_ids:
+        placeholders = ", ".join(["%s"] * len(case_ids))
+        cur.execute(
+            f"""
+            DELETE FROM {qname(health_db)}.exam_check_results
+            WHERE ledger_type = %s
+              AND exam_export_case_id IN ({placeholders})
+            """,
+            (LEDGER_TYPE_EXPORT_CASE, *case_ids),
         )
         deleted += int(cur.rowcount or 0)
     if xml_ids:
@@ -468,6 +482,26 @@ def update_exam_ledger_check(
         WHERE exam_ledger_id = %s
         """,
         (check_status, check_reason, exam_ledger_id),
+    )
+
+
+def update_exam_export_case_check(
+    cur: Any,
+    *,
+    health_db: str,
+    exam_export_case_id: int,
+    check_status: str,
+    check_reason: str | None,
+) -> None:
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db)}.exam_export_cases
+        SET check_status = %s,
+            check_reason = %s,
+            updated_at = CURRENT_TIMESTAMP(3)
+        WHERE exam_export_case_id = %s
+        """,
+        (check_status, check_reason, exam_export_case_id),
     )
 
 
@@ -589,7 +623,7 @@ def fetch_target_exam_ledgers(
           AND (
             (source_type = 'XML' AND xml_status = 'READY')
             OR (source_type = 'CSV' AND row_status IN ('READY', 'ERROR'))
-            OR source_type = 'COMBINED'
+            OR source_type = 'PAPER'
           )
         ORDER BY exam_ledger_id
         {limit_sql}
@@ -599,7 +633,47 @@ def fetch_target_exam_ledgers(
     return list(cur.fetchall())
 
 
+def fetch_target_case_ledgers(
+    cur: Any,
+    *,
+    health_db: str,
+    event_id: int,
+    limit: int = 0,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [event_id]
+    limit_sql = ""
+    if limit:
+        limit_sql = "LIMIT %s"
+        params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          'EXPORT_CASE' AS ledger_type,
+          exam_export_case_id AS id,
+          exam_export_case_id,
+          event_id,
+          subscriber_id,
+          hia_subscriber_id
+        FROM {qname(health_db)}.exam_export_cases
+        WHERE event_id = %s
+          AND value_build_status = 'READY'
+          AND subscriber_match_status = 'MATCHED'
+        ORDER BY exam_export_case_id
+        {limit_sql}
+        """,
+        tuple(params),
+    )
+    return list(cur.fetchall())
+
+
 def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[str, Any]]:
+    if config.ledger_type == LEDGER_TYPE_EXPORT_CASE:
+        return fetch_target_case_ledgers(
+            cur,
+            health_db=config.health_db,
+            event_id=config.event_id,
+            limit=config.limit,
+        )
     if config.ledger_type == LEDGER_TYPE_EXAM:
         return fetch_target_exam_ledgers(
             cur,
@@ -621,19 +695,19 @@ def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[st
             event_id=config.event_id,
             limit=config.limit,
         )
-    xml_ledgers = fetch_target_xml_ledgers(
+    exam_ledgers = fetch_target_exam_ledgers(
         cur,
         health_db=config.health_db,
         event_id=config.event_id,
         limit=0,
     )
-    csv_ledgers = fetch_target_csv_ledgers(
+    case_ledgers = fetch_target_case_ledgers(
         cur,
         health_db=config.health_db,
         event_id=config.event_id,
         limit=0,
     )
-    ledgers = [*xml_ledgers, *csv_ledgers]
+    ledgers = [*exam_ledgers, *case_ledgers]
     return ledgers[: config.limit] if config.limit else ledgers
 
 
@@ -675,6 +749,7 @@ def process_ledgers(
             ledger_id=value_ledger_id,
             required_namecodes=required_namecodes,
             result_db=config.health_db,
+            dev_db=config.dev_db,
         )
         article44_result = check_article44(value_map)
         validate_article44_result(article44_result)
@@ -718,6 +793,14 @@ def process_ledgers(
                 health_cur,
                 health_db=config.health_db,
                 exam_ledger_id=ledger_id,
+                check_status=check_status,
+                check_reason=check_reason,
+            )
+        elif ledger["ledger_type"] == LEDGER_TYPE_EXPORT_CASE:
+            update_exam_export_case_check(
+                health_cur,
+                health_db=config.health_db,
+                exam_export_case_id=ledger_id,
                 check_status=check_status,
                 check_reason=check_reason,
             )

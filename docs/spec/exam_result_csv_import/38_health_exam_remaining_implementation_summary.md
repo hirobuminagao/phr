@@ -15,8 +15,7 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 - 健診機関alias解決。
 - CSV format照合。
 - CSV mapping適用。
-- CSV行台帳 `csv_row_ledger` 作成。
-- XML台帳 `xml_ledger` 作成。
+- 統合台帳 `exam_ledgers` 作成。CSVは1行1件、XMLはXML内の1人分1件として登録する。
 - 加入者identity生成、加入者突合。
 - `exam_item_values` への検査値登録。
 - CD/CO/PQ/ST系のnormalize。
@@ -26,11 +25,11 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 
 - XML/CSVを対象にした法定チェック。
 - `exam_check_results` 作成。
-- `csv_row_ledger` / `xml_ledger` へのcheck結果反映。
+- `exam_ledgers` へのsource単位check結果反映。
 - CSV由来結果からHIAアップロード用XML/ZIP出力。
 - XSD検証。
 - XML出力履歴 `xml_export_zips` / `xml_export_members`。
-- 統合ledger `exam_ledgers` へのbackfill。
+- 既存個別ledgerから統合ledger `exam_ledgers` へのbackfill。
 - `exam_ledgers` 起点の報告用 `exam_result_ledger_report` 更新。
 
 ### HIA Dashboard Side
@@ -42,21 +41,28 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 
 ## Main Remaining Implementations
 
-### 1. Unified Ledger First Flow
+### 1. Unified Exam Ledger Import Flow
 
-今後の業務処理は、XML/CSV個別ledgerではなく `health_exam_result.exam_ledgers` を中心にする。
+今後の取込単位の業務処理は、XML/CSV個別ledgerではなく `health_exam_result.exam_ledgers` を中心にする。
+`exam_ledgers` は `xml_ledger` / `csv_row_ledger` の統合版であり、XMLならXML内の1人分、CSVならCSV 1行、紙入力なら紙入力1人分を表す。
 
 必要なこと:
 
-- scan/import/check/export後に `exam_ledgers` へ自然に反映される流れを固める。
+- scan/importでXML/CSV/紙入力を `exam_ledgers` へ登録する。
+- `exam_item_values` は `exam_ledgers.exam_ledger_id` を親にして、source値、raw、normalize、validationを保持する。
+- source単位の法定checkは `exam_ledgers + exam_item_values` に対して実行する。
+- check結果は `exam_check_results` に保存し、`exam_ledgers.check_status` / `check_reason` へ戻す。
 - `exam_result_ledger_report` は個別ledgerではなく `exam_ledgers` から作る。
-- XML/CSV個別ledgerは原本証跡と後方互換として残す。
+- XML/CSV個別ledgerは移行元、原本証跡、後方互換として当面残す。
 - 再scan/再importで正式出力済み状態を戻さない。
 
 現状:
 
 - `sync_exam_ledgers.py` によるbackfillは実装済み。
-- 完全な通常フロー組込みは未完了。
+- CSV import本体は、通常取込の保存先を `exam_ledgers` とし、CSV由来の `exam_item_values` を `ledger_type = EXAM` / `ledger_id = exam_ledgers.exam_ledger_id` として登録する方針へ寄せる。
+- XML import本体も、通常取込の保存先を `exam_ledgers` とし、XML由来の `exam_item_values` を `ledger_type = EXAM` / `ledger_id = exam_ledgers.exam_ledger_id` として登録する方針へ寄せる。
+- 既存個別ledger向けのcheck関数は明示指定時の後方互換として残すが、通常 `ALL` checkは `exam_ledgers` と結合出力用caseを対象にする。
+- `sync_exam_ledgers.py` は通常運用の必須手順ではなく、初回移行、復旧、再構築用へ下げる方針。
 
 ### 2. Person Event Population and Status Sync
 
@@ -69,7 +75,8 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 - 資格喪失者も除外しない。資格喪失日は状況確認用の状態として保持する。
 - `subscribers` の追加・氏名・資格喪失日・identity系情報更新に追従できるよう、母集団同期は再実行可能なupsertにする。
 - 結果状態同期は母集団系itemを削除せず、結果受領、check、XML出力状態だけを更新する。
-- `exam_ledgers` から人単位の受領件数、check件数、XML出力可否、出力済み件数を同期する。
+- `exam_ledgers` から人単位の受領件数、source check件数、要補正件数を同期する。
+- 結合出力用caseからXML出力可否、case check状態、出力済み件数を同期する。
 - HIAダッシュボード状態、資格状態、HIAダウンロードXML有無、健保納品、事業所納品をitemとして同期できるようにする。
 - 未突合ledgerは `person_event` にしない。
 
@@ -145,23 +152,33 @@ CSV/XML由来の基本情報に不足や誤りがある場合、画面から補�
 - `36_postal_code_master_design.md` に設計あり。
 - DDL/loaderの実装確認と運用投入は未完了。
 
-### 6. Multi-Source Merge
+### 6. Export Case and Multi-Source Merge
 
 XMLとCSV、または複数CSVで不足項目を補い、1つの論理健診結果としてXML出力する。
 
 必要なこと:
 
-- 同一人物、同一健診日、同一健診機関、同一eventのsource候補をまとめる。
+- 同一人物、同一健診日、同一健診機関、同一eventの `exam_ledgers` 候補をまとめる。
+- 1人1回分のXML出力候補を結合出力用caseとして作る。
+- caseを構成する `exam_ledgers` をsource tableとして持つ。
 - XMLをCSVより優先する。
 - CSV同士、XML同士で同じ値が競合した場合は止める。
 - 片方にしかない検査値は補完値として採用する。
-- 採用済み値は `ledger_type = EXAM` の `exam_item_values` として持つ。
-- 採用元source値を追えるようにする。
+- 採用済み値は結合出力用case valuesとして持つ。
+- case valuesはrawを持たず、XML出力に必要な正規化済み値だけを持つ。
+- 型、単位、OID、section、methodCode、順番、一連検査グループは `exam_item_master` から参照する。
+- 採用元 `exam_item_values.id` を保持し、raw証跡へ戻れるようにする。
+- case values + `exam_item_master` に対してcase単位の法定チェックを行い、出力OK/NGを結合出力用caseに反映する。
+- 理由ありOKはsource単位checkを書き換えず、結合出力用caseに承認者、理由、承認日時を持つ。
+- ledgerが増えるたびに、該当者の結合出力用caseと `person_event_status_items` を更新できるようにする。
 
 現状:
 
 - 設計方針はある。
-- 結合処理と採用値生成は未実装。
+- XML出力候補の命名は `exam_export_cases` / `exam_export_case_sources` / `exam_export_case_values` に寄せる。
+- `build_combined_exam_ledgers.py` は試作として残すが、本流にはしない。
+- 結合出力用case DDL、case作成、case value採用、case単位checkは `exam_ledgers + exam_item_values` 起点で整備する。
+- case起点exportは未実装。
 
 ### 7. Export Control UI
 
@@ -173,7 +190,7 @@ XML出力条件を画面から指定できるようにする。
 - 健診機関。
 - 受領ファイル。
 - 健診年月。
-- 個人または論理健診結果。
+- 個人または結合出力用case。
 - 既出力者を含める/含めない。
 - 同日分割送信回数の自動/手動指定。
 
@@ -226,6 +243,39 @@ XML出力後、人がHIAへアップロードしたか、その後健保・事�
 - 旧「紙→Excel→DB→normalize→export」資産はある。
 - 新統合ledger前提の画面入力は未実装。
 
+### 10. Standardization and Mapping Intelligence Layer
+
+CSV取込で蓄積したサンプル、マッピング、名寄せ辞書、エラー判断を、納品処理とは別の標準化資産として扱う。
+
+目的:
+
+- 健診機関ごとのCSVヘッダー、項目名、値、判定列、検査方法列の傾向を見えるようにする。
+- `raw値 -> namecode / OID / code` の寄せ方と、あえて寄せずにエラーにした判断を蓄積する。
+- 新しいCSVフォーマット登録時に、人が確認すべき候補や過去類似例を出せるようにする。
+- 標準化の議論や健診機関との調整に使える根拠を残す。
+- 医療機関へ返す是正項目まとめを作れるようにする。
+
+集計候補:
+
+- 健診機関。
+- CSVヘッダー名。
+- 項目種別: 値、判定、検査方法、所見、基本情報、独自項目。
+- raw値の種類と出現回数。
+- 寄せ先namecode、結果コードOID、code。
+- normalize結果、validation結果。
+- 初出ファイル、初出日、確認待ち、確認結果。
+- 是正カテゴリ: 標準コード不一致、項目内容不一致、値型不一致、施設独自コード、必須基本情報不足、列名/値意味不明、未回答確認事項。
+- 医療機関確認用の要約文、対象ヘッダー、対象raw値例、出現件数、影響範囲。
+
+方針:
+
+- 機微情報を含む実データは保持しない。
+- 機微情報を除去・加工したサンプル、format seed、mapping seed、`norm_variants` seed、判断メモは保持する。
+- このレイヤーは自動推測で本番取込を変えるためのものではなく、人が標準化判断を行うための参照材料とする。
+- 是正項目まとめは、内部エラー名をそのまま出すのではなく、健診機関や取引先に説明できる業務用カテゴリと文章に変換する。
+- 健診機関からデータ抽出費用が発生する場合でも、受領データが用途に合わないときは、PHR側で行った名寄せ・変換・補正作業と、健診機関へ是正依頼すべき内容を分けて記録する。
+- 後続で、省庁、標準化団体、医療情報標準、特定健診・労安法健診の法体系、政策動向を調査する。
+
 ## Proposed Priority
 
 1. `event_id` の保険者番号から `subscribers` 全員を抽出し、`person_event` 母集団を作る。
@@ -233,18 +283,21 @@ XML出力後、人がHIAへアップロードしたか、その後健保・事�
 3. `exam_ledgers` / `person_event_status_items` の同期を通常運用に近づける。
 4. 基本情報補正のDB構造と履歴。
 5. 郵便番号マスタと住所補完。
-6. 複数source結合と `ledger_type = EXAM` の採用値生成。
-7. XML出力制御UI。
-8. HIAアップロード、HIAダウンロード、健保・事業所納品ステータス。
-9. 紙入力画面。
+6. `exam_export_cases` / `exam_export_case_sources` / `exam_export_case_values` のDDL。
+7. case作成、case value採用、case単位check。
+8. case起点のXML出力。
+9. XML出力制御UI。
+10. HIAアップロード、HIAダウンロード、健保・事業所納品ステータス。
+11. 紙入力画面。
+12. 標準化・マッピング知見レイヤー。
 
 納品が迫る場合は、1、2、4、5を先に進める。
-XMLとCSVを合わせて法定を満たす必要が出た時点で、6を優先する。
+XMLとCSVを合わせて法定を満たす必要が出た時点で、6、7、8を優先する。
 
 ## Current Risk
 
 - 住所がHIAで必須となるため、CSV/XML/予約/加入者台帳のどこにも住所がない人の扱いを決める必要がある。
 - HIAダッシュボードCSVは年度で状態が上書きされるため、過年度eventの状態を最新テーブルだけで判定すると誤る。
 - 基本情報補正をDB直接修正で続けると、誰が何を直したか追えなくなる。
-- 複数ファイル結合をsource ledger上で直接処理すると、原本証跡と清書値が混ざる。
+- 複数ファイル結合を取込単位の `exam_ledgers` 上で直接処理すると、原本証跡と清書値が混ざる。
 - HIAアップロード後の人手状態を持たないと、正式出力済みXMLと実際のアップロード済みがズレる。

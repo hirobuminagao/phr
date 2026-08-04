@@ -47,10 +47,19 @@ REPORT_COLUMNS = (
     "exam_date",
     "name_kana_raw",
     "name_kana_match",
+    "name_kana_export_value",
+    "name_kana_export_source",
+    "name_kana_export_reason",
     "insurance_symbol_raw",
     "insurance_symbol_match",
+    "insurance_symbol_export_value",
+    "insurance_symbol_export_source",
+    "insurance_symbol_export_reason",
     "insurance_number_raw",
     "insurance_number_match",
+    "insurance_number_export_value",
+    "insurance_number_export_source",
+    "insurance_number_export_reason",
     "birthdate",
     "gender_code",
     "report_category_code",
@@ -60,6 +69,17 @@ REPORT_COLUMNS = (
     "subscriber_match_status",
     "subscriber_match_method",
     "subscriber_match_reason",
+    "basic_info_status",
+    "basic_info_reason",
+    "insurer_number_source",
+    "insurer_number_completion_status",
+    "insurer_number_completion_reason",
+    "insurer_number_export_value",
+    "address_source",
+    "address_completion_status",
+    "address_completion_reason",
+    "address_completed_value",
+    "postal_code_completed_value",
     "exam_item_status",
     "exam_item_reason",
     "xml_status",
@@ -101,6 +121,9 @@ REPORT_COLUMNS = (
     "resume_approved_reason",
     "manual_export_approved_at",
     "manual_export_approved_by",
+    "correction_status",
+    "merge_status",
+    "merge_reason",
     "relationship_name",
     "qualification_lost_date",
     "refreshed_at",
@@ -121,14 +144,14 @@ class ReportSummary:
     dry_run: bool
     xml_source_rows: int = 0
     csv_source_rows: int = 0
-    combined_source_rows: int = 0
+    paper_source_rows: int = 0
     existing_report_rows: int = 0
     deleted_rows: int = 0
     inserted_rows_count: int = 0
 
     @property
     def source_rows(self) -> int:
-        return self.xml_source_rows + self.csv_source_rows + self.combined_source_rows
+        return self.xml_source_rows + self.csv_source_rows + self.paper_source_rows
 
     @property
     def inserted_rows(self) -> int:
@@ -138,7 +161,7 @@ class ReportSummary:
         return (
             f"exam_result_ledger_report event_id={self.event_id} "
             f"source_xml={self.xml_source_rows} source_csv={self.csv_source_rows} "
-            f"source_combined={self.combined_source_rows} "
+            f"source_paper={self.paper_source_rows} "
             f"existing={self.existing_report_rows} deleted={self.deleted_rows} "
             f"inserted={self.inserted_rows_count} "
             f"dry_run={self.dry_run}"
@@ -210,8 +233,8 @@ def build_insert_sql(config: ReportConfig, *, subscriber_columns: set[str]) -> s
         elif target == "ledger_id":
             expression = """
                 CASE l.`source_type`
-                    WHEN 'XML' THEN l.`source_xml_ledger_id`
-                    WHEN 'CSV' THEN l.`source_csv_row_ledger_id`
+                    WHEN 'XML' THEN COALESCE(l.`source_xml_ledger_id`, l.`exam_ledger_id`)
+                    WHEN 'CSV' THEN COALESCE(l.`source_csv_row_ledger_id`, l.`exam_ledger_id`)
                     ELSE l.`exam_ledger_id`
                 END
             """
@@ -281,11 +304,11 @@ def load_summary(cur: Any, config: ReportConfig) -> ReportSummary:
         dry_run=config.dry_run,
         xml_source_rows=source_count(cur, schema=config.health_db, event_id=config.event_id, source_type="XML"),
         csv_source_rows=source_count(cur, schema=config.health_db, event_id=config.event_id, source_type="CSV"),
-        combined_source_rows=source_count(
+        paper_source_rows=source_count(
             cur,
             schema=config.health_db,
             event_id=config.event_id,
-            source_type="COMBINED",
+            source_type="PAPER",
         ),
         existing_report_rows=count_rows(
             cur,
@@ -303,7 +326,7 @@ def refresh_report(conn: Any, config: ReportConfig) -> ReportSummary:
         summary = load_summary(cur, config)
         if summary.source_rows == 0:
             raise RuntimeError(
-                f"event_id={config.event_id} has no exam_ledger rows; run sync_exam_ledgers.py first"
+                f"event_id={config.event_id} has no exam_ledger rows; run scan/import or sync_exam_ledgers.py"
             )
         if config.dry_run:
             return summary

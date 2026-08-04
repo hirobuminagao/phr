@@ -31,12 +31,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.lookup.exam_item_master import get_exam_items
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import log_error as etl_log_error
 from scripts.lib.etl import start_run as etl_start_run
+from scripts.lib.examination.value_normalizer import CODE_DATA_TYPES, normalize_exam_item_value
 from scripts.lib.identity.generator import generate_identity_bundle
 
 
@@ -59,6 +61,7 @@ FILE_TYPE_ZIP = "ZIP"
 FILE_TYPE_XML = "XML"
 XML_STATUS_READY = "READY"
 XML_STATUS_PARSE_ERROR = "PARSE_ERROR"
+LEDGER_TYPE_EXAM = "EXAM"
 
 SUBSCRIBER_MATCH_MATCHED = "MATCHED"
 SUBSCRIBER_MATCH_CANDIDATE = "CANDIDATE"
@@ -82,6 +85,21 @@ PATIENT_ID_ROOT_INSURER_NUMBER = "1.2.392.200119.6.101"
 PATIENT_ID_ROOT_INSURANCE_SYMBOL = "1.2.392.200119.6.204"
 PATIENT_ID_ROOT_INSURANCE_NUMBER = "1.2.392.200119.6.205"
 FACILITY_CODE_ROOT = "1.2.392.200119.6.102"
+FINDING_PRESENCE_PAIRS: dict[str, tuple[str, str, str]] = {
+    "9N056160400000049": ("9N056000000000011", "1.2.392.200119.6.2001", "既往歴"),
+    "9N061160800000049": ("9N061000000000011", "1.2.392.200119.6.2001", "自覚症状"),
+    "9N066160800000049": ("9N066000000000011", "1.2.392.200119.6.2001", "他覚症状"),
+    "9A110160800000049": ("9A110160700000011", "1.2.392.200119.6.2002", "心電図（所見の有無）"),
+    "9N206160800000049": ("9N206160700000011", "1.2.392.200119.6.2002", "胸部X線（所見の有無）"),
+    "9N251160800000049": ("9N251160700000011", "1.2.392.200119.6.2002", "眼底検査（所見の有無）"),
+    "9N256160800000049": ("9N256160700000011", "1.2.392.200119.6.2002", "胃部X線（所見の有無）"),
+    "9N266160800000049": ("9N266160700000011", "1.2.392.200119.6.2002", "胃内視鏡（所見の有無）"),
+    "9N271160800000049": ("9N271160700000011", "1.2.392.200119.6.2002", "腹部超音波（所見の有無）"),
+    "9N276160800000049": ("9N276160700000011", "1.2.392.200119.6.2002", "乳房視触診（所見の有無）"),
+    "9N281160800000049": ("9N281160700000011", "1.2.392.200119.6.2002", "マンモグラフィ（所見の有無）"),
+    "9F140160800000049": ("9F140160700000011", "1.2.392.200119.6.2002", "子宮頸部細胞診（所見の有無）"),
+    "9N291160800000049": ("9N291160700000011", "1.2.392.200119.6.2002", "婦人科診察（所見の有無）"),
+}
 
 
 @dataclass(frozen=True)
@@ -836,7 +854,152 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
             }
         )
 
+    rows = supplement_missing_finding_presence_rows(rows)
     return ExamExtraction(rows=rows, unsupported_namecodes=tuple(unsupported_namecodes))
+
+
+def supplement_missing_finding_presence_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    existing = {str(row.get("namecode")) for row in rows if row.get("namecode")}
+    occurrence_by_namecode: dict[str, int] = {}
+    for row in rows:
+        namecode = row.get("namecode")
+        if namecode:
+            occurrence_by_namecode[str(namecode)] = max(
+                occurrence_by_namecode.get(str(namecode), 0),
+                int(row.get("occurrence_no") or 1),
+            )
+
+    supplemented = list(rows)
+    for row in rows:
+        finding_namecode = row.get("namecode")
+        if not finding_namecode or str(finding_namecode) not in FINDING_PRESENCE_PAIRS:
+            continue
+        if not compact_text(row.get("raw_value")):
+            continue
+        presence_namecode, code_system, display_name = FINDING_PRESENCE_PAIRS[str(finding_namecode)]
+        if presence_namecode in existing:
+            continue
+        occurrence_by_namecode[presence_namecode] = occurrence_by_namecode.get(presence_namecode, 0) + 1
+        supplemented.append(
+            {
+                "section_code": row.get("section_code"),
+                "section_code_system": row.get("section_code_system"),
+                "section_name": row.get("section_name"),
+                "namecode": presence_namecode,
+                "occurrence_no": occurrence_by_namecode[presence_namecode],
+                "raw_value": "所見あり",
+                "raw_value_type": "CD",
+                "raw_unit": None,
+                "nullflavor": None,
+                "code_system": code_system,
+                "code_value": "1",
+                "code_display": "所見あり",
+                "interpretation_code": None,
+                "interpretation_code_system": None,
+                "interpretation_name": None,
+                "namecode_display_name": display_name,
+                "negation_ind": 0,
+                "identity_item_code": presence_namecode[:5],
+                "jun_no": None,
+            }
+        )
+        existing.add(presence_namecode)
+    return supplemented
+
+
+def normalize_xml_exam_item_rows(
+    cur: Any,
+    config: ImportConfig,
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    item_by_namecode = get_exam_items(
+        cur,
+        [cast(str | None, row.get("namecode")) for row in rows],
+        dev_db=config.dev_db,
+    )
+    normalized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        normalized_row = dict(row)
+        namecode = compact_text(row.get("namecode"))
+        raw_value = row.get("raw_value")
+        raw_unit = cast(str | None, row.get("raw_unit"))
+        item = item_by_namecode.get(namecode or "")
+        data_type = compact_text(item.get("data_type")) if item else compact_text(row.get("raw_value_type"))
+        result_code_oid = compact_text(item.get("result_code_oid")) if item else None
+        code_system = compact_text(row.get("code_system"))
+        code_value = compact_text(row.get("code_value"))
+        code_display = compact_text(row.get("code_display"))
+
+        if namecode and item is None:
+            normalized_row.update(
+                {
+                    "normalize_status": "ERROR",
+                    "normalize_reason": "EXAM_ITEM_MASTER_NOT_FOUND",
+                    "validation_status": "INVALID",
+                    "validation_reason": "EXAM_ITEM_MASTER_NOT_FOUND",
+                }
+            )
+            normalized_rows.append(normalized_row)
+            continue
+
+        if namecode and data_type in CODE_DATA_TYPES and code_value:
+            if result_code_oid and code_system and code_system != result_code_oid:
+                normalized_row.update(
+                    {
+                        "normalize_status": "ERROR",
+                        "normalize_reason": "RESULT_CODE_OID_MISMATCH",
+                        "validation_status": "INVALID",
+                        "validation_reason": "RESULT_CODE_OID_MISMATCH",
+                    }
+                )
+            elif result_code_oid and not code_system:
+                normalized_row.update(
+                    {
+                        "normalize_status": "ERROR",
+                        "normalize_reason": "RESULT_CODE_OID_MISSING_IN_XML",
+                        "validation_status": "INVALID",
+                        "validation_reason": "RESULT_CODE_OID_MISSING_IN_XML",
+                    }
+                )
+            else:
+                normalized_row.update(
+                    {
+                        "raw_value_type": data_type,
+                        "code_system": code_system or result_code_oid,
+                        "code_value": code_value,
+                        "code_display": code_display,
+                        "normalize_status": "OK",
+                        "normalize_reason": "XML_CODE_MATCH",
+                        "validation_status": "VALID",
+                        "validation_reason": None,
+                    }
+                )
+            normalized_rows.append(normalized_row)
+            continue
+
+        value_for_normalize = raw_value if compact_text(raw_value) else code_display
+        if namecode:
+            normalized = normalize_exam_item_value(
+                cur,
+                namecode=namecode,
+                raw_value=value_for_normalize,
+                raw_unit=raw_unit,
+                exam_item=item,
+                dev_db=config.dev_db,
+                master_db=config.master_db,
+            )
+            normalized_row.update(normalized.as_exam_item_value_columns())
+        else:
+            normalized_row.update(
+                {
+                    "normalize_status": "ERROR",
+                    "normalize_reason": "NAMECODE_NOT_FOUND",
+                    "validation_status": "INVALID",
+                    "validation_reason": "NAMECODE_NOT_FOUND",
+                }
+            )
+        normalized_rows.append(normalized_row)
+    return normalized_rows
 
 
 def parse_int(value: str | None) -> int | None:
@@ -999,8 +1162,9 @@ def get_xml_ledger(cur: Any, config: ImportConfig, xml_sha256: str) -> dict[str,
     cur.execute(
         f"""
         SELECT *
-        FROM {qname(config.health_db)}.xml_ledger
+        FROM {qname(config.health_db)}.exam_ledgers
         WHERE xml_sha256 = %s
+          AND source_type = 'XML'
         """,
         (xml_sha256,),
     )
@@ -1015,6 +1179,8 @@ def insert_xml_ledger(
     xml_file_name: str | None,
     xml_status: str,
     xml_reason: str | None,
+    file_receipt_id: int,
+    run_id: int | None,
     basic: Mapping[str, Any],
     identity_bundle: Mapping[str, Any] | None,
     subscriber: Mapping[str, Any],
@@ -1028,8 +1194,8 @@ def insert_xml_ledger(
     try:
         cur.execute(
             f"""
-            INSERT INTO {qname(config.health_db)}.xml_ledger (
-                event_id,
+            INSERT INTO {qname(config.health_db)}.exam_ledgers (
+                event_id, source_type, file_receipt_id, source_etl_run_id,
                 subscriber_id, hia_subscriber_id,
                 xml_sha256, xml_file_name, document_id,
                 insurer_number, facility_code, facility_name, exam_date,
@@ -1039,10 +1205,11 @@ def insert_xml_ledger(
                 report_category_code, program_type_code,
                 identity_hash, person_id_custom,
                 subscriber_match_status, subscriber_match_method, subscriber_match_reason,
-                xml_status, xml_reason
+                xml_status, xml_reason,
+                source_created_at, source_updated_at
             )
             VALUES (
-                %s,
+                %s, 'XML', %s, %s,
                 %s, %s,
                 %s, %s, %s,
                 %s, %s, %s, %s,
@@ -1052,11 +1219,14 @@ def insert_xml_ledger(
                 %s, %s,
                 %s, %s,
                 %s, %s, %s,
-                %s, %s
+                %s, %s,
+                CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
             )
             """,
             (
                 config.event_id,
+                file_receipt_id,
+                run_id,
                 subscriber.get("subscriber_id"),
                 subscriber.get("hia_subscriber_id"),
                 xml_sha256,
@@ -1089,15 +1259,17 @@ def insert_xml_ledger(
                 update_xml_ledger_report_codes(
                     cur,
                     config,
-                    ledger_id=int(existing["id"]),
+                    ledger_id=int(existing["exam_ledger_id"]),
+                    file_receipt_id=file_receipt_id,
+                    run_id=run_id,
                     report_category_code=cast(str | None, basic.get("report_category_code")),
                     program_type_code=cast(str | None, basic.get("program_type_code")),
                 )
-                return int(existing["id"]), False
+                return int(existing["exam_ledger_id"]), False
         raise
     ledger_id = cur.lastrowid
     if ledger_id is None:
-        raise RuntimeError("failed to get inserted xml_ledger.id")
+        raise RuntimeError("failed to get inserted exam_ledgers.exam_ledger_id")
     return int(ledger_id), True
 
 
@@ -1106,17 +1278,21 @@ def update_xml_ledger_report_codes(
     config: ImportConfig,
     *,
     ledger_id: int,
+    file_receipt_id: int,
+    run_id: int | None,
     report_category_code: str | None,
     program_type_code: str | None,
 ) -> None:
     cur.execute(
         f"""
-        UPDATE {qname(config.health_db)}.xml_ledger
-        SET report_category_code = COALESCE(%s, report_category_code),
+        UPDATE {qname(config.health_db)}.exam_ledgers
+        SET file_receipt_id = COALESCE(%s, file_receipt_id),
+            source_etl_run_id = COALESCE(%s, source_etl_run_id),
+            report_category_code = COALESCE(%s, report_category_code),
             program_type_code = COALESCE(%s, program_type_code)
-        WHERE id = %s
+        WHERE exam_ledger_id = %s
         """,
-        (report_category_code, program_type_code, ledger_id),
+        (file_receipt_id, run_id, report_category_code, program_type_code, ledger_id),
     )
 
 
@@ -1125,24 +1301,11 @@ def insert_xml_file_link(
     config: ImportConfig,
     *,
     file_receipt_id: int,
-    xml_ledger_id: int,
+    exam_ledger_id: int,
     xml_inner_path: str | None,
 ) -> str:
-    try:
-        cur.execute(
-            f"""
-            INSERT INTO {qname(config.health_db)}.xml_file_links (
-                event_id, file_receipt_id, xml_ledger_id, xml_inner_path
-            )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (config.event_id, file_receipt_id, xml_ledger_id, xml_inner_path),
-        )
-        return "inserted"
-    except IntegrityError as exc:
-        if exc.errno == errorcode.ER_DUP_ENTRY:
-            return "duplicate"
-        raise
+    _ = (cur, config, file_receipt_id, exam_ledger_id, xml_inner_path)
+    return "skipped"
 
 
 def insert_exam_item_values(
@@ -1161,6 +1324,7 @@ def insert_exam_item_values(
     params = [
         (
             config.event_id,
+            LEDGER_TYPE_EXAM,
             ledger_id,
             subscriber_id,
             hia_subscriber_id,
@@ -1172,6 +1336,8 @@ def insert_exam_item_values(
             row.get("raw_value"),
             row.get("raw_value_type"),
             row.get("raw_unit"),
+            row.get("normalized_value"),
+            row.get("normalized_unit"),
             row.get("nullflavor"),
             row.get("code_system"),
             row.get("code_value"),
@@ -1183,6 +1349,10 @@ def insert_exam_item_values(
             row.get("negation_ind"),
             row.get("identity_item_code"),
             row.get("jun_no"),
+            row.get("normalize_status"),
+            row.get("normalize_reason"),
+            row.get("validation_status"),
+            row.get("validation_reason"),
             run_id,
         )
         for row in rows
@@ -1195,23 +1365,29 @@ def insert_exam_item_values(
             namecode, section_code, section_code_system, section_name,
             occurrence_no,
             raw_value, raw_value_type, raw_unit,
+            normalized_value, normalized_unit,
             nullflavor, code_system, code_value, code_display,
             interpretation_code, interpretation_code_system, interpretation_name,
             namecode_display_name, negation_ind,
             identity_item_code, jun_no,
-            extracted_run_id, extracted_at
+            normalize_status, normalize_reason,
+            validation_status, validation_reason,
+            extracted_run_id, extracted_at, normalized_at
         )
         VALUES (
-            %s, 'XML', %s,
+            %s, %s, %s,
             %s, %s,
             %s, %s, %s, %s,
             %s,
             %s, %s, %s,
+            %s, %s,
             %s, %s, %s, %s,
             %s, %s, %s,
             %s, %s,
             %s, %s,
-            %s, CURRENT_TIMESTAMP(3)
+            %s, %s,
+            %s, %s,
+            %s, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
         )
         """,
         params,
@@ -1395,31 +1571,6 @@ def process_xml_candidate(
     file_receipt_id = int(cast(Any, file_receipt.get("id")))
     xml_sha256 = sha256_bytes(candidate.data)
     existing = get_xml_ledger(health_cur, config, xml_sha256)
-    if existing and existing.get("report_category_code") and existing.get("program_type_code"):
-        ledger_id = int(existing["id"])
-        result = XmlProcessResult(ok=True, existing_ledger=True)
-        if config.dry_run:
-            return result
-        try:
-            link_result = insert_xml_file_link(
-                health_cur,
-                config,
-                file_receipt_id=file_receipt_id,
-                xml_ledger_id=ledger_id,
-                xml_inner_path=candidate.inner_path,
-            )
-        except Exception as exc:
-            raise ImportDbError(
-                "DB_XML_FILE_LINK_SAVE_FAILED",
-                (
-                    f"xml_file_links save failed: path={file_receipt.get('source_path')}, "
-                    f"inner_path={candidate.inner_path}, reason={compact_text(exc) or type(exc).__name__}"
-                ),
-                candidate.inner_path,
-            ) from exc
-        result.link_inserted = link_result == "inserted"
-        result.link_duplicate = link_result == "duplicate"
-        return result
 
     try:
         root = ElementTree.fromstring(candidate.data)
@@ -1437,14 +1588,16 @@ def process_xml_candidate(
                     xml_file_name=candidate.xml_file_name,
                     xml_status=XML_STATUS_PARSE_ERROR,
                     xml_reason=message,
+                    file_receipt_id=file_receipt_id,
+                    run_id=run_id,
                     basic={},
                     identity_bundle=None,
                     subscriber={"subscriber_match_status": SUBSCRIBER_MATCH_NOT_EXECUTED},
                 )
             except Exception as exc:
                 raise ImportDbError(
-                    "DB_XML_LEDGER_SAVE_FAILED",
-                    f"xml_ledger save failed: path={candidate.display_path}, reason={compact_text(exc) or type(exc).__name__}",
+                    "DB_EXAM_LEDGER_SAVE_FAILED",
+                    f"exam_ledger save failed: path={candidate.display_path}, reason={compact_text(exc) or type(exc).__name__}",
                     candidate.inner_path,
                 ) from exc
             try:
@@ -1452,7 +1605,7 @@ def process_xml_candidate(
                     health_cur,
                     config,
                     file_receipt_id=file_receipt_id,
-                    xml_ledger_id=ledger_id,
+                    exam_ledger_id=ledger_id,
                     xml_inner_path=candidate.inner_path,
                 )
             except Exception as exc:
@@ -1501,14 +1654,16 @@ def process_xml_candidate(
                     xml_file_name=candidate.xml_file_name,
                     xml_status=XML_STATUS_READY,
                     xml_reason="XML_RAW_EXTRACT_FAILED",
+                    file_receipt_id=file_receipt_id,
+                    run_id=run_id,
                     basic={},
                     identity_bundle=None,
                     subscriber={"subscriber_match_status": SUBSCRIBER_MATCH_NOT_EXECUTED},
                 )
             except Exception as db_exc:
                 raise ImportDbError(
-                    "DB_XML_LEDGER_SAVE_FAILED",
-                    f"xml_ledger save failed after raw extract error: path={candidate.display_path}, reason={compact_text(db_exc) or type(db_exc).__name__}",
+                    "DB_EXAM_LEDGER_SAVE_FAILED",
+                    f"exam_ledger save failed after raw extract error: path={candidate.display_path}, reason={compact_text(db_exc) or type(db_exc).__name__}",
                     candidate.inner_path,
                 ) from db_exc
             try:
@@ -1516,7 +1671,7 @@ def process_xml_candidate(
                     health_cur,
                     config,
                     file_receipt_id=file_receipt_id,
-                    xml_ledger_id=ledger_id,
+                    exam_ledger_id=ledger_id,
                     xml_inner_path=candidate.inner_path,
                 )
             except Exception as db_exc:
@@ -1547,7 +1702,7 @@ def process_xml_candidate(
             error_count=1,
         )
 
-    exam_items = exam_extraction.rows
+    exam_items = normalize_xml_exam_item_rows(health_cur, config, exam_extraction.rows)
     local_error_count = 0
     if exam_extraction.unsupported_namecodes:
         samples = [
@@ -1652,14 +1807,16 @@ def process_xml_candidate(
             xml_file_name=candidate.xml_file_name,
             xml_status=XML_STATUS_READY,
             xml_reason=None,
+            file_receipt_id=file_receipt_id,
+            run_id=run_id,
             basic=basic,
             identity_bundle=identity_bundle,
             subscriber=subscriber,
         )
     except Exception as exc:
         raise ImportDbError(
-            "DB_XML_LEDGER_SAVE_FAILED",
-            f"xml_ledger save failed: path={candidate.display_path}, reason={compact_text(exc) or type(exc).__name__}",
+            "DB_EXAM_LEDGER_SAVE_FAILED",
+            f"exam_ledger save failed: path={candidate.display_path}, reason={compact_text(exc) or type(exc).__name__}",
             candidate.inner_path,
         ) from exc
     try:
@@ -1667,7 +1824,7 @@ def process_xml_candidate(
             health_cur,
             config,
             file_receipt_id=file_receipt_id,
-            xml_ledger_id=ledger_id,
+            exam_ledger_id=ledger_id,
             xml_inner_path=candidate.inner_path,
         )
     except Exception as exc:
@@ -1676,25 +1833,30 @@ def process_xml_candidate(
             f"xml_file_links save failed: path={candidate.display_path}, reason={compact_text(exc) or type(exc).__name__}",
             candidate.inner_path,
         ) from exc
-    if ledger_inserted:
-        try:
-            exam_item_count = insert_exam_item_values(
-                health_cur,
-                config,
-                ledger_id=ledger_id,
-                subscriber_id=cast(int | None, subscriber.get("subscriber_id")),
-                hia_subscriber_id=cast(str | None, subscriber.get("hia_subscriber_id")),
-                run_id=run_id,
-                rows=exam_items,
-            )
-        except Exception as exc:
-            raise ImportDbError(
-                "DB_EXAM_ITEM_VALUES_SAVE_FAILED",
-                f"exam_item_values save failed: path={candidate.display_path}, reason={compact_text(exc) or type(exc).__name__}",
-                candidate.inner_path,
-            ) from exc
-    else:
-        exam_item_count = 0
+    try:
+        health_cur.execute(
+            f"""
+            DELETE FROM {qname(config.health_db)}.exam_item_values
+            WHERE ledger_type = %s
+              AND ledger_id = %s
+            """,
+            (LEDGER_TYPE_EXAM, ledger_id),
+        )
+        exam_item_count = insert_exam_item_values(
+            health_cur,
+            config,
+            ledger_id=ledger_id,
+            subscriber_id=cast(int | None, subscriber.get("subscriber_id")),
+            hia_subscriber_id=cast(str | None, subscriber.get("hia_subscriber_id")),
+            run_id=run_id,
+            rows=exam_items,
+        )
+    except Exception as exc:
+        raise ImportDbError(
+            "DB_EXAM_ITEM_VALUES_SAVE_FAILED",
+            f"exam_item_values save failed: path={candidate.display_path}, reason={compact_text(exc) or type(exc).__name__}",
+            candidate.inner_path,
+        ) from exc
     return XmlProcessResult(
         ok=True,
         new_ledger=ledger_inserted,

@@ -4,23 +4,32 @@
 
 Initial implementation completed as of 2026-07-30. The confirmed behavior in this document is implemented; deferred items remain explicitly marked.
 
-この文書は、統合台帳 `exam_ledgers` と `exam_item_values` から厚生労働省指定の健診結果XMLを生成する処理の叩き台である。
+この文書は、統合取込ledger `exam_ledgers`、結合出力用case、出力用整値から厚生労働省指定の健診結果XMLを生成する処理の叩き台である。
 確定済み条件と、実装前に確認が必要な不足情報を分けて記載する。
 
-## Unified Ledger Direction
+## Unified Ledger, Export Case, and Person Event Direction
 
-CSV→XML出力まで一通り動作確認できたため、今後の改修はXML/CSV個別ledgerを直接拡張し続けるのではなく、統合台帳 `exam_ledgers` を中核にする。
+CSV→XML出力まで一通り動作確認できたため、今後の改修はXML/CSV個別ledgerを直接拡張し続けるのではなく、統合取込ledger、結合出力用case、人単位event状態を分けて扱う。
+
+`exam_ledgers` は、XML由来・CSV由来・紙入力由来を問わず、取込結果1件を表す統合ledgerとする。
+XMLならXML内の1人分、CSVならCSV 1行、紙入力なら紙入力1人分を `exam_ledgers` 1件として扱う。
+加入者突合、基本情報、検査値処理、source単位の法定check、補正現在値は `exam_ledgers.exam_ledger_id` を参照する。
+
 既存 `xml_ledger` / `csv_row_ledger` は直ちに廃止せず、移行元、原本証跡、後方互換のsource tableとして残す。
+通常運用ではimport時に `exam_ledgers` へ登録し、既存個別ledgerからの `sync_exam_ledgers.py` は初回移行、復旧、再構築用に下げる。
 
-`exam_ledgers` は、XML由来・CSV由来を問わず1人1健診結果を表す共通台帳とする。
-check、基本情報補正、加入者再突合、XML出力、出力履歴、HIAアップロード状態管理、画面表示は原則として `exam_ledgers.exam_ledger_id` を参照する。
-XML/CSV固有の情報は `source_type` とsource ledger IDで辿れるようにする。
+結合出力用caseは、人単位・1回分健診・XML出力候補を表す。
+複数の `exam_ledgers` を組み合わせる場合、case sourcesで構成元ledgerを保持し、case valuesでXMLへ出す採用済み整値を保持する。
+XMLのみ、CSVのみ、XML+CSV、手修正込みのいずれの場合も、最終的なXML出力可否は結合出力用caseで判断する。
+
+`person_event` / `person_event_status_items` は、eventに対する人単位の業務状態を管理する。
+結果受領件数、source check状態、出力case状態、XML出力状態、HIAアップロード状態、納品状態などは、`exam_ledgers` や結合出力用caseから同期する。
 
 初期移行では以下を許容する。
 
 - 既存 `xml_ledger` / `csv_row_ledger` から `exam_ledgers` へ移行する。
 - 必要に応じて全ファイルを再scan/再importし、`exam_ledgers` を作り直す。
-- 個別ledgerの廃止タイミングは、実行環境で統合台帳ベースの取込、check、補正、XML出力が安定してから決める。
+- 個別ledgerの廃止タイミングは、実行環境で `exam_ledgers` ベースの取込、check、補正、XML出力が安定してから決める。
 
 ## Existing Exporter
 
@@ -44,22 +53,22 @@ scripts/kenshin_list_pydir/scripts/medi_export_xml.py
 
 ## Confirmed Export Eligibility
 
-統合ledgerは以下をすべて満たす場合にXML出力候補とする。
+結合出力用caseは以下をすべて満たす場合にXML出力候補とする。
 
-1. `exam_ledgers.health_exam_report_category` が空でない。
-2. `exam_ledgers.program_code` が空でない。
-3. `exam_ledgers.subscriber_match_status = 'MATCHED'`。
+1. 報告区分が空でない。
+2. プログラムコードが空でない。
+3. 加入者突合が `MATCHED`。
 4. 次のいずれかを満たす。
-   - `exam_ledgers.check_status = 'OK'`。
+   - case単位の法定checkが `OK`。
    - 法定チェックNGの原因が `MISSING` のみで、`manual_export_approved = 1`、理由、承認者、承認日時が設定されている。
 
 `03_check_exam_results.py` の `check_status` は現状、法定チェック結果を基準に `OK` / `NG` を設定している。
 したがって4は、法定チェックOKまたはMISSINGだけを理由として明示的に手動許可された状態を意味する。
 
 手動出力許可は、妊娠中等の確認済み理由により法定検査値がMISSINGとなる場合の例外とする。
-`exam_check_results` と `exam_ledgers.check_status` は書き換えず、架空の検査値を作らない。MISSINGの該当entryはXMLへ出力しない。
+`exam_check_results` とcase側 `check_status` は書き換えず、架空の検査値を作らない。MISSINGの該当entryはXMLへ出力しない。
 `INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致は手動許可の対象外とする。
-`manual_export_approved` / `manual_export_reason` / `manual_export_approved_at` / `manual_export_approved_by` は `exam_ledgers` へ持たせる。手動許可時は理由、承認者、承認日時を必須とする。
+`manual_export_approved` / `manual_export_reason` / `manual_export_approved_at` / `manual_export_approved_by` は結合出力用caseへ持たせる。手動許可時は理由、承認者、承認日時を必須とする。
 
 上記4条件は業務上の出力候補条件とする。
 XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致などが発生した場合は、出力候補であっても生成エラーとして扱う。
@@ -73,7 +82,7 @@ XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致�
 | event | 必須。画面を開いたeventを固定する |
 | 健診機関 | 必須。複数選択可。全施設も明示選択とする |
 | 受領ファイル | 任意。`file_receipt_id` の複数選択可。未指定時は選択施設内の全対象CSV |
-| 健診年月 | 任意。`exam_ledgers.exam_date` に対する単月 `YYYY-MM` 指定 |
+| 健診年月 | 任意。結合出力用caseの健診日に対する単月 `YYYY-MM` 指定 |
 | 個人 | 任意。画面で表示された論理健診結果を複数選択可 |
 
 各selectorはAND条件で適用する。
@@ -88,35 +97,55 @@ XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致�
 通常運用の既定値は `含めない` とし、初期検証や再出力では `含める` を明示選択できるようにする。
 `含める` は未出力者と既出力者の両方を対象とし、既出力者だけを抽出する第3モードは初期版では設けない。
 
-### Logical Exam Record
+### Export Case
 
 将来、同一人物の結果が複数の受領CSVに分かれ、一方のCSVにしか存在しない検査項目を組み合わせて1件のXMLを作る可能性がある。
-そのため、外部仕様およびexporter内部では source ledger 1行をそのまま1件の出力単位にしない。
+そのため、外部仕様およびexporter内部では `exam_ledgers` 1件をそのまま1件の出力単位にしない。
 
-1件の個人XMLに対応する出力単位を「論理健診結果」とし、次の構造で扱う。
+1件の個人XMLに対応する出力単位を結合出力用caseとし、次の構造で扱う。
 
 ```text
-LogicalExamRecord
-  candidate_key
+exam_export_cases
+  exam_export_case_id
   event_id
+  person_event_id
   exam_facility_id
   insurer_number
   subscriber_id
   exam_date
   health_exam_report_category
   program_code
-  source_ledger_ids[]
-  source_file_receipt_ids[]
-  merged_exam_item_values[]
+  case_status
+  merge_status
+  check_status
+  xml_export_status
+
+exam_export_case_sources
+  exam_export_case_id
+  source_exam_ledger_id
+  source_type
+  source_role
+  source_status
+
+exam_export_case_values
+  exam_export_case_id
+  namecode
+  occurrence_no
+  adopted normalized/code value
+  adopted_source_exam_item_value_id
+  adopted_reason
 ```
 
 画面の個人選択は加入者単位ではなく、この論理健診結果単位とする。
 表示項目には氏名、カナ、生年月日、健診日、健診機関、構成元受領ファイルを含める。
 同一人物に別日または別プログラムの健診結果がある場合は、別の候補として表示する。
 
-初期実装でも `source_ledger_ids` はlistとして扱う。
-複数行結合をまだ有効にしない段階で同一候補に複数行が見つかった場合は、重複XMLを自動生成せず `MULTIPLE_SOURCE_ROWS_UNRESOLVED` として出力対象外にする。
-将来の結合対応では同じ候補を `COMBINE` modeで処理できるようにし、画面/APIの選択単位を変更しない。
+caseは出力ボタンを押した時に初めて仮想生成するのではなく、取込後またはsource check後に事前作成し、出力OK/NGをXML出力候補単位で管理する。
+複数sourceを組み合わせた過不足判定は、`exam_export_case_values + exam_item_master` に対して法定チェックを行った時点で確定する。
+XML exporterは case checkがOK、または理由ありOKのcaseだけを読み、結合や採用判断を行わない。
+
+case単位の法定チェック結果は、source単位checkとは分けて保持する。
+初期実装では既存 `03_check_exam_results.py` を流用できる形に寄せるが、保存先は結合出力用caseを参照できるカラムまたは専用check結果テーブルとする。
 
 ### Future Multi-Source Merge Rules
 
@@ -135,7 +164,7 @@ XMLは厚生労働省標準様式によって構造、namecode、型、単位が
 片方のsourceだけに値があればその値を採用し、複数の異なる有効値があれば `MERGE_BASE_FIELD_CONFLICT` として出力を停止する。
 健診日またはcanonical健診機関コードを解決できない行は、安全に同一候補と確定できる別ルールが設定されるまで自動結合しない。
 
-`xml_ledger` はXMLの `ClinicalDocument/code` を `report_category_code`、`documentationOf/serviceEvent/code` を `program_type_code` として保存する。
+`exam_ledgers` はXMLの `ClinicalDocument/code` を `report_category_code`、`documentationOf/serviceEvent/code` を `program_type_code` として保存する。
 XML由来コードは元XMLの明示値を正とし、event年齢規則で上書きしない。
 既存XMLは `02_import_xml.py --include-imported` で再取込し、追加カラムをbackfillする。
 
@@ -154,8 +183,8 @@ XML由来コードは元XMLの明示値を正とし、event年齢規則で上書
 XML由来であっても、parse、normalize、validationに失敗した値は優先対象にしない。
 正常なXML値がなく正常なCSV値がある場合は、CSV値をactiveにできる。
 
-結合後も証跡を失わないよう、個人XMLごとに全 `source_ledger_ids` と `source_file_receipt_ids` を追跡する。
-出力成功時は、構成元となった全 `csv_row_ledger` に同じexport Runと出力先を関連付ける。
+結合後も証跡を失わないよう、個人XMLごとに全 `source_exam_ledger_ids` と `source_file_receipt_ids` を追跡する。
+出力成功時は、構成元となった全 `exam_ledgers` に同じexport Runと出力先を関連付ける。
 出力履歴CSVと `ix08_V08.xml.totalRecordCount` の人数は、構成元CSV行数ではなく、生成した論理健診結果数とする。
 
 ## Output Path
@@ -181,7 +210,7 @@ ZIPファイル名はルートフォルダ名に `.zip` を付けた名前でな
 | part | official meaning | current scope |
 | --- | --- | --- |
 | 提出元健診機関番号 | 健診機関番号10桁 | `exam_facilities.exam_facility_code` |
-| 提出先保険者番号 | 8桁。8桁未満は先頭ゼロ埋め | `csv_row_ledger.insurer_number` |
+| 提出先保険者番号 | 8桁。8桁未満は先頭ゼロ埋め | 結合出力用caseで採用した `insurer_number` |
 | 提出年月日 | ZIPを提出する年月日 | XML/ZIP作成日と同一とし、exporterのRun日を使う |
 | 同日分割送信回数 `N` | 同一送付元・送付先の同日1回目は`0`。以後`1`から`9` | 既存ZIPから自動採番する。CLI/APIで`0`から`9`の明示指定も可能とする |
 | 実施区分コード `X` | `1`: 特定健診情報 | 今回は`1` |
@@ -381,7 +410,7 @@ ZIPは各健診機関フォルダの `03_健診結果（アップロードデー
 ## Basic Information Normalization
 
 XML基本情報は照合用 `match` ではなく、格納・出力用のnorm値を使う。
-元値は `xml_ledger` または `csv_row_ledger` の原本由来値とし、`subscribers` の値へ直接置き換えない。
+元値は `exam_ledgers` の原本由来値とし、`subscribers` の値へ直接置き換えない。
 `subscribers` で使用している共通identity libと同じ関数を利用する。
 `export_fields.py` はこれらの既存関数を呼び出し、XML出力値のprojectionと必須項目エラーの集約だけを行う。同じ値生成・妥当性確認を再実装しない。
 
@@ -442,9 +471,8 @@ exporterは補完lookupや業務判断を行わず、importまたはledger同期
 
 業務上利用を許可された加入者住所等による補完、およびHIA提出用の最終代替値として郵便番号 `000-0000`、住所 `－` を使用する処理は、基本情報補正画面・補正履歴テーブルと合わせて後続で実装する。
 
-現行実装では、CSV importが加入者突合直後に `scripts/from_medical/script_lib/basic_info_completion.py` を呼び出し、`csv_row_ledger` に以下を保存する。
-`sync_exam_ledgers.py` は同じ値を `exam_ledgers` へコピーする。
-XML import側は将来のXML基本情報パース拡張に備えて同じ列を持つが、現時点では住所・郵便番号を抽出していないため原則NULLとする。
+現行実装では、CSV importが加入者突合直後に `scripts/from_medical/script_lib/basic_info_completion.py` を呼び出し、`exam_ledgers` に以下を保存する。
+XML import側も同じ `exam_ledgers` へ保存する。XML原本に住所・郵便番号がない場合はNULLとし、後続の基本情報補正・住所補完で扱う。
 
 | column | meaning |
 | --- | --- |
@@ -505,7 +533,7 @@ APIはデータ更新の手間が少ない一方、ビジネスアカウント�
 住所補完または代替値使用を行った場合、原本値は上書きせず、XMLに出した値、元値、補完元、補完理由、処理Run、処理日時を記帳する。
 
 基本情報補正はCSV由来とXML由来の両方を対象にする。
-`xml_ledger` と `csv_row_ledger` に現在XML出力で使う補正値を横持ちし、変更履歴は `ledger_type` / `ledger_id` でXML/CSVを区別する共通テーブルへ残す。
+現在XML出力で使う補正値は `exam_ledgers` に横持ちし、変更履歴は `exam_ledger_id` を起点にした共通テーブルへ残す。
 補正対象は初期版では以下に限定する。
 
 - `insurer_number`
@@ -531,8 +559,7 @@ name_kana_corrected = 佐藤
 name_kana_correction_history_id = 3
 ```
 
-現行 `xml_ledger` はCSV側にある枝番、郵便番号、住所、受診券番号、受診券有効期限を十分に保持していない。
-XML由来も同じ画面・同じ出力projectionで補正するため、補正対象項目の原本値または補正値を受け止めるカラムを `xml_ledger` 側にも追加する。
+XML由来もCSV由来も同じ画面・同じ出力projectionで補正するため、補正対象項目の原本値または補正値を受け止めるカラムは `exam_ledgers` 側に揃える。
 XMLに存在しない項目は原本値NULLとして保持し、補正値と履歴で補える状態にする。
 
 履歴テーブルは、項目ごとの変更チェーンを保持する。
@@ -541,8 +568,7 @@ XMLに存在しない項目は原本値NULLとして保持し、補正値と履�
 ```text
 exam_ledger_basic_info_correction_histories
   correction_history_id
-  ledger_type
-  ledger_id
+  exam_ledger_id
   field_name
   before_value
   after_value
@@ -585,7 +611,8 @@ XML出力projectionは、補正値がある項目は補正値を優先し、な�
 
 ## Exam Item Values
 
-検査値は `health_exam_result.exam_item_values` の `ledger_type = 'CSV'`、`ledger_id = csv_row_ledger_id` を対象とする。
+source検査値は `health_exam_result.exam_item_values` の `ledger_type = 'EXAM'`、`ledger_id = exam_ledgers.exam_ledger_id` を対象とする。
+XML出力では、複数sourceを統合した `exam_export_case_values` の採用済み整値を使用する。
 
 初期の値選択は以下を基本とする。
 
@@ -619,7 +646,7 @@ XML出力projectionは、補正値がある項目は補正値を優先し、な�
 
 ### Change from the Old Exporter
 
-- 旧 `work_other` 2テーブルではなく `csv_row_ledger` / `exam_item_values` を読む。
+- 旧 `work_other` 2テーブルや個別ledgerではなく、`exam_ledgers` / `exam_export_cases` / `exam_export_case_values` / `exam_item_values` を読む。
 - 全員一律の `10/010` 既定値は使わない。CSV取込時にevent年齢規則で40～74歳を `10/010`、それ以外を `40/990` として補完する。
 - event年齢規則または生年月日を解決できずコードが空のままの場合は出力対象外とする。
 - 健診機関番号・保険者番号の `000...` fallbackを廃止し、不正値はエラーにする。
@@ -628,7 +655,7 @@ XML出力projectionは、補正値がある項目は補正値を優先し、な�
 - sectionはAnnex2 flagから再判定せず、取込時に確定した `section_code` を使う。
 - `occurrence_no` を反映する。
 - 付属2の一連検査グループを `exam_item_master` から再現する。
-- ETL run/errorと `csv_row_ledger.xml_export_status` を更新する。
+- ETL run/errorと結合出力用caseの `xml_export_status` を更新する。
 - 完成フォルダへ直接書かず、一時ディレクトリでXML生成・検証後に確定配置する。
 - 個人XMLとIX08をXSD検証してから出力成功とする。
 
@@ -656,7 +683,7 @@ CLIの `--health-db` / `--dev-db` / `--master-db` でschema名を上書きでき
 M4 Dockerでは `--dev-db m4_dev_phr` を指定し、実行環境では既定の `dev_phr` を使用する。
 
 scripts/from_medical/script_lib/hia_xml_export_loader.py
-  csv_row_ledger / exam_item_values / exam_facilities の取得、論理健診結果候補の構築
+  exam_ledgers / exam_export_cases / exam_export_case_values / exam_item_values / exam_facilities の取得、論理健診結果候補の構築
 
 scripts/lib/examination/mhlw_v08_xml.py
   個人CDA、IX08、命名、XML書込、XSD検証、ZIP構成
@@ -701,7 +728,7 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
 ### Applied Database Change
 
 - `20260730_009_health_exam_result_create_xml_export_history.sql` を追加した。
-- `csv_row_ledger` に手動許可の承認日時・承認者を追加した。
+- 結合出力用caseに手動許可の承認日時・承認者を追加した。
 - `xml_export_zips` と `xml_export_members` を追加し、`etl_runs` を親に出力事実を追記する。
 - 統合報告用snapshotにも手動許可の承認日時・承認者を引き継ぐ。
 
@@ -725,7 +752,7 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
    - 失敗したZIPと別のZIP単位は処理を継続できる。
 4. 健診機関番号の正
    - `phr_master.exam_facilities.exam_facility_code` を正として出力する。
-   - `csv_row_ledger.facility_code` とmaster値が不一致の場合は、そのZIPを停止する。
+   - 結合出力用caseで採用した健診機関コードとmaster値が不一致の場合は、そのZIPを停止する。
 5. 健診機関情報
    - export時に `exam_facilities` を参照し、名称、郵便番号、住所、電話番号を取得する。
 
@@ -736,8 +763,8 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
 - ZIP全体の生成とXSD検証が成功した後、ZIP履歴、個人XML履歴、技術的な出力済み状態を同一トランザクションで確定する。
 - ZIPが失敗した場合は出力履歴を登録せず、失敗内容を `etl_runs` / `etl_errors` に残す。
 - 再出力は過去履歴を更新・削除せず、別のZIP・個人XML履歴として追加する。
-- `csv_row_ledger.xml_export_status` は既出力判定用の技術状態として使用できるが、出力履歴の正本にはしない。
-- 再scan/importや統合ledger同期でsource ledger側の `xml_export_status` が未出力へ戻っても、`xml_export_members` に出力事実がある場合は `exam_ledgers.xml_export_status = 'EXPORTED'` として復元する。
+- 結合出力用caseの `xml_export_status` は既出力判定用の技術状態として使用できるが、出力履歴の正本にはしない。
+- 再scan/importや統合ledger同期で構成元 `exam_ledgers` 側の `xml_export_status` が未出力へ戻っても、`xml_export_members` に出力事実がある場合は `exam_ledgers.xml_export_status = 'EXPORTED'` として復元する。
 - 正式出力済みXML/ZIPは再出力しないことを基本とし、再出力が必要な場合は別途再出力理由と履歴管理を決める。
 - `xml_export_members` には、出力時点の `manual_export_approved`、理由、承認者、承認日時をsnapshotとして保存する。
 - 初回出力日時や出力回数は、専用履歴から取得する。

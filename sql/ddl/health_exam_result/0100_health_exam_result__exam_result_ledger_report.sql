@@ -1,11 +1,11 @@
 CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `report_row_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '報告用行ID',
   `report_run_id` bigint unsigned NOT NULL COMMENT 'この報告行を生成したhealth_exam_result.etl_runs.run_id',
-  `ledger_type` varchar(16) NOT NULL COMMENT 'XMLまたはCSV',
+  `ledger_type` varchar(16) NOT NULL COMMENT 'exam_ledgers.source_type。XML/CSV/PAPER',
   `exam_ledger_id` bigint unsigned DEFAULT NULL COMMENT '統合ledger ID',
 
-  -- xml_ledgerの全カラムを元の順番で保持するブロック
-  `ledger_id` bigint unsigned NOT NULL COMMENT 'xml_ledger.idまたはcsv_row_ledger.csv_row_ledger_id',
+  -- exam_ledgersの共通ブロック
+  `ledger_id` bigint unsigned NOT NULL COMMENT '旧source ledger ID。なければexam_ledger_id',
   `event_id` bigint NOT NULL,
   `subscriber_id` bigint unsigned DEFAULT NULL,
   `hia_subscriber_id` varchar(190) DEFAULT NULL,
@@ -18,10 +18,19 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `exam_date` date DEFAULT NULL,
   `name_kana_raw` varchar(255) DEFAULT NULL,
   `name_kana_match` varchar(255) DEFAULT NULL,
+  `name_kana_export_value` varchar(255) DEFAULT NULL,
+  `name_kana_export_source` varchar(32) DEFAULT NULL,
+  `name_kana_export_reason` text DEFAULT NULL,
   `insurance_symbol_raw` varchar(190) DEFAULT NULL,
   `insurance_symbol_match` varchar(190) DEFAULT NULL,
+  `insurance_symbol_export_value` varchar(190) DEFAULT NULL,
+  `insurance_symbol_export_source` varchar(32) DEFAULT NULL,
+  `insurance_symbol_export_reason` text DEFAULT NULL,
   `insurance_number_raw` varchar(190) DEFAULT NULL,
   `insurance_number_match` varchar(190) DEFAULT NULL,
+  `insurance_number_export_value` varchar(190) DEFAULT NULL,
+  `insurance_number_export_source` varchar(32) DEFAULT NULL,
+  `insurance_number_export_reason` text DEFAULT NULL,
   `birthdate` date DEFAULT NULL,
   `gender_code` varchar(16) DEFAULT NULL,
   `report_category_code` varchar(32) DEFAULT NULL COMMENT 'XML由来の報告区分コード',
@@ -31,6 +40,17 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `subscriber_match_status` varchar(32) DEFAULT NULL,
   `subscriber_match_method` varchar(64) DEFAULT NULL,
   `subscriber_match_reason` text,
+  `basic_info_status` varchar(32) DEFAULT NULL,
+  `basic_info_reason` text DEFAULT NULL,
+  `insurer_number_source` varchar(32) DEFAULT NULL,
+  `insurer_number_completion_status` varchar(32) DEFAULT NULL,
+  `insurer_number_completion_reason` text DEFAULT NULL,
+  `insurer_number_export_value` varchar(20) DEFAULT NULL,
+  `address_source` varchar(32) DEFAULT NULL,
+  `address_completion_status` varchar(32) DEFAULT NULL,
+  `address_completion_reason` text DEFAULT NULL,
+  `address_completed_value` varchar(255) DEFAULT NULL,
+  `postal_code_completed_value` varchar(16) DEFAULT NULL,
   `exam_item_status` varchar(32) DEFAULT NULL,
   `exam_item_reason` text,
   `xml_status` varchar(32) DEFAULT NULL,
@@ -43,7 +63,7 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `source_created_at` datetime(3) NOT NULL COMMENT '元ledgerのcreated_at',
   `source_updated_at` datetime(3) NOT NULL COMMENT '元ledgerのupdated_at',
 
-  -- csv_row_ledgerにだけ存在するカラムのブロック
+  -- source行情報ブロック
   `file_receipt_id` bigint unsigned DEFAULT NULL,
   `source_etl_run_id` bigint unsigned DEFAULT NULL COMMENT 'CSV取込時のhealth_exam_result.etl_runs.run_id',
   `src_row_no` int DEFAULT NULL,
@@ -74,6 +94,9 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   `resume_approved_reason` text,
   `manual_export_approved_at` datetime(3) DEFAULT NULL,
   `manual_export_approved_by` varchar(190) DEFAULT NULL,
+  `correction_status` varchar(32) DEFAULT NULL,
+  `merge_status` varchar(32) DEFAULT NULL,
+  `merge_reason` text,
 
   -- subscriberから報告時点の値を付加するブロック
   `relationship_name` varchar(190) DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.relationship_name',
@@ -95,4 +118,4 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_ja_0900_as_cs
-COMMENT='XML/CSV健診結果ledgerの報告用カレントスナップショット';
+COMMENT='統合健診結果ledgerの報告用カレントスナップショット';

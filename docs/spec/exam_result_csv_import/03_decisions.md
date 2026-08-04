@@ -96,53 +96,62 @@ Current as of 2026-07-29.
 - 所見有無CDと所見本文STの組合せを施設別テンプレートで明示できるよう、mapping ruleは `value_source_type = SOURCE / FIXED`、`fixed_value`、`value_join_separator`、`value_exclude_values` を持つ。
 - `FIXED` は行条件が成立した場合だけ明示した固定値を生成する。医学的意味を文言から推測して固定値を決めない。
 - `SOURCE` で複数の `VALUE` 列を指定する場合は `value_join_separator` を必須とし、空欄列と `value_exclude_values` に一致する値を除外してCSV列順に結合する。
-- `value_exclude_values` は改行区切りで保持する。元行証跡は `csv_row_ledger.raw_row_json` に残るため、`exam_item_values.raw_value` には取込結果として有用な値だけを残す。
+- `value_exclude_values` は改行区切りで保持する。元行証跡は `exam_ledgers.raw_row_json` に残るため、`exam_item_values.raw_value` には取込結果として有用な値だけを残す。
 - ハートクロスへこの所見有無CD/STルールを適用するかは健診機関回答後に決定し、回答前のseedには反映しない。
+- XML取込で所見本文STが存在し、対応する所見有無CDが存在しない場合は、XML原本の不備として `exam_item_values` に補完CDを追加する。補完値は `raw_value = 所見あり`, `raw_value_type = CD`, `code_value = 1` とし、元ST行はそのまま保持する。
+- 補完対象は、既往歴、自覚症状、他覚症状、心電図、胸部X線、眼底、胃部X線、胃内視鏡、腹部超音波、乳房視触診、マンモグラフィ、子宮頸部細胞診、婦人科診察の所見本文STと対応する所見有無CDの組み合わせとする。
 - `norm_variant` lookupは単品APIと一括APIの両方を持つ。CSV取込では一括APIで事前取得し、単品APIは少量処理・テスト・再normalize用に使う。
-- CSV直取込では、CSVデータ行単位の台帳として `health_exam_result.csv_row_ledger` を追加する案を基本とする。
-- CSV由来の `exam_item_values` は `ledger_type = 'CSV'`, `ledger_id = csv_row_ledger.csv_row_ledger_id` で由来を表す。
-- CSVに保険者番号を持たない施設フォーマットでは、`file_receipts.insurer_number` を `csv_row_ledger.insurer_number` と加入者identity生成の入力に利用する。
+- CSV直取込では、CSVデータ行単位の台帳として `health_exam_result.exam_ledgers` を使う。
+- CSV由来の `exam_item_values` は `ledger_type = 'EXAM'`, `ledger_id = exam_ledgers.exam_ledger_id` で由来を表す。
+- CSVに保険者番号を持たない施設フォーマットでは、`file_receipts.insurer_number` を `exam_ledgers.insurer_number` と加入者identity生成の入力に利用する。
 - `03_check_exam_results.py` はXML由来だけでなくCSV由来も対象にする。
-- check結果は `exam_check_results.ledger_type` で `XML` / `CSV` を区別し、XMLは `xml_ledger_id`、CSVは `csv_row_ledger_id` に紐づける。
-- CSV由来のcheck状態は `csv_row_ledger.check_status` / `check_reason` に反映する。
+- check結果は source単位では `exam_check_results.ledger_type = 'EXAM'` とし、`exam_ledger_id` に紐づける。
+- CSV/XML由来のcheck状態は `exam_ledgers.check_status` / `check_reason` に反映する。
 - 保険記号・保険番号は加入者identity生成に必要なため、施設フォーマット側にない場合は本番取込前の整形でCSV末尾へ追加する方針とする。
 - `csv_loader` はCSV読込の共通部品として利用し、mapping適用、rule実行、normalize、identity生成、加入者照合は `csv_loader` の責務外とする。
 - CSVヘッダー読取は既存 `scripts/lib/csv/csv_loader.py` の `load_csv()` / `CSVLoader.get_headers()` / `CSVLoader.get_header_dict()` を利用する案を基本とする。
 - 既存 `csv_loader` 実装と `docs/spec/common_lib/csv_loader.md` の想定APIには差分があるため、既存利用スクリプトに影響を与えない追加APIとして `CsvLoadResult` / `CsvHeaderSet` 形式へ拡張する案を基本とする。
 - 既存 `load_csv()` の戻り値は `CSVLoader` のまま維持し、構造化結果が必要な処理向けに `load_csv_result()` などの追加APIを作る案を基本とする。
 
-### Unified Exam Ledger
+### Unified Exam Ledger, Export Case, and Person Event
 
-- CSV→XML出力まで一通り動作確認できたため、今後の補正、再突合、XML出力、出力画面、HIAアップロード状態管理は、XML/CSV個別ledgerではなく統合台帳 `exam_ledgers` を中核にする。
+- CSV→XML出力まで一通り動作確認できたため、今後の取込、補正、再突合、法定check、XML出力、出力画面、HIAアップロード状態管理は、`exam_ledgers`、結合出力用case、`person_event` の3層に分けて扱う。
 - 既存 `xml_ledger` / `csv_row_ledger` は直ちに廃止しない。移行完了までは取込済みデータの移行元、既存スクリプトの後方互換、再scan/再import時の由来保持として扱う。
-- 新規改修では、可能な限り `exam_ledgers.exam_ledger_id` を参照する。`exam_item_values`、`exam_check_results`、基本情報補正履歴、XML出力履歴も統合ledger IDを正として扱えるようにする。
-- `exam_ledgers` はXML/CSV共通の1人1健診結果台帳とし、`source_type`, `source_xml_ledger_id`, `source_csv_row_ledger_id`, `file_receipt_id`, `event_id`, 加入者突合情報、基本情報、check/export状態、補正現在値を持つ。
-- 既存個別ledgerから統合ledgerへのbackfillは `sync_exam_ledgers.py` で行う。CSVは `csv_row_ledger.file_receipt_id`、XMLは `xml_file_links.file_receipt_id` から `file_receipts` へのリンクを復元する。
-- XML/CSV固有の原本証跡は、既存個別ledgerまたはsource detailへ残す。統合台帳は業務処理・画面・XML出力の共通面とする。
-- 移行方法は2案を許容する。既存 `xml_ledger` / `csv_row_ledger` から `exam_ledgers` へデータ移行する方法、または全ファイルを再scan/再importして `exam_ledgers` を作り直す方法である。実行環境で安定確認してから個別ledger廃止タイミングを決める。
+- 最終的な通常取込では、XML由来もCSV由来も `exam_ledgers` へ登録する。XMLならXML内の1人分、CSVならCSV 1行、紙入力なら紙入力1人分を `exam_ledgers` 1件として扱う。
+- `exam_ledgers` は `xml_ledger` / `csv_row_ledger` の統合版であり、ファイルまたは行由来の取込結果1件単位のledgerとする。
+- `exam_ledgers` は `source_type = XML / CSV / PAPER`、source file/row情報、`file_receipt_id`、`event_id`、加入者突合情報、基本情報、検査値処理状態、source単位の法定check状態を持つ。
+- `exam_item_values` は `exam_ledgers.exam_ledger_id` に紐づく検査値source値として扱い、raw、normalize、validation、由来、エラーを保持する。
+- 既存個別ledgerから `exam_ledgers` へのbackfillは `sync_exam_ledgers.py` で行う。通常運用ではimport完了時に該当 `exam_ledgers` が更新され、`sync_exam_ledgers.py` は初回移行、復旧、再構築用に下げる。
+- XML/CSV固有の原本証跡は、移行完了までは既存個別ledgerまたはsource detailへ残す。新規の業務処理・画面・check・補正・出力制御は `exam_ledgers` を参照する。
+- 個別ledgerの廃止タイミングは、`exam_ledgers` ベースの取込、check、補正、XML出力が実行環境で安定してから決める。
 - `exam_ledgers` の上位に、eventに対する人単位の現在状態を管理する既存 `dev_phr.person_event` を使う。
 - 増減しやすい状態項目、check集計、出力状態、HIAアップロード状態、要対応理由は `dev_phr.person_event_status_items` に縦持ちする。
 - `person_event` は汎用イベント管理ではなく、健診イベントに対する人単位の進捗・確認状態に限定して使う。
 - `person_event` の母集団は結果受領者ではなく、`event_id` から解決した保険者番号に一致する `dev_phr.subscribers` 全員とする。
 - 資格喪失者も `person_event` 母集団から除外しない。資格喪失日は除外条件ではなく、状況確認・資格状態判定のための状態項目として扱う。
 - 予約申込、受診、結果ファイル受領、健診結果check、HIA状態、健保・事業所納品状態は、eventごとの人チェック項目として `person_event_status_items` に集約する。
-- 年度内複数受診や特殊健診を想定し、`person_event` は人×eventの親、個別の受診・結果は `exam_ledgers` の複数件として扱う。
+- 年度内複数受診や特殊健診を想定し、`person_event` は人×eventの親、個別の受診・結果は `exam_ledgers` または結合出力用caseの複数件として扱う。
 - 未突合ledgerはまだ人として確定していないため `person_event` を作らず、`exam_ledgers` 側の未突合状態として扱う。
 - HIAダッシュボードCSV由来の最新状態は `work_other.hia_dashboard_status`、年度最終状態は `work_other.hia_dashboard_year_end_status`、健診eventに対する人チェック状態は `person_event_status_items` として分ける。
 - 2025年度のHIA年度最終状態は `hia_dashboard_year_end_status` へスナップショット保管済みである。
 - 進行中年度のHIA状態は `hia_dashboard_status` を入力にできるが、過年度eventの状態判定に最新テーブルを直接使わない。
 - HIAダッシュボードCSVの新フォーマットでは先頭にHIA加入者IDが追加されているため、HIA加入者IDが存在する場合は加入者照合の第一候補として扱う。
-- XML出力候補判定は `exam_ledgers`、出力後の業務状態管理とHIAアップロード状態は `person_event` / `person_event_status_items` の責務とする。
+- source単位の法定check結果は `exam_check_results` に残し、集計結果を `exam_ledgers.check_status` / `check_reason` へ戻す。
+- 複数の `exam_ledgers` を組み合わせてXML出力する場合は、結合出力用caseを作る。結合出力用caseは、人単位・1回分健診・XML出力候補を表し、出力OK/NG、結合状態、手動許可、XML出力状態を持つ。
+- 結合出力用caseの構成元は `exam_export_case_sources` 相当のテーブルで `exam_ledgers` を複数保持する。
+- 結合出力用caseの採用済み整値は `exam_export_case_values` 相当のテーブルで保持する。raw値は持たず、XML出力に必要な最小限の採用済み値、採用元 `exam_item_values.id`、採用理由、採用状態を持つ。
+- 結合出力用caseの法定checkは、採用済み整値 + `exam_item_master` に対して行い、結果を結合出力用caseへ戻す。
+- XML出力候補判定は結合出力用case、出力後の業務状態管理とHIAアップロード状態は `person_event` / `person_event_status_items` の責務とする。
 - CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
-- `exam_ledgers.xml_export_status` は、source ledgerの技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。
-- 複数結果を1つにする処理は、source ledgerを直接出力するのではなく、結合後の `exam_ledgers` を作成または更新する処理として扱う。
+- 結合出力用caseの `xml_export_status` は、構成元 `exam_ledgers` の技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。
+- ledgerが増える、再取込される、checkが更新される、結合出力用caseが更新されるたびに、該当者の `person_event_status_items` は再同期される。
 - 検査値は、ファイル由来のsource値と、納品・XML出力用の清書値を分けて扱う。
 - source値はraw、normalize、validation、由来、エラーを持つ処理・証跡層とする。
-- 清書値は出力に必要な最小限の採用済み値、採用元参照、採用状態を持つ業務・納品層とする。
-- 初期案では既存 `exam_item_values` を `ledger_type = XML / CSV` のsource値と、`ledger_type = EXAM` の清書値で使い分ける。必要になった場合のみ専用の採用値テーブルへ分離する。
+- XML出力時は採用済み整値 + `exam_item_master` でentryを構成する。型、単位、OID、section、methodCode、順番、一連検査グループは原則として `exam_item_master` から参照し、整値テーブルへ複製しない。
+- 採用済み整値には採用元 `exam_item_values.id` を必須候補として持たせ、raw証跡へ戻れるようにする。手修正値の場合は補正履歴IDを持たせる。
 - XML/CSVの両方に同じ `namecode + occurrence_no` が存在する場合、原則はXML優位とする。
 - ただし健診機関XMLの `9N511 医師の診断(判定)` に「メタボリックシンドローム判定にて非該当です。」のような制度判定の口語説明だけが入るケースがあるため、全項目フラグではなく `exam_item_value_precedence_rules` によるnamecode単位の例外ルールで制御する。
-- 採用例外ルールは、`CSV_FIRST` / `CSV_IF_XML_MATCHES_PATTERN` / `JOIN_XML_CSV` / `MANUAL_REVIEW` を表現できるようにする。取り込み時のsource値は改変せず、結合済み `ledger_type = EXAM` の清書値を作る時だけ適用する。
+- 採用例外ルールは、`CSV_FIRST` / `CSV_IF_XML_MATCHES_PATTERN` / `JOIN_XML_CSV` / `MANUAL_REVIEW` を表現できるようにする。取り込み時のsource値は改変せず、結合出力用caseの採用済み整値を作る時だけ適用する。
 - 初期ルールとして、XML側の `9N511` がメタボリックシンドローム判定の口語説明のみで、CSV側の `9N511` が存在する場合はCSV側を採用する。
 
 ### Initial `exam_facilities` Shape
@@ -186,7 +195,7 @@ Current as of 2026-07-29.
 - 初回scan時にmapping未登録で `WAITING_CONFIRM` になったCSVは、mapping登録後に `01_01_match_csv_format.py` を再実行してformat照合だけを再適用する。
 - activeなformatがない場合は「マッピング未登録」、activeなformatはあるがheaderが一致しない場合は「CSV構造不一致」として扱い、どちらも `WAITING_CONFIRM` で止めるが `summary_message` / `etl_errors` の理由は区別する。
 - CSV行単位の加入者突合は、XML import と同じく基本情報抽出、`generate_identity_bundle()`、`resolve_subscriber_identity()` の流れに揃える。
-- 加入者突合、健診結果値処理、check/export状態は、XML側の `xml_ledger` に相当するCSV行台帳 `csv_row_ledger` へ持たせる。
+- 加入者突合、健診結果値処理、check/export状態は、CSV/XML共通で `exam_ledgers` へ持たせる。
 - `file_receipts` に `subscriber_match_*` / `exam_item_*` / `csv_status` / `csv_reason` を追加する案は採用しない。
 - ヘッダー関連など、ファイル単位で停止または確認Goが必要な内容は既存 `status` / `summary_message` と停止後Go項目で扱う。
 - `file_receipts` には停止後Goの証跡として `import_resume_approved` / `import_resume_approved_at` / `import_resume_approved_by` / `import_resume_approved_reason` / `import_resume_scope` を追加する案を基本とする。
@@ -198,7 +207,7 @@ Current as of 2026-07-29.
 - alias対応施設フォルダが存在するのに `02_健診結果（編集）` がない場合、実フォルダ名がalias未登録の場合、または実フォルダに対応するaliasが無効・健診機関未解決の場合だけフォルダ・aliasエラーとする。
 - CSV取込の `etl_runs.phase` は `IMPORT_CSV_EXAM_RESULTS` とする。
 - `file_receipts.etl_run_id` は既存XML側と同じくscan時runの参照として扱い、CSV取込runでは上書きしない。
-- CSV取込runは `csv_row_ledger.etl_run_id` と `etl_errors.run_id` に残す。
+- CSV取込runは `exam_ledgers.source_etl_run_id` と `etl_errors.run_id` に残す。
 
 ### CSV Mapping Tables
 
@@ -223,7 +232,7 @@ Current as of 2026-07-29.
 - 検査値ruleの値・下限・上限・判定の区別は、`target_field` ではなく `csv_exam_result_mapping_conditions.source_role` で表す。
 - CSVテンプレート登録という入口は1つにする。
 - 基本情報マッピングと検査結果値マッピングは登録先としては分けるが、CSVから値を抽出するマッピング形式は共通化する案を基本とする。
-- 基本情報マッピングは `csv_row_ledger` の基本情報カラムへ反映する。
+- 基本情報マッピングは `exam_ledgers` の基本情報カラムへ反映する。
 - 検査結果値マッピングは `exam_item_values` の `namecode` ベース登録へ反映する。
 - 基本情報は、条件なしの `target_kind = LEDGER_FIELD`, `source_role = VALUE` のruleとして表現する。
 - 検査結果値は、`target_kind = EXAM_ITEM_VALUE`、`target_namecode` または `target_identity_item_code`、`source_role`、必要に応じた条件を持つruleとして表現する。
@@ -313,19 +322,19 @@ Current as of 2026-07-29.
 - 今回スコープでは、CSV取込を成立させるための初期テンプレート登録はseed前提とする。
 - テンプレート登録は、今回スコープ完了後の次タスクでFastAPIベースの管理API化を検討する。
 - 現時点ではFastAPI実装は行わず仕様整理に留める。
-- CSV取込の初期処理方式は、1行ごとに基本情報と検査結果値を抽出し、`csv_row_ledger` と `exam_item_values` を順に登録する行単位処理を採用する。
+- CSV取込の初期処理方式は、1行ごとに基本情報と検査結果値を抽出し、`exam_ledgers` と `exam_item_values` を順に登録する行単位処理を採用する。
 - ただし、抽出処理の関数境界は基本情報と検査結果値で分け、将来のバッチ処理へ転用できる形にする。
 - CSV取込ではリアルタイム性を求めず、初期実装は1人/1行ずつ処理する方針を基本とする。
 - CSVテンプレートは候補ruleを定義するだけで、実際に作成する `exam_item_values.namecode` はCSVデータ行ごとの補助列・方式条件を評価して決定する。
-- 1行処理では、抽出対象ruleを取得し、各項目ruleに従って値を1個ずつ作成し、1行分の `csv_row_ledger` / `exam_item_values` 登録を組み立ててcommitする。
-- CSV行を再処理する場合、`exam_item_values` は `ledger_type = 'CSV'` かつ `ledger_id = csv_row_ledger_id` の既存行をdeleteしてからinsertする。
+- 1行処理では、抽出対象ruleを取得し、各項目ruleに従って値を1個ずつ作成し、1行分の `exam_ledgers` / `exam_item_values` 登録を組み立ててcommitする。
+- CSV行を再処理する場合、`exam_item_values` は `ledger_type = 'EXAM'` かつ `ledger_id = exam_ledger_id` の既存行をdeleteしてからinsertする。
 - 現状の `exam_item_values` に新しい一意制約を追加せず、CSV由来結果値は行台帳単位のdelete+insertで整合させる。
 - 行処理中に失敗した場合は、その行の変更をrollbackし、行単位errorとして記録する案を基本とする。
 - 抽出マッピングは基本情報も検査結果値も同じrule/condition形式で扱う。
 - 基本情報は条件なしのruleとして扱う。
-- `csv_row_ledger` は `xml_ledger` と対になるCSV行台帳として扱い、名称は `csv_row_ledger` を維持する案を基本とする。
+- 既存 `csv_row_ledger` は移行元・後方互換用として残すが、新規通常取込の正は `exam_ledgers` とする。
 - CSVファイル全体の重複抑制には `file_receipts.file_sha256` を使う。
-- CSV行単位の重複抑制には `csv_row_ledger.row_sha256` を使う。
+- CSV行単位の重複抑制には `exam_ledgers.row_sha256` を使う。
 - `row_sha256` は列順込みのセル配列から算出し、ヘッダー名sort済みkey-value hashにはしない。
 - `row_sha256` は、CSV loaderで文字コード変換後のセル配列を列順込みでJSON正規化し、SHA-256化する。
 - check済みでOK扱いの同一 `row_sha256` は再取込時にskipする。
@@ -339,7 +348,7 @@ Current as of 2026-07-29.
 - 健診日など基本情報が不足していてもCSV取込段階ではskipしない。足りない基本情報の判定は将来 `check_result` 側のスコープで扱う。
 - ハートクロスCSVのようにCSV単体に健診日がないサンプルでも、別データで健診日を特定できる見込みがある場合は、実装検証を止めない。
 - その場合、テンプレートは暫定設定として作成し、健診日取得元は健診機関回答待ちまたは別データ連携待ちとして明示する。
-- 健診日未解決の行は `csv_row_ledger.exam_date = NULL` で保持し、後続checkで不足として検知できる状態にする。
+- 健診日未解決の行は `exam_ledgers.exam_date = NULL` で保持し、後続checkで不足として検知できる状態にする。
 - 完全空行はCSV取込段階でskipする。
 - 既存 `work_other.medi_exam_result_ledger` は旧紙/Excel系の1人=1件の基本情報台帳であり、CSV行台帳設計の参照元とする。
 - `health_exam_result.file_receipts` はファイル単位台帳であり、人/行単位の基本情報台帳としては共用しない。
@@ -362,7 +371,7 @@ Current as of 2026-07-29.
 - 実際に採用した文字コードは `file_receipts.actual_character_encoding` に保存する。
 - `quote_char` はCSV parserへ実際に渡す。引用符が存在しないCSVも同じ設定で読めるため、引用符の有無だけではformat不一致にしない。
 - delimiterは初期実装では登録値を固定使用し、自動fallbackの対象にしない。
-- `csv_row_ledger.health_exam_report_category` と `program_code` は、施設・format version別のmapping ruleで正しい厚生労働省コードを明示的に得られた場合はその値を保存する。
+- `exam_ledgers.health_exam_report_category` と `program_code` は、施設・format version別のmapping ruleで正しい厚生労働省コードを明示的に得られた場合はその値を保存する。
 - 小禄病院CSVの `医療機関コード` は施設内コードであり、健診機関識別には使用しない。小禄の `facility_code` / `facility_name` は、scan時に `exam_facilities` から `file_receipts` へ保存したスナップショットを使用する。
 - CSVに対応項目がない、または対応項目の値がNULLの場合は、`event.age_rule_type` と `event.age_reference_date` による満年齢判定で不足コードを補完する。
 - 満年齢40～74歳は `health_exam_report_category = 10`, `program_code = 010`、それ以外は `health_exam_report_category = 40`, `program_code = 990` とする。
@@ -374,17 +383,17 @@ Current as of 2026-07-29.
 
 - `health_exam_report_category` と厚生労働省プログラムコードは、CSV mappingによって正しい値が登録されている場合は、その値をXML出力に使用する。
 - mapping値がない場合はCSV取込時にevent年齢規則で補完されたledger値をXML出力に使用する。
-- XML取込では、元XMLの `ClinicalDocument/code` を `xml_ledger.report_category_code`、`documentationOf/serviceEvent/code` を `xml_ledger.program_type_code` に保存する。
+- XML取込では、元XMLの `ClinicalDocument/code` を `exam_ledgers.report_category_code`、`documentationOf/serviceEvent/code` を `exam_ledgers.program_type_code` に保存する。
 - XML由来コードは元XMLの明示値を正とし、event年齢規則による上書きや補完は行わない。
 - 既存XMLは `02_import_xml.py --include-imported` で再取込し、新カラムをbackfillできるようにする。
 - XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
-- 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、`csv_row_ledger.manual_export_approved` と必須の理由、承認者、承認日時を記録してXML出力を許可できる。
+- 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、結合出力用case側の `manual_export_approved` と必須の理由、承認者、承認日時を記録してXML出力を許可できる。
 - 手動出力許可は法定チェックNGの原因が `MISSING` のみの場合に限定し、`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致、XML生成・XSD検証エラーは通過させない。
 - XML不足をCSVで実値補完して法定OKにする処理と、妊娠中等の業務確認によりMISSINGのまま条件付き出力OKにする処理は別レーンとして扱う。
 - 条件付き出力OKでは架空の検査値を作らず、`check_status = NG` / `check_reason` を維持したまま `manual_export_approved` / `manual_export_reason` / `manual_export_approved_by` / `manual_export_approved_at` を記録する。
 - 初期のCSV補完診断対象は、視力 `4403004001`、聴力 `4403005001`、胸部X線 `4404001001`、心電図 `4411001001`、既往歴 `4401001001`、自覚症状 `4402001001`、他覚症状 `4402001002` の7分類とする。
 - ただしCSV取込自体は7分類へ絞らない。健診機関ごとの通常マッピングを作り、取込可能な検査値・基本情報は従来どおり全てsource値として取り込む。7分類は補完診断で重点的に見る分類であり、マッピング対象や取込対象を制限するものではない。
-- 手動出力許可後も `exam_check_results` と `csv_row_ledger.check_status` は書き換えず、架空の検査値を作らない。該当entryはXMLへ出力しない。
+- 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えず、架空の検査値を作らない。該当entryはXMLへ出力しない。
 - 同日分割送信回数は既存ZIPからの自動採番を既定とし、`0`から`9`の明示指定も可能にする。既存ZIPと衝突する番号では上書きしない。
 - 個人XMLファイル名21桁目の種別は、特定健診情報を表す実施区分コード `1` 固定とする。
 - XML出力の原子単位はZIPとする。同じ健診機関・保険者・作成日・同日分割送信回数の対象者に1人でも生成またはXSD検証失敗があれば、そのZIP全体を出力しない。
@@ -403,7 +412,7 @@ Current as of 2026-07-29.
 - 日本郵便データに含まれる「以下に掲載がない場合」等の表現は、XML出力用にそのまま使わず、住所文字列として扱える表記へ整備する。整備規則と元表記は記録する。
 - 郵便番号からも住所を補完できない場合は、HIA提出用の代替値として郵便番号 `000-0000`、住所 `－`（全角ハイフン）を使用できる。
 - 住所補完または代替値使用を行った場合は、XMLに出した値、元値、補完元、補完理由、処理日時、処理者または処理Runを必ず記帳する。原本CSV/XML値そのものは上書きしない。
-- 基本情報の補正はCSVだけでなくXML取込にも必要である。`xml_ledger` と `csv_row_ledger` の両方に現在XML出力で使う補正値と項目別の最新変更履歴IDを持たせ、変更履歴は `ledger_type` / `ledger_id` でXML/CSVを区別する共通テーブルへ項目ごとの変更チェーンとして残す。
+- 基本情報の補正はCSVだけでなくXML取込にも必要である。現在XML出力で使う補正値と項目別の最新変更履歴IDは `exam_ledgers` 側に持たせ、変更履歴は `exam_ledger_id` を起点に項目ごとの変更チェーンとして残す。
 - 初期の補正対象は `insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branch_number`, `exam_ticket_number`, `exam_ticket_expires_on`, `name_kana`, `postal_code`, `address` とする。
 - 補正履歴は `field_name`, `before_value`, `after_value`, `correction_source`, `correction_reason`, `previous_correction_history_id`, `etl_run_id`, `corrected_by`, `corrected_at` を持つ。`active` flagではなく、ledger側の最新履歴IDで現在値を示す。
 - 基本情報修正画面では、加入者突合済みの行に対して `subscribers` の保険証記号、保険証番号、枝番、氏名カナ、郵便番号、住所を補正候補として表示する。採用時は `correction_source = 'SUBSCRIBER'` の補正履歴として記録し、原本値を上書きしない。
@@ -413,6 +422,16 @@ Current as of 2026-07-29.
 - CSV/XML原本から作る場合は `*_export_source = SOURCE`、加入者突合済みの `subscribers` 登録値から作る場合は `*_export_source = SUBSCRIBER` とする。
 - `subscribers` からHIA/XML出力用基本情報を読む処理は、`scripts/lib/db/lookup/subscriber_export_projection.py` に閉じ込める。`subscribers` 本体の列名やraw/norm/match/exportの混在は、出力処理側へ直接漏らさない。
 - `subscribers.insurance_symbol_export` は保険証記号の出力候補として使用できる。保険証番号は `subscribers.insurance_number`、氏名カナは `subscribers.name_kana_full` を元値として既存identity共通libへ通し、出力値を作る。
+
+### CSV Mapping and Normalization Assets
+
+- m4側に作成したCSVサンプル、CSVフォーマット定義、マッピングルール、`norm_variants` 追加seed、寄せた/寄せない判断メモは、納品処理の一時データではなく健診結果取込の経験値資産として保持する。
+- 機微情報を含む実データは保持しないが、機微情報を除去・加工したサンプルと、`raw値 -> namecode / OID / code` の対応、normalizeエラーとして残す判断は保持する。
+- 施設判定、独自コード、CSVヘッダーのクセ、型に合わない値、健診機関確認待ちの内容は、後続の標準化・解析レイヤーで参照できるように記録を残す。
+- これらの資産は、将来の自動推測に使うためではなく、人が標準化、マッピング、健診機関とのすり合わせを行う際の判断材料として使う。
+- 健診機関へ返す是正項目まとめを後続機能として作る。これは内部エラー一覧ではなく、健診機関に確認・修正依頼できる粒度で、標準コード不一致、項目内容不一致、列名と値の意味不一致、施設独自コード、必須基本情報不足、提出データ品質の問題を整理する。
+- 健診機関からCSV抽出費用等が発生する場合でも、受領データが標準仕様や契約上の用途を満たさない場合は、名寄せ・変換・補正作業をPHR側の無償吸収として扱わず、是正依頼または別途作業として説明できる証跡を残す。
+- 健診結果項目の標準化を検討する後続版では、省庁、標準化団体、医療情報標準、特定健診・労安法健診の法体系、関連する政策動向を調査対象に含める。
 
 ### Production Folder Aliases
 
@@ -446,7 +465,7 @@ Current as of 2026-07-29.
 - 非測定値語を `nullflavor` へ写像するかどうか。
 - `あり` / `なし` の項目別扱いの具体seed。
 - テンプレート登録FastAPIの正式スコープ。
-- `csv_row_ledger` の最終DDL SQL化。
+- 既存 `csv_row_ledger` 廃止タイミングと、必要になった場合のデータ退避・参照停止手順。
 - ヒロオカクリニック実CSVを元にした初期seed内容。
 - `csv_loader` 追加APIの正式名。
 - alias lookupで `folder_name` が空、未登録、無効施設の場合の正式な状態遷移。

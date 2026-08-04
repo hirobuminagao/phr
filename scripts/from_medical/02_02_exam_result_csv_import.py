@@ -54,7 +54,7 @@ FILE_STATUS_DISCOVERED = "DISCOVERED"
 FILE_STATUS_READY = "READY"
 FILE_STATUS_WAITING_CONFIRM = "WAITING_CONFIRM"
 FILE_STATUS_IMPORTED = "IMPORTED"
-LEDGER_TYPE_CSV = "CSV"
+LEDGER_TYPE_EXAM = "EXAM"
 SUBSCRIBER_MATCH_MATCHED = "MATCHED"
 SUBSCRIBER_MATCH_CANDIDATE = "CANDIDATE"
 SUBSCRIBER_MATCH_NOT_FOUND = "NOT_FOUND"
@@ -446,9 +446,10 @@ def get_existing_row_ledger(
     cur.execute(
         f"""
         SELECT *
-        FROM {qname(config.health_db)}.csv_row_ledger
+        FROM {qname(config.health_db)}.exam_ledgers
         WHERE file_receipt_id = %s
           AND src_row_no = %s
+          AND source_type = 'CSV'
         LIMIT 1
         """,
         (file_receipt_id, src_row_no),
@@ -535,11 +536,12 @@ def upsert_row_ledger(
         "row_reason": row_reason,
     }
     if existing is None:
-        insert_placeholders = ", ".join(["%s"] * 53)
+        insert_placeholders = ", ".join(["%s"] * 54)
         cur.execute(
             f"""
-            INSERT INTO {qname(config.health_db)}.csv_row_ledger (
-                file_receipt_id, etl_run_id, event_id, src_row_no, src_line_no,
+            INSERT INTO {qname(config.health_db)}.exam_ledgers (
+                source_type,
+                file_receipt_id, source_etl_run_id, event_id, src_row_no, src_line_no,
                 row_sha256, raw_row_json, actual_header_sha256, mapping_version,
                 insurer_number, exam_facility_id, facility_code, facility_name,
                 exam_date, name_full_raw, name_kana_raw,
@@ -564,6 +566,7 @@ def upsert_row_ledger(
             VALUES ({insert_placeholders})
             """,
             (
+                "CSV",
                 file_receipt_id,
                 params["etl_run_id"],
                 params["event_id"],
@@ -621,11 +624,11 @@ def upsert_row_ledger(
         )
         return int(cur.lastrowid), "inserted"
 
-    ledger_id = int(existing["csv_row_ledger_id"])
+    ledger_id = int(existing["exam_ledger_id"])
     cur.execute(
         f"""
-        UPDATE {qname(config.health_db)}.csv_row_ledger
-        SET etl_run_id = %s,
+        UPDATE {qname(config.health_db)}.exam_ledgers
+        SET source_etl_run_id = %s,
             row_sha256 = %s,
             raw_row_json = %s,
             actual_header_sha256 = %s,
@@ -674,7 +677,7 @@ def upsert_row_ledger(
             exam_item_reason = %s,
             row_status = %s,
             row_reason = %s
-        WHERE csv_row_ledger_id = %s
+        WHERE exam_ledger_id = %s
         """,
         (
             params["etl_run_id"],
@@ -732,14 +735,14 @@ def upsert_row_ledger(
     return ledger_id, "updated"
 
 
-def delete_csv_exam_item_values(cur: Any, *, config: ImportConfig, ledger_id: int) -> None:
+def delete_exam_item_values(cur: Any, *, config: ImportConfig, exam_ledger_id: int) -> None:
     cur.execute(
         f"""
         DELETE FROM {qname(config.health_db)}.exam_item_values
         WHERE ledger_type = %s
           AND ledger_id = %s
         """,
-        (LEDGER_TYPE_CSV, ledger_id),
+        (LEDGER_TYPE_EXAM, exam_ledger_id),
     )
 
 
@@ -765,7 +768,7 @@ def update_row_ledger_subscriber(
     ).as_db_params()
     cur.execute(
         f"""
-        UPDATE {qname(config.health_db)}.csv_row_ledger
+        UPDATE {qname(config.health_db)}.exam_ledgers
         SET subscriber_id = %s,
             hia_subscriber_id = %s,
             identity_hash = %s,
@@ -784,7 +787,7 @@ def update_row_ledger_subscriber(
             subscriber_match_status = %s,
             subscriber_match_method = %s,
             subscriber_match_reason = %s
-        WHERE csv_row_ledger_id = %s
+        WHERE exam_ledger_id = %s
         """,
         (
             subscriber.get("subscriber_id"),
@@ -816,7 +819,7 @@ def insert_exam_item_value(
     config: ImportConfig,
     run_id: int,
     file_receipt: Mapping[str, Any],
-    ledger_id: int,
+    exam_ledger_id: int,
     rule: CsvMappingRule,
     raw_value: str | None,
     subscriber_id: int | None = None,
@@ -867,8 +870,8 @@ def insert_exam_item_value(
         """,
         (
             int(file_receipt["event_id"]),
-            LEDGER_TYPE_CSV,
-            ledger_id,
+            LEDGER_TYPE_EXAM,
+            exam_ledger_id,
             subscriber_id,
             hia_subscriber_id,
             rule.target_namecode,
@@ -1073,7 +1076,7 @@ def process_file_receipt(
         ).as_db_params()
         item_results = [result for result in extracted if result.rule.target_kind == "EXAM_ITEM_VALUE"]
         raw_row_json = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
-        ledger_id, action = upsert_row_ledger(
+        exam_ledger_id, action = upsert_row_ledger(
             cur,
             config=config,
             run_id=run_id,
@@ -1093,7 +1096,7 @@ def process_file_receipt(
         update_row_ledger_subscriber(
             cur,
             config=config,
-            ledger_id=ledger_id,
+            ledger_id=exam_ledger_id,
             ledger_fields=ledger_fields,
             identity=identity,
             subscriber=subscriber,
@@ -1103,7 +1106,7 @@ def process_file_receipt(
         else:
             summary.rows_updated += 1
 
-        delete_csv_exam_item_values(cur, config=config, ledger_id=ledger_id)
+        delete_exam_item_values(cur, config=config, exam_ledger_id=exam_ledger_id)
         inserted_values = 0
         item_error_count = len(row_errors)
         item_reasons = list(row_errors)
@@ -1114,7 +1117,7 @@ def process_file_receipt(
                 config=config,
                 run_id=run_id,
                 file_receipt=file_receipt,
-                ledger_id=ledger_id,
+                exam_ledger_id=exam_ledger_id,
                 rule=result.rule,
                 raw_value=raw_value,
                 subscriber_id=cast(int | None, subscriber.get("subscriber_id")),
@@ -1129,14 +1132,14 @@ def process_file_receipt(
 
         cur.execute(
             f"""
-            UPDATE {qname(config.health_db)}.csv_row_ledger
+            UPDATE {qname(config.health_db)}.exam_ledgers
             SET exam_item_count = %s,
                 exam_item_error_count = %s,
                 exam_item_status = %s,
                 exam_item_reason = %s,
                 row_status = %s,
                 row_reason = %s
-            WHERE csv_row_ledger_id = %s
+            WHERE exam_ledger_id = %s
             """,
             (
                 inserted_values,
@@ -1145,7 +1148,7 @@ def process_file_receipt(
                 "; ".join(item_reasons) if item_reasons else None,
                 "ERROR" if item_error_count else "READY",
                 "; ".join(item_reasons) if item_reasons else None,
-                ledger_id,
+                exam_ledger_id,
             ),
         )
         if item_error_count:

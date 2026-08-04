@@ -1,7 +1,7 @@
 CREATE TABLE `health_exam_result`.`exam_ledgers` (
   `exam_ledger_id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '統合健診結果ledger ID',
   `event_id` bigint NOT NULL,
-  `source_type` varchar(16) NOT NULL COMMENT 'XML/CSV/COMBINED',
+  `source_type` varchar(16) NOT NULL COMMENT 'XML/CSV/PAPER',
   `source_xml_ledger_id` bigint unsigned DEFAULT NULL,
   `source_csv_row_ledger_id` bigint unsigned DEFAULT NULL,
   `file_receipt_id` bigint unsigned DEFAULT NULL,
@@ -30,10 +30,19 @@ CREATE TABLE `health_exam_result`.`exam_ledgers` (
   `name_full_raw` varchar(255) DEFAULT NULL,
   `name_kana_raw` varchar(255) DEFAULT NULL,
   `name_kana_match` varchar(255) DEFAULT NULL,
+  `name_kana_export_value` varchar(255) DEFAULT NULL,
+  `name_kana_export_source` varchar(32) DEFAULT NULL,
+  `name_kana_export_reason` text DEFAULT NULL,
   `insurance_symbol_raw` varchar(190) DEFAULT NULL,
   `insurance_symbol_match` varchar(190) DEFAULT NULL,
+  `insurance_symbol_export_value` varchar(190) DEFAULT NULL,
+  `insurance_symbol_export_source` varchar(32) DEFAULT NULL,
+  `insurance_symbol_export_reason` text DEFAULT NULL,
   `insurance_number_raw` varchar(190) DEFAULT NULL,
   `insurance_number_match` varchar(190) DEFAULT NULL,
+  `insurance_number_export_value` varchar(190) DEFAULT NULL,
+  `insurance_number_export_source` varchar(32) DEFAULT NULL,
+  `insurance_number_export_reason` text DEFAULT NULL,
   `insurance_branch_number_raw` varchar(64) DEFAULT NULL,
   `insurance_branch_number_match` varchar(64) DEFAULT NULL,
   `birthdate` date DEFAULT NULL,
@@ -89,6 +98,8 @@ CREATE TABLE `health_exam_result`.`exam_ledgers` (
   PRIMARY KEY (`exam_ledger_id`),
   UNIQUE KEY `uq_exam_ledgers_xml_source` (`source_type`, `source_xml_ledger_id`),
   UNIQUE KEY `uq_exam_ledgers_csv_source` (`source_type`, `source_csv_row_ledger_id`),
+  UNIQUE KEY `uq_exam_ledgers_xml_sha256_source` (`source_type`, `xml_sha256`),
+  UNIQUE KEY `uq_exam_ledgers_file_row_source` (`source_type`, `file_receipt_id`, `src_row_no`),
   KEY `idx_exam_ledgers_event` (`event_id`),
   KEY `idx_exam_ledgers_source_type` (`source_type`),
   KEY `idx_exam_ledgers_file_receipt` (`file_receipt_id`),
@@ -105,13 +116,14 @@ CREATE TABLE `health_exam_result`.`exam_ledgers` (
   KEY `idx_exam_ledgers_basic_info_status` (`basic_info_status`),
   KEY `idx_exam_ledgers_insurer_number_completion_status` (`insurer_number_completion_status`),
   KEY `idx_exam_ledgers_address_completion_status` (`address_completion_status`),
+  KEY `idx_exam_ledgers_identity_export_source` (`insurance_symbol_export_source`, `insurance_number_export_source`, `name_kana_export_source`),
   KEY `idx_exam_ledgers_check_status` (`check_status`),
   KEY `idx_exam_ledgers_export_status` (`xml_export_status`),
   KEY `idx_exam_ledgers_merge_status` (`merge_status`)
 ) ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_ja_0900_as_cs
-COMMENT='XML/CSV/結合済み健診結果の統合ledger';
+COMMENT='XML/CSV/紙入力の健診結果取込単位を表す統合ledger';
 
 CREATE TABLE `health_exam_result`.`exam_ledger_sources` (
   `exam_ledger_source_id` bigint unsigned NOT NULL AUTO_INCREMENT,
