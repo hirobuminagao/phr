@@ -91,9 +91,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument(
-        "--deactivate-missing",
+        "--partial-import",
         action="store_true",
-        help="Treat each imported insurer folder as a full snapshot and deactivate rows not seen in the import.",
+        help="Treat input as filtered/partial CSV and keep rows not seen in the import active.",
     )
     parser.add_argument("--db-prefix", default="PHR_DB_")
     return parser.parse_args()
@@ -760,7 +760,7 @@ def main() -> int:
         dev_db=args.dev_db,
         dry_run=bool(args.dry_run),
         limit=int(args.limit or 0),
-        deactivate_missing=bool(args.deactivate_missing),
+        deactivate_missing=not bool(args.partial_import),
     )
     return run(config, db_prefix=args.db_prefix)
 

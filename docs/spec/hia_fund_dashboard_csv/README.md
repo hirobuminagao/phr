@@ -211,24 +211,26 @@ hia_dashboard_reminder_events
 - UPDATE
 - UNCHANGED
 
-のみを扱い、DELETE は手動分析対象とする。
+を扱い、物理DELETEは行わない。
 
-進行中年度の全件ダッシュボードCSVを取り込む場合は、物理削除ではなく
+進行中年度のダッシュボードCSV取込は、保険者単位の全件CSVを基本とする。
+物理削除ではなく
 `hia_dashboard_status.is_active` で最新CSVに存在するかを管理する。
 
 方針:
 
 - 値の変更履歴は `hia_dashboard_status_history` に列単位で保持する。
 - `hia_dashboard_status` 本体は最新値と active/inactive 状態を保持する。
-- `--deactivate-missing` を指定した全件取込では、同じ保険者番号で今回CSVに存在しなかった既存行を `is_active = 0` にする。
+- 通常取込では、同じ保険者番号で今回CSVに存在しなかった既存行を `is_active = 0` にする。
+- フィルタ済みCSVを取り込む場合だけ `--partial-import` を指定し、今回CSVに存在しなかった既存行を触らない。
 - 非アクティブ化時は `inactive_run_id`、`inactive_at`、`inactive_reason` を本体に保持する。
 - 再度CSVに出現した場合は、通常のINSERT/UPDATE処理で `is_active = 1` に戻す。
 - 画面・集計では、現在HIA上に存在する人を見る場合は `is_active = 1` を条件にする。
 
 注意:
 
-- `--deactivate-missing` は、そのCSVが保険者単位の全件スナップショットである場合だけ使う。
-- フィルタ済みCSVでは、存在しない行を非アクティブ化してはならない。
+- 通常取込は、そのCSVが保険者単位の全件スナップショットであることを前提とする。
+- フィルタ済みCSVでは、必ず `--partial-import` を指定する。
 
 ---
 
@@ -289,6 +291,12 @@ hia_dashboard_reminder_events
 ```powershell
 python scripts/hia/import_dashboard_csv.py --dry-run
 python scripts/hia/import_dashboard_csv.py
+```
+
+フィルタ済みCSVとして、CSVに存在しない行を非アクティブ化しない場合:
+
+```powershell
+python scripts/hia/import_dashboard_csv.py --partial-import
 ```
 
 入力配置:
