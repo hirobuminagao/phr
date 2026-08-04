@@ -134,7 +134,7 @@ def parse_int_or_none(value: Any) -> int | None:
 
 
 def parse_reminder_datetime(value: str) -> str | None:
-    text = text.strip()
+    text = value.strip()
     if not text:
         return None
     normalized = text.replace("/", "-")
