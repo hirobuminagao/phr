@@ -140,6 +140,10 @@ Current as of 2026-07-29.
 - source値はraw、normalize、validation、由来、エラーを持つ処理・証跡層とする。
 - 清書値は出力に必要な最小限の採用済み値、採用元参照、採用状態を持つ業務・納品層とする。
 - 初期案では既存 `exam_item_values` を `ledger_type = XML / CSV` のsource値と、`ledger_type = EXAM` の清書値で使い分ける。必要になった場合のみ専用の採用値テーブルへ分離する。
+- XML/CSVの両方に同じ `namecode + occurrence_no` が存在する場合、原則はXML優位とする。
+- ただし健診機関XMLの `9N511 医師の診断(判定)` に「メタボリックシンドローム判定にて非該当です。」のような制度判定の口語説明だけが入るケースがあるため、全項目フラグではなく `exam_item_value_precedence_rules` によるnamecode単位の例外ルールで制御する。
+- 採用例外ルールは、`CSV_FIRST` / `CSV_IF_XML_MATCHES_PATTERN` / `JOIN_XML_CSV` / `MANUAL_REVIEW` を表現できるようにする。取り込み時のsource値は改変せず、結合済み `ledger_type = EXAM` の清書値を作る時だけ適用する。
+- 初期ルールとして、XML側の `9N511` がメタボリックシンドローム判定の口語説明のみで、CSV側の `9N511` が存在する場合はCSV側を採用する。
 
 ### Initial `exam_facilities` Shape
 

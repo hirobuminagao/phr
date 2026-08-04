@@ -32,6 +32,10 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   `normalize_reason` text,
   `validation_status` varchar(32) DEFAULT NULL,
   `validation_reason` text,
+  `source_ledger_type` varchar(16) DEFAULT NULL COMMENT '清書値の採用元ledger_type',
+  `source_ledger_id` bigint unsigned DEFAULT NULL COMMENT '清書値の採用元ledger_id',
+  `source_exam_item_value_id` bigint unsigned DEFAULT NULL COMMENT '清書値の採用元exam_item_values.id',
+  `value_source_role` varchar(32) DEFAULT NULL COMMENT 'PRIMARY/SUPPLEMENT等',
   `extracted_run_id` bigint unsigned DEFAULT NULL,
   `extracted_at` datetime(3) DEFAULT NULL,
   `normalized_at` datetime(3) DEFAULT NULL,
@@ -51,6 +55,7 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   KEY `idx_exam_item_values_jun_no` (`jun_no`),
   KEY `idx_exam_item_values_normalize_status` (`normalize_status`),
   KEY `idx_exam_item_values_validation_status` (`validation_status`),
+  KEY `idx_exam_item_values_source_value` (`source_ledger_type`, `source_ledger_id`, `source_exam_item_value_id`),
   KEY `idx_exam_item_values_extracted_run` (`extracted_run_id`),
   KEY `idx_exam_item_values_extracted_at` (`extracted_at`)
 )

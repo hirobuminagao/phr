@@ -226,6 +226,28 @@ source値:
 将来、清書値の責務が大きくなった場合は `adopted_exam_item_values` 等の専用テーブルへ分離する。
 ただし初期段階では、テーブルを増やすこと自体よりも、source値と清書値の責務分離、採用元参照、再生成可能性を優先する。
 
+### Source Precedence Exceptions
+
+複数sourceを1つの清書ledgerへ結合する場合、同じ `namecode + occurrence_no` の値は原則XML優位で採用する。
+XMLは標準様式として受領した原本であり、項目・型・コード体系がCSVより厳密であるためである。
+
+一方で、XMLが常に業務上もっとも有用な値とは限らない。
+例として `9N511 医師の診断(判定)` に、`メタボリックシンドローム判定にて非該当です。` のような `9N501` の口語説明だけが入る施設がある。
+この場合、CSV側の指導コメントに医師の診断・再検査指示として有用な文章が入っていれば、CSV値を清書値として採用した方が納品上の意味が通る。
+
+この制御は全項目に優位フラグを持たせず、`health_exam_result.exam_item_value_precedence_rules` による例外ルールで扱う。
+取り込み済みsource値はXML/CSVとも証跡として保持し、結合済み `ledger_type = EXAM` の清書値を再生成する時だけ例外を適用する。
+
+初期actionは以下とする。
+
+| action | 意味 |
+| --- | --- |
+| `XML_FIRST` | 条件一致時もXMLを採用する |
+| `CSV_FIRST` | CSV値があればCSVを採用する |
+| `CSV_IF_XML_MATCHES_PATTERN` | XML値が指定パターンに一致し、CSV値が条件を満たす場合にCSVを採用する |
+| `JOIN_XML_CSV` | XML値とCSV値を重複除去して結合する |
+| `MANUAL_REVIEW` | 自動採用はXML優位のまま、人の確認対象として残す |
+
 ## Three-Layer Summary
 
 今後の中心は以下の3層とする。

@@ -42,6 +42,7 @@ python scripts/from_medical/dev_tools/sync_exam_ledgers.py
 
 ```text
 sync_exam_ledgers.py
+build_combined_exam_ledgers.py
 03_check_exam_results.py --ledger-type EXAM
 scripts/health_exam_event/sync_person_event_population.py
 scripts/health_exam_event/sync_person_event_status_items.py
@@ -49,6 +50,46 @@ refresh_exam_result_ledger_report.py
 ```
 
 人単位event状態の同期は `scripts/health_exam_event/` に移動しました。
+
+## `build_combined_exam_ledgers.py`
+
+指定した `event_id` の `exam_ledgers` から、同一人物・同一健診日・同一健診機関の
+XML/CSV source ledger を束ね、`source_type = COMBINED` の清書ledgerを作ります。
+
+初期仕様:
+
+- XMLをPRIMARYとして優先します。
+- CSVはSUPPLEMENTとして扱います。
+- 清書値は `exam_item_values.ledger_type = EXAM`、`ledger_id = combined exam_ledger_id` に作ります。
+- 同じ `namecode + occurrence_no` がPRIMARYにある場合はPRIMARYを採用し、SUPPLEMENT側は採用しません。
+- PRIMARYにない項目だけSUPPLEMENTから補完します。
+- 値単位の採用元は `source_ledger_type` / `source_ledger_id` / `source_exam_item_value_id` / `value_source_role` に保持します。
+- `exam_ledger_sources` はsource ledgerの現在の束ね先を表すため、結合ledger作成後はsourceがCOMBINEDへ紐付きます。
+
+実行前にmigrationを適用します。
+
+```powershell
+Get-Content sql/migrations/health_exam_result/20260804_005_health_exam_result_add_exam_item_value_source_tracking.sql -Raw |
+  mysql -u USER -p
+```
+
+件数だけ確認します。この実行ではDBを変更しません。
+
+```powershell
+python scripts/from_medical/dev_tools/build_combined_exam_ledgers.py --dry-run
+```
+
+結合ledgerと清書値を作成します。
+
+```powershell
+python scripts/from_medical/dev_tools/build_combined_exam_ledgers.py
+```
+
+作成後、COMBINED ledgerを法定チェックします。
+
+```powershell
+python scripts/from_medical/03_check_exam_results.py --ledger-type EXAM
+```
 
 ## `refresh_exam_result_ledger_report.py`
 

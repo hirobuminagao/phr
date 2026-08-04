@@ -461,6 +461,15 @@ def upsert_source_rows(cur: Any, config: SyncConfig, source_type: str) -> int:
         WHERE el.`event_id` = %s
           AND el.`source_type` = %s
           AND el.{qname(source_id_column)} IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM {qname(config.health_db)}.`exam_ledger_sources` AS existing_source
+            JOIN {qname(config.health_db)}.`exam_ledgers` AS existing_ledger
+              ON existing_ledger.`exam_ledger_id` = existing_source.`exam_ledger_id`
+            WHERE existing_source.`source_type` = %s
+              AND existing_source.`source_ledger_id` = el.{qname(source_id_column)}
+              AND existing_ledger.`source_type` = 'COMBINED'
+          )
         ON DUPLICATE KEY UPDATE
             `exam_ledger_id` = VALUES(`exam_ledger_id`),
             `file_receipt_id` = VALUES(`file_receipt_id`),
@@ -469,7 +478,7 @@ def upsert_source_rows(cur: Any, config: SyncConfig, source_type: str) -> int:
             `source_status` = VALUES(`source_status`),
             `source_reason` = VALUES(`source_reason`)
         """,
-        (source_type, source_type, config.event_id, source_type),
+        (source_type, source_type, config.event_id, source_type, source_type),
     )
     return int(cur.rowcount)
 
