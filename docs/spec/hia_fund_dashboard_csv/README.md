@@ -91,7 +91,9 @@ CSV 自体に保険者番号が含まれないため、input 配置フォルダ�
 現時点で確認できている列は以下。
 
 - ステータス
+- 加入者ID
 - 氏名
+- 氏名カナ
 - 被保険者記号
 - 被保険者番号
 - 枝番
@@ -113,28 +115,38 @@ CSV 自体に保険者番号が含まれないため、input 配置フォルダ�
 
 ## 識別と突合の考え方
 
-この CSV には、現時点で以下が含まれていない。
+旧CSVには、以下が含まれていなかった。
 
 - 保険者番号（フォルダ名で補完）
 - 氏名カナ
 - 生年月日
 - 性別
 
-また、この CSV は加入者マスタそのものではなく、HIA ダッシュボード画面の表示用CSVである。
+新CSVでは `加入者ID` と `氏名カナ` が追加された。
+ただし、この CSV は加入者マスタそのものではなく、HIA ダッシュボード画面の表示用CSVである。
 そのため、氏名（漢字）は識別キーとして信用しない。
 
-第一段階では、次の組み合わせを人物識別の論理キーとする。
+新CSVでは、次の順で人物を解決する。
+
+1. `加入者ID` がある場合は `dev_phr.subscribers.hia_subscriber_id` で優先照合する。
+2. `加入者ID` がない、または未一致の場合は旧方式の保険証情報と氏名で補助照合する。
+
+旧方式では、次の組み合わせを人物識別の論理キーとする。
 
 - insurer_number（フォルダ名補完）
 - insurance_symbol
 - insurance_number
 - relationship
 
-この組み合わせから次を構築する。
+この組み合わせから旧 `snapshot_identity_key` を構築する。
 
 ```text
 snapshot_identity_key
 ```
+
+新CSVでは `insurer_number + hia_subscriber_id` を優先して `snapshot_identity_key` を構築する。
+旧方式で登録済みの行がある場合は、取込時に旧 `snapshot_identity_key` でも既存行を探し、
+見つかった場合は新 `snapshot_identity_key` へ更新する。
 
 補足:
 
@@ -201,6 +213,23 @@ hia_dashboard_reminder_events
 
 のみを扱い、DELETE は手動分析対象とする。
 
+進行中年度の全件ダッシュボードCSVを取り込む場合は、物理削除ではなく
+`hia_dashboard_status.is_active` で最新CSVに存在するかを管理する。
+
+方針:
+
+- 値の変更履歴は `hia_dashboard_status_history` に列単位で保持する。
+- `hia_dashboard_status` 本体は最新値と active/inactive 状態を保持する。
+- `--deactivate-missing` を指定した全件取込では、同じ保険者番号で今回CSVに存在しなかった既存行を `is_active = 0` にする。
+- 非アクティブ化時は `inactive_run_id`、`inactive_at`、`inactive_reason` を本体に保持する。
+- 再度CSVに出現した場合は、通常のINSERT/UPDATE処理で `is_active = 1` に戻す。
+- 画面・集計では、現在HIA上に存在する人を見る場合は `is_active = 1` を条件にする。
+
+注意:
+
+- `--deactivate-missing` は、そのCSVが保険者単位の全件スナップショットである場合だけ使う。
+- フィルタ済みCSVでは、存在しない行を非アクティブ化してはならない。
+
 ---
 
 ## 想定テーブル
@@ -250,7 +279,29 @@ hia_dashboard_reminder_events
 
 ## 想定スクリプト
 
-- `hia_import_dashboard_csv.py`
+- 現行: `scripts/hia/import_dashboard_csv.py`
+- 旧参照: `scripts/work_folder/scripts/hia_import_dashboard_csv.py`
+
+今後の改修対象は `scripts/hia/import_dashboard_csv.py` とする。
+
+実行例:
+
+```powershell
+python scripts/hia/import_dashboard_csv.py --dry-run
+python scripts/hia/import_dashboard_csv.py
+```
+
+入力配置:
+
+```text
+data/hia_export/input_dashboard_csv/<8桁保険者番号>/*.csv
+```
+
+新CSV追加列の保持:
+
+- `加入者ID` は `hia_dashboard_status.hia_subscriber_id` に保持する。
+- `氏名カナ` 原文は `hia_dashboard_status.dashboard_name_kana` に保持する。
+- `氏名カナ` 照合用は `hia_dashboard_status.dashboard_name_kana_match` に保持する。
 
 ---
 

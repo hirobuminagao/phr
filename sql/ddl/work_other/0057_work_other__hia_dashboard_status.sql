@@ -21,6 +21,8 @@ CREATE TABLE `work_other`.`hia_dashboard_status` (
   -- name
   `name` varchar(190) DEFAULT NULL,
   `name_match` varchar(190) DEFAULT NULL,
+  `dashboard_name_kana` varchar(190) DEFAULT NULL COMMENT 'HIAダッシュボードCSV由来の氏名カナ原文',
+  `dashboard_name_kana_match` varchar(190) DEFAULT NULL COMMENT 'HIAダッシュボードCSV由来の氏名カナ照合用',
 
   -- subscriber enrichment (resolved from subscribers at import time)
   `subscriber_person_id_custom` varchar(64) DEFAULT NULL,
@@ -55,6 +57,10 @@ CREATE TABLE `work_other`.`hia_dashboard_status` (
 
   -- diff / tracking
   `row_sha256` char(64) NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT '最新全件取込で有効な行か',
+  `inactive_run_id` bigint unsigned DEFAULT NULL COMMENT '非アクティブ化したrun_id',
+  `inactive_at` datetime(3) DEFAULT NULL COMMENT '非アクティブ化日時',
+  `inactive_reason` varchar(190) DEFAULT NULL COMMENT '非アクティブ化理由',
 
   `first_seen_run_id` bigint unsigned NOT NULL,
   `last_seen_run_id` bigint unsigned NOT NULL,
@@ -83,7 +89,9 @@ CREATE TABLE `work_other`.`hia_dashboard_status` (
   KEY `idx_hia_dashboard_subscribers_id` (`subscribers_id`),
   KEY `idx_hia_dashboard_hia_subscriber_id` (`hia_subscriber_id`),
   KEY `idx_hia_dashboard_identity_hash` (`identity_hash`),
+  KEY `idx_hia_dashboard_name_kana_match` (`dashboard_name_kana_match`),
   KEY `idx_hia_dashboard_subscriber_name_kana_full_match` (`subscriber_name_kana_full_match`),
+  KEY `idx_hia_dashboard_active` (`insurer_number`, `is_active`),
   KEY `idx_hia_dashboard_last_seen_run` (`last_seen_run_id`),
 
   CONSTRAINT `fk_hia_dashboard_first_run`
@@ -93,6 +101,9 @@ CREATE TABLE `work_other`.`hia_dashboard_status` (
   CONSTRAINT `fk_hia_dashboard_last_run`
     FOREIGN KEY (`last_seen_run_id`)
     REFERENCES `work_other`.`etl_runs` (`run_id`)
+
+  -- inactive_run_id は運用上の参照値として保持する。
+  -- 過去run削除・環境移行で邪魔しないためFKは張らない。
 
 )
 ENGINE=InnoDB
