@@ -71,6 +71,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
 from scripts.lib.identity.generator import generate_identity_bundle
+from scripts.lib.db.lookup.fund import (
+    FundLookupError,
+    get_fund_name_from_insurer_number,
+)
 from scripts.lib.shg.xml.basic import extract_basic
 from scripts.lib.shg.xml.section_90030_initial import (
     extract_initial_goals,
@@ -222,6 +226,17 @@ def make_person_key(
     return "|".join(parts)
 
 
+def resolve_insurer_name(insurer_number: Any) -> str:
+    """XML由来の保険者番号から健康保険組合名を解決する。"""
+    raw = str(insurer_number or "").strip()
+    if not raw:
+        return ""
+    try:
+        return get_fund_name_from_insurer_number(raw)
+    except (ValueError, FundLookupError):
+        return ""
+
+
 
 
 # ------------------------------------------------------------
@@ -332,6 +347,7 @@ def main() -> None:
         try:
             root = read_xml(xml_path)
             basic = extract_basic(root)
+            insurer_name = resolve_insurer_name(basic.get("insurer"))
             role = resolve_shg_role(str(basic.get("report_code") or ""))
             identity_res = build_xml_identity_from_basic(basic)
 
@@ -437,6 +453,7 @@ def main() -> None:
                     "initial_date": initial_date or "",
                     "final_date": basic.get("final_date", ""),
                     "insurer": basic.get("insurer", ""),
+                    "健康保険組合名": insurer_name,
                     "symbol": basic.get("symbol", ""),
                     "number": basic.get("number", ""),
                     "name": basic.get("name", ""),
@@ -479,6 +496,7 @@ def main() -> None:
                     "identity_reason": f"xml_parse_error: {e}",
                     "role": "",
                     "insurer": "",
+                    "健康保険組合名": "",
                     "symbol": "",
                     "number": "",
                     "name": "",
@@ -509,6 +527,12 @@ def main() -> None:
         initial = info.get("initial")
         final = info.get("final")
         db_info = info.get("db_row") or {}
+        insurer_number_value = (
+            ((final or {}).get("basic") or {}).get("insurer")
+            or ((initial or {}).get("basic") or {}).get("insurer")
+            or ""
+        )
+        insurer_name = resolve_insurer_name(insurer_number_value)
         initial_guidance = (initial or {}).get("guidance") or {}
         final_guidance = (final or {}).get("guidance") or {}
         level_code = (
@@ -681,6 +705,8 @@ def main() -> None:
                 "person_key": info.get("person_key", ""),
                 "person_id": identity_hash,
                 "person_id_custom": info.get("person_id_custom", ""),
+                "insurer": insurer_number_value,
+                "健康保険組合名": insurer_name,
                 "db_ticket_no": db_info.get("usage_ticket_number", ""),
                 "db_ticket_exp": db_info.get("expiration_date", ""),
                 "initial_xml": (initial or {}).get("xml_file", ""),

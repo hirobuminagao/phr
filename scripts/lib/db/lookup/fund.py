@@ -17,6 +17,7 @@ fund 関連の参照系 lookup ライブラリ。
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any, Iterable, Mapping, cast
 
 from scripts.lib.db.config import load_mysql_base_params
@@ -107,6 +108,36 @@ def _fetch_fund_ids_by_candidates(candidates: Iterable[str]) -> list[int]:
     return fund_ids
 
 
+def _fetch_fund_name_rows_by_candidates(candidates: Iterable[str]) -> list[Mapping[str, Any]]:
+    """候補 insurer_number 群から fund name 行を取得する。"""
+    candidate_list = list(candidates)
+    if not candidate_list:
+        return []
+
+    placeholders = ", ".join(["%s"] * len(candidate_list))
+    sql = f"""
+        SELECT DISTINCT
+            fin.fund_id,
+            f.name_display,
+            f.name_official,
+            f.name_short
+        FROM {DEV_PHR}.fund_insurer_numbers AS fin
+        JOIN {DEV_PHR}.funds AS f
+          ON f.id = fin.fund_id
+        WHERE fin.insurer_number IN ({placeholders})
+        ORDER BY fin.fund_id
+    """
+
+    params = load_mysql_base_params()
+    with connect_ctx(params, database=DEV_PHR) as conn:
+        cursor = dict_cursor(conn)
+        try:
+            cursor.execute(sql, tuple(candidate_list))
+            return cast(list[Mapping[str, Any]], cursor.fetchall())
+        finally:
+            cursor.close()
+
+
 def get_fund_id_from_insurer_number(insurer_number: str) -> int:
     """
     insurer_number から fund_id を解決する。
@@ -137,3 +168,42 @@ def get_fund_id_from_insurer_number(insurer_number: str) -> int:
         )
 
     return unique_ids[0]
+
+
+@lru_cache(maxsize=1024)
+def get_fund_name_from_insurer_number(insurer_number: str) -> str:
+    """
+    insurer_number から健康保険組合名を解決する。
+
+    名称は表示名、正式名、略称の順に採用する。
+    """
+    candidates = _build_insurer_number_candidates(insurer_number)
+    rows = _fetch_fund_name_rows_by_candidates(candidates)
+
+    if not rows:
+        raise FundNotFoundError(
+            f"fund name not found for insurer_number={insurer_number!r} candidates={candidates!r}"
+        )
+
+    names_by_fund_id: dict[int, str] = {}
+    for row in rows:
+        fund_id = row_get_int(row, "fund_id")
+        name = (
+            str(row.get("name_display") or "").strip()
+            or str(row.get("name_official") or "").strip()
+            or str(row.get("name_short") or "").strip()
+        )
+        if name:
+            names_by_fund_id[fund_id] = name
+
+    if not names_by_fund_id:
+        raise FundNotFoundError(
+            f"fund name is empty for insurer_number={insurer_number!r} candidates={candidates!r}"
+        )
+
+    if len(names_by_fund_id) > 1:
+        raise FundAmbiguousError(
+            f"multiple fund name found for insurer_number={insurer_number!r}: {names_by_fund_id!r}"
+        )
+
+    return next(iter(names_by_fund_id.values()))
