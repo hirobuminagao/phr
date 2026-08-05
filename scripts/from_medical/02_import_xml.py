@@ -1051,9 +1051,24 @@ def fetch_file_receipts(cur: Any, config: ImportConfig) -> list[dict[str, Any]]:
     status_placeholders = ", ".join(["%s"] * len(config.input.file_statuses))
     type_placeholders = ", ".join(["%s"] * len(config.input.file_types))
     params: list[Any] = [config.event_id, *config.input.file_statuses, *config.input.file_types]
+    include_pending_xml_ledgers = (
+        FILE_STATUS_IMPORTED in config.input.file_statuses
+        or FILE_STATUS_WARNING in config.input.file_statuses
+    )
+    status_filter = f"fr.status IN ({status_placeholders})"
+    if include_pending_xml_ledgers:
+        status_filter = (
+            f"({status_filter} OR EXISTS ("
+            f"SELECT 1 FROM {qname(config.health_db)}.exam_ledgers AS el "
+            "WHERE el.file_receipt_id = fr.id "
+            "AND el.source_type = 'XML' "
+            "AND el.xml_status = 'READY' "
+            "AND el.xml_export_status = 'PENDING'"
+            "))"
+        )
     etl_filter = ""
     if config.input.etl_run_id is not None:
-        etl_filter = "AND etl_run_id = %s"
+        etl_filter = "AND fr.etl_run_id = %s"
         params.append(config.input.etl_run_id)
     limit_sql = ""
     if config.limit:
@@ -1062,13 +1077,13 @@ def fetch_file_receipts(cur: Any, config: ImportConfig) -> list[dict[str, Any]]:
 
     cur.execute(
         f"""
-        SELECT *
-        FROM {qname(config.health_db)}.file_receipts
-        WHERE event_id = %s
-          AND status IN ({status_placeholders})
-          AND file_type IN ({type_placeholders})
+        SELECT fr.*
+        FROM {qname(config.health_db)}.file_receipts AS fr
+        WHERE fr.event_id = %s
+          AND {status_filter}
+          AND fr.file_type IN ({type_placeholders})
           {etl_filter}
-        ORDER BY id
+        ORDER BY fr.id
         {limit_sql}
         """,
         tuple(params),
