@@ -31,8 +31,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.lookup.event import get_event_insurer_number
 from scripts.lib.db.lookup.exam_item_master import get_exam_items
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
+from scripts.lib.db.lookup.subscriber_export_projection import (
+    load_subscriber_basic_export_projection_by_id,
+    resolve_basic_identity_export_values,
+)
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.db.schemas import PHR_MASTER
 from scripts.lib.etl import RunMetrics
@@ -41,6 +46,7 @@ from scripts.lib.etl import log_error as etl_log_error
 from scripts.lib.etl import start_run as etl_start_run
 from scripts.lib.examination.value_normalizer import CODE_DATA_TYPES, normalize_exam_item_value
 from scripts.lib.identity.generator import generate_identity_bundle
+from scripts.from_medical.script_lib.basic_info_completion import resolve_basic_info_completion
 
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
@@ -1176,6 +1182,17 @@ def get_xml_ledger(cur: Any, config: ImportConfig, xml_sha256: str) -> dict[str,
     return cur.fetchone()
 
 
+def xml_basic_to_completion_row(basic: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "insurer_number": basic.get("insurer_number_raw"),
+        "insurance_symbol_raw": basic.get("insurance_symbol_raw"),
+        "insurance_number_raw": basic.get("insurance_number_raw"),
+        "name_kana_raw": basic.get("name_kana_full_raw"),
+        "postal_code": basic.get("postal_code"),
+        "address": basic.get("address"),
+    }
+
+
 def insert_xml_ledger(
     cur: Any,
     config: ImportConfig,
@@ -1189,12 +1206,16 @@ def insert_xml_ledger(
     basic: Mapping[str, Any],
     identity_bundle: Mapping[str, Any] | None,
     subscriber: Mapping[str, Any],
+    basic_info: Mapping[str, Any] | None = None,
+    basic_identity_export: Mapping[str, Any] | None = None,
 ) -> tuple[int, bool]:
     person_id_custom = None
     identity_hash = None
     if identity_bundle and identity_bundle.get("ok"):
         person_id_custom = identity_bundle.get("person_id_custom")
         identity_hash = identity_bundle.get("identity_hash")
+    basic_info = basic_info or {}
+    basic_identity_export = basic_identity_export or {}
 
     try:
         cur.execute(
@@ -1205,9 +1226,19 @@ def insert_xml_ledger(
                 xml_sha256, xml_file_name, document_id,
                 insurer_number, facility_code, facility_name, exam_date,
                 name_kana_raw,
+                name_kana_export_value, name_kana_export_source, name_kana_export_reason,
                 insurance_symbol_raw, insurance_number_raw,
+                insurance_symbol_export_value, insurance_symbol_export_source, insurance_symbol_export_reason,
+                insurance_number_export_value, insurance_number_export_source, insurance_number_export_reason,
                 birthdate, gender_code,
                 report_category_code, program_type_code,
+                postal_code, address,
+                basic_info_status, basic_info_reason,
+                insurer_number_source, insurer_number_completion_status,
+                insurer_number_completion_reason, insurer_number_export_value,
+                address_source,
+                address_completion_status, address_completion_reason,
+                address_completed_value, postal_code_completed_value,
                 identity_hash, person_id_custom,
                 subscriber_match_status, subscriber_match_method, subscriber_match_reason,
                 xml_status, xml_reason,
@@ -1219,10 +1250,18 @@ def insert_xml_ledger(
                 %s, %s, %s,
                 %s, %s, %s, %s,
                 %s,
+                %s, %s, %s,
+                %s, %s,
+                %s, %s, %s,
+                %s, %s, %s,
                 %s, %s,
                 %s, %s,
                 %s, %s,
                 %s, %s,
+                %s, %s, %s, %s,
+                %s,
+                %s, %s,
+                %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s,
                 CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
@@ -1242,12 +1281,34 @@ def insert_xml_ledger(
                 basic.get("facility_name"),
                 basic.get("exam_date"),
                 basic.get("name_kana_full_raw"),
+                basic_identity_export.get("name_kana_export_value"),
+                basic_identity_export.get("name_kana_export_source"),
+                basic_identity_export.get("name_kana_export_reason"),
                 basic.get("insurance_symbol_raw"),
                 basic.get("insurance_number_raw"),
+                basic_identity_export.get("insurance_symbol_export_value"),
+                basic_identity_export.get("insurance_symbol_export_source"),
+                basic_identity_export.get("insurance_symbol_export_reason"),
+                basic_identity_export.get("insurance_number_export_value"),
+                basic_identity_export.get("insurance_number_export_source"),
+                basic_identity_export.get("insurance_number_export_reason"),
                 parse_mysql_date(cast(str | None, basic.get("birthdate"))),
                 basic.get("gender_code"),
                 basic.get("report_category_code"),
                 basic.get("program_type_code"),
+                basic.get("postal_code"),
+                basic.get("address"),
+                basic_info.get("basic_info_status"),
+                basic_info.get("basic_info_reason"),
+                basic_info.get("insurer_number_source"),
+                basic_info.get("insurer_number_completion_status"),
+                basic_info.get("insurer_number_completion_reason"),
+                basic_info.get("insurer_number_export_value"),
+                basic_info.get("address_source"),
+                basic_info.get("address_completion_status"),
+                basic_info.get("address_completion_reason"),
+                basic_info.get("address_completed_value"),
+                basic_info.get("postal_code_completed_value"),
                 identity_hash,
                 person_id_custom,
                 subscriber.get("subscriber_match_status"),
@@ -1269,6 +1330,11 @@ def insert_xml_ledger(
                     run_id=run_id,
                     report_category_code=cast(str | None, basic.get("report_category_code")),
                     program_type_code=cast(str | None, basic.get("program_type_code")),
+                    basic=basic,
+                    basic_info=basic_info,
+                    basic_identity_export=basic_identity_export,
+                    identity_bundle=identity_bundle,
+                    subscriber=subscriber,
                 )
                 return int(existing["exam_ledger_id"]), False
         raise
@@ -1287,17 +1353,109 @@ def update_xml_ledger_report_codes(
     run_id: int | None,
     report_category_code: str | None,
     program_type_code: str | None,
+    basic: Mapping[str, Any],
+    basic_info: Mapping[str, Any],
+    basic_identity_export: Mapping[str, Any],
+    identity_bundle: Mapping[str, Any] | None,
+    subscriber: Mapping[str, Any],
 ) -> None:
+    person_id_custom = None
+    identity_hash = None
+    if identity_bundle and identity_bundle.get("ok"):
+        person_id_custom = identity_bundle.get("person_id_custom")
+        identity_hash = identity_bundle.get("identity_hash")
     cur.execute(
         f"""
         UPDATE {qname(config.health_db)}.exam_ledgers
         SET file_receipt_id = COALESCE(%s, file_receipt_id),
             source_etl_run_id = COALESCE(%s, source_etl_run_id),
             report_category_code = COALESCE(%s, report_category_code),
-            program_type_code = COALESCE(%s, program_type_code)
+            program_type_code = COALESCE(%s, program_type_code),
+            insurer_number = COALESCE(%s, insurer_number),
+            facility_code = COALESCE(%s, facility_code),
+            facility_name = COALESCE(%s, facility_name),
+            exam_date = COALESCE(%s, exam_date),
+            name_kana_raw = COALESCE(%s, name_kana_raw),
+            name_kana_export_value = %s,
+            name_kana_export_source = %s,
+            name_kana_export_reason = %s,
+            insurance_symbol_raw = COALESCE(%s, insurance_symbol_raw),
+            insurance_symbol_export_value = %s,
+            insurance_symbol_export_source = %s,
+            insurance_symbol_export_reason = %s,
+            insurance_number_raw = COALESCE(%s, insurance_number_raw),
+            insurance_number_export_value = %s,
+            insurance_number_export_source = %s,
+            insurance_number_export_reason = %s,
+            birthdate = COALESCE(%s, birthdate),
+            gender_code = COALESCE(%s, gender_code),
+            postal_code = COALESCE(%s, postal_code),
+            address = COALESCE(%s, address),
+            basic_info_status = %s,
+            basic_info_reason = %s,
+            insurer_number_source = %s,
+            insurer_number_completion_status = %s,
+            insurer_number_completion_reason = %s,
+            insurer_number_export_value = %s,
+            address_source = %s,
+            address_completion_status = %s,
+            address_completion_reason = %s,
+            address_completed_value = %s,
+            postal_code_completed_value = %s,
+            identity_hash = COALESCE(%s, identity_hash),
+            person_id_custom = COALESCE(%s, person_id_custom),
+            subscriber_id = COALESCE(%s, subscriber_id),
+            hia_subscriber_id = COALESCE(%s, hia_subscriber_id),
+            subscriber_match_status = COALESCE(%s, subscriber_match_status),
+            subscriber_match_method = COALESCE(%s, subscriber_match_method),
+            subscriber_match_reason = COALESCE(%s, subscriber_match_reason)
         WHERE exam_ledger_id = %s
         """,
-        (file_receipt_id, run_id, report_category_code, program_type_code, ledger_id),
+        (
+            file_receipt_id,
+            run_id,
+            report_category_code,
+            program_type_code,
+            basic.get("insurer_number_raw"),
+            basic.get("facility_code"),
+            basic.get("facility_name"),
+            basic.get("exam_date"),
+            basic.get("name_kana_full_raw"),
+            basic_identity_export.get("name_kana_export_value"),
+            basic_identity_export.get("name_kana_export_source"),
+            basic_identity_export.get("name_kana_export_reason"),
+            basic.get("insurance_symbol_raw"),
+            basic_identity_export.get("insurance_symbol_export_value"),
+            basic_identity_export.get("insurance_symbol_export_source"),
+            basic_identity_export.get("insurance_symbol_export_reason"),
+            basic.get("insurance_number_raw"),
+            basic_identity_export.get("insurance_number_export_value"),
+            basic_identity_export.get("insurance_number_export_source"),
+            basic_identity_export.get("insurance_number_export_reason"),
+            parse_mysql_date(cast(str | None, basic.get("birthdate"))),
+            basic.get("gender_code"),
+            basic.get("postal_code"),
+            basic.get("address"),
+            basic_info.get("basic_info_status"),
+            basic_info.get("basic_info_reason"),
+            basic_info.get("insurer_number_source"),
+            basic_info.get("insurer_number_completion_status"),
+            basic_info.get("insurer_number_completion_reason"),
+            basic_info.get("insurer_number_export_value"),
+            basic_info.get("address_source"),
+            basic_info.get("address_completion_status"),
+            basic_info.get("address_completion_reason"),
+            basic_info.get("address_completed_value"),
+            basic_info.get("postal_code_completed_value"),
+            identity_hash,
+            person_id_custom,
+            subscriber.get("subscriber_id"),
+            subscriber.get("hia_subscriber_id"),
+            subscriber.get("subscriber_match_status"),
+            subscriber.get("subscriber_match_method"),
+            subscriber.get("subscriber_match_reason"),
+            ledger_id,
+        ),
     )
 
 
@@ -1731,13 +1889,30 @@ def process_xml_candidate(
         )
         local_error_count += 1
 
+    event_insurer_number = get_event_insurer_number(
+        dev_cur,
+        event_id=config.event_id,
+        dev_db=config.dev_db,
+    )
+    completion_row = xml_basic_to_completion_row(basic)
+    basic_info = resolve_basic_info_completion(
+        health_cur,
+        row=completion_row,
+        event_insurer_number=event_insurer_number,
+        master_db=config.master_db,
+    )
+    basic_info_params = basic_info.as_db_params()
+    basic_for_ledger = dict(basic)
+    if basic_info_params.get("insurer_number_export_value"):
+        basic_for_ledger["insurer_number_raw"] = basic_info_params["insurer_number_export_value"]
+
     identity_raw = {
-        "birthdate": basic.get("birthdate"),
-        "insurer_number_raw": basic.get("insurer_number_raw"),
-        "insurance_symbol_raw": basic.get("insurance_symbol_raw"),
-        "insurance_number_raw": basic.get("insurance_number_raw"),
-        "name_kana_full_raw": basic.get("name_kana_full_raw"),
-        "gender_code": basic.get("gender_code"),
+        "birthdate": basic_for_ledger.get("birthdate"),
+        "insurer_number_raw": basic_for_ledger.get("insurer_number_raw"),
+        "insurance_symbol_raw": basic_for_ledger.get("insurance_symbol_raw"),
+        "insurance_number_raw": basic_for_ledger.get("insurance_number_raw"),
+        "name_kana_full_raw": basic_for_ledger.get("name_kana_full_raw"),
+        "gender_code": basic_for_ledger.get("gender_code"),
     }
     identity_bundle = cast(Mapping[str, Any], generate_identity_bundle(**identity_raw))
     if not identity_bundle.get("ok"):
@@ -1794,6 +1969,18 @@ def process_xml_candidate(
         )
         local_error_count += 1
 
+    projection = None
+    if subscriber.get("subscriber_match_status") == SUBSCRIBER_MATCH_MATCHED:
+        projection = load_subscriber_basic_export_projection_by_id(
+            dev_cur,
+            subscriber_id=cast(int | None, subscriber.get("subscriber_id")),
+            dev_db=config.dev_db,
+        )
+    basic_identity_export = resolve_basic_identity_export_values(
+        xml_basic_to_completion_row(basic_for_ledger),
+        subscriber=projection,
+    ).as_db_params()
+
     if config.dry_run:
         return XmlProcessResult(
             ok=True,
@@ -1814,9 +2001,11 @@ def process_xml_candidate(
             xml_reason=None,
             file_receipt_id=file_receipt_id,
             run_id=run_id,
-            basic=basic,
+            basic=basic_for_ledger,
             identity_bundle=identity_bundle,
             subscriber=subscriber,
+            basic_info=basic_info_params,
+            basic_identity_export=basic_identity_export,
         )
     except Exception as exc:
         raise ImportDbError(
