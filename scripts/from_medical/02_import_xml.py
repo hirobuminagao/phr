@@ -267,7 +267,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--include-imported",
         action="store_true",
-        help="Also process file_receipts already marked IMPORTED.",
+        help="Also process file_receipts already marked IMPORTED or WARNING.",
     )
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
@@ -326,8 +326,8 @@ def load_import_config(path: str | Path) -> ImportConfig:
 def resolve_config(args: argparse.Namespace) -> ImportConfig:
     config = load_import_config(args.config)
     file_statuses = config.input.file_statuses
-    if args.include_imported and FILE_STATUS_IMPORTED not in file_statuses:
-        file_statuses = (*file_statuses, FILE_STATUS_IMPORTED)
+    if args.include_imported:
+        file_statuses = tuple(dict.fromkeys((*file_statuses, FILE_STATUS_IMPORTED, FILE_STATUS_WARNING)))
     return ImportConfig(
         event_id=args.event_id if args.event_id is not None else config.event_id,
         health_db=args.health_db if args.health_db is not None else config.health_db,
