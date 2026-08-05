@@ -1992,21 +1992,39 @@ def process_xml_candidate(
         )
 
     try:
-        ledger_id, ledger_inserted = insert_xml_ledger(
-            health_cur,
-            config,
-            xml_sha256=xml_sha256,
-            xml_file_name=candidate.xml_file_name,
-            xml_status=XML_STATUS_READY,
-            xml_reason=None,
-            file_receipt_id=file_receipt_id,
-            run_id=run_id,
-            basic=basic_for_ledger,
-            identity_bundle=identity_bundle,
-            subscriber=subscriber,
-            basic_info=basic_info_params,
-            basic_identity_export=basic_identity_export,
-        )
+        if existing:
+            ledger_id = int(existing["exam_ledger_id"])
+            update_xml_ledger_report_codes(
+                health_cur,
+                config,
+                ledger_id=ledger_id,
+                file_receipt_id=file_receipt_id,
+                run_id=run_id,
+                report_category_code=cast(str | None, basic_for_ledger.get("report_category_code")),
+                program_type_code=cast(str | None, basic_for_ledger.get("program_type_code")),
+                basic=basic_for_ledger,
+                basic_info=basic_info_params,
+                basic_identity_export=basic_identity_export,
+                identity_bundle=identity_bundle,
+                subscriber=subscriber,
+            )
+            ledger_inserted = False
+        else:
+            ledger_id, ledger_inserted = insert_xml_ledger(
+                health_cur,
+                config,
+                xml_sha256=xml_sha256,
+                xml_file_name=candidate.xml_file_name,
+                xml_status=XML_STATUS_READY,
+                xml_reason=None,
+                file_receipt_id=file_receipt_id,
+                run_id=run_id,
+                basic=basic_for_ledger,
+                identity_bundle=identity_bundle,
+                subscriber=subscriber,
+                basic_info=basic_info_params,
+                basic_identity_export=basic_identity_export,
+            )
     except Exception as exc:
         raise ImportDbError(
             "DB_EXAM_LEDGER_SAVE_FAILED",
