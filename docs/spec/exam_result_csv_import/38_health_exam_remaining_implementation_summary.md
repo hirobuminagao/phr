@@ -199,7 +199,7 @@ XMLとCSV、または複数CSVで不足項目を補い、1つの論理健診結�
 
 - 設計方針はある。
 - XML出力候補の命名は `exam_export_cases` / `exam_export_case_sources` / `exam_export_case_values` に寄せる。
-- `build_combined_exam_ledgers.py` は試作として残すが、本流にはしない。
+- 旧COMBINED ledger方式の試作 `build_combined_exam_ledgers.py` は削除済み。本流にはしない。
 - 結合出力用case DDL、case作成、case value採用、case単位checkは `exam_ledgers + exam_item_values` 起点で整備する。
 - case起点exportは未実装。
 

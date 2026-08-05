@@ -52,45 +52,14 @@ refresh_exam_result_ledger_report.py
 
 人単位event状態の同期は `scripts/health_exam_event/` に移動しました。
 
-## `build_combined_exam_ledgers.py`
+## 結合出力用case
 
-指定した `event_id` の `exam_ledgers` から、同一人物・同一健診日・同一健診機関の
-XML/CSV source ledger を束ね、`source_type = COMBINED` の清書ledgerを作ります。
-
-初期仕様:
-
-- XMLをPRIMARYとして優先します。
-- CSVはSUPPLEMENTとして扱います。
-- 清書値は `exam_item_values.ledger_type = EXAM`、`ledger_id = combined exam_ledger_id` に作ります。
-- 同じ `namecode + occurrence_no` がPRIMARYにある場合はPRIMARYを採用し、SUPPLEMENT側は採用しません。
-- PRIMARYにない項目だけSUPPLEMENTから補完します。
-- 値単位の採用元は `source_ledger_type` / `source_ledger_id` / `source_exam_item_value_id` / `value_source_role` に保持します。
-- `exam_ledger_sources` はsource ledgerの現在の束ね先を表すため、結合ledger作成後はsourceがCOMBINEDへ紐付きます。
-
-実行前にmigrationを適用します。
+旧COMBINED ledger方式の試作スクリプトは削除済みです。
+通常運用では `exam_ledgers` を清書ledger化せず、次のcase方式を使用します。
 
 ```powershell
-Get-Content sql/migrations/health_exam_result/20260804_005_health_exam_result_add_exam_item_value_source_tracking.sql -Raw |
-  mysql -u USER -p
-```
-
-件数だけ確認します。この実行ではDBを変更しません。
-
-```powershell
-python scripts/from_medical/dev_tools/build_combined_exam_ledgers.py --dry-run
-```
-
-旧COMBINED ledger方式の保守用スクリプトです。
-通常運用では `03_01_build_exam_export_cases.py` と
-`03_02_build_exam_export_case_values.py` を使用します。
-
-```powershell
-python scripts/from_medical/dev_tools/build_combined_exam_ledgers.py
-```
-
-通常運用のcase単位法定チェックは次を使用します。
-
-```powershell
+python scripts/from_medical/03_01_build_exam_export_cases.py
+python scripts/from_medical/03_02_build_exam_export_case_values.py
 python scripts/from_medical/03_04_check_exam_export_cases.py
 ```
 
