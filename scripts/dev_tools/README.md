@@ -42,6 +42,7 @@ CSV本体はgit管理しない。
 実行環境から持ち帰った、匿名化済み・集計済みの `exam_item_values` normalizeエラーCSVを `health_exam_result.exam_item_value_normalize_error_fixtures` へ取り込む。
 
 このテーブルは正式seedではなく、`norm_variants` 追加候補の確認、意図的に残すエラーの整理、回帰確認用の観察テーブルである。
+原則としてm4検証環境だけに作成し、実行環境には作成・投入しない。
 個人ID、氏名、ファイルパス、CSV行全体は入れない。
 
 事前にDDLまたはmigrationを適用する。

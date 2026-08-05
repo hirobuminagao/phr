@@ -1,6 +1,15 @@
--- Add code variants observed in anonymized normalize error fixtures.
--- Keep these scoped to observed values; broader standard-code cleanup remains a
--- separate review topic.
+-- Backfill result code variants that are required by runtime imports.
+-- This file is safe for execution environments. It does not load normalize
+-- error fixture rows.
+
+UPDATE `phr_master`.`norm_variants`
+SET
+  `is_active` = 0,
+  `note` = CONCAT(COALESCE(`note`, ''), ' Deactivated: provisional fixture-derived 2121 alias is not part of execution seed.'),
+  `updated_at` = CURRENT_TIMESTAMP(6)
+WHERE `result_code_oid` = '1.2.392.200119.6.2121'
+  AND `note` LIKE 'Observed in exam_item_values_error_20260805 fixture.%'
+  AND `note` NOT LIKE '%Deactivated:%';
 
 INSERT INTO `phr_master`.`norm_variants` (
   `result_code_oid`,
@@ -14,11 +23,6 @@ INSERT INTO `phr_master`.`norm_variants` (
   `is_active`,
   `note`
 ) VALUES
-  -- Bethesda-style cervical cytology codes observed with OID 2121.
-  ('1.2.392.200119.6.2121', '1', '1', '1', '1.2.392.200119.6.2121', 'NILM', 0, 90, 1, 'Observed in exam_item_values_error_20260805 fixture. OID 2121 handling should be reviewed against source standard.'),
-  ('1.2.392.200119.6.2121', '2', '2', '2', '1.2.392.200119.6.2121', 'ASC-US', 0, 90, 1, 'Observed in exam_item_values_error_20260805 fixture. OID 2121 handling should be reviewed against source standard.'),
-  ('1.2.392.200119.6.2121', '5', '5', '5', '1.2.392.200119.6.2121', 'HSIL', 0, 90, 1, 'Observed in exam_item_values_error_20260805 fixture. OID 2121 handling should be reviewed against source standard.'),
-
   -- Fill code_system for commonly used aliases where older rows had NULL.
   ('1.2.392.200119.6.2100', '+', '+', '1', '1.2.392.200119.6.2100', '陽性', 0, 90, 1, 'Backfill code_system for positive/negative result aliases.'),
   ('1.2.392.200119.6.2100', '(+)', '(+)', '1', '1.2.392.200119.6.2100', '陽性', 0, 90, 1, 'Backfill code_system for positive/negative result aliases.'),
