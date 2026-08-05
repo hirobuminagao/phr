@@ -206,7 +206,7 @@ def condition_matches(row: dict[str, Any] | None, condition_type: Any, pattern: 
     if condition == "EMPTY":
         return not text.strip()
     if condition == "REGEXP":
-        return bool(pattern) and re.search(str(pattern), text)
+        return bool(pattern) and bool(re.search(str(pattern), text))
     if condition == "EQUALS":
         return text == str(pattern or "")
     if condition == "CONTAINS":
@@ -473,7 +473,7 @@ def main() -> int:
     )
     validate_config(config)
     params = load_mysql_base_params(args.db_prefix)
-    with connect_ctx(params) as conn:
+    with connect_ctx(params, database=config.health_db) as conn:
         build_case_values(conn, config)
     return 0
 

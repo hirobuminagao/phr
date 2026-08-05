@@ -423,7 +423,7 @@ def main() -> int:
     )
     validate_config(config)
     params = load_mysql_base_params(args.db_prefix)
-    with connect_ctx(params) as conn:
+    with connect_ctx(params, database=config.health_db) as conn:
         build_cases(conn, config)
     return 0
 
