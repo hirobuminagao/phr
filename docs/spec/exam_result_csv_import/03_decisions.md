@@ -2,7 +2,7 @@
 
 ## Status
 
-Current as of 2026-07-29.
+Current as of 2026-08-05.
 
 このドキュメントは `02_02_exam_result_csv_import` の前提となるマスタ整備、および `phr_master` 新設に関する採用済み決定事項を管理する。
 協議経緯は `05_design_history.md` に記録し、本ファイルには実装・DDL・seed・migration の前提にできる内容だけを反映する。
@@ -145,6 +145,10 @@ Current as of 2026-07-29.
 - 結合出力用caseの採用済み整値は `exam_export_case_values` 相当のテーブルで保持する。raw値は持たず、XML出力に必要な最小限の採用済み値、採用元 `exam_item_values.id`、採用理由、採用状態を持つ。
 - 結合出力用caseの法定checkは、採用済み整値 + `exam_item_master` に対して行い、結果を結合出力用caseへ戻す。
 - XML出力候補判定は結合出力用case、出力後の業務状態管理とHIAアップロード状態は `person_event` / `person_event_status_items` の責務とする。
+- 結合出力用caseの人が見る総合状態は `exam_export_cases.export_readiness_status` / `export_readiness_reason` に持つ。
+- `export_readiness_status` は少なくとも `EXPORT_READY`, `APPROVED_WITH_REASON`, `BLOCKED`, `WAITING_VALUES`, `WAITING_CHECK`, `EXPORTED`, `EXPORT_ERROR` を扱う。
+- `export_readiness_status` は `03_01_build_exam_export_cases.py`, `03_02_build_exam_export_case_values.py`, `03_04_check_exam_export_cases.py` の後で再計算し、caseの `subscriber_match_status`, `merge_status`, `case_status`, `value_build_status`, `check_status`, `manual_export_approved`, `xml_export_status` から導く。
+- XML出力済みのcaseには、`output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を保持する。これは後続の出力画面、HIAアップロード依頼、再出力判断のための証跡である。
 - CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
 - 結合出力用caseの `xml_export_status` は、構成元 `exam_ledgers` の技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。
 - ledgerが増える、再取込される、checkが更新される、結合出力用caseが更新されるたびに、該当者の `person_event_status_items` は再同期される。
@@ -156,6 +160,20 @@ Current as of 2026-07-29.
 - ただし健診機関XMLの `9N511 医師の診断(判定)` に「メタボリックシンドローム判定にて非該当です。」のような制度判定の口語説明だけが入るケースがあるため、全項目フラグではなく `exam_item_value_precedence_rules` によるnamecode単位の例外ルールで制御する。
 - 採用例外ルールは、`CSV_FIRST` / `CSV_IF_XML_MATCHES_PATTERN` / `JOIN_XML_CSV` / `MANUAL_REVIEW` を表現できるようにする。取り込み時のsource値は改変せず、結合出力用caseの採用済み整値を作る時だけ適用する。
 - 初期ルールとして、XML側の `9N511` がメタボリックシンドローム判定の口語説明のみで、CSV側の `9N511` が存在する場合はCSV側を採用する。
+- 通常の実行順は、`01_scan_files.py`、必要に応じて `01_01_match_csv_format.py`、`02_import_xml.py`、`02_02_exam_result_csv_import.py`、`03_00_check_imported_exam_ledgers.py`、`03_01_build_exam_export_cases.py`、`03_02_build_exam_export_case_values.py`、`03_04_check_exam_export_cases.py` とする。
+- `03_00_check_imported_exam_ledgers.py` はfile/row source単位の法定check、`03_04_check_exam_export_cases.py` は結合後case単位の法定checkであり、役割が違うため両方実行する。
+- `sync_exam_ledgers.py` は通常運用の必須手順ではない。旧個別ledgerからの初回移行、復旧、再構築用に限定する。
+- `04_export_hia_xml.py` は次段階で `exam_export_cases` / `exam_export_case_values` 起点へ切り替える。旧CSV行台帳起点の出力経路は移行中の互換経路であり、今後の正にはしない。
+
+### XML Import Current Rules
+
+- XML取込も通常取込の保存先は `exam_ledgers` とする。
+- XML由来の `exam_item_values` も `ledger_type = 'EXAM'`, `ledger_id = exam_ledgers.exam_ledger_id` で登録する。
+- XMLの健診機関IDは `file_receipts.exam_facility_id` を正とし、XML本文に施設コード・名称があっても `exam_facility_id` の決定には使わない。
+- XML本文から健診機関コード・名称を抽出できない場合は、`file_receipts.facility_code` / `facility_name` のscan時スナップショットを補完表示値として使う。
+- 受診者住所は `recordTarget/patientRole/addr` だけから抽出する。`representedOrganization/addr` など医療機関住所を受診者住所へ流用しない。
+- 住所抽出は `state + city + streetAddressLine` を優先し、タグ外mixed contentが住所として入っているXMLでは `postalCode` を除いた本文をfallbackとして扱う。
+- `02_import_xml.py --include-imported` は、取込済みreceiptの再読込、`WARNING` receipt、既存XML ledgerが `READY/PENDING` のもののbackfillに使う。
 
 ### Initial `exam_facilities` Shape
 

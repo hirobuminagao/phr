@@ -2,7 +2,7 @@
 
 ## Status
 
-Current as of 2026-07-30.
+Current as of 2026-08-05.
 
 この文書は、CSV健診結果取込について、採用済み決定事項と現行実装の差分を同期し、次工程のCSVからXML作成へ引き継ぐための現在正である。
 
@@ -43,6 +43,7 @@ Current as of 2026-07-30.
 03_04_check_exam_export_cases.py
   -> exam_check_results
   -> exam_export_cases.check_status / check_reason
+  -> exam_export_cases.export_readiness_status / export_readiness_reason
 
 04_export_hia_xml.py
   -> V08個人XML + ix08_V08.xml
@@ -51,6 +52,9 @@ Current as of 2026-07-30.
 ```
 
 実行履歴の根は既存どおり `etl_runs` とし、CSV専用のrun親テーブルは追加していない。
+
+`04_export_hia_xml.py` は、2026-08-05時点では旧CSV行台帳起点の出力経路が残っている。
+今後の正は `exam_export_cases` / `exam_export_case_values` 起点であり、出力後は `exam_export_cases` の出力ファイル証跡カラムと `xml_export_zips` / `xml_export_members` の履歴を更新する。
 
 ## Implemented Scope
 
@@ -97,25 +101,28 @@ Current as of 2026-07-30.
 - header名、context、occurrence、column numberのlocator構造を保持できる。
 - fixed value、複数列の文字列結合、除外値、条件groupのAND/ORを扱える。
 
-### Row Ledger and Subscriber Matching
+### Unified Source Ledger and Subscriber Matching
 
-- `csv_row_ledger` は、XML側台帳に準じた加入者突合、検査値、check、export状態を持つ。
-- 原CSV行は `raw_row_json` と `row_sha256` に保存する。
+- `exam_ledgers` は、XML/CSV/紙入力を問わず、取込結果1件を表す統合source ledgerである。
+- CSVは1行1件、XMLはXML内の1人分1件、紙入力は入力1人分1件として登録する。
+- 原CSV行は `exam_ledgers.raw_row_json` と `row_sha256` に保存する。
 - 完全空行はskipし、それ以外は行台帳を作る。
-- 同一 `file_receipt_id + src_row_no` の再取込は行台帳をUPDATEする。
-- その行の `exam_item_values` はdelete+insertで再作成する。
+- 同一sourceの再取込は `exam_ledgers` をUPDATEする。
+- そのsourceに紐づく `exam_item_values` はdelete+insertで再作成する。
 - 加入者突合は `generate_identity_bundle()` と `resolve_subscriber_identity()` を使い、XML側と同じidentity系共通libへ寄せている。
-- CSVに保険者番号がない場合は、`file_receipts`、eventの順で補完する。
-- `health_exam_report_category` と `program_code` は、正しい厚生労働省コードの明示mapping値があればその値を保存する。
+- CSV/XMLに保険者番号がない場合は、`file_receipts`、eventの順で補完する。
+- `health_exam_report_category` と `program_code` は、正しい厚生労働省コードの明示値があればその値を保存する。
 - mapping対象がない、または値がNULLの場合は、eventの年齢判定規則により40～74歳を `10/010`、それ以外を `40/990` として不足値を補完する。
 - 施設側コースコード、コース名、検査構成から報告区分・プログラムコードを推測しない。
 
-### XML Report and Program Codes
+### XML Import and Program Codes
 
-- `xml_ledger` に `report_category_code` と `program_type_code` を追加した。
-- `02_import_xml.py` は元XMLの `ClinicalDocument/code` と `documentationOf/serviceEvent/code` を抽出して、そのまま保存する。
+- `02_import_xml.py` は元XMLの `ClinicalDocument/code` と `documentationOf/serviceEvent/code` を抽出して、`exam_ledgers` へそのまま保存する。
 - XML由来コードは年齢から再判定しない。
-- `--include-imported` を指定すると、取込済みfile receiptも再読込し、既存ledgerのNULLカラムをbackfillする。
+- XML由来の `exam_item_values` も `ledger_type = 'EXAM'`, `ledger_id = exam_ledgers.exam_ledger_id` で登録する。
+- `exam_facility_id` は `file_receipts` から引き継ぐ。XML本文に施設コード・名称がない場合は `file_receipts` のscan時スナップショットを表示値として使う。
+- 受診者住所は `recordTarget/patientRole/addr` のみから抽出し、医療機関住所を受診者住所として使わない。
+- `--include-imported` を指定すると、取込済みfile receipt、`WARNING` receipt、既存XML ledgerが `READY/PENDING` のものも再読込し、既存ledgerのNULLカラムや追加カラムをbackfillする。
 - `exam_result_ledger_report` にもXML由来2カラムを追加し、報告用snapshotへ引き継ぐ。
 
 ### Exam Item Values and Normalize
@@ -137,7 +144,20 @@ Current as of 2026-07-30.
 - 数値項目は `normalized_value`、コード項目は `code_value` を優先して法定チェックする。
 - 結果は `exam_ledgers.check_status` / `check_reason` へ戻す。
 - 結合出力用case単位の法定チェックは `03_04_check_exam_export_cases.py` で実行し、結果は `exam_export_cases.check_status` / `check_reason` へ戻す。
+- case作成、case値作成、case単位checkの後に `exam_export_cases.export_readiness_status` / `export_readiness_reason` を更新する。
 - 施設別のABC判定や総合判定は、法定項目チェックと混同せず取込対象外とする。
+
+### Export Case Readiness
+
+`exam_export_cases` は、人単位の1回分XML出力候補である。
+同一人物、同一健診日、同一健診機関、同一保険者のXML/CSV sourceは同じcaseへ束ねる。
+
+- `source_mode` は `XML_ONLY` / `CSV_ONLY` / `XML_CSV` / `MULTI_SOURCE` 等を表す。
+- `exam_export_case_sources` は構成元 `exam_ledgers` を保持する。
+- `exam_export_case_values` はXML出力用の採用済み整値を保持する。raw証跡は採用元 `exam_item_values` へ戻って確認する。
+- 人が見る総合状態は `export_readiness_status` / `export_readiness_reason` を見る。
+- `EXPORT_READY` は出力可能、`APPROVED_WITH_REASON` は理由あり手動許可済み、`BLOCKED` は加入者・結合・case・法定check等で停止、`WAITING_VALUES` は採用値作成待ち、`WAITING_CHECK` はcase check待ち、`EXPORTED` はXML出力済み、`EXPORT_ERROR` はXML生成・検証等の出力失敗を表す。
+- 出力後は `output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` に証跡を保持する。
 
 ## Current Transaction and Re-run Behavior
 
@@ -172,8 +192,8 @@ Current as of 2026-07-30.
 ## Evidence Placement
 
 - ファイル単位の読込・format・SHA異常は `etl_errors` に残す。
-- 行の元内容は `csv_row_ledger.raw_row_json` に残す。
-- mapping必須列不足と項目normalizeエラーは `csv_row_ledger.row_reason` / `exam_item_reason` に集約する。
+- 行の元内容は `exam_ledgers.raw_row_json` に残す。
+- mapping必須列不足と項目normalizeエラーは `exam_ledgers.row_reason` / `exam_item_reason` に集約する。
 - 項目ごとのraw、normalize、validation結果は `exam_item_values` に残す。
 - 現実装では項目normalizeエラーを1件ずつ `etl_errors` に重複記録しない。
 
@@ -202,8 +222,12 @@ Current as of 2026-07-30.
 
 CSVからXMLを作成するための主要データは、すでに以下へ揃っている。
 
-- `csv_row_ledger`
+- `exam_ledgers`
   - event、加入者ID、保険者番号、健診機関、健診日、氏名等の原文、identity、program/report category、住所、check/export状態
+- `exam_export_cases`
+  - 人単位の1回分XML出力候補、構成元source、結合状態、出力可否summary、出力後ファイル証跡
+- `exam_export_case_values`
+  - XML出力に採用する正規化済み検査値
 - `exam_item_values`
   - namecode、section、occurrence、raw値、型、単位、正規化値、コード値、normalize/validation結果
 - `exam_check_results`
@@ -248,7 +272,7 @@ CSV取込の再設計は不要である。XML出力について以下を確定�
 - ヒロオカfixture 7人のうち、ローカルsubscriber seedと一致する5人が `MATCHED / check OK`、基本情報不足の2人が停止となった。
 - 5人を1 ZIPへ出力し、個人XML5件、`ix08_V08.xml`、V08 XSD bundleを公式フォルダ構成で格納した。
 - 5個人XMLはすべてXSD適合し、付属2一連検査グループも実データ上で生成された。
-- `xml_export_zips` 1件、`xml_export_members` 5件、`csv_row_ledger.xml_export_status = EXPORTED` 5件を確認した。
+- `xml_export_zips` 1件、`xml_export_members` 5件、当時のCSV行台帳の出力済み状態5件を確認した。
 - 基本情報不足の2人は出力対象外のまま `PENDING` を維持した。
 
 ## Readiness Conclusion

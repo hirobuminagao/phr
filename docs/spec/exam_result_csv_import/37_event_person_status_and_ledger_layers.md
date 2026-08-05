@@ -2,11 +2,12 @@
 
 ## Status
 
-Decision note as of 2026-08-03.
+Decision note updated as of 2026-08-05.
 
 CSV/XML取込からXML出力まで一通り動いたため、次の実装は「複数の結果を1つの論理健診結果にまとめる」ことと、「eventに対する人の状況を管理する」ことを分けて設計する。
 
-第一段階として `health_exam_result.exam_ledgers` / `exam_ledger_sources` を追加し、既存 `xml_ledger` / `csv_row_ledger` から統合ledgerを作る同期スクリプトを追加した。
+第一段階として `health_exam_result.exam_ledgers` を追加し、XML/CSV importの通常保存先を統合ledgerへ寄せた。
+既存 `xml_ledger` / `csv_row_ledger` から統合ledgerを作る同期スクリプトは、初回移行、復旧、再構築用に残す。
 また、運用確認用の `exam_result_ledger_report` は `exam_ledgers` 起点で作成する方針へ更新した。
 
 人単位状態は新しい横持ちテーブルを増やさず、既存 `dev_phr.person_event` を親にする。
@@ -28,15 +29,26 @@ dev_phr.event
               受領、check、出力、HIA、補正待ちなどを縦持ち
 
 health_exam_result.exam_ledgers
-  1人1健診結果または結合後の論理健診結果
-  check、補正、XML出力候補判定の単位
+  XML/CSV/紙入力から取り込んだsource 1件
+  XMLならXML内の1人分、CSVならCSV 1行
+  source単位の加入者突合、normalize、法定checkの単位
   |
   +-- health_exam_result.exam_item_values
-        source ledger または combined ledger に紐づくnamecode単位の検査結果値
+        source ledger に紐づくnamecode単位の検査結果値
+
+health_exam_result.exam_export_cases
+  人単位の1回分XML出力候補
+  source ledgerを複数束ね、出力可否、結合状態、出力証跡を持つ
+  |
+  +-- health_exam_result.exam_export_case_sources
+        構成元exam_ledgers
+  |
+  +-- health_exam_result.exam_export_case_values
+        XML出力用の採用済み整値
 ```
 
 既存の `xml_ledger` / `csv_row_ledger` は直ちに廃止しない。
-これらは原本取込の台帳、source証跡、移行元として残し、今後の業務処理・画面・出力制御は `exam_ledgers` と `person_event` 系へ寄せる。
+これらは原本取込の台帳、source証跡、移行元として残し、今後の業務処理・画面・出力制御は `exam_ledgers`、`exam_export_cases`、`person_event` 系へ寄せる。
 
 未突合のledgerはまだ「人」として確定していないため、`person_event` は作らない。
 未突合、加入者確認待ち、施設確認待ちのsource状態は `exam_ledgers` で管理し、加入者確定後に `person_event` へ反映する。
@@ -99,9 +111,9 @@ exam_ledgers
   2026-11-15 再検査または追加受領
 ```
 
-`person_event` はその人のイベント全体の状態を示し、個別の受診・結果・結合・XML出力候補は `exam_ledgers` 側で扱う。
+`person_event` はその人のイベント全体の状態を示し、個別の受診・source結果は `exam_ledgers`、結合・XML出力候補は `exam_export_cases` 側で扱う。
 年度内複数受診を潰して1件にしない。
-画面では `person_event` から、その人に紐づく複数の `exam_ledgers` を展開して確認できる形を目指す。
+画面では `person_event` から、その人に紐づく複数の `exam_ledgers` と `exam_export_cases` を展開して確認できる形を目指す。
 
 ### Person Event Population Source
 
@@ -195,7 +207,7 @@ adopted value layer は「XML出力や業務画面で使う採用済みの値」
 
 保持する情報:
 
-- `person_event_id` または結合済み `exam_ledger_id`
+- `exam_export_case_id`
 - `namecode`
 - `occurrence_no`
 - 採用後の型別値
@@ -211,20 +223,23 @@ adopted value layer はraw値やnormalize過程を主責務にしない。
 
 ### Initial Implementation Direction
 
-初期実装では、既存 `exam_item_values` を使い分ける案を基本とする。
+初期実装では、source値と清書値を別テーブルとして扱う。
 
 ```text
 source値:
-  ledger_type = XML / CSV
-  ledger_id = source ledger id
+  exam_item_values
+  ledger_type = EXAM
+  ledger_id = source exam_ledgers.exam_ledger_id
 
 清書値:
-  ledger_type = EXAM
-  ledger_id = combined or adopted exam_ledger_id
+  exam_export_case_values
+  exam_export_case_id = exam_export_cases.exam_export_case_id
+  source_exam_item_value_id でsource値へ戻る
 ```
 
-将来、清書値の責務が大きくなった場合は `adopted_exam_item_values` 等の専用テーブルへ分離する。
-ただし初期段階では、テーブルを増やすこと自体よりも、source値と清書値の責務分離、採用元参照、再生成可能性を優先する。
+`exam_item_values` は取込sourceのraw/normalize/validation証跡に集中させる。
+`exam_export_case_values` はrawを持たず、XML出力に必要な最小限の採用済み値と採用元参照を持つ。
+これにより、XML/CSV/紙入力のsource証跡を壊さず、人単位のXML出力用に清書値を再生成できる。
 
 ### Source Precedence Exceptions
 
@@ -348,16 +363,17 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
 
 ### `health_exam_result.exam_ledgers`
 
-`exam_ledgers` は「XMLに出せる可能性がある1つの健診結果」を表す。
+`exam_ledgers` は「受け取ったXML/CSV/紙入力を1人分として読んだsource結果」を表す。
 
 想定する責務:
 
-- XML由来、CSV由来、結合由来を問わず、論理健診結果を表す。
+- XML由来、CSV由来、紙入力由来のsource結果を表す。
 - `event_id`, `subscriber_id`, `exam_date`, `exam_facility_id`, `insurer_number`, `health_exam_report_category`, `program_code` を持つ。
-- 加入者突合結果、法定チェック結果、基本情報補正後の現在値、XML出力候補判定を持つ。
-- 複数sourceから結合した場合は、構成元 `xml_ledger` / `csv_row_ledger` / `file_receipts` を辿れるようにする。
-- `exam_item_values` の親として、XML出力時に採用する検査値集合を定義する。
-- source ledgerから清書済みの採用値を作る場合、その採用値の親になる。
+- 加入者突合結果、source単位の法定チェック結果、基本情報、住所補完状態を持つ。
+- source file、source row、`file_receipts` を辿れるようにする。
+- 複数sourceの結合結果やXML出力候補判定は `exam_export_cases` 側へ分ける。
+- `exam_item_values` の親として、sourceごとの検査値集合を定義する。
+- XML出力時に採用する清書済み検査値集合は `exam_export_case_values` 側で定義する。
 
 このレイヤーは「event全体での人の作業状態」を主責務にしない。
 同じ人に複数の健診日、複数の健診機関、複数のプログラムがある場合、`exam_ledgers` は複数件になりうる。
@@ -368,7 +384,7 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
 
 ### 出力候補判定
 
-「この健診結果はXMLにできるか」は `exam_ledgers` の責務とする。
+「この1回分健診をXMLにできるか」は `exam_export_cases` の責務とする。
 
 判定材料:
 
@@ -376,7 +392,7 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
 - 加入者突合が `MATCHED`。
 - 法定チェックが `OK`、またはMISSINGのみで手動出力許可済み。
 - 基本情報のXML出力値が揃っている。
-- 検査値に出力不可の `INVALID` が残っていない。
+- 採用済み整値に出力不可の `INVALID` が残っていない。
 
 出力候補には以下の2種類を区別して扱う。
 
@@ -425,8 +441,8 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
 
 ## Multi-Source Merge Position
 
-複数結果を1つにする処理は `exam_ledgers` を作る、または更新する処理として扱う。
-元source ledgerを直接上書きせず、結合後の `COMBINED` または採用済み `exam_ledgers` を作成し、そこへ清書値を生成する。
+複数結果を1つにする処理は `exam_export_cases` と `exam_export_case_values` を作る、または更新する処理として扱う。
+元source ledgerを直接上書きせず、`exam_export_case_sources` で構成元を保持し、`exam_export_case_values` へ清書値を生成する。
 
 候補キー:
 
@@ -489,14 +505,27 @@ CSVは健診機関ごとの通常マッピングを作り、取込可能な検�
 
 推奨順:
 
-1. `exam_ledgers` / `exam_ledger_sources` のDDLと同期を作る。
+1. `exam_ledgers` のDDLと、旧個別ledgerからの復旧用同期を作る。
    - 追加済み。
+   - 通常importはXML/CSVとも `exam_ledgers` へ直接登録する。
 2. source単位の法定チェック入口を `03_00_check_imported_exam_ledgers.py` として分離する。
    - `exam_ledgers` を対象にする。
    - 追加済み。
-3. `person_event_status_items` のDDLを作る。
-4. `exam_ledgers` から `person_event` / `person_event_status_items` へ同期する。
-5. `exam_result_ledger_report` は `exam_ledgers` 起点のまま維持する。
+3. `exam_export_cases` / `exam_export_case_sources` / `exam_export_case_values` のDDLを作る。
+   - 追加済み。
+4. `03_01_build_exam_export_cases.py` でsource ledgerを人単位のcaseへ束ねる。
+   - 追加済み。
+5. `03_02_build_exam_export_case_values.py` で採用済み整値を作る。
+   - 追加済み。
+6. `03_04_check_exam_export_cases.py` でcase単位の法定チェックを行う。
+   - 追加済み。
+7. `exam_export_cases.export_readiness_status` / `export_readiness_reason` を更新する。
+   - 追加済み。
+8. `person_event_status_items` のDDLを作る。
+   - 追加済み。
+9. `exam_ledgers` / `exam_export_cases` から `person_event` / `person_event_status_items` へ同期する。
+10. `exam_result_ledger_report` は `exam_ledgers` 起点のまま維持する。
+11. `04_export_hia_xml.py` を `exam_export_cases` / `exam_export_case_values` 起点へ寄せる。
 6. 複数source候補を検出し、`MULTIPLE_SOURCE_ROWS_UNRESOLVED` を出せるようにする。
 7. 明示選択されたsourceを結合し、結合後 `exam_item_values` を作る。
 8. 結合後checkを実行し、`person_event_status_items` へ現在状態を反映する。

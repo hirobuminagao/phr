@@ -15,7 +15,7 @@
 
 ## Documents
 
-2026-07-29時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `33_implementation_status_and_xml_handoff.md` である。
+2026-08-05時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `33_implementation_status_and_xml_handoff.md`、人単位・結合出力の残実装整理が `38_health_exam_remaining_implementation_summary.md` である。
 実際のカラム・処理挙動は適用対象のDDL、migration、seed、コードを優先する。
 `05_design_history.md` は協議履歴、`30_pre_implementation_review.md` は実装着手時の基準点であり、旧案や当時の未決事項が残っていても現在正とは限らない。
 
@@ -72,6 +72,9 @@
 - `37_event_person_status_and_ledger_layers.md`
   - 複数結果結合、統合台帳、eventに対する人単位の状況管理レイヤーを整理する。
   - `exam_ledgers` と `person_event` / `person_event_status_items` の責務分離、出力制御の置き場所、実装順をまとめる。
+- `38_health_exam_remaining_implementation_summary.md`
+  - `exam_ledgers` へ取込を集約した後の、結合出力case、人単位event状態、HIA連携、基本情報補正、出力画面の残タスクを整理する。
+  - 2026-08-05時点では、source単位check、case作成、case値作成、case単位check、出力可否summaryの器まで実装済みであり、次はcase基点XML exporterへの切替が主対象である。
 
 ## ADR Policy
 

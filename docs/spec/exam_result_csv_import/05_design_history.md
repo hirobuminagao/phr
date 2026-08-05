@@ -1576,3 +1576,54 @@ person_event母集団の作成元
 - ledger側には `insurance_symbol_export_value`、`insurance_number_export_value`、`name_kana_export_value` と、それぞれの `source` / `reason` を保持する。
 - CSV取込時は、まずCSV原本値から `SOURCE` として出力値を作り、加入者突合が `MATCHED` の場合は `subscribers` 登録値から `SUBSCRIBER` として出力値を作り直す。
 - XML出力では、ledgerの `*_export_value` がある場合はそれを優先し、なければ従来どおりraw値をidentity共通libで正規化する。
+
+---
+
+## DH-20260805-01 / 2026-08-05 JST
+
+### テーマ
+
+統合ledger、結合出力case、出力可否summaryの責務整理
+
+### 背景
+
+- XML/CSV importを `exam_ledgers` へ寄せた後、`exam_ledgers` がsource ledgerなのか、人単位の結合済みledgerなのかが文書上で混在していた。
+- ファイル単位の法定checkと、人単位に複数sourceを結合した後の法定checkは役割が違う。
+- 実行環境では `03_00_check_imported_exam_ledgers.py`、`03_01_build_exam_export_cases.py`、`03_02_build_exam_export_case_values.py`、`03_04_check_exam_export_cases.py` まで動作し、case単位のOK/NGが見える状態になった。
+- ただし人が見る「出力してよいか」は `check_status` だけでは分かりづらく、後続の出力画面やHIAアップロード依頼にも不十分だった。
+
+### 決定・実装内容
+
+- `exam_ledgers` は、XML/CSV/紙入力から取り込んだsource 1件を表す統合台帳とする。
+- XMLならXML内の1人分、CSVならCSV 1行、紙入力なら入力1人分を `exam_ledgers` 1件として扱う。
+- 複数sourceをまとめた人単位のXML出力候補は `exam_export_cases` とする。
+- 構成元sourceは `exam_export_case_sources`、XML出力用の採用済み整値は `exam_export_case_values` に保持する。
+- `exam_item_values` はsource値のraw/normalize/validation証跡に集中させ、清書値として兼用しない。
+- source単位の法定check入口は `03_00_check_imported_exam_ledgers.py`、case単位の法定check入口は `03_04_check_exam_export_cases.py` とする。
+- 人が見る出力可否summaryとして、`exam_export_cases.export_readiness_status` / `export_readiness_reason` を追加した。
+- `export_readiness_status` は `EXPORT_READY`, `APPROVED_WITH_REASON`, `BLOCKED`, `WAITING_VALUES`, `WAITING_CHECK`, `EXPORTED`, `EXPORT_ERROR` を扱う。
+- 出力後証跡として `exam_export_cases` に `output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を追加した。
+- `04_export_hia_xml.py` は次段階で `exam_export_cases` / `exam_export_case_values` 起点へ切り替える。旧CSV行台帳起点の出力経路は移行中の互換経路であり、今後の正にはしない。
+
+---
+
+## DH-20260805-02 / 2026-08-05 JST
+
+### テーマ
+
+XML importの基本情報backfillと受診者住所抽出
+
+### 背景
+
+- XML由来ledgerのcase化を進めたところ、CSVでは保持できている出力用基本情報がXML側で不足していた。
+- XMLには受診者住所と医療機関住所の両方が現れうるため、誤って医療機関住所を受診者住所として扱うリスクがあった。
+- 既存のXML抽出資産では、受診者住所は `recordTarget/patientRole/addr` を見る思想になっていた。
+
+### 決定・実装内容
+
+- XML importも `exam_ledgers` を通常保存先とし、XML由来の `exam_item_values` は `ledger_type = EXAM`, `ledger_id = exam_ledgers.exam_ledger_id` で登録する。
+- XML ledgerの `exam_facility_id` は `file_receipts.exam_facility_id` から引き継ぐ。
+- XML本文から施設コード・名称が抽出できない場合は、`file_receipts.facility_code` / `facility_name` のscan時スナップショットを補完表示値として使う。
+- 受診者住所は `recordTarget/patientRole/addr` だけから抽出し、医療機関住所は使わない。
+- 住所は `state + city + streetAddressLine` を優先し、タグ外mixed contentが住所として入るXMLでは `postalCode` を除いた本文をfallbackとして扱う。
+- `02_import_xml.py --include-imported` は取込済み、`WARNING`、既存XML ledgerが `READY/PENDING` のもののbackfillにも使う。

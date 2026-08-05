@@ -2,7 +2,7 @@
 
 ## Status
 
-Initial implementation completed as of 2026-07-30. The confirmed behavior in this document is implemented; deferred items remain explicitly marked.
+Current implementation note as of 2026-08-05. `exam_ledgers`、`exam_export_cases`、`exam_export_case_sources`、`exam_export_case_values`、case単位check、出力可否summaryの器は実装済みである。`04_export_hia_xml.py` のcase基点切替は次段階の実装対象である。
 
 この文書は、統合取込ledger `exam_ledgers`、結合出力用case、出力用整値から厚生労働省指定の健診結果XMLを生成する処理の叩き台である。
 確定済み条件と、実装前に確認が必要な不足情報を分けて記載する。
@@ -119,6 +119,13 @@ exam_export_cases
   merge_status
   check_status
   xml_export_status
+  export_readiness_status
+  export_readiness_reason
+  output_zip_path
+  output_zip_file_name
+  output_xml_file_name
+  xml_exported_at
+  xml_export_etl_run_id
 
 exam_export_case_sources
   exam_export_case_id
@@ -146,6 +153,25 @@ XML exporterは case checkがOK、または理由ありOKのcaseだけを読み�
 
 case単位の法定チェック結果は、source単位checkとは分けて保持する。
 実装入口は `03_04_check_exam_export_cases.py` とし、保存先は結合出力用caseを参照する。
+
+### Export Readiness Status
+
+人が「この人は出力してよいか」を見る列は、`exam_export_cases.export_readiness_status` / `export_readiness_reason` とする。
+これは後続処理や画面向けのsummaryであり、個別の原因は `subscriber_match_status`, `merge_status`, `case_status`, `value_build_status`, `check_status`, `manual_export_approved`, `xml_export_status` に残す。
+
+| status | meaning |
+| --- | --- |
+| `EXPORT_READY` | case値作成済み、case check OK、未出力 |
+| `APPROVED_WITH_REASON` | MISSING等を理由に手動出力許可済み、未出力 |
+| `BLOCKED` | 加入者不一致、結合停止、case不備、法定check NGなどで出力不可 |
+| `WAITING_VALUES` | caseはあるが採用済み整値が未作成 |
+| `WAITING_CHECK` | 採用済み整値はあるがcase単位checkが未実行 |
+| `EXPORTED` | XML/ZIP出力済み |
+| `EXPORT_ERROR` | XML生成、XSD検証、ZIP作成など出力処理で失敗 |
+
+`03_01_build_exam_export_cases.py`、`03_02_build_exam_export_case_values.py`、`03_04_check_exam_export_cases.py` は、それぞれの処理後にこのsummaryを再計算する。
+XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のcaseだけを対象にする。
+出力成功後は、`output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` をcaseへ記録し、`xml_export_zips` / `xml_export_members` にも出力事実を残す。
 
 ### Future Multi-Source Merge Rules
 
@@ -692,6 +718,9 @@ scripts/lib/identity/export_fields.py
   既存identity field関数を組み合わせたXML出力用基本情報projection。独自の正規化規則は持たない
 ```
 
+2026-08-05時点では、`04_export_hia_xml.py` と `hia_xml_export_loader.py` に旧CSV行台帳起点の経路が残っている。
+今後の実装正はこの文書のとおりcase起点であり、exporterは `exam_export_cases` / `exam_export_case_values` から個人XMLを作成する方向へ切り替える。
+
 旧 `medi_export_xml.py` は変更しない。
 新処理から旧スクリプトをimportするのではなく、確認済みのXML生成部分を共通moduleとして新設し、テストで旧出力構造との差分を管理する。
 
@@ -802,7 +831,7 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
 - 基本情報不足の2人は候補判定で停止し、ZIPへ含めなかった。
 - 個人XML5件はV08 XSDへ適合した。
 - 個人XML内で、付属2一連検査グループを親observation + `COMP` / `RSON` として確認した。
-- ZIP履歴1件、個人履歴5件、CSV台帳の出力済み状態5件を確認した。
+- ZIP履歴1件、個人履歴5件、当時のCSV台帳の出力済み状態5件を確認した。
 - 業務向け `健診結果XML出力履歴.csv` に健診機関コード、名称、フォルダ名、出力フォルダ、人数5を出力した。
 
 出力履歴は今回の実装対象とする。個人単位の業務状態や修正版の正本判定、不足情報CSVは後続判断とし、初期実装を止めない。
