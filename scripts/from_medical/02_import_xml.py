@@ -1280,7 +1280,7 @@ def insert_xml_ledger(
                 event_id, source_type, file_receipt_id, source_etl_run_id,
                 subscriber_id, hia_subscriber_id,
                 xml_sha256, xml_file_name, document_id,
-                insurer_number, facility_code, facility_name, exam_date,
+                insurer_number, exam_facility_id, facility_code, facility_name, exam_date,
                 name_kana_raw,
                 name_kana_export_value, name_kana_export_source, name_kana_export_reason,
                 insurance_symbol_raw, insurance_number_raw,
@@ -1304,7 +1304,7 @@ def insert_xml_ledger(
                 %s, 'XML', %s, %s,
                 %s, %s,
                 %s, %s, %s,
-                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
                 %s,
                 %s, %s, %s,
                 %s, %s,
@@ -1333,6 +1333,7 @@ def insert_xml_ledger(
                 xml_file_name,
                 basic.get("document_id"),
                 basic.get("insurer_number_raw"),
+                basic.get("exam_facility_id"),
                 basic.get("facility_code"),
                 basic.get("facility_name"),
                 basic.get("exam_date"),
@@ -1428,6 +1429,7 @@ def update_xml_ledger_report_codes(
             report_category_code = COALESCE(%s, report_category_code),
             program_type_code = COALESCE(%s, program_type_code),
             insurer_number = COALESCE(%s, insurer_number),
+            exam_facility_id = COALESCE(%s, exam_facility_id),
             facility_code = COALESCE(%s, facility_code),
             facility_name = COALESCE(%s, facility_name),
             exam_date = COALESCE(%s, exam_date),
@@ -1473,6 +1475,7 @@ def update_xml_ledger_report_codes(
             report_category_code,
             program_type_code,
             basic.get("insurer_number_raw"),
+            basic.get("exam_facility_id"),
             basic.get("facility_code"),
             basic.get("facility_name"),
             basic.get("exam_date"),
@@ -1959,6 +1962,11 @@ def process_xml_candidate(
     )
     basic_info_params = basic_info.as_db_params()
     basic_for_ledger = dict(basic)
+    basic_for_ledger["exam_facility_id"] = file_receipt.get("exam_facility_id")
+    if not basic_for_ledger.get("facility_code"):
+        basic_for_ledger["facility_code"] = file_receipt.get("facility_code")
+    if not basic_for_ledger.get("facility_name"):
+        basic_for_ledger["facility_name"] = file_receipt.get("facility_name")
     if basic_info_params.get("insurer_number_export_value"):
         basic_for_ledger["insurer_number_raw"] = basic_info_params["insurer_number_export_value"]
 
