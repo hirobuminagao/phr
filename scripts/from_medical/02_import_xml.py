@@ -34,6 +34,7 @@ from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.exam_item_master import get_exam_items
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.db.schemas import PHR_MASTER
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import log_error as etl_log_error
@@ -123,6 +124,7 @@ class ImportConfig:
     event_id: int
     health_db: str
     dev_db: str
+    master_db: str
     work_db: str
     dry_run: bool
     limit: int
@@ -264,6 +266,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
     parser.add_argument("--dev-db", default=None, help="Override dev_phr schema name.")
+    parser.add_argument("--master-db", default=None, help="Override phr_master schema name.")
     parser.add_argument("--work-db", default=None, help="Override work_other schema name.")
     parser.add_argument("--keep-work", action="store_true", help="Override config zip.keep_work to true.")
     return parser.parse_args()
@@ -294,6 +297,7 @@ def load_import_config(path: str | Path) -> ImportConfig:
         event_id=int(data.get("event_id", 2)),
         health_db=str(data.get("health_db") or HEALTH_EXAM_RESULT_DB),
         dev_db=str(data.get("dev_db") or DEV_PHR_DB),
+        master_db=str(data.get("master_db") or PHR_MASTER),
         work_db=str(data.get("work_db") or WORK_OTHER_DB),
         dry_run=bool(data.get("dry_run", False)),
         limit=int(data.get("limit", 0) or 0),
@@ -322,6 +326,7 @@ def resolve_config(args: argparse.Namespace) -> ImportConfig:
         event_id=args.event_id if args.event_id is not None else config.event_id,
         health_db=args.health_db if args.health_db is not None else config.health_db,
         dev_db=args.dev_db if args.dev_db is not None else config.dev_db,
+        master_db=args.master_db if args.master_db is not None else config.master_db,
         work_db=args.work_db if args.work_db is not None else config.work_db,
         dry_run=True if args.dry_run else config.dry_run,
         limit=args.limit if args.limit is not None else config.limit,
