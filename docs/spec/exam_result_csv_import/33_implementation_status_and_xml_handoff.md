@@ -120,7 +120,7 @@ Current as of 2026-07-30.
 
 ### Exam Item Values and Normalize
 
-- `exam_item_values` は `ledger_type = 'CSV'`、`ledger_id = csv_row_ledger_id` で登録する。
+- `exam_item_values` は `ledger_type = 'EXAM'`、`ledger_id = exam_ledgers.exam_ledger_id` で登録する。
 - raw値を証跡として残し、型に応じて `normalized_value` または `code_value` へ正規化する。
 - `normalize_status` / `normalize_reason` に、raw完全一致、正規化後一致、数値比較記号除去、辞書不足、型不正などを残す。
 - CD/COは `phr_master.norm_variants` を参照する。
@@ -132,10 +132,11 @@ Current as of 2026-07-30.
 
 ### Check Results
 
-- `03_check_exam_results.py` はXMLとCSVを `ledger_type` で区別して対象にできる。
-- CSVでは `csv_row_ledger` と `exam_item_values` を参照し、`exam_check_results` を再作成する。
+- source単位の法定チェックは `03_00_check_imported_exam_ledgers.py` で実行する。
+- `exam_ledgers` と `exam_item_values` を参照し、`exam_check_results` を再作成する。
 - 数値項目は `normalized_value`、コード項目は `code_value` を優先して法定チェックする。
-- 結果は `csv_row_ledger.check_status` / `check_reason` へ戻す。
+- 結果は `exam_ledgers.check_status` / `check_reason` へ戻す。
+- 結合出力用case単位の法定チェックは `03_04_check_exam_export_cases.py` で実行し、結果は `exam_export_cases.check_status` / `check_reason` へ戻す。
 - 施設別のABC判定や総合判定は、法定項目チェックと混同せず取込対象外とする。
 
 ## Current Transaction and Re-run Behavior

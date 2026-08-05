@@ -491,8 +491,8 @@ CSVは健診機関ごとの通常マッピングを作り、取込可能な検�
 
 1. `exam_ledgers` / `exam_ledger_sources` のDDLと同期を作る。
    - 追加済み。
-2. `03_check_exam_results.py` を統合ledger単位でも実行できるようにする。
-   - `--ledger-type EXAM` で `exam_ledgers` を対象にする。
+2. source単位の法定チェック入口を `03_00_check_imported_exam_ledgers.py` として分離する。
+   - `exam_ledgers` を対象にする。
    - 追加済み。
 3. `person_event_status_items` のDDLを作る。
 4. `exam_ledgers` から `person_event` / `person_event_status_items` へ同期する。

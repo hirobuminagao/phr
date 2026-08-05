@@ -104,7 +104,7 @@ Current as of 2026-07-29.
 - CSV直取込では、CSVデータ行単位の台帳として `health_exam_result.exam_ledgers` を使う。
 - CSV由来の `exam_item_values` は `ledger_type = 'EXAM'`, `ledger_id = exam_ledgers.exam_ledger_id` で由来を表す。
 - CSVに保険者番号を持たない施設フォーマットでは、`file_receipts.insurer_number` を `exam_ledgers.insurer_number` と加入者identity生成の入力に利用する。
-- `03_check_exam_results.py` はXML由来だけでなくCSV由来も対象にする。
+- `03_00_check_imported_exam_ledgers.py` はXML由来とCSV由来の `exam_ledgers` を対象にする。
 - check結果は source単位では `exam_check_results.ledger_type = 'EXAM'` とし、`exam_ledger_id` に紐づける。
 - CSV/XML由来のcheck状態は `exam_ledgers.check_status` / `check_reason` に反映する。
 - 保険記号・保険番号は加入者identity生成に必要なため、施設フォーマット側にない場合は本番取込前の整形でCSV末尾へ追加する方針とする。
@@ -139,7 +139,7 @@ Current as of 2026-07-29.
 - source単位の法定check結果は `exam_check_results` に残し、集計結果を `exam_ledgers.check_status` / `check_reason` へ戻す。
 - source単位の法定checkは、人が `--ledger-type` を指定しなくてよいように `03_00_check_imported_exam_ledgers.py` を通常入口とする。
 - 結合出力用caseの法定checkは `03_04_check_exam_export_cases.py` を通常入口とする。
-- `03_check_exam_results.py` は互換・開発用入口とし、通常運用手順からは外す。
+- `03_check_exam_results.py` は廃止し、source単位と結合出力用case単位の入口を分ける。
 - 複数の `exam_ledgers` を組み合わせてXML出力する場合は、結合出力用caseを作る。結合出力用caseは、人単位・1回分健診・XML出力候補を表し、出力OK/NG、結合状態、手動許可、XML出力状態を持つ。
 - 結合出力用caseの構成元は `exam_export_case_sources` 相当のテーブルで `exam_ledgers` を複数保持する。
 - 結合出力用caseの採用済み整値は `exam_export_case_values` 相当のテーブルで保持する。raw値は持たず、XML出力に必要な最小限の採用済み値、採用元 `exam_item_values.id`、採用理由、採用状態を持つ。

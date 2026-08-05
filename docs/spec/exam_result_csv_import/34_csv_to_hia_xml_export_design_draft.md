@@ -62,7 +62,7 @@ scripts/kenshin_list_pydir/scripts/medi_export_xml.py
    - case単位の法定checkが `OK`。
    - 法定チェックNGの原因が `MISSING` のみで、`manual_export_approved = 1`、理由、承認者、承認日時が設定されている。
 
-`03_check_exam_results.py` の `check_status` は現状、法定チェック結果を基準に `OK` / `NG` を設定している。
+`03_04_check_exam_export_cases.py` の `check_status` は現状、法定チェック結果を基準に `OK` / `NG` を設定している。
 したがって4は、法定チェックOKまたはMISSINGだけを理由として明示的に手動許可された状態を意味する。
 
 手動出力許可は、妊娠中等の確認済み理由により法定検査値がMISSINGとなる場合の例外とする。
@@ -145,7 +145,7 @@ caseは出力ボタンを押した時に初めて仮想生成するのではな�
 XML exporterは case checkがOK、または理由ありOKのcaseだけを読み、結合や採用判断を行わない。
 
 case単位の法定チェック結果は、source単位checkとは分けて保持する。
-初期実装では既存 `03_check_exam_results.py` を流用できる形に寄せるが、保存先は結合出力用caseを参照できるカラムまたは専用check結果テーブルとする。
+実装入口は `03_04_check_exam_export_cases.py` とし、保存先は結合出力用caseを参照する。
 
 ### Future Multi-Source Merge Rules
 

@@ -66,7 +66,7 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 - XML import本体も、通常取込の保存先を `exam_ledgers` とし、XML由来の `exam_item_values` を `ledger_type = EXAM` / `ledger_id = exam_ledgers.exam_ledger_id` として登録する方針へ寄せる。
 - 既存個別ledger向けのcheck関数は明示指定時の後方互換として残すが、通常運用では使わない。
 - 通常運用のcheck入口は、source単位が `03_00_check_imported_exam_ledgers.py`、結合出力用case単位が `03_04_check_exam_export_cases.py` とする。
-- `03_check_exam_results.py` は互換・開発用入口として残し、人が通常実行する手順からは外す。
+- `03_check_exam_results.py` は廃止し、人が実行する入口は `03_00_check_imported_exam_ledgers.py` と `03_04_check_exam_export_cases.py` に分ける。
 - `sync_exam_ledgers.py` は通常運用の必須手順ではなく、初回移行、復旧、再構築用へ下げる方針。
 
 ### 2. Person Event Population and Status Sync
