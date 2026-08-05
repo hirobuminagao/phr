@@ -512,6 +512,44 @@ def extract_document_id(root: ElementTree.Element) -> str | None:
     return root_value or extension
 
 
+def first_child_text(parent: ElementTree.Element | None, *child_names: str) -> str | None:
+    wanted = {name.lower() for name in child_names}
+    if parent is None:
+        return None
+    for child in list(parent):
+        if local_name(child.tag).lower() in wanted:
+            value = elem_text(child)
+            if value:
+                return value
+    return None
+
+
+def extract_patient_address(root: ElementTree.Element) -> tuple[str | None, str | None]:
+    """Extract only the examinee address under recordTarget/patientRole/addr."""
+    role = patient_role(root)
+    addr = child_by_local(role, "addr")
+    if addr is None:
+        return None, None
+
+    postal_code = first_child_text(addr, "postalCode", "postal_code", "zip", "zipCode")
+    address_parts: list[str] = []
+    # Keep the primary path aligned with the previous XML import implementation.
+    for name in ("state", "city", "streetAddressLine"):
+        value = first_child_text(addr, name)
+        if value:
+            address_parts.append(value)
+
+    if address_parts:
+        return postal_code, compact_text("".join(address_parts))
+
+    # Some senders place the whole address directly under addr. Remove the
+    # postal code text if it is also present as a child.
+    whole = elem_text(addr)
+    if whole and postal_code:
+        whole = compact_text(whole.replace(postal_code, "", 1))
+    return postal_code, whole
+
+
 def parse_mysql_date(value: str | None) -> str | None:
     if not value:
         return None
@@ -539,6 +577,8 @@ def extract_basic_info(root: ElementTree.Element) -> dict[str, Any]:
         "facility_code": None,
         "facility_name": None,
         "exam_date": None,
+        "postal_code": None,
+        "address": None,
     }
 
     info["document_id"] = extract_document_id(root)
@@ -605,6 +645,7 @@ def extract_basic_info(root: ElementTree.Element) -> dict[str, Any]:
     info["insurer_number_raw"] = patient_role_id_extension(root, PATIENT_ID_ROOT_INSURER_NUMBER)
     info["insurance_symbol_raw"] = patient_role_id_extension(root, PATIENT_ID_ROOT_INSURANCE_SYMBOL)
     info["insurance_number_raw"] = patient_role_id_extension(root, PATIENT_ID_ROOT_INSURANCE_NUMBER)
+    info["postal_code"], info["address"] = extract_patient_address(root)
 
     return info
 
