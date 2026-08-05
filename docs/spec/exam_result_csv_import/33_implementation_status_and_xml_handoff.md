@@ -25,13 +25,24 @@ Current as of 2026-07-30.
   -> mapping登録後のformat再照合
 
 02_02_exam_result_csv_import.py
-  -> csv_row_ledger
+  -> exam_ledgers
   -> subscriber identity matching
   -> exam_item_values + normalize
 
-03_check_exam_results.py
+03_00_check_imported_exam_ledgers.py
   -> exam_check_results
-  -> csv_row_ledger.check_status / check_reason
+  -> exam_ledgers.check_status / check_reason
+
+03_01_build_exam_export_cases.py
+  -> exam_export_cases
+  -> exam_export_case_sources
+
+03_02_build_exam_export_case_values.py
+  -> exam_export_case_values
+
+03_04_check_exam_export_cases.py
+  -> exam_check_results
+  -> exam_export_cases.check_status / check_reason
 
 04_export_hia_xml.py
   -> V08個人XML + ix08_V08.xml

@@ -326,7 +326,7 @@ def refresh_report(conn: Any, config: ReportConfig) -> ReportSummary:
         summary = load_summary(cur, config)
         if summary.source_rows == 0:
             raise RuntimeError(
-                f"event_id={config.event_id} has no exam_ledger rows; run scan/import or sync_exam_ledgers.py"
+                f"event_id={config.event_id} has no exam_ledger rows; run scan/import first"
             )
         if config.dry_run:
             return summary

@@ -137,6 +137,9 @@ Current as of 2026-07-29.
 - 進行中年度のHIA状態は `hia_dashboard_status` を入力にできるが、過年度eventの状態判定に最新テーブルを直接使わない。
 - HIAダッシュボードCSVの新フォーマットでは先頭にHIA加入者IDが追加されているため、HIA加入者IDが存在する場合は加入者照合の第一候補として扱う。
 - source単位の法定check結果は `exam_check_results` に残し、集計結果を `exam_ledgers.check_status` / `check_reason` へ戻す。
+- source単位の法定checkは、人が `--ledger-type` を指定しなくてよいように `03_00_check_imported_exam_ledgers.py` を通常入口とする。
+- 結合出力用caseの法定checkは `03_04_check_exam_export_cases.py` を通常入口とする。
+- `03_check_exam_results.py` は互換・開発用入口とし、通常運用手順からは外す。
 - 複数の `exam_ledgers` を組み合わせてXML出力する場合は、結合出力用caseを作る。結合出力用caseは、人単位・1回分健診・XML出力候補を表し、出力OK/NG、結合状態、手動許可、XML出力状態を持つ。
 - 結合出力用caseの構成元は `exam_export_case_sources` 相当のテーブルで `exam_ledgers` を複数保持する。
 - 結合出力用caseの採用済み整値は `exam_export_case_values` 相当のテーブルで保持する。raw値は持たず、XML出力に必要な最小限の採用済み値、採用元 `exam_item_values.id`、採用理由、採用状態を持つ。

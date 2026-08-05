@@ -41,9 +41,10 @@ python scripts/from_medical/dev_tools/sync_exam_ledgers.py
 基本の実行順は以下です。
 
 ```text
-sync_exam_ledgers.py
-build_combined_exam_ledgers.py
-03_check_exam_results.py --ledger-type EXAM
+03_00_check_imported_exam_ledgers.py
+03_01_build_exam_export_cases.py
+03_02_build_exam_export_case_values.py
+03_04_check_exam_export_cases.py
 scripts/health_exam_event/sync_person_event_population.py
 scripts/health_exam_event/sync_person_event_status_items.py
 refresh_exam_result_ledger_report.py
@@ -79,16 +80,18 @@ Get-Content sql/migrations/health_exam_result/20260804_005_health_exam_result_ad
 python scripts/from_medical/dev_tools/build_combined_exam_ledgers.py --dry-run
 ```
 
-結合ledgerと清書値を作成します。
+旧COMBINED ledger方式の保守用スクリプトです。
+通常運用では `03_01_build_exam_export_cases.py` と
+`03_02_build_exam_export_case_values.py` を使用します。
 
 ```powershell
 python scripts/from_medical/dev_tools/build_combined_exam_ledgers.py
 ```
 
-作成後、COMBINED ledgerを法定チェックします。
+通常運用のcase単位法定チェックは次を使用します。
 
 ```powershell
-python scripts/from_medical/03_check_exam_results.py --ledger-type EXAM
+python scripts/from_medical/03_04_check_exam_export_cases.py
 ```
 
 ## `refresh_exam_result_ledger_report.py`
@@ -127,21 +130,22 @@ Get-Content sql/migrations/health_exam_result/20260802_002_health_exam_result_ad
 `006` を適用済みの環境では、加入者2列の位置だけを変更する `007` を追加適用します。
 `20260802_002` は、統合ledger起点で報告行を追跡するための `exam_ledger_id` を追加します。
 
-先に統合ledgerを同期します。
+通常運用では、XML/CSV importが直接 `exam_ledgers` を作成します。
+`sync_exam_ledgers.py` は旧個別ledgerからの初回移行、復旧、再構築用です。
+
+source単位の法定チェックを実行します。
 
 ```powershell
-python scripts/from_medical/dev_tools/sync_exam_ledgers.py
+python scripts/from_medical/03_00_check_imported_exam_ledgers.py
 ```
 
-法定チェックを統合ledger単位で再実行する場合は、同期後に次を実行します。
+結合出力用caseを作成し、採用値を作成した後、case単位の法定チェックを実行します。
 
 ```powershell
-python scripts/from_medical/03_check_exam_results.py --ledger-type EXAM
+python scripts/from_medical/03_01_build_exam_export_cases.py
+python scripts/from_medical/03_02_build_exam_export_case_values.py
+python scripts/from_medical/03_04_check_exam_export_cases.py
 ```
-
-既存どおり `--ledger-type XML` / `--ledger-type CSV` を実行した場合も、対応する
-`exam_ledgers.check_status` / `check_reason` へ結果を反映します。
-ただし複数sourceを結合した `COMBINED` ledger は、統合ledger単位のcheck対象です。
 
 件数だけ確認します。この実行ではDBを変更しません。
 

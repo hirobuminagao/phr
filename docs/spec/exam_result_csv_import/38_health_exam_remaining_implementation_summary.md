@@ -23,9 +23,12 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 
 ### Check and XML Export
 
-- XML/CSVを対象にした法定チェック。
+- XML/CSV取込単位 `exam_ledgers` を対象にした法定チェック。
 - `exam_check_results` 作成。
 - `exam_ledgers` へのsource単位check結果反映。
+- 人単位の `exam_export_cases` 作成。
+- 採用済み整値 `exam_export_case_values` 作成。
+- `exam_export_cases` を対象にした清書後法定チェック。
 - CSV由来結果からHIAアップロード用XML/ZIP出力。
 - XSD検証。
 - XML出力履歴 `xml_export_zips` / `xml_export_members`。
@@ -61,7 +64,9 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 - `sync_exam_ledgers.py` によるbackfillは実装済み。
 - CSV import本体は、通常取込の保存先を `exam_ledgers` とし、CSV由来の `exam_item_values` を `ledger_type = EXAM` / `ledger_id = exam_ledgers.exam_ledger_id` として登録する方針へ寄せる。
 - XML import本体も、通常取込の保存先を `exam_ledgers` とし、XML由来の `exam_item_values` を `ledger_type = EXAM` / `ledger_id = exam_ledgers.exam_ledger_id` として登録する方針へ寄せる。
-- 既存個別ledger向けのcheck関数は明示指定時の後方互換として残すが、通常 `ALL` checkは `exam_ledgers` と結合出力用caseを対象にする。
+- 既存個別ledger向けのcheck関数は明示指定時の後方互換として残すが、通常運用では使わない。
+- 通常運用のcheck入口は、source単位が `03_00_check_imported_exam_ledgers.py`、結合出力用case単位が `03_04_check_exam_export_cases.py` とする。
+- `03_check_exam_results.py` は互換・開発用入口として残し、人が通常実行する手順からは外す。
 - `sync_exam_ledgers.py` は通常運用の必須手順ではなく、初回移行、復旧、再構築用へ下げる方針。
 
 ### 2. Person Event Population and Status Sync
