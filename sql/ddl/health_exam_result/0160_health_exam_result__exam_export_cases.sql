@@ -57,6 +57,8 @@ CREATE TABLE `health_exam_result`.`exam_export_cases` (
   `manual_export_reason` text DEFAULT NULL,
   `manual_export_approved_at` datetime(3) DEFAULT NULL,
   `manual_export_approved_by` varchar(190) DEFAULT NULL,
+  `export_readiness_status` varchar(32) NOT NULL DEFAULT 'PENDING' COMMENT '運用向けの総合出力状態',
+  `export_readiness_reason` text DEFAULT NULL COMMENT '運用向けの総合出力状態理由',
   `correction_status` varchar(32) NOT NULL DEFAULT 'NONE',
   `built_etl_run_id` bigint unsigned DEFAULT NULL,
   `built_at` datetime(3) DEFAULT NULL,
@@ -83,7 +85,8 @@ CREATE TABLE `health_exam_result`.`exam_export_cases` (
   KEY `idx_exam_export_cases_merge_status` (`merge_status`),
   KEY `idx_exam_export_cases_value_build_status` (`value_build_status`),
   KEY `idx_exam_export_cases_check_status` (`check_status`),
-  KEY `idx_exam_export_cases_export_status` (`xml_export_status`)
+  KEY `idx_exam_export_cases_export_status` (`xml_export_status`),
+  KEY `idx_exam_export_cases_readiness` (`export_readiness_status`)
 ) ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_ja_0900_as_cs

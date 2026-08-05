@@ -1,0 +1,66 @@
+"""Resolve operator-facing readiness status for exam_export_cases."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from scripts.lib.examination.lookup import qname
+
+
+def refresh_export_case_readiness(
+    cur: Any,
+    *,
+    health_db: str,
+    event_id: int,
+) -> int:
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db)}.`exam_export_cases`
+        SET
+          `export_readiness_status` = CASE
+            WHEN `xml_export_status` = 'EXPORTED' THEN 'EXPORTED'
+            WHEN `xml_export_status` = 'ERROR' THEN 'EXPORT_ERROR'
+            WHEN `subscriber_match_status` <> 'MATCHED' THEN 'BLOCKED'
+            WHEN `merge_status` = 'REVIEW_REQUIRED' THEN 'BLOCKED'
+            WHEN `case_status` <> 'READY' THEN 'BLOCKED'
+            WHEN `value_build_status` = 'PENDING' THEN 'WAITING_VALUES'
+            WHEN `value_build_status` <> 'READY' THEN 'BLOCKED'
+            WHEN `check_status` = 'PENDING' THEN 'WAITING_CHECK'
+            WHEN `check_status` = 'OK' THEN 'EXPORT_READY'
+            WHEN `check_status` = 'NG' AND `manual_export_approved` = 1 THEN 'APPROVED_WITH_REASON'
+            WHEN `check_status` = 'NG' THEN 'BLOCKED'
+            ELSE 'WAITING_CHECK'
+          END,
+          `export_readiness_reason` = CASE
+            WHEN `xml_export_status` = 'EXPORTED' THEN 'XML出力済み'
+            WHEN `xml_export_status` = 'ERROR' THEN 'XML出力エラー'
+            WHEN `subscriber_match_status` <> 'MATCHED'
+              THEN CONCAT('加入者突合: ', COALESCE(`subscriber_match_reason`, `subscriber_match_status`))
+            WHEN `merge_status` = 'REVIEW_REQUIRED'
+              THEN CONCAT('結合確認: ', COALESCE(`merge_reason`, `merge_status`))
+            WHEN `case_status` <> 'READY'
+              THEN CONCAT('case作成: ', COALESCE(`case_reason`, `case_status`))
+            WHEN `value_build_status` = 'PENDING' THEN '出力値作成待ち'
+            WHEN `value_build_status` <> 'READY'
+              THEN CONCAT('出力値作成: ', COALESCE(`value_build_reason`, `value_build_status`))
+            WHEN `check_status` = 'PENDING' THEN '法定チェック待ち'
+            WHEN `check_status` = 'OK' THEN '出力可能'
+            WHEN `check_status` = 'NG' AND `manual_export_approved` = 1
+              THEN CONCAT('理由あり出力許可: ', COALESCE(`manual_export_reason`, `check_reason`, '理由未入力'))
+            WHEN `check_status` = 'NG'
+              THEN CONCAT('法定チェックNG: ', COALESCE(`check_reason`, '理由未入力'))
+            ELSE CONCAT_WS(
+              ' | ',
+              CONCAT('case=', `case_status`),
+              CONCAT('merge=', `merge_status`),
+              CONCAT('values=', `value_build_status`),
+              CONCAT('check=', `check_status`),
+              CONCAT('export=', `xml_export_status`)
+            )
+          END,
+          `updated_at` = CURRENT_TIMESTAMP(3)
+        WHERE `event_id` = %s
+        """,
+        (event_id,),
+    )
+    return int(cur.rowcount or 0)

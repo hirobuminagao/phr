@@ -23,6 +23,7 @@ from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import start_run as etl_start_run
+from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
 
 
 HEALTH_DB = "health_exam_result"
@@ -456,6 +457,7 @@ def build_case_values(conn: Any, config: BuildValueConfig) -> BuildValueSummary:
             summary.values_inserted += inserted
             summary.precedence_rules_applied += rules_applied
             summary.cases_built += 1
+        refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.event_id)
         etl_finish_run(cur, run_id, summary.to_metrics(), extra_notes=summary.message())
     conn.commit()
     print(summary.message())

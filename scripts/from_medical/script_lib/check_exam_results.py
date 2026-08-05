@@ -28,6 +28,7 @@ from scripts.from_medical.script_lib.article44_checker import check_article44
 from scripts.from_medical.script_lib.article44_models import Article44Result, CheckResult
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
 from scripts.from_medical.script_lib.article44_value_loader import load_article44_value_map
+from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK
 from scripts.lib.examination.models import STATUS_ALTERNATIVE, STATUS_CALCULATED, STATUS_INVALID, STATUS_MISSING, STATUS_OK
@@ -837,6 +838,9 @@ def process_ledgers(
                 check_reason=check_reason,
             )
         summary.ledgers_updated += 1
+
+    if not config.dry_run and config.ledger_type == LEDGER_TYPE_EXPORT_CASE:
+        refresh_export_case_readiness(health_cur, health_db=config.health_db, event_id=config.event_id)
 
     if not config.dry_run:
         health_conn.commit()
