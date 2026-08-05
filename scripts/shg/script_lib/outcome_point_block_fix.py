@@ -44,6 +44,9 @@ MOTIVATION_GUIDANCE_CODE = "2"
 """動機付け最終の場合にブロック削除をしないリスト"""
 OUTCOME_TOTAL_POINT_DELETE_EXCLUDED_INSURER_NUMBERS = {
     "06380216",
+    "06139463",
+    "06132518",
+    "06137723",
 }
 
 
