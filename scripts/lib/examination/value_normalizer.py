@@ -45,6 +45,44 @@ CODE_DATA_TYPES = {"CD", "CO"}
 TEXT_DATA_TYPES = {"ST", "TX"}
 NUMERIC_LESS_THAN_PATTERN = re.compile(r"^(?:<|＜)\s*([+-]?\d+(?:\.\d+)?)$")
 NUMERIC_LESS_THAN_JA_PATTERN = re.compile(r"^([+-]?\d+(?:\.\d+)?)\s*(?:未満|以下)$")
+UNIT_ALIASES = {
+    "": None,
+    "%": "%",
+    "/MIN": "1/min",
+    "1/MIN": "1/min",
+    "回/分": "1/min",
+    "回／分": "1/min",
+    "拍/分": "1/min",
+    "拍／分": "1/min",
+    "BPM": "1/min",
+    "MMHG": "mm[Hg]",
+    "MM[HG]": "mm[Hg]",
+    "MG/DL": "mg/dL",
+    "G/DL": "g/dL",
+    "U/L": "U/L",
+    "U/ML": "U/mL",
+    "IU/L": "U/L",
+    "ML/MIN/1.73M2": "mL/min/{1.73_m2}",
+    "ML/MIN/1.73M^2": "mL/min/{1.73_m2}",
+    "ML/MIN/1.73㎡": "mL/min/{1.73_m2}",
+    "ML/MIN/{1.73_M2}": "mL/min/{1.73_m2}",
+    "1/MM3": "1/mm3",
+    "/MM3": "1/mm3",
+    "/ΜL": "1/uL",
+    "/ΜＬ": "1/uL",
+    "/ΜL": "1/uL",
+    "/UL": "1/uL",
+    "1/UL": "1/uL",
+    "10*4/MM3": "10*4/mm3",
+    "万/MM3": "10*4/mm3",
+    "万/MM^3": "10*4/mm3",
+    "10^4/MM3": "10*4/mm3",
+    "FL": "fL",
+    "ｆｌ": "fL",
+    "PG": "pg",
+    "PG/ML": "pg/mL",
+    "NG/ML": "ng/mL",
+}
 
 
 @dataclass(frozen=True)
@@ -100,6 +138,24 @@ def _item_data_type(item: Mapping[str, Any]) -> str | None:
 
 def _item_unit(item: Mapping[str, Any]) -> str | None:
     return _compact_text(item.get("unit") or item.get("ucum_unit") or item.get("display_unit"))
+
+
+def _canonical_unit(unit: str | None) -> str | None:
+    value = _compact_text(unit)
+    if value is None:
+        return None
+    key = (
+        value.replace("μ", "u")
+        .replace("µ", "u")
+        .replace("㎕", "uL")
+        .replace("㎗", "dL")
+        .replace("／", "/")
+        .replace("＊", "*")
+        .replace("＾", "^")
+        .replace("　", "")
+        .replace(" ", "")
+    )
+    return UNIT_ALIASES.get(key.upper(), value)
 
 
 def _numeric_text(value: str) -> tuple[str, str | None]:
@@ -240,7 +296,7 @@ def normalize_exam_item_value(
             reason="RAW_VALUE_UNMEASURABLE",
         )
 
-    if unit and expected_unit and unit != expected_unit:
+    if unit and expected_unit and _canonical_unit(unit) != _canonical_unit(expected_unit):
         return _error(
             raw_value=raw_text,
             raw_value_type=data_type,
