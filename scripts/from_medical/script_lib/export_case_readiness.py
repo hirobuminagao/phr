@@ -32,8 +32,10 @@ def refresh_export_case_readiness(
             ELSE 'WAITING_CHECK'
           END,
           `export_readiness_reason` = CASE
-            WHEN `xml_export_status` = 'EXPORTED' THEN 'XML出力済み'
-            WHEN `xml_export_status` = 'ERROR' THEN 'XML出力エラー'
+            WHEN `xml_export_status` = 'EXPORTED'
+              THEN CONCAT('XML出力済み: ', COALESCE(`output_zip_file_name`, 'ZIP名未記録'))
+            WHEN `xml_export_status` = 'ERROR'
+              THEN CONCAT('XML出力エラー: ', COALESCE(`output_zip_file_name`, `value_build_reason`, `check_reason`, '理由未入力'))
             WHEN `subscriber_match_status` <> 'MATCHED'
               THEN CONCAT('加入者突合: ', COALESCE(`subscriber_match_reason`, `subscriber_match_status`))
             WHEN `merge_status` = 'REVIEW_REQUIRED'
@@ -62,5 +64,54 @@ def refresh_export_case_readiness(
         WHERE `event_id` = %s
         """,
         (event_id,),
+    )
+    return int(cur.rowcount or 0)
+
+
+def mark_export_case_exported(
+    cur: Any,
+    *,
+    health_db: str,
+    exam_export_case_id: int,
+    output_zip_path: str,
+    output_zip_file_name: str,
+    output_xml_file_name: str,
+    etl_run_id: int,
+) -> int:
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db)}.`exam_export_cases`
+        SET `xml_export_status` = 'EXPORTED',
+            `output_zip_path` = %s,
+            `output_zip_file_name` = %s,
+            `output_xml_file_name` = %s,
+            `xml_exported_at` = CURRENT_TIMESTAMP(3),
+            `xml_export_etl_run_id` = %s,
+            `updated_at` = CURRENT_TIMESTAMP(3)
+        WHERE `exam_export_case_id` = %s
+        """,
+        (output_zip_path, output_zip_file_name, output_xml_file_name, etl_run_id, exam_export_case_id),
+    )
+    return int(cur.rowcount or 0)
+
+
+def mark_export_case_export_error(
+    cur: Any,
+    *,
+    health_db: str,
+    exam_export_case_id: int,
+    reason: str,
+    etl_run_id: int,
+) -> int:
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db)}.`exam_export_cases`
+        SET `xml_export_status` = 'ERROR',
+            `value_build_reason` = COALESCE(`value_build_reason`, %s),
+            `xml_export_etl_run_id` = %s,
+            `updated_at` = CURRENT_TIMESTAMP(3)
+        WHERE `exam_export_case_id` = %s
+        """,
+        (reason, etl_run_id, exam_export_case_id),
     )
     return int(cur.rowcount or 0)

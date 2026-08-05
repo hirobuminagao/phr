@@ -53,6 +53,11 @@ CREATE TABLE `health_exam_result`.`exam_export_cases` (
   `check_status` varchar(32) NOT NULL DEFAULT 'PENDING',
   `check_reason` text DEFAULT NULL,
   `xml_export_status` varchar(32) NOT NULL DEFAULT 'PENDING',
+  `output_zip_path` varchar(1024) DEFAULT NULL COMMENT '出力ZIPフルパス',
+  `output_zip_file_name` varchar(255) DEFAULT NULL COMMENT '出力ZIPファイル名',
+  `output_xml_file_name` varchar(255) DEFAULT NULL COMMENT 'ZIP内の個人XMLファイル名',
+  `xml_exported_at` datetime(3) DEFAULT NULL COMMENT 'XML出力完了日時',
+  `xml_export_etl_run_id` bigint unsigned DEFAULT NULL COMMENT 'XML出力ETL run ID',
   `manual_export_approved` tinyint(1) NOT NULL DEFAULT 0,
   `manual_export_reason` text DEFAULT NULL,
   `manual_export_approved_at` datetime(3) DEFAULT NULL,
@@ -86,6 +91,7 @@ CREATE TABLE `health_exam_result`.`exam_export_cases` (
   KEY `idx_exam_export_cases_value_build_status` (`value_build_status`),
   KEY `idx_exam_export_cases_check_status` (`check_status`),
   KEY `idx_exam_export_cases_export_status` (`xml_export_status`),
+  KEY `idx_exam_export_cases_exported_at` (`xml_exported_at`),
   KEY `idx_exam_export_cases_readiness` (`export_readiness_status`)
 ) ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
