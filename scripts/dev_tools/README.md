@@ -36,3 +36,50 @@ python scripts/dev_tools/import_postal_code_addresses.py --apply --replace
 `--source` 省略時は `scripts/dev_tools/import_csv/utf_ken_all.csv` を読む。
 日本郵便の最新版CSVを取得したら、この場所へ `utf_ken_all.csv` という名前で配置する。
 CSV本体はgit管理しない。
+
+## `import_exam_item_value_normalize_error_fixtures.py`
+
+実行環境から持ち帰った、匿名化済み・集計済みの `exam_item_values` normalizeエラーCSVを `health_exam_result.exam_item_value_normalize_error_fixtures` へ取り込む。
+
+このテーブルは正式seedではなく、`norm_variants` 追加候補の確認、意図的に残すエラーの整理、回帰確認用の観察テーブルである。
+個人ID、氏名、ファイルパス、CSV行全体は入れない。
+
+事前にDDLまたはmigrationを適用する。
+
+```powershell
+Get-Content sql/migrations/health_exam_result/20260805_003_health_exam_result_create_exam_item_value_normalize_error_fixtures.sql -Raw |
+  mysql -u USER -p
+```
+
+CSVは以下へ配置する。CSV本体はgit管理しない。
+
+```text
+scripts/dev_tools/import_csv/exam_item_values_error_20260805.csv
+```
+
+dry-runでCSVの内容を確認する。この実行ではDBを変更しない。
+
+```powershell
+python scripts/dev_tools/import_exam_item_value_normalize_error_fixtures.py
+```
+
+DBへ反映する。
+
+```powershell
+python scripts/dev_tools/import_exam_item_value_normalize_error_fixtures.py --apply
+```
+
+同じ `source_label` の既存行を削除してから入れ直す。
+
+```powershell
+python scripts/dev_tools/import_exam_item_value_normalize_error_fixtures.py --apply --replace
+```
+
+別ファイル名や別ラベルで取り込む場合:
+
+```powershell
+python scripts/dev_tools/import_exam_item_value_normalize_error_fixtures.py `
+  --source scripts/dev_tools/import_csv/exam_item_values_error_20260805.csv `
+  --source-label exam_item_values_error_20260805 `
+  --apply --replace
+```
