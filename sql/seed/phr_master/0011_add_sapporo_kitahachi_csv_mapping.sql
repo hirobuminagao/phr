@@ -552,7 +552,15 @@ INSERT INTO `phr_master`.`csv_exam_result_mapping_rules` (
   (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.chest_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1360, 1, 'draft seed:kitahachi.exam.chest_xray_presence_normal:所見なし/empty -> CD=2'),
   (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.chest_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N206160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1370, 1, 'draft seed:kitahachi.exam.chest_xray_presence_abnormal:finding text exists -> CD=1'),
   (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.ecg_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1380, 1, 'draft seed:kitahachi.exam.ecg_presence_normal:所見なし/empty -> CD=2'),
-  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.ecg_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1390, 1, 'draft seed:kitahachi.exam.ecg_presence_abnormal:finding text exists -> CD=1')
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.ecg_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9A110160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 1390, 1, 'draft seed:kitahachi.exam.ecg_presence_abnormal:finding text exists -> CD=1'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.gastric_xray_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 1990, 1, 'draft seed:kitahachi.exam.gastric_xray_presence_normal:所見なし -> CD=2'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.gastric_xray_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N256160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 2000, 1, 'draft seed:kitahachi.exam.gastric_xray_presence_abnormal:finding text exists -> CD=1'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.gynecology_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N271160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 2010, 1, 'draft seed:kitahachi.exam.gynecology_presence_normal:異常なし -> CD=2'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.gynecology_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N271160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 2020, 1, 'draft seed:kitahachi.exam.gynecology_presence_abnormal:finding text exists -> CD=1'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.breast_ultrasound_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9F140160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 2030, 1, 'draft seed:kitahachi.exam.breast_ultrasound_presence_normal:right/left 所見なし -> CD=2'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.breast_ultrasound_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9F140160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 2040, 1, 'draft seed:kitahachi.exam.breast_ultrasound_presence_abnormal:right or left finding text exists -> CD=1'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.mammography_presence_normal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N281160700000011', 'SINGLE_COLUMN', 'FIXED', '2', 0, 2050, 1, 'draft seed:kitahachi.exam.mammography_presence_normal:right/left 所見なし -> CD=2'),
+  (@sapporo_kitahachi_csv_format_version_id, 'kitahachi.exam.mammography_presence_abnormal', 'EXAM_ITEM_VALUE', 'SINGLE_NAMECODE', 'DIRECT', '9N281160700000011', 'SINGLE_COLUMN', 'FIXED', '1', 0, 2060, 1, 'draft seed:kitahachi.exam.mammography_presence_abnormal:right or left finding text exists -> CD=1')
 ON DUPLICATE KEY UPDATE
   `target_kind` = VALUES(`target_kind`),
   `target_resolution_type` = VALUES(`target_resolution_type`),
@@ -599,6 +607,24 @@ JOIN (
   UNION ALL SELECT 'kitahachi.exam.ecg_presence_normal', 2, '安静時12誘導', 'EMPTY', NULL, 100
   UNION ALL SELECT 'kitahachi.exam.ecg_presence_abnormal', 1, '安静時12誘導', 'NOT_EMPTY', NULL, 100
   UNION ALL SELECT 'kitahachi.exam.ecg_presence_abnormal', 1, '安静時12誘導', 'NOT_EQUALS', '所見なし', 110
+  UNION ALL SELECT 'kitahachi.exam.gastric_xray_presence_normal', 1, '胃部X線検査', 'EQUALS', '所見なし', 100
+  UNION ALL SELECT 'kitahachi.exam.gastric_xray_presence_abnormal', 1, '胃部X線検査', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'kitahachi.exam.gastric_xray_presence_abnormal', 1, '胃部X線検査', 'NOT_EQUALS', '所見なし', 110
+  UNION ALL SELECT 'kitahachi.exam.gynecology_presence_normal', 1, '婦人科診察所見', 'EQUALS', '異常なし', 100
+  UNION ALL SELECT 'kitahachi.exam.gynecology_presence_abnormal', 1, '婦人科診察所見', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'kitahachi.exam.gynecology_presence_abnormal', 1, '婦人科診察所見', 'NOT_EQUALS', '異常なし', 110
+  UNION ALL SELECT 'kitahachi.exam.breast_ultrasound_presence_normal', 1, '乳腺超音波（右）', 'EQUALS', '所見なし', 100
+  UNION ALL SELECT 'kitahachi.exam.breast_ultrasound_presence_normal', 1, '乳腺超音波（左）', 'EQUALS', '所見なし', 110
+  UNION ALL SELECT 'kitahachi.exam.breast_ultrasound_presence_abnormal', 1, '乳腺超音波（右）', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'kitahachi.exam.breast_ultrasound_presence_abnormal', 1, '乳腺超音波（右）', 'NOT_EQUALS', '所見なし', 110
+  UNION ALL SELECT 'kitahachi.exam.breast_ultrasound_presence_abnormal', 2, '乳腺超音波（左）', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'kitahachi.exam.breast_ultrasound_presence_abnormal', 2, '乳腺超音波（左）', 'NOT_EQUALS', '所見なし', 110
+  UNION ALL SELECT 'kitahachi.exam.mammography_presence_normal', 1, 'マンモグラフィ（右）', 'EQUALS', '所見なし', 100
+  UNION ALL SELECT 'kitahachi.exam.mammography_presence_normal', 1, 'マンモグラフィ（左）', 'EQUALS', '所見なし', 110
+  UNION ALL SELECT 'kitahachi.exam.mammography_presence_abnormal', 1, 'マンモグラフィ（右）', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'kitahachi.exam.mammography_presence_abnormal', 1, 'マンモグラフィ（右）', 'NOT_EQUALS', '所見なし', 110
+  UNION ALL SELECT 'kitahachi.exam.mammography_presence_abnormal', 2, 'マンモグラフィ（左）', 'NOT_EMPTY', NULL, 100
+  UNION ALL SELECT 'kitahachi.exam.mammography_presence_abnormal', 2, 'マンモグラフィ（左）', 'NOT_EQUALS', '所見なし', 110
 ) x ON x.`rule_key` = r.`rule_key`
 WHERE r.`csv_format_version_id` = @sapporo_kitahachi_csv_format_version_id;
 
