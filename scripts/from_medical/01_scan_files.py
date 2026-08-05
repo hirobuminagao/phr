@@ -41,6 +41,9 @@ DEV_PHR_DB = "dev_phr"
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "scan_files.yml"
 
 EDIT_FOLDER_NAME = "02_健診結果（編集）"
+NON_MEDICAL_ROOT_FOLDER_NAMES = {
+    "xml作成_出力履歴",
+}
 ETL_PHASE = "SCAN_FILES"
 ETL_SOURCE = "FROM_MEDICAL"
 ETL_STATUS_SUCCESS = "success"
@@ -488,6 +491,8 @@ def scan_unknown_folders(
         return
 
     for child in children:
+        if child.name in NON_MEDICAL_ROOT_FOLDER_NAMES:
+            continue
         if child.name in alias_names:
             continue
         summary.unknown_folders += 1
