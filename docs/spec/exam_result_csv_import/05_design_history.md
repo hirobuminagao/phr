@@ -1603,7 +1603,7 @@ person_event母集団の作成元
 - 人が見る出力可否summaryとして、`exam_export_cases.export_readiness_status` / `export_readiness_reason` を追加した。
 - `export_readiness_status` は `EXPORT_READY`, `APPROVED_WITH_REASON`, `BLOCKED`, `WAITING_VALUES`, `WAITING_CHECK`, `EXPORTED`, `EXPORT_ERROR` を扱う。
 - 出力後証跡として `exam_export_cases` に `output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を追加した。
-- `04_export_hia_xml.py` は次段階で `exam_export_cases` / `exam_export_case_values` 起点へ切り替える。旧CSV行台帳起点の出力経路は移行中の互換経路であり、今後の正にはしない。
+- `04_export_hia_xml.py` は後続実装で `exam_export_cases` / `exam_export_case_values` 起点へ切り替える方針とした。旧CSV行台帳起点の出力経路は今後の正にはしない。
 
 ---
 

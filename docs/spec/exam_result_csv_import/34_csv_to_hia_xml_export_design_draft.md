@@ -2,7 +2,7 @@
 
 ## Status
 
-Current implementation note as of 2026-08-05. `exam_ledgers`、`exam_export_cases`、`exam_export_case_sources`、`exam_export_case_values`、case単位check、出力可否summaryの器は実装済みである。`04_export_hia_xml.py` のcase基点切替は次段階の実装対象である。
+Current implementation note as of 2026-08-06. `exam_ledgers`、`exam_export_cases`、`exam_export_case_sources`、`exam_export_case_values`、case単位check、出力可否summaryは実装済みである。`04_export_hia_xml.py` も `exam_export_cases` / `exam_export_case_values` 起点へ切り替え済みである。
 
 この文書は、統合取込ledger `exam_ledgers`、結合出力用case、出力用整値から厚生労働省指定の健診結果XMLを生成する処理の叩き台である。
 確定済み条件と、実装前に確認が必要な不足情報を分けて記載する。
@@ -172,6 +172,44 @@ case単位の法定チェック結果は、source単位checkとは分けて保�
 `03_01_build_exam_export_cases.py`、`03_02_build_exam_export_case_values.py`、`03_04_check_exam_export_cases.py` は、それぞれの処理後にこのsummaryを再計算する。
 XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のcaseだけを対象にする。
 出力成功後は、`output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` をcaseへ記録し、`xml_export_zips` / `xml_export_members` にも出力事実を残す。
+
+### Export Processing Flow
+
+`04_export_hia_xml.py` の実行時処理は、以下の順序とする。
+
+```text
+1. 出力対象caseを探す。
+   exam_export_cases から、event、健診機関、受診月、受領ファイル、人単位、再出力条件に合うcaseを取得する。
+   対象は export_readiness_status が EXPORT_READY または APPROVED_WITH_REASON のcaseだけとする。
+
+2. 出力対象をグルーピングする。
+   健診機関 × 保険者番号 × 受診月でまとめる。
+   受領ファイルは抽出条件であり、ZIP分割単位にはしない。
+
+3. グループごとに処理を開始する。
+   健診機関番号、保険者番号、提出日、同日出力番号から公式ZIP名を決める。
+   出力先は イベントルート / 健診機関フォルダ / 03_健診結果（アップロードデータ） / 出力日時 / 受診月 とする。
+
+4. グループ内のcaseを1人ずつXML化する。
+   exam_export_cases の基本情報をXML出力用に整形する。
+   exam_export_case_values から採用済み検査値を取得する。
+   exam_item_master で型、単位、OID、methodCode等を補い、個人XMLを作る。
+   個人XMLごとにXSD検証を行い、OKならDATA配下へ配置する。
+
+5. グループ全員分のXML作成が終わったら、交換用基本情報 ix08_V08.xml を作る。
+   XSD一式を同梱し、公式構成でZIP化する。
+
+6. 出力履歴を保存する。
+   xml_export_zips にZIP単位の履歴を登録する。
+   xml_export_members に case単位の個人XML履歴を ledger_type = CASE で登録する。
+   exam_export_cases を EXPORTED に更新し、ZIP/XMLファイル名、出力日時、etl_run_idを記録する。
+
+7. 次のグループを処理する。
+```
+
+グループ内の誰か1人でもXML生成またはXSD検証に失敗した場合、そのグループのZIPは作らない。
+該当caseは `EXPORT_ERROR` に寄せ、失敗理由を `etl_errors` と `exam_export_cases.export_readiness_reason` で追える状態にする。
+他のグループは独立して処理を継続できる。
 
 ### Export Selectors
 
