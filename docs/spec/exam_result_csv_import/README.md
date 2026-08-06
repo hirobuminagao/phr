@@ -40,9 +40,6 @@
 - `20_mapping_rule_screen_mock.html`
   - テンプレート登録構造を把握するための画面モック。
   - 実装画面ではなく、入力粒度確認用のサンプルとして扱う。
-- `40_hia_upload_worklist_mock.html`
-  - HIAアップロード作業リストの画面モック。
-  - 出力run、健診機関別ZIP、個人XML単位エラー記帳、アップロード完了記帳の操作イメージ確認用として扱う。
 - `21_mapping_rule_structure_examples.md`
   - 画面モックの内容を `csv_exam_result_mapping_rules` / `csv_exam_result_mapping_conditions` の候補データとして見える化する。
 - `22_exam_item_concept_group_initial_set_draft.md`
@@ -78,6 +75,12 @@
 - `38_health_exam_remaining_implementation_summary.md`
   - `exam_ledgers` へ取込を集約した後の、結合出力case、人単位event状態、HIA連携、基本情報補正、出力画面の残タスクを整理する。
   - 2026-08-06時点では、source単位check、case作成、case値作成、case単位check、出力可否summary、case基点XML exporter、HIAアップロード作業リストの器まで実装済みである。
+- `39_hia_xml_export_run_mock.html`
+  - HIA XML出力実行画面のモック。
+  - 施設、受診月、人単位、再出力条件で出力caseを選び、ZIP予定単位と個人caseを確認して実行する画面イメージとして扱う。
+- `40_hia_upload_worklist_mock.html`
+  - HIAアップロード作業リストの画面モック。
+  - 出力run、健診機関別ZIP、個人XML単位エラー記帳、アップロード完了記帳の操作イメージ確認用として扱う。
 
 ## ADR Policy
 
