@@ -29,8 +29,8 @@ FROM `health_exam_result`.`exam_item_values` AS eiv
 LEFT JOIN `dev_phr`.`exam_item_master` AS em
   ON em.`namecode` = eiv.`namecode`
 WHERE
-  COALESCE(eiv.`normalize_status`, '') <> 'OK'
-  OR COALESCE(eiv.`validation_status`, '') NOT IN ('', 'VALID')
+  eiv.`normalize_status` = 'ERROR'
+  OR eiv.`validation_status` = 'INVALID'
 GROUP BY
   eiv.`namecode`,
   COALESCE(eiv.`namecode_display_name`, ''),
