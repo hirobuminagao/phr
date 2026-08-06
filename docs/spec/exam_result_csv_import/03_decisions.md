@@ -152,7 +152,7 @@ Current as of 2026-08-05.
 - CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
 - 結合出力用caseの `xml_export_status` は、構成元 `exam_ledgers` の技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。
 - HIAアップロード作業リストは `xml_export_zips` / `xml_export_members` を拡張して保持する。ZIP単位のアップロード状態は `xml_export_zips.hia_upload_status`、個人XML単位のエラーや記帳は `xml_export_members.hia_upload_status` とエラー列に持つ。
-- 画面・確認SQL向けには `v_xml_export_hia_upload_worklist` を使い、病院毎、出力run毎、ZIP毎、個人毎に出力履歴とHIAアップロード状態を確認できるようにする。
+- 画面・確認SQL向けには `v_xml_export_hia_upload_worklist` を使い、病院毎、出力リスト毎、ZIP毎、個人毎に出力履歴とHIAアップロード状態を確認できるようにする。
 - ledgerが増える、再取込される、checkが更新される、結合出力用caseが更新されるたびに、該当者の `person_event_status_items` は再同期される。
 - 検査値は、ファイル由来のsource値と、納品・XML出力用の清書値を分けて扱う。
 - source値はraw、normalize、validation、由来、エラーを持つ処理・証跡層とする。
@@ -422,7 +422,10 @@ Current as of 2026-08-05.
 - XML出力の原子単位はZIPとする。同じ健診機関・保険者・作成日・同日分割送信回数の対象者に1人でも生成またはXSD検証失敗があれば、そのZIP全体を出力しない。
 - 失敗したZIPとは別のZIP単位は処理を継続する。
 - 健診機関情報は `phr_master.exam_facilities` を正とし、ledgerの健診機関コードと不一致の場合は該当ZIPを停止する。
-- XML出力履歴は `etl_runs` を処理の親とし、正常完成したZIPと収録した個人XMLを専用履歴テーブルへ追記する。別のRun管理概念は追加しない。
+- XML出力履歴は `etl_runs` を処理の親とし、正常完成したZIPと収録した個人XMLを専用履歴テーブルへ追記する。
+- 画面運用では、即出力ではなく「出力リスト」を作成し、検索した `exam_export_cases` を追加・確認してから出力する方式を正とする。これは人が操作する作業箱であり、`etl_runs` とは別責務である。
+- 出力リストの初期DDL候補名は `xml_export_lists` / `xml_export_list_cases` とする。`run_id` という名前はETL実行履歴と混同するため避ける。
+- `etl_runs` は出力処理を実際に走らせた実行ログとして使い続ける。出力リストは「誰を今回出す候補にしたか」、`xml_export_zips` / `xml_export_members` は「実際にどのZIP・個人XMLを出したか」を表す。
 - 個人XML履歴には、出力時点の手動許可有無、理由、承認者、承認日時をsnapshotとして残す。
 - 再出力は通常運用として想定し、過去の出力履歴を更新・削除せず、新しいZIP・個人XML履歴として追加する。
 - 出力履歴は「誰をどのZIPへ出力したか」という事実を保存する責務に限定する。個人単位の業務状態、修正版の正本判定、後続業務データへの反映時点は後続版で決める。

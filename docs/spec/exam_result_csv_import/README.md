@@ -76,11 +76,11 @@
   - `exam_ledgers` へ取込を集約した後の、結合出力case、人単位event状態、HIA連携、基本情報補正、出力画面の残タスクを整理する。
   - 2026-08-06時点では、source単位check、case作成、case値作成、case単位check、出力可否summary、case基点XML exporter、HIAアップロード作業リストの器まで実装済みである。
 - `39_hia_xml_export_run_mock.html`
-  - HIA XML出力実行画面のモック。
-  - 施設、受診月、人単位、再出力条件で出力caseを選び、ZIP予定単位と個人caseを確認して実行する画面イメージとして扱う。
+  - HIA XML出力リスト画面のモック。
+  - 出力リストを作成し、施設、受診月、人単位、再出力条件で検索したcaseを追加・確認してからXML出力する画面イメージとして扱う。
 - `40_hia_upload_worklist_mock.html`
   - HIAアップロード作業リストの画面モック。
-  - 出力run、健診機関別ZIP、個人XML単位エラー記帳、アップロード完了記帳の操作イメージ確認用として扱う。
+  - 出力リスト、健診機関別ZIP、個人XML単位エラー記帳、アップロード完了記帳の操作イメージ確認用として扱う。
 - `41_exam_export_case_detail_mock.html`
   - 個人出力case詳細画面のモック。
   - 構成元source、採用済み整値、法定チェック、理由ありOK、出力/HIA履歴を1人単位で確認する画面イメージとして扱う。

@@ -30,7 +30,7 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 - 採用済み整値 `exam_export_case_values` 作成。
 - `exam_export_cases` を対象にした清書後法定チェック。
 - `exam_export_cases.export_readiness_status` / `export_readiness_reason` に、人が見る出力可否summaryを反映。
-- `exam_export_cases` に出力ZIPパス、ZIP名、個人XML名、出力日時、出力run IDを保持する器を追加。
+- `exam_export_cases` に出力ZIPパス、ZIP名、個人XML名、出力日時、XML出力のETL実行IDを保持する器を追加。
 - CSV由来結果からHIAアップロード用XML/ZIP出力。これは旧CSV行台帳起点の経路が残っており、次段階でcase起点へ切り替える。
 - XSD検証。
 - XML出力履歴 `xml_export_zips` / `xml_export_members`。

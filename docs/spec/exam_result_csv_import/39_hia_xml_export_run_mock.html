@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HIA XML出力実行 モック</title>
+  <title>HIA XML出力リスト モック</title>
   <style>
     :root {
       color-scheme: light;
@@ -233,7 +233,7 @@
   <header>
     <h1>HIA XML出力</h1>
     <div class="toolbar">
-      <button>条件を保存</button>
+      <button>リストを保存</button>
       <button>dry-run</button>
       <button class="primary">XML出力を実行</button>
     </div>
@@ -242,11 +242,34 @@
   <main>
     <aside>
       <div class="pane-head">
-        <h2>出力条件</h2>
+        <h2>出力リスト</h2>
         <span class="pill blue">event 2</span>
       </div>
 
       <div class="block stack">
+        <div>
+          <label>リスト名</label>
+          <input value="2026年5月 CSV補完後 HIAアップロード用">
+        </div>
+        <div class="grid-2">
+          <div>
+            <label>リスト状態</label>
+            <select>
+              <option>DRAFT</option>
+              <option>READY</option>
+              <option>EXPORTED</option>
+              <option>ERROR</option>
+            </select>
+          </div>
+          <div>
+            <label>対象event</label>
+            <input value="2">
+          </div>
+        </div>
+      </div>
+
+      <div class="block stack">
+        <h3>検索条件</h3>
         <div class="grid-2">
           <div>
             <label>対象</label>
@@ -309,22 +332,23 @@
         <h3>出力先プレビュー</h3>
         <div class="kv"><b>フォルダ</b><span class="code">03_健診結果（アップロードデータ）/20260806_153000/202605</span></div>
         <div class="kv"><b>履歴</b><span class="code">xml作成_出力履歴/20260806_153000</span></div>
+        <div class="kv"><b>紐付け</b><span class="code">xml_export_list_id = 18</span></div>
       </div>
     </aside>
 
     <section>
       <div class="pane-head">
-        <h2>出力候補プレビュー</h2>
+        <h2>出力リスト編集</h2>
         <div class="chips">
-          <span class="pill ok">case起点</span>
-          <span class="pill">施設 × 保険者 × 受診月</span>
-          <span class="pill">ZIP単位</span>
+          <span class="pill ok">リストID 18</span>
+          <span class="pill">caseを追加してから出力</span>
+          <span class="pill">ETL runとは別</span>
         </div>
       </div>
 
       <div class="summary">
-        <div class="metric"><b>76</b><span>候補case</span></div>
-        <div class="metric"><b>55</b><span>出力可能</span></div>
+        <div class="metric"><b>76</b><span>検索候補case</span></div>
+        <div class="metric"><b>58</b><span>リスト追加済み</span></div>
         <div class="metric"><b>3</b><span>理由ありOK</span></div>
         <div class="metric"><b>18</b><span>出力不可</span></div>
         <div class="metric"><b>5</b><span>ZIP予定</span></div>
@@ -332,93 +356,35 @@
       </div>
 
       <div class="tabs">
-        <div class="tab active">グループ</div>
-        <div class="tab">個人case</div>
+        <div class="tab active">追加済みcase</div>
+        <div class="tab">検索候補</div>
+        <div class="tab">ZIP予定</div>
         <div class="tab">出力不可</div>
-        <div class="tab">実行ログ</div>
+        <div class="tab">履歴</div>
       </div>
 
       <div class="block">
         <div class="grid-3">
           <div class="success">
-            出力対象は `EXPORT_READY` と `APPROVED_WITH_REASON` のみ。出力前にcase単位の法定チェックが完了している前提。
+            出力リストへ追加できる主対象は `EXPORT_READY` と `APPROVED_WITH_REASON`。出力直前に現在状態を再確認する。
           </div>
           <div class="notice">
             グループ内で1人でもXML生成またはXSD検証に失敗した場合、そのグループのZIPは作成しない。
           </div>
           <div class="panel-lite">
             <h3>次の処理</h3>
-            <div class="subtle">出力後はHIAアップロード作業リストへ進む</div>
-            <button>アップロード画面を開く</button>
+            <div class="subtle">対象を追加してリスト確定後、XML出力へ進む</div>
+            <button>リストを確定</button>
           </div>
         </div>
       </div>
 
       <div class="pane-head">
-        <h2>出力グループ</h2>
+        <h2>追加済みcase</h2>
         <div class="toolbar">
-          <button>全グループを選択</button>
-          <button>エラー候補を確認</button>
-        </div>
-      </div>
-      <div class="table-scroll">
-        <table class="group-table">
-          <thead>
-            <tr>
-              <th>健診機関</th>
-              <th>保険者</th>
-              <th>受診月</th>
-              <th>人数</th>
-              <th>ZIP名プレビュー</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="active">
-              <td>
-                <div class="title">札幌きたはち健診センター</div>
-                <div class="code">0110717770</div>
-              </td>
-              <td class="code">06139463</td>
-              <td>202605</td>
-              <td>12</td>
-              <td>
-                <div class="code">0110717770_06139463_202608060_1.zip</div>
-                <div class="subtle">20260806_153000/202605</div>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                <div class="title">ヒロオカクリニック</div>
-                <div class="code">1310438796</div>
-              </td>
-              <td class="code">06139463</td>
-              <td>202605</td>
-              <td>7</td>
-              <td><span class="code">1310438796_06139463_202608060_1.zip</span></td>
-            </tr>
-            <tr>
-              <td>
-                <div class="title">ヘルスケアクリニック厚木</div>
-                <div class="code">1412910586</div>
-              </td>
-              <td class="code">06139463</td>
-              <td>202605</td>
-              <td>39</td>
-              <td>
-                <div class="code">1412910586_06139463_202608061_1.zip</div>
-                <div class="subtle">既存番号0あり。自動で1を採番</div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="pane-head">
-        <h2>個人case</h2>
-        <div class="toolbar">
-          <button>出力可能のみ</button>
-          <button>理由ありOKのみ</button>
-          <button>出力不可のみ</button>
+          <button>検索候補から追加</button>
+          <button>選択を除外</button>
+          <button>詳細確認</button>
         </div>
       </div>
       <div class="table-scroll">
@@ -462,16 +428,54 @@
                 <div class="subtle">承認: 長尾 / 2026-08-06 14:10</div>
               </td>
             </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pane-head">
+        <h2>ZIP予定</h2>
+        <div class="toolbar">
+          <button>再計算</button>
+          <button>グループ詳細</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="group-table">
+          <thead>
             <tr>
-              <td><input type="checkbox"></td>
-              <td><span class="pill danger">BLOCKED</span></td>
+              <th>健診機関</th>
+              <th>保険者</th>
+              <th>受診月</th>
+              <th>人数</th>
+              <th>ZIP名プレビュー</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="active">
               <td>
-                <div>小禄病院</div>
-                <div class="subtle">2026-05-31</div>
+                <div class="title">札幌きたはち健診センター</div>
+                <div class="code">0110717770</div>
               </td>
-              <td class="code">HIA0001911</td>
-              <td>山田 太郎</td>
-              <td>既往歴、自覚症状、他覚症状 MISSING。医療機関回答待ち</td>
+              <td class="code">06139463</td>
+              <td>202605</td>
+              <td>12</td>
+              <td>
+                <div class="code">0110717770_06139463_202608060_1.zip</div>
+                <div class="subtle">20260806_153000/202605</div>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div class="title">ヘルスケアクリニック厚木</div>
+                <div class="code">1412910586</div>
+              </td>
+              <td class="code">06139463</td>
+              <td>202605</td>
+              <td>39</td>
+              <td>
+                <div class="code">1412910586_06139463_202608061_1.zip</div>
+                <div class="subtle">既存番号0あり。自動で1を採番</div>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -479,8 +483,8 @@
 
       <div class="footer-actions">
         <div>
-          <div class="title">出力予定: 5 ZIP / 58人</div>
-          <div class="subtle">出力不可 18人は今回のZIPには含めない</div>
+          <div class="title">出力リスト: 5 ZIP / 58人</div>
+          <div class="subtle">出力不可 18人はリスト外、または除外状態として管理</div>
         </div>
         <div class="toolbar">
           <button>dry-runで再計算</button>
