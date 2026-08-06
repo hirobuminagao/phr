@@ -442,7 +442,7 @@ def build_group(
     output_root = result_root / folder_name / UPLOAD_DIR_NAME
     month_output_root = output_root / timestamp / exam_month
     file_date = config.file_date.strftime("%Y%m%d")
-    split_no = choose_split_no(month_output_root, facility_code, insurer_number, file_date, config.split_no)
+    split_no = choose_split_no(output_root, facility_code, insurer_number, file_date, config.split_no)
     root_name = root_dir_name(facility_code, insurer_number, file_date, split_no)
     final_dir = month_output_root
     final_zip = final_dir / f"{root_name}.zip"

@@ -208,7 +208,7 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
 ```
 
 グループ内の誰か1人でもXML生成またはXSD検証に失敗した場合、そのグループのZIPは作らない。
-該当caseは `EXPORT_ERROR` に寄せ、失敗理由を `etl_errors` と `exam_export_cases.export_readiness_reason` で追える状態にする。
+実装上はグループ単位でロールバックするため、同じグループのcaseを `EXPORT_ERROR` に寄せ、失敗理由を `etl_errors` と `exam_export_cases.export_readiness_reason` で追える状態にする。
 他のグループは独立して処理を継続できる。
 
 ### Export Selectors
@@ -225,7 +225,8 @@ XML出力は、後続の画面操作を見据えて以下の条件を組み合�
 
 人単位の指定は `exam_export_case_id`、`subscriber_id`、`hia_subscriber_id`、`person_id_custom` を受け付ける。
 通常運用では `facility_codes + exam_month`、個別修正後は `hia_subscriber_id` または `exam_export_case_id`、再出力時は `include_exported = true` を使う。
-再出力時も過去の出力履歴は削除せず、同日出力回数 `split_no` を自動採番または明示指定して別ZIPとして残す。
+再出力時も過去の出力履歴は削除せず、`EXPORTED` のcaseを明示的に対象へ戻す。
+同日出力回数 `split_no` は健診機関フォルダ配下の既存ZIP名から自動採番するか、明示指定して別ZIPとして残す。
 
 ### Future Multi-Source Merge Rules
 

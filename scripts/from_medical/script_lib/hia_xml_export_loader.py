@@ -38,7 +38,7 @@ def check_reason_is_missing_only(reason: Any) -> bool:
 
 
 def decide_candidate(row: Mapping[str, Any]) -> CandidateDecision:
-    if row.get("export_readiness_status") not in ("EXPORT_READY", "APPROVED_WITH_REASON"):
+    if row.get("export_readiness_status") not in ("EXPORT_READY", "APPROVED_WITH_REASON", "EXPORTED"):
         return CandidateDecision(False, row.get("export_readiness_reason") or "NOT_EXPORT_READY")
     required = (
         ("health_exam_report_category", "REPORT_CATEGORY_MISSING"),
@@ -113,7 +113,10 @@ def fetch_candidates(
             "WHERE xem.ledger_type = 'CASE' AND xem.ledger_id = eec.exam_export_case_id)"
         )
         filters.append("eec.xml_export_status <> 'EXPORTED'")
-    filters.append("eec.export_readiness_status IN ('EXPORT_READY', 'APPROVED_WITH_REASON')")
+    if selectors.include_exported:
+        filters.append("eec.export_readiness_status IN ('EXPORT_READY', 'APPROVED_WITH_REASON', 'EXPORTED')")
+    else:
+        filters.append("eec.export_readiness_status IN ('EXPORT_READY', 'APPROVED_WITH_REASON')")
     limit_sql = ""
     if selectors.limit:
         limit_sql = "LIMIT %s"
