@@ -76,7 +76,7 @@
 
     main {
       display: grid;
-      grid-template-columns: 340px minmax(820px, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
       padding: 14px;
       min-height: calc(100vh - 58px);
@@ -102,6 +102,13 @@
     .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .grid-4 { display: grid; grid-template-columns: 1.1fr 1fr 1fr .8fr; gap: 10px; }
+    .search-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr .9fr; gap: 10px; }
+    .list-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
     .subtle { color: var(--muted); font-size: 12px; }
     .code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -181,6 +188,8 @@
       background: #fff;
     }
     .work-block + .work-block { margin-top: 18px; }
+    .list-grid .work-block { margin: 14px 0 0; }
+    .list-grid .work-block + .work-block { margin-top: 14px; }
     .work-block.search { border-color: #b9c9e9; }
     .work-block.selected { border-color: #9cc9b1; }
     .work-block.zip { border-color: #d4c28c; margin-bottom: 82px; }
@@ -227,6 +236,7 @@
     .group-table th:nth-child(5) { width: 1fr; }
     .table-scroll { overflow: auto; }
     .table-scroll table { min-width: 980px; }
+    .list-grid .table-scroll table { min-width: 760px; }
     tr.active { background: var(--accent-soft); }
 
     .inline-check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; margin: 0; }
@@ -265,11 +275,13 @@
       main { grid-template-columns: 1fr; }
       .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .search-state { grid-template-columns: 1fr; }
+      .search-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .list-grid { grid-template-columns: 1fr; }
       .step-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 720px) {
       header { align-items: flex-start; flex-direction: column; padding: 12px; }
-      main, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      main, .grid-2, .grid-3, .grid-4, .search-grid { grid-template-columns: 1fr; }
       main { padding: 10px; }
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .work-block { margin-left: 10px; margin-right: 10px; }
@@ -289,16 +301,19 @@
   <main>
     <aside>
       <div class="pane-head">
-        <h2>出力リスト / 検索条件</h2>
-        <span class="pill blue">event 2</span>
+        <h2>検索条件</h2>
+        <div class="chips">
+          <span class="pill blue">event 2</span>
+          <span class="pill ok">リストID 18</span>
+        </div>
       </div>
 
       <div class="block stack">
-        <div>
-          <label>リスト名</label>
-          <input value="2026年5月 CSV補完後 HIAアップロード用">
-        </div>
-        <div class="grid-2">
+        <div class="search-grid">
+          <div>
+            <label>リスト名</label>
+            <input value="2026年5月 CSV補完後 HIAアップロード用">
+          </div>
           <div>
             <label>リスト状態</label>
             <select>
@@ -312,12 +327,15 @@
             <label>対象event</label>
             <input value="2">
           </div>
+          <div>
+            <label>提出日</label>
+            <input value="20260806">
+          </div>
         </div>
       </div>
 
       <div class="block stack">
-        <h3>検索条件</h3>
-        <div class="grid-2">
+        <div class="search-grid">
           <div>
             <label>対象</label>
             <select>
@@ -335,16 +353,19 @@
               <option>指定なし</option>
             </select>
           </div>
+          <div>
+            <label>健診機関コード</label>
+            <input value="0110717770, 1310438796, 1412910586">
+          </div>
+          <div>
+            <label>個人指定</label>
+            <input placeholder="HIA加入者ID / subscriber_id / case_id">
+          </div>
         </div>
-        <div>
-          <label>健診機関コード</label>
-          <input value="0110717770, 1310438796, 1412910586">
-        </div>
-        <div>
-          <label>個人指定</label>
-          <input placeholder="HIA加入者ID / subscriber_id / case_id">
-        </div>
-        <div class="grid-2">
+      </div>
+
+      <div class="block stack">
+        <div class="search-grid">
           <div>
             <label>再出力</label>
             <select>
@@ -361,25 +382,22 @@
               <option>2</option>
             </select>
           </div>
+          <div>
+            <label>対象ステータス</label>
+            <div class="chips">
+              <label class="inline-check"><input type="checkbox" checked> READY</label>
+              <label class="inline-check"><input type="checkbox" checked> 理由ありOK</label>
+              <label class="inline-check"><input type="checkbox"> EXPORTED</label>
+            </div>
+          </div>
+          <div>
+            <label>操作</label>
+            <div class="toolbar">
+              <button class="primary">検索</button>
+              <button>条件クリア</button>
+            </div>
+          </div>
         </div>
-        <div>
-          <label>提出日</label>
-          <input value="20260806">
-        </div>
-      </div>
-
-      <div class="block stack">
-        <h3>対象ステータス</h3>
-        <label class="inline-check"><input type="checkbox" checked> EXPORT_READY</label>
-        <label class="inline-check"><input type="checkbox" checked> APPROVED_WITH_REASON</label>
-        <label class="inline-check"><input type="checkbox"> EXPORTED（再出力時のみ）</label>
-      </div>
-
-      <div class="block stack">
-        <h3>出力先プレビュー</h3>
-        <div class="kv"><b>フォルダ</b><span class="code">03_健診結果（アップロードデータ）/20260806_153000/202605</span></div>
-        <div class="kv"><b>履歴</b><span class="code">xml作成_出力履歴/20260806_153000</span></div>
-        <div class="kv"><b>紐付け</b><span class="code">xml_export_list_id = 18</span></div>
       </div>
     </aside>
 
@@ -433,6 +451,7 @@
         </div>
       </div>
 
+      <div class="list-grid">
       <div class="work-block search">
         <div class="pane-head">
           <div class="block-title">
@@ -440,7 +459,6 @@
             <div class="subtle">左の検索条件で候補を再取得する領域。ここではリスト本体は変更しない。</div>
           </div>
           <div class="toolbar">
-            <button>検索</button>
             <button class="primary">選択した候補を追加</button>
             <button>詳細確認</button>
           </div>
@@ -603,6 +621,7 @@
           </tbody>
           </table>
         </div>
+      </div>
       </div>
 
       <div class="work-block zip">
