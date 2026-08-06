@@ -81,6 +81,9 @@
 - `40_hia_upload_worklist_mock.html`
   - HIAアップロード作業リストの画面モック。
   - 出力run、健診機関別ZIP、個人XML単位エラー記帳、アップロード完了記帳の操作イメージ確認用として扱う。
+- `41_exam_export_case_detail_mock.html`
+  - 個人出力case詳細画面のモック。
+  - 構成元source、採用済み整値、法定チェック、理由ありOK、出力/HIA履歴を1人単位で確認する画面イメージとして扱う。
 
 ## ADR Policy
 
