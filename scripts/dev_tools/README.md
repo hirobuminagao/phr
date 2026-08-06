@@ -39,27 +39,28 @@ CSV本体はgit管理しない。
 
 ## `import_exam_item_value_normalize_error_fixtures.py`
 
-実行環境から持ち帰った、匿名化済み・集計済みの `exam_item_values` normalizeエラーCSVを `health_exam_result.exam_item_value_normalize_error_fixtures` へ取り込む。
+実行環境から持ち帰った、匿名化済み・集計済みの `exam_item_values` normalizeエラーCSVを、m4検証環境の `health_exam_result.exam_item_value_normalize_error_fixtures` へ取り込む。
 
 このテーブルは正式seedではなく、`norm_variants` 追加候補の確認、意図的に残すエラーの整理、回帰確認用の観察テーブルである。
 原則としてm4検証環境だけに作成し、実行環境には作成・投入しない。
 個人ID、氏名、ファイルパス、CSV行全体は入れない。
 
-実行環境からCSVを作るときは、以下の抽出SQLを使う。
+実行環境からCSVを作るときは、以下の抽出SQLだけを使う。
 単位不一致の調査に必要な `raw_unit`, `normalized_unit`, `master_display_unit`, `master_ucum_unit` も出力する。
+実行環境側にfixtureテーブルやfixture用migrationは不要である。
 
 ```text
 sql/dev_tools/extract_exam_item_value_normalize_error_fixtures.sql
 ```
 
-事前にDDLまたはmigrationを適用する。
+m4検証環境では、事前にDDLまたはmigrationを適用する。
 
 ```powershell
 Get-Content sql/migrations/health_exam_result/20260805_003_health_exam_result_create_exam_item_value_normalize_error_fixtures.sql -Raw |
   mysql -u USER -p
 ```
 
-既にfixtureテーブルを作成済みのm4環境では、単位列追加migrationも適用する。
+既にfixtureテーブルを作成済みのm4検証環境では、単位列追加migrationも適用する。
 
 ```powershell
 Get-Content sql/migrations/health_exam_result/20260806_003_health_exam_result_add_units_to_normalize_error_fixtures.sql -Raw |
