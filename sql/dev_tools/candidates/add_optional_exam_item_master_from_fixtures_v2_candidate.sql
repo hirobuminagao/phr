@@ -1,8 +1,11 @@
--- Add additional optional exam_item_master rows found from anonymized normalize error fixtures.
+-- Candidate: add additional optional exam_item_master rows found from anonymized normalize error fixtures.
 --
 -- Scope:
 -- - Add official/JLAC-like optional items that can safely be represented as exam result entries.
 -- - Do not add facility/custom ZG/Z* guidance codes or standard weight here; those remain excluded/non-target.
+--
+-- This is an m4 review candidate, not an execution-environment migration.
+-- Promote selected rows to a formal dev_phr migration/seed only after review.
 
 INSERT INTO `dev_phr`.`exam_item_master` (
   `namecode`,

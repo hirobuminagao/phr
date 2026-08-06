@@ -53,6 +53,14 @@ CSV本体はgit管理しない。
 sql/dev_tools/extract_exam_item_value_normalize_error_fixtures.sql
 ```
 
+m4検証で作った `exam_item_master` 追加候補は以下に置く。
+これは正式migrationではないため、実行環境にはそのまま適用しない。
+採用する場合は、内容をレビューしてから別途正式migration/seedへ昇格する。
+
+```text
+sql/dev_tools/candidates/add_optional_exam_item_master_from_fixtures_v2_candidate.sql
+```
+
 m4検証環境では、事前にDDLまたはmigrationを適用する。
 
 ```powershell
