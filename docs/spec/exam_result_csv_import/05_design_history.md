@@ -1733,8 +1733,29 @@ HIA XML出力リストと出力履歴連携の実装
 - `xml_export_lists` / `xml_export_list_cases` を正式テーブルとして追加する。
 - `xml_export_zips` に `xml_export_list_id` を追加し、ZIP履歴から出力リストへ辿れるようにする。
 - `v_xml_export_hia_upload_worklist` に出力リストID、リスト名、リスト状態を追加する。
-- CLI暫定運用として、`create_xml_export_list.py` で出力リストを作成し、`04_export_hia_xml.py --xml-export-list-id` で対象リストを出力できるようにする。
+- CLI運用として、`03_05_create_xml_export_list.py` で出力リストを作成し、`04_export_hia_xml.py --xml-export-list-id` で対象リストを出力できるようにする。
 - `xml_export_members` は引き続き個人XML単位の出力履歴正本とし、出力成功時に `xml_export_list_cases` も `EXPORTED` へ更新する。
+
+---
+
+## DH-20260806-06 / 2026-08-06 JST
+
+### テーマ
+
+画面実装前のXML出力リスト作成CLIを正式順序へ採番
+
+### 背景
+
+- 出力リスト方式を採用したが、画面が未実装の期間もスクリプトだけで運用できる入口が必要である。
+- `dev_tools/create_xml_export_list.py` のままだと暫定ツールに見え、通常実行順に組み込みにくい。
+
+### 決定
+
+- 出力リスト作成の正式CLI入口を `03_05_create_xml_export_list.py` とする。
+- 通常順序は `03_04_check_exam_export_cases.py` の後に `03_05_create_xml_export_list.py`、その後 `04_export_hia_xml.py --xml-export-list-id ...` とする。
+- `03_05_create_xml_export_list.py` は標準でREADYな出力リストを作成する。下書き確認したい場合だけ `--draft` を使う。
+- リスト名を省略した場合は、event、受診月、実行日時から自動生成する。
+- 既存の `dev_tools/create_xml_export_list.py` は互換ラッパーとして残す。
 
 ---
 

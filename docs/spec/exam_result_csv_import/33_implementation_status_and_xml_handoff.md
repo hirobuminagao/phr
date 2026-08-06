@@ -45,6 +45,11 @@ Current as of 2026-08-05.
   -> exam_export_cases.check_status / check_reason
   -> exam_export_cases.export_readiness_status / export_readiness_reason
 
+03_05_create_xml_export_list.py
+  -> xml_export_lists
+  -> xml_export_list_cases
+  -> 画面実装前の正式CLI入口として、出力可能caseをREADYリスト化
+
 04_export_hia_xml.py
   -> V08個人XML + ix08_V08.xml
   -> XSD検証
@@ -55,6 +60,7 @@ Current as of 2026-08-05.
 
 `04_export_hia_xml.py` は `exam_export_cases` / `exam_export_case_values` 起点へ切り替え済みである。
 出力対象は `export_readiness_status` が `EXPORT_READY` または `APPROVED_WITH_REASON` のcaseとし、出力後は `exam_export_cases` の出力ファイル証跡カラムと `xml_export_zips` / `xml_export_members` の履歴を更新する。
+画面実装前は `03_05_create_xml_export_list.py` で出力リストを作成し、`04_export_hia_xml.py --xml-export-list-id ...` で出力する。
 `xml_export_members` は `ledger_type = CASE`, `ledger_id = exam_export_cases.exam_export_case_id` で出力対象を記録する。
 
 ## Implemented Scope

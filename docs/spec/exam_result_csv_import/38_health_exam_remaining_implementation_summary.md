@@ -82,10 +82,13 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 03_01_build_exam_export_cases.py
 03_02_build_exam_export_case_values.py
 03_04_check_exam_export_cases.py
-04_export_hia_xml.py  # 次段階でcase基点へ切替
+03_05_create_xml_export_list.py
+04_export_hia_xml.py
 ```
 
 `03_00` はファイル/row sourceとして正しいかのcheck、`03_04` は複数sourceを束ねたcaseとしてXMLに出せるかのcheckであり、両方必要である。
+`03_05` は画面実装前の正式CLI入口として、出力可能なcaseをREADYな出力リストへまとめる。
+`04_export_hia_xml.py` は通常 `--xml-export-list-id` で確定済みリストを指定して実行する。
 
 ### 2. Person Event Population and Status Sync
 

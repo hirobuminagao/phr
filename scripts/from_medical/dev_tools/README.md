@@ -45,6 +45,8 @@ python scripts/from_medical/dev_tools/sync_exam_ledgers.py
 03_01_build_exam_export_cases.py
 03_02_build_exam_export_case_values.py
 03_04_check_exam_export_cases.py
+03_05_create_xml_export_list.py
+04_export_hia_xml.py
 scripts/health_exam_event/sync_person_event_population.py
 scripts/health_exam_event/sync_person_event_status_items.py
 refresh_exam_result_ledger_report.py

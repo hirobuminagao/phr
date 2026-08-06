@@ -208,8 +208,10 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
 CLI暫定運用では、画面の代わりに以下の2段階で実行できる。
 
 ```text
-1. scripts/from_medical/dev_tools/create_xml_export_list.py
+1. scripts/from_medical/03_05_create_xml_export_list.py
    条件に合う export_readiness_status OK相当のcaseを xml_export_lists / xml_export_list_cases へ登録する。
+   標準ではREADYな出力リストを作成し、画面前のスクリプト運用ではこの入口を正式手順とする。
+   リスト名を省略した場合は、event、受診月、実行日時から自動採番する。
 
 2. scripts/from_medical/04_export_hia_xml.py --xml-export-list-id {xml_export_list_id}
    出力リストに含まれるcaseだけをZIP出力し、xml_export_zips / xml_export_members へ履歴を残す。
