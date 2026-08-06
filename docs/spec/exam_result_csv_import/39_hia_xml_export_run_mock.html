@@ -192,9 +192,11 @@
     .list-grid .work-block + .work-block { margin-top: 14px; }
     .work-block.search { border-color: #b9c9e9; }
     .work-block.selected { border-color: #9cc9b1; }
+    .work-block.edit { border-color: #c8ced6; }
     .work-block.zip { border-color: #d4c28c; margin-bottom: 82px; }
     .work-block.search .pane-head { background: var(--blue-soft); }
     .work-block.selected .pane-head { background: var(--accent-soft); }
+    .work-block.edit .pane-head { background: var(--band); }
     .work-block.zip .pane-head { background: var(--warn-soft); }
     .block-title {
       display: grid;
@@ -301,13 +303,17 @@
   <main>
     <aside>
       <div class="pane-head">
-        <h2>検索条件</h2>
+        <h2>リスト基本</h2>
         <div class="chips">
           <span class="pill blue">event 2</span>
           <span class="pill ok">リストID 18</span>
         </div>
       </div>
 
+      <div class="pane-head">
+        <h2>検索</h2>
+        <div class="subtle">条件を指定して候補を探す</div>
+      </div>
       <div class="block stack">
         <div class="search-grid">
           <div>
@@ -402,55 +408,6 @@
     </aside>
 
     <section>
-      <div class="pane-head">
-        <h2>出力リスト編集</h2>
-        <div class="chips">
-          <span class="pill ok">リストID 18</span>
-          <span class="pill">caseを追加してから出力</span>
-          <span class="pill">ETL runとは別</span>
-        </div>
-      </div>
-
-      <div class="summary">
-        <div class="metric"><b>76</b><span>検索候補case</span></div>
-        <div class="metric"><b>58</b><span>リスト追加済み</span></div>
-        <div class="metric"><b>3</b><span>理由ありOK</span></div>
-        <div class="metric"><b>18</b><span>出力不可</span></div>
-        <div class="metric"><b>5</b><span>ZIP予定</span></div>
-        <div class="metric"><b>0</b><span>出力済み含む</span></div>
-      </div>
-
-      <div class="tabs">
-        <div class="tab active">検索候補</div>
-        <div class="tab">追加済みcase</div>
-        <div class="tab">ZIP予定</div>
-        <div class="tab">出力不可</div>
-        <div class="tab">履歴</div>
-      </div>
-
-      <div class="step-strip">
-        <div class="step active"><b>1. 検索</b><span>条件に合うcaseを表示</span></div>
-        <div class="step"><b>2. 詳細確認</b><span>不足・補正・理由ありOKを確認</span></div>
-        <div class="step"><b>3. リスト追加</b><span>今回出す人だけ下へ積む</span></div>
-        <div class="step"><b>4. 確定・出力</b><span>ZIP予定を確認して実行</span></div>
-      </div>
-
-      <div class="block">
-        <div class="grid-3">
-          <div class="success">
-            出力リストへ追加できる主対象は `EXPORT_READY` と `APPROVED_WITH_REASON`。出力直前に現在状態を再確認する。
-          </div>
-          <div class="notice">
-            グループ内で1人でもXML生成またはXSD検証に失敗した場合、そのグループのZIPは作成しない。
-          </div>
-          <div class="panel-lite">
-            <h3>次の処理</h3>
-            <div class="subtle">対象を追加してリスト確定後、XML出力へ進む</div>
-            <button>リストを確定</button>
-          </div>
-        </div>
-      </div>
-
       <div class="list-grid">
       <div class="work-block search">
         <div class="pane-head">
@@ -675,6 +632,52 @@
             </tr>
           </tbody>
           </table>
+        </div>
+      </div>
+
+      <div class="work-block edit">
+        <div class="pane-head">
+          <div class="block-title">
+            <h2>出力リスト編集</h2>
+            <div class="subtle">追加済みリストを確定し、ZIP予定と出力条件を確認する。</div>
+          </div>
+          <div class="chips">
+            <span class="pill ok">リストID 18</span>
+            <span class="pill">caseを追加してから出力</span>
+            <span class="pill">ETL runとは別</span>
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="metric"><b>76</b><span>検索候補case</span></div>
+          <div class="metric"><b>58</b><span>リスト追加済み</span></div>
+          <div class="metric"><b>3</b><span>理由ありOK</span></div>
+          <div class="metric"><b>18</b><span>出力不可</span></div>
+          <div class="metric"><b>5</b><span>ZIP予定</span></div>
+          <div class="metric"><b>0</b><span>出力済み含む</span></div>
+        </div>
+
+        <div class="step-strip">
+          <div class="step"><b>1. 検索</b><span>条件に合うcaseを表示</span></div>
+          <div class="step"><b>2. 詳細確認</b><span>不足・補正・理由ありOKを確認</span></div>
+          <div class="step active"><b>3. リスト追加</b><span>今回出す人だけ右へ積む</span></div>
+          <div class="step"><b>4. 確定・出力</b><span>ZIP予定を確認して実行</span></div>
+        </div>
+
+        <div class="block">
+          <div class="grid-3">
+            <div class="success">
+              出力リストへ追加できる主対象は `EXPORT_READY` と `APPROVED_WITH_REASON`。出力直前に現在状態を再確認する。
+            </div>
+            <div class="notice">
+              グループ内で1人でもXML生成またはXSD検証に失敗した場合、そのグループのZIPは作成しない。
+            </div>
+            <div class="panel-lite">
+              <h3>次の処理</h3>
+              <div class="subtle">追加済みリストとZIP予定を確認してから確定する</div>
+              <button>リストを確定</button>
+            </div>
+          </div>
         </div>
       </div>
 
