@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HIAアップロード作業リスト モック</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f6f8;
+      --panel: #fff;
+      --band: #f8fafb;
+      --line: #d8dee5;
+      --line-strong: #aeb8c3;
+      --text: #202a33;
+      --muted: #657584;
+      --accent: #147447;
+      --accent-soft: #e6f4ed;
+      --blue: #255fbd;
+      --blue-soft: #e8f0ff;
+      --warn: #986000;
+      --warn-soft: #fff4da;
+      --danger: #a33838;
+      --danger-soft: #fde9e9;
+      --shadow: 0 1px 2px rgba(16, 24, 40, .08);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    header {
+      min-height: 58px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    h1 { margin: 0; font-size: 18px; font-weight: 650; }
+    h2 { margin: 0; font-size: 15px; font-weight: 650; }
+    h3 { margin: 0; font-size: 13px; font-weight: 650; color: var(--muted); }
+    button, input, select, textarea { font: inherit; }
+    button {
+      min-height: 34px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 0 12px;
+      white-space: nowrap;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.icon { width: 34px; padding: 0; font-weight: 700; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 7px 9px;
+    }
+    input, select { min-height: 34px; }
+    textarea { min-height: 68px; resize: vertical; }
+    label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+
+    main {
+      display: grid;
+      grid-template-columns: 320px minmax(760px, 1fr);
+      gap: 14px;
+      padding: 14px;
+      min-height: calc(100vh - 58px);
+    }
+
+    aside, section {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .pane-head {
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .block { padding: 14px 15px; border-bottom: 1px solid var(--line); }
+    .stack { display: grid; gap: 12px; }
+    .toolbar, .chips, .row-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr .8fr; gap: 10px; }
+    .subtle { color: var(--muted); font-size: 12px; }
+    .code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 0 8px;
+      background: #eef2f5;
+      color: #40505e;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .pill.ok { background: var(--accent-soft); color: var(--accent); }
+    .pill.warn { background: var(--warn-soft); color: var(--warn); }
+    .pill.danger { background: var(--danger-soft); color: var(--danger); }
+    .pill.blue { background: var(--blue-soft); color: var(--blue); }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px 15px;
+      background: var(--band);
+      border-bottom: 1px solid var(--line);
+    }
+    .metric {
+      min-height: 58px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      padding: 8px 10px;
+    }
+    .metric b { display: block; font-size: 20px; line-height: 1.2; }
+    .metric span { color: var(--muted); font-size: 12px; }
+
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px; vertical-align: top; text-align: left; }
+    th { background: #f8fafb; color: var(--muted); font-weight: 600; }
+    .zip-table th:nth-child(1) { width: 82px; }
+    .zip-table th:nth-child(2) { width: 220px; }
+    .zip-table th:nth-child(3) { width: 78px; }
+    .zip-table th:nth-child(4) { width: 82px; }
+    .zip-table th:nth-child(5) { width: 96px; }
+    .zip-table th:nth-child(6) { width: 1fr; }
+    .member-table th:nth-child(1) { width: 72px; }
+    .member-table th:nth-child(2) { width: 120px; }
+    .member-table th:nth-child(3) { width: 150px; }
+    .member-table th:nth-child(4) { width: 88px; }
+    .member-table th:nth-child(5) { width: 190px; }
+    .member-table th:nth-child(6) { width: 1fr; }
+    .member-table th:nth-child(7) { width: 120px; }
+    .table-scroll { overflow: auto; }
+    .table-scroll table { min-width: 960px; }
+    tr.active { background: var(--accent-soft); }
+
+    .run-list { display: grid; gap: 8px; padding: 10px; }
+    .run-card {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .run-card.active { border-color: #92cbaa; background: var(--accent-soft); }
+    .run-title { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .title { font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kv {
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      gap: 6px;
+      align-items: start;
+    }
+    .kv b { color: var(--muted); font-size: 12px; font-weight: 600; }
+
+    .detail-band {
+      padding: 12px 15px;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 12px;
+      background: var(--band);
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-lite {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      padding: 11px;
+      display: grid;
+      gap: 8px;
+    }
+    .path-box {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .path {
+      min-height: 34px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #f8fafb;
+      overflow-wrap: anywhere;
+    }
+    .inline-edit {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    @media (max-width: 1100px) {
+      main { grid-template-columns: 1fr; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .detail-band { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 680px) {
+      header { align-items: flex-start; flex-direction: column; padding: 12px; }
+      main, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      main { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>HIAアップロード作業リスト</h1>
+    <div class="toolbar">
+      <button>一覧更新</button>
+      <button>CSV出力</button>
+      <button class="primary">選択ZIPを完了にする</button>
+    </div>
+  </header>
+
+  <main>
+    <aside>
+      <div class="pane-head">
+        <h2>出力run</h2>
+        <span class="pill blue">event 2</span>
+      </div>
+      <div class="block stack">
+        <div>
+          <label>出力日時</label>
+          <select>
+            <option>20260806_153000</option>
+            <option>20260806_101500</option>
+            <option>20260805_184200</option>
+          </select>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label>受診月</label>
+            <select>
+              <option>202605</option>
+              <option>202606</option>
+              <option>すべて</option>
+            </select>
+          </div>
+          <div>
+            <label>状態</label>
+            <select>
+              <option>未完了のみ</option>
+              <option>エラーあり</option>
+              <option>すべて</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label>健診機関</label>
+          <input value="札幌きたはち">
+        </div>
+      </div>
+
+      <div class="run-list">
+        <div class="run-card active">
+          <div class="run-title">
+            <div class="title">20260806_153000</div>
+            <span class="pill warn">PARTIAL</span>
+          </div>
+          <div class="kv"><b>ZIP</b><span>8件 / 3施設</span></div>
+          <div class="kv"><b>人数</b><span>76人</span></div>
+          <div class="kv"><b>未完了</b><span>2 ZIP / 4人</span></div>
+        </div>
+        <div class="run-card">
+          <div class="run-title">
+            <div class="title">20260806_101500</div>
+            <span class="pill ok">CONFIRMED</span>
+          </div>
+          <div class="kv"><b>ZIP</b><span>5件 / 2施設</span></div>
+          <div class="kv"><b>人数</b><span>42人</span></div>
+          <div class="kv"><b>未完了</b><span>0</span></div>
+        </div>
+        <div class="run-card">
+          <div class="run-title">
+            <div class="title">20260805_184200</div>
+            <span class="pill danger">ERROR</span>
+          </div>
+          <div class="kv"><b>ZIP</b><span>3件 / 1施設</span></div>
+          <div class="kv"><b>人数</b><span>21人</span></div>
+          <div class="kv"><b>未完了</b><span>1 ZIP / 1人</span></div>
+        </div>
+      </div>
+    </aside>
+
+    <section>
+      <div class="pane-head">
+        <h2>アップロード対象ZIP</h2>
+        <div class="chips">
+          <span class="pill">健診機関単位</span>
+          <span class="pill">受診月単位</span>
+          <span class="pill">個人エラー記帳</span>
+        </div>
+      </div>
+
+      <div class="summary">
+        <div class="metric"><b>8</b><span>ZIP</span></div>
+        <div class="metric"><b>76</b><span>個人XML</span></div>
+        <div class="metric"><b>5</b><span>アップロード済みZIP</span></div>
+        <div class="metric"><b>2</b><span>未完了ZIP</span></div>
+        <div class="metric"><b>1</b><span>エラーZIP</span></div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="zip-table">
+          <thead>
+            <tr>
+              <th>状態</th>
+              <th>健診機関</th>
+              <th>受診月</th>
+              <th>人数</th>
+              <th>出力番号</th>
+              <th>ZIP / パス</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="active">
+              <td><span class="pill warn">PENDING</span></td>
+              <td>
+                <div class="title">札幌きたはち健診センター</div>
+                <div class="code">0110717770</div>
+              </td>
+              <td>202605</td>
+              <td>12</td>
+              <td><span class="code">0</span></td>
+              <td>
+                <div class="code">0110717770_06139463_202608060_1.zip</div>
+                <div class="subtle">03_健診結果（アップロードデータ）/20260806_153000/202605</div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="pill ok">UPLOADED</span></td>
+              <td>
+                <div class="title">ヒロオカクリニック</div>
+                <div class="code">1310438796</div>
+              </td>
+              <td>202605</td>
+              <td>7</td>
+              <td><span class="code">0</span></td>
+              <td>
+                <div class="code">1310438796_06139463_202608060_1.zip</div>
+                <div class="subtle">03_健診結果（アップロードデータ）/20260806_153000/202605</div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="pill danger">UPLOAD_ERROR</span></td>
+              <td>
+                <div class="title">ヘルスケアクリニック厚木</div>
+                <div class="code">1412910586</div>
+              </td>
+              <td>202605</td>
+              <td>38</td>
+              <td><span class="code">1</span></td>
+              <td>
+                <div class="code">1412910586_06139463_202608061_1.zip</div>
+                <div class="subtle">個人単位エラー 2件</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="detail-band">
+        <div class="panel-lite">
+          <h3>選択ZIPのアップロード作業</h3>
+          <div class="path-box">
+            <div class="path code">\\fs03\sec\07.未病・予防事業部\健診結果_請求\2026年度\06139463_トランスコスモス健康保険組合\0110717770_札幌きたはち健診センター\03_健診結果（アップロードデータ）\20260806_153000\202605</div>
+            <button>コピー</button>
+          </div>
+          <div class="grid-3">
+            <div>
+              <label>ZIP状態</label>
+              <select>
+                <option>PENDING</option>
+                <option>UPLOADED</option>
+                <option>UPLOAD_ERROR</option>
+                <option>PARTIAL</option>
+                <option>CONFIRMED</option>
+              </select>
+            </div>
+            <div>
+              <label>作業者</label>
+              <input value="長尾">
+            </div>
+            <div>
+              <label>確認日時</label>
+              <input value="2026-08-06 16:20">
+            </div>
+          </div>
+          <div>
+            <label>ZIP単位メモ / エラー要約</label>
+            <textarea>HIA画面で札幌きたはち健診センターを選択してアップロード。個人エラーなしならUPLOADEDへ更新。</textarea>
+          </div>
+          <div class="row-actions">
+            <button class="primary">ZIP状態を保存</button>
+            <button>個人全員をUPLOADEDにする</button>
+          </div>
+        </div>
+
+        <div class="panel-lite">
+          <h3>選択ZIPの情報</h3>
+          <div class="kv"><b>出力run</b><span class="code">etl_run_id 144 / 20260806_153000</span></div>
+          <div class="kv"><b>健診機関</b><span>札幌きたはち健診センター</span></div>
+          <div class="kv"><b>保険者</b><span class="code">06139463</span></div>
+          <div class="kv"><b>受診月</b><span>202605</span></div>
+          <div class="kv"><b>ZIP</b><span class="code">0110717770_06139463_202608060_1.zip</span></div>
+          <div class="kv"><b>人数</b><span>12人</span></div>
+          <div class="kv"><b>現在状態</b><span><span class="pill warn">PENDING</span></span></div>
+        </div>
+      </div>
+
+      <div class="pane-head">
+        <h2>個人XML結果</h2>
+        <div class="toolbar">
+          <button>エラーのみ</button>
+          <button>選択行をUPLOADED</button>
+          <button class="primary">個人結果を保存</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table class="member-table">
+          <thead>
+            <tr>
+              <th>状態</th>
+              <th>HIA ID</th>
+              <th>氏名</th>
+              <th>受診日</th>
+              <th>XML</th>
+              <th>エラー / メモ</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="pill">PENDING</span></td>
+              <td class="code">HIA0001842</td>
+              <td>
+                <div>田中 花子</div>
+                <div class="subtle">タナカ ハナコ</div>
+              </td>
+              <td>2026-05-25</td>
+              <td class="code">hc08_0110717770_202608060_000001.xml</td>
+              <td>
+                <div class="inline-edit">
+                  <select>
+                    <option>PENDING</option>
+                    <option>UPLOADED</option>
+                    <option>UPLOAD_ERROR</option>
+                    <option>EXCLUDED</option>
+                  </select>
+                  <input placeholder="エラー内容またはメモ">
+                </div>
+              </td>
+              <td><button class="icon">✓</button></td>
+            </tr>
+            <tr>
+              <td><span class="pill danger">UPLOAD_ERROR</span></td>
+              <td class="code">HIA0001877</td>
+              <td>
+                <div>佐藤 一郎</div>
+                <div class="subtle">サトウ イチロウ</div>
+              </td>
+              <td>2026-05-27</td>
+              <td class="code">hc08_0110717770_202608060_000002.xml</td>
+              <td>
+                <div class="stack">
+                  <select>
+                    <option>UPLOAD_ERROR</option>
+                    <option>UPLOADED</option>
+                    <option>PENDING</option>
+                  </select>
+                  <input value="HIA: 住所必須エラー。補正後に再出力予定">
+                </div>
+              </td>
+              <td><button>詳細</button></td>
+            </tr>
+            <tr>
+              <td><span class="pill ok">UPLOADED</span></td>
+              <td class="code">HIA0001920</td>
+              <td>
+                <div>鈴木 美咲</div>
+                <div class="subtle">スズキ ミサキ</div>
+              </td>
+              <td>2026-05-29</td>
+              <td class="code">hc08_0110717770_202608060_000003.xml</td>
+              <td class="subtle">2026-08-06 16:18 長尾</td>
+              <td><button>戻す</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
