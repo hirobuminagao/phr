@@ -1691,9 +1691,9 @@ HIA XML出力の出力リスト方式
 
 - 画面運用では「出力リスト」を作成し、検索した `exam_export_cases` を追加・確認してからXML出力する方式を正とする。
 - 出力リストは人が操作する作業箱、`etl_runs` は実行ログ、`xml_export_zips` / `xml_export_members` は実際に出力された履歴として責務を分ける。
-- 初期DDL候補名は `xml_export_lists` / `xml_export_list_cases` とする。
+- 初期DDL名は `xml_export_lists` / `xml_export_list_cases` とする。
 - `run_id` という名前はETL実行履歴と混同しやすいため、出力対象の作業箱には使わない。
-- 後続で `xml_export_zips` へ `xml_export_list_id` を追加し、HIAアップロード作業リストから元の出力リストへたどれるようにする候補とする。
+- `xml_export_zips` へ `xml_export_list_id` を追加し、HIAアップロード作業リストから元の出力リストへたどれるようにする。
 - CLIの直接条件指定出力は当面残すが、画面運用の正ルートは出力リスト方式とする。
 
 ### 想定フロー
@@ -1711,10 +1711,30 @@ HIA XML出力の出力リスト方式
 
 ### 保留
 
-- `xml_export_lists` / `xml_export_list_cases` の正式DDL。
 - 出力リストから除外したcaseの履歴をどこまで残すか。
 - 同じcaseを複数の未出力リストへ同時追加できるかどうか。
 - 出力済みcaseを再出力リストへ追加する時の警告・承認項目。
+
+---
+
+## DH-20260806-05 / 2026-08-06 JST
+
+### テーマ
+
+HIA XML出力リストと出力履歴連携の実装
+
+### 背景
+
+- 画面モック確認により、出力対象を検索して一時的な作業箱へ追加し、その作業箱からXML出力する流れが必要と整理した。
+- HIAアップロード作業では、出力ZIPと個人XMLだけでなく、どの出力リストから作られたものかを追える必要がある。
+
+### 決定
+
+- `xml_export_lists` / `xml_export_list_cases` を正式テーブルとして追加する。
+- `xml_export_zips` に `xml_export_list_id` を追加し、ZIP履歴から出力リストへ辿れるようにする。
+- `v_xml_export_hia_upload_worklist` に出力リストID、リスト名、リスト状態を追加する。
+- CLI暫定運用として、`create_xml_export_list.py` で出力リストを作成し、`04_export_hia_xml.py --xml-export-list-id` で対象リストを出力できるようにする。
+- `xml_export_members` は引き続き個人XML単位の出力履歴正本とし、出力成功時に `xml_export_list_cases` も `EXPORTED` へ更新する。
 
 ---
 

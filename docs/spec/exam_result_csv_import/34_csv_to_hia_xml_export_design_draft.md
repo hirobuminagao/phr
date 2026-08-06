@@ -181,8 +181,8 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
 `etl_runs` はスクリプト実行履歴、エラー、処理件数を残す技術ログである。
 出力リストは、どのcaseを今回HIAへ出す候補にしたか、誰が確認したか、どのZIP出力につながったかを管理する業務用リストである。
 
-初期DDL候補は以下とする。
-実装時に既存 `xml_export_zips` / `xml_export_members` との重複を再確認して最終化する。
+初期DDLは `20260806_002_health_exam_result_create_xml_export_lists.sql` で追加する。
+既存 `xml_export_zips` / `xml_export_members` とは責務を分け、出力リストは作業選択、ZIP/memberは出力事実の正本とする。
 
 | table | role |
 | --- | --- |
@@ -201,9 +201,19 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
 | `ERROR` | 出力処理で失敗 |
 | `CANCELLED` | 人が使用しないと判断して閉じた |
 
-`xml_export_zips` には、後続実装で `xml_export_list_id` を持たせる候補とする。
+`xml_export_zips` には `xml_export_list_id` を持たせる。
 これにより、HIAアップロード作業画面で「どの出力リストから作られたZIPか」をたどれる。
 ただし、出力履歴の正本は引き続き `xml_export_zips` / `xml_export_members` であり、出力リストは作業選択の単位である。
+
+CLI暫定運用では、画面の代わりに以下の2段階で実行できる。
+
+```text
+1. scripts/from_medical/dev_tools/create_xml_export_list.py
+   条件に合う export_readiness_status OK相当のcaseを xml_export_lists / xml_export_list_cases へ登録する。
+
+2. scripts/from_medical/04_export_hia_xml.py --xml-export-list-id {xml_export_list_id}
+   出力リストに含まれるcaseだけをZIP出力し、xml_export_zips / xml_export_members へ履歴を残す。
+```
 
 ### Export Processing Flow
 
@@ -312,6 +322,16 @@ HIAアップロード作業では、出力されたZIPを健診機関ごとのHI
 `xml_export_members.hia_upload_status` は個人XML単位の結果を表す。
 初期値は `PENDING` とし、ZIP全体が問題なくアップロードできた場合は対象memberを `UPLOADED` へ更新する。
 HIAが個人単位の取込エラーを返した場合は、該当memberを `UPLOAD_ERROR` とし、`hia_upload_error_code`, `hia_upload_error_message`, `hia_upload_note` に内容を記録する。
+
+画面実装前の暫定運用では、`scripts/from_medical/dev_tools/update_hia_xml_upload_status.py` でZIP単位・個人XML単位のHIAアップロード状態を更新できる。
+
+```text
+ZIP単位でアップロード完了:
+  update_hia_xml_upload_status.py --zip-id {xml_export_zip_id} --zip-status UPLOADED --member-status UPLOADED --apply-to-members --by {operator}
+
+個人XML単位でHIAエラーを記帳:
+  update_hia_xml_upload_status.py --member-id {xml_export_member_id} --member-status UPLOAD_ERROR --error-code {code} --error-message {message} --by {operator}
+```
 
 ### Future Multi-Source Merge Rules
 

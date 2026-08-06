@@ -11,6 +11,7 @@ from scripts.lib.examination.mhlw_v08_xml import ExamItem
 @dataclass(frozen=True)
 class ExportSelectors:
     event_id: int
+    xml_export_list_id: int | None = None
     facility_ids: tuple[int, ...] = ()
     facility_codes: tuple[str, ...] = ()
     file_receipt_ids: tuple[int, ...] = ()
@@ -84,6 +85,17 @@ def fetch_candidates(
 ) -> list[dict[str, Any]]:
     params: list[Any] = [selectors.event_id]
     filters = ["eec.event_id = %s"]
+    if selectors.xml_export_list_id is not None:
+        filters.append(
+            "EXISTS ("
+            f"SELECT 1 FROM {qname(health_db)}.xml_export_list_cases xelc "
+            "WHERE xelc.exam_export_case_id = eec.exam_export_case_id "
+            "AND xelc.xml_export_list_id = %s "
+            "AND xelc.list_case_status IN ('SELECTED', 'READY', 'EXPORT_ERROR') "
+            "AND xelc.removed_at IS NULL"
+            ")"
+        )
+        params.append(selectors.xml_export_list_id)
     if selectors.facility_ids:
         filters.append(f"eec.exam_facility_id IN ({_in_clause(selectors.facility_ids, params)})")
     if selectors.facility_codes:

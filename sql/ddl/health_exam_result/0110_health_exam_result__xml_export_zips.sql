@@ -1,6 +1,7 @@
 CREATE TABLE `health_exam_result`.`xml_export_zips` (
   `xml_export_zip_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `etl_run_id` bigint unsigned NOT NULL,
+  `xml_export_list_id` bigint unsigned DEFAULT NULL COMMENT 'このZIPを作成した出力リスト。CLI直接出力時はNULL',
   `event_id` bigint NOT NULL,
   `exam_facility_id` bigint unsigned NOT NULL,
   `facility_code` varchar(64) NOT NULL,
@@ -32,9 +33,12 @@ CREATE TABLE `health_exam_result`.`xml_export_zips` (
   KEY `idx_xml_export_zips_receiver` (`insurer_number`),
   KEY `idx_xml_export_zips_file_date` (`file_date`),
   KEY `idx_xml_export_zips_hia_upload_status` (`hia_upload_status`),
+  KEY `idx_xml_export_zips_export_list` (`xml_export_list_id`),
   KEY `idx_xml_export_zips_created` (`created_at`),
   CONSTRAINT `fk_xml_export_zips_run`
-    FOREIGN KEY (`etl_run_id`) REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
+    FOREIGN KEY (`etl_run_id`) REFERENCES `health_exam_result`.`etl_runs` (`run_id`),
+  CONSTRAINT `fk_xml_export_zips_export_list`
+    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`xml_export_lists` (`xml_export_list_id`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

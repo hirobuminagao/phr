@@ -2,6 +2,9 @@ CREATE OR REPLACE VIEW `health_exam_result`.`v_xml_export_hia_upload_worklist` A
 SELECT
   zez.`xml_export_zip_id`,
   zem.`xml_export_member_id`,
+  zez.`xml_export_list_id`,
+  xel.`list_name` AS `xml_export_list_name`,
+  xel.`list_status` AS `xml_export_list_status`,
   zez.`etl_run_id`,
   zez.`event_id`,
   zez.`exam_facility_id`,
@@ -55,6 +58,8 @@ SELECT
 FROM `health_exam_result`.`xml_export_zips` AS zez
 INNER JOIN `health_exam_result`.`xml_export_members` AS zem
   ON zem.`xml_export_zip_id` = zez.`xml_export_zip_id`
+LEFT JOIN `health_exam_result`.`xml_export_lists` AS xel
+  ON xel.`xml_export_list_id` = zez.`xml_export_list_id`
 LEFT JOIN `health_exam_result`.`exam_export_cases` AS eec
   ON zem.`ledger_type` = 'CASE'
  AND zem.`ledger_id` = eec.`exam_export_case_id`

@@ -117,6 +117,7 @@ def parse_args() -> argparse.Namespace:
     scope.add_argument("--all-facilities", action="store_true")
     parser.add_argument("--file-receipt-id", type=int, action="append", default=[])
     parser.add_argument("--case-id", "--ledger-id", dest="ledger_id", type=int, action="append", default=[])
+    parser.add_argument("--xml-export-list-id", type=int)
     parser.add_argument("--subscriber-id", type=int, action="append", default=[])
     parser.add_argument("--hia-subscriber-id", action="append", default=[])
     parser.add_argument("--person-id-custom", action="append", default=[])
@@ -181,6 +182,9 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
     facility_codes = tuple(args.facility_code or ()) or _str_tuple(data.get("facility_codes"))
     file_receipt_ids = tuple(args.file_receipt_id or ()) or _int_tuple(data.get("file_receipt_ids"))
     ledger_ids = tuple(args.ledger_id or ()) or _int_tuple(data.get("ledger_ids"))
+    xml_export_list_id = args.xml_export_list_id
+    if xml_export_list_id is None and data.get("xml_export_list_id") not in (None, ""):
+        xml_export_list_id = int(data["xml_export_list_id"])
     subscriber_ids = tuple(args.subscriber_id or ()) or _int_tuple(data.get("subscriber_ids"))
     hia_subscriber_ids = tuple(args.hia_subscriber_id or ()) or _str_tuple(data.get("hia_subscriber_ids"))
     person_id_customs = tuple(args.person_id_custom or ()) or _str_tuple(data.get("person_id_customs"))
@@ -193,18 +197,20 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         and not facility_codes
         and not file_receipt_ids
         and not ledger_ids
+        and xml_export_list_id is None
         and not subscriber_ids
         and not hia_subscriber_ids
         and not person_id_customs
     ):
         raise ValueError(
             "Specify --facility-id, --facility-code, --all-facilities, file_receipt_ids, "
-            "ledger_ids, subscriber_ids, hia_subscriber_ids, or person_id_customs explicitly"
+            "ledger_ids, xml_export_list_id, subscriber_ids, hia_subscriber_ids, or person_id_customs explicitly"
         )
     if exam_month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(exam_month)):
         raise ValueError("exam_month must be YYYY-MM")
     selectors = ExportSelectors(
         event_id=event_id,
+        xml_export_list_id=xml_export_list_id,
         facility_ids=facility_ids,
         facility_codes=facility_codes,
         file_receipt_ids=file_receipt_ids,
@@ -346,19 +352,96 @@ def log_failure(cur: Any, *, run_id: int, summary: ExportSummary, row: Mapping[s
     )
 
 
+def mark_export_list_started(cur: Any, *, config: ExportConfig, run_id: int) -> None:
+    if config.selectors.xml_export_list_id is None:
+        return
+    cur.execute(
+        f"""
+        UPDATE {qname(config.health_db)}.xml_export_lists
+        SET
+          list_status = 'EXPORTING',
+          export_etl_run_id = %s,
+          export_started_at = COALESCE(export_started_at, CURRENT_TIMESTAMP(3)),
+          updated_at = CURRENT_TIMESTAMP(3)
+        WHERE xml_export_list_id = %s
+          AND event_id = %s
+          AND list_status IN ('READY', 'PARTIAL', 'ERROR')
+        """,
+        (run_id, config.selectors.xml_export_list_id, config.selectors.event_id),
+    )
+    if cur.rowcount != 1:
+        raise ValueError(f"XML_EXPORT_LIST_NOT_READY: {config.selectors.xml_export_list_id}")
+
+
+def mark_export_list_finished(cur: Any, *, config: ExportConfig, run_id: int, summary: ExportSummary) -> None:
+    if config.selectors.xml_export_list_id is None:
+        return
+    if summary.errors and summary.members_exported:
+        status = "PARTIAL"
+    elif summary.errors:
+        status = "ERROR"
+    elif summary.members_exported:
+        status = "EXPORTED"
+    else:
+        status = "READY"
+    cur.execute(
+        f"""
+        UPDATE {qname(config.health_db)}.xml_export_lists xel
+        SET
+          xel.list_status = %s,
+          xel.export_etl_run_id = %s,
+          xel.export_finished_at = CURRENT_TIMESTAMP(3),
+          xel.exported_zip_count = (
+            SELECT COUNT(*)
+            FROM {qname(config.health_db)}.xml_export_zips zez
+            WHERE zez.xml_export_list_id = xel.xml_export_list_id
+          ),
+          xel.exported_member_count = (
+            SELECT COUNT(*)
+            FROM {qname(config.health_db)}.xml_export_members zem
+            INNER JOIN {qname(config.health_db)}.xml_export_zips zez
+              ON zez.xml_export_zip_id = zem.xml_export_zip_id
+            WHERE zez.xml_export_list_id = xel.xml_export_list_id
+          ),
+          xel.updated_at = CURRENT_TIMESTAMP(3)
+        WHERE xel.xml_export_list_id = %s
+          AND xel.event_id = %s
+        """,
+        (status, run_id, config.selectors.xml_export_list_id, config.selectors.event_id),
+    )
+
+
+def mark_export_list_case_error(cur: Any, *, config: ExportConfig, exam_export_case_id: int, reason: str) -> None:
+    if config.selectors.xml_export_list_id is None:
+        return
+    cur.execute(
+        f"""
+        UPDATE {qname(config.health_db)}.xml_export_list_cases
+        SET
+          list_case_status = 'EXPORT_ERROR',
+          export_error_reason = %s,
+          updated_at = CURRENT_TIMESTAMP(3)
+        WHERE xml_export_list_id = %s
+          AND exam_export_case_id = %s
+          AND removed_at IS NULL
+        """,
+        (reason, config.selectors.xml_export_list_id, exam_export_case_id),
+    )
+
+
 def insert_history(cur: Any, *, config: ExportConfig, run_id: int, group: list[dict[str, Any]], folder_name: str, split_no: int, root_name: str, zip_path: Path, member_info: list[tuple[dict[str, Any], str, str]]) -> None:
     first = group[0]
     cur.execute(
         f"""
         INSERT INTO {qname(config.health_db)}.xml_export_zips (
-          etl_run_id, event_id, exam_facility_id, facility_code, facility_name,
+          etl_run_id, xml_export_list_id, event_id, exam_facility_id, facility_code, facility_name,
           facility_folder_name, insurer_number, file_date, split_no,
           implementation_code, root_dir_name, zip_file_name, zip_path,
           zip_sha256, member_count, xsd_bundle_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, '1', %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '1', %s, %s, %s, %s, %s, %s)
         """,
         (
-            run_id, config.selectors.event_id, first["exam_facility_id"], first["master_facility_code"],
+            run_id, config.selectors.xml_export_list_id, config.selectors.event_id, first["exam_facility_id"], first["master_facility_code"],
             first["master_facility_name"], folder_name, _digits(first["insurer_number"], 8, "insurer_number"),
             config.file_date, split_no, root_name, zip_path.name, str(zip_path), file_sha256(zip_path),
             len(member_info), config.xsd_bundle_id,
@@ -383,6 +466,22 @@ def insert_history(cur: Any, *, config: ExportConfig, run_id: int, group: list[d
                 row.get("manual_export_reason"), row.get("manual_export_approved_at"), row.get("manual_export_approved_by"),
             ),
         )
+        member_id = int(cur.lastrowid)
+        if config.selectors.xml_export_list_id is not None:
+            cur.execute(
+                f"""
+                UPDATE {qname(config.health_db)}.xml_export_list_cases
+                SET
+                  list_case_status = 'EXPORTED',
+                  exported_xml_export_member_id = %s,
+                  exported_at = CURRENT_TIMESTAMP(3),
+                  updated_at = CURRENT_TIMESTAMP(3)
+                WHERE xml_export_list_id = %s
+                  AND exam_export_case_id = %s
+                  AND removed_at IS NULL
+                """,
+                (member_id, config.selectors.xml_export_list_id, row["exam_export_case_id"]),
+            )
         mark_export_case_exported(
             cur,
             health_db=config.health_db,
@@ -395,16 +494,22 @@ def insert_history(cur: Any, *, config: ExportConfig, run_id: int, group: list[d
     refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.selectors.event_id)
 
 
-def mark_group_export_error(cur: Any, *, health_db: str, event_id: int, run_id: int, group: list[dict[str, Any]], reason: str) -> None:
+def mark_group_export_error(cur: Any, *, config: ExportConfig, run_id: int, group: list[dict[str, Any]], reason: str) -> None:
     for row in group:
         mark_export_case_export_error(
             cur,
-            health_db=health_db,
+            health_db=config.health_db,
             exam_export_case_id=int(row["exam_export_case_id"]),
             reason=reason,
             etl_run_id=run_id,
         )
-    refresh_export_case_readiness(cur, health_db=health_db, event_id=event_id)
+        mark_export_list_case_error(
+            cur,
+            config=config,
+            exam_export_case_id=int(row["exam_export_case_id"]),
+            reason=reason,
+        )
+    refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.selectors.event_id)
 
 
 def build_group(
@@ -543,6 +648,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
             run_id: int | None = None
             if not config.dry_run:
                 run_id = start_run(cur, config, result_root)
+                mark_export_list_started(cur, config=config, run_id=run_id)
                 conn.commit()
             try:
                 candidates = fetch_candidates(
@@ -589,8 +695,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                         if run_id is not None:
                             mark_group_export_error(
                                 cur,
-                                health_db=config.health_db,
-                                event_id=config.selectors.event_id,
+                                config=config,
                                 run_id=run_id,
                                 group=group,
                                 reason=f"{type(exc).__name__}: {exc}",
@@ -615,6 +720,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                 if operator_rows and not config.dry_run:
                     print(f"[LOG] {write_operator_log(result_root, timestamp, operator_rows)}")
                 if run_id is not None:
+                    mark_export_list_finished(cur, config=config, run_id=run_id, summary=summary)
                     etl_finish_run(
                         cur,
                         run_id,
@@ -634,6 +740,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                         error_code="XML_EXPORT_RUN_FAILED",
                         message=f"{type(exc).__name__}: {exc}",
                     )
+                    mark_export_list_finished(cur, config=config, run_id=run_id, summary=summary)
                     etl_finish_run(
                         cur,
                         run_id,
