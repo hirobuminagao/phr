@@ -173,6 +173,26 @@
     .step.active { border-color: #8fc8a9; background: var(--accent-soft); }
     .step b { display: block; font-size: 13px; }
     .step span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .work-block {
+      margin: 14px 15px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .work-block + .work-block { margin-top: 18px; }
+    .work-block.search { border-color: #b9c9e9; }
+    .work-block.selected { border-color: #9cc9b1; }
+    .work-block.zip { border-color: #d4c28c; margin-bottom: 82px; }
+    .work-block.search .pane-head { background: var(--blue-soft); }
+    .work-block.selected .pane-head { background: var(--accent-soft); }
+    .work-block.zip .pane-head { background: var(--warn-soft); }
+    .block-title {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+    .block-title .subtle { line-height: 1.35; }
     .notice {
       border: 1px solid #edc777;
       background: var(--warn-soft);
@@ -252,6 +272,7 @@
       main, .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
       main { padding: 10px; }
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .work-block { margin-left: 10px; margin-right: 10px; }
     }
   </style>
 </head>
@@ -268,7 +289,7 @@
   <main>
     <aside>
       <div class="pane-head">
-        <h2>出力リスト</h2>
+        <h2>出力リスト / 検索条件</h2>
         <span class="pill blue">event 2</span>
       </div>
 
@@ -412,107 +433,116 @@
         </div>
       </div>
 
-      <div class="pane-head">
-        <h2>検索結果</h2>
-        <div class="toolbar">
-          <button>検索</button>
-          <button class="primary">選択した候補を追加</button>
-          <button>詳細確認</button>
-        </div>
-      </div>
-      <div class="block">
-        <div class="search-state">
-          <div class="panel-lite">
-            <h3>検索条件スナップショット</h3>
-            <div class="kv"><b>受診月</b><span>2026-05</span></div>
-            <div class="kv"><b>施設</b><span>3施設指定</span></div>
-            <div class="kv"><b>再出力</b><span>出力済みを含めない</span></div>
-            <div class="kv"><b>状態</b><span>READY / 理由ありOK</span></div>
+      <div class="work-block search">
+        <div class="pane-head">
+          <div class="block-title">
+            <h2>検索結果</h2>
+            <div class="subtle">左の検索条件で候補を再取得する領域。ここではリスト本体は変更しない。</div>
           </div>
-          <div class="panel-lite">
-            <h3>検索後の内訳</h3>
-            <div class="kv"><b>候補</b><span>76人</span></div>
-            <div class="kv"><b>追加可能</b><span>55人</span></div>
-            <div class="kv"><b>追加済み</b><span>18人</span></div>
-            <div class="kv"><b>追加不可</b><span>3人</span></div>
-          </div>
-          <div class="panel-lite">
-            <h3>検索ボタン押下時</h3>
-            <div class="subtle">条件を保存せずに候補だけ再取得する。追加済みの人は消さず、検索結果側に「追加済み」と表示する。</div>
-            <div class="subtle">候補の現在状態が変わっていた場合は、行の状態と理由を最新化する。</div>
+          <div class="toolbar">
+            <button>検索</button>
+            <button class="primary">選択した候補を追加</button>
+            <button>詳細確認</button>
           </div>
         </div>
-      </div>
-      <div class="table-scroll">
-        <table class="case-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>状態</th>
-              <th>健診機関 / 受診日</th>
-              <th>HIA ID</th>
-              <th>氏名</th>
-              <th>リスト状態</th>
-              <th>理由 / 構成元</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><input type="checkbox"></td>
-              <td><span class="pill ok">READY</span></td>
-              <td>
-                <div>札幌きたはち健診センター</div>
-                <div class="subtle">2026-05-25</div>
-              </td>
-              <td class="code">HIA0001842</td>
-              <td>田中 花子</td>
-              <td><span class="pill">未追加</span></td>
-              <td>
-                <div>XML + CSV 結合済み</div>
-                <div class="subtle">XML: source 881 / CSV: source 902</div>
-              </td>
-            </tr>
-            <tr>
-              <td><input type="checkbox"></td>
-              <td><span class="pill warn">理由ありOK</span></td>
-              <td>
-                <div>ヘルスケアクリニック厚木</div>
-                <div class="subtle">2026-05-29</div>
-              </td>
-              <td class="code">HIA0001877</td>
-              <td>佐藤 一郎</td>
-              <td><span class="pill warn">追加済み</span></td>
-              <td>
-                <div>胸部X線 MISSING。妊娠中につき確認済み</div>
-                <div class="subtle">承認: 長尾 / 2026-08-06 14:10</div>
-              </td>
-            </tr>
-            <tr>
-              <td><input type="checkbox"></td>
-              <td><span class="pill danger">BLOCKED</span></td>
-              <td>
-                <div>小禄病院</div>
-                <div class="subtle">2026-05-31</div>
-              </td>
-              <td class="code">HIA0001911</td>
-              <td>山田 太郎</td>
-              <td><span class="pill danger">追加不可</span></td>
-              <td>既往歴、自覚症状、他覚症状 MISSING。医療機関回答待ち</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="block">
+          <div class="search-state">
+            <div class="panel-lite">
+              <h3>検索条件スナップショット</h3>
+              <div class="kv"><b>受診月</b><span>2026-05</span></div>
+              <div class="kv"><b>施設</b><span>3施設指定</span></div>
+              <div class="kv"><b>再出力</b><span>出力済みを含めない</span></div>
+              <div class="kv"><b>状態</b><span>READY / 理由ありOK</span></div>
+            </div>
+            <div class="panel-lite">
+              <h3>検索後の内訳</h3>
+              <div class="kv"><b>候補</b><span>76人</span></div>
+              <div class="kv"><b>追加可能</b><span>55人</span></div>
+              <div class="kv"><b>追加済み</b><span>18人</span></div>
+              <div class="kv"><b>追加不可</b><span>3人</span></div>
+            </div>
+            <div class="panel-lite">
+              <h3>検索ボタン押下時</h3>
+              <div class="subtle">条件を保存せずに候補だけ再取得する。追加済みの人は消さず、検索結果側に「追加済み」と表示する。</div>
+              <div class="subtle">候補の現在状態が変わっていた場合は、行の状態と理由を最新化する。</div>
+            </div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="case-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>状態</th>
+                <th>健診機関 / 受診日</th>
+                <th>HIA ID</th>
+                <th>氏名</th>
+                <th>リスト状態</th>
+                <th>理由 / 構成元</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td><span class="pill ok">READY</span></td>
+                <td>
+                  <div>札幌きたはち健診センター</div>
+                  <div class="subtle">2026-05-25</div>
+                </td>
+                <td class="code">HIA0001842</td>
+                <td>田中 花子</td>
+                <td><span class="pill">未追加</span></td>
+                <td>
+                  <div>XML + CSV 結合済み</div>
+                  <div class="subtle">XML: source 881 / CSV: source 902</div>
+                </td>
+              </tr>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td><span class="pill warn">理由ありOK</span></td>
+                <td>
+                  <div>ヘルスケアクリニック厚木</div>
+                  <div class="subtle">2026-05-29</div>
+                </td>
+                <td class="code">HIA0001877</td>
+                <td>佐藤 一郎</td>
+                <td><span class="pill warn">追加済み</span></td>
+                <td>
+                  <div>胸部X線 MISSING。妊娠中につき確認済み</div>
+                  <div class="subtle">承認: 長尾 / 2026-08-06 14:10</div>
+                </td>
+              </tr>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td><span class="pill danger">BLOCKED</span></td>
+                <td>
+                  <div>小禄病院</div>
+                  <div class="subtle">2026-05-31</div>
+                </td>
+                <td class="code">HIA0001911</td>
+                <td>山田 太郎</td>
+                <td><span class="pill danger">追加不可</span></td>
+                <td>既往歴、自覚症状、他覚症状 MISSING。医療機関回答待ち</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div class="pane-head">
-        <h2>出力リストに追加した人</h2>
-        <div class="toolbar">
-          <button>選択を除外</button>
-          <button>理由ありOK確認</button>
-          <button>詳細確認</button>
+      <div class="work-block selected">
+        <div class="pane-head">
+          <div class="block-title">
+            <h2>出力リストに追加した人</h2>
+            <div class="subtle">今回のXML出力に含める人。検索結果から追加した後はここで確認する。</div>
+          </div>
+          <div class="toolbar">
+            <button>選択を除外</button>
+            <button>理由ありOK確認</button>
+            <button>詳細確認</button>
+          </div>
         </div>
-      </div>
-      <div class="table-scroll">
-        <table class="case-table">
+        <div class="table-scroll">
+          <table class="case-table">
           <thead>
             <tr>
               <th></th>
@@ -571,18 +601,23 @@
               </td>
             </tr>
           </tbody>
-        </table>
-      </div>
-
-      <div class="pane-head">
-        <h2>ZIP予定</h2>
-        <div class="toolbar">
-          <button>再計算</button>
-          <button>グループ詳細</button>
+          </table>
         </div>
       </div>
-      <div class="table-scroll">
-        <table class="group-table">
+
+      <div class="work-block zip">
+        <div class="pane-head">
+          <div class="block-title">
+            <h2>ZIP予定</h2>
+            <div class="subtle">追加済みリストを施設、保険者、受診月でまとめた出力単位。</div>
+          </div>
+          <div class="toolbar">
+            <button>再計算</button>
+            <button>グループ詳細</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="group-table">
           <thead>
             <tr>
               <th>健診機関</th>
@@ -620,7 +655,8 @@
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       <div class="footer-actions">
