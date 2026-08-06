@@ -173,6 +173,22 @@ case単位の法定チェック結果は、source単位checkとは分けて保�
 XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のcaseだけを対象にする。
 出力成功後は、`output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` をcaseへ記録し、`xml_export_zips` / `xml_export_members` にも出力事実を残す。
 
+### Export Selectors
+
+XML出力は、後続の画面操作を見据えて以下の条件を組み合わせて絞り込めるようにする。
+
+| selector | purpose |
+| --- | --- |
+| 健診機関 | 健診機関ごとのHIAアップロードページに合わせてZIPを作る |
+| 受診月 | 既にアップロードした月と、これからアップロードする月を分ける |
+| 受領ファイル | 特定の受領物だけを再確認・出力する |
+| 人単位 | 個別修正後の1人または少人数だけを出力する |
+| 再出力 | 既に出力済みのcaseを、明示指定した時だけ再度出力する |
+
+人単位の指定は `exam_export_case_id`、`subscriber_id`、`hia_subscriber_id`、`person_id_custom` を受け付ける。
+通常運用では `facility_codes + exam_month`、個別修正後は `hia_subscriber_id` または `exam_export_case_id`、再出力時は `include_exported = true` を使う。
+再出力時も過去の出力履歴は削除せず、同日出力回数 `split_no` を自動採番または明示指定して別ZIPとして残す。
+
 ### Future Multi-Source Merge Rules
 
 複数受領ファイルからの結合は、自動推測ではなく、加入者突合済みの行と明示的な結合条件を使う。

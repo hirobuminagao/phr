@@ -15,6 +15,9 @@ class ExportSelectors:
     facility_codes: tuple[str, ...] = ()
     file_receipt_ids: tuple[int, ...] = ()
     ledger_ids: tuple[int, ...] = ()
+    subscriber_ids: tuple[int, ...] = ()
+    hia_subscriber_ids: tuple[str, ...] = ()
+    person_id_customs: tuple[str, ...] = ()
     exam_month: str | None = None
     include_exported: bool = False
     limit: int = 0
@@ -95,6 +98,12 @@ def fetch_candidates(
         )
     if selectors.ledger_ids:
         filters.append(f"eec.exam_export_case_id IN ({_in_clause(selectors.ledger_ids, params)})")
+    if selectors.subscriber_ids:
+        filters.append(f"eec.subscriber_id IN ({_in_clause(selectors.subscriber_ids, params)})")
+    if selectors.hia_subscriber_ids:
+        filters.append(f"eec.hia_subscriber_id IN ({_in_clause(selectors.hia_subscriber_ids, params)})")
+    if selectors.person_id_customs:
+        filters.append(f"eec.person_id_custom IN ({_in_clause(selectors.person_id_customs, params)})")
     if selectors.exam_month:
         filters.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
         params.append(selectors.exam_month)

@@ -117,6 +117,9 @@ def parse_args() -> argparse.Namespace:
     scope.add_argument("--all-facilities", action="store_true")
     parser.add_argument("--file-receipt-id", type=int, action="append", default=[])
     parser.add_argument("--case-id", "--ledger-id", dest="ledger_id", type=int, action="append", default=[])
+    parser.add_argument("--subscriber-id", type=int, action="append", default=[])
+    parser.add_argument("--hia-subscriber-id", action="append", default=[])
+    parser.add_argument("--person-id-custom", action="append", default=[])
     parser.add_argument("--exam-month", help="YYYY-MM")
     parser.add_argument("--include-exported", action="store_true")
     parser.add_argument("--split-no", type=int, choices=range(10))
@@ -178,12 +181,25 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
     facility_codes = tuple(args.facility_code or ()) or _str_tuple(data.get("facility_codes"))
     file_receipt_ids = tuple(args.file_receipt_id or ()) or _int_tuple(data.get("file_receipt_ids"))
     ledger_ids = tuple(args.ledger_id or ()) or _int_tuple(data.get("ledger_ids"))
+    subscriber_ids = tuple(args.subscriber_id or ()) or _int_tuple(data.get("subscriber_ids"))
+    hia_subscriber_ids = tuple(args.hia_subscriber_id or ()) or _str_tuple(data.get("hia_subscriber_ids"))
+    person_id_customs = tuple(args.person_id_custom or ()) or _str_tuple(data.get("person_id_customs"))
     exam_month = args.exam_month if args.exam_month is not None else data.get("exam_month")
     if event_id <= 0:
         raise ValueError("event_id is required")
-    if not all_facilities and not facility_ids and not facility_codes and not file_receipt_ids and not ledger_ids:
+    if (
+        not all_facilities
+        and not facility_ids
+        and not facility_codes
+        and not file_receipt_ids
+        and not ledger_ids
+        and not subscriber_ids
+        and not hia_subscriber_ids
+        and not person_id_customs
+    ):
         raise ValueError(
-            "Specify --facility-id, --facility-code, --all-facilities, file_receipt_ids, or ledger_ids explicitly"
+            "Specify --facility-id, --facility-code, --all-facilities, file_receipt_ids, "
+            "ledger_ids, subscriber_ids, hia_subscriber_ids, or person_id_customs explicitly"
         )
     if exam_month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(exam_month)):
         raise ValueError("exam_month must be YYYY-MM")
@@ -193,6 +209,9 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         facility_codes=facility_codes,
         file_receipt_ids=file_receipt_ids,
         ledger_ids=ledger_ids,
+        subscriber_ids=subscriber_ids,
+        hia_subscriber_ids=hia_subscriber_ids,
+        person_id_customs=person_id_customs,
         exam_month=None if not exam_month else str(exam_month),
         include_exported=bool(args.include_exported or data.get("include_exported", False)),
         limit=args.limit if args.limit is not None else int(data.get("limit") or 0),
