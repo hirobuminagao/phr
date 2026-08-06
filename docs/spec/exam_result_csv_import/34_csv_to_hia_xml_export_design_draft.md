@@ -217,6 +217,9 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
    exam_export_cases から、event、健診機関、受診月、受領ファイル、人単位、再出力条件に合うcaseを取得する。
    対象は export_readiness_status が EXPORT_READY または APPROVED_WITH_REASON のcaseだけとする。
    再出力を明示した場合だけ EXPORTED も候補に含める。
+   検索ボタン押下では、出力リスト本体と追加済みcaseは保存変更せず、検索候補だけを再取得する。
+   検索結果には、未追加、追加済み、追加不可を表示し、既に出力リストへ追加済みのcaseを重複追加しない。
+   検索時点でcase状態が変わっていた場合は、検索結果側に最新の export_readiness_status と理由を表示する。
 
 3. case詳細を確認し、必要なら基本情報補正、理由ありOK、検査値の再取込・再構築を行う。
 
