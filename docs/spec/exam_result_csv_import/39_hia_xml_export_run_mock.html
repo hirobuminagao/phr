@@ -356,8 +356,8 @@
       </div>
 
       <div class="tabs">
-        <div class="tab active">追加済みcase</div>
-        <div class="tab">検索候補</div>
+        <div class="tab active">検索候補</div>
+        <div class="tab">追加済みcase</div>
         <div class="tab">ZIP予定</div>
         <div class="tab">出力不可</div>
         <div class="tab">履歴</div>
@@ -380,10 +380,10 @@
       </div>
 
       <div class="pane-head">
-        <h2>追加済みcase</h2>
+        <h2>検索結果</h2>
         <div class="toolbar">
-          <button>検索候補から追加</button>
-          <button>選択を除外</button>
+          <button>検索</button>
+          <button class="primary">選択した候補を追加</button>
           <button>詳細確認</button>
         </div>
       </div>
@@ -401,7 +401,7 @@
           </thead>
           <tbody>
             <tr>
-              <td><input type="checkbox" checked></td>
+              <td><input type="checkbox"></td>
               <td><span class="pill ok">READY</span></td>
               <td>
                 <div>札幌きたはち健診センター</div>
@@ -415,7 +415,85 @@
               </td>
             </tr>
             <tr>
+              <td><input type="checkbox"></td>
+              <td><span class="pill warn">理由ありOK</span></td>
+              <td>
+                <div>ヘルスケアクリニック厚木</div>
+                <div class="subtle">2026-05-29</div>
+              </td>
+              <td class="code">HIA0001877</td>
+              <td>佐藤 一郎</td>
+              <td>
+                <div>胸部X線 MISSING。妊娠中につき確認済み</div>
+                <div class="subtle">承認: 長尾 / 2026-08-06 14:10</div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="checkbox"></td>
+              <td><span class="pill danger">BLOCKED</span></td>
+              <td>
+                <div>小禄病院</div>
+                <div class="subtle">2026-05-31</div>
+              </td>
+              <td class="code">HIA0001911</td>
+              <td>山田 太郎</td>
+              <td>既往歴、自覚症状、他覚症状 MISSING。医療機関回答待ち</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pane-head">
+        <h2>出力リストに追加した人</h2>
+        <div class="toolbar">
+          <button>選択を除外</button>
+          <button>理由ありOK確認</button>
+          <button>詳細確認</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="case-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>状態</th>
+              <th>健診機関 / 受診日</th>
+              <th>HIA ID</th>
+              <th>氏名</th>
+              <th>理由 / 構成元</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="active">
               <td><input type="checkbox" checked></td>
+              <td><span class="pill ok">READY</span></td>
+              <td>
+                <div>ヒロオカクリニック</div>
+                <div class="subtle">2026-05-20</div>
+              </td>
+              <td class="code">HIA0001810</td>
+              <td>高橋 美咲</td>
+              <td>
+                <div>CSV単独で出力可能</div>
+                <div class="subtle">CSV: source 771</div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="checkbox"></td>
+              <td><span class="pill ok">READY</span></td>
+              <td>
+                <div>札幌きたはち健診センター</div>
+                <div class="subtle">2026-05-25</div>
+              </td>
+              <td class="code">HIA0001842</td>
+              <td>田中 花子</td>
+              <td>
+                <div>XML + CSV 結合済み</div>
+                <div class="subtle">XML: source 881 / CSV: source 902</div>
+              </td>
+            </tr>
+            <tr>
+              <td><input type="checkbox"></td>
               <td><span class="pill warn">理由ありOK</span></td>
               <td>
                 <div>ヘルスケアクリニック厚木</div>
