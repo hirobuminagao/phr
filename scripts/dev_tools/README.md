@@ -45,10 +45,24 @@ CSV本体はgit管理しない。
 原則としてm4検証環境だけに作成し、実行環境には作成・投入しない。
 個人ID、氏名、ファイルパス、CSV行全体は入れない。
 
+実行環境からCSVを作るときは、以下の抽出SQLを使う。
+単位不一致の調査に必要な `raw_unit`, `normalized_unit`, `master_display_unit`, `master_ucum_unit` も出力する。
+
+```text
+sql/dev_tools/extract_exam_item_value_normalize_error_fixtures.sql
+```
+
 事前にDDLまたはmigrationを適用する。
 
 ```powershell
 Get-Content sql/migrations/health_exam_result/20260805_003_health_exam_result_create_exam_item_value_normalize_error_fixtures.sql -Raw |
+  mysql -u USER -p
+```
+
+既にfixtureテーブルを作成済みのm4環境では、単位列追加migrationも適用する。
+
+```powershell
+Get-Content sql/migrations/health_exam_result/20260806_003_health_exam_result_add_units_to_normalize_error_fixtures.sql -Raw |
   mysql -u USER -p
 ```
 

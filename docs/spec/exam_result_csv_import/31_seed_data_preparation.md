@@ -45,8 +45,10 @@ Implemented and expanded.
 `0015_fix_result_code_variant_code_systems.sql` は、実行環境へ適用してよい `phr_master.norm_variants` の安定補正seedである。対象は、陽性/陰性OID `1.2.392.200119.6.2100` と尿定性OID `1.2.392.200119.6.2102` の `code_system` 欠落補正、およびカッコ付き `+` / `-` など実運用で必要なaliasである。
 匿名化済みnormalizeエラーfixtureを保存する `health_exam_result.exam_item_value_normalize_error_fixtures` と、そのimportスクリプトはm4検証・辞書整備用であり、実行環境には適用しない。
 
-`dev_phr.exam_item_master` の任意項目追加は `sql/migrations/dev_phr/20260805_001_dev_phr_add_optional_exam_item_master_from_normalize_errors.sql` で行う。対象は、CSV/XML健診結果で実際に出現し、検査結果として受け止めるべき血清アミラーゼ、BUN、尿pH、尿定性、便潜血、婦人科細胞診、腫瘍マーカー、BNP/NT-proBNP、骨密度などである。
-標準体重、施設独自の総合判定・指導区分、内容が不明な古い検査項目はこの差分では追加しない。これらはマッピング除外、施設確認、または別レイヤーの標準化分析対象とする。
+`dev_phr.exam_item_master` の任意項目追加は `sql/migrations/dev_phr/20260805_001_dev_phr_add_optional_exam_item_master_from_normalize_errors.sql` と `sql/migrations/dev_phr/20260806_003_dev_phr_add_optional_exam_item_master_from_fixtures_v2.sql` で行う。対象は、CSV/XML健診結果で実際に出現し、検査結果として受け止めるべき血清アミラーゼ、BUN、尿pH、尿定性、便潜血、婦人科細胞診、腫瘍マーカー、BNP/NT-proBNP、骨密度、胃がんリスク検査などである。
+標準体重、施設独自の総合判定・指導区分、標準コードとして判断できない `Z...` / `ZG...` 系項目、既存標準項目との同一視に確認が必要な項目はこの差分では追加しない。これらはマッピング除外、施設確認、または別レイヤーの標準化分析対象とする。
+
+単位不一致は、共通normalize libの単位aliasで「同一単位の表記揺れ」だけ吸収する。例として `/uL`, `/μL`, `/㎕` は血球数系で使われる `/mm3` と同義として扱う。数値換算が必要な真の単位差は引き続き `UNIT_MISMATCH` のまま残す。
 
 `dev_phr` のローカル検証用seed:
 

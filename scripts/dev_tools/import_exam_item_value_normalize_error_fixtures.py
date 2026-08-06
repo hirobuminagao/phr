@@ -33,6 +33,22 @@ EXPECTED_HEADER = [
     "namecode_display_name",
     "raw_value",
     "raw_value_type",
+    "raw_unit",
+    "normalized_unit",
+    "master_display_unit",
+    "master_ucum_unit",
+    "code_system",
+    "normalize_status",
+    "normalize_reason",
+    "validation_status",
+    "validation_reason",
+    "cnt",
+]
+LEGACY_HEADER = [
+    "namecode",
+    "namecode_display_name",
+    "raw_value",
+    "raw_value_type",
     "code_system",
     "normalize_status",
     "normalize_reason",
@@ -53,6 +69,10 @@ class NormalizeErrorFixture:
     namecode_display_name: str | None
     raw_value: str | None
     raw_value_type: str | None
+    raw_unit: str | None
+    normalized_unit: str | None
+    master_display_unit: str | None
+    master_ucum_unit: str | None
     code_system: str | None
     normalize_status: str
     normalize_reason: str | None
@@ -147,6 +167,10 @@ def parse_row(
         namecode_display_name=optional_text(row.get("namecode_display_name")),
         raw_value=optional_text(row.get("raw_value")),
         raw_value_type=optional_text(row.get("raw_value_type")),
+        raw_unit=optional_text(row.get("raw_unit")),
+        normalized_unit=optional_text(row.get("normalized_unit")),
+        master_display_unit=optional_text(row.get("master_display_unit")),
+        master_ucum_unit=optional_text(row.get("master_ucum_unit")),
         code_system=optional_text(row.get("code_system")),
         normalize_status=normalize_status,
         normalize_reason=optional_text(row.get("normalize_reason")),
@@ -163,8 +187,11 @@ def read_source(path: Path, *, source_label: str) -> tuple[list[NormalizeErrorFi
 
     with path.open("r", encoding="utf-8-sig", newline="") as fp:
         reader = csv.DictReader(fp)
-        if reader.fieldnames != EXPECTED_HEADER:
-            raise ValueError(f"unexpected header: {reader.fieldnames!r}")
+        if reader.fieldnames not in (EXPECTED_HEADER, LEGACY_HEADER):
+            raise ValueError(
+                "unexpected header: "
+                f"{reader.fieldnames!r}; expected {EXPECTED_HEADER!r} or legacy {LEGACY_HEADER!r}"
+            )
 
         for source_row_no, raw_row in enumerate(reader, start=2):
             summary.rows_read += 1
@@ -203,6 +230,10 @@ def row_params(row: NormalizeErrorFixture) -> tuple[Any, ...]:
         row.namecode_display_name,
         row.raw_value,
         row.raw_value_type,
+        row.raw_unit,
+        row.normalized_unit,
+        row.master_display_unit,
+        row.master_ucum_unit,
         row.code_system,
         row.normalize_status,
         row.normalize_reason,
@@ -223,6 +254,10 @@ def upsert_rows(cur: Any, health_db: str, rows: list[NormalizeErrorFixture], bat
         "namecode_display_name",
         "raw_value",
         "raw_value_type",
+        "raw_unit",
+        "normalized_unit",
+        "master_display_unit",
+        "master_ucum_unit",
         "code_system",
         "normalize_status",
         "normalize_reason",
