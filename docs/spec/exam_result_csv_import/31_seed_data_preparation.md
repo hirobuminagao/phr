@@ -33,6 +33,25 @@ Implemented and expanded.
 既に `0000` から `0003` を適用済みの環境でも、旧export辞書を未投入の場合は `0008` を追加適用する。
 `0004` 以降は実装・検証で増えた差分seedであり、実行環境の最終適用済み地点に応じて追加適用する。
 
+実行環境へ追加反映するDB変更はDB別に管理する。
+
+`dev_phr` migration:
+
+1. `20260805_001_dev_phr_add_optional_exam_item_master_from_normalize_errors.sql`
+2. `20260806_001_dev_phr_add_gastric_cancer_risk_exam_item_master.sql`
+3. `20260806_002_dev_phr_add_clia_tumor_marker_exam_item_master.sql`
+
+`phr_master` migration:
+
+1. `20260806_004_phr_master_create_exam_item_output_policies.sql`
+
+`phr_master` seed:
+
+1. `0015_fix_result_code_variant_code_systems.sql`
+
+上記を適用しただけでは既に取り込んだ `exam_item_values` のnormalize結果は自動更新されない。
+既存データへ反映するには、対象CSV/XMLを `--include-imported` 等で再取込し、その後 `03_00`、`03_01`、`03_02`、`03_04`、必要に応じて `03_05` を再実行する。
+
 `0008_fill_base_norm_variants_from_export_sql.sql` は、旧 `sql/export_sql/norm_variants.sql` の812件を `phr_master.norm_variants` へ補充するseedである。
 `INSERT IGNORE` のため、既に投入済みの辞書やCSVサンプルで追加済みの揺れは上書きしない。
 実行環境で旧export辞書を未投入のまま `0002` / `0007` だけを当てた場合、CD/CO項目の基本値まで `NORMALIZE_VARIANT_NOT_FOUND` になるため、追加seedとして適用する。

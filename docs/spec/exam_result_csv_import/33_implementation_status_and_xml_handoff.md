@@ -2,7 +2,7 @@
 
 ## Status
 
-Current as of 2026-08-05.
+Current as of 2026-08-06.
 
 この文書は、CSV健診結果取込について、採用済み決定事項と現行実装の差分を同期し、次工程のCSVからXML作成へ引き継ぐための現在正である。
 
@@ -88,7 +88,7 @@ Current as of 2026-08-05.
 
 ### Format and Mapping
 
-以下の5 formatを同一seedへ登録済みである。
+以下のformatをseedへ登録済みである。
 
 | facility | mapping version | header |
 | --- | --- | --- |
@@ -97,6 +97,8 @@ Current as of 2026-08-05.
 | 渋谷ウェストヒルズクリニック | `SHIBUYA_WESTHILLS_2026_05_PATTERN_A_V1` | 1行 |
 | ハートクロス健診プラザ赤坂駅前 | `HEARTCROSS_2026_05_PATTERN_B_V1` | 2行 |
 | 医療法人 禄寿会 小禄病院 | `OROKU_2026_05_JOINED_PATTERN_C_V1` | 結合済みCSV |
+| 医療法人社団平世会村上医院 | `MURAKAMI_IIN_2026_05_PAPER_CSV_V1` | 紙入力由来CSV |
+| 医療法人社団明日佳 札幌きたはち健診センター | `SAPPORO_KITAHACHI_2026_05_PATTERN_A_V1` | 1行 |
 
 小禄病院CSVの `医療機関コード` は施設内コードのためmapping対象外とし、健診機関コード・名称は `file_receipts` のマスタ由来スナップショットを採用する。
 
@@ -143,6 +145,10 @@ Current as of 2026-08-05.
 - 未実施、キャンセル、測定不能などはrawを残し、`SKIPPED` / `WARNING` と理由を残す。
 - CSVサンプルで確認したコード値の表記は追加seedで整備済みである。
 - 辞書にない値は自動推測せず `NORMALIZE_VARIANT_NOT_FOUND` とする。
+- m4 fixtureと実行環境エラーから、血清アミラーゼ、BUN、尿pH、尿定性、便潜血、腫瘍マーカー、BNP/NT-proBNP、骨密度、胃がんリスク検査、CA125/CA19-9 CLIA法variantなど、検査結果として受け止める任意項目を `exam_item_master` へ正式追加済みである。
+- ヘリコバクターピロリ抗体、ペプシノゲン、ABCD分類、CA125、CA19-9は検査結果として受け止めるため、出力ポリシーseedでは止めない。
+- `Z...` / `ZG...` 系の施設独自コード、指導区分、施設由来総合判定、標準項目との同一視に確認が必要な項目は、`exam_item_master` へ追加せず、取込エラーまたは確認待ちとして残す。
+- 現時点で残るnormalize/masterエラーは、主に値なし、施設確認待ち、`Z...` / `ZG...` 系、標準コードと表示内容の不一致、raw値ゆれであり、構造不足ではなく個別判断の領域に寄っている。
 
 ### Check Results
 
@@ -192,9 +198,10 @@ Current as of 2026-08-05.
 | concept groups | テーブルは存在する | `ANNEX2_IDENTITY` 197件と入力支援bundleのseedは未作成 |
 | 非測定値語YAML | YAML管理を採用済み | 現状は `value_normalizer.py` のPython定数 |
 | norm辞書一括lookup | 単品・一括APIは存在する | CSV importerは単品APIを使用中 |
+| 出力画面 | モックで出力リスト、case詳細、HIAアップロード作業の方向性を確認済み | 次工程でFastAPI/ローカル画面の要件モックを再整理する |
 
 上表は採用済み仕様を廃止するものではない。
-現行サンプルの処理に必要になった時点、またはFastAPIテンプレート登録へ進む時点で実装する。
+現行サンプルの処理に必要になった時点、またはFastAPIテンプレート登録・出力画面へ進む時点で実装する。
 
 ## Evidence Placement
 
@@ -284,7 +291,8 @@ CSV取込の再設計は不要である。XML出力について以下を確定�
 
 ## Readiness Conclusion
 
-現行5 formatについて、CSV受領から `exam_item_values` 登録、normalize、加入者突合、法定チェックまでの基盤は実装済みである。
-高度な汎用mapping機能には未実装が残るが、現在の5サンプルをCSVからXMLへ進めることを妨げない。
+現行登録済みformatについて、CSV受領から `exam_item_values` 登録、normalize、加入者突合、法定チェック、結合出力用case作成までの基盤は実装済みである。
+高度な汎用mapping機能には未実装が残るが、現在のCSV/XMLサンプルをXML出力へ進めることを妨げない。
 
-CSV台帳・結果値からXMLを組み立て、M4で個人XML、XSD検証、ZIP、DB履歴、業務向け出力履歴CSVまで一連確認済みである。次工程は実行環境へmigration・seedを適用し、対象施設の確認済みCSVで同じRunを行うことである。
+CSV/XML由来の統合ledgerと採用済み整値からXMLを組み立て、M4および実行環境で個人XML、XSD検証、ZIP、DB履歴、出力リストまで一連確認済みである。
+次工程は、残normalizeエラーの個別判断を継続しつつ、出力リスト作成、case詳細確認、HIAアップロード記帳を扱う画面要件モックへ進むことである。
