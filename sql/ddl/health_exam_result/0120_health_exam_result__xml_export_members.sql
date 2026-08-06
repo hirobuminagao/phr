@@ -16,6 +16,12 @@ CREATE TABLE `health_exam_result`.`xml_export_members` (
   `manual_export_reason` text,
   `manual_export_approved_at` datetime(3) DEFAULT NULL,
   `manual_export_approved_by` varchar(190) DEFAULT NULL,
+  `hia_upload_status` varchar(32) NOT NULL DEFAULT 'PENDING' COMMENT '個人XML単位のHIAアップロード結果。PENDING/UPLOADED/UPLOAD_ERROR/EXCLUDED等',
+  `hia_upload_error_code` varchar(64) DEFAULT NULL COMMENT 'HIAアップロード時の個人単位エラーコードまたは分類',
+  `hia_upload_error_message` text DEFAULT NULL COMMENT 'HIAアップロード時の個人単位エラー内容',
+  `hia_upload_note` text DEFAULT NULL COMMENT 'HIAアップロード個人単位メモ',
+  `hia_uploaded_at` datetime(3) DEFAULT NULL COMMENT '個人XMLのHIAアップロード完了確認日時',
+  `hia_uploaded_by` varchar(190) DEFAULT NULL COMMENT '個人XMLのHIAアップロード完了確認者',
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
   PRIMARY KEY (`xml_export_member_id`),
@@ -25,6 +31,7 @@ CREATE TABLE `health_exam_result`.`xml_export_members` (
   KEY `idx_xml_export_members_source` (`ledger_type`, `ledger_id`),
   KEY `idx_xml_export_members_receipt` (`source_file_receipt_id`),
   KEY `idx_xml_export_members_subscriber` (`subscriber_id`),
+  KEY `idx_xml_export_members_hia_upload_status` (`hia_upload_status`),
   CONSTRAINT `fk_xml_export_members_zip`
     FOREIGN KEY (`xml_export_zip_id`) REFERENCES `health_exam_result`.`xml_export_zips` (`xml_export_zip_id`)
 )

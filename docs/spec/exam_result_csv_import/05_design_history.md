@@ -1650,3 +1650,25 @@ HIA XML出力のcase起点化
 - 出力履歴 `xml_export_members` は `ledger_type = CASE`, `ledger_id = exam_export_cases.exam_export_case_id` として記録する。
 - 出力成功時は `exam_export_cases.xml_export_status`, `output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を更新する。
 - 出力失敗時は該当caseを `EXPORT_ERROR` に寄せ、`etl_errors` に理由を残す。
+
+---
+
+## DH-20260806-02 / 2026-08-06 JST
+
+### テーマ
+
+HIAアップロード作業リストのDB履歴化
+
+### 背景
+
+- HIAアップロードは健診機関ごとの画面からZIPを手作業でアップロードする。
+- 出力CSVログだけでは、出力run、健診機関、ZIP、個人XML、アップロード完了、個人単位エラーを後から追いにくい。
+- 画面から出力リストを見て、エクスプローラーで対象ZIPを開き、HIAへアップロードし、完了やエラー内容を記帳する作業が必要になる。
+
+### 決定・実装内容
+
+- `xml_export_zips` にZIP単位のHIAアップロード作業状態を追加する。
+- `xml_export_members` に個人XML単位のHIAアップロード結果、エラーコード、エラー内容、メモを追加する。
+- 初期状態はZIP単位、個人XML単位ともに `PENDING` とする。
+- 画面・確認SQL向けに `v_xml_export_hia_upload_worklist` を追加する。
+- このVIEWで、病院毎、出力run毎、ZIP毎、元ファイル毎、個人毎に出力履歴とHIAアップロード状態を確認できるようにする。

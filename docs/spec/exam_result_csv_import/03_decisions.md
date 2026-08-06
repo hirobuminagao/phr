@@ -151,6 +151,8 @@ Current as of 2026-08-05.
 - XML出力済みのcaseには、`output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を保持する。これは後続の出力画面、HIAアップロード依頼、再出力判断のための証跡である。
 - CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
 - 結合出力用caseの `xml_export_status` は、構成元 `exam_ledgers` の技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。
+- HIAアップロード作業リストは `xml_export_zips` / `xml_export_members` を拡張して保持する。ZIP単位のアップロード状態は `xml_export_zips.hia_upload_status`、個人XML単位のエラーや記帳は `xml_export_members.hia_upload_status` とエラー列に持つ。
+- 画面・確認SQL向けには `v_xml_export_hia_upload_worklist` を使い、病院毎、出力run毎、ZIP毎、個人毎に出力履歴とHIAアップロード状態を確認できるようにする。
 - ledgerが増える、再取込される、checkが更新される、結合出力用caseが更新されるたびに、該当者の `person_event_status_items` は再同期される。
 - 検査値は、ファイル由来のsource値と、納品・XML出力用の清書値を分けて扱う。
 - source値はraw、normalize、validation、由来、エラーを持つ処理・証跡層とする。

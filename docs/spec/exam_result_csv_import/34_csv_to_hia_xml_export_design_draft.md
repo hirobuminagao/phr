@@ -203,6 +203,7 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
    xml_export_zips にZIP単位の履歴を登録する。
    xml_export_members に case単位の個人XML履歴を ledger_type = CASE で登録する。
    exam_export_cases を EXPORTED に更新し、ZIP/XMLファイル名、出力日時、etl_run_idを記録する。
+   HIAアップロード作業状態は ZIP単位、個人XML単位ともに PENDING として開始する。
 
 7. 次のグループを処理する。
 ```
@@ -227,6 +228,37 @@ XML出力は、後続の画面操作を見据えて以下の条件を組み合�
 通常運用では `facility_codes + exam_month`、個別修正後は `hia_subscriber_id` または `exam_export_case_id`、再出力時は `include_exported = true` を使う。
 再出力時も過去の出力履歴は削除せず、`EXPORTED` のcaseを明示的に対象へ戻す。
 同日出力回数 `split_no` は健診機関フォルダ配下の既存ZIP名から自動採番するか、明示指定して別ZIPとして残す。
+
+### HIA Upload Worklist
+
+HIAアップロード作業では、出力されたZIPを健診機関ごとのHIA画面から手作業でアップロードする。
+そのため、出力履歴は単なるCSVログだけでなく、DB上の作業リストとしても保持する。
+
+作業リストの正本は以下とする。
+
+| level | table | role |
+| --- | --- | --- |
+| ZIP単位 | `xml_export_zips` | 健診機関、出力run、ZIPパス、HIAアップロード作業状態を持つ |
+| 個人XML単位 | `xml_export_members` | ZIP内の個人XML、case、加入者、個人単位アップロード結果・エラーを持つ |
+| 一覧表示 | `v_xml_export_hia_upload_worklist` | 画面・確認SQL向けにZIP、個人、case、元ファイルを横断して表示する |
+
+想定作業は以下である。
+
+```text
+1. 出力run、健診機関、受診月でアップロード対象ZIPを一覧する。
+2. 一覧の zip_path またはフォルダパスをコピーしてエクスプローラーで開く。
+3. HIAの健診機関ページで対象ZIPをアップロードする。
+4. ZIP単位でアップロード完了、エラー、確認者、確認日時、メモを記帳する。
+5. HIAが個人単位エラーを返す場合は、xml_export_members に個人単位エラー内容を記帳する。
+6. 後続の再出力、修正、再アップロード対象は、この履歴から抽出する。
+```
+
+`xml_export_zips.hia_upload_status` はZIP単位の作業状態を表す。
+初期値は `PENDING` とし、画面または運用スクリプトで `UPLOADED`, `UPLOAD_ERROR`, `PARTIAL`, `CONFIRMED` 等へ更新する。
+
+`xml_export_members.hia_upload_status` は個人XML単位の結果を表す。
+初期値は `PENDING` とし、ZIP全体が問題なくアップロードできた場合は対象memberを `UPLOADED` へ更新する。
+HIAが個人単位の取込エラーを返した場合は、該当memberを `UPLOAD_ERROR` とし、`hia_upload_error_code`, `hia_upload_error_message`, `hia_upload_note` に内容を記録する。
 
 ### Future Multi-Source Merge Rules
 
