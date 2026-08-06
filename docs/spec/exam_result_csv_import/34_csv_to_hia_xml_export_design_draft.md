@@ -217,6 +217,10 @@ CLI暫定運用では、画面の代わりに以下の2段階で実行できる�
    出力リストに含まれるcaseだけをZIP出力し、xml_export_zips / xml_export_members へ履歴を残す。
 ```
 
+画面未実装期間の通常Runでは、`export_hia_xml.yml` の `use_latest_xml_export_list: true` を正とする。
+そのため、`03_05_create_xml_export_list.py` でREADYリストを作成した直後に `04_export_hia_xml.py` を引数なしで実行すると、最新のREADY出力リストを自動選択して出力する。
+直接条件指定で出す場合だけ、`--xml-export-list-id`, `--all-facilities`, `--facility-code`, `--case-id` 等を明示する。
+
 ### Export Processing Flow
 
 画面運用での基本処理は、以下の順序とする。
@@ -858,14 +862,15 @@ scripts/from_medical/config/export_hia_xml.yml
 
 対象条件はYAMLで以下を指定できる。CLIで同じ条件を指定した場合はCLIを優先する。
 
-- `all_facilities`: `true` の場合、指定event内の全施設を対象にする。
+- `use_latest_xml_export_list`: `true` の場合、明示条件がない通常Runでは最新READY出力リストを自動選択する。
+- `all_facilities`: `true` の場合、指定event内の全施設を直接条件指定で対象にする。
 - `facility_codes`: 複数の健診機関コードを指定する。手動運用では原則こちらを使用する。
 - `facility_ids`: `exam_facilities.exam_facility_id` の内部IDを指定する。
 - `file_receipt_ids`: 受領ファイル単位で指定する。
 - `ledger_ids`: CSV行台帳単位で個人を指定する。
 - `exam_month`: `YYYY-MM` で受診月を指定する。全施設月指定を行う場合は `all_facilities: true` も明示する。
 
-誤出力防止のため、`all_facilities` / `facility_codes` / `facility_ids` / `file_receipt_ids` / `ledger_ids` のいずれもない場合は停止する。
+誤出力防止のため、`use_latest_xml_export_list` も、`xml_export_list_id` / `all_facilities` / `facility_codes` / `facility_ids` / `file_receipt_ids` / `ledger_ids` 等の明示条件もない場合は停止する。
 
 CLIの `--health-db` / `--dev-db` / `--master-db` でschema名を上書きできる。
 M4 Dockerでは `--dev-db m4_dev_phr` を指定し、実行環境では既定の `dev_phr` を使用する。

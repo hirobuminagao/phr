@@ -166,7 +166,8 @@ Current as of 2026-08-05.
 - `03_00_check_imported_exam_ledgers.py` はfile/row source単位の法定check、`03_04_check_exam_export_cases.py` は結合後case単位の法定checkであり、役割が違うため両方実行する。
 - `sync_exam_ledgers.py` は通常運用の必須手順ではない。旧個別ledgerからの初回移行、復旧、再構築用に限定する。
 - `03_05_create_xml_export_list.py` は画面実装前の正式CLI入口として、出力可能な `exam_export_cases` を `xml_export_lists` / `xml_export_list_cases` へまとめる。通常はREADYリストを作成し、必要な場合のみ `--draft` で下書きにする。
-- `04_export_hia_xml.py` は `exam_export_cases` / `exam_export_case_values` 起点でXMLを出力する。画面運用の正ルートでは `--xml-export-list-id` を指定して、確定済み出力リストから出力する。
+- `04_export_hia_xml.py` は `exam_export_cases` / `exam_export_case_values` 起点でXMLを出力する。画面運用の正ルートでは出力リストから出力する。
+- 画面未実装期間の通常Runでは、`04_export_hia_xml.py` は明示条件がない場合に最新のREADY出力リストを自動選択する。直接条件指定で出したい場合のみ `--xml-export-list-id`, `--all-facilities`, `--facility-code`, `--case-id` 等を明示する。
 
 ### XML Import Current Rules
 

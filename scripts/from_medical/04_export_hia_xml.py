@@ -10,7 +10,7 @@ import sys
 import tempfile
 import zipfile
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Mapping, cast
@@ -76,6 +76,7 @@ class ExportConfig:
     master_db: str
     xsd_bundle_id: str
     all_facilities: bool
+    use_latest_xml_export_list: bool
     split_no: int | None
     file_date: date
     dry_run: bool
@@ -118,6 +119,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--file-receipt-id", type=int, action="append", default=[])
     parser.add_argument("--case-id", "--ledger-id", dest="ledger_id", type=int, action="append", default=[])
     parser.add_argument("--xml-export-list-id", type=int)
+    parser.add_argument("--latest-xml-export-list", action="store_true", help="Use the latest READY XML export list when no explicit target selector is specified.")
+    parser.add_argument("--no-latest-xml-export-list", action="store_true", help="Disable latest XML export list fallback from YAML.")
     parser.add_argument("--subscriber-id", type=int, action="append", default=[])
     parser.add_argument("--hia-subscriber-id", action="append", default=[])
     parser.add_argument("--person-id-custom", action="append", default=[])
@@ -189,6 +192,9 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
     hia_subscriber_ids = tuple(args.hia_subscriber_id or ()) or _str_tuple(data.get("hia_subscriber_ids"))
     person_id_customs = tuple(args.person_id_custom or ()) or _str_tuple(data.get("person_id_customs"))
     exam_month = args.exam_month if args.exam_month is not None else data.get("exam_month")
+    use_latest_xml_export_list = bool(data.get("use_latest_xml_export_list", False) or args.latest_xml_export_list)
+    if args.no_latest_xml_export_list:
+        use_latest_xml_export_list = False
     if event_id <= 0:
         raise ValueError("event_id is required")
     if (
@@ -198,13 +204,15 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         and not file_receipt_ids
         and not ledger_ids
         and xml_export_list_id is None
+        and not use_latest_xml_export_list
         and not subscriber_ids
         and not hia_subscriber_ids
         and not person_id_customs
     ):
         raise ValueError(
             "Specify --facility-id, --facility-code, --all-facilities, file_receipt_ids, "
-            "ledger_ids, xml_export_list_id, subscriber_ids, hia_subscriber_ids, or person_id_customs explicitly"
+            "ledger_ids, xml_export_list_id, subscriber_ids, hia_subscriber_ids, person_id_customs, "
+            "or use_latest_xml_export_list explicitly"
         )
     if exam_month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(exam_month)):
         raise ValueError("exam_month must be YYYY-MM")
@@ -229,6 +237,7 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         master_db=str(args.master_db or data.get("master_db") or "phr_master"),
         xsd_bundle_id=str(data.get("xsd_bundle_id") or "mhlw_v4_20230331_v08"),
         all_facilities=all_facilities,
+        use_latest_xml_export_list=use_latest_xml_export_list,
         split_no=args.split_no if args.split_no is not None else _optional_split_no(data.get("split_no")),
         file_date=_parse_file_date(args.file_date if args.file_date is not None else data.get("file_date")),
         dry_run=bool(args.dry_run or data.get("dry_run", False)),
@@ -241,6 +250,46 @@ def fetch_result_root(cur: Any, config: ExportConfig) -> Path:
     if not row or not row.get("result_root_path"):
         raise ValueError(f"event.result_root_path is missing: event_id={config.selectors.event_id}")
     return Path(str(row["result_root_path"]))
+
+
+def has_explicit_export_target(config: ExportConfig) -> bool:
+    selectors = config.selectors
+    return bool(
+        config.all_facilities
+        or selectors.xml_export_list_id is not None
+        or selectors.facility_ids
+        or selectors.facility_codes
+        or selectors.file_receipt_ids
+        or selectors.ledger_ids
+        or selectors.subscriber_ids
+        or selectors.hia_subscriber_ids
+        or selectors.person_id_customs
+    )
+
+
+def resolve_latest_xml_export_list(cur: Any, config: ExportConfig) -> ExportConfig:
+    if not config.use_latest_xml_export_list or has_explicit_export_target(config):
+        return config
+    cur.execute(
+        f"""
+        SELECT xml_export_list_id, list_name, list_status
+        FROM {qname(config.health_db)}.xml_export_lists
+        WHERE event_id = %s
+          AND list_status IN ('READY', 'PARTIAL', 'ERROR')
+        ORDER BY xml_export_list_id DESC
+        LIMIT 1
+        """,
+        (config.selectors.event_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError(f"XML_EXPORT_LIST_NOT_FOUND: latest READY list not found for event_id={config.selectors.event_id}")
+    list_id = int(row["xml_export_list_id"])
+    print(f"[LIST] xml_export_list_id={list_id} list_name={row.get('list_name')} status={row.get('list_status')}")
+    return replace(
+        config,
+        selectors=replace(config.selectors, xml_export_list_id=list_id),
+    )
 
 
 def _digits(value: Any, width: int, field: str) -> str:
@@ -645,6 +694,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
     with connect_ctx(params, database=config.health_db, autocommit=False) as conn:
         with dict_cursor(conn) as cur:
             result_root = fetch_result_root(cur, config)
+            config = resolve_latest_xml_export_list(cur, config)
             run_id: int | None = None
             if not config.dry_run:
                 run_id = start_run(cur, config, result_root)

@@ -1759,6 +1759,25 @@ HIA XML出力リストと出力履歴連携の実装
 
 ---
 
+## DH-20260806-07 / 2026-08-06 JST
+
+### テーマ
+
+画面未実装期間のXML出力を最新READY出力リストへ寄せる
+
+### 背景
+
+- `03_05_create_xml_export_list.py` で出力リストを作っても、`04_export_hia_xml.py` のYAML既定が直接全施設出力のままだと、順番にRunした時に「最後に作ったリスト」が使われない。
+- 画面がない期間も、スクリプトだけで `03_05 -> 04` の運用を安全に回したい。
+
+### 決定
+
+- `export_hia_xml.yml` の既定を `use_latest_xml_export_list: true`, `all_facilities: false` とする。
+- `04_export_hia_xml.py` は、明示条件がない場合に最新のREADY/PARTIAL/ERROR出力リストを自動選択する。
+- `--xml-export-list-id`, `--all-facilities`, `--facility-code`, `--case-id` 等を明示した場合は、その明示条件を優先する。
+
+---
+
 ## DH-20260806-04 / 2026-08-06 JST
 
 ### テーマ
