@@ -53,8 +53,9 @@ Current as of 2026-08-05.
 
 実行履歴の根は既存どおり `etl_runs` とし、CSV専用のrun親テーブルは追加していない。
 
-`04_export_hia_xml.py` は、2026-08-05時点では旧CSV行台帳起点の出力経路が残っている。
-今後の正は `exam_export_cases` / `exam_export_case_values` 起点であり、出力後は `exam_export_cases` の出力ファイル証跡カラムと `xml_export_zips` / `xml_export_members` の履歴を更新する。
+`04_export_hia_xml.py` は `exam_export_cases` / `exam_export_case_values` 起点へ切り替え済みである。
+出力対象は `export_readiness_status` が `EXPORT_READY` または `APPROVED_WITH_REASON` のcaseとし、出力後は `exam_export_cases` の出力ファイル証跡カラムと `xml_export_zips` / `xml_export_members` の履歴を更新する。
+`xml_export_members` は `ledger_type = CASE`, `ledger_id = exam_export_cases.exam_export_case_id` で出力対象を記録する。
 
 ## Implemented Scope
 

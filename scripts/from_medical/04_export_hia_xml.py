@@ -25,10 +25,14 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.from_medical.script_lib.hia_xml_export_loader import (
     ExportSelectors,
     decide_candidate,
-    detect_unresolved_duplicates,
     facility_folder_name,
     fetch_candidates,
     fetch_valid_items,
+)
+from scripts.from_medical.script_lib.export_case_readiness import (
+    mark_export_case_export_error,
+    mark_export_case_exported,
+    refresh_export_case_readiness,
 )
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -59,7 +63,7 @@ from scripts.lib.identity.primitive.digits import extract_digits, zero_pad
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "export_hia_xml.yml"
 DEFAULT_XSD_ROOT = Path(__file__).resolve().parent / "source" / "XSD"
 ETL_PHASE = "EXPORT_HIA_XML"
-ETL_SOURCE = "FROM_MEDICAL_CSV"
+ETL_SOURCE = "FROM_MEDICAL"
 UPLOAD_DIR_NAME = "03_健診結果（アップロードデータ）"
 HISTORY_DIR_NAME = "xml作成_出力履歴"
 
@@ -112,7 +116,7 @@ def parse_args() -> argparse.Namespace:
     scope.add_argument("--facility-code", action="append", default=[])
     scope.add_argument("--all-facilities", action="store_true")
     parser.add_argument("--file-receipt-id", type=int, action="append", default=[])
-    parser.add_argument("--ledger-id", type=int, action="append", default=[])
+    parser.add_argument("--case-id", "--ledger-id", dest="ledger_id", type=int, action="append", default=[])
     parser.add_argument("--exam-month", help="YYYY-MM")
     parser.add_argument("--include-exported", action="store_true")
     parser.add_argument("--split-no", type=int, choices=range(10))
@@ -314,7 +318,7 @@ def log_failure(cur: Any, *, run_id: int, summary: ExportSummary, row: Mapping[s
         src_file=None if row is None else str(row.get("source_file_name") or "") or None,
         row_no=None if row is None else int(row.get("src_row_no") or 0) or None,
         line_no=None if row is None else int(row.get("src_line_no") or 0) or None,
-        staging_rowid=None if row is None else int(row["csv_row_ledger_id"]),
+        staging_rowid=None if row is None else int(row["exam_export_case_id"]),
         person_id_custom=None if row is None else str(row.get("person_id_custom") or "") or None,
         field="xml_export",
         field_value=None,
@@ -351,26 +355,37 @@ def insert_history(cur: Any, *, config: ExportConfig, run_id: int, group: list[d
               person_xml_file_name, person_xml_sha256, report_category_code,
               program_type_code, manual_export_approved, manual_export_reason,
               manual_export_approved_at, manual_export_approved_by
-            ) VALUES (%s, %s, %s, 'CSV', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, 'CASE', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                zip_id, run_id, config.selectors.event_id, row["csv_row_ledger_id"], row["file_receipt_id"],
+                zip_id, run_id, config.selectors.event_id, row["exam_export_case_id"], row.get("file_receipt_id"),
                 row.get("subscriber_id"), row.get("hia_subscriber_id"), filename, digest,
                 row["health_exam_report_category"], row["program_code"], bool(row.get("manual_export_approved")),
                 row.get("manual_export_reason"), row.get("manual_export_approved_at"), row.get("manual_export_approved_by"),
             ),
         )
-        cur.execute(
-            f"UPDATE {qname(config.health_db)}.csv_row_ledger SET xml_export_status = 'EXPORTED' WHERE csv_row_ledger_id = %s",
-            (row["csv_row_ledger_id"],),
+        mark_export_case_exported(
+            cur,
+            health_db=config.health_db,
+            exam_export_case_id=int(row["exam_export_case_id"]),
+            output_zip_path=str(zip_path),
+            output_zip_file_name=zip_path.name,
+            output_xml_file_name=filename,
+            etl_run_id=run_id,
         )
+    refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.selectors.event_id)
 
 
-def mark_group_export_error(cur: Any, *, health_db: str, group: list[dict[str, Any]]) -> None:
-    cur.executemany(
-        f"UPDATE {qname(health_db)}.csv_row_ledger SET xml_export_status = 'ERROR' WHERE csv_row_ledger_id = %s",
-        [(row["csv_row_ledger_id"],) for row in group],
-    )
+def mark_group_export_error(cur: Any, *, health_db: str, event_id: int, run_id: int, group: list[dict[str, Any]], reason: str) -> None:
+    for row in group:
+        mark_export_case_export_error(
+            cur,
+            health_db=health_db,
+            exam_export_case_id=int(row["exam_export_case_id"]),
+            reason=reason,
+            etl_run_id=run_id,
+        )
+    refresh_export_case_readiness(cur, health_db=health_db, event_id=event_id)
 
 
 def build_group(
@@ -445,9 +460,9 @@ def build_group(
                 postal_code=fields.postal_code,
                 address=fields.address,
             )
-            items = fetch_valid_items(cur, ledger_id=int(row["csv_row_ledger_id"]), health_db=config.health_db, dev_db=config.dev_db)
+            items = fetch_valid_items(cur, ledger_id=int(row["exam_export_case_id"]), health_db=config.health_db, dev_db=config.dev_db)
             if not items:
-                raise ValueError(f"NO_VALID_EXAM_ITEMS: ledger_id={row['csv_row_ledger_id']}")
+                raise ValueError(f"NO_VALID_EXAM_ITEMS: case_id={row['exam_export_case_id']}")
             content = xml_bytes(build_clinical_document(person, facility, items, file_date))
             validate_xml(content, bundle_dir / "hc08_V08.xsd")
             filename = person_xml_file_name(facility_code, file_date, split_no, sequence)
@@ -523,22 +538,9 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                     decision = decide_candidate(row)
                     if decision.reason:
                         summary.skipped += 1
-                        print(f"[SKIP] ledger_id={row['csv_row_ledger_id']} reason={decision.reason}")
+                        print(f"[SKIP] case_id={row['exam_export_case_id']} reason={decision.reason}")
                         continue
                     ready.append(row)
-                duplicate_ids = detect_unresolved_duplicates(ready)
-                if duplicate_ids:
-                    deduplicated: list[dict[str, Any]] = []
-                    for row in ready:
-                        if int(row["csv_row_ledger_id"]) in duplicate_ids:
-                            summary.skipped += 1
-                            print(
-                                f"[SKIP] ledger_id={row['csv_row_ledger_id']} "
-                                "reason=MULTIPLE_SOURCE_ROWS_UNRESOLVED"
-                            )
-                        else:
-                            deduplicated.append(row)
-                    ready = deduplicated
                 summary.candidates_ready = len(ready)
                 groups: dict[tuple[int, str, str], list[dict[str, Any]]] = defaultdict(list)
                 for row in ready:
@@ -566,7 +568,14 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                     except Exception as exc:
                         conn.rollback()
                         if run_id is not None:
-                            mark_group_export_error(cur, health_db=config.health_db, group=group)
+                            mark_group_export_error(
+                                cur,
+                                health_db=config.health_db,
+                                event_id=config.selectors.event_id,
+                                run_id=run_id,
+                                group=group,
+                                reason=f"{type(exc).__name__}: {exc}",
+                            )
                             log_failure(
                                 cur,
                                 run_id=run_id,

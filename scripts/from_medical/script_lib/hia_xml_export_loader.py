@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.mhlw_v08_xml import ExamItem
-from scripts.lib.identity.base_norm import base_normalize
-from scripts.lib.identity.primitive.digits import extract_digits, zero_pad
 
 
 @dataclass(frozen=True)
@@ -38,6 +35,8 @@ def check_reason_is_missing_only(reason: Any) -> bool:
 
 
 def decide_candidate(row: Mapping[str, Any]) -> CandidateDecision:
+    if row.get("export_readiness_status") not in ("EXPORT_READY", "APPROVED_WITH_REASON"):
+        return CandidateDecision(False, row.get("export_readiness_reason") or "NOT_EXPORT_READY")
     required = (
         ("health_exam_report_category", "REPORT_CATEGORY_MISSING"),
         ("program_code", "PROGRAM_CODE_MISSING"),
@@ -81,23 +80,31 @@ def fetch_candidates(
     master_db: str,
 ) -> list[dict[str, Any]]:
     params: list[Any] = [selectors.event_id]
-    filters = ["crl.event_id = %s"]
+    filters = ["eec.event_id = %s"]
     if selectors.facility_ids:
-        filters.append(f"crl.exam_facility_id IN ({_in_clause(selectors.facility_ids, params)})")
+        filters.append(f"eec.exam_facility_id IN ({_in_clause(selectors.facility_ids, params)})")
     if selectors.facility_codes:
         filters.append(f"ef.exam_facility_code IN ({_in_clause(selectors.facility_codes, params)})")
     if selectors.file_receipt_ids:
-        filters.append(f"crl.file_receipt_id IN ({_in_clause(selectors.file_receipt_ids, params)})")
+        filters.append(
+            "EXISTS ("
+            f"SELECT 1 FROM {qname(health_db)}.exam_export_case_sources src_filter "
+            "WHERE src_filter.exam_export_case_id = eec.exam_export_case_id "
+            f"AND src_filter.file_receipt_id IN ({_in_clause(selectors.file_receipt_ids, params)})"
+            ")"
+        )
     if selectors.ledger_ids:
-        filters.append(f"crl.csv_row_ledger_id IN ({_in_clause(selectors.ledger_ids, params)})")
+        filters.append(f"eec.exam_export_case_id IN ({_in_clause(selectors.ledger_ids, params)})")
     if selectors.exam_month:
-        filters.append("DATE_FORMAT(crl.exam_date, '%Y-%m') = %s")
+        filters.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
         params.append(selectors.exam_month)
     if not selectors.include_exported:
         filters.append(
             f"NOT EXISTS (SELECT 1 FROM {qname(health_db)}.xml_export_members xem "
-            "WHERE xem.ledger_type = 'CSV' AND xem.ledger_id = crl.csv_row_ledger_id)"
+            "WHERE xem.ledger_type = 'CASE' AND xem.ledger_id = eec.exam_export_case_id)"
         )
+        filters.append("eec.xml_export_status <> 'EXPORTED'")
+    filters.append("eec.export_readiness_status IN ('EXPORT_READY', 'APPROVED_WITH_REASON')")
     limit_sql = ""
     if selectors.limit:
         limit_sql = "LIMIT %s"
@@ -106,55 +113,43 @@ def fetch_candidates(
     cur.execute(
         f"""
         SELECT
-          crl.*,
-          fr.relative_path,
-          fr.file_name AS source_file_name,
+          eec.*,
+          src.file_receipt_id,
+          src.relative_path,
+          src.file_name AS source_file_name,
           ef.exam_facility_code AS master_facility_code,
           ef.exam_facility_name AS master_facility_name,
-          ef.postal_code AS master_facility_postal_code,
-          ef.address AS master_facility_address,
-          ef.phone_number AS master_facility_phone_number
-        FROM {qname(health_db)}.csv_row_ledger crl
-        INNER JOIN {qname(health_db)}.file_receipts fr ON fr.id = crl.file_receipt_id
-        INNER JOIN {qname(master_db)}.exam_facilities ef ON ef.exam_facility_id = crl.exam_facility_id
+          COALESCE(eec.exam_facility_postal_code, ef.postal_code) AS master_facility_postal_code,
+          COALESCE(eec.exam_facility_address, ef.address) AS master_facility_address,
+          COALESCE(eec.exam_facility_phone_number, ef.phone_number) AS master_facility_phone_number
+        FROM {qname(health_db)}.exam_export_cases eec
+        LEFT JOIN (
+          SELECT
+            ecs.exam_export_case_id,
+            MIN(ecs.file_receipt_id) AS file_receipt_id,
+            SUBSTRING_INDEX(
+              GROUP_CONCAT(fr.relative_path ORDER BY ecs.source_priority, ecs.exam_export_case_source_id SEPARATOR '\\n'),
+              '\\n',
+              1
+            ) AS relative_path,
+            SUBSTRING_INDEX(
+              GROUP_CONCAT(fr.file_name ORDER BY ecs.source_priority, ecs.exam_export_case_source_id SEPARATOR '\\n'),
+              '\\n',
+              1
+            ) AS file_name
+          FROM {qname(health_db)}.exam_export_case_sources ecs
+          LEFT JOIN {qname(health_db)}.file_receipts fr ON fr.id = ecs.file_receipt_id
+          WHERE ecs.source_status = 'ACTIVE'
+          GROUP BY ecs.exam_export_case_id
+        ) src ON src.exam_export_case_id = eec.exam_export_case_id
+        INNER JOIN {qname(master_db)}.exam_facilities ef ON ef.exam_facility_id = eec.exam_facility_id
         WHERE {' AND '.join(filters)}
-        ORDER BY crl.exam_facility_id, crl.insurer_number, crl.exam_date, crl.csv_row_ledger_id
+        ORDER BY eec.exam_facility_id, eec.insurer_number, eec.exam_date, eec.exam_export_case_id
         {limit_sql}
         """,
         tuple(params),
     )
     return [dict(row) for row in cur.fetchall()]
-
-
-def detect_unresolved_duplicates(rows: Iterable[Mapping[str, Any]]) -> set[int]:
-    rows = list(rows)
-
-    def canonical_insurer(value: Any) -> str:
-        digits = extract_digits(base_normalize(None if value is None else str(value)))
-        return zero_pad(digits, 8) or ""
-
-    rows_and_keys = [
-        (row, (
-            row.get("event_id"),
-            row.get("exam_facility_id"),
-            canonical_insurer(row.get("insurer_number")),
-            row.get("subscriber_id"),
-            row.get("exam_date"),
-        ))
-        for row in rows
-        if row.get("event_id") is not None
-        and row.get("exam_facility_id") is not None
-        and canonical_insurer(row.get("insurer_number"))
-        and row.get("subscriber_id") is not None
-        and row.get("exam_date") is not None
-    ]
-    keys = [key for _, key in rows_and_keys]
-    counts = Counter(keys)
-    return {
-        int(row["csv_row_ledger_id"])
-        for row, key in rows_and_keys
-        if counts[key] > 1
-    }
 
 
 def facility_folder_name(relative_path: Any) -> str:
@@ -168,34 +163,32 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str) 
     cur.execute(
         f"""
         SELECT
-          eiv.namecode,
-          COALESCE(NULLIF(eiv.section_code, ''), NULLIF(em.cda_section_code_default, ''), '01990') AS section_code,
-          COALESCE(NULLIF(eiv.raw_value_type, ''), em.xml_value_type, 'ST') AS value_type,
-          eiv.normalized_value,
-          COALESCE(NULLIF(eiv.normalized_unit, ''), NULLIF(em.ucum_unit, ''), NULLIF(em.display_unit, '')) AS normalized_unit,
-          eiv.nullflavor,
-          COALESCE(NULLIF(eiv.code_system, ''), NULLIF(em.result_code_oid, '')) AS code_system,
-          eiv.code_value,
-          eiv.code_display,
-          eiv.interpretation_code,
-          eiv.interpretation_code_system,
-          eiv.interpretation_name,
-          COALESCE(NULLIF(eiv.namecode_display_name, ''), em.item_name) AS display_name,
+          ecv.namecode,
+          COALESCE(NULLIF(em.cda_section_code_default, ''), '01990') AS section_code,
+          COALESCE(em.xml_value_type, 'ST') AS value_type,
+          ecv.normalized_value,
+          COALESCE(NULLIF(ecv.normalized_unit, ''), NULLIF(em.ucum_unit, ''), NULLIF(em.display_unit, '')) AS normalized_unit,
+          ecv.nullflavor,
+          NULLIF(em.result_code_oid, '') AS code_system,
+          ecv.code_value,
+          ecv.code_display,
+          ecv.interpretation_code,
+          NULL AS interpretation_code_system,
+          ecv.interpretation_name,
+          em.item_name AS display_name,
           em.xml_method_code AS method_code,
-          NULLIF(eiv.source_reference_lower, '') AS source_reference_lower,
-          NULLIF(eiv.source_reference_upper, '') AS source_reference_upper,
+          NULLIF(ecv.source_reference_lower, '') AS source_reference_lower,
+          NULLIF(ecv.source_reference_upper, '') AS source_reference_upper,
           em.annex2_series_group_identifier AS series_group_identifier,
           em.annex2_series_group_relation_code AS series_group_relation_code,
-          eiv.negation_ind,
-          eiv.occurrence_no,
-          COALESCE(eiv.jun_no, em.jun_no) AS jun_no
-        FROM {qname(health_db)}.exam_item_values eiv
-        LEFT JOIN {qname(dev_db)}.exam_item_master em ON em.namecode = eiv.namecode
-        WHERE eiv.ledger_type = 'CSV'
-          AND eiv.ledger_id = %s
-          AND eiv.validation_status = 'VALID'
-          AND eiv.namecode IS NOT NULL
-        ORDER BY COALESCE(eiv.jun_no, em.jun_no), eiv.id
+          ecv.negation_ind,
+          ecv.occurrence_no,
+          em.jun_no AS jun_no
+        FROM {qname(health_db)}.exam_export_case_values ecv
+        LEFT JOIN {qname(dev_db)}.exam_item_master em ON em.namecode = ecv.namecode
+        WHERE ecv.exam_export_case_id = %s
+          AND ecv.namecode IS NOT NULL
+        ORDER BY COALESCE(em.jun_no, 999999), ecv.exam_export_case_value_id
         """,
         (ledger_id,),
     )

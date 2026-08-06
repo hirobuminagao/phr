@@ -14,7 +14,7 @@ facility_codes: []
 facility_ids: []
 # file_receipt_ids: health_exam_result.file_receipts.id.
 file_receipt_ids: []
-# ledger_ids: health_exam_result.csv_row_ledger.csv_row_ledger_id.
+# ledger_ids: health_exam_result.exam_export_cases.exam_export_case_id.
 ledger_ids: []
 # exam_month: YYYY-MM. Use with all_facilities/facility_codes/facility_ids/file_receipt_ids/ledger_ids.
 exam_month:

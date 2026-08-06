@@ -1627,3 +1627,26 @@ XML importの基本情報backfillと受診者住所抽出
 - 受診者住所は `recordTarget/patientRole/addr` だけから抽出し、医療機関住所は使わない。
 - 住所は `state + city + streetAddressLine` を優先し、タグ外mixed contentが住所として入るXMLでは `postalCode` を除いた本文をfallbackとして扱う。
 - `02_import_xml.py --include-imported` は取込済み、`WARNING`、既存XML ledgerが `READY/PENDING` のもののbackfillにも使う。
+
+---
+
+## DH-20260806-01 / 2026-08-06 JST
+
+### テーマ
+
+HIA XML出力のcase起点化
+
+### 背景
+
+- 取込と法定checkは `exam_ledgers`、人単位の結合出力候補は `exam_export_cases` / `exam_export_case_values` へ寄せる方針に整理済みだった。
+- しかし `04_export_hia_xml.py` は旧CSV行台帳起点の候補取得、値取得、出力済み更新が残っていた。
+- XML+CSV結合後の人単位caseを出力するには、04もcase起点に揃える必要があった。
+
+### 決定・実装内容
+
+- `04_export_hia_xml.py` の出力候補取得を `exam_export_cases` 起点に変更した。
+- 出力対象は `export_readiness_status` が `EXPORT_READY` または `APPROVED_WITH_REASON` のcaseとする。
+- XML出力値は `exam_export_case_values` から取得し、XML項目メタ情報は `exam_item_master` で補う。
+- 出力履歴 `xml_export_members` は `ledger_type = CASE`, `ledger_id = exam_export_cases.exam_export_case_id` として記録する。
+- 出力成功時は `exam_export_cases.xml_export_status`, `output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を更新する。
+- 出力失敗時は該当caseを `EXPORT_ERROR` に寄せ、`etl_errors` に理由を残す。
