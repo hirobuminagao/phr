@@ -50,6 +50,7 @@ Implemented and expanded.
 施設独自の総合判定・指導区分、標準コードとして判断できない `Z...` / `ZG...` 系項目、既存標準項目との同一視に確認が必要な項目はこの差分では追加しない。これらはマッピング除外、施設確認、または別レイヤーの標準化分析対象とする。
 
 `sql/migrations/dev_phr/20260806_001_dev_phr_add_gastric_cancer_risk_exam_item_master.sql` は、m4 fixture候補から胃がんリスク検査系を正式昇格したmigrationである。対象はヘリコバクターピロリ抗体IgG判定、ABCD分類、ヘリコバクターピロリ抗体、ペプシノゲン1、ペプシノゲン2、ペプシノゲン1/2比、ペプシノゲン判定である。これらは検査結果として受け止める項目であり、出力ポリシーseedでは止めない。
+`sql/migrations/dev_phr/20260806_002_dev_phr_add_clia_tumor_marker_exam_item_master.sql` は、CA125とCA19-9のCLIA法variantを正式昇格したmigrationである。既存のその他/不明method版と同じく任意腫瘍マーカー値として受け止め、出力ポリシーseedでは止めない。
 
 施設確認後に「XMLへそのまま出す」または「証跡のみ残してXMLへ出さない」を切り替える項目は、normalize辞書や `exam_item_master` だけで表現しない。
 `phr_master.exam_item_output_policies` に `exam_facility_id` と `namecode` 単位で登録し、`INCLUDE` / `EXCLUDE` / `REVIEW_REQUIRED` を指定する。
