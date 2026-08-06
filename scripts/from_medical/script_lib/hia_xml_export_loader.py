@@ -183,7 +183,7 @@ def facility_folder_name(relative_path: Any) -> str:
     return text.split("/", 1)[0]
 
 
-def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str) -> list[ExamItem]:
+def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, master_db: str) -> list[ExamItem]:
     cur.execute(
         f"""
         SELECT
@@ -209,9 +209,20 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str) 
           ecv.occurrence_no,
           em.jun_no AS jun_no
         FROM {qname(health_db)}.exam_export_case_values ecv
+        INNER JOIN {qname(health_db)}.exam_export_cases eec
+          ON eec.exam_export_case_id = ecv.exam_export_case_id
         LEFT JOIN {qname(dev_db)}.exam_item_master em ON em.namecode = ecv.namecode
+        LEFT JOIN {qname(master_db)}.exam_item_output_policies AS fpolicy
+          ON fpolicy.exam_facility_id = eec.exam_facility_id
+         AND fpolicy.namecode = ecv.namecode
+         AND fpolicy.is_active = 1
+        LEFT JOIN {qname(master_db)}.exam_item_output_policies AS gpolicy
+          ON gpolicy.exam_facility_id = 0
+         AND gpolicy.namecode = ecv.namecode
+         AND gpolicy.is_active = 1
         WHERE ecv.exam_export_case_id = %s
           AND ecv.namecode IS NOT NULL
+          AND COALESCE(fpolicy.output_policy, gpolicy.output_policy, 'INCLUDE') = 'INCLUDE'
         ORDER BY COALESCE(em.jun_no, 999999), ecv.exam_export_case_value_id
         """,
         (ledger_id,),

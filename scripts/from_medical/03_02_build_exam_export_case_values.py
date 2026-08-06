@@ -35,6 +35,7 @@ ETL_SOURCE = "FROM_MEDICAL"
 class BuildValueConfig:
     event_id: int
     health_db: str
+    master_db: str
     dry_run: bool
     limit_cases: int
     include_review_required: bool
@@ -79,6 +80,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-review-required", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
+    parser.add_argument("--master-db", default="phr_master")
     return parser.parse_args()
 
 
@@ -94,6 +96,7 @@ def validate_config(config: BuildValueConfig) -> None:
     if config.limit_cases < 0:
         raise ValueError("limit_cases must be >= 0")
     qname(config.health_db)
+    qname(config.master_db)
 
 
 def fetch_cases(cur: Any, config: BuildValueConfig) -> list[dict[str, Any]]:
@@ -118,7 +121,9 @@ def fetch_cases(cur: Any, config: BuildValueConfig) -> list[dict[str, Any]]:
     return [dict(row) for row in cur.fetchall()]
 
 
-def fetch_case_items(cur: Any, config: BuildValueConfig, case_id: int) -> list[dict[str, Any]]:
+def fetch_case_items(cur: Any, config: BuildValueConfig, case_row: dict[str, Any]) -> list[dict[str, Any]]:
+    case_id = int(case_row["exam_export_case_id"])
+    exam_facility_id = case_row.get("exam_facility_id")
     cur.execute(
         f"""
         SELECT
@@ -142,18 +147,29 @@ def fetch_case_items(cur: Any, config: BuildValueConfig, case_id: int) -> list[d
           eiv.`interpretation_name`,
           eiv.`source_reference_lower`,
           eiv.`source_reference_upper`,
-          eiv.`negation_ind`
+          eiv.`negation_ind`,
+          COALESCE(fpolicy.`output_policy`, gpolicy.`output_policy`, 'INCLUDE') AS `output_policy`,
+          COALESCE(fpolicy.`policy_reason`, gpolicy.`policy_reason`) AS `output_policy_reason`
         FROM {qname(config.health_db)}.`exam_export_case_sources` AS src
         INNER JOIN {qname(config.health_db)}.`exam_item_values` AS eiv
           ON eiv.`ledger_type` = 'EXAM'
          AND eiv.`ledger_id` = src.`source_exam_ledger_id`
+        LEFT JOIN {qname(config.master_db)}.`exam_item_output_policies` AS fpolicy
+          ON fpolicy.`exam_facility_id` = %s
+         AND fpolicy.`namecode` = eiv.`namecode`
+         AND fpolicy.`is_active` = 1
+        LEFT JOIN {qname(config.master_db)}.`exam_item_output_policies` AS gpolicy
+          ON gpolicy.`exam_facility_id` = 0
+         AND gpolicy.`namecode` = eiv.`namecode`
+         AND gpolicy.`is_active` = 1
         WHERE src.`exam_export_case_id` = %s
           AND src.`source_status` = 'ACTIVE'
           AND eiv.`validation_status` = 'VALID'
           AND eiv.`namecode` IS NOT NULL
+          AND COALESCE(fpolicy.`output_policy`, gpolicy.`output_policy`, 'INCLUDE') <> 'EXCLUDE'
         ORDER BY src.`source_priority`, eiv.`namecode`, eiv.`occurrence_no`, eiv.`id`
         """,
-        (case_id,),
+        (exam_facility_id, case_id),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -289,9 +305,13 @@ def choose_default(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any] | N
 def selected_values(
     items: list[dict[str, Any]],
     rules: dict[tuple[str, int], list[dict[str, Any]]],
-) -> tuple[list[tuple[dict[str, Any], str]], int]:
+) -> tuple[list[tuple[dict[str, Any], str]], int, list[str]]:
     grouped: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
+    review_required: list[str] = []
     for item in items:
+        if str(item.get("output_policy") or "").upper() == "REVIEW_REQUIRED":
+            review_required.append(str(item["namecode"]))
+            continue
         grouped[(str(item["namecode"]), int(item.get("occurrence_no") or 1))].append(item)
     selected: list[tuple[dict[str, Any], str]] = []
     rules_applied = 0
@@ -307,7 +327,7 @@ def selected_values(
             chosen, reason = choose_default(candidates)
         if chosen is not None and reason is not None:
             selected.append((chosen, reason))
-    return selected, rules_applied
+    return selected, rules_applied, sorted(set(review_required))
 
 
 VALUE_COLUMNS = [
@@ -445,13 +465,18 @@ def build_case_values(conn: Any, config: BuildValueConfig) -> BuildValueSummary:
             if case_row.get("merge_status") == "REVIEW_REQUIRED" and not config.include_review_required:
                 summary.cases_skipped += 1
                 continue
-            items = fetch_case_items(cur, config, case_id)
+            items = fetch_case_items(cur, config, case_row)
             rules = fetch_precedence_rules(cur, config, case_row)
-            selected, rules_applied = selected_values(items, rules)
+            selected, rules_applied, review_required = selected_values(items, rules)
             deleted = clear_case_values(cur, config, case_id)
-            inserted = insert_case_values(cur, config, case_row=case_row, selected=selected, run_id=run_id)
+            inserted = 0
+            if not review_required:
+                inserted = insert_case_values(cur, config, case_row=case_row, selected=selected, run_id=run_id)
             status = "READY" if inserted else "NO_VALUES"
             reason = None if inserted else "no valid source exam_item_values"
+            if review_required:
+                status = "REVIEW_REQUIRED"
+                reason = "output policy review required: " + ",".join(review_required)
             update_case_value_status(cur, config, case_id=case_id, status=status, reason=reason, count=inserted, run_id=run_id)
             summary.values_deleted += deleted
             summary.values_inserted += inserted
@@ -469,6 +494,7 @@ def main() -> int:
     config = BuildValueConfig(
         event_id=args.event_id,
         health_db=args.health_db,
+        master_db=args.master_db,
         dry_run=bool(args.dry_run),
         limit_cases=int(args.limit_cases or 0),
         include_review_required=bool(args.include_review_required),

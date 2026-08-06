@@ -633,7 +633,13 @@ def build_group(
                 postal_code=fields.postal_code,
                 address=fields.address,
             )
-            items = fetch_valid_items(cur, ledger_id=int(row["exam_export_case_id"]), health_db=config.health_db, dev_db=config.dev_db)
+            items = fetch_valid_items(
+                cur,
+                ledger_id=int(row["exam_export_case_id"]),
+                health_db=config.health_db,
+                dev_db=config.dev_db,
+                master_db=config.master_db,
+            )
             if not items:
                 raise ValueError(f"NO_VALID_EXAM_ITEMS: case_id={row['exam_export_case_id']}")
             content = xml_bytes(build_clinical_document(person, facility, items, file_date))

@@ -162,6 +162,10 @@ Current as of 2026-08-05.
 - ただし健診機関XMLの `9N511 医師の診断(判定)` に「メタボリックシンドローム判定にて非該当です。」のような制度判定の口語説明だけが入るケースがあるため、全項目フラグではなく `exam_item_value_precedence_rules` によるnamecode単位の例外ルールで制御する。
 - 採用例外ルールは、`CSV_FIRST` / `CSV_IF_XML_MATCHES_PATTERN` / `JOIN_XML_CSV` / `MANUAL_REVIEW` を表現できるようにする。取り込み時のsource値は改変せず、結合出力用caseの採用済み整値を作る時だけ適用する。
 - 初期ルールとして、XML側の `9N511` がメタボリックシンドローム判定の口語説明のみで、CSV側の `9N511` が存在する場合はCSV側を採用する。
+- 施設独自項目、標準コード不一致、健診機関確認待ち項目は、取込時にsource値として保持する。XML出力へ含めるかどうかは `phr_master.exam_item_output_policies` で制御する。
+- `exam_item_output_policies.exam_facility_id = 0` は全施設共通、施設ID指定は施設別上書きとする。policyは `INCLUDE` / `EXCLUDE` / `REVIEW_REQUIRED` を持つ。
+- `INCLUDE` は従来通りXML出力候補、`EXCLUDE` は証跡・case値作成元には残すがXML出力しない、`REVIEW_REQUIRED` は医療機関確認または運用判断が完了するまでcase値作成を停止する。
+- output policy未登録の項目は `INCLUDE` とみなし、既存の正常項目出力を止めない。
 - 通常の実行順は、`01_scan_files.py`、必要に応じて `01_01_match_csv_format.py`、`02_import_xml.py`、`02_02_exam_result_csv_import.py`、`03_00_check_imported_exam_ledgers.py`、`03_01_build_exam_export_cases.py`、`03_02_build_exam_export_case_values.py`、`03_04_check_exam_export_cases.py`、`03_05_create_xml_export_list.py`、`04_export_hia_xml.py` とする。
 - `03_00_check_imported_exam_ledgers.py` はfile/row source単位の法定check、`03_04_check_exam_export_cases.py` は結合後case単位の法定checkであり、役割が違うため両方実行する。
 - `sync_exam_ledgers.py` は通常運用の必須手順ではない。旧個別ledgerからの初回移行、復旧、再構築用に限定する。

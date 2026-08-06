@@ -154,6 +154,25 @@ XML exporterは case checkがOK、または理由ありOKのcaseだけを読み�
 case単位の法定チェック結果は、source単位checkとは分けて保持する。
 実装入口は `03_04_check_exam_export_cases.py` とし、保存先は結合出力用caseを参照する。
 
+### Item Output Policy
+
+CSV/XMLから受け取った検査値は、標準コード不一致や施設独自項目であっても証跡として `exam_item_values` に残す。
+一方で、HIA提出用XMLへ出すかどうかは別判断であるため、`phr_master.exam_item_output_policies` で `namecode` 単位に出力制御する。
+
+| policy | behavior |
+| --- | --- |
+| `INCLUDE` | XML出力候補に含める。policy未登録時の既定値 |
+| `EXCLUDE` | 取込証跡は残すが、case値作成およびXML出力から除外する |
+| `REVIEW_REQUIRED` | 医療機関確認または運用判断が完了するまでcase値作成を停止する |
+
+`exam_facility_id = 0` は全施設共通、施設ID指定は施設別上書きとする。
+例えば `ZG...` 指導区分系のように検査結果XMLへ出すべきでない施設独自項目は `EXCLUDE`、`5C120 BNP` のように標準コードとの同一視が危ない項目は `REVIEW_REQUIRED` として扱える。
+
+制御点は2段に分ける。
+`03_02_build_exam_export_case_values.py` は `EXCLUDE` を採用済み整値に入れず、`REVIEW_REQUIRED` が含まれるcaseは `value_build_status = REVIEW_REQUIRED` として停止する。
+`04_export_hia_xml.py` は出力直前にも `INCLUDE` の項目だけを読む。
+これにより、取り込み後にpolicyを変更して再出力しても、証跡を壊さず出力対象だけを切り替えられる。
+
 ### Export Readiness Status
 
 人が「この人は出力してよいか」を見る列は、`exam_export_cases.export_readiness_status` / `export_readiness_reason` とする。

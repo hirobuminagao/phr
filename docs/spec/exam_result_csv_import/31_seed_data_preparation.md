@@ -46,10 +46,15 @@ Implemented and expanded.
 匿名化済みnormalizeエラーfixtureを保存する `health_exam_result.exam_item_value_normalize_error_fixtures` と、そのimportスクリプトはm4検証・辞書整備用であり、実行環境には適用しない。
 
 `dev_phr.exam_item_master` の任意項目追加は、正式に採用したものだけ `sql/migrations/dev_phr/20260805_001_dev_phr_add_optional_exam_item_master_from_normalize_errors.sql` のような実行環境向けmigrationで行う。m4でfixture CSVを検証して作った追加候補は `sql/dev_tools/candidates/add_optional_exam_item_master_from_fixtures_v2_candidate.sql` に置き、実行環境にはそのまま適用しない。
-対象候補は、CSV/XML健診結果で実際に出現し、検査結果として受け止めるべき血清アミラーゼ、BUN、尿pH、尿定性、便潜血、婦人科細胞診、腫瘍マーカー、BNP/NT-proBNP、骨密度、胃がんリスク検査などである。
-標準体重、施設独自の総合判定・指導区分、標準コードとして判断できない `Z...` / `ZG...` 系項目、既存標準項目との同一視に確認が必要な項目はこの差分では追加しない。これらはマッピング除外、施設確認、または別レイヤーの標準化分析対象とする。
+対象候補は、CSV/XML健診結果で実際に出現し、検査結果として受け止めるべき血清アミラーゼ、BUN、尿pH、尿定性、便潜血、標準体重、婦人科細胞診、腫瘍マーカー、BNP/NT-proBNP、骨密度、胃がんリスク検査などである。
+施設独自の総合判定・指導区分、標準コードとして判断できない `Z...` / `ZG...` 系項目、既存標準項目との同一視に確認が必要な項目はこの差分では追加しない。これらはマッピング除外、施設確認、または別レイヤーの標準化分析対象とする。
 
-単位不一致は、共通normalize libの単位aliasで「同一単位の表記揺れ」だけ吸収する。例として `/uL`, `/μL`, `/㎕` は血球数系で使われる `/mm3` と同義として扱う。数値換算が必要な真の単位差は引き続き `UNIT_MISMATCH` のまま残す。
+施設確認後に「XMLへそのまま出す」または「証跡のみ残してXMLへ出さない」を切り替える項目は、normalize辞書や `exam_item_master` だけで表現しない。
+`phr_master.exam_item_output_policies` に `exam_facility_id` と `namecode` 単位で登録し、`INCLUDE` / `EXCLUDE` / `REVIEW_REQUIRED` を指定する。
+全施設共通ルールは `exam_facility_id = 0`、施設別判断は実際の `exam_facility_id` を指定する。
+policy未登録の項目は `INCLUDE` として扱うため、seed不足だけで既存出力を止めない。
+
+単位不一致は、共通normalize libの単位aliasで「同一単位の表記揺れ」だけ吸収する。例として `/uL`, `/μL`, `/㎕` は血球数系で使われる `/mm3` と同義として扱う。eGFRの `ml/min/{1.73m2}`, `ml/min./1.73m2`, `ml/min/1.7`, `ml/分` は、namecodeがeGFRで値域も同等であるため `mL/min/{1.73_m2}` へ寄せる。数値換算が必要な真の単位差は引き続き `UNIT_MISMATCH` のまま残す。
 
 `dev_phr` のローカル検証用seed:
 

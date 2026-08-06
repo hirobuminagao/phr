@@ -33,6 +33,7 @@ INSERT INTO `dev_phr`.`exam_item_master` (
   `annex2_legal_report_flag`,
   `cda_section_code_default`
 ) VALUES
+('Z9N06000000000001', '標準体重', 'PQ', '1.2.392.200119.6.1005', NULL, 'kg', 'kg', NULL, '身体計測', '数字', NULL, NULL, 'Facility-derived standard weight accepted as optional/non-legal-report item from normalize error fixture.', '追加', 'CSV/XML健診結果取込の任意身体計測値を受けるため追加', '2026-08-06', 200, '任意追加項目', 1515, 'Z9N060', '標準体重', NULL, 0, '01990'),
 ('9Z5070000Z9225001', '骨塩定量(DXA/DEX法)', 'PQ', '1.2.392.200119.6.1005', NULL, NULL, NULL, 'DXA/DEX法', '骨密度検査', '数字', '9Z50720009', NULL, 'JLAC10 optional bone density item added from normalize error fixture.', '追加', 'CSV/XML健診結果取込の任意骨密度検査値を受けるため追加', '2026-08-06', 200, '任意追加項目', 1516, '9Z507', '骨塩定量', NULL, 0, '01990'),
 ('9Z5210000Z9625001', '骨塩定量(DIP法)', 'PQ', '1.2.392.200119.6.1005', NULL, NULL, NULL, 'DIP法', '骨密度検査', '数字', '9Z52120009', NULL, 'JLAC10 optional bone density item added from normalize error fixture.', '追加', 'CSV/XML健診結果取込の任意骨密度検査値を受けるため追加', '2026-08-06', 200, '任意追加項目', 1517, '9Z521', '骨塩定量', NULL, 0, '01990'),
 ('9Z5210000Z9625002', '骨塩定量(DIP法)対YAM%', 'PQ', '1.2.392.200119.6.1005', NULL, '%', '%', 'DIP法', '骨密度検査', '数字', '9Z52120009', NULL, 'JLAC10 optional bone density item added from normalize error fixture.', '追加', 'CSV/XML健診結果取込の任意骨密度検査値を受けるため追加', '2026-08-06', 200, '任意追加項目', 1518, '9Z521', '骨塩定量', NULL, 0, '01990'),
