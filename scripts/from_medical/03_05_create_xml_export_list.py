@@ -80,13 +80,23 @@ def load_config(args: argparse.Namespace) -> Config:
         month = args.exam_month or "all-months"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         list_name = f"event{args.event_id}_{month}_export_ready_{timestamp}"
+    has_explicit_selector = bool(
+        args.facility_code
+        or args.facility_id
+        or args.file_receipt_id
+        or args.case_id
+        or args.subscriber_id
+        or args.hia_subscriber_id
+        or args.person_id_custom
+    )
+    all_facilities = bool(args.all_facilities or not has_explicit_selector)
     return Config(
         event_id=args.event_id,
         list_name=list_name,
         health_db=args.health_db,
         master_db=args.master_db,
         facility_codes=tuple(args.facility_code or ()),
-        all_facilities=bool(args.all_facilities),
+        all_facilities=all_facilities,
         facility_ids=tuple(args.facility_id or ()),
         file_receipt_ids=tuple(args.file_receipt_id or ()),
         case_ids=tuple(args.case_id or ()),
@@ -169,17 +179,6 @@ def create_list(cur: Any, config: Config, rows: list[dict[str, Any]]) -> int:
 
 
 def run(config: Config, *, db_prefix: str) -> int:
-    if (
-        not config.all_facilities
-        and not config.facility_codes
-        and not config.facility_ids
-        and not config.file_receipt_ids
-        and not config.case_ids
-        and not config.subscriber_ids
-        and not config.hia_subscriber_ids
-        and not config.person_id_customs
-    ):
-        raise ValueError("Specify --all-facilities or at least one selector.")
     selectors = ExportSelectors(
         event_id=config.event_id,
         facility_ids=config.facility_ids,
