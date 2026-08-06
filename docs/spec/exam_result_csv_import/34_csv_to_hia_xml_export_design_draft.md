@@ -221,7 +221,9 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
    検索結果には、未追加、追加済み、追加不可を表示し、既に出力リストへ追加済みのcaseを重複追加しない。
    検索時点でcase状態が変わっていた場合は、検索結果側に最新の export_readiness_status と理由を表示する。
 
-3. case詳細を確認し、必要なら基本情報補正、理由ありOK、検査値の再取込・再構築を行う。
+3. case詳細を確認し、必要なら加入者突合修正、基本情報補正、理由ありOK、検査値の再取込・再構築を行う。
+   加入者情報が当たっていない、または一部項目だけ合致しているsource/caseは、`subscribers` 候補を検索して正しい加入者へ紐付け直す後続操作を用意する。
+   加入者修正後は、該当sourceの `exam_ledgers`、`person_event`、`exam_export_cases`、`exam_export_case_values`、case単位checkを再同期・再構築する。
 
 4. 出力するcaseを出力リストへ追加する。
    追加時点の export_readiness_status と理由はsnapshotとして保持する。

@@ -126,7 +126,35 @@ HIAダッシュボードCSVの新フォーマット対応を行う。
 - 既存取込スクリプトはある。
 - 新フォーマットで実運用可能かの確認と改修が必要。
 
-### 4. Basic Info Correction
+### 4. Subscriber Match Correction
+
+CSV/XML受領後、加入者情報が当たっていない、または一部項目だけ合致しているcaseを、人が確認して正しい加入者へ紐付け直せる構造が必要である。
+これがないと、検査値が取れていても `subscriber_match_status != MATCHED` のまま出力対象にできず、受領からHIA XML出力までの作業が閉じない。
+
+対象:
+
+- `exam_ledgers.subscriber_match_status` が未突合、不一致、複数候補、要確認のsource。
+- 氏名、生年月日、性別、記号、番号、枝番、HIA加入者IDなどの一部だけが合致しているsource。
+- CSV/XML原本値は正しそうだが `subscribers` 側の登録値と表記や履歴がずれているsource。
+- `exam_export_cases` 作成前、またはcase作成後に加入者が変わる可能性があるsource/case。
+
+必要なこと:
+
+- 未突合・要確認の `exam_ledgers` を検索できるようにする。
+- `subscribers` から候補者を検索し、候補の続柄、資格喪失日、HIA加入者ID、記号番号等を並べて比較できるようにする。
+- 正しい加入者を選択した場合、`exam_ledgers.subscriber_id`, `subscriber_match_status`, `subscriber_match_method`, `subscriber_match_reason` を更新する。
+- 修正操作は履歴に残し、原本CSV/XML値は上書きしない。
+- 加入者修正後は、該当sourceの `person_event` 反映、`exam_export_cases` 再構築、`exam_export_case_values` 再構築、case単位checkを再実行できるようにする。
+- 一部合致のまま手動で紐付ける場合は、手動確定理由、確定者、確定日時を必須にする。
+- 誤った加入者へ出力済みの場合の扱いは別途手順化する。初期版では正式出力済みcaseの加入者修正は警告・停止対象とする。
+
+現状:
+
+- 取込時の自動加入者突合は実装済み。
+- HIA加入者IDを使う方向性は整理済み。
+- 人が未突合・一部合致を修正する画面/API/履歴テーブルは未実装。
+
+### 5. Basic Info Correction
 
 CSV/XML由来の基本情報に不足や誤りがある場合、画面から補正できる構造が必要である。
 
@@ -155,7 +183,7 @@ CSV/XML由来の基本情報に不足や誤りがある場合、画面から補�
 - 郵便番号マスタ設計はある。
 - 補正画面と補正履歴は未実装。
 
-### 5. Postal Code Master
+### 6. Postal Code Master
 
 住所がどこにもないケースがHIA必須項目で問題になるため、郵便番号から住所候補を補えるようにする。
 
@@ -175,7 +203,7 @@ CSV/XML由来の基本情報に不足や誤りがある場合、画面から補�
 - `36_postal_code_master_design.md` に設計あり。
 - DDL/loaderの実装確認と運用投入は未完了。
 
-### 6. Export Case and Multi-Source Merge
+### 7. Export Case and Multi-Source Merge
 
 XMLとCSV、または複数CSVで不足項目を補い、1つの論理健診結果としてXML出力する。
 
@@ -203,7 +231,7 @@ XMLとCSV、または複数CSVで不足項目を補い、1つの論理健診結�
 - 結合出力用case DDL、case作成、case value採用、case単位checkは `exam_ledgers + exam_item_values` 起点で整備する。
 - case起点exportは未実装。
 
-### 7. Export Control UI
+### 8. Export Control UI
 
 XML出力条件を画面から指定できるようにする。
 
@@ -228,7 +256,7 @@ XML出力条件を画面から指定できるようにする。
 - CLI/YAMLによる出力は実装済み。
 - local FastAPIなどの画面は未実装。
 
-### 8. HIA Upload and Delivery Status
+### 9. HIA Upload and Delivery Status
 
 XML出力後、人がHIAへアップロードしたか、その後健保・事業所へ納品したかを管理する。
 
@@ -246,7 +274,7 @@ XML出力後、人がHIAへアップロードしたか、その後健保・事�
 - XML出力履歴はある。
 - HIAアップロード以降の人手ステータス管理は未実装。
 
-### 9. Paper Input
+### 10. Paper Input
 
 紙から作成した健診結果も、今回のフォーマットに沿って登録できるようにする。
 
@@ -266,7 +294,7 @@ XML出力後、人がHIAへアップロードしたか、その後健保・事�
 - 旧「紙→Excel→DB→normalize→export」資産はある。
 - 新統合ledger前提の画面入力は未実装。
 
-### 10. Standardization and Mapping Intelligence Layer
+### 11. Standardization and Mapping Intelligence Layer
 
 CSV取込で蓄積したサンプル、マッピング、名寄せ辞書、エラー判断を、納品処理とは別の標準化資産として扱う。
 
@@ -304,22 +332,24 @@ CSV取込で蓄積したサンプル、マッピング、名寄せ辞書、エ�
 1. `event_id` の保険者番号から `subscribers` 全員を抽出し、`person_event` 母集団を作る。
 2. HIAダッシュボードCSV新フォーマット対応。
 3. `exam_ledgers` / `person_event_status_items` の同期を通常運用に近づける。
-4. 基本情報補正のDB構造と履歴。
-5. 郵便番号マスタと住所補完。
-6. `exam_export_cases` / `exam_export_case_sources` / `exam_export_case_values` のDDL。
-7. case作成、case value採用、case単位check。
-8. case起点のXML出力。
-9. XML出力制御UI。
-10. HIAアップロード、HIAダウンロード、健保・事業所納品ステータス。
-11. 紙入力画面。
-12. 標準化・マッピング知見レイヤー。
+4. 加入者未突合・一部合致の修正構造と履歴。
+5. 基本情報補正のDB構造と履歴。
+6. 郵便番号マスタと住所補完。
+7. `exam_export_cases` / `exam_export_case_sources` / `exam_export_case_values` のDDL。
+8. case作成、case value採用、case単位check。
+9. case起点のXML出力。
+10. XML出力制御UI。
+11. HIAアップロード、HIAダウンロード、健保・事業所納品ステータス。
+12. 紙入力画面。
+13. 標準化・マッピング知見レイヤー。
 
-納品が迫る場合は、1、2、4、5を先に進める。
-XMLとCSVを合わせて法定を満たす必要が出た時点で、6、7、8を優先する。
+納品が迫る場合は、1、2、4、5、6を先に進める。
+XMLとCSVを合わせて法定を満たす必要が出た時点で、7、8、9を優先する。
 
 ## Current Risk
 
 - 住所がHIAで必須となるため、CSV/XML/予約/加入者台帳のどこにも住所がない人の扱いを決める必要がある。
+- 加入者未突合や一部合致を直す口がないと、受領済みの結果を正しい人に寄せられず、出力リストへ追加できない。
 - HIAダッシュボードCSVは年度で状態が上書きされるため、過年度eventの状態を最新テーブルだけで判定すると誤る。
 - 基本情報補正をDB直接修正で続けると、誰が何を直したか追えなくなる。
 - 複数ファイル結合を取込単位の `exam_ledgers` 上で直接処理すると、原本証跡と清書値が混ざる。
