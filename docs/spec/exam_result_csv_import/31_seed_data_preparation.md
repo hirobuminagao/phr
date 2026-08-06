@@ -49,6 +49,8 @@ Implemented and expanded.
 対象候補は、CSV/XML健診結果で実際に出現し、検査結果として受け止めるべき血清アミラーゼ、BUN、尿pH、尿定性、便潜血、標準体重、婦人科細胞診、腫瘍マーカー、BNP/NT-proBNP、骨密度、胃がんリスク検査などである。
 施設独自の総合判定・指導区分、標準コードとして判断できない `Z...` / `ZG...` 系項目、既存標準項目との同一視に確認が必要な項目はこの差分では追加しない。これらはマッピング除外、施設確認、または別レイヤーの標準化分析対象とする。
 
+`sql/migrations/dev_phr/20260806_001_dev_phr_add_gastric_cancer_risk_exam_item_master.sql` は、m4 fixture候補から胃がんリスク検査系を正式昇格したmigrationである。対象はヘリコバクターピロリ抗体IgG判定、ABCD分類、ヘリコバクターピロリ抗体、ペプシノゲン1、ペプシノゲン2、ペプシノゲン1/2比、ペプシノゲン判定である。これらは検査結果として受け止める項目であり、出力ポリシーseedでは止めない。
+
 施設確認後に「XMLへそのまま出す」または「証跡のみ残してXMLへ出さない」を切り替える項目は、normalize辞書や `exam_item_master` だけで表現しない。
 `phr_master.exam_item_output_policies` に `exam_facility_id` と `namecode` 単位で登録し、`INCLUDE` / `EXCLUDE` / `REVIEW_REQUIRED` を指定する。
 全施設共通ルールは `exam_facility_id = 0`、施設別判断は実際の `exam_facility_id` を指定する。
