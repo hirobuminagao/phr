@@ -424,15 +424,17 @@ button[type="submit"]:hover {
   display: grid;
   grid-template-columns: minmax(220px, 1.6fr) minmax(160px, 0.8fr) minmax(160px, 0.8fr) auto;
   gap: 14px;
-  align-items: end;
+  align-items: start;
 }
 
 .filter-form label {
-  align-self: end;
+  display: grid;
+  grid-template-rows: 24px var(--control-height);
+  gap: 7px;
+  align-self: start;
 }
 
 .filter-form label > span {
-  min-height: 22px;
   display: inline-flex;
   align-items: center;
 }
@@ -440,8 +442,9 @@ button[type="submit"]:hover {
 .filter-actions {
   display: flex;
   gap: 8px;
-  align-items: end;
-  min-height: var(--control-height);
+  align-items: center;
+  min-height: calc(24px + 7px + var(--control-height));
+  padding-top: 31px;
 }
 
 .suggest-input {

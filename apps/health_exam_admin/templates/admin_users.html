@@ -38,9 +38,6 @@
           <div id="user-search-suggestions" class="suggest-list" hidden></div>
         </div>
       </label>
-      <script type="application/json" id="user-search-suggestion-data">
-        {{ suggestions|tojson }}
-      </script>
       <label>
         <span>状態</span>
         <select name="status">
@@ -67,6 +64,9 @@
         <a class="ghost-button" href="/admin/users">クリア</a>
       </div>
     </form>
+    <script type="application/json" id="user-search-suggestion-data">
+      {{ suggestions|tojson }}
+    </script>
   </section>
 
   <section class="panel table-panel">
