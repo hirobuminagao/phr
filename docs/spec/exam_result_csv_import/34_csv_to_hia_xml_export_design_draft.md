@@ -538,6 +538,7 @@ HIAアップロード担当者への依頼は「`yyyymmdd_hhmmss` に出力し�
 このモードは、作成したXML/ZIPを人が確認するためのヒロ確認用であり、HIAアップロード対象フォルダを汚さないことを目的とする。
 ZIP内部のルートフォルダ名、個人XML名、XSD構成は正式出力と同じにする。
 違いは外側の配置場所だけである。
+ETL run と `etl_errors` は実行証跡として残すが、`xml_export_zips` / `xml_export_members`、`exam_export_cases.xml_export_status`、`xml_export_lists` / `xml_export_list_cases` の正式出力状態は更新しない。
 
 ```text
 <repo>/data/hia_xml_review_exports/
@@ -551,6 +552,7 @@ ZIP内部のルートフォルダ名、個人XML名、XSD構成は正式出力�
 
 `review_output_root` を指定した場合は、上記 `<repo>/data/hia_xml_review_exports` の代わりにそのパスを使う。
 確認用出力は、正式アップロード依頼には使用しない。
+確認後に正式出力する場合は、同じ出力リストを `output_mode = official` で再実行する。
 
 最終出力物は以下の命名規則で作るZIPである。
 個人XML名とZIP内部の構成は公式仕様を正とし、旧exporterの実装は補助的に参照する。

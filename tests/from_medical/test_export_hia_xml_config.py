@@ -128,3 +128,13 @@ def test_resolve_output_base_root_uses_project_data_for_review(tmp_path: Path) -
     config = export_hia_xml.load_config(args_for(config_path))
 
     assert export_hia_xml.resolve_output_base_root(tmp_path / "event_root", config) == tmp_path / "review_exports" / "event_2"
+    assert export_hia_xml.writes_official_export_state(config) is False
+
+
+def test_writes_official_export_state_only_for_official_non_dry_run(tmp_path: Path) -> None:
+    config_path = write_config(tmp_path / "export.yml", event_id=2, all_facilities=True)
+    official = export_hia_xml.load_config(args_for(config_path))
+    dry_run = export_hia_xml.load_config(args_for(config_path, dry_run=True))
+
+    assert export_hia_xml.writes_official_export_state(official) is True
+    assert export_hia_xml.writes_official_export_state(dry_run) is False

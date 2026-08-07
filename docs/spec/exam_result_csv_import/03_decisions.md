@@ -172,7 +172,7 @@ Current as of 2026-08-05.
 - `03_05_create_xml_export_list.py` は画面実装前の正式CLI入口として、出力可能な `exam_export_cases` を `xml_export_lists` / `xml_export_list_cases` へまとめる。通常はREADYリストを作成し、必要な場合のみ `--draft` で下書きにする。
 - `04_export_hia_xml.py` は `exam_export_cases` / `exam_export_case_values` 起点でXMLを出力する。画面運用の正ルートでは出力リストから出力する。
 - 画面未実装期間の通常Runでは、`04_export_hia_xml.py` は明示条件がない場合に最新のREADY出力リストを自動選択する。直接条件指定で出したい場合のみ `--xml-export-list-id`, `--all-facilities`, `--facility-code`, `--case-id` 等を明示する。
-- XML出力先は `output_mode` で切り替える。`official` はHIAアップロード対象として従来どおり `event.result_root_path / 健診機関フォルダ / 03_健診結果（アップロードデータ）` へ出力する。`review` は確認専用としてプロジェクト配下の `data/hia_xml_review_exports/event_<event_id>` へ同じZIP構造で出力し、本番フォルダを汚さない。
+- XML出力先は `output_mode` で切り替える。`official` はHIAアップロード対象として従来どおり `event.result_root_path / 健診機関フォルダ / 03_健診結果（アップロードデータ）` へ出力し、`xml_export_zips` / `xml_export_members` とcase/listの正式出力状態を更新する。`review` は確認専用としてプロジェクト配下の `data/hia_xml_review_exports/event_<event_id>` へ同じZIP構造で出力し、本番フォルダを汚さない。`review` ではETL run/errorsだけを証跡として残し、正式出力履歴やcase/list状態は進めない。
 
 ### XML Import Current Rules
 

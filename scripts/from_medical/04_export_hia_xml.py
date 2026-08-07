@@ -284,6 +284,10 @@ def resolve_output_base_root(result_root: Path, config: ExportConfig) -> Path:
     return config.review_output_root / f"event_{config.selectors.event_id}"
 
 
+def writes_official_export_state(config: ExportConfig) -> bool:
+    return config.output_mode == OUTPUT_MODE_OFFICIAL and not config.dry_run
+
+
 def has_explicit_export_target(config: ExportConfig) -> bool:
     selectors = config.selectors
     return bool(
@@ -694,6 +698,9 @@ def build_group(
             raise ValueError(f"OUTPUT_ALREADY_EXISTS: {final_zip}")
         shutil.move(str(temp_zip), final_zip)
 
+    if not writes_official_export_state(config):
+        return final_zip, (facility_code, facility.name, folder_name, exam_month, final_zip.name, len(group))
+
     assert run_id is not None
     try:
         insert_history(
@@ -738,7 +745,8 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
             run_id: int | None = None
             if not config.dry_run:
                 run_id = start_run(cur, config, result_root)
-                mark_export_list_started(cur, config=config, run_id=run_id)
+                if writes_official_export_state(config):
+                    mark_export_list_started(cur, config=config, run_id=run_id)
                 conn.commit()
             try:
                 candidates = fetch_candidates(
@@ -783,13 +791,14 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                     except Exception as exc:
                         conn.rollback()
                         if run_id is not None:
-                            mark_group_export_error(
-                                cur,
-                                config=config,
-                                run_id=run_id,
-                                group=group,
-                                reason=f"{type(exc).__name__}: {exc}",
-                            )
+                            if writes_official_export_state(config):
+                                mark_group_export_error(
+                                    cur,
+                                    config=config,
+                                    run_id=run_id,
+                                    group=group,
+                                    reason=f"{type(exc).__name__}: {exc}",
+                                )
                             log_failure(
                                 cur,
                                 run_id=run_id,
@@ -810,7 +819,8 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                 if operator_rows and not config.dry_run:
                     print(f"[LOG] {write_operator_log(output_base_root, timestamp, operator_rows)}")
                 if run_id is not None:
-                    mark_export_list_finished(cur, config=config, run_id=run_id, summary=summary)
+                    if writes_official_export_state(config):
+                        mark_export_list_finished(cur, config=config, run_id=run_id, summary=summary)
                     etl_finish_run(
                         cur,
                         run_id,
@@ -830,7 +840,8 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                         error_code="XML_EXPORT_RUN_FAILED",
                         message=f"{type(exc).__name__}: {exc}",
                     )
-                    mark_export_list_finished(cur, config=config, run_id=run_id, summary=summary)
+                    if writes_official_export_state(config):
+                        mark_export_list_finished(cur, config=config, run_id=run_id, summary=summary)
                     etl_finish_run(
                         cur,
                         run_id,
