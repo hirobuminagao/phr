@@ -33,6 +33,7 @@
           <th>社員番号</th>
           <th>氏名</th>
           <th>部署</th>
+          <th>ロール</th>
           <th>PW</th>
           <th>最終ログイン</th>
           <th>操作</th>
@@ -52,6 +53,18 @@
             <small>{{ row.display_name_kana or '' }}</small>
           </td>
           <td>{{ row.department_name or '' }}</td>
+          <td>
+            <form method="post" action="/admin/users/{{ row.app_user_id }}/role" class="role-form">
+              <select name="role_code" aria-label="ロール">
+                {% for role in roles %}
+                <option value="{{ role.role_code }}" {% if row.role_codes and role.role_code in row.role_codes.split(',') %}selected{% endif %}>
+                  {{ role.role_name }}
+                </option>
+                {% endfor %}
+              </select>
+              <button class="ghost-submit" type="submit">変更</button>
+            </form>
+          </td>
           <td>{% if row.must_change_password %}<span class="status-pill status-pending">初期</span>{% endif %}</td>
           <td>{{ row.last_login_at or '' }}</td>
           <td class="row-actions">

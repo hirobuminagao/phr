@@ -18,11 +18,11 @@
 
     <form method="post" action="/register" class="form-stack">
       <label>
-        <span>社員番号</span>
+        <span>社員番号 <em class="required-mark">必須</em></span>
         <input name="employee_no" value="{{ form.employee_no or '' }}" autocomplete="username" required autofocus>
       </label>
       <label>
-        <span>氏名</span>
+        <span>氏名 <em class="required-mark">必須</em></span>
         <input name="display_name" value="{{ form.display_name or '' }}" required>
       </label>
       <label>
@@ -38,11 +38,11 @@
         <input name="email" type="email" value="{{ form.email or '' }}" autocomplete="email">
       </label>
       <label>
-        <span>パスワード</span>
+        <span>パスワード <em class="required-mark">必須</em></span>
         <input name="password" type="password" autocomplete="new-password" required>
       </label>
       <label>
-        <span>パスワード確認</span>
+        <span>パスワード確認 <em class="required-mark">必須</em></span>
         <input name="password_confirm" type="password" autocomplete="new-password" required>
       </label>
       <button type="submit">登録申請</button>

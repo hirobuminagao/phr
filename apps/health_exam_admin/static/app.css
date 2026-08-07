@@ -23,7 +23,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -56,6 +57,19 @@ input {
   color: var(--accent-dark);
   font-weight: 800;
   text-decoration: none;
+}
+
+.required-mark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fff1f1;
+  color: var(--danger-text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .eyebrow {
@@ -108,7 +122,17 @@ input {
   background: #fff;
 }
 
-input:focus {
+select {
+  width: 100%;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  padding: 11px 12px;
+  color: var(--text);
+  background: #fff;
+}
+
+input:focus,
+select:focus {
   outline: 3px solid rgba(20, 125, 100, 0.18);
   border-color: var(--accent);
 }
@@ -363,7 +387,15 @@ button[type="submit"]:hover {
 
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.role-form {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) auto;
+  gap: 8px;
+  min-width: 220px;
 }
 
 .danger-button {

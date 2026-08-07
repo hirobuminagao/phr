@@ -103,22 +103,58 @@ def load_admin_user_rows(cur: Any) -> list[dict[str, Any]]:
     cur.execute(
         """
         SELECT
-          app_user_id,
-          employee_no,
-          display_name,
-          display_name_kana,
-          department_name,
-          email,
-          approval_status,
-          is_active,
-          approval_requested_at,
-          approved_at,
-          must_change_password,
-          last_login_at
-        FROM app_users
+          u.app_user_id,
+          u.employee_no,
+          u.display_name,
+          u.display_name_kana,
+          u.department_name,
+          u.email,
+          u.approval_status,
+          u.is_active,
+          u.approval_requested_at,
+          u.approved_at,
+          u.must_change_password,
+          u.last_login_at,
+          GROUP_CONCAT(r.role_code ORDER BY r.role_code SEPARATOR ',') AS role_codes,
+          GROUP_CONCAT(r.role_name ORDER BY r.role_code SEPARATOR ', ') AS role_names
+        FROM app_users u
+        LEFT JOIN app_user_roles ur
+          ON ur.app_user_id = u.app_user_id
+         AND ur.is_active = 1
+         AND (ur.valid_from IS NULL OR ur.valid_from <= CURRENT_DATE())
+         AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE())
+        LEFT JOIN app_roles r
+          ON r.app_role_id = ur.app_role_id
+         AND r.is_active = 1
+        GROUP BY
+          u.app_user_id,
+          u.employee_no,
+          u.display_name,
+          u.display_name_kana,
+          u.department_name,
+          u.email,
+          u.approval_status,
+          u.is_active,
+          u.approval_requested_at,
+          u.approved_at,
+          u.must_change_password,
+          u.last_login_at
         ORDER BY
-          CASE approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
-          app_user_id
+          CASE u.approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
+          u.app_user_id
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_manageable_roles(cur: Any) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT app_role_id, role_code, role_name
+        FROM app_roles
+        WHERE is_active = 1
+          AND role_code IN ('ADMIN', 'EDITOR', 'VIEWER', 'PENDING')
+        ORDER BY FIELD(role_code, 'ADMIN', 'EDITOR', 'VIEWER', 'PENDING'), role_code
         """
     )
     return [dict(row) for row in cur.fetchall()]
@@ -154,6 +190,27 @@ def count_remaining_active_user_managers(cur: Any, *, excluding_app_user_id: int
     return int(row.get("cnt") or 0)
 
 
+def role_has_user_manage(cur: Any, *, role_code: str) -> bool:
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM app_roles r
+        JOIN app_role_permissions rp
+          ON rp.app_role_id = r.app_role_id
+         AND rp.is_allowed = 1
+        JOIN app_permissions p
+          ON p.app_permission_id = rp.app_permission_id
+         AND p.is_active = 1
+         AND p.permission_code = 'users.manage'
+        WHERE r.role_code = %s
+          AND r.is_active = 1
+        """,
+        (role_code,),
+    )
+    row = cur.fetchone() or {}
+    return int(row.get("cnt") or 0) > 0
+
+
 def assign_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by_app_user_id: int | None) -> None:
     cur.execute("SELECT app_role_id FROM app_roles WHERE role_code = %s AND is_active = 1", (role_code,))
     role = cur.fetchone()
@@ -178,6 +235,43 @@ def assign_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by_
         """,
         (app_user_id, int(role["app_role_id"]), assigned_by_app_user_id, f"assigned by {role_code} registration flow"),
     )
+
+
+def replace_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by_app_user_id: int) -> bool:
+    cur.execute("SELECT app_role_id FROM app_roles WHERE role_code = %s AND is_active = 1", (role_code,))
+    role = cur.fetchone()
+    if not role:
+        return False
+    cur.execute(
+        """
+        UPDATE app_user_roles
+           SET is_active = 0,
+               valid_to = CURRENT_DATE()
+         WHERE app_user_id = %s
+           AND is_active = 1
+        """,
+        (app_user_id,),
+    )
+    cur.execute(
+        """
+        INSERT INTO app_user_roles (
+          app_user_id,
+          app_role_id,
+          valid_from,
+          is_active,
+          assigned_by_app_user_id,
+          note
+        )
+        VALUES (%s, %s, CURRENT_DATE(), 1, %s, 'role changed from admin screen')
+        ON DUPLICATE KEY UPDATE
+          is_active = VALUES(is_active),
+          valid_to = NULL,
+          assigned_by_app_user_id = VALUES(assigned_by_app_user_id),
+          note = VALUES(note)
+        """,
+        (app_user_id, int(role["app_role_id"]), assigned_by_app_user_id),
+    )
+    return True
 
 
 @app.get("/health")
@@ -521,6 +615,7 @@ def admin_users(request: Request) -> Response:
     with connect_ctx(params, database=app_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
         users = load_admin_user_rows(cur)
+        roles = load_manageable_roles(cur)
         cur.close()
     return templates.TemplateResponse(
         "admin_users.html",
@@ -528,6 +623,7 @@ def admin_users(request: Request) -> Response:
             "request": request,
             "user": user,
             "users": users,
+            "roles": roles,
             "message": None,
             "temporary_password": None,
             "error": None,
@@ -558,6 +654,80 @@ def approve_user(request: Request, app_user_id: int) -> Response:
                 """,
                 (int(user["app_user_id"]), app_user_id),
             )
+            cur.execute(
+                """
+                UPDATE app_user_roles
+                   SET is_active = 0,
+                       valid_to = CURRENT_DATE()
+                 WHERE app_user_id = %s
+                   AND is_active = 1
+                   AND app_role_id IN (
+                     SELECT app_role_id FROM app_roles WHERE role_code = 'PENDING'
+                   )
+                """,
+                (app_user_id,),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{app_user_id}/role")
+async def update_user_role(request: Request, app_user_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    role_code = form.get("role_code", "").strip()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not role_has_user_manage(cur, role_code=role_code):
+                if count_remaining_active_user_managers(cur, excluding_app_user_id=app_user_id) <= 0:
+                    users = load_admin_user_rows(cur)
+                    roles = load_manageable_roles(cur)
+                    conn.rollback()
+                    return templates.TemplateResponse(
+                        "admin_users.html",
+                        {
+                            "request": request,
+                            "user": user,
+                            "users": users,
+                            "roles": roles,
+                            "message": None,
+                            "temporary_password": None,
+                            "error": "有効な管理者が0人になるためロールを変更できません。",
+                        },
+                        status_code=400,
+                    )
+            if not replace_user_role(
+                cur,
+                app_user_id=app_user_id,
+                role_code=role_code,
+                assigned_by_app_user_id=int(user["app_user_id"]),
+            ):
+                users = load_admin_user_rows(cur)
+                roles = load_manageable_roles(cur)
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "admin_users.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        "users": users,
+                        "roles": roles,
+                        "message": None,
+                        "temporary_password": None,
+                        "error": "指定されたロールが見つかりません。",
+                    },
+                    status_code=400,
+                )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -592,6 +762,7 @@ def reset_user_password(request: Request, app_user_id: int) -> Response:
                 (hash_password(temporary_password), app_user_id),
             )
             users = load_admin_user_rows(cur)
+            roles = load_manageable_roles(cur)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -603,6 +774,7 @@ def reset_user_password(request: Request, app_user_id: int) -> Response:
             "request": request,
             "user": user,
             "users": users,
+            "roles": roles,
             "message": "初期パスワードを発行しました。本人に伝えてください。",
             "temporary_password": temporary_password,
             "error": None,
@@ -623,6 +795,7 @@ def disable_user(request: Request, app_user_id: int) -> Response:
         try:
             if count_remaining_active_user_managers(cur, excluding_app_user_id=app_user_id) <= 0:
                 users = load_admin_user_rows(cur)
+                roles = load_manageable_roles(cur)
                 conn.rollback()
                 return templates.TemplateResponse(
                     "admin_users.html",
@@ -630,6 +803,7 @@ def disable_user(request: Request, app_user_id: int) -> Response:
                         "request": request,
                         "user": user,
                         "users": users,
+                        "roles": roles,
                         "message": None,
                         "temporary_password": None,
                         "error": "有効な管理者が0人になるため無効化できません。",
