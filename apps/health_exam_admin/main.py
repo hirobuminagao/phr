@@ -99,6 +99,61 @@ def generate_temporary_password(length: int = 12) -> str:
             return password
 
 
+def load_admin_user_rows(cur: Any) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT
+          app_user_id,
+          employee_no,
+          display_name,
+          display_name_kana,
+          department_name,
+          email,
+          approval_status,
+          is_active,
+          approval_requested_at,
+          approved_at,
+          must_change_password,
+          last_login_at
+        FROM app_users
+        ORDER BY
+          CASE approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
+          app_user_id
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def count_remaining_active_user_managers(cur: Any, *, excluding_app_user_id: int) -> int:
+    cur.execute(
+        """
+        SELECT COUNT(DISTINCT u.app_user_id) AS cnt
+        FROM app_users u
+        JOIN app_user_roles ur
+          ON ur.app_user_id = u.app_user_id
+         AND ur.is_active = 1
+         AND (ur.valid_from IS NULL OR ur.valid_from <= CURRENT_DATE())
+         AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE())
+        JOIN app_roles r
+          ON r.app_role_id = ur.app_role_id
+         AND r.is_active = 1
+        JOIN app_role_permissions rp
+          ON rp.app_role_id = r.app_role_id
+         AND rp.is_allowed = 1
+        JOIN app_permissions p
+          ON p.app_permission_id = rp.app_permission_id
+         AND p.is_active = 1
+         AND p.permission_code = 'users.manage'
+        WHERE u.app_user_id <> %s
+          AND u.is_active = 1
+          AND u.approval_status = 'APPROVED'
+        """,
+        (excluding_app_user_id,),
+    )
+    row = cur.fetchone() or {}
+    return int(row.get("cnt") or 0)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -330,32 +385,18 @@ def admin_users(request: Request) -> Response:
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=app_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
-        cur.execute(
-            """
-            SELECT
-              app_user_id,
-              employee_no,
-              display_name,
-              display_name_kana,
-              department_name,
-              email,
-              approval_status,
-              is_active,
-              approval_requested_at,
-              approved_at,
-              must_change_password,
-              last_login_at
-            FROM app_users
-            ORDER BY
-              CASE approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
-              app_user_id
-            """
-        )
-        users = cur.fetchall()
+        users = load_admin_user_rows(cur)
         cur.close()
     return templates.TemplateResponse(
         "admin_users.html",
-        {"request": request, "user": user, "users": users, "message": None, "temporary_password": None},
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "message": None,
+            "temporary_password": None,
+            "error": None,
+        },
     )
 
 
@@ -415,28 +456,7 @@ def reset_user_password(request: Request, app_user_id: int) -> Response:
                 """,
                 (hash_password(temporary_password), app_user_id),
             )
-            cur.execute(
-                """
-                SELECT
-                  app_user_id,
-                  employee_no,
-                  display_name,
-                  display_name_kana,
-                  department_name,
-                  email,
-                  approval_status,
-                  is_active,
-                  approval_requested_at,
-                  approved_at,
-                  must_change_password,
-                  last_login_at
-                FROM app_users
-                ORDER BY
-                  CASE approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
-                  app_user_id
-                """
-            )
-            users = cur.fetchall()
+            users = load_admin_user_rows(cur)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -450,6 +470,7 @@ def reset_user_password(request: Request, app_user_id: int) -> Response:
             "users": users,
             "message": "初期パスワードを発行しました。本人に伝えてください。",
             "temporary_password": temporary_password,
+            "error": None,
         },
     )
 
@@ -461,14 +482,63 @@ def disable_user(request: Request, app_user_id: int) -> Response:
         return user
     if not has_permission(user, "users.manage"):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
-    if int(user["app_user_id"]) == app_user_id:
-        return RedirectResponse("/admin/users", status_code=303)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if count_remaining_active_user_managers(cur, excluding_app_user_id=app_user_id) <= 0:
+                users = load_admin_user_rows(cur)
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "admin_users.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        "users": users,
+                        "message": None,
+                        "temporary_password": None,
+                        "error": "有効な管理者が0人になるため無効化できません。",
+                    },
+                    status_code=400,
+                )
+            cur.execute("UPDATE app_users SET is_active = 0 WHERE app_user_id = %s", (app_user_id,))
+            cur.execute(
+                """
+                UPDATE app_sessions
+                   SET revoked_at = CURRENT_TIMESTAMP(3)
+                 WHERE app_user_id = %s
+                   AND revoked_at IS NULL
+                """,
+                (app_user_id,),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{app_user_id}/enable")
+def enable_user(request: Request, app_user_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=app_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            cur.execute("UPDATE app_users SET is_active = 0 WHERE app_user_id = %s", (app_user_id,))
+            cur.execute(
+                """
+                UPDATE app_users
+                   SET is_active = 1
+                 WHERE app_user_id = %s
+                   AND approval_status = 'APPROVED'
+                """,
+                (app_user_id,),
+            )
             conn.commit()
         except Exception:
             conn.rollback()

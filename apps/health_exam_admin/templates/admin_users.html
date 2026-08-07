@@ -16,6 +16,7 @@
 
 <main class="page">
   {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
   {% if temporary_password %}
   <section class="temporary-password-panel">
     <span>初期パスワード</span>
@@ -62,6 +63,11 @@
             {% if row.is_active and row.app_user_id != user.app_user_id %}
             <form method="post" action="/admin/users/{{ row.app_user_id }}/disable">
               <button class="danger-button" type="submit">無効</button>
+            </form>
+            {% endif %}
+            {% if not row.is_active and row.approval_status == 'APPROVED' %}
+            <form method="post" action="/admin/users/{{ row.app_user_id }}/enable">
+              <button type="submit">有効</button>
             </form>
             {% endif %}
             <form method="post" action="/admin/users/{{ row.app_user_id }}/reset-password">
