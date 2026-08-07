@@ -11,7 +11,10 @@
 - ログインIDは社員番号 `employee_no`。
 - パスワードは平文保存しない。初期実装は `pbkdf2_sha256` 形式のハッシュを保存する。
 - ロールは初期値として `ADMIN` / `EDITOR` / `VIEWER` を用意する。
-- ロールで何ができるかは固定実装にしない。`app_permissions` と `app_role_permissions` で後から変更できるようにする。
+- `ADMIN` はフルコントロールとして扱う。
+- 通常作業の担当可否はロールではなく、個人ごとの作業権限ON/OFFで制御する。
+- 個人作業権限は `表示` と `編集・実行` を分ける。
+- ロールで何ができるかは固定実装にしない。`app_permissions` と `app_role_permissions` で後から変更できるようにする。ただし出力リスト、XML出力、HIAアップロード等の作業系権限は個人設定を正とする。
 - IP制限はユーザー単位で持つ。許可IPが未登録ならIP制限なし、1件以上ある場合は一致するIPのみログイン可。
 - ログイン試行は成功・失敗とも `app_login_attempts` に残す。
 - 画面操作や重要な業務操作は `app_audit_logs` に残す。
@@ -51,6 +54,7 @@ PHR画面の利用者本体。
 - `export_lists.edit`
 - `xml_export.review`
 - `xml_export.official`
+- `hia_upload.perform`
 - `hia_upload_status.edit`
 - `audit.view`
 
@@ -61,6 +65,30 @@ PHR画面の利用者本体。
 ### `app_user_roles`
 
 利用者に付与されたロール。複数ロール付与を許容する。
+
+### `app_user_permissions`
+
+利用者ごとの明示的な作業権限。
+
+用途:
+
+- 出力リスト、XML出力、HIAアップロードなど、現場の担当者ごとにON/OFFしたい作業を管理する。
+- ロールで一括付与せず、個人ごとに `表示` と `編集・実行` を分けて管理する。
+- `is_allowed = 1` は個人許可、`is_allowed = 0` は個人拒否として扱う。
+
+初期の個人作業権限:
+
+| 作業 | 表示 | 編集・実行 |
+|---|---|---|
+| 出力リスト | `export_lists.view` | `export_lists.edit` |
+| XML出力 | `xml_export.review` | `xml_export.official` |
+| HIAアップロード | `hia_upload.perform` | `hia_upload_status.edit` |
+
+権限判定順:
+
+1. `ADMIN` ロールを持つユーザーは全権限を持つ。
+2. 個人権限 `app_user_permissions` の明示設定を反映する。
+3. ロール権限 `app_role_permissions` を反映する。
 
 ### `app_user_allowed_ips`
 
@@ -89,10 +117,13 @@ PHR画面の利用者本体。
 1. `phr_app` DBとユーザー管理テーブルを作成する。
 2. CLIでユーザー登録とログイン確認をできるようにする。
 3. FastAPI画面/API実装時に、セッション・権限・IP制限をこのDBへ接続する。
-4. 画面ごとの権限は初期運用後に調整する。
+4. アカウント編集画面で個人ごとの作業権限ON/OFFを設定する。
+5. 画面ごとの権限は初期運用後に調整する。
 
 ## 適用ファイル
 
 - `sql/ddl/phr_app/0000_phr_app__database.sql`
 - `sql/ddl/phr_app/0010_phr_app__user_management.sql`
 - `sql/migrations/phr_app/20260807_001_phr_app_create_user_management.sql`
+- `sql/migrations/phr_app/20260807_002_phr_app_add_user_approval.sql`
+- `sql/migrations/phr_app/20260807_003_phr_app_add_user_permission_overrides.sql`
