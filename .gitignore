@@ -27,6 +27,9 @@ data/hia_export/
 data/hia_export_shg/
 !data/hia_export_shg/.gitkeep
 
+data/hia_xml_review_exports/
+!data/hia_xml_review_exports/.gitkeep
+
 # fund delivery runtime data (input/work/output, not versioned)
 data/fund_delivery/
 !data/fund_delivery/.gitkeep
