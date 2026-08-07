@@ -28,6 +28,7 @@ VALUES
   ('export_lists.edit', '出力リスト編集', 'xml_export', 'HIAアップロード用出力リストを作成・編集する', 1),
   ('xml_export.review', 'XML確認出力', 'xml_export', '確認用のXMLを出力する', 1),
   ('xml_export.official', 'XML本番出力', 'xml_export', 'HIAアップロード用の正式XMLを出力する', 1),
+  ('hia_upload.perform', 'HIAアップロード作業', 'hia', '出力済みZIPをHIAへアップロードする作業を担当する', 1),
   ('hia_upload_status.edit', 'HIAアップロード状態編集', 'hia', 'HIAアップロード完了・エラー内容を記帳する', 1),
   ('audit.view', '監査ログ参照', 'audit', '操作ログを参照する', 1)
 ON DUPLICATE KEY UPDATE
@@ -51,9 +52,7 @@ JOIN `app_permissions` p
     'exam_cases.view',
     'exam_cases.edit',
     'export_lists.view',
-    'export_lists.edit',
-    'xml_export.review',
-    'hia_upload_status.edit'
+    'xml_export.review'
   )
 WHERE r.`role_code` = 'EDITOR'
 ON DUPLICATE KEY UPDATE `is_allowed` = VALUES(`is_allowed`);

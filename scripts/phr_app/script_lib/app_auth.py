@@ -77,6 +77,33 @@ def get_user_by_employee_no(cur: Cursor, *, app_db: str, employee_no: str) -> di
 def get_user_permissions(cur: Cursor, *, app_db: str, app_user_id: int) -> tuple[str, ...]:
     cur.execute(
         f"""
+        SELECT COUNT(*) AS cnt
+        FROM {_schema(app_db)}.`app_user_roles` ur
+        JOIN {_schema(app_db)}.`app_roles` r
+          ON r.`app_role_id` = ur.`app_role_id`
+         AND r.`is_active` = 1
+         AND r.`role_code` = 'ADMIN'
+        WHERE ur.`app_user_id` = %s
+          AND ur.`is_active` = 1
+          AND (ur.`valid_from` IS NULL OR ur.`valid_from` <= CURRENT_DATE())
+          AND (ur.`valid_to` IS NULL OR ur.`valid_to` >= CURRENT_DATE())
+        """,
+        (app_user_id,),
+    )
+    is_admin = int((cur.fetchone() or {}).get("cnt") or 0) > 0
+    if is_admin:
+        cur.execute(
+            f"""
+            SELECT `permission_code`
+            FROM {_schema(app_db)}.`app_permissions`
+            WHERE `is_active` = 1
+            ORDER BY `permission_code`
+            """
+        )
+        return tuple(str(row["permission_code"]) for row in cur.fetchall())
+
+    cur.execute(
+        f"""
         SELECT DISTINCT p.`permission_code`
         FROM {_schema(app_db)}.`app_user_roles` ur
         JOIN {_schema(app_db)}.`app_roles` r
@@ -96,7 +123,25 @@ def get_user_permissions(cur: Cursor, *, app_db: str, app_user_id: int) -> tuple
         """,
         (app_user_id,),
     )
-    return tuple(str(row["permission_code"]) for row in cur.fetchall())
+    permissions = {str(row["permission_code"]) for row in cur.fetchall()}
+    cur.execute(
+        f"""
+        SELECT p.`permission_code`, up.`is_allowed`
+        FROM {_schema(app_db)}.`app_user_permissions` up
+        JOIN {_schema(app_db)}.`app_permissions` p
+          ON p.`app_permission_id` = up.`app_permission_id`
+         AND p.`is_active` = 1
+        WHERE up.`app_user_id` = %s
+        """,
+        (app_user_id,),
+    )
+    for row in cur.fetchall():
+        permission_code = str(row["permission_code"])
+        if bool(row["is_allowed"]):
+            permissions.add(permission_code)
+        else:
+            permissions.discard(permission_code)
+    return tuple(sorted(permissions))
 
 
 def is_ip_allowed(cur: Cursor, *, app_db: str, app_user_id: int, client_ip: str | None) -> bool:

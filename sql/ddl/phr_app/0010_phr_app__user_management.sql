@@ -94,6 +94,24 @@ CREATE TABLE IF NOT EXISTS `app_user_roles` (
   CONSTRAINT `fk_app_user_roles_assigned_by` FOREIGN KEY (`assigned_by_app_user_id`) REFERENCES `app_users` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_ja_0900_as_cs;
 
+CREATE TABLE IF NOT EXISTS `app_user_permissions` (
+  `app_user_permission_id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `app_user_id` bigint unsigned NOT NULL,
+  `app_permission_id` bigint unsigned NOT NULL,
+  `is_allowed` tinyint(1) NOT NULL DEFAULT '1' COMMENT '個人単位の明示許可/拒否',
+  `assigned_by_app_user_id` bigint unsigned DEFAULT NULL,
+  `note` text COLLATE utf8mb4_ja_0900_as_cs,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`app_user_permission_id`),
+  UNIQUE KEY `uq_app_user_permissions_user_permission` (`app_user_id`,`app_permission_id`),
+  KEY `idx_app_user_permissions_permission` (`app_permission_id`,`is_allowed`),
+  KEY `idx_app_user_permissions_assigned_by` (`assigned_by_app_user_id`),
+  CONSTRAINT `fk_app_user_permissions_user` FOREIGN KEY (`app_user_id`) REFERENCES `app_users` (`app_user_id`),
+  CONSTRAINT `fk_app_user_permissions_permission` FOREIGN KEY (`app_permission_id`) REFERENCES `app_permissions` (`app_permission_id`),
+  CONSTRAINT `fk_app_user_permissions_assigned_by` FOREIGN KEY (`assigned_by_app_user_id`) REFERENCES `app_users` (`app_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_ja_0900_as_cs;
+
 CREATE TABLE IF NOT EXISTS `app_user_allowed_ips` (
   `app_user_allowed_ip_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `app_user_id` bigint unsigned NOT NULL,

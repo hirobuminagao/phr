@@ -44,12 +44,18 @@
   </section>
   {% endif %}
 
+  {% if "export_lists.view" in user.permissions
+    or "export_lists.edit" in user.permissions
+    or "xml_export.official" in user.permissions
+    or "hia_upload.perform" in user.permissions
+    or "hia_upload_status.edit" in user.permissions %}
   <section class="work-list">
     <a class="work-link" href="/export-lists">
       <span>HIA XML 出力リスト</span>
       <strong>出力対象の確認・作成へ</strong>
     </a>
   </section>
+  {% endif %}
 
   <section class="permission-panel">
     <h2>現在の権限</h2>

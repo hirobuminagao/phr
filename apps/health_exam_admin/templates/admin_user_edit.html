@@ -55,6 +55,26 @@
           {% endfor %}
         </select>
       </label>
+      <div class="form-section">
+        <h2>作業権限</h2>
+        <p class="subtle">リスト作成、XML出力、HIAアップロード作業は個人ごとにON/OFFします。</p>
+        <div class="work-permission-list">
+          {% for permission in work_permissions %}
+          <label class="work-permission-toggle">
+            <input
+              type="checkbox"
+              name="work_permission__{{ permission.key }}"
+              value="1"
+              {% if permission.user_is_allowed %}checked{% endif %}
+            >
+            <span>
+              <strong>{{ permission.name }}</strong>
+              <small>{{ permission.description }}</small>
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
       <div class="form-actions">
         <button type="submit">更新</button>
       </div>

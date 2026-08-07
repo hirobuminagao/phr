@@ -352,6 +352,53 @@ button[type="submit"]:hover {
   grid-column: 1 / -1;
 }
 
+.form-section {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.form-section h2 {
+  margin-bottom: 0;
+}
+
+.work-permission-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.work-permission-toggle {
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #c9d6e2;
+  border-radius: 8px;
+  background: #f7fafc;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.work-permission-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.work-permission-toggle strong,
+.work-permission-toggle small {
+  display: block;
+}
+
+.work-permission-toggle:has(input:checked) {
+  border-color: #a7d8c9;
+  background: #e9f7f3;
+}
+
 .issue-panel,
 .filter-panel {
   margin-bottom: 18px;
@@ -611,6 +658,10 @@ button[type="submit"]:hover {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .work-permission-list {
     grid-template-columns: 1fr;
   }
 }
