@@ -153,8 +153,8 @@ def load_manageable_roles(cur: Any) -> list[dict[str, Any]]:
         SELECT app_role_id, role_code, role_name
         FROM app_roles
         WHERE is_active = 1
-          AND role_code IN ('ADMIN', 'EDITOR', 'VIEWER', 'PENDING')
-        ORDER BY FIELD(role_code, 'ADMIN', 'EDITOR', 'VIEWER', 'PENDING'), role_code
+          AND role_code IN ('VIEWER', 'EDITOR', 'ADMIN')
+        ORDER BY FIELD(role_code, 'VIEWER', 'EDITOR', 'ADMIN'), role_code
         """
     )
     return [dict(row) for row in cur.fetchall()]
@@ -384,7 +384,7 @@ async def register_user(request: Request) -> Response:
                 ),
             )
             app_user_id = int(cur.lastrowid)
-            assign_user_role(cur, app_user_id=app_user_id, role_code="PENDING", assigned_by_app_user_id=None)
+            assign_user_role(cur, app_user_id=app_user_id, role_code="VIEWER", assigned_by_app_user_id=None)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -667,6 +667,29 @@ def approve_user(request: Request, app_user_id: int) -> Response:
                 """,
                 (app_user_id,),
             )
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM app_user_roles ur
+                JOIN app_roles r
+                  ON r.app_role_id = ur.app_role_id
+                 AND r.is_active = 1
+                 AND r.role_code <> 'PENDING'
+                WHERE ur.app_user_id = %s
+                  AND ur.is_active = 1
+                  AND (ur.valid_from IS NULL OR ur.valid_from <= CURRENT_DATE())
+                  AND (ur.valid_to IS NULL OR ur.valid_to >= CURRENT_DATE())
+                """,
+                (app_user_id,),
+            )
+            role_count = int((cur.fetchone() or {}).get("cnt") or 0)
+            if role_count == 0:
+                assign_user_role(
+                    cur,
+                    app_user_id=app_user_id,
+                    role_code="VIEWER",
+                    assigned_by_app_user_id=int(user["app_user_id"]),
+                )
             conn.commit()
         except Exception:
             conn.rollback()
