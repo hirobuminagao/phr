@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set title = "ログイン" %}
+{% block body %}
+<main class="login-shell">
+  <section class="login-panel">
+    <div>
+      <p class="eyebrow">PHR</p>
+      <h1>健診管理</h1>
+      <p class="subtle">社員番号でログインしてください。</p>
+    </div>
+
+    {% if error %}
+    <div class="alert">ログインできませんでした: {{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/login" class="form-stack">
+      <label>
+        <span>社員番号</span>
+        <input name="employee_no" autocomplete="username" required autofocus>
+      </label>
+      <label>
+        <span>パスワード</span>
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit">ログイン</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

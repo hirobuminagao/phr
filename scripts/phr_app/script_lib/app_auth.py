@@ -295,3 +295,73 @@ def authenticate_user(
         session_token=session_token,
         permissions=permissions,
     )
+
+
+def get_authenticated_session(
+    cur: Cursor,
+    *,
+    app_db: str,
+    session_token: str | None,
+) -> dict[str, Any] | None:
+    if not session_token:
+        return None
+
+    token_sha256 = hashlib.sha256(session_token.encode("utf-8")).hexdigest()
+    cur.execute(
+        f"""
+        SELECT
+          s.`app_session_id`,
+          s.`app_user_id`,
+          u.`employee_no`,
+          u.`display_name`,
+          u.`department_name`,
+          u.`email`,
+          u.`must_change_password`
+        FROM {_schema(app_db)}.`app_sessions` s
+        JOIN {_schema(app_db)}.`app_users` u
+          ON u.`app_user_id` = s.`app_user_id`
+         AND u.`is_active` = 1
+        WHERE s.`session_token_sha256` = %s
+          AND s.`revoked_at` IS NULL
+          AND s.`expires_at` > CURRENT_TIMESTAMP(3)
+        """,
+        (token_sha256,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    app_user_id = int(row["app_user_id"])
+    permissions = get_user_permissions(cur, app_db=app_db, app_user_id=app_user_id)
+    cur.execute(
+        f"""
+        UPDATE {_schema(app_db)}.`app_sessions`
+        SET `last_seen_at` = CURRENT_TIMESTAMP(3)
+        WHERE `app_session_id` = %s
+        """,
+        (int(row["app_session_id"]),),
+    )
+    result = dict(row)
+    result["permissions"] = permissions
+    return result
+
+
+def revoke_session(
+    cur: Cursor,
+    *,
+    app_db: str,
+    session_token: str | None,
+) -> None:
+    if not session_token:
+        return
+
+    token_sha256 = hashlib.sha256(session_token.encode("utf-8")).hexdigest()
+    cur.execute(
+        f"""
+        UPDATE {_schema(app_db)}.`app_sessions`
+        SET `revoked_at` = CURRENT_TIMESTAMP(3)
+        WHERE `session_token_sha256` = %s
+          AND `revoked_at` IS NULL
+        """,
+        (token_sha256,),
+    )

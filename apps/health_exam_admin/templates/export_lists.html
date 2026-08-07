@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% set title = "出力リスト" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">HIA XML</p>
+    <h1>出力リスト</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">戻る</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="empty-state">
+    <h2>画面の入口だけ作成済み</h2>
+    <p>次の実装で、出力リスト作成・検索・追加済みリスト・HIAアップロード記帳をここへ接続します。</p>
+  </section>
+</main>
+{% endblock %}

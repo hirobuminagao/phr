@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% set title = "ダッシュボード" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">PHR Health Exam Admin</p>
+    <h1>健診管理</h1>
+  </div>
+  <form method="post" action="/logout">
+    <button class="ghost-button" type="submit">ログアウト</button>
+  </form>
+</header>
+
+<main class="page">
+  <section class="summary-grid">
+    <article class="summary-card">
+      <span>ログインユーザー</span>
+      <strong>{{ user.display_name }}</strong>
+      <small>{{ user.employee_no }}</small>
+    </article>
+    <article class="summary-card">
+      <span>部署</span>
+      <strong>{{ user.department_name or "未設定" }}</strong>
+      <small>{{ user.email or "" }}</small>
+    </article>
+    <article class="summary-card">
+      <span>権限数</span>
+      <strong>{{ user.permissions|length }}</strong>
+      <small>DB設定から取得</small>
+    </article>
+  </section>
+
+  <section class="work-list">
+    <a class="work-link" href="/export-lists">
+      <span>HIA XML 出力リスト</span>
+      <strong>出力対象の確認・作成へ</strong>
+    </a>
+  </section>
+
+  <section class="permission-panel">
+    <h2>現在の権限</h2>
+    <div class="permission-list">
+      {% for permission in user.permissions %}
+      <span>{{ permission }}</span>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+{% endblock %}

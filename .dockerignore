@@ -1,0 +1,13 @@
+.git
+.DS_Store
+**/.DS_Store
+**/__pycache__/
+**/*.pyc
+
+scripts/.env
+scripts/**/.env
+scripts/**/.env.*
+
+data/
+docs/spec/exam_result_csv_import/downloads/
+docs/spec/exam_result_csv_import/samples/
