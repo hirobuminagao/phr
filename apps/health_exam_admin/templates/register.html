@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set title = "新規登録" %}
+{% block body %}
+<main class="login-shell">
+  <section class="login-panel register-panel">
+    <div>
+      <p class="eyebrow">PHR</p>
+      <h1>新規登録</h1>
+      <p class="subtle">登録後、管理者の承認が完了するとログインできます。</p>
+    </div>
+
+    {% if message %}
+    <div class="notice">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+    <div class="alert">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/register" class="form-stack">
+      <label>
+        <span>社員番号</span>
+        <input name="employee_no" value="{{ form.employee_no or '' }}" autocomplete="username" required autofocus>
+      </label>
+      <label>
+        <span>氏名</span>
+        <input name="display_name" value="{{ form.display_name or '' }}" required>
+      </label>
+      <label>
+        <span>氏名カナ</span>
+        <input name="display_name_kana" value="{{ form.display_name_kana or '' }}">
+      </label>
+      <label>
+        <span>部署</span>
+        <input name="department_name" value="{{ form.department_name or '' }}">
+      </label>
+      <label>
+        <span>メールアドレス</span>
+        <input name="email" type="email" value="{{ form.email or '' }}" autocomplete="email">
+      </label>
+      <label>
+        <span>パスワード</span>
+        <input name="password" type="password" autocomplete="new-password" required>
+      </label>
+      <label>
+        <span>パスワード確認</span>
+        <input name="password_confirm" type="password" autocomplete="new-password" required>
+      </label>
+      <button type="submit">登録申請</button>
+    </form>
+
+    <div class="login-links">
+      <a href="/login">ログインへ戻る</a>
+    </div>
+  </section>
+</main>
+{% endblock %}

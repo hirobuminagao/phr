@@ -154,6 +154,32 @@ def count_remaining_active_user_managers(cur: Any, *, excluding_app_user_id: int
     return int(row.get("cnt") or 0)
 
 
+def assign_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by_app_user_id: int | None) -> None:
+    cur.execute("SELECT app_role_id FROM app_roles WHERE role_code = %s AND is_active = 1", (role_code,))
+    role = cur.fetchone()
+    if not role:
+        return
+    cur.execute(
+        """
+        INSERT INTO app_user_roles (
+          app_user_id,
+          app_role_id,
+          valid_from,
+          is_active,
+          assigned_by_app_user_id,
+          note
+        )
+        VALUES (%s, %s, CURRENT_DATE(), 1, %s, %s)
+        ON DUPLICATE KEY UPDATE
+          is_active = VALUES(is_active),
+          valid_to = NULL,
+          assigned_by_app_user_id = VALUES(assigned_by_app_user_id),
+          note = VALUES(note)
+        """,
+        (app_user_id, int(role["app_role_id"]), assigned_by_app_user_id, f"assigned by {role_code} registration flow"),
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -170,6 +196,115 @@ def index(request: Request) -> HTMLResponse:
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("login.html", {"request": request, "error": None})
+
+
+@app.get("/register", response_class=HTMLResponse)
+def register_form(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "register.html",
+        {"request": request, "message": None, "error": None, "form": {}},
+    )
+
+
+@app.post("/register", response_class=HTMLResponse)
+async def register_user(request: Request) -> Response:
+    form = await read_form(request)
+    employee_no = form.get("employee_no", "").strip()
+    display_name = form.get("display_name", "").strip()
+    display_name_kana = form.get("display_name_kana", "").strip() or None
+    department_name = form.get("department_name", "").strip() or None
+    email = form.get("email", "").strip() or None
+    password = form.get("password", "")
+    password_confirm = form.get("password_confirm", "")
+    form_values = {
+        "employee_no": employee_no,
+        "display_name": display_name,
+        "display_name_kana": display_name_kana or "",
+        "department_name": department_name or "",
+        "email": email or "",
+    }
+
+    if not employee_no or not display_name:
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "message": None, "error": "社員番号と氏名は必須です。", "form": form_values},
+            status_code=400,
+        )
+    if len(password) < 8:
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "message": None, "error": "パスワードは8文字以上にしてください。", "form": form_values},
+            status_code=400,
+        )
+    if password != password_confirm:
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "message": None, "error": "パスワードが一致しません。", "form": form_values},
+            status_code=400,
+        )
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute("SELECT app_user_id FROM app_users WHERE employee_no = %s", (employee_no,))
+            if cur.fetchone():
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "register.html",
+                    {"request": request, "message": None, "error": "この社員番号はすでに登録されています。", "form": form_values},
+                    status_code=400,
+                )
+
+            cur.execute(
+                """
+                INSERT INTO app_users (
+                  employee_no,
+                  display_name,
+                  display_name_kana,
+                  department_name,
+                  email,
+                  password_hash,
+                  password_hash_algorithm,
+                  password_changed_at,
+                  must_change_password,
+                  approval_status,
+                  approval_requested_at,
+                  is_active,
+                  note
+                )
+                VALUES (
+                  %s, %s, %s, %s, %s,
+                  %s, 'pbkdf2_sha256', CURRENT_TIMESTAMP(3), 0,
+                  'PENDING', CURRENT_TIMESTAMP(3), 1,
+                  'self registration from login screen'
+                )
+                """,
+                (
+                    employee_no,
+                    display_name,
+                    display_name_kana,
+                    department_name,
+                    email,
+                    hash_password(password),
+                ),
+            )
+            app_user_id = int(cur.lastrowid)
+            assign_user_role(cur, app_user_id=app_user_id, role_code="PENDING", assigned_by_app_user_id=None)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return templates.TemplateResponse(
+        "register.html",
+        {
+            "request": request,
+            "message": "登録申請を受け付けました。管理者の承認後にログインできます。",
+            "error": None,
+            "form": {},
+        },
+    )
 
 
 @app.post("/login", response_class=HTMLResponse)
