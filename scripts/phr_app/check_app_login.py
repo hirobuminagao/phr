@@ -20,15 +20,34 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check PHR app login and create a session.")
     parser.add_argument("--app-db", default="phr_app")
     parser.add_argument("--db-prefix", default="PHR_DB_")
-    parser.add_argument("--employee-no", required=True)
+    parser.add_argument("--employee-no")
     parser.add_argument("--client-ip")
     parser.add_argument("--user-agent", default="phr_app_cli")
     parser.add_argument("--password")
     return parser.parse_args()
 
 
+def prompt_required(label: str, current: str | None = None) -> str:
+    if current:
+        return current
+    while True:
+        value = input(f"{label}: ").strip()
+        if value:
+            return value
+        print(f"{label} は必須です。")
+
+
+def prompt_optional(label: str, current: str | None = None) -> str | None:
+    if current:
+        return current
+    value = input(f"{label} (空なら未指定): ").strip()
+    return value or None
+
+
 def main() -> int:
     args = parse_args()
+    args.employee_no = prompt_required("社員番号 / ログインID", args.employee_no)
+    args.client_ip = prompt_optional("接続元IP", args.client_ip)
     password = args.password or getpass.getpass("password: ")
     params = load_mysql_base_params(args.db_prefix)
 
