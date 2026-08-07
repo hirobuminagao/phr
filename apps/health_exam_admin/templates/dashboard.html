@@ -10,6 +10,7 @@
     <a class="ghost-button" href="/account">登録情報</a>
     {% if "users.manage" in user.permissions %}
     <a class="ghost-button" href="/admin/users">アカウント管理</a>
+    <a class="ghost-button" href="/admin/permissions">権限設定</a>
     {% endif %}
     <form method="post" action="/logout">
       <button class="ghost-button" type="submit">ログアウト</button>

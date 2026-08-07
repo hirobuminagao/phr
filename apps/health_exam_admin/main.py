@@ -221,6 +221,57 @@ def load_manageable_roles(cur: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_permission_matrix(cur: Any) -> dict[str, Any]:
+    roles = load_manageable_roles(cur)
+    cur.execute(
+        """
+        SELECT app_permission_id, permission_code, permission_name, permission_group, description
+        FROM app_permissions
+        WHERE is_active = 1
+        ORDER BY
+          FIELD(permission_group, 'users', 'health_exam', 'xml_export', 'hia', 'audit'),
+          permission_group,
+          app_permission_id
+        """
+    )
+    permissions = [dict(row) for row in cur.fetchall()]
+    cur.execute(
+        """
+        SELECT r.role_code, p.permission_code, rp.is_allowed
+        FROM app_role_permissions rp
+        JOIN app_roles r
+          ON r.app_role_id = rp.app_role_id
+         AND r.is_active = 1
+        JOIN app_permissions p
+          ON p.app_permission_id = rp.app_permission_id
+         AND p.is_active = 1
+        WHERE r.role_code IN ('ADMIN', 'EDITOR', 'VIEWER')
+        """
+    )
+    allowed: dict[str, bool] = {}
+    for row in cur.fetchall():
+        allowed[f"{row['role_code']}||{row['permission_code']}"] = bool(row["is_allowed"])
+    return {"roles": roles, "permissions": permissions, "allowed": allowed}
+
+
+def upsert_role_permission(cur: Any, *, role_code: str, permission_code: str, is_allowed: bool) -> None:
+    cur.execute(
+        """
+        INSERT INTO app_role_permissions (app_role_id, app_permission_id, is_allowed)
+        SELECT r.app_role_id, p.app_permission_id, %s
+        FROM app_roles r
+        JOIN app_permissions p
+        WHERE r.role_code = %s
+          AND r.is_active = 1
+          AND p.permission_code = %s
+          AND p.is_active = 1
+        ON DUPLICATE KEY UPDATE
+          is_allowed = VALUES(is_allowed)
+        """,
+        (1 if is_allowed else 0, role_code, permission_code),
+    )
+
+
 def admin_user_filters_from_request(request: Request) -> dict[str, str]:
     return {
         "q": (request.query_params.get("q") or "").strip(),
@@ -756,6 +807,76 @@ def admin_users(request: Request) -> Response:
             **page_data,
             "message": None,
             "temporary_password": None,
+            "error": None,
+        },
+    )
+
+
+@app.get("/admin/permissions", response_class=HTMLResponse)
+def permission_settings(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        matrix = load_permission_matrix(cur)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_permissions.html",
+        {
+            "request": request,
+            "user": user,
+            **matrix,
+            "message": None,
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/permissions", response_class=HTMLResponse)
+async def update_permission_settings(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            matrix = load_permission_matrix(cur)
+            permissions = matrix["permissions"]
+            for permission in permissions:
+                permission_code = str(permission["permission_code"])
+                upsert_role_permission(cur, role_code="ADMIN", permission_code=permission_code, is_allowed=True)
+                for role_code in ("EDITOR", "VIEWER"):
+                    is_allowed = form.get(f"allow__{role_code}__{permission_code}") == "1"
+                    if permission_code == "users.manage":
+                        is_allowed = False
+                    upsert_role_permission(
+                        cur,
+                        role_code=role_code,
+                        permission_code=permission_code,
+                        is_allowed=is_allowed,
+                    )
+            conn.commit()
+            matrix = load_permission_matrix(cur)
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_permissions.html",
+        {
+            "request": request,
+            "user": current_user(request) or user,
+            **matrix,
+            "message": "権限設定を更新しました。",
             "error": None,
         },
     )

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set title = "権限設定" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>権限設定</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/users">アカウント管理</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>ロール別の操作権限</h2>
+        <p class="subtle">管理者は常に全権限です。編集・閲覧は機能ごとに許可を調整します。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/permissions">
+      <div class="permission-matrix-wrap">
+        <table class="data-table permission-matrix">
+          <thead>
+            <tr>
+              <th>機能</th>
+              <th>グループ</th>
+              {% for role in roles %}
+              <th>{{ role.role_name }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for permission in permissions %}
+            <tr>
+              <td>
+                <strong>{{ permission.permission_name }}</strong>
+                <small>{{ permission.permission_code }}</small>
+              </td>
+              <td>{{ permission.permission_group }}</td>
+              {% for role in roles %}
+              {% set checked = allowed.get(role.role_code ~ '||' ~ permission.permission_code, false) %}
+              {% set locked = role.role_code == 'ADMIN' or (permission.permission_code == 'users.manage' and role.role_code != 'ADMIN') %}
+              <td>
+                <label class="toggle-cell">
+                  <input
+                    type="checkbox"
+                    name="allow__{{ role.role_code }}__{{ permission.permission_code }}"
+                    value="1"
+                    {% if checked or role.role_code == 'ADMIN' %}checked{% endif %}
+                    {% if locked %}disabled{% endif %}
+                  >
+                  <span class="toggle-label"></span>
+                </label>
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="form-actions permission-actions">
+        <button type="submit">更新</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

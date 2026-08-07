@@ -9,6 +9,7 @@
   --accent-dark: #0c5f4a;
   --danger-bg: #fff1f1;
   --danger-text: #9f1c1c;
+  --control-height: 42px;
 }
 
 * {
@@ -113,25 +114,27 @@ label {
   font-weight: 700;
 }
 
-input {
+input:not([type="checkbox"]) {
   width: 100%;
+  min-height: var(--control-height);
   border: 1px solid #b9c5d2;
   border-radius: 6px;
-  padding: 11px 12px;
+  padding: 0 12px;
   color: var(--text);
   background: #fff;
 }
 
 select {
   width: 100%;
+  min-height: var(--control-height);
   border: 1px solid #b9c5d2;
   border-radius: 6px;
-  padding: 11px 12px;
+  padding: 0 12px;
   color: var(--text);
   background: #fff;
 }
 
-input:focus,
+input:not([type="checkbox"]):focus,
 select:focus {
   outline: 3px solid rgba(20, 125, 100, 0.18);
   border-color: var(--accent);
@@ -140,6 +143,7 @@ select:focus {
 button,
 .work-link,
 .ghost-button {
+  min-height: var(--control-height);
   border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
@@ -147,7 +151,7 @@ button,
 }
 
 button[type="submit"] {
-  padding: 12px 16px;
+  padding: 0 16px;
   background: var(--accent);
   color: #fff;
   font-weight: 800;
@@ -160,8 +164,8 @@ button[type="submit"]:hover {
 .ghost-button {
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
-  padding: 8px 14px;
+  justify-content: center;
+  padding: 0 14px;
   background: #fff;
   border-color: #b9c5d2;
   color: var(--text);
@@ -273,6 +277,18 @@ button[type="submit"]:hover {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.section-heading h2 {
+  margin-bottom: 4px;
 }
 
 .narrow-page {
@@ -453,10 +469,71 @@ button[type="submit"]:hover {
   min-width: 220px;
 }
 
+.permission-matrix-wrap {
+  overflow-x: auto;
+}
+
+.permission-matrix {
+  min-width: 980px;
+}
+
+.permission-matrix th:nth-child(n + 3),
+.permission-matrix td:nth-child(n + 3) {
+  text-align: center;
+}
+
+.toggle-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #c9d6e2;
+  border-radius: 999px;
+  background: #f7fafc;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.toggle-cell input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-label::before {
+  content: "不可";
+}
+
+.toggle-cell:has(input:checked) {
+  border-color: #a7d8c9;
+  background: #e9f7f3;
+  color: var(--accent-dark);
+}
+
+.toggle-cell:has(input:checked) .toggle-label::before {
+  content: "許可";
+}
+
+.toggle-cell:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.permission-actions {
+  margin-top: 18px;
+}
+
 .switch-button {
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  min-height: var(--control-height);
   min-width: 112px;
   padding: 4px !important;
   border: 1px solid #b9c5d2 !important;
@@ -513,7 +590,7 @@ button[type="submit"]:hover {
 }
 
 .ghost-submit {
-  padding: 8px 12px !important;
+  padding: 0 12px !important;
   background: #fff !important;
   border: 1px solid #b9c5d2 !important;
   color: var(--text) !important;
