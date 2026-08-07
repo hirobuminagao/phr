@@ -20,12 +20,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create or update a PHR app user.")
     parser.add_argument("--app-db", default="phr_app")
     parser.add_argument("--db-prefix", default="PHR_DB_")
-    parser.add_argument("--employee-no", required=True)
-    parser.add_argument("--display-name", required=True)
+    parser.add_argument("--employee-no")
+    parser.add_argument("--display-name")
     parser.add_argument("--display-name-kana")
     parser.add_argument("--department-name")
     parser.add_argument("--email")
-    parser.add_argument("--role-code", action="append", default=["VIEWER"])
+    parser.add_argument("--role-code", action="append")
     parser.add_argument("--allowed-ip", action="append", default=[])
     parser.add_argument("--password")
     parser.add_argument("--inactive", action="store_true")
@@ -33,11 +33,80 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def prompt_required(label: str, current: str | None = None) -> str:
+    if current:
+        return current
+    while True:
+        value = input(f"{label}: ").strip()
+        if value:
+            return value
+        print(f"{label} は必須です。")
+
+
+def prompt_optional(label: str, current: str | None = None) -> str | None:
+    if current:
+        return current
+    value = input(f"{label} (空なら未設定): ").strip()
+    return value or None
+
+
+def prompt_yes_no(label: str, *, default: bool) -> bool:
+    suffix = "Y/n" if default else "y/N"
+    value = input(f"{label} [{suffix}]: ").strip().lower()
+    if not value:
+        return default
+    return value in {"y", "yes", "1", "true"}
+
+
+def prompt_role_codes(current: list[str] | None) -> list[str]:
+    if current:
+        return [role.strip().upper() for role in current if role.strip()]
+
+    print("ロールを選択してください: ADMIN / EDITOR / VIEWER")
+    value = input("role-code [ADMIN]: ").strip()
+    if not value:
+        return ["ADMIN"]
+    return [role.strip().upper() for role in value.split(",") if role.strip()]
+
+
+def prompt_allowed_ips(current: list[str]) -> list[str]:
+    if current:
+        return current
+
+    value = input("許可IP (空ならIP制限なし、複数はカンマ区切り): ").strip()
+    if not value:
+        return []
+    return [ip.strip() for ip in value.split(",") if ip.strip()]
+
+
+def prompt_password(current: str | None) -> str:
+    if current:
+        return current
+    while True:
+        password = getpass.getpass("password: ")
+        if not password:
+            print("password は必須です。")
+            continue
+        confirm = getpass.getpass("password confirm: ")
+        if password == confirm:
+            return password
+        print("password が一致しません。もう一度入力してください。")
+
+
 def main() -> int:
     args = parse_args()
-    password = args.password or getpass.getpass("password: ")
-    if not password:
-        raise RuntimeError("password is required")
+    args.employee_no = prompt_required("社員番号 / ログインID", args.employee_no)
+    args.display_name = prompt_required("表示名", args.display_name)
+    args.display_name_kana = prompt_optional("表示名カナ", args.display_name_kana)
+    args.department_name = prompt_optional("部署名", args.department_name)
+    args.email = prompt_optional("メールアドレス", args.email)
+    args.role_code = prompt_role_codes(args.role_code)
+    args.allowed_ip = prompt_allowed_ips(args.allowed_ip)
+    if not args.inactive:
+        args.inactive = not prompt_yes_no("有効ユーザーとして登録しますか", default=True)
+    if not args.no_must_change_password:
+        args.no_must_change_password = not prompt_yes_no("初回パスワード変更を要求しますか", default=True)
+    password = prompt_password(args.password)
 
     params = load_mysql_base_params(args.db_prefix)
     with connect_ctx(params, database=args.app_db, autocommit=False) as conn:
