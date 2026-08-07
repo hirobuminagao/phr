@@ -39,6 +39,21 @@ app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=APP_ROOT / "templates")
 
 
+def approval_status_label(status: str | None, *, is_active: bool = True) -> str:
+    labels = {
+        "APPROVED": "承認済み",
+        "PENDING": "承認待ち",
+        "REJECTED": "却下",
+    }
+    label = labels.get(status or "APPROVED", status or "承認済み")
+    if not is_active:
+        return f"{label} / 無効"
+    return label
+
+
+templates.env.globals["approval_status_label"] = approval_status_label
+
+
 def app_db() -> str:
     return os.getenv("PHR_APP_DB", "phr_app")
 

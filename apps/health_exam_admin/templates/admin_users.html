@@ -44,7 +44,7 @@
         <tr>
           <td>
             <span class="status-pill {{ 'status-pending' if row.approval_status == 'PENDING' else 'status-ready' if row.is_active else 'status-muted' }}">
-              {{ row.approval_status }}{% if not row.is_active %} / INACTIVE{% endif %}
+              {{ approval_status_label(row.approval_status, is_active=row.is_active) }}
             </span>
           </td>
           <td>{{ row.employee_no }}</td>

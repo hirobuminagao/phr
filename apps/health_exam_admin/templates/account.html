@@ -29,7 +29,7 @@
       </label>
       <label>
         <span>承認状態</span>
-        <input value="{{ user.approval_status or 'APPROVED' }}" disabled>
+        <input value="{{ approval_status_label(user.approval_status, is_active=user.is_active) }}" disabled>
       </label>
       <label>
         <span>表示名</span>

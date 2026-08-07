@@ -32,7 +32,7 @@
     <article class="summary-card">
       <span>権限数</span>
       <strong>{{ user.permissions|length }}</strong>
-      <small>{{ user.approval_status or "APPROVED" }}</small>
+      <small>{{ approval_status_label(user.approval_status, is_active=user.is_active) }}</small>
     </article>
   </section>
 
