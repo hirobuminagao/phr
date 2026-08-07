@@ -13,14 +13,22 @@ CREATE TABLE IF NOT EXISTS `app_users` (
   `locked_until` datetime(3) DEFAULT NULL,
   `last_login_at` datetime(3) DEFAULT NULL,
   `last_login_ip` varchar(45) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+  `approval_status` varchar(32) COLLATE utf8mb4_ja_0900_as_cs NOT NULL DEFAULT 'APPROVED' COMMENT 'APPROVED/PENDING/REJECTED。APPROVEDのみログイン可',
+  `approval_requested_at` datetime(3) DEFAULT NULL,
+  `approved_at` datetime(3) DEFAULT NULL,
+  `approved_by_app_user_id` bigint unsigned DEFAULT NULL,
+  `approval_note` text COLLATE utf8mb4_ja_0900_as_cs,
   `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `note` text COLLATE utf8mb4_ja_0900_as_cs,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`app_user_id`),
   UNIQUE KEY `uq_app_users_employee_no` (`employee_no`),
+  KEY `idx_app_users_approval` (`approval_status`,`is_active`),
+  KEY `idx_app_users_approved_by` (`approved_by_app_user_id`),
   KEY `idx_app_users_active` (`is_active`),
-  KEY `idx_app_users_last_login` (`last_login_at`)
+  KEY `idx_app_users_last_login` (`last_login_at`),
+  CONSTRAINT `fk_app_users_approved_by` FOREIGN KEY (`approved_by_app_user_id`) REFERENCES `app_users` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_ja_0900_as_cs;
 
 CREATE TABLE IF NOT EXISTS `app_roles` (

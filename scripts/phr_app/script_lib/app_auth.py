@@ -210,6 +210,19 @@ def authenticate_user(
         )
         return LoginResult(False, "USER_INACTIVE", app_user_id=app_user_id, employee_no=employee_no)
 
+    if str(user.get("approval_status") or "APPROVED") != "APPROVED":
+        record_login_attempt(
+            cur,
+            app_db=app_db,
+            employee_no=employee_no,
+            app_user_id=app_user_id,
+            success=False,
+            failure_reason="USER_NOT_APPROVED",
+            client_ip=client_ip,
+            user_agent=user_agent,
+        )
+        return LoginResult(False, "USER_NOT_APPROVED", app_user_id=app_user_id, employee_no=employee_no)
+
     locked_until = user.get("locked_until")
     if locked_until and locked_until > datetime.now():
         record_login_attempt(
@@ -316,7 +329,8 @@ def get_authenticated_session(
           u.`display_name`,
           u.`department_name`,
           u.`email`,
-          u.`must_change_password`
+          u.`must_change_password`,
+          u.`approval_status`
         FROM {_schema(app_db)}.`app_sessions` s
         JOIN {_schema(app_db)}.`app_users` u
           ON u.`app_user_id` = s.`app_user_id`

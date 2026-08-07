@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allowed-ip", action="append", default=[])
     parser.add_argument("--password")
     parser.add_argument("--inactive", action="store_true")
+    parser.add_argument("--pending-approval", action="store_true")
     parser.add_argument("--no-must-change-password", action="store_true")
     return parser.parse_args()
 
@@ -104,6 +105,8 @@ def main() -> int:
     args.allowed_ip = prompt_allowed_ips(args.allowed_ip)
     if not args.inactive:
         args.inactive = not prompt_yes_no("有効ユーザーとして登録しますか", default=True)
+    if not args.pending_approval:
+        args.pending_approval = prompt_yes_no("承認待ちユーザーとして登録しますか", default=False)
     if not args.no_must_change_password:
         args.no_must_change_password = not prompt_yes_no("初回パスワード変更を要求しますか", default=True)
     password = prompt_password(args.password)
@@ -124,9 +127,11 @@ def main() -> int:
                   password_hash_algorithm,
                   password_changed_at,
                   must_change_password,
+                  approval_status,
+                  approval_requested_at,
                   is_active
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, 'pbkdf2_sha256', CURRENT_TIMESTAMP(3), %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, 'pbkdf2_sha256', CURRENT_TIMESTAMP(3), %s, %s, CURRENT_TIMESTAMP(3), %s)
                 ON DUPLICATE KEY UPDATE
                   display_name = VALUES(display_name),
                   display_name_kana = VALUES(display_name_kana),
@@ -136,6 +141,8 @@ def main() -> int:
                   password_hash_algorithm = VALUES(password_hash_algorithm),
                   password_changed_at = VALUES(password_changed_at),
                   must_change_password = VALUES(must_change_password),
+                  approval_status = VALUES(approval_status),
+                  approval_requested_at = VALUES(approval_requested_at),
                   is_active = VALUES(is_active)
                 """,
                 (
@@ -146,7 +153,8 @@ def main() -> int:
                     args.email,
                     hash_password(password),
                     int(not args.no_must_change_password),
-                    int(not args.inactive),
+                    "PENDING" if args.pending_approval else "APPROVED",
+                    int(not args.inactive and not args.pending_approval),
                 ),
             )
             cur.execute("SELECT app_user_id FROM app_users WHERE employee_no = %s", (args.employee_no,))

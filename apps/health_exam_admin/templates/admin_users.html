@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set title = "アカウント管理" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>アカウント管理</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">戻る</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel table-panel">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>状態</th>
+          <th>社員番号</th>
+          <th>氏名</th>
+          <th>部署</th>
+          <th>最終ログイン</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in users %}
+        <tr>
+          <td>
+            <span class="status-pill {{ 'status-pending' if row.approval_status == 'PENDING' else 'status-ready' if row.is_active else 'status-muted' }}">
+              {{ row.approval_status }}{% if not row.is_active %} / INACTIVE{% endif %}
+            </span>
+          </td>
+          <td>{{ row.employee_no }}</td>
+          <td>
+            <strong>{{ row.display_name }}</strong>
+            <small>{{ row.display_name_kana or '' }}</small>
+          </td>
+          <td>{{ row.department_name or '' }}</td>
+          <td>{{ row.last_login_at or '' }}</td>
+          <td class="row-actions">
+            {% if row.approval_status != 'APPROVED' %}
+            <form method="post" action="/admin/users/{{ row.app_user_id }}/approve">
+              <button type="submit">承認</button>
+            </form>
+            {% endif %}
+            {% if row.is_active and row.app_user_id != user.app_user_id %}
+            <form method="post" action="/admin/users/{{ row.app_user_id }}/disable">
+              <button class="danger-button" type="submit">無効</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</main>
+{% endblock %}

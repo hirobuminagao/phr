@@ -21,6 +21,14 @@ from scripts.phr_app.script_lib.app_auth import (
 
 APP_ROOT = Path(__file__).resolve().parent
 SESSION_COOKIE_NAME = "phr_app_session"
+LOGIN_ERROR_MESSAGES = {
+    "USER_NOT_FOUND": "社員番号またはパスワードが違います。",
+    "PASSWORD_MISMATCH": "社員番号またはパスワードが違います。",
+    "USER_INACTIVE": "このアカウントは無効です。",
+    "USER_LOCKED": "このアカウントは一時的にロックされています。",
+    "IP_NOT_ALLOWED": "この端末からのログインは許可されていません。",
+    "USER_NOT_APPROVED": "承認待ちです。管理者の承認後にログインできます。",
+}
 
 app = FastAPI(title="PHR Health Exam Admin")
 app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
@@ -64,6 +72,17 @@ def current_user(request: Request) -> dict[str, Any] | None:
             raise
 
 
+def has_permission(user: dict[str, Any], permission_code: str) -> bool:
+    return permission_code in set(user.get("permissions") or ())
+
+
+def require_user(request: Request) -> dict[str, Any] | RedirectResponse:
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return user
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -71,9 +90,9 @@ def health() -> dict[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
-    user = current_user(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 
@@ -106,9 +125,10 @@ async def login(request: Request) -> Response:
             raise
 
     if not result.success:
+        reason = result.failure_reason or "LOGIN_FAILED"
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "error": result.failure_reason or "LOGIN_FAILED"},
+            {"request": request, "error": LOGIN_ERROR_MESSAGES.get(reason, "ログインできませんでした。")},
             status_code=401,
         )
 
@@ -144,7 +164,154 @@ def logout(request: Request) -> RedirectResponse:
 
 @app.get("/export-lists", response_class=HTMLResponse)
 def export_lists(request: Request) -> Response:
-    user = current_user(request)
-    if not user:
-        return RedirectResponse("/login", status_code=303)
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
     return templates.TemplateResponse("export_lists.html", {"request": request, "user": user})
+
+
+@app.get("/account", response_class=HTMLResponse)
+def account_form(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse(
+        "account.html",
+        {"request": request, "user": user, "message": None, "error": None},
+    )
+
+
+@app.post("/account", response_class=HTMLResponse)
+async def update_account(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    form = await read_form(request)
+    display_name = form.get("display_name", "").strip()
+    display_name_kana = form.get("display_name_kana", "").strip() or None
+    department_name = form.get("department_name", "").strip() or None
+    email = form.get("email", "").strip() or None
+    if not display_name:
+        return templates.TemplateResponse(
+            "account.html",
+            {"request": request, "user": user, "message": None, "error": "表示名は必須です。"},
+            status_code=400,
+        )
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                """
+                UPDATE app_users
+                   SET display_name = %s,
+                       display_name_kana = %s,
+                       department_name = %s,
+                       email = %s
+                 WHERE app_user_id = %s
+                """,
+                (display_name, display_name_kana, department_name, email, int(user["app_user_id"])),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    refreshed = current_user(request) or user
+    return templates.TemplateResponse(
+        "account.html",
+        {"request": request, "user": refreshed, "message": "登録情報を更新しました。", "error": None},
+    )
+
+
+@app.get("/admin/users", response_class=HTMLResponse)
+def admin_users(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            """
+            SELECT
+              app_user_id,
+              employee_no,
+              display_name,
+              display_name_kana,
+              department_name,
+              email,
+              approval_status,
+              is_active,
+              approval_requested_at,
+              approved_at,
+              last_login_at
+            FROM app_users
+            ORDER BY
+              CASE approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
+              app_user_id
+            """
+        )
+        users = cur.fetchall()
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_users.html",
+        {"request": request, "user": user, "users": users, "message": None},
+    )
+
+
+@app.post("/admin/users/{app_user_id}/approve")
+def approve_user(request: Request, app_user_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                """
+                UPDATE app_users
+                   SET approval_status = 'APPROVED',
+                       is_active = 1,
+                       approved_at = CURRENT_TIMESTAMP(3),
+                       approved_by_app_user_id = %s
+                 WHERE app_user_id = %s
+                """,
+                (int(user["app_user_id"]), app_user_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{app_user_id}/disable")
+def disable_user(request: Request, app_user_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    if int(user["app_user_id"]) == app_user_id:
+        return RedirectResponse("/admin/users", status_code=303)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute("UPDATE app_users SET is_active = 0 WHERE app_user_id = %s", (app_user_id,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/users", status_code=303)

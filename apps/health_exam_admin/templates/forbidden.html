@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% set title = "権限不足" %}
+{% block body %}
+<main class="login-shell">
+  <section class="login-panel">
+    <p class="eyebrow">Forbidden</p>
+    <h1>権限がありません</h1>
+    <p class="subtle">この操作には管理権限が必要です。</p>
+    <a class="ghost-button" href="/">戻る</a>
+  </section>
+</main>
+{% endblock %}

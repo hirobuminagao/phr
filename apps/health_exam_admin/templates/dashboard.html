@@ -6,9 +6,15 @@
     <p class="eyebrow">PHR Health Exam Admin</p>
     <h1>健診管理</h1>
   </div>
-  <form method="post" action="/logout">
-    <button class="ghost-button" type="submit">ログアウト</button>
-  </form>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/account">登録情報</a>
+    {% if "users.manage" in user.permissions %}
+    <a class="ghost-button" href="/admin/users">アカウント管理</a>
+    {% endif %}
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
 </header>
 
 <main class="page">
@@ -26,7 +32,7 @@
     <article class="summary-card">
       <span>権限数</span>
       <strong>{{ user.permissions|length }}</strong>
-      <small>DB設定から取得</small>
+      <small>{{ user.approval_status or "APPROVED" }}</small>
     </article>
   </section>
 

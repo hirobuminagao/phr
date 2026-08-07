@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% set title = "登録情報" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Account</p>
+    <h1>登録情報</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">戻る</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page narrow-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <form method="post" action="/account" class="form-grid">
+      <label>
+        <span>社員番号</span>
+        <input value="{{ user.employee_no }}" disabled>
+      </label>
+      <label>
+        <span>承認状態</span>
+        <input value="{{ user.approval_status or 'APPROVED' }}" disabled>
+      </label>
+      <label>
+        <span>表示名</span>
+        <input name="display_name" value="{{ user.display_name }}" required>
+      </label>
+      <label>
+        <span>表示名カナ</span>
+        <input name="display_name_kana" value="{{ user.display_name_kana or '' }}">
+      </label>
+      <label>
+        <span>部署名</span>
+        <input name="department_name" value="{{ user.department_name or '' }}">
+      </label>
+      <label>
+        <span>メールアドレス</span>
+        <input name="email" value="{{ user.email or '' }}">
+      </label>
+      <div class="form-actions">
+        <button type="submit">更新</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}
