@@ -25,6 +25,85 @@
   </section>
   {% endif %}
 
+  <section class="panel issue-panel">
+    <h2>本人以外のアカウント発行</h2>
+    <form method="post" action="/admin/users/issue" class="form-grid compact-form">
+      <label>
+        <span>社員番号 <em class="required-mark">必須</em></span>
+        <input name="employee_no" value="{{ issue_form.employee_no or '' }}" required>
+      </label>
+      <label>
+        <span>氏名 <em class="required-mark">必須</em></span>
+        <input name="display_name" value="{{ issue_form.display_name or '' }}" required>
+      </label>
+      <label>
+        <span>氏名カナ</span>
+        <input name="display_name_kana" value="{{ issue_form.display_name_kana or '' }}">
+      </label>
+      <label>
+        <span>部署</span>
+        <input name="department_name" value="{{ issue_form.department_name or '' }}">
+      </label>
+      <label>
+        <span>メールアドレス</span>
+        <input name="email" type="email" value="{{ issue_form.email or '' }}">
+      </label>
+      <label>
+        <span>ロール</span>
+        <select name="role_code">
+          {% for role in roles %}
+          <option value="{{ role.role_code }}" {% if (issue_form.role_code or 'VIEWER') == role.role_code %}selected{% endif %}>
+            {{ role.role_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">発行</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel filter-panel">
+    <h2>絞り込み</h2>
+    <form method="get" action="/admin/users" class="filter-form">
+      <label>
+        <span>社員番号・氏名</span>
+        <input name="q" value="{{ filters.q or '' }}" list="user-search-suggestions" placeholder="社員番号 / 氏名 / カナ">
+        <datalist id="user-search-suggestions">
+          {% for suggestion in suggestions %}
+          <option value="{{ suggestion }}"></option>
+          {% endfor %}
+        </datalist>
+      </label>
+      <label>
+        <span>状態</span>
+        <select name="status">
+          <option value="" {% if not filters.status %}selected{% endif %}>すべて</option>
+          <option value="active" {% if filters.status == 'active' %}selected{% endif %}>有効</option>
+          <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>承認待ち</option>
+          <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>無効</option>
+          <option value="rejected" {% if filters.status == 'rejected' %}selected{% endif %}>却下</option>
+        </select>
+      </label>
+      <label>
+        <span>ロール</span>
+        <select name="role_code">
+          <option value="" {% if not filters.role_code %}selected{% endif %}>すべて</option>
+          {% for role in roles %}
+          <option value="{{ role.role_code }}" {% if filters.role_code == role.role_code %}selected{% endif %}>
+            {{ role.role_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/admin/users">クリア</a>
+      </div>
+    </form>
+  </section>
+
   <section class="panel table-panel">
     <table class="data-table">
       <thead>

@@ -328,8 +328,29 @@ button[type="submit"]:hover {
   gap: 18px;
 }
 
+.compact-form {
+  margin-top: 14px;
+}
+
 .form-actions {
   grid-column: 1 / -1;
+}
+
+.issue-panel,
+.filter-panel {
+  margin-bottom: 18px;
+}
+
+.filter-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) minmax(160px, 0.8fr) minmax(160px, 0.8fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .table-panel {

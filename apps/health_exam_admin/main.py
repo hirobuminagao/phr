@@ -113,9 +113,54 @@ def generate_temporary_password(length: int = 12) -> str:
             return password
 
 
-def load_admin_user_rows(cur: Any) -> list[dict[str, Any]]:
+def load_admin_user_rows(cur: Any, *, filters: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    filters = filters or {}
+    where_parts: list[str] = []
+    params: list[Any] = []
+    status = filters.get("status", "").strip()
+    role_code = filters.get("role_code", "").strip()
+    query = filters.get("q", "").strip()
+    if status == "active":
+        where_parts.append("u.approval_status = 'APPROVED' AND u.is_active = 1")
+    elif status == "pending":
+        where_parts.append("u.approval_status = 'PENDING'")
+    elif status == "inactive":
+        where_parts.append("u.is_active = 0")
+    elif status == "rejected":
+        where_parts.append("u.approval_status = 'REJECTED'")
+    if role_code:
+        where_parts.append(
+            """
+            EXISTS (
+              SELECT 1
+              FROM app_user_roles fur
+              JOIN app_roles fr
+                ON fr.app_role_id = fur.app_role_id
+               AND fr.is_active = 1
+               AND fr.role_code = %s
+              WHERE fur.app_user_id = u.app_user_id
+                AND fur.is_active = 1
+                AND (fur.valid_from IS NULL OR fur.valid_from <= CURRENT_DATE())
+                AND (fur.valid_to IS NULL OR fur.valid_to >= CURRENT_DATE())
+            )
+            """
+        )
+        params.append(role_code)
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              u.employee_no LIKE %s
+              OR u.display_name LIKE %s
+              OR u.display_name_kana LIKE %s
+            )
+            """
+        )
+        params.extend([like, like, like])
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur.execute(
-        """
+        f"""
         SELECT
           u.app_user_id,
           u.employee_no,
@@ -140,6 +185,7 @@ def load_admin_user_rows(cur: Any) -> list[dict[str, Any]]:
         LEFT JOIN app_roles r
           ON r.app_role_id = ur.app_role_id
          AND r.is_active = 1
+        {where_sql}
         GROUP BY
           u.app_user_id,
           u.employee_no,
@@ -156,7 +202,8 @@ def load_admin_user_rows(cur: Any) -> list[dict[str, Any]]:
         ORDER BY
           CASE u.approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
           u.app_user_id
-        """
+        """,
+        tuple(params),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -172,6 +219,44 @@ def load_manageable_roles(cur: Any) -> list[dict[str, Any]]:
         """
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def admin_user_filters_from_request(request: Request) -> dict[str, str]:
+    return {
+        "q": (request.query_params.get("q") or "").strip(),
+        "status": (request.query_params.get("status") or "").strip(),
+        "role_code": (request.query_params.get("role_code") or "").strip(),
+    }
+
+
+def load_user_search_suggestions(cur: Any) -> list[str]:
+    cur.execute(
+        """
+        SELECT employee_no, display_name, display_name_kana
+        FROM app_users
+        ORDER BY app_user_id
+        LIMIT 300
+        """
+    )
+    suggestions: list[str] = []
+    seen: set[str] = set()
+    for row in cur.fetchall():
+        for key in ("employee_no", "display_name", "display_name_kana"):
+            value = str(row.get(key) or "").strip()
+            if value and value not in seen:
+                suggestions.append(value)
+                seen.add(value)
+    return suggestions
+
+
+def load_admin_page_data(cur: Any, *, filters: dict[str, str] | None = None) -> dict[str, Any]:
+    return {
+        "users": load_admin_user_rows(cur, filters=filters),
+        "roles": load_manageable_roles(cur),
+        "suggestions": load_user_search_suggestions(cur),
+        "filters": filters or {},
+        "issue_form": {},
+    }
 
 
 def count_remaining_active_user_managers(cur: Any, *, excluding_app_user_id: int) -> int:
@@ -249,6 +334,11 @@ def assign_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by_
         """,
         (app_user_id, int(role["app_role_id"]), assigned_by_app_user_id, f"assigned by {role_code} registration flow"),
     )
+
+
+def role_exists(cur: Any, *, role_code: str) -> bool:
+    cur.execute("SELECT 1 FROM app_roles WHERE role_code = %s AND is_active = 1", (role_code,))
+    return cur.fetchone() is not None
 
 
 def replace_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by_app_user_id: int) -> bool:
@@ -625,21 +715,159 @@ def admin_users(request: Request) -> Response:
     if not has_permission(user, "users.manage"):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
+    filters = admin_user_filters_from_request(request)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=app_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
-        users = load_admin_user_rows(cur)
-        roles = load_manageable_roles(cur)
+        page_data = load_admin_page_data(cur, filters=filters)
         cur.close()
     return templates.TemplateResponse(
         "admin_users.html",
         {
             "request": request,
             "user": user,
-            "users": users,
-            "roles": roles,
+            **page_data,
             "message": None,
             "temporary_password": None,
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/users/issue")
+async def issue_user(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    employee_no = form.get("employee_no", "").strip()
+    display_name = form.get("display_name", "").strip()
+    display_name_kana = form.get("display_name_kana", "").strip() or None
+    department_name = form.get("department_name", "").strip() or None
+    email = form.get("email", "").strip() or None
+    role_code = form.get("role_code", "VIEWER").strip() or "VIEWER"
+    issue_form = {
+        "employee_no": employee_no,
+        "display_name": display_name,
+        "display_name_kana": display_name_kana or "",
+        "department_name": department_name or "",
+        "email": email or "",
+        "role_code": role_code,
+    }
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not employee_no or not display_name:
+                page_data = load_admin_page_data(cur)
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "admin_users.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        **page_data,
+                        "issue_form": issue_form,
+                        "message": None,
+                        "temporary_password": None,
+                        "error": "社員番号と氏名は必須です。",
+                    },
+                    status_code=400,
+                )
+            if not role_exists(cur, role_code=role_code):
+                page_data = load_admin_page_data(cur)
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "admin_users.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        **page_data,
+                        "issue_form": issue_form,
+                        "message": None,
+                        "temporary_password": None,
+                        "error": "指定されたロールが見つかりません。",
+                    },
+                    status_code=400,
+                )
+            cur.execute("SELECT app_user_id FROM app_users WHERE employee_no = %s", (employee_no,))
+            if cur.fetchone():
+                page_data = load_admin_page_data(cur)
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "admin_users.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        **page_data,
+                        "issue_form": issue_form,
+                        "message": None,
+                        "temporary_password": None,
+                        "error": "この社員番号はすでに登録されています。",
+                    },
+                    status_code=400,
+                )
+
+            temporary_password = generate_temporary_password()
+            cur.execute(
+                """
+                INSERT INTO app_users (
+                  employee_no,
+                  display_name,
+                  display_name_kana,
+                  department_name,
+                  email,
+                  password_hash,
+                  password_hash_algorithm,
+                  password_changed_at,
+                  must_change_password,
+                  approval_status,
+                  approved_at,
+                  approved_by_app_user_id,
+                  is_active,
+                  note
+                )
+                VALUES (
+                  %s, %s, %s, %s, %s,
+                  %s, 'pbkdf2_sha256', CURRENT_TIMESTAMP(3), 1,
+                  'APPROVED', CURRENT_TIMESTAMP(3), %s, 1,
+                  'issued by admin screen'
+                )
+                """,
+                (
+                    employee_no,
+                    display_name,
+                    display_name_kana,
+                    department_name,
+                    email,
+                    hash_password(temporary_password),
+                    int(user["app_user_id"]),
+                ),
+            )
+            app_user_id = int(cur.lastrowid)
+            assign_user_role(
+                cur,
+                app_user_id=app_user_id,
+                role_code=role_code,
+                assigned_by_app_user_id=int(user["app_user_id"]),
+            )
+            page_data = load_admin_page_data(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return templates.TemplateResponse(
+        "admin_users.html",
+        {
+            "request": request,
+            "user": user,
+            **page_data,
+            "message": "アカウントを発行しました。初期パスワードを本人に伝えてください。",
+            "temporary_password": temporary_password,
             "error": None,
         },
     )
@@ -727,16 +955,14 @@ async def update_user_role(request: Request, app_user_id: int) -> Response:
         try:
             if not role_has_user_manage(cur, role_code=role_code):
                 if count_remaining_active_user_managers(cur, excluding_app_user_id=app_user_id) <= 0:
-                    users = load_admin_user_rows(cur)
-                    roles = load_manageable_roles(cur)
+                    page_data = load_admin_page_data(cur)
                     conn.rollback()
                     return templates.TemplateResponse(
                         "admin_users.html",
                         {
                             "request": request,
                             "user": user,
-                            "users": users,
-                            "roles": roles,
+                            **page_data,
                             "message": None,
                             "temporary_password": None,
                             "error": "有効な管理者が0人になるためロールを変更できません。",
@@ -749,16 +975,14 @@ async def update_user_role(request: Request, app_user_id: int) -> Response:
                 role_code=role_code,
                 assigned_by_app_user_id=int(user["app_user_id"]),
             ):
-                users = load_admin_user_rows(cur)
-                roles = load_manageable_roles(cur)
+                page_data = load_admin_page_data(cur)
                 conn.rollback()
                 return templates.TemplateResponse(
                     "admin_users.html",
                     {
                         "request": request,
                         "user": user,
-                        "users": users,
-                        "roles": roles,
+                        **page_data,
                         "message": None,
                         "temporary_password": None,
                         "error": "指定されたロールが見つかりません。",
@@ -798,8 +1022,7 @@ def reset_user_password(request: Request, app_user_id: int) -> Response:
                 """,
                 (hash_password(temporary_password), app_user_id),
             )
-            users = load_admin_user_rows(cur)
-            roles = load_manageable_roles(cur)
+            page_data = load_admin_page_data(cur)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -810,8 +1033,7 @@ def reset_user_password(request: Request, app_user_id: int) -> Response:
         {
             "request": request,
             "user": user,
-            "users": users,
-            "roles": roles,
+            **page_data,
             "message": "初期パスワードを発行しました。本人に伝えてください。",
             "temporary_password": temporary_password,
             "error": None,
@@ -831,16 +1053,14 @@ def disable_user(request: Request, app_user_id: int) -> Response:
         cur = dict_cursor(conn)
         try:
             if count_remaining_active_user_managers(cur, excluding_app_user_id=app_user_id) <= 0:
-                users = load_admin_user_rows(cur)
-                roles = load_manageable_roles(cur)
+                page_data = load_admin_page_data(cur)
                 conn.rollback()
                 return templates.TemplateResponse(
                     "admin_users.html",
                     {
                         "request": request,
                         "user": user,
-                        "users": users,
-                        "roles": roles,
+                        **page_data,
                         "message": None,
                         "temporary_password": None,
                         "error": "有効な管理者が0人になるため無効化できません。",
