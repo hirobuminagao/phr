@@ -25,6 +25,7 @@ from scripts.lib.etl import start_run as etl_start_run
 
 HEALTH_DB = "health_exam_result"
 DEV_DB = "dev_phr"
+WORK_DB = "work_other"
 REPORT_TABLE = "exam_result_ledger_report"
 ETL_PHASE = "REPORT_EXAM_RESULT_LEDGER"
 ETL_SOURCE = "FROM_MEDICAL"
@@ -126,6 +127,11 @@ REPORT_COLUMNS = (
     "merge_reason",
     "relationship_name",
     "qualification_lost_date",
+    "hia_dashboard_status",
+    "hia_dashboard_reservation_date",
+    "hia_dashboard_exam_date",
+    "hia_dashboard_medical_institution",
+    "hia_dashboard_course_name",
     "refreshed_at",
 )
 
@@ -135,6 +141,7 @@ class ReportConfig:
     event_id: int
     health_db: str
     dev_db: str
+    work_db: str
     dry_run: bool
 
 
@@ -177,6 +184,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
     parser.add_argument("--dev-db", default=DEV_DB)
+    parser.add_argument("--work-db", default=WORK_DB)
     return parser.parse_args()
 
 
@@ -191,6 +199,7 @@ def validate_config(config: ReportConfig) -> None:
         raise ValueError("event_id must be positive")
     qname(config.health_db)
     qname(config.dev_db)
+    qname(config.work_db)
 
 
 def source_count(cur: Any, *, schema: str, event_id: int, source_type: str) -> int:
@@ -220,8 +229,14 @@ def load_table_columns(cur: Any, *, schema: str, table: str) -> set[str]:
     return {str(row["COLUMN_NAME"]) for row in cur.fetchall()}
 
 
-def build_insert_sql(config: ReportConfig, *, subscriber_columns: set[str]) -> str:
+def build_insert_sql(
+    config: ReportConfig,
+    *,
+    subscriber_columns: set[str],
+    dashboard_columns: set[str],
+) -> str:
     select_expressions: list[str] = []
+    has_dashboard = bool(dashboard_columns)
 
     for target in REPORT_COLUMNS:
         if target == "report_run_id":
@@ -242,6 +257,16 @@ def build_insert_sql(config: ReportConfig, *, subscriber_columns: set[str]) -> s
             expression = "s.`relationship_name`" if "relationship_name" in subscriber_columns else "NULL"
         elif target == "qualification_lost_date":
             expression = "s.`qualification_lost_date`" if "qualification_lost_date" in subscriber_columns else "NULL"
+        elif target == "hia_dashboard_status":
+            expression = "hds.`status`" if has_dashboard and "status" in dashboard_columns else "NULL"
+        elif target == "hia_dashboard_reservation_date":
+            expression = "hds.`reservation_date`" if has_dashboard and "reservation_date" in dashboard_columns else "NULL"
+        elif target == "hia_dashboard_exam_date":
+            expression = "hds.`exam_date`" if has_dashboard and "exam_date" in dashboard_columns else "NULL"
+        elif target == "hia_dashboard_medical_institution":
+            expression = "hds.`medical_institution`" if has_dashboard and "medical_institution" in dashboard_columns else "NULL"
+        elif target == "hia_dashboard_course_name":
+            expression = "hds.`course_name`" if has_dashboard and "course_name" in dashboard_columns else "NULL"
         elif target == "refreshed_at":
             expression = "CURRENT_TIMESTAMP(3)"
         elif target == "source_created_at":
@@ -254,6 +279,25 @@ def build_insert_sql(config: ReportConfig, *, subscriber_columns: set[str]) -> s
 
     insert_columns = ",\n            ".join(qname(column) for column in REPORT_COLUMNS)
     select_columns = ",\n            ".join(select_expressions)
+    dashboard_join = ""
+    if has_dashboard:
+        dashboard_join = f"""
+        LEFT JOIN (
+          SELECT
+            `hia_subscriber_id`,
+            MAX(`hia_dashboard_person_id`) AS `hia_dashboard_person_id`
+          FROM {qname(config.work_db)}.`hia_dashboard_status`
+          WHERE `is_active` = 1
+            AND `hia_subscriber_id` IS NOT NULL
+            AND `hia_subscriber_id` <> ''
+          GROUP BY `hia_subscriber_id`
+        ) AS hds_latest
+          ON hds_latest.`hia_subscriber_id` = l.`hia_subscriber_id`
+         AND l.`hia_subscriber_id` IS NOT NULL
+         AND l.`hia_subscriber_id` <> ''
+        LEFT JOIN {qname(config.work_db)}.`hia_dashboard_status` AS hds
+          ON hds.`hia_dashboard_person_id` = hds_latest.`hia_dashboard_person_id`
+        """
     return f"""
         INSERT INTO {qname(config.health_db)}.{qname(REPORT_TABLE)} (
             {insert_columns}
@@ -263,6 +307,7 @@ def build_insert_sql(config: ReportConfig, *, subscriber_columns: set[str]) -> s
         FROM {qname(config.health_db)}.`exam_ledgers` AS l
         LEFT JOIN {qname(config.dev_db)}.`subscribers` AS s
           ON s.`id` = l.`subscriber_id`
+        {dashboard_join}
         WHERE l.`event_id` = %s
     """
 
@@ -291,8 +336,13 @@ def insert_ledger_rows(
     report_run_id: int,
 ) -> int:
     subscriber_columns = load_table_columns(cur, schema=config.dev_db, table="subscribers")
+    dashboard_columns = load_table_columns(cur, schema=config.work_db, table="hia_dashboard_status")
     cur.execute(
-        build_insert_sql(config, subscriber_columns=subscriber_columns),
+        build_insert_sql(
+            config,
+            subscriber_columns=subscriber_columns,
+            dashboard_columns=dashboard_columns,
+        ),
         (report_run_id, config.event_id),
     )
     return int(cur.rowcount)
@@ -385,6 +435,7 @@ def main() -> int:
         event_id=args.event_id,
         health_db=args.health_db,
         dev_db=args.dev_db,
+        work_db=args.work_db,
         dry_run=bool(args.dry_run),
     )
     params = load_mysql_base_params(args.db_prefix)

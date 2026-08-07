@@ -101,6 +101,13 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   -- subscriberから報告時点の値を付加するブロック
   `relationship_name` varchar(190) DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.relationship_name',
   `qualification_lost_date` date DEFAULT NULL COMMENT '報告作成時点のdev_phr.subscribers.qualification_lost_date',
+
+  -- HIAダッシュボード最新状態を付加するブロック
+  `hia_dashboard_status` varchar(64) DEFAULT NULL COMMENT '報告作成時点のwork_other.hia_dashboard_status.status。hia_subscriber_idがある場合のみ参照',
+  `hia_dashboard_reservation_date` date DEFAULT NULL COMMENT '報告作成時点のwork_other.hia_dashboard_status.reservation_date',
+  `hia_dashboard_exam_date` date DEFAULT NULL COMMENT '報告作成時点のwork_other.hia_dashboard_status.exam_date',
+  `hia_dashboard_medical_institution` varchar(190) DEFAULT NULL COMMENT '報告作成時点のwork_other.hia_dashboard_status.medical_institution',
+  `hia_dashboard_course_name` varchar(190) DEFAULT NULL COMMENT '報告作成時点のwork_other.hia_dashboard_status.course_name',
   `refreshed_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '報告行の更新日時',
 
   PRIMARY KEY (`report_row_id`),
@@ -110,6 +117,7 @@ CREATE TABLE `health_exam_result`.`exam_result_ledger_report` (
   KEY `idx_exam_result_ledger_report_subscriber` (`subscriber_id`),
   KEY `idx_exam_result_ledger_report_facility` (`facility_code`),
   KEY `idx_exam_result_ledger_report_exam_date` (`exam_date`),
+  KEY `idx_exam_result_ledger_report_hia_dashboard_status` (`hia_dashboard_status`),
   KEY `idx_exam_result_ledger_report_run` (`report_run_id`),
   CONSTRAINT `fk_exam_result_ledger_report_run`
     FOREIGN KEY (`report_run_id`)
