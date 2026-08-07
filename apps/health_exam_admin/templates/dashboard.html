@@ -36,6 +36,13 @@
     </article>
   </section>
 
+  {% if user.must_change_password %}
+  <section class="warning-strip">
+    <strong>初期パスワードのままです。</strong>
+    <a href="/account/password">パスワードを変更</a>
+  </section>
+  {% endif %}
+
   <section class="work-list">
     <a class="work-link" href="/export-lists">
       <span>HIA XML 出力リスト</span>

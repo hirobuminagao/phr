@@ -15,6 +15,15 @@
 </header>
 
 <main class="page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if temporary_password %}
+  <section class="temporary-password-panel">
+    <span>初期パスワード</span>
+    <strong>{{ temporary_password }}</strong>
+    <small>この画面で一度だけ表示します。本人へ伝達後、本人がパスワード変更します。</small>
+  </section>
+  {% endif %}
+
   <section class="panel table-panel">
     <table class="data-table">
       <thead>
@@ -23,6 +32,7 @@
           <th>社員番号</th>
           <th>氏名</th>
           <th>部署</th>
+          <th>PW</th>
           <th>最終ログイン</th>
           <th>操作</th>
         </tr>
@@ -41,6 +51,7 @@
             <small>{{ row.display_name_kana or '' }}</small>
           </td>
           <td>{{ row.department_name or '' }}</td>
+          <td>{% if row.must_change_password %}<span class="status-pill status-pending">初期</span>{% endif %}</td>
           <td>{{ row.last_login_at or '' }}</td>
           <td class="row-actions">
             {% if row.approval_status != 'APPROVED' %}
@@ -53,6 +64,9 @@
               <button class="danger-button" type="submit">無効</button>
             </form>
             {% endif %}
+            <form method="post" action="/admin/users/{{ row.app_user_id }}/reset-password">
+              <button class="ghost-submit" type="submit">初期化</button>
+            </form>
           </td>
         </tr>
         {% endfor %}

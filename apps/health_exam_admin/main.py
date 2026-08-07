@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import secrets
+import string
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs
@@ -15,7 +17,9 @@ from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
     get_authenticated_session,
+    hash_password,
     revoke_session,
+    verify_password,
 )
 
 
@@ -81,6 +85,18 @@ def require_user(request: Request) -> dict[str, Any] | RedirectResponse:
     if not user:
         return RedirectResponse("/login", status_code=303)
     return user
+
+
+def generate_temporary_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits
+    while True:
+        password = "".join(secrets.choice(alphabet) for _ in range(length))
+        if (
+            any(ch.islower() for ch in password)
+            and any(ch.isupper() for ch in password)
+            and any(ch.isdigit() for ch in password)
+        ):
+            return password
 
 
 @app.get("/health")
@@ -226,6 +242,83 @@ async def update_account(request: Request) -> Response:
     )
 
 
+@app.get("/account/password", response_class=HTMLResponse)
+def password_form(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse(
+        "password.html",
+        {"request": request, "user": user, "message": None, "error": None},
+    )
+
+
+@app.post("/account/password", response_class=HTMLResponse)
+async def update_password(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    form = await read_form(request)
+    current_password = form.get("current_password", "")
+    new_password = form.get("new_password", "")
+    new_password_confirm = form.get("new_password_confirm", "")
+
+    if len(new_password) < 8:
+        return templates.TemplateResponse(
+            "password.html",
+            {"request": request, "user": user, "message": None, "error": "新しいパスワードは8文字以上にしてください。"},
+            status_code=400,
+        )
+    if new_password != new_password_confirm:
+        return templates.TemplateResponse(
+            "password.html",
+            {"request": request, "user": user, "message": None, "error": "新しいパスワードが一致しません。"},
+            status_code=400,
+        )
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                "SELECT password_hash FROM app_users WHERE app_user_id = %s",
+                (int(user["app_user_id"]),),
+            )
+            row = cur.fetchone()
+            if not row or not verify_password(current_password, str(row["password_hash"])):
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "password.html",
+                    {"request": request, "user": user, "message": None, "error": "現在のパスワードが違います。"},
+                    status_code=400,
+                )
+
+            cur.execute(
+                """
+                UPDATE app_users
+                   SET password_hash = %s,
+                       password_hash_algorithm = 'pbkdf2_sha256',
+                       password_changed_at = CURRENT_TIMESTAMP(3),
+                       must_change_password = 0,
+                       failed_login_count = 0,
+                       locked_until = NULL
+                 WHERE app_user_id = %s
+                """,
+                (hash_password(new_password), int(user["app_user_id"])),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    refreshed = current_user(request) or user
+    return templates.TemplateResponse(
+        "password.html",
+        {"request": request, "user": refreshed, "message": "パスワードを変更しました。", "error": None},
+    )
+
+
 @app.get("/admin/users", response_class=HTMLResponse)
 def admin_users(request: Request) -> Response:
     user = require_user(request)
@@ -250,6 +343,7 @@ def admin_users(request: Request) -> Response:
               is_active,
               approval_requested_at,
               approved_at,
+              must_change_password,
               last_login_at
             FROM app_users
             ORDER BY
@@ -261,7 +355,7 @@ def admin_users(request: Request) -> Response:
         cur.close()
     return templates.TemplateResponse(
         "admin_users.html",
-        {"request": request, "user": user, "users": users, "message": None},
+        {"request": request, "user": user, "users": users, "message": None, "temporary_password": None},
     )
 
 
@@ -293,6 +387,71 @@ def approve_user(request: Request, app_user_id: int) -> Response:
             conn.rollback()
             raise
     return RedirectResponse("/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{app_user_id}/reset-password")
+def reset_user_password(request: Request, app_user_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    temporary_password = generate_temporary_password()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                """
+                UPDATE app_users
+                   SET password_hash = %s,
+                       password_hash_algorithm = 'pbkdf2_sha256',
+                       password_changed_at = CURRENT_TIMESTAMP(3),
+                       must_change_password = 1,
+                       failed_login_count = 0,
+                       locked_until = NULL
+                 WHERE app_user_id = %s
+                """,
+                (hash_password(temporary_password), app_user_id),
+            )
+            cur.execute(
+                """
+                SELECT
+                  app_user_id,
+                  employee_no,
+                  display_name,
+                  display_name_kana,
+                  department_name,
+                  email,
+                  approval_status,
+                  is_active,
+                  approval_requested_at,
+                  approved_at,
+                  must_change_password,
+                  last_login_at
+                FROM app_users
+                ORDER BY
+                  CASE approval_status WHEN 'PENDING' THEN 0 WHEN 'APPROVED' THEN 1 ELSE 2 END,
+                  app_user_id
+                """
+            )
+            users = cur.fetchall()
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return templates.TemplateResponse(
+        "admin_users.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "message": "初期パスワードを発行しました。本人に伝えてください。",
+            "temporary_password": temporary_password,
+        },
+    )
 
 
 @app.post("/admin/users/{app_user_id}/disable")

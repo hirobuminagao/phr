@@ -19,6 +19,9 @@
   {% if error %}<div class="alert">{{ error }}</div>{% endif %}
 
   <section class="panel">
+    {% if user.must_change_password %}
+    <div class="alert">初期パスワードのままです。パスワードを変更してください。</div>
+    {% endif %}
     <form method="post" action="/account" class="form-grid">
       <label>
         <span>社員番号</span>
@@ -46,6 +49,7 @@
       </label>
       <div class="form-actions">
         <button type="submit">更新</button>
+        <a class="ghost-button" href="/account/password">パスワード変更</a>
       </div>
     </form>
   </section>

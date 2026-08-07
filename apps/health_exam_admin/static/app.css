@@ -250,6 +250,39 @@ button[type="submit"]:hover {
   font-weight: 800;
 }
 
+.warning-strip,
+.temporary-password-panel {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid #ffd66b;
+  border-radius: 8px;
+  background: #fff8df;
+  color: #705100;
+}
+
+.warning-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.warning-strip a {
+  color: #0c5f4a;
+  font-weight: 800;
+}
+
+.temporary-password-panel {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.temporary-password-panel strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 26px;
+  color: #1f2933;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -324,6 +357,17 @@ button[type="submit"]:hover {
 
 .danger-button:hover {
   background: #8f1d14 !important;
+}
+
+.ghost-submit {
+  padding: 8px 12px !important;
+  background: #fff !important;
+  border: 1px solid #b9c5d2 !important;
+  color: var(--text) !important;
+}
+
+.ghost-submit:hover {
+  background: #f7fafc !important;
 }
 
 @media (max-width: 760px) {
