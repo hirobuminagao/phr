@@ -2,12 +2,21 @@
 -- ETL runs/errors are intentionally kept as execution evidence.
 --
 -- Usage:
---   1. Adjust @event_id and @review_path_token if needed.
---   2. Run this SQL in the execution environment.
---   3. Re-run scripts/from_medical/03_04_check_exam_export_cases.py before exporting again.
+--   1. Set @export_run_id to the EXPORT_HIA_XML etl_runs.run_id to revert.
+--   2. Adjust @event_id and @review_path_token if needed.
+--   3. Run this SQL in the execution environment.
+--   4. Re-run scripts/from_medical/03_04_check_exam_export_cases.py before exporting again.
 
 SET @event_id := 2;
+SET @export_run_id := NULL; -- REQUIRED: set to the review EXPORT_HIA_XML run_id.
 SET @review_path_token := 'data/hia_xml_review_exports';
+
+DROP TEMPORARY TABLE IF EXISTS tmp_required_export_run_id;
+CREATE TEMPORARY TABLE tmp_required_export_run_id (
+  export_run_id bigint unsigned NOT NULL
+);
+INSERT INTO tmp_required_export_run_id (export_run_id)
+VALUES (@export_run_id);
 
 DROP TEMPORARY TABLE IF EXISTS tmp_review_xml_export_zips;
 CREATE TEMPORARY TABLE tmp_review_xml_export_zips AS
@@ -16,6 +25,7 @@ SELECT
   zez.xml_export_list_id
 FROM health_exam_result.xml_export_zips AS zez
 WHERE zez.event_id = @event_id
+  AND zez.etl_run_id = @export_run_id
   AND REPLACE(zez.zip_path, '\\', '/') LIKE CONCAT('%', @review_path_token, '%');
 
 DROP TEMPORARY TABLE IF EXISTS tmp_review_xml_export_members;
@@ -119,5 +129,6 @@ SET
   xel.updated_at = CURRENT_TIMESTAMP(3);
 
 SELECT
+  @export_run_id AS reverted_export_run_id,
   (SELECT COUNT(*) FROM tmp_review_xml_export_zips) AS reverted_zip_rows,
   (SELECT COUNT(*) FROM tmp_review_xml_export_members) AS reverted_member_rows;
