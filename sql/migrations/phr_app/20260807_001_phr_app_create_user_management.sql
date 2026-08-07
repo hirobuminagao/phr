@@ -50,9 +50,7 @@ FROM `app_roles` r
 JOIN `app_permissions` p
   ON p.`permission_code` IN (
     'exam_cases.view',
-    'exam_cases.edit',
-    'export_lists.view',
-    'xml_export.review'
+    'exam_cases.edit'
   )
 WHERE r.`role_code` = 'EDITOR'
 ON DUPLICATE KEY UPDATE `is_allowed` = VALUES(`is_allowed`);
@@ -63,7 +61,6 @@ FROM `app_roles` r
 JOIN `app_permissions` p
   ON p.`permission_code` IN (
     'exam_cases.view',
-    'export_lists.view',
     'audit.view'
   )
 WHERE r.`role_code` = 'VIEWER'

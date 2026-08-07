@@ -42,7 +42,9 @@ JOIN `app_permissions` p
 SET rp.`is_allowed` = 0
 WHERE r.`role_code` IN ('EDITOR', 'VIEWER')
   AND p.`permission_code` IN (
+    'export_lists.view',
     'export_lists.edit',
+    'xml_export.review',
     'xml_export.official',
     'hia_upload.perform',
     'hia_upload_status.edit'

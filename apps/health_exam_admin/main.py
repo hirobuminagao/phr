@@ -36,21 +36,24 @@ LOGIN_ERROR_MESSAGES = {
 WORK_PERMISSION_ITEMS = (
     {
         "key": "export_list",
-        "name": "出力リスト作成",
-        "description": "出力対象リストの作成・編集を担当する",
-        "permission_codes": ("export_lists.edit",),
+        "name": "出力リスト",
+        "description": "出力対象リストの確認・作成を担当する",
+        "view_codes": ("export_lists.view",),
+        "edit_codes": ("export_lists.edit",),
     },
     {
         "key": "xml_export",
-        "name": "XML本番出力",
-        "description": "HIAアップロード用XMLの正式出力を担当する",
-        "permission_codes": ("xml_export.official",),
+        "name": "XML出力",
+        "description": "確認出力と本番出力を担当する",
+        "view_codes": ("xml_export.review",),
+        "edit_codes": ("xml_export.official",),
     },
     {
         "key": "hia_upload",
         "name": "HIAアップロード",
         "description": "出力済みZIPのアップロード作業と結果記帳を担当する",
-        "permission_codes": ("hia_upload.perform", "hia_upload_status.edit"),
+        "view_codes": ("hia_upload.perform",),
+        "edit_codes": ("hia_upload_status.edit",),
     },
 )
 
@@ -301,7 +304,7 @@ def load_work_permission_rows(cur: Any, *, app_user_id: int | None = None) -> li
     permission_codes = tuple(
         permission_code
         for item in WORK_PERMISSION_ITEMS
-        for permission_code in item["permission_codes"]
+        for permission_code in (*item["view_codes"], *item["edit_codes"])
     )
     placeholders = ", ".join(["%s"] * len(permission_codes))
     cur.execute(
@@ -324,14 +327,17 @@ def load_work_permission_rows(cur: Any, *, app_user_id: int | None = None) -> li
     values = {str(row["permission_code"]): row for row in cur.fetchall()}
     rows: list[dict[str, Any]] = []
     for item in WORK_PERMISSION_ITEMS:
-        codes = tuple(item["permission_codes"])
+        view_codes = tuple(item["view_codes"])
+        edit_codes = tuple(item["edit_codes"])
         rows.append(
             {
                 "key": item["key"],
                 "name": item["name"],
                 "description": item["description"],
-                "permission_codes": codes,
-                "user_is_allowed": all(bool(values.get(code, {}).get("user_is_allowed")) for code in codes),
+                "view_codes": view_codes,
+                "edit_codes": edit_codes,
+                "view_is_allowed": all(bool(values.get(code, {}).get("user_is_allowed")) for code in view_codes),
+                "edit_is_allowed": all(bool(values.get(code, {}).get("user_is_allowed")) for code in edit_codes),
             }
         )
     return rows
@@ -341,11 +347,15 @@ def replace_user_work_permissions(
     cur: Any,
     *,
     app_user_id: int,
-    allowed_work_keys: set[str],
+    allowed_work_permissions: set[tuple[str, str]],
     assigned_by_app_user_id: int,
 ) -> None:
     for item in WORK_PERMISSION_ITEMS:
-        for permission_code in item["permission_codes"]:
+        keyed_codes = (
+            *[(str(item["key"]), "view", code) for code in item["view_codes"]],
+            *[(str(item["key"]), "edit", code) for code in item["edit_codes"]],
+        )
+        for item_key, action_key, permission_code in keyed_codes:
             cur.execute(
                 """
                 INSERT INTO app_user_permissions (
@@ -366,7 +376,7 @@ def replace_user_work_permissions(
                 """,
                 (
                     app_user_id,
-                    1 if item["key"] in allowed_work_keys else 0,
+                    1 if (item_key, action_key) in allowed_work_permissions else 0,
                     assigned_by_app_user_id,
                     permission_code,
                 ),
@@ -971,7 +981,9 @@ async def update_permission_settings(request: Request) -> Response:
                     is_allowed = form.get(f"allow__{role_code}__{permission_code}") == "1"
                     if permission_code in (
                         "users.manage",
+                        "export_lists.view",
                         "export_lists.edit",
+                        "xml_export.review",
                         "xml_export.official",
                         "hia_upload.perform",
                         "hia_upload_status.edit",
@@ -1278,10 +1290,11 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
     department_name = form.get("department_name", "").strip() or None
     email = form.get("email", "").strip() or None
     role_code = form.get("role_code", "").strip()
-    allowed_work_keys = {
-        str(item["key"])
+    allowed_work_permissions = {
+        (str(item["key"]), action_key)
         for item in WORK_PERMISSION_ITEMS
-        if form.get(f"work_permission__{item['key']}") == "1"
+        for action_key in ("view", "edit")
+        if form.get(f"work_permission__{item['key']}__{action_key}") == "1"
     }
     form_values = {
         "employee_no": employee_no,
@@ -1398,7 +1411,7 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
             replace_user_work_permissions(
                 cur,
                 app_user_id=app_user_id,
-                allowed_work_keys=allowed_work_keys,
+                allowed_work_permissions=allowed_work_permissions,
                 assigned_by_app_user_id=int(user["app_user_id"]),
             )
             conn.commit()

@@ -49,7 +49,7 @@
               {% for role in roles %}
               {% set checked = allowed.get(role.role_code ~ '||' ~ permission.permission_code, false) %}
               {% set locked = role.role_code == 'ADMIN'
-                or (permission.permission_code in ['users.manage', 'export_lists.edit', 'xml_export.official', 'hia_upload.perform', 'hia_upload_status.edit'] and role.role_code != 'ADMIN') %}
+                or (permission.permission_code in ['users.manage', 'export_lists.view', 'export_lists.edit', 'xml_export.review', 'xml_export.official', 'hia_upload.perform', 'hia_upload_status.edit'] and role.role_code != 'ADMIN') %}
               <td>
                 <label class="toggle-cell">
                   <input

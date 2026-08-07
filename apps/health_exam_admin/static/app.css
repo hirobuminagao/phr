@@ -369,34 +369,35 @@ button[type="submit"]:hover {
   gap: 12px;
 }
 
-.work-permission-toggle {
+.work-permission-card {
   min-height: 82px;
   display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: start;
   gap: 10px;
   padding: 12px;
   border: 1px solid #c9d6e2;
   border-radius: 8px;
   background: #f7fafc;
   color: var(--text);
-  cursor: pointer;
 }
 
-.work-permission-toggle input {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--accent);
-}
-
-.work-permission-toggle strong,
-.work-permission-toggle small {
+.work-permission-card strong,
+.work-permission-card small {
   display: block;
 }
 
-.work-permission-toggle:has(input:checked) {
-  border-color: #a7d8c9;
-  background: #e9f7f3;
+.work-permission-switches {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-caption {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .issue-panel,
@@ -576,7 +577,8 @@ button[type="submit"]:hover {
   margin-top: 18px;
 }
 
-.switch-button {
+.switch-button,
+.binary-switch {
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -590,7 +592,8 @@ button[type="submit"]:hover {
   overflow: hidden;
 }
 
-.switch-button::before {
+.switch-button::before,
+.binary-switch::before {
   content: "";
   position: absolute;
   top: 4px;
@@ -602,12 +605,22 @@ button[type="submit"]:hover {
   transition: left 0.16s ease;
 }
 
-.switch-button span {
+.switch-button span,
+.binary-switch span {
   position: relative;
   z-index: 1;
   padding: 5px 8px;
   font-size: 12px;
   font-weight: 800;
+  text-align: center;
+}
+
+.binary-switch input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .switch-on::before {

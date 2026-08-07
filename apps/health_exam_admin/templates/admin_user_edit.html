@@ -60,18 +60,36 @@
         <p class="subtle">リスト作成、XML出力、HIAアップロード作業は個人ごとにON/OFFします。</p>
         <div class="work-permission-list">
           {% for permission in work_permissions %}
-          <label class="work-permission-toggle">
-            <input
-              type="checkbox"
-              name="work_permission__{{ permission.key }}"
-              value="1"
-              {% if permission.user_is_allowed %}checked{% endif %}
-            >
-            <span>
+          <div class="work-permission-card">
+            <div>
               <strong>{{ permission.name }}</strong>
               <small>{{ permission.description }}</small>
-            </span>
-          </label>
+            </div>
+            <div class="work-permission-switches">
+              <span class="switch-caption">表示</span>
+              <label class="binary-switch {{ 'switch-on' if permission.view_is_allowed else 'switch-off' }}">
+                <input
+                  type="checkbox"
+                  name="work_permission__{{ permission.key }}__view"
+                  value="1"
+                  {% if permission.view_is_allowed %}checked{% endif %}
+                >
+                <span>有効</span>
+                <span>無効</span>
+              </label>
+              <span class="switch-caption">編集</span>
+              <label class="binary-switch {{ 'switch-on' if permission.edit_is_allowed else 'switch-off' }}">
+                <input
+                  type="checkbox"
+                  name="work_permission__{{ permission.key }}__edit"
+                  value="1"
+                  {% if permission.edit_is_allowed %}checked{% endif %}
+                >
+                <span>有効</span>
+                <span>無効</span>
+              </label>
+            </div>
+          </div>
           {% endfor %}
         </div>
       </div>
@@ -81,4 +99,18 @@
     </form>
   </section>
 </main>
+<script>
+(() => {
+  for (const input of document.querySelectorAll(".binary-switch input")) {
+    const update = () => {
+      const label = input.closest(".binary-switch");
+      if (!label) return;
+      label.classList.toggle("switch-on", input.checked);
+      label.classList.toggle("switch-off", !input.checked);
+    };
+    input.addEventListener("change", update);
+    update();
+  }
+})();
+</script>
 {% endblock %}
