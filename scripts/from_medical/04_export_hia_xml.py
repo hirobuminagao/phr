@@ -66,6 +66,10 @@ ETL_PHASE = "EXPORT_HIA_XML"
 ETL_SOURCE = "FROM_MEDICAL"
 UPLOAD_DIR_NAME = "03_健診結果（アップロードデータ）"
 HISTORY_DIR_NAME = "xml作成_出力履歴"
+REVIEW_OUTPUT_DEFAULT_ROOT = REPO_ROOT / "data" / "hia_xml_review_exports"
+OUTPUT_MODE_OFFICIAL = "official"
+OUTPUT_MODE_REVIEW = "review"
+OUTPUT_MODES = {OUTPUT_MODE_OFFICIAL, OUTPUT_MODE_REVIEW}
 
 
 @dataclass(frozen=True)
@@ -80,6 +84,8 @@ class ExportConfig:
     split_no: int | None
     file_date: date
     dry_run: bool
+    output_mode: str
+    review_output_root: Path
 
 
 @dataclass
@@ -128,6 +134,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-exported", action="store_true")
     parser.add_argument("--split-no", type=int, choices=range(10))
     parser.add_argument("--file-date", help="YYYYMMDD; default is today")
+    parser.add_argument("--output-mode", choices=sorted(OUTPUT_MODES), help="official=event folder, review=project data folder")
+    parser.add_argument("--review-output-root", help="Base directory for output_mode=review")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
@@ -174,6 +182,19 @@ def _optional_split_no(value: Any) -> int | None:
     if split_no < 0 or split_no > 9:
         raise ValueError("split_no must be 0-9")
     return split_no
+
+
+def _output_mode(value: Any) -> str:
+    mode = str(value or OUTPUT_MODE_OFFICIAL).strip().lower()
+    if mode not in OUTPUT_MODES:
+        raise ValueError(f"output_mode must be one of {sorted(OUTPUT_MODES)}")
+    return mode
+
+
+def _review_output_root(value: Any) -> Path:
+    if value in (None, ""):
+        return REVIEW_OUTPUT_DEFAULT_ROOT
+    return Path(str(value)).expanduser()
 
 
 def load_config(args: argparse.Namespace) -> ExportConfig:
@@ -230,6 +251,7 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         include_exported=bool(args.include_exported or data.get("include_exported", False)),
         limit=args.limit if args.limit is not None else int(data.get("limit") or 0),
     )
+    output_mode = _output_mode(args.output_mode if args.output_mode is not None else data.get("output_mode"))
     return ExportConfig(
         selectors=selectors,
         health_db=str(args.health_db or data.get("health_db") or "health_exam_result"),
@@ -241,6 +263,10 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         split_no=args.split_no if args.split_no is not None else _optional_split_no(data.get("split_no")),
         file_date=_parse_file_date(args.file_date if args.file_date is not None else data.get("file_date")),
         dry_run=bool(args.dry_run or data.get("dry_run", False)),
+        output_mode=output_mode,
+        review_output_root=_review_output_root(
+            args.review_output_root if args.review_output_root is not None else data.get("review_output_root")
+        ),
     )
 
 
@@ -250,6 +276,12 @@ def fetch_result_root(cur: Any, config: ExportConfig) -> Path:
     if not row or not row.get("result_root_path"):
         raise ValueError(f"event.result_root_path is missing: event_id={config.selectors.event_id}")
     return Path(str(row["result_root_path"]))
+
+
+def resolve_output_base_root(result_root: Path, config: ExportConfig) -> Path:
+    if config.output_mode == OUTPUT_MODE_OFFICIAL:
+        return result_root
+    return config.review_output_root / f"event_{config.selectors.event_id}"
 
 
 def has_explicit_export_target(config: ExportConfig) -> bool:
@@ -593,7 +625,8 @@ def build_group(
         address=normalize_address_export(first.get("master_facility_address")),
         phone=normalize_phone_number_export(first.get("master_facility_phone_number")),
     )
-    output_root = result_root / folder_name / UPLOAD_DIR_NAME
+    output_base_root = resolve_output_base_root(result_root, config)
+    output_root = output_base_root / folder_name / UPLOAD_DIR_NAME
     month_output_root = output_root / timestamp / exam_month
     file_date = config.file_date.strftime("%Y%m%d")
     split_no = choose_split_no(output_root, facility_code, insurer_number, file_date, config.split_no)
@@ -680,8 +713,8 @@ def build_group(
     return final_zip, (facility_code, facility.name, folder_name, exam_month, final_zip.name, len(group))
 
 
-def write_operator_log(result_root: Path, timestamp: str, rows: list[tuple[str, str, str, str, str, int]]) -> Path:
-    log_dir = result_root / HISTORY_DIR_NAME / timestamp
+def write_operator_log(output_base_root: Path, timestamp: str, rows: list[tuple[str, str, str, str, str, int]]) -> Path:
+    log_dir = output_base_root / HISTORY_DIR_NAME / timestamp
     log_dir.mkdir(parents=True, exist_ok=True)
     path = log_dir / "健診結果XML出力履歴.csv"
     temporary_path = path.with_suffix(".csv.tmp")
@@ -700,6 +733,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
     with connect_ctx(params, database=config.health_db, autocommit=False) as conn:
         with dict_cursor(conn) as cur:
             result_root = fetch_result_root(cur, config)
+            output_base_root = resolve_output_base_root(result_root, config)
             config = resolve_latest_xml_export_list(cur, config)
             run_id: int | None = None
             if not config.dry_run:
@@ -774,7 +808,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                         )
 
                 if operator_rows and not config.dry_run:
-                    print(f"[LOG] {write_operator_log(result_root, timestamp, operator_rows)}")
+                    print(f"[LOG] {write_operator_log(output_base_root, timestamp, operator_rows)}")
                 if run_id is not None:
                     mark_export_list_finished(cur, config=config, run_id=run_id, summary=summary)
                     etl_finish_run(

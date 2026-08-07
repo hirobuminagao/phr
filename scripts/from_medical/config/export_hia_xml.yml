@@ -33,6 +33,10 @@ exam_month:
 # true allows already-exported cases to be output again with a new auto split number unless split_no is specified.
 include_exported: false
 dry_run: false
+# official: event.result_root_path under each facility folder.
+# review: project data folder for operator validation; does not write into production event folders.
+output_mode: official
+review_output_root: data/hia_xml_review_exports
 limit: 0
 # split_no: blank = auto 0-9, or specify 0-9 manually.
 split_no:

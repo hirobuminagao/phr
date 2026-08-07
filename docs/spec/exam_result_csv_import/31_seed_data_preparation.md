@@ -76,7 +76,7 @@ Implemented and expanded.
 全施設共通ルールは `exam_facility_id = 0`、施設別判断は実際の `exam_facility_id` を指定する。
 policy未登録の項目は `INCLUDE` として扱うため、seed不足だけで既存出力を止めない。
 
-単位不一致は、共通normalize libの単位aliasで「同一単位の表記揺れ」だけ吸収する。例として `/uL`, `/μL`, `/㎕` は血球数系で使われる `/mm3` と同義として扱う。eGFRの `ml/min/{1.73m2}`, `ml/min./1.73m2`, `ml/min/1.7`, `ml/分` は、namecodeがeGFRで値域も同等であるため `mL/min/{1.73_m2}` へ寄せる。数値換算が必要な真の単位差は引き続き `UNIT_MISMATCH` のまま残す。
+単位不一致は、共通normalize libの単位aliasで「同一単位の表記揺れ」だけ吸収する。例として `/uL`, `/μL`, `/㎕` は血球数系で使われる `/mm3` と同義として扱う。eGFRの `ml/min/{1.73m2}`, `ml/min./1.73m2`, `ml/min/1.7`, `ml/分` は、namecodeがeGFRで値域も同等であるため、厚労省サンプルXMLおよび付属2系マスタのXML単位に合わせて `ml/min/1.73m2` へ寄せる。数値換算が必要な真の単位差は引き続き `UNIT_MISMATCH` のまま残す。
 
 `dev_phr` のローカル検証用seed:
 

@@ -191,7 +191,11 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
           COALESCE(NULLIF(em.cda_section_code_default, ''), '01990') AS section_code,
           COALESCE(em.xml_value_type, 'ST') AS value_type,
           ecv.normalized_value,
-          COALESCE(NULLIF(ecv.normalized_unit, ''), NULLIF(em.ucum_unit, ''), NULLIF(em.display_unit, '')) AS normalized_unit,
+          CASE
+            WHEN COALESCE(em.xml_value_type, 'ST') = 'PQ'
+              THEN COALESCE(NULLIF(em.ucum_unit, ''), NULLIF(ecv.normalized_unit, ''), NULLIF(em.display_unit, ''))
+            ELSE ecv.normalized_unit
+          END AS normalized_unit,
           ecv.nullflavor,
           NULLIF(em.result_code_oid, '') AS code_system,
           ecv.code_value,

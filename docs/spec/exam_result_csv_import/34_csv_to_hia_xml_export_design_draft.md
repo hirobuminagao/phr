@@ -511,6 +511,11 @@ exporter設定にはbundle IDを持たせ、選択したbundleのXSDファイル
 
 出力先は以下とする。
 
+### Official Output Mode
+
+通常運用・HIAアップロード対象の正式出力は `output_mode = official` とする。
+正式出力では、従来どおりイベントルート配下の健診機関フォルダへZIPを配置する。
+
 ```text
 <event.result_root_path>/
   <健診機関フォルダ>/
@@ -526,6 +531,26 @@ exporter設定にはbundle IDを持たせ、選択したbundleのXSDファイル
 HIAアップロード担当者への依頼は「`yyyymmdd_hhmmss` に出力した分をアップロードしてください」と伝える運用にするため、まず出力実行日時でフォルダを分ける。
 その配下を健診実施月 `YYYYMM` ごとに分ける。
 健診実施月は個人XMLの健診実施日 `exam_date` から算出する。
+
+### Review Output Mode
+
+確認用出力では `output_mode = review` を指定する。
+このモードは、作成したXML/ZIPを人が確認するためのヒロ確認用であり、HIAアップロード対象フォルダを汚さないことを目的とする。
+ZIP内部のルートフォルダ名、個人XML名、XSD構成は正式出力と同じにする。
+違いは外側の配置場所だけである。
+
+```text
+<repo>/data/hia_xml_review_exports/
+  event_<event_id>/
+    <健診機関フォルダ>/
+      03_健診結果（アップロードデータ）/
+        yyyymmdd_hhmmss/
+          <健診実施月YYYYMM>/
+            <健診機関番号>_<保険者番号>_<yyyymmdd><同日分割送信回数>_1.zip
+```
+
+`review_output_root` を指定した場合は、上記 `<repo>/data/hia_xml_review_exports` の代わりにそのパスを使う。
+確認用出力は、正式アップロード依頼には使用しない。
 
 最終出力物は以下の命名規則で作るZIPである。
 個人XML名とZIP内部の構成は公式仕様を正とし、旧exporterの実装は補助的に参照する。
@@ -877,7 +902,7 @@ scripts/from_medical/04_export_hia_xml.py
   DB対象抽出、grouping、ETL、状態更新、出力先制御、作業用出力履歴CSV
 
 scripts/from_medical/config/export_hia_xml.yml
-  event_id、DB schema、XSD bundle ID、対象条件、既出力者指定、dry-run、limit、同日分割送信回数、提出日
+  event_id、DB schema、XSD bundle ID、対象条件、既出力者指定、dry-run、limit、同日分割送信回数、提出日、出力モード
 
 対象条件はYAMLで以下を指定できる。CLIで同じ条件を指定した場合はCLIを優先する。
 
@@ -888,6 +913,8 @@ scripts/from_medical/config/export_hia_xml.yml
 - `file_receipt_ids`: 受領ファイル単位で指定する。
 - `ledger_ids`: CSV行台帳単位で個人を指定する。
 - `exam_month`: `YYYY-MM` で受診月を指定する。全施設月指定を行う場合は `all_facilities: true` も明示する。
+- `output_mode`: `official` または `review`。`official` はHIAアップロード対象の正式出力、`review` はプロジェクト `data` 配下への確認用出力。
+- `review_output_root`: `output_mode = review` の基点。未指定時は `<repo>/data/hia_xml_review_exports`。
 
 誤出力防止のため、`use_latest_xml_export_list` も、`xml_export_list_id` / `all_facilities` / `facility_codes` / `facility_ids` / `file_receipt_ids` / `ledger_ids` 等の明示条件もない場合は停止する。
 

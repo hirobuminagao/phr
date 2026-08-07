@@ -26,10 +26,18 @@ def args_for(config: Path, **overrides: object) -> argparse.Namespace:
         "all_facilities": False,
         "file_receipt_id": [],
         "ledger_id": [],
+        "xml_export_list_id": None,
+        "latest_xml_export_list": False,
+        "no_latest_xml_export_list": False,
+        "subscriber_id": [],
+        "hia_subscriber_id": [],
+        "person_id_custom": [],
         "exam_month": None,
         "include_exported": False,
         "split_no": None,
         "file_date": None,
+        "output_mode": None,
+        "review_output_root": None,
         "limit": None,
         "dry_run": False,
         "db_prefix": "PHR_DB_",
@@ -58,6 +66,8 @@ def test_load_config_accepts_yaml_selectors(tmp_path: Path) -> None:
         split_no=3,
         file_date="20260730",
         dry_run=True,
+        output_mode="review",
+        review_output_root=str(tmp_path / "review_exports"),
     )
 
     config = export_hia_xml.load_config(args_for(config_path))
@@ -71,6 +81,8 @@ def test_load_config_accepts_yaml_selectors(tmp_path: Path) -> None:
     assert config.split_no == 3
     assert config.file_date.isoformat() == "2026-07-30"
     assert config.dry_run is True
+    assert config.output_mode == "review"
+    assert config.review_output_root == tmp_path / "review_exports"
 
 
 def test_cli_selectors_override_yaml_lists(tmp_path: Path) -> None:
@@ -96,3 +108,23 @@ def test_requires_explicit_scope(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Specify --facility-id"):
         export_hia_xml.load_config(args_for(config_path))
+
+
+def test_resolve_output_base_root_uses_event_root_for_official(tmp_path: Path) -> None:
+    config_path = write_config(tmp_path / "export.yml", event_id=2, all_facilities=True)
+    config = export_hia_xml.load_config(args_for(config_path))
+
+    assert export_hia_xml.resolve_output_base_root(tmp_path / "event_root", config) == tmp_path / "event_root"
+
+
+def test_resolve_output_base_root_uses_project_data_for_review(tmp_path: Path) -> None:
+    config_path = write_config(
+        tmp_path / "export.yml",
+        event_id=2,
+        all_facilities=True,
+        output_mode="review",
+        review_output_root=str(tmp_path / "review_exports"),
+    )
+    config = export_hia_xml.load_config(args_for(config_path))
+
+    assert export_hia_xml.resolve_output_base_root(tmp_path / "event_root", config) == tmp_path / "review_exports" / "event_2"
