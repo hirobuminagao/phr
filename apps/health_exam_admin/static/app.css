@@ -377,33 +377,36 @@ button[type="submit"]:hover {
 
 .work-permission-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
 }
 
 .work-permission-card {
-  min-height: 82px;
+  min-height: 132px;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: 1fr;
   align-items: start;
-  gap: 10px;
+  gap: 14px;
   padding: 12px;
   border: 1px solid #c9d6e2;
   border-radius: 8px;
   background: #f7fafc;
   color: var(--text);
+  min-width: 0;
 }
 
 .work-permission-card strong,
 .work-permission-card small {
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .work-permission-switches {
   display: grid;
-  grid-template-columns: auto auto;
+  grid-template-columns: max-content minmax(108px, 128px) max-content minmax(108px, 128px);
   align-items: center;
-  gap: 8px;
+  gap: 8px 10px;
+  justify-content: start;
 }
 
 .switch-caption {
