@@ -65,6 +65,66 @@ SET
   eec.xml_export_etl_run_id = NULL,
   eec.updated_at = CURRENT_TIMESTAMP(3);
 
+UPDATE health_exam_result.exam_export_cases AS eec
+INNER JOIN tmp_xml_export_members AS tm
+  ON tm.exam_export_case_id = eec.exam_export_case_id
+SET
+  eec.export_readiness_status = CASE
+    WHEN eec.xml_export_status = 'EXPORTED' THEN 'EXPORTED'
+    WHEN eec.xml_export_status = 'ERROR' THEN 'EXPORT_ERROR'
+    WHEN eec.subscriber_match_status <> 'MATCHED' THEN 'BLOCKED'
+    WHEN eec.merge_status = 'REVIEW_REQUIRED' THEN 'BLOCKED'
+    WHEN eec.case_status <> 'READY' THEN 'BLOCKED'
+    WHEN eec.value_build_status = 'PENDING' THEN 'WAITING_VALUES'
+    WHEN eec.value_build_status <> 'READY' THEN 'BLOCKED'
+    WHEN eec.check_status = 'PENDING' THEN 'WAITING_CHECK'
+    WHEN eec.check_status = 'OK' THEN 'EXPORT_READY'
+    WHEN eec.check_status = 'NG' AND eec.manual_export_approved = 1 THEN 'APPROVED_WITH_REASON'
+    WHEN eec.check_status = 'NG' THEN 'BLOCKED'
+    ELSE 'WAITING_CHECK'
+  END,
+  eec.export_readiness_reason = CASE
+    WHEN eec.xml_export_status = 'EXPORTED'
+      THEN CONCAT('XML出力済み: ', COALESCE(eec.output_zip_file_name, 'ZIP名未記録'))
+    WHEN eec.xml_export_status = 'ERROR'
+      THEN CONCAT('XML出力エラー: ', COALESCE(eec.output_zip_file_name, eec.value_build_reason, eec.check_reason, '理由未入力'))
+    WHEN eec.subscriber_match_status <> 'MATCHED'
+      THEN CONCAT('加入者突合: ', COALESCE(eec.subscriber_match_reason, eec.subscriber_match_status))
+    WHEN eec.merge_status = 'REVIEW_REQUIRED'
+      THEN CONCAT('結合確認: ', COALESCE(eec.merge_reason, eec.merge_status))
+    WHEN eec.case_status <> 'READY'
+      THEN CONCAT('case作成: ', COALESCE(eec.case_reason, eec.case_status))
+    WHEN eec.value_build_status = 'PENDING' THEN '出力値作成待ち'
+    WHEN eec.value_build_status <> 'READY'
+      THEN CONCAT('出力値作成: ', COALESCE(eec.value_build_reason, eec.value_build_status))
+    WHEN eec.check_status = 'PENDING' THEN '法定チェック待ち'
+    WHEN eec.check_status = 'OK' THEN '出力可能'
+    WHEN eec.check_status = 'NG' AND eec.manual_export_approved = 1
+      THEN CONCAT('理由あり出力許可: ', COALESCE(eec.manual_export_reason, eec.check_reason, '理由未入力'))
+    WHEN eec.check_status = 'NG'
+      THEN CONCAT('法定チェックNG: ', COALESCE(eec.check_reason, '理由未入力'))
+    ELSE CONCAT_WS(
+      ' | ',
+      CONCAT('case=', eec.case_status),
+      CONCAT('merge=', eec.merge_status),
+      CONCAT('values=', eec.value_build_status),
+      CONCAT('check=', eec.check_status),
+      CONCAT('export=', eec.xml_export_status)
+    )
+  END,
+  eec.updated_at = CURRENT_TIMESTAMP(3);
+
+UPDATE health_exam_result.xml_export_list_cases AS xelc
+INNER JOIN tmp_xml_export_members AS tm
+  ON tm.exam_export_case_id = xelc.exam_export_case_id
+INNER JOIN health_exam_result.exam_export_cases AS eec
+  ON eec.exam_export_case_id = xelc.exam_export_case_id
+SET
+  xelc.export_readiness_status_snapshot = eec.export_readiness_status,
+  xelc.export_readiness_reason_snapshot = eec.export_readiness_reason,
+  xelc.updated_at = CURRENT_TIMESTAMP(3)
+WHERE xelc.removed_at IS NULL;
+
 DELETE zem
 FROM health_exam_result.xml_export_members AS zem
 INNER JOIN tmp_xml_export_zips AS tz
