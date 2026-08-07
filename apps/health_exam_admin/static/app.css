@@ -427,9 +427,21 @@ button[type="submit"]:hover {
   align-items: end;
 }
 
+.filter-form label {
+  align-self: end;
+}
+
+.filter-form label > span {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+}
+
 .filter-actions {
   display: flex;
   gap: 8px;
+  align-items: end;
+  min-height: var(--control-height);
 }
 
 .suggest-input {
