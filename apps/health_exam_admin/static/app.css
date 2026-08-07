@@ -353,6 +353,40 @@ button[type="submit"]:hover {
   gap: 8px;
 }
 
+.suggest-input {
+  position: relative;
+}
+
+.suggest-list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(31, 41, 51, 0.16);
+}
+
+.suggest-option {
+  display: block;
+  width: 100%;
+  padding: 10px 12px !important;
+  border: 0;
+  border-radius: 0;
+  background: #fff !important;
+  color: var(--text) !important;
+  text-align: left;
+  font-weight: 700;
+}
+
+.suggest-option:hover {
+  background: #e9f7f3 !important;
+}
+
 .table-panel {
   overflow-x: auto;
 }

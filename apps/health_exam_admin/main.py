@@ -255,7 +255,13 @@ def load_admin_page_data(cur: Any, *, filters: dict[str, str] | None = None) -> 
         "roles": load_manageable_roles(cur),
         "suggestions": load_user_search_suggestions(cur),
         "filters": filters or {},
-        "issue_form": {},
+    }
+
+
+def load_issue_page_data(cur: Any, *, issue_form: dict[str, str] | None = None) -> dict[str, Any]:
+    return {
+        "roles": load_manageable_roles(cur),
+        "issue_form": issue_form or {},
     }
 
 
@@ -734,6 +740,32 @@ def admin_users(request: Request) -> Response:
     )
 
 
+@app.get("/admin/users/new", response_class=HTMLResponse)
+def issue_user_form(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        page_data = load_issue_page_data(cur)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_user_new.html",
+        {
+            "request": request,
+            "user": user,
+            **page_data,
+            "message": None,
+            "temporary_password": None,
+            "error": None,
+        },
+    )
+
+
 @app.post("/admin/users/issue")
 async def issue_user(request: Request) -> Response:
     user = require_user(request)
@@ -762,10 +794,10 @@ async def issue_user(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             if not employee_no or not display_name:
-                page_data = load_admin_page_data(cur)
+                page_data = load_issue_page_data(cur, issue_form=issue_form)
                 conn.rollback()
                 return templates.TemplateResponse(
-                    "admin_users.html",
+                    "admin_user_new.html",
                     {
                         "request": request,
                         "user": user,
@@ -778,10 +810,10 @@ async def issue_user(request: Request) -> Response:
                     status_code=400,
                 )
             if not role_exists(cur, role_code=role_code):
-                page_data = load_admin_page_data(cur)
+                page_data = load_issue_page_data(cur, issue_form=issue_form)
                 conn.rollback()
                 return templates.TemplateResponse(
-                    "admin_users.html",
+                    "admin_user_new.html",
                     {
                         "request": request,
                         "user": user,
@@ -795,10 +827,10 @@ async def issue_user(request: Request) -> Response:
                 )
             cur.execute("SELECT app_user_id FROM app_users WHERE employee_no = %s", (employee_no,))
             if cur.fetchone():
-                page_data = load_admin_page_data(cur)
+                page_data = load_issue_page_data(cur, issue_form=issue_form)
                 conn.rollback()
                 return templates.TemplateResponse(
-                    "admin_users.html",
+                    "admin_user_new.html",
                     {
                         "request": request,
                         "user": user,
@@ -854,14 +886,14 @@ async def issue_user(request: Request) -> Response:
                 role_code=role_code,
                 assigned_by_app_user_id=int(user["app_user_id"]),
             )
-            page_data = load_admin_page_data(cur)
+            page_data = load_issue_page_data(cur)
             conn.commit()
         except Exception:
             conn.rollback()
             raise
 
     return templates.TemplateResponse(
-        "admin_users.html",
+        "admin_user_new.html",
         {
             "request": request,
             "user": user,

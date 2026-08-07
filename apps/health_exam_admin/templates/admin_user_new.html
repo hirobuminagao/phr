@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set title = "新規アカウント作成" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>新規アカウント作成</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/users">戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page narrow-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  {% if temporary_password %}
+  <section class="temporary-password-panel">
+    <span>初期パスワード</span>
+    <strong>{{ temporary_password }}</strong>
+    <small>この画面で一度だけ表示します。本人へ伝達後、本人がパスワード変更します。</small>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <form method="post" action="/admin/users/issue" class="form-grid">
+      <label>
+        <span>社員番号 <em class="required-mark">必須</em></span>
+        <input name="employee_no" value="{{ issue_form.employee_no or '' }}" required autofocus>
+      </label>
+      <label>
+        <span>氏名 <em class="required-mark">必須</em></span>
+        <input name="display_name" value="{{ issue_form.display_name or '' }}" required>
+      </label>
+      <label>
+        <span>氏名カナ</span>
+        <input name="display_name_kana" value="{{ issue_form.display_name_kana or '' }}">
+      </label>
+      <label>
+        <span>部署</span>
+        <input name="department_name" value="{{ issue_form.department_name or '' }}">
+      </label>
+      <label>
+        <span>メールアドレス</span>
+        <input name="email" type="email" value="{{ issue_form.email or '' }}">
+      </label>
+      <label>
+        <span>ロール</span>
+        <select name="role_code">
+          {% for role in roles %}
+          <option value="{{ role.role_code }}" {% if (issue_form.role_code or 'VIEWER') == role.role_code %}selected{% endif %}>
+            {{ role.role_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">発行</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

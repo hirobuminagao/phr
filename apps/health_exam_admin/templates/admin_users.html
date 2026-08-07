@@ -7,6 +7,7 @@
     <h1>アカウント管理</h1>
   </div>
   <nav class="top-actions">
+    <a class="ghost-button" href="/admin/users/new">新規アカウント作成</a>
     <a class="ghost-button" href="/">HOME</a>
     <form method="post" action="/logout">
       <button class="ghost-button" type="submit">ログアウト</button>
@@ -25,56 +26,25 @@
   </section>
   {% endif %}
 
-  <section class="panel issue-panel">
-    <h2>本人以外のアカウント発行</h2>
-    <form method="post" action="/admin/users/issue" class="form-grid compact-form">
-      <label>
-        <span>社員番号 <em class="required-mark">必須</em></span>
-        <input name="employee_no" value="{{ issue_form.employee_no or '' }}" required>
-      </label>
-      <label>
-        <span>氏名 <em class="required-mark">必須</em></span>
-        <input name="display_name" value="{{ issue_form.display_name or '' }}" required>
-      </label>
-      <label>
-        <span>氏名カナ</span>
-        <input name="display_name_kana" value="{{ issue_form.display_name_kana or '' }}">
-      </label>
-      <label>
-        <span>部署</span>
-        <input name="department_name" value="{{ issue_form.department_name or '' }}">
-      </label>
-      <label>
-        <span>メールアドレス</span>
-        <input name="email" type="email" value="{{ issue_form.email or '' }}">
-      </label>
-      <label>
-        <span>ロール</span>
-        <select name="role_code">
-          {% for role in roles %}
-          <option value="{{ role.role_code }}" {% if (issue_form.role_code or 'VIEWER') == role.role_code %}selected{% endif %}>
-            {{ role.role_name }}
-          </option>
-          {% endfor %}
-        </select>
-      </label>
-      <div class="form-actions">
-        <button type="submit">発行</button>
-      </div>
-    </form>
-  </section>
-
   <section class="panel filter-panel">
     <h2>絞り込み</h2>
     <form method="get" action="/admin/users" class="filter-form">
       <label>
         <span>社員番号・氏名</span>
-        <input name="q" value="{{ filters.q or '' }}" list="user-search-suggestions" placeholder="社員番号 / 氏名 / カナ">
-        <datalist id="user-search-suggestions">
+        <div class="suggest-input">
+          <input id="user-search-input" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="社員番号 / 氏名 / カナ">
+          <div id="user-search-suggestions" class="suggest-list" hidden></div>
+        </div>
+        <script type="application/json" id="user-search-suggestion-data">
+          {{ suggestions|tojson }}
+        </script>
+        <noscript>
+          <datalist id="user-search-suggestions-noscript">
           {% for suggestion in suggestions %}
           <option value="{{ suggestion }}"></option>
           {% endfor %}
-        </datalist>
+          </datalist>
+        </noscript>
       </label>
       <label>
         <span>状態</span>
@@ -172,4 +142,47 @@
     </table>
   </section>
 </main>
+<script>
+(() => {
+  const input = document.getElementById("user-search-input");
+  const list = document.getElementById("user-search-suggestions");
+  const dataNode = document.getElementById("user-search-suggestion-data");
+  const form = input ? input.closest("form") : null;
+  if (!input || !list || !dataNode) return;
+  const values = JSON.parse(dataNode.textContent || "[]");
+  const close = () => {
+    list.hidden = true;
+    list.replaceChildren();
+  };
+  const render = () => {
+    const keyword = input.value.trim().toLocaleLowerCase();
+    if (!keyword) {
+      close();
+      return;
+    }
+    const matched = values
+      .filter((value) => String(value).toLocaleLowerCase().includes(keyword))
+      .slice(0, 12);
+    list.replaceChildren();
+    for (const value of matched) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "suggest-option";
+      button.textContent = value;
+      button.addEventListener("click", () => {
+        input.value = value;
+        close();
+        if (form) form.requestSubmit();
+      });
+      list.appendChild(button);
+    }
+    list.hidden = matched.length === 0;
+  };
+  input.addEventListener("input", render);
+  input.addEventListener("focus", render);
+  document.addEventListener("click", (event) => {
+    if (!list.contains(event.target) && event.target !== input) close();
+  });
+})();
+</script>
 {% endblock %}
