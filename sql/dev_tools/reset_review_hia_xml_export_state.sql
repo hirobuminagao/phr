@@ -26,7 +26,12 @@ SELECT
 FROM health_exam_result.xml_export_zips AS zez
 WHERE zez.event_id = @event_id
   AND zez.etl_run_id = @export_run_id
-  AND REPLACE(zez.zip_path, '\\', '/') LIKE CONCAT('%', @review_path_token, '%');
+  AND REPLACE(zez.zip_path, '\\', '/') COLLATE utf8mb4_ja_0900_as_cs
+    LIKE CONCAT(
+      _utf8mb4'%',
+      CAST(@review_path_token AS CHAR CHARACTER SET utf8mb4),
+      _utf8mb4'%'
+    ) COLLATE utf8mb4_ja_0900_as_cs;
 
 DROP TEMPORARY TABLE IF EXISTS tmp_review_xml_export_members;
 CREATE TEMPORARY TABLE tmp_review_xml_export_members AS
