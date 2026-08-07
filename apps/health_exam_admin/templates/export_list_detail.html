@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% set title = "出力リスト詳細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">HIA XML</p>
+    <h1>出力リスト詳細</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/export-lists">戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page export-page">
+  {% if message %}
+    <div class="notice">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="panel export-detail-head">
+    <div>
+      <p class="eyebrow">#{{ export_list.xml_export_list_id }}</p>
+      <h2>{{ export_list.list_name }}</h2>
+      <p class="subtle">{{ export_list.selector_summary|replace("\n", " / ") }}</p>
+    </div>
+    <div class="detail-status-stack">
+      <span class="status-pill status-ready">{{ list_status_label(export_list.list_status) }}</span>
+      <small>event {{ export_list.event_id }} / 受診月 {{ export_list.requested_exam_month or "全て" }}</small>
+    </div>
+  </section>
+
+  <section class="summary-grid export-summary-grid">
+    <div class="summary-card">
+      <span>追加済み</span>
+      <strong>{{ cases|length }}</strong>
+    </div>
+    <div class="summary-card">
+      <span>出力済み</span>
+      <strong>{{ export_list.exported_member_count or 0 }}</strong>
+    </div>
+    <div class="summary-card">
+      <span>ZIP</span>
+      <strong>{{ export_list.exported_zip_count or 0 }}</strong>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>追加済みの人</h2>
+        <p class="subtle">ここに入っている人が、リスト指定のXML出力対象です。</p>
+      </div>
+      {% if can_export %}
+      <div class="cli-hint">
+        <strong>出力コマンド用ID</strong>
+        <code>{{ export_list.xml_export_list_id }}</code>
+      </div>
+      {% endif %}
+    </div>
+    <div class="table-panel">
+      <table class="data-table export-case-table">
+        <thead>
+          <tr>
+            <th>状態</th>
+            <th>加入者</th>
+            <th>健診機関 / 受診日 / HIA ID</th>
+            <th>法定チェック</th>
+            <th>出力</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for case in cases %}
+          <tr>
+            <td>
+              <span class="status-pill status-ready">{{ readiness_label(case.export_readiness_status) }}</span>
+              <small>{{ case.list_case_status }}</small>
+            </td>
+            <td>
+              <strong>{{ case.insured_card_symbol or "" }}-{{ case.insured_card_number or "" }}</strong>
+              <small>{{ case.name_kana or "氏名カナなし" }}</small>
+              <small>{{ case.birth_date or "生年月日なし" }}</small>
+            </td>
+            <td>
+              <strong title="{{ case.exam_facility_name or "" }}">{{ case.exam_facility_name or "健診機関なし" }}</strong>
+              <small>{{ case.exam_date or "受診日なし" }}</small>
+              <small>{{ case.hia_subscriber_id or "HIA IDなし" }}</small>
+            </td>
+            <td>
+              <strong>{{ case.check_status or "" }}</strong>
+              <small>{{ case.check_reason or case.export_readiness_reason or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ case.xml_export_status or "" }}</strong>
+              <small>{{ case.exported_at or "" }}</small>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5">このリストにはまだ人が追加されていません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

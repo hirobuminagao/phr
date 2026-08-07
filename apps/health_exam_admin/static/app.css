@@ -577,6 +577,106 @@ button[type="submit"]:hover {
   margin-top: 18px;
 }
 
+.export-page {
+  display: grid;
+  gap: 18px;
+}
+
+.export-create-panel {
+  padding-bottom: 18px;
+}
+
+.export-create-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(120px, 0.5fr) minmax(150px, 0.7fr) minmax(260px, 1.4fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.export-option-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  min-height: var(--control-height);
+}
+
+.field-label {
+  width: 100%;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.check-line {
+  display: inline-flex;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.check-line input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.export-list-table {
+  min-width: 1080px;
+}
+
+.export-list-table th:first-child,
+.export-list-table td:first-child {
+  width: 64px;
+}
+
+.export-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.detail-status-stack,
+.cli-hint {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.cli-hint {
+  align-content: start;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.cli-hint code {
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: #edf1f5;
+  color: var(--text);
+}
+
+.export-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.export-case-table {
+  min-width: 1120px;
+}
+
+.export-case-table th:first-child,
+.export-case-table td:first-child {
+  width: 132px;
+}
+
+.export-case-table th:last-child,
+.export-case-table td:last-child {
+  width: 132px;
+}
+
 .switch-button,
 .binary-switch {
   position: relative;
@@ -676,5 +776,19 @@ button[type="submit"]:hover {
 
   .work-permission-list {
     grid-template-columns: 1fr;
+  }
+
+  .export-create-form,
+  .export-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .export-detail-head {
+    flex-direction: column;
+  }
+
+  .detail-status-stack,
+  .cli-hint {
+    justify-items: start;
   }
 }

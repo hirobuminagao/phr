@@ -5,7 +5,7 @@ import secrets
 import string
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -14,6 +14,12 @@ from fastapi.templating import Jinja2Templates
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.examination.lookup import qname
+from scripts.from_medical.script_lib.hia_xml_export_loader import (
+    ExportSelectors,
+    decide_candidate,
+    fetch_candidates,
+)
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
     get_authenticated_session,
@@ -78,6 +84,14 @@ templates.env.globals["approval_status_label"] = approval_status_label
 
 def app_db() -> str:
     return os.getenv("PHR_APP_DB", "phr_app")
+
+
+def health_db() -> str:
+    return os.getenv("PHR_HEALTH_DB", "health_exam_result")
+
+
+def master_db() -> str:
+    return os.getenv("PHR_MASTER_DB", "phr_master")
 
 
 def db_prefix() -> str:
@@ -499,6 +513,240 @@ def role_has_user_manage(cur: Any, *, role_code: str) -> bool:
     return int(row.get("cnt") or 0) > 0
 
 
+def list_status_label(status: str | None) -> str:
+    labels = {
+        "DRAFT": "下書き",
+        "READY": "出力待ち",
+        "EXPORTING": "出力中",
+        "EXPORTED": "出力済み",
+        "PARTIAL": "一部出力",
+        "ERROR": "エラー",
+        "CANCELLED": "取消",
+    }
+    return labels.get(status or "", status or "")
+
+
+def readiness_label(status: str | None) -> str:
+    labels = {
+        "EXPORT_READY": "READY",
+        "APPROVED_WITH_REASON": "理由ありOK",
+        "PENDING": "確認待ち",
+        "BLOCKED": "BLOCKED",
+        "EXPORTED": "出力済み",
+    }
+    return labels.get(status or "", status or "")
+
+
+templates.env.globals["list_status_label"] = list_status_label
+templates.env.globals["readiness_label"] = readiness_label
+
+
+def load_xml_export_lists(cur: Any, *, limit: int = 30) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          xel.xml_export_list_id,
+          xel.event_id,
+          xel.list_name,
+          xel.list_status,
+          xel.requested_exam_month,
+          xel.requested_facility_codes,
+          xel.include_exported,
+          xel.requested_file_date,
+          xel.requested_split_no,
+          xel.export_etl_run_id,
+          xel.export_started_at,
+          xel.export_finished_at,
+          xel.exported_zip_count,
+          xel.exported_member_count,
+          xel.created_by,
+          xel.confirmed_by,
+          xel.confirmed_at,
+          xel.created_at,
+          COUNT(xelc.xml_export_list_case_id) AS case_count,
+          SUM(CASE WHEN xelc.list_case_status = 'READY' THEN 1 ELSE 0 END) AS ready_count,
+          SUM(CASE WHEN xelc.list_case_status = 'EXPORTED' THEN 1 ELSE 0 END) AS exported_count,
+          SUM(CASE WHEN xelc.list_case_status = 'EXPORT_ERROR' THEN 1 ELSE 0 END) AS error_count
+        FROM {qname(health_db())}.xml_export_lists xel
+        LEFT JOIN {qname(health_db())}.xml_export_list_cases xelc
+          ON xelc.xml_export_list_id = xel.xml_export_list_id
+         AND xelc.removed_at IS NULL
+        GROUP BY
+          xel.xml_export_list_id,
+          xel.event_id,
+          xel.list_name,
+          xel.list_status,
+          xel.requested_exam_month,
+          xel.requested_facility_codes,
+          xel.include_exported,
+          xel.requested_file_date,
+          xel.requested_split_no,
+          xel.export_etl_run_id,
+          xel.export_started_at,
+          xel.export_finished_at,
+          xel.exported_zip_count,
+          xel.exported_member_count,
+          xel.created_by,
+          xel.confirmed_by,
+          xel.confirmed_at,
+          xel.created_at
+        ORDER BY xel.xml_export_list_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {qname(health_db())}.xml_export_lists
+        WHERE xml_export_list_id = %s
+        """,
+        (xml_export_list_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          xelc.xml_export_list_case_id,
+          xelc.xml_export_list_id,
+          xelc.exam_export_case_id,
+          xelc.list_case_status,
+          xelc.export_readiness_status_snapshot,
+          xelc.export_readiness_reason_snapshot,
+          xelc.added_by,
+          xelc.added_at,
+          xelc.exported_at,
+          eec.hia_subscriber_id,
+          eec.person_id_custom,
+          eec.insured_card_symbol,
+          eec.insured_card_number,
+          eec.name_kana,
+          eec.birth_date,
+          eec.exam_date,
+          eec.exam_facility_id,
+          eec.export_readiness_status,
+          eec.export_readiness_reason,
+          eec.check_status,
+          eec.check_reason,
+          eec.xml_export_status,
+          ef.exam_facility_code,
+          ef.exam_facility_name
+        FROM {qname(health_db())}.xml_export_list_cases xelc
+        INNER JOIN {qname(health_db())}.exam_export_cases eec
+          ON eec.exam_export_case_id = xelc.exam_export_case_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = eec.exam_facility_id
+        WHERE xelc.xml_export_list_id = %s
+          AND xelc.removed_at IS NULL
+        ORDER BY ef.exam_facility_code, eec.exam_date, eec.name_kana, xelc.xml_export_list_case_id
+        """,
+        (xml_export_list_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def create_xml_export_list_from_form(cur: Any, *, form: dict[str, str], user: dict[str, Any]) -> tuple[int, int, int]:
+    event_id = int(form.get("event_id") or 2)
+    list_name = (form.get("list_name") or "").strip()
+    if not list_name:
+        raise ValueError("LIST_NAME_REQUIRED")
+    exam_month = (form.get("exam_month") or "").strip() or None
+    facility_codes = tuple(
+        item.strip()
+        for item in (form.get("facility_codes") or "").replace(",", "\n").splitlines()
+        if item.strip()
+    )
+    include_exported = form.get("include_exported") == "1"
+    add_mode = form.get("add_mode") or "candidates"
+    include_ready = form.get("include_ready") == "1"
+    include_approved = form.get("include_approved") == "1"
+    requested_file_date = (form.get("requested_file_date") or "").strip() or None
+    requested_split_no_text = (form.get("requested_split_no") or "").strip()
+    requested_split_no = int(requested_split_no_text) if requested_split_no_text else None
+    selectors = ExportSelectors(
+        event_id=event_id,
+        facility_codes=facility_codes,
+        exam_month=exam_month,
+        include_exported=include_exported,
+    )
+    candidates = fetch_candidates(cur, selectors=selectors, health_db=health_db(), master_db=master_db())
+    selected = []
+    for row in candidates:
+        decision = decide_candidate(row)
+        if not decision.allowed:
+            continue
+        if row.get("export_readiness_status") == "EXPORT_READY" and include_ready:
+            selected.append(row)
+        elif row.get("export_readiness_status") == "APPROVED_WITH_REASON" and include_approved:
+            selected.append(row)
+        elif row.get("export_readiness_status") == "EXPORTED" and include_exported:
+            selected.append(row)
+    if add_mode == "empty":
+        selected = []
+
+    status = "READY"
+    created_by = str(user.get("employee_no") or user.get("display_name") or "")
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.xml_export_lists (
+          event_id, list_name, list_status, selector_summary,
+          requested_exam_month, requested_facility_codes, include_exported,
+          requested_file_date, requested_split_no, created_by, confirmed_by, confirmed_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP(3))
+        """,
+        (
+            event_id,
+            list_name,
+            status,
+            "\n".join(
+                [
+                    f"event_id={event_id}",
+                    f"exam_month={exam_month or ''}",
+                    f"facility_codes={','.join(facility_codes)}",
+                    f"include_ready={int(include_ready)}",
+                    f"include_approved={int(include_approved)}",
+                    f"include_exported={int(include_exported)}",
+                    f"add_mode={add_mode}",
+                ]
+            ),
+            exam_month,
+            "\n".join(facility_codes) if facility_codes else None,
+            include_exported,
+            requested_file_date,
+            requested_split_no,
+            created_by,
+            created_by,
+        ),
+    )
+    xml_export_list_id = int(cur.lastrowid)
+    for row in selected:
+        cur.execute(
+            f"""
+            INSERT INTO {qname(health_db())}.xml_export_list_cases (
+              xml_export_list_id, exam_export_case_id, list_case_status,
+              export_readiness_status_snapshot, export_readiness_reason_snapshot,
+              added_by
+            ) VALUES (%s, %s, 'READY', %s, %s, %s)
+            """,
+            (
+                xml_export_list_id,
+                row["exam_export_case_id"],
+                row.get("export_readiness_status"),
+                row.get("export_readiness_reason"),
+                created_by,
+            ),
+        )
+    return xml_export_list_id, len(candidates), len(selected)
+
+
 def assign_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by_app_user_id: int | None) -> None:
     cur.execute("SELECT app_role_id FROM app_roles WHERE role_code = %s AND is_active = 1", (role_code,))
     role = cur.fetchone()
@@ -771,7 +1019,97 @@ def export_lists(request: Request) -> Response:
         ),
     ):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
-    return templates.TemplateResponse("export_lists.html", {"request": request, "user": user})
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            lists = load_xml_export_lists(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "export_lists.html",
+        {
+            "request": request,
+            "user": user,
+            "lists": lists,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+            "can_edit": has_permission(user, "export_lists.edit"),
+        },
+    )
+
+
+@app.post("/export-lists", response_class=HTMLResponse)
+async def create_export_list(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "export_lists.edit"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            xml_export_list_id, candidates, selected = create_xml_export_list_from_form(cur, form=form, user=user)
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            message = "リスト名は必須です。" if str(exc) == "LIST_NAME_REQUIRED" else str(exc)
+            return RedirectResponse(f"/export-lists?error={quote(message)}", status_code=303)
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse(
+        f"/export-lists/{xml_export_list_id}?message={quote(f'候補{candidates}件から{selected}件を追加しました。')}",
+        status_code=303,
+    )
+
+
+@app.get("/export-lists/{xml_export_list_id}", response_class=HTMLResponse)
+def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(
+        user,
+        (
+            "export_lists.view",
+            "export_lists.edit",
+            "xml_export.official",
+            "hia_upload.perform",
+            "hia_upload_status.edit",
+        ),
+    ):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            export_list = load_xml_export_list_detail(cur, xml_export_list_id=xml_export_list_id)
+            if not export_list:
+                conn.commit()
+                return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
+            cases = load_xml_export_list_cases(cur, xml_export_list_id=xml_export_list_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "export_list_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "export_list": export_list,
+            "cases": cases,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+            "can_edit": has_permission(user, "export_lists.edit"),
+            "can_export": has_permission(user, "xml_export.official"),
+        },
+    )
 
 
 @app.get("/account", response_class=HTMLResponse)

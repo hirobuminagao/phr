@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% set title = "出力リスト" %}
+{% set title = "出力管理" %}
 {% block body %}
 <header class="topbar">
   <div>
     <p class="eyebrow">HIA XML</p>
-    <h1>出力リスト</h1>
+    <h1>出力管理</h1>
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/">HOME</a>
@@ -14,10 +14,135 @@
   </nav>
 </header>
 
-<main class="page">
-  <section class="empty-state">
-    <h2>画面の入口だけ作成済み</h2>
-    <p>次の実装で、出力リスト作成・検索・追加済みリスト・HIAアップロード記帳をここへ接続します。</p>
+<main class="page export-page">
+  {% if message %}
+    <div class="notice">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  {% if can_edit %}
+  <section class="panel export-create-panel">
+    <div class="section-heading">
+      <div>
+        <h2>出力リスト作成</h2>
+        <p class="subtle">出力する人の箱を作ります。個別追加画面は後続で、この箱に人を足す想定です。</p>
+      </div>
+    </div>
+    <form method="post" action="/export-lists" class="export-create-form">
+      <label>
+        リスト名
+        <input name="list_name" value="2026年5月 HIAアップロード用">
+      </label>
+      <label>
+        対象event
+        <input name="event_id" value="2">
+      </label>
+      <label>
+        受診月
+        <input name="exam_month" value="2026-05" placeholder="YYYY-MM">
+      </label>
+      <label>
+        健診機関コード
+        <input name="facility_codes" placeholder="空欄なら全施設。複数は改行またはカンマ">
+      </label>
+      <div class="export-option-group">
+        <span class="field-label">箱作成時に含める対象</span>
+        <label class="check-line">
+          <input type="checkbox" name="include_ready" value="1" checked>
+          READY
+        </label>
+        <label class="check-line">
+          <input type="checkbox" name="include_approved" value="1" checked>
+          理由ありOK
+        </label>
+      </div>
+      <label>
+        作成方法
+        <select name="add_mode">
+          <option value="candidates">選択した対象を追加して作成</option>
+          <option value="empty">空のリストを作成</option>
+        </select>
+      </label>
+      <label>
+        再出力
+        <select name="include_exported">
+          <option value="0">出力済みを含めない</option>
+          <option value="1">出力済みも含める</option>
+        </select>
+      </label>
+      <label>
+        提出日
+        <input name="requested_file_date" placeholder="YYYY-MM-DD。空欄なら出力時に自動">
+      </label>
+      <label>
+        出力番号
+        <select name="requested_split_no">
+          <option value="">自動採番</option>
+          {% for n in range(10) %}
+            <option value="{{ n }}">{{ n }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">出力リストを作成</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>出力リスト一覧</h2>
+        <p class="subtle">最新30件を表示します。正式出力はREADYのリストを指定して実行します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table export-list-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>リスト</th>
+            <th>状態</th>
+            <th>条件</th>
+            <th>人数</th>
+            <th>出力</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in lists %}
+          <tr>
+            <td>{{ item.xml_export_list_id }}</td>
+            <td>
+              <strong>{{ item.list_name }}</strong>
+              <small>作成: {{ item.created_at }}</small>
+            </td>
+            <td><span class="status-pill status-ready">{{ list_status_label(item.list_status) }}</span></td>
+            <td>
+              <strong>{{ item.requested_exam_month or "全受診月" }}</strong>
+              <small>{{ (item.requested_facility_codes or "全施設")|replace("\n", ", ") }}</small>
+            </td>
+            <td>
+              <strong>{{ item.case_count or 0 }}人</strong>
+              <small>READY {{ item.ready_count or 0 }} / エラー {{ item.error_count or 0 }}</small>
+            </td>
+            <td>
+              <strong>{{ item.exported_member_count or 0 }}人</strong>
+              <small>ZIP {{ item.exported_zip_count or 0 }}</small>
+            </td>
+            <td><a class="ghost-button" href="/export-lists/{{ item.xml_export_list_id }}">開く</a></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7">出力リストはまだありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </section>
 </main>
 {% endblock %}
