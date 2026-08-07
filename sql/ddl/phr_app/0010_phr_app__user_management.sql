@@ -160,6 +160,22 @@ CREATE TABLE IF NOT EXISTS `app_login_attempts` (
   CONSTRAINT `fk_app_login_attempts_user` FOREIGN KEY (`app_user_id`) REFERENCES `app_users` (`app_user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_ja_0900_as_cs;
 
+CREATE TABLE IF NOT EXISTS `app_settings` (
+  `setting_key` varchar(128) COLLATE utf8mb4_ja_0900_as_cs NOT NULL,
+  `setting_value` varchar(1024) COLLATE utf8mb4_ja_0900_as_cs NOT NULL,
+  `value_type` varchar(32) COLLATE utf8mb4_ja_0900_as_cs NOT NULL DEFAULT 'string',
+  `setting_group` varchar(64) COLLATE utf8mb4_ja_0900_as_cs NOT NULL DEFAULT 'general',
+  `description` text COLLATE utf8mb4_ja_0900_as_cs,
+  `updated_by_app_user_id` bigint unsigned DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`setting_key`),
+  KEY `idx_app_settings_group` (`setting_group`),
+  KEY `idx_app_settings_updated_by` (`updated_by_app_user_id`),
+  CONSTRAINT `fk_app_settings_updated_by`
+    FOREIGN KEY (`updated_by_app_user_id`) REFERENCES `app_users` (`app_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_ja_0900_as_cs;
+
 CREATE TABLE IF NOT EXISTS `app_audit_logs` (
   `app_audit_log_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `app_user_id` bigint unsigned DEFAULT NULL,

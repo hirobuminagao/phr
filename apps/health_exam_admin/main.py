@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import secrets
 import string
 from pathlib import Path
@@ -23,6 +24,8 @@ from scripts.from_medical.script_lib.hia_xml_export_loader import (
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
     get_authenticated_session,
+    get_app_setting,
+    get_app_setting_int,
     hash_password,
     revoke_session,
     verify_password,
@@ -119,7 +122,20 @@ def current_user(request: Request) -> dict[str, Any] | None:
     with connect_ctx(params, database=app_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            user = get_authenticated_session(cur, app_db=app_db(), session_token=token)
+            idle_timeout = get_app_setting_int(
+                cur,
+                app_db=app_db(),
+                setting_key="session_idle_timeout_minutes",
+                default=60,
+                minimum=0,
+                maximum=24 * 60,
+            )
+            user = get_authenticated_session(
+                cur,
+                app_db=app_db(),
+                session_token=token,
+                idle_timeout_minutes=idle_timeout,
+            )
             conn.commit()
             return user
         except Exception:
@@ -449,6 +465,58 @@ def load_admin_user_detail(cur: Any, *, app_user_id: int) -> dict[str, Any] | No
     return None
 
 
+def load_allowed_ip_rows(cur: Any, *, app_user_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT app_user_allowed_ip_id, allowed_ip, label, is_active, note, updated_at
+        FROM app_user_allowed_ips
+        WHERE app_user_id = %s
+        ORDER BY is_active DESC, allowed_ip
+        """,
+        (app_user_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def replace_allowed_ips(
+    cur: Any,
+    *,
+    app_user_id: int,
+    allowed_ips_text: str,
+) -> None:
+    values = []
+    seen = set()
+    for line in allowed_ips_text.replace(",", "\n").splitlines():
+        text = line.strip()
+        if not text or text in seen:
+            continue
+        values.append(text)
+        seen.add(text)
+    cur.execute(
+        """
+        UPDATE app_user_allowed_ips
+           SET is_active = 0
+         WHERE app_user_id = %s
+        """,
+        (app_user_id,),
+    )
+    for allowed_ip in values:
+        cur.execute(
+            """
+            INSERT INTO app_user_allowed_ips (app_user_id, allowed_ip, is_active, note)
+            VALUES (%s, %s, 1, 'updated from admin screen')
+            ON DUPLICATE KEY UPDATE
+              is_active = VALUES(is_active),
+              note = VALUES(note)
+            """,
+            (app_user_id, allowed_ip),
+        )
+
+
+def allowed_ips_text(rows: list[dict[str, Any]]) -> str:
+    return "\n".join(str(row["allowed_ip"]) for row in rows if bool(row.get("is_active")))
+
+
 def admin_user_form_values(row: dict[str, Any]) -> dict[str, str]:
     role_codes = str(row.get("role_codes") or "")
     first_role = role_codes.split(",", 1)[0] if role_codes else "VIEWER"
@@ -460,6 +528,148 @@ def admin_user_form_values(row: dict[str, Any]) -> dict[str, str]:
         "email": str(row.get("email") or ""),
         "role_code": first_role or "VIEWER",
     }
+
+
+def load_app_security_settings(cur: Any) -> dict[str, str]:
+    keys = {
+        "session_lifetime_minutes": "720",
+        "session_idle_timeout_minutes": "60",
+        "personal_info_audit_enabled": "1",
+    }
+    return {
+        key: get_app_setting(cur, app_db=app_db(), setting_key=key, default=default)
+        for key, default in keys.items()
+    }
+
+
+def load_audit_log_rows(cur: Any, *, limit: int = 100) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT
+          app_audit_log_id,
+          app_user_id,
+          employee_no,
+          action_code,
+          target_schema,
+          target_table,
+          target_id,
+          after_json,
+          client_ip,
+          created_at
+        FROM app_audit_logs
+        ORDER BY app_audit_log_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def upsert_app_setting(
+    cur: Any,
+    *,
+    setting_key: str,
+    setting_value: str,
+    value_type: str,
+    setting_group: str,
+    description: str,
+    updated_by_app_user_id: int,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO app_settings (
+          setting_key,
+          setting_value,
+          value_type,
+          setting_group,
+          description,
+          updated_by_app_user_id
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+          setting_value = VALUES(setting_value),
+          value_type = VALUES(value_type),
+          setting_group = VALUES(setting_group),
+          description = VALUES(description),
+          updated_by_app_user_id = VALUES(updated_by_app_user_id)
+        """,
+        (setting_key, setting_value, value_type, setting_group, description, updated_by_app_user_id),
+    )
+
+
+def audit_enabled(cur: Any) -> bool:
+    return get_app_setting(cur, app_db=app_db(), setting_key="personal_info_audit_enabled", default="1") == "1"
+
+
+def log_audit(
+    cur: Any,
+    *,
+    request: Request,
+    user: dict[str, Any] | None,
+    action_code: str,
+    target_schema: str | None = None,
+    target_table: str | None = None,
+    target_id: str | None = None,
+    after: dict[str, Any] | None = None,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO app_audit_logs (
+          app_user_id,
+          employee_no,
+          action_code,
+          target_schema,
+          target_table,
+          target_id,
+          after_json,
+          client_ip,
+          user_agent
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            None if not user else int(user["app_user_id"]),
+            None if not user else str(user.get("employee_no") or ""),
+            action_code,
+            target_schema,
+            target_table,
+            target_id,
+            json.dumps(after or {}, ensure_ascii=False),
+            client_ip(request),
+            request.headers.get("user-agent"),
+        ),
+    )
+
+
+def log_personal_info_view(
+    cur: Any,
+    *,
+    request: Request,
+    user: dict[str, Any],
+    action_code: str,
+    cases: list[dict[str, Any]],
+    list_id: int | None = None,
+) -> None:
+    if not audit_enabled(cur):
+        return
+    for case in cases:
+        log_audit(
+            cur,
+            request=request,
+            user=user,
+            action_code=action_code,
+            target_schema=health_db(),
+            target_table="exam_export_cases",
+            target_id=str(case.get("exam_export_case_id") or ""),
+            after={
+                "xml_export_list_id": list_id,
+                "exam_export_case_id": case.get("exam_export_case_id"),
+                "hia_subscriber_id": case.get("hia_subscriber_id"),
+                "person_id_custom": case.get("person_id_custom"),
+                "exam_date": str(case.get("exam_date") or ""),
+                "exam_facility_id": case.get("exam_facility_id"),
+            },
+        )
 
 
 def count_remaining_active_user_managers(cur: Any, *, excluding_app_user_id: int) -> int:
@@ -952,6 +1162,14 @@ async def login(request: Request) -> Response:
     with connect_ctx(params, database=app_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
+            session_lifetime = get_app_setting_int(
+                cur,
+                app_db=app_db(),
+                setting_key="session_lifetime_minutes",
+                default=720,
+                minimum=5,
+                maximum=24 * 60,
+            )
             result = authenticate_user(
                 cur,
                 app_db=app_db(),
@@ -959,6 +1177,7 @@ async def login(request: Request) -> Response:
                 password=password,
                 client_ip=client_ip(request),
                 user_agent=request.headers.get("user-agent"),
+                session_lifetime_minutes=session_lifetime,
             )
             conn.commit()
         except Exception:
@@ -1093,6 +1312,14 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
                 conn.commit()
                 return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
             cases = load_xml_export_list_cases(cur, xml_export_list_id=xml_export_list_id)
+            log_personal_info_view(
+                cur,
+                request=request,
+                user=user,
+                action_code="PERSONAL_INFO_VIEW_EXPORT_LIST",
+                cases=cases,
+                list_id=xml_export_list_id,
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -1268,6 +1495,145 @@ def admin_users(request: Request) -> Response:
             "message": None,
             "temporary_password": None,
             "error": None,
+        },
+    )
+
+
+@app.get("/admin/security", response_class=HTMLResponse)
+def security_settings(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        settings = load_app_security_settings(cur)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_security.html",
+        {
+            "request": request,
+            "user": user,
+            "settings": settings,
+            "message": None,
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/security", response_class=HTMLResponse)
+async def update_security_settings(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    try:
+        session_lifetime_minutes = max(5, min(24 * 60, int(form.get("session_lifetime_minutes") or "720")))
+        session_idle_timeout_minutes = max(0, min(24 * 60, int(form.get("session_idle_timeout_minutes") or "60")))
+    except ValueError:
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+            cur = dict_cursor(conn)
+            settings = load_app_security_settings(cur)
+            cur.close()
+        return templates.TemplateResponse(
+            "admin_security.html",
+            {
+                "request": request,
+                "user": user,
+                "settings": settings,
+                "message": None,
+                "error": "分数は数値で入力してください。",
+            },
+            status_code=400,
+        )
+    audit_on = "1" if form.get("personal_info_audit_enabled") == "1" else "0"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            upsert_app_setting(
+                cur,
+                setting_key="session_lifetime_minutes",
+                setting_value=str(session_lifetime_minutes),
+                value_type="int",
+                setting_group="security",
+                description="ログインセッションの最大有効時間。初期値は12時間",
+                updated_by_app_user_id=int(user["app_user_id"]),
+            )
+            upsert_app_setting(
+                cur,
+                setting_key="session_idle_timeout_minutes",
+                setting_value=str(session_idle_timeout_minutes),
+                value_type="int",
+                setting_group="security",
+                description="無操作状態で自動ログアウトするまでの分数。0は無効",
+                updated_by_app_user_id=int(user["app_user_id"]),
+            )
+            upsert_app_setting(
+                cur,
+                setting_key="personal_info_audit_enabled",
+                setting_value=audit_on,
+                value_type="bool",
+                setting_group="audit",
+                description="個人情報を含む画面閲覧・ダウンロードを監査ログへ記録する",
+                updated_by_app_user_id=int(user["app_user_id"]),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="APP_SECURITY_SETTINGS_UPDATE",
+                target_schema=app_db(),
+                target_table="app_settings",
+                target_id="security",
+                after={
+                    "session_lifetime_minutes": session_lifetime_minutes,
+                    "session_idle_timeout_minutes": session_idle_timeout_minutes,
+                    "personal_info_audit_enabled": audit_on,
+                },
+            )
+            conn.commit()
+            settings = load_app_security_settings(cur)
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_security.html",
+        {
+            "request": request,
+            "user": current_user(request) or user,
+            "settings": settings,
+            "message": "セキュリティ設定を更新しました。",
+            "error": None,
+        },
+    )
+
+
+@app.get("/admin/audit-logs", response_class=HTMLResponse)
+def audit_logs(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "audit.view"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        rows = load_audit_log_rows(cur)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_audit_logs.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
         },
     )
 
@@ -1595,6 +1961,7 @@ def edit_user_form(request: Request, app_user_id: int) -> Response:
         row = load_admin_user_detail(cur, app_user_id=app_user_id)
         roles = load_manageable_roles(cur)
         work_permissions = load_work_permission_rows(cur, app_user_id=app_user_id)
+        allowed_ips = load_allowed_ip_rows(cur, app_user_id=app_user_id)
         cur.close()
     if row is None:
         return RedirectResponse("/admin/users", status_code=303)
@@ -1606,7 +1973,9 @@ def edit_user_form(request: Request, app_user_id: int) -> Response:
             "target_user": row,
             "roles": roles,
             "work_permissions": work_permissions,
+            "allowed_ips": allowed_ips,
             "form": admin_user_form_values(row),
+            "allowed_ips_text": allowed_ips_text(allowed_ips),
             "message": None,
             "error": None,
         },
@@ -1628,6 +1997,7 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
     department_name = form.get("department_name", "").strip() or None
     email = form.get("email", "").strip() or None
     role_code = form.get("role_code", "").strip()
+    allowed_ips_input = form.get("allowed_ips", "")
     allowed_work_permissions = {
         (str(item["key"]), action_key)
         for item in WORK_PERMISSION_ITEMS
@@ -1649,6 +2019,7 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
             row = load_admin_user_detail(cur, app_user_id=app_user_id)
             roles = load_manageable_roles(cur)
             work_permissions = load_work_permission_rows(cur, app_user_id=app_user_id)
+            allowed_ips = load_allowed_ip_rows(cur, app_user_id=app_user_id)
             if row is None:
                 conn.rollback()
                 return RedirectResponse("/admin/users", status_code=303)
@@ -1662,7 +2033,9 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
                         "target_user": row,
                         "roles": roles,
                         "work_permissions": work_permissions,
+                        "allowed_ips": allowed_ips,
                         "form": form_values,
+                        "allowed_ips_text": allowed_ips_input,
                         "message": None,
                         "error": "社員番号と氏名は必須です。",
                     },
@@ -1687,7 +2060,9 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
                         "target_user": row,
                         "roles": roles,
                         "work_permissions": work_permissions,
+                        "allowed_ips": allowed_ips,
                         "form": form_values,
+                        "allowed_ips_text": allowed_ips_input,
                         "message": None,
                         "error": "この社員番号はすでに登録されています。",
                     },
@@ -1703,7 +2078,9 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
                         "target_user": row,
                         "roles": roles,
                         "work_permissions": work_permissions,
+                        "allowed_ips": allowed_ips,
                         "form": form_values,
+                        "allowed_ips_text": allowed_ips_input,
                         "message": None,
                         "temporary_password": None,
                         "error": "指定されたロールが見つかりません。",
@@ -1721,7 +2098,9 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
                             "target_user": row,
                             "roles": roles,
                             "work_permissions": work_permissions,
+                            "allowed_ips": allowed_ips,
                             "form": form_values,
+                            "allowed_ips_text": allowed_ips_input,
                             "message": None,
                             "temporary_password": None,
                             "error": "有効な管理者が0人になるためロールを変更できません。",
@@ -1752,6 +2131,7 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
                 allowed_work_permissions=allowed_work_permissions,
                 assigned_by_app_user_id=int(user["app_user_id"]),
             )
+            replace_allowed_ips(cur, app_user_id=app_user_id, allowed_ips_text=allowed_ips_input)
             conn.commit()
         except Exception:
             conn.rollback()

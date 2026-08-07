@@ -16,8 +16,9 @@
 - 個人作業権限は `表示` と `編集・実行` を分ける。
 - ロールで何ができるかは固定実装にしない。`app_permissions` と `app_role_permissions` で後から変更できるようにする。ただし出力リスト、XML出力、HIAアップロード等の作業系権限は個人設定を正とする。
 - IP制限はユーザー単位で持つ。許可IPが未登録ならIP制限なし、1件以上ある場合は一致するIPのみログイン可。
+- 自動ログアウトはadmin設定で管理する。初期値は最大12時間、無操作60分。
 - ログイン試行は成功・失敗とも `app_login_attempts` に残す。
-- 画面操作や重要な業務操作は `app_audit_logs` に残す。
+- 画面操作や重要な業務操作は `app_audit_logs` に残す。個人情報を含む画面閲覧、今後追加するダウンロードは、誰が・いつ・どの人を見た/出したかを残す。
 
 ## DB構成
 
@@ -104,13 +105,35 @@ PHR画面の利用者本体。
 
 ログイン成功後のセッション。画面/API実装時に使用する。
 
+初期仕様:
+
+- `session_lifetime_minutes`: セッション最大時間。初期値720分。
+- `session_idle_timeout_minutes`: 最終操作から自動ログアウトするまでの分数。初期値60分。0なら無操作ログアウトを無効化。
+- 上記は `app_settings` でadminが変更できる。
+
 ### `app_login_attempts`
 
 ログイン試行履歴。ログイン不可理由を後から追えるようにする。
 
+### `app_settings`
+
+PHR画面の運用設定。
+
+初期設定:
+
+- `session_lifetime_minutes`: ログインセッションの最大有効時間。
+- `session_idle_timeout_minutes`: 無操作ログアウトまでの分数。
+- `personal_info_audit_enabled`: 個人情報画面閲覧/ダウンロード監査ログのON/OFF。
+
 ### `app_audit_logs`
 
 画面/API操作の監査ログ。出力リスト編集、正式XML出力、HIAアップロード記帳、ユーザー変更などを残す。
+
+個人情報監査:
+
+- 出力リスト詳細など、氏名カナ・記号番号・HIA加入者ID等を含む画面を開いた場合、対象者ごとに `PERSONAL_INFO_VIEW_*` として記録する。
+- ダウンロード機能を追加する場合は `PERSONAL_INFO_DOWNLOAD_*` として同じテーブルへ記録する。
+- 監査ログの記録ON/OFFは `personal_info_audit_enabled` で制御する。
 
 ## 実装ステップ
 
@@ -118,7 +141,8 @@ PHR画面の利用者本体。
 2. CLIでユーザー登録とログイン確認をできるようにする。
 3. FastAPI画面/API実装時に、セッション・権限・IP制限をこのDBへ接続する。
 4. アカウント編集画面で個人ごとの作業権限ON/OFFを設定する。
-5. 画面ごとの権限は初期運用後に調整する。
+5. セキュリティ設定画面で自動ログアウト、個人情報監査ログON/OFFを変更する。
+6. 画面ごとの権限は初期運用後に調整する。
 
 ## 適用ファイル
 
@@ -127,3 +151,4 @@ PHR画面の利用者本体。
 - `sql/migrations/phr_app/20260807_001_phr_app_create_user_management.sql`
 - `sql/migrations/phr_app/20260807_002_phr_app_add_user_approval.sql`
 - `sql/migrations/phr_app/20260807_003_phr_app_add_user_permission_overrides.sql`
+- `sql/migrations/phr_app/20260807_004_phr_app_add_security_settings.sql`

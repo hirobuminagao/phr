@@ -189,6 +189,47 @@ def record_login_attempt(
     )
 
 
+def get_app_setting(
+    cur: Cursor,
+    *,
+    app_db: str,
+    setting_key: str,
+    default: str,
+) -> str:
+    cur.execute(
+        f"""
+        SELECT `setting_value`
+        FROM {_schema(app_db)}.`app_settings`
+        WHERE `setting_key` = %s
+        """,
+        (setting_key,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return default
+    return str(row["setting_value"])
+
+
+def get_app_setting_int(
+    cur: Cursor,
+    *,
+    app_db: str,
+    setting_key: str,
+    default: int,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    try:
+        value = int(get_app_setting(cur, app_db=app_db, setting_key=setting_key, default=str(default)))
+    except ValueError:
+        value = default
+    if minimum is not None:
+        value = max(minimum, value)
+    if maximum is not None:
+        value = min(maximum, value)
+    return value
+
+
 def create_session(
     cur: Cursor,
     *,
@@ -196,11 +237,11 @@ def create_session(
     app_user_id: int,
     client_ip: str | None,
     user_agent: str | None,
-    lifetime_hours: int = 12,
+    lifetime_minutes: int = 720,
 ) -> str:
     token = secrets.token_urlsafe(32)
     token_sha256 = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    expires_at = datetime.now() + timedelta(hours=lifetime_hours)
+    expires_at = datetime.now() + timedelta(minutes=lifetime_minutes)
     cur.execute(
         f"""
         INSERT INTO {_schema(app_db)}.`app_sessions` (
@@ -226,6 +267,7 @@ def authenticate_user(
     password: str,
     client_ip: str | None,
     user_agent: str | None = None,
+    session_lifetime_minutes: int = 720,
 ) -> LoginResult:
     user = get_user_by_employee_no(cur, app_db=app_db, employee_no=employee_no)
     if not user:
@@ -323,6 +365,7 @@ def authenticate_user(
         app_user_id=app_user_id,
         client_ip=client_ip,
         user_agent=user_agent,
+        lifetime_minutes=session_lifetime_minutes,
     )
     cur.execute(
         f"""
@@ -360,6 +403,7 @@ def get_authenticated_session(
     *,
     app_db: str,
     session_token: str | None,
+    idle_timeout_minutes: int = 60,
 ) -> dict[str, Any] | None:
     if not session_token:
         return None
@@ -370,6 +414,7 @@ def get_authenticated_session(
         SELECT
           s.`app_session_id`,
           s.`app_user_id`,
+          s.`last_seen_at`,
           u.`employee_no`,
           u.`display_name`,
           u.`department_name`,
@@ -389,6 +434,19 @@ def get_authenticated_session(
     row = cur.fetchone()
     if not row:
         return None
+    if idle_timeout_minutes > 0:
+        last_seen_at = row.get("last_seen_at")
+        if last_seen_at and last_seen_at < datetime.now() - timedelta(minutes=idle_timeout_minutes):
+            cur.execute(
+                f"""
+                UPDATE {_schema(app_db)}.`app_sessions`
+                SET `revoked_at` = CURRENT_TIMESTAMP(3)
+                WHERE `app_session_id` = %s
+                  AND `revoked_at` IS NULL
+                """,
+                (int(row["app_session_id"]),),
+            )
+            return None
 
     app_user_id = int(row["app_user_id"])
     permissions = get_user_permissions(cur, app_db=app_db, app_user_id=app_user_id)

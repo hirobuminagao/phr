@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% set title = "監査ログ" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>監査ログ</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/security">セキュリティ</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel table-panel">
+    <table class="data-table audit-table">
+      <thead>
+        <tr>
+          <th>日時</th>
+          <th>社員番号</th>
+          <th>操作</th>
+          <th>対象</th>
+          <th>IP</th>
+          <th>内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.created_at }}</td>
+          <td>{{ row.employee_no or '' }}</td>
+          <td>{{ row.action_code }}</td>
+          <td>
+            <strong>{{ row.target_table or '' }}</strong>
+            <small>{{ row.target_id or '' }}</small>
+          </td>
+          <td>{{ row.client_ip or '' }}</td>
+          <td><small>{{ row.after_json or '' }}</small></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6">監査ログはまだありません。</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</main>
+{% endblock %}

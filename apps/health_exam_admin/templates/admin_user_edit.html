@@ -93,6 +93,21 @@
           {% endfor %}
         </div>
       </div>
+      <div class="form-section">
+        <h2>ログイン許可IP</h2>
+        <p class="subtle">空欄ならIP制限なし。入力した場合は、登録したIPからのみログインできます。複数は改行またはカンマで入力します。</p>
+        <label>
+          <span>許可IP</span>
+          <textarea name="allowed_ips" rows="4" placeholder="例: 192.168.1.10">{{ allowed_ips_text or '' }}</textarea>
+        </label>
+        {% if allowed_ips %}
+        <div class="permission-list">
+          {% for row in allowed_ips %}
+          <span>{{ row.allowed_ip }}{% if not row.is_active %} / 無効{% endif %}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
       <div class="form-actions">
         <button type="submit">更新</button>
       </div>

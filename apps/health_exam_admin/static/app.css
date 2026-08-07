@@ -25,7 +25,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -124,6 +125,16 @@ input:not([type="checkbox"]) {
   background: #fff;
 }
 
+textarea {
+  width: 100%;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: #fff;
+  resize: vertical;
+}
+
 select {
   width: 100%;
   min-height: var(--control-height);
@@ -135,7 +146,8 @@ select {
 }
 
 input:not([type="checkbox"]):focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 3px solid rgba(20, 125, 100, 0.18);
   border-color: var(--accent);
 }

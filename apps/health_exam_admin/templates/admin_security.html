@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% set title = "セキュリティ設定" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>セキュリティ設定</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/users">アカウント管理</a>
+    <a class="ghost-button" href="/admin/permissions">権限設定</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page narrow-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <form method="post" action="/admin/security" class="form-grid">
+      <label>
+        <span>セッション最大時間（分）</span>
+        <input name="session_lifetime_minutes" type="number" min="5" max="1440" value="{{ settings.session_lifetime_minutes or '720' }}">
+      </label>
+      <label>
+        <span>無操作ログアウト（分）</span>
+        <input name="session_idle_timeout_minutes" type="number" min="0" max="1440" value="{{ settings.session_idle_timeout_minutes or '60' }}">
+      </label>
+      <div class="form-section">
+        <h2>監査ログ</h2>
+        <p class="subtle">個人情報を含む画面を開いた日時、利用者、対象者を記録します。ダウンロード機能を追加した場合も同じログへ記録します。</p>
+        <label class="binary-switch {{ 'switch-on' if settings.personal_info_audit_enabled == '1' else 'switch-off' }}">
+          <input
+            type="checkbox"
+            name="personal_info_audit_enabled"
+            value="1"
+            {% if settings.personal_info_audit_enabled == '1' %}checked{% endif %}
+          >
+          <span>有効</span>
+          <span>無効</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">更新</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>IP制限</h2>
+    <p class="subtle">IP制限はアカウントごとに設定します。対象ユーザーの編集画面で許可IPを登録してください。</p>
+    <a class="ghost-button" href="/admin/users">アカウント管理へ</a>
+  </section>
+</main>
+<script>
+(() => {
+  for (const input of document.querySelectorAll(".binary-switch input")) {
+    const update = () => {
+      const label = input.closest(".binary-switch");
+      if (!label) return;
+      label.classList.toggle("switch-on", input.checked);
+      label.classList.toggle("switch-off", !input.checked);
+    };
+    input.addEventListener("change", update);
+    update();
+  }
+})();
+</script>
+{% endblock %}
