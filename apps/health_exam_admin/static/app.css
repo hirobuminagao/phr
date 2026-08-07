@@ -453,6 +453,57 @@ button[type="submit"]:hover {
   min-width: 220px;
 }
 
+.switch-button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 112px;
+  padding: 4px !important;
+  border: 1px solid #b9c5d2 !important;
+  border-radius: 999px !important;
+  background: #edf1f5 !important;
+  color: var(--muted) !important;
+  overflow: hidden;
+}
+
+.switch-button::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(31, 41, 51, 0.18);
+  transition: left 0.16s ease;
+}
+
+.switch-button span {
+  position: relative;
+  z-index: 1;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.switch-on::before {
+  left: 4px;
+}
+
+.switch-off::before {
+  left: 50%;
+}
+
+.switch-on span:first-child,
+.switch-off span:last-child {
+  color: var(--accent-dark);
+}
+
+.switch-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .danger-button {
   background: #b42318 !important;
 }

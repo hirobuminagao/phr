@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% set title = "アカウント編集" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>アカウント編集</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/users">戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page narrow-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <form method="post" action="/admin/users/{{ target_user.app_user_id }}/edit" class="form-grid">
+      <label>
+        <span>社員番号 <em class="required-mark">必須</em></span>
+        <input name="employee_no" value="{{ form.employee_no or '' }}" required autofocus>
+      </label>
+      <label>
+        <span>状態</span>
+        <input value="{{ approval_status_label(target_user.approval_status, is_active=target_user.is_active) }}" disabled>
+      </label>
+      <label>
+        <span>氏名 <em class="required-mark">必須</em></span>
+        <input name="display_name" value="{{ form.display_name or '' }}" required>
+      </label>
+      <label>
+        <span>氏名カナ</span>
+        <input name="display_name_kana" value="{{ form.display_name_kana or '' }}">
+      </label>
+      <label>
+        <span>部署</span>
+        <input name="department_name" value="{{ form.department_name or '' }}">
+      </label>
+      <label>
+        <span>メールアドレス</span>
+        <input name="email" type="email" value="{{ form.email or '' }}">
+      </label>
+      <label>
+        <span>ロール</span>
+        <select name="role_code">
+          {% for role in roles %}
+          <option value="{{ role.role_code }}" {% if (form.role_code or 'VIEWER') == role.role_code %}selected{% endif %}>
+            {{ role.role_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">更新</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

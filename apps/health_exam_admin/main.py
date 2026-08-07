@@ -265,6 +265,27 @@ def load_issue_page_data(cur: Any, *, issue_form: dict[str, str] | None = None) 
     }
 
 
+def load_admin_user_detail(cur: Any, *, app_user_id: int) -> dict[str, Any] | None:
+    rows = load_admin_user_rows(cur, filters={})
+    for row in rows:
+        if int(row["app_user_id"]) == app_user_id:
+            return row
+    return None
+
+
+def admin_user_form_values(row: dict[str, Any]) -> dict[str, str]:
+    role_codes = str(row.get("role_codes") or "")
+    first_role = role_codes.split(",", 1)[0] if role_codes else "VIEWER"
+    return {
+        "employee_no": str(row.get("employee_no") or ""),
+        "display_name": str(row.get("display_name") or ""),
+        "display_name_kana": str(row.get("display_name_kana") or ""),
+        "department_name": str(row.get("department_name") or ""),
+        "email": str(row.get("email") or ""),
+        "role_code": first_role or "VIEWER",
+    }
+
+
 def count_remaining_active_user_managers(cur: Any, *, excluding_app_user_id: int) -> int:
     cur.execute(
         """
@@ -971,8 +992,38 @@ def approve_user(request: Request, app_user_id: int) -> Response:
     return RedirectResponse("/admin/users", status_code=303)
 
 
-@app.post("/admin/users/{app_user_id}/role")
-async def update_user_role(request: Request, app_user_id: int) -> Response:
+@app.get("/admin/users/{app_user_id}/edit", response_class=HTMLResponse)
+def edit_user_form(request: Request, app_user_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        row = load_admin_user_detail(cur, app_user_id=app_user_id)
+        roles = load_manageable_roles(cur)
+        cur.close()
+    if row is None:
+        return RedirectResponse("/admin/users", status_code=303)
+    return templates.TemplateResponse(
+        "admin_user_edit.html",
+        {
+            "request": request,
+            "user": user,
+            "target_user": row,
+            "roles": roles,
+            "form": admin_user_form_values(row),
+            "message": None,
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/users/{app_user_id}/edit", response_class=HTMLResponse)
+async def update_admin_user(request: Request, app_user_id: int) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -980,52 +1031,124 @@ async def update_user_role(request: Request, app_user_id: int) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     form = await read_form(request)
+    employee_no = form.get("employee_no", "").strip()
+    display_name = form.get("display_name", "").strip()
+    display_name_kana = form.get("display_name_kana", "").strip() or None
+    department_name = form.get("department_name", "").strip() or None
+    email = form.get("email", "").strip() or None
     role_code = form.get("role_code", "").strip()
+    form_values = {
+        "employee_no": employee_no,
+        "display_name": display_name,
+        "display_name_kana": display_name_kana or "",
+        "department_name": department_name or "",
+        "email": email or "",
+        "role_code": role_code,
+    }
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=app_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            if not role_has_user_manage(cur, role_code=role_code):
-                if count_remaining_active_user_managers(cur, excluding_app_user_id=app_user_id) <= 0:
-                    page_data = load_admin_page_data(cur)
-                    conn.rollback()
-                    return templates.TemplateResponse(
-                        "admin_users.html",
-                        {
-                            "request": request,
-                            "user": user,
-                            **page_data,
-                            "message": None,
-                            "temporary_password": None,
-                            "error": "有効な管理者が0人になるためロールを変更できません。",
-                        },
-                        status_code=400,
-                    )
-            if not replace_user_role(
-                cur,
-                app_user_id=app_user_id,
-                role_code=role_code,
-                assigned_by_app_user_id=int(user["app_user_id"]),
-            ):
-                page_data = load_admin_page_data(cur)
+            row = load_admin_user_detail(cur, app_user_id=app_user_id)
+            roles = load_manageable_roles(cur)
+            if row is None:
+                conn.rollback()
+                return RedirectResponse("/admin/users", status_code=303)
+            if not employee_no or not display_name:
                 conn.rollback()
                 return templates.TemplateResponse(
-                    "admin_users.html",
+                    "admin_user_edit.html",
                     {
                         "request": request,
                         "user": user,
-                        **page_data,
+                        "target_user": row,
+                        "roles": roles,
+                        "form": form_values,
+                        "message": None,
+                        "error": "社員番号と氏名は必須です。",
+                    },
+                    status_code=400,
+                )
+            cur.execute(
+                """
+                SELECT app_user_id
+                FROM app_users
+                WHERE employee_no = %s
+                  AND app_user_id <> %s
+                """,
+                (employee_no, app_user_id),
+            )
+            if cur.fetchone():
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "admin_user_edit.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        "target_user": row,
+                        "roles": roles,
+                        "form": form_values,
+                        "message": None,
+                        "error": "この社員番号はすでに登録されています。",
+                    },
+                    status_code=400,
+                )
+            if not role_exists(cur, role_code=role_code):
+                conn.rollback()
+                return templates.TemplateResponse(
+                    "admin_user_edit.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        "target_user": row,
+                        "roles": roles,
+                        "form": form_values,
                         "message": None,
                         "temporary_password": None,
                         "error": "指定されたロールが見つかりません。",
                     },
                     status_code=400,
                 )
+            if not role_has_user_manage(cur, role_code=role_code):
+                if count_remaining_active_user_managers(cur, excluding_app_user_id=app_user_id) <= 0:
+                    conn.rollback()
+                    return templates.TemplateResponse(
+                        "admin_user_edit.html",
+                        {
+                            "request": request,
+                            "user": user,
+                            "target_user": row,
+                            "roles": roles,
+                            "form": form_values,
+                            "message": None,
+                            "temporary_password": None,
+                            "error": "有効な管理者が0人になるためロールを変更できません。",
+                        },
+                        status_code=400,
+                    )
+            cur.execute(
+                """
+                UPDATE app_users
+                   SET employee_no = %s,
+                       display_name = %s,
+                       display_name_kana = %s,
+                       department_name = %s,
+                       email = %s
+                 WHERE app_user_id = %s
+                """,
+                (employee_no, display_name, display_name_kana, department_name, email, app_user_id),
+            )
+            replace_user_role(
+                cur,
+                app_user_id=app_user_id,
+                role_code=role_code,
+                assigned_by_app_user_id=int(user["app_user_id"]),
+            )
             conn.commit()
         except Exception:
             conn.rollback()
             raise
-    return RedirectResponse("/admin/users", status_code=303)
+    return RedirectResponse(f"/admin/users/{app_user_id}/edit", status_code=303)
 
 
 @app.post("/admin/users/{app_user_id}/reset-password")

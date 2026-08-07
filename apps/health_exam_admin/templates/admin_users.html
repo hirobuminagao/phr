@@ -102,18 +102,7 @@
             <small>{{ row.display_name_kana or '' }}</small>
           </td>
           <td>{{ row.department_name or '' }}</td>
-          <td>
-            <form method="post" action="/admin/users/{{ row.app_user_id }}/role" class="role-form">
-              <select name="role_code" aria-label="ロール">
-                {% for role in roles %}
-                <option value="{{ role.role_code }}" {% if (row.role_codes and role.role_code in row.role_codes.split(',')) or (not row.role_codes and role.role_code == 'VIEWER') %}selected{% endif %}>
-                  {{ role.role_name }}
-                </option>
-                {% endfor %}
-              </select>
-              <button class="ghost-submit" type="submit">変更</button>
-            </form>
-          </td>
+          <td>{{ row.role_names or '閲覧' }}</td>
           <td>{% if row.must_change_password %}<span class="status-pill status-pending">初期</span>{% endif %}</td>
           <td>{{ row.last_login_at or '' }}</td>
           <td class="row-actions">
@@ -122,16 +111,15 @@
               <button type="submit">承認</button>
             </form>
             {% endif %}
-            {% if row.is_active and row.app_user_id != user.app_user_id %}
-            <form method="post" action="/admin/users/{{ row.app_user_id }}/disable">
-              <button class="danger-button" type="submit">無効</button>
+            {% if row.approval_status == 'APPROVED' %}
+            <form method="post" action="/admin/users/{{ row.app_user_id }}/{{ 'disable' if row.is_active else 'enable' }}">
+              <button class="switch-button {{ 'switch-on' if row.is_active else 'switch-off' }}" type="submit" {% if row.app_user_id == user.app_user_id %}disabled{% endif %}>
+                <span>有効</span>
+                <span>無効</span>
+              </button>
             </form>
             {% endif %}
-            {% if not row.is_active and row.approval_status == 'APPROVED' %}
-            <form method="post" action="/admin/users/{{ row.app_user_id }}/enable">
-              <button type="submit">有効</button>
-            </form>
-            {% endif %}
+            <a class="ghost-button" href="/admin/users/{{ row.app_user_id }}/edit">編集</a>
             <form method="post" action="/admin/users/{{ row.app_user_id }}/reset-password">
               <button class="ghost-submit" type="submit">初期化</button>
             </form>
