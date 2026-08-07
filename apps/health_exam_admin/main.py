@@ -41,14 +41,13 @@ templates = Jinja2Templates(directory=APP_ROOT / "templates")
 
 def approval_status_label(status: str | None, *, is_active: bool = True) -> str:
     labels = {
-        "APPROVED": "承認済み",
+        "APPROVED": "有効",
         "PENDING": "承認待ち",
         "REJECTED": "却下",
     }
-    label = labels.get(status or "APPROVED", status or "承認済み")
     if not is_active:
-        return f"{label} / 無効"
-    return label
+        return "無効"
+    return labels.get(status or "APPROVED", status or "有効")
 
 
 templates.env.globals["approval_status_label"] = approval_status_label
