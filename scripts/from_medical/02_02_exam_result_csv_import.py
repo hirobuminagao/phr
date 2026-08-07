@@ -628,7 +628,8 @@ def upsert_row_ledger(
     cur.execute(
         f"""
         UPDATE {qname(config.health_db)}.exam_ledgers
-        SET source_etl_run_id = %s,
+        SET file_receipt_id = %s,
+            source_etl_run_id = %s,
             row_sha256 = %s,
             raw_row_json = %s,
             actual_header_sha256 = %s,
@@ -680,6 +681,7 @@ def upsert_row_ledger(
         WHERE exam_ledger_id = %s
         """,
         (
+            file_receipt_id,
             params["etl_run_id"],
             params["row_sha256"],
             params["raw_row_json"],
