@@ -648,6 +648,49 @@ button[type="submit"]:hover {
   align-items: center;
 }
 
+.filter-toggle-field {
+  display: grid;
+  grid-template-rows: 24px var(--control-height);
+  gap: 7px;
+  align-self: start;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.filter-toggle-field > span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.filter-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filter-toggle-group button {
+  min-height: var(--control-height);
+  padding: 0 12px;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.filter-toggle-group button:hover {
+  background: #eef8f5;
+  border-color: #8fb8ad;
+}
+
+.filter-toggle-group button.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .filter-actions {
   display: flex;
   gap: 8px;

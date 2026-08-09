@@ -33,25 +33,23 @@
         <span>event</span>
         <input name="event_id" value="{{ filters.event_id or '' }}">
       </label>
-      <label>
+      <div class="filter-toggle-field">
         <span>種別</span>
-        <select name="file_type">
-          <option value="" {% if not filters.file_type %}selected{% endif %}>すべて</option>
-          <option value="CSV" {% if filters.file_type == 'CSV' %}selected{% endif %}>CSV</option>
-          <option value="XML" {% if filters.file_type == 'XML' %}selected{% endif %}>XML</option>
-          <option value="ZIP" {% if filters.file_type == 'ZIP' %}selected{% endif %}>ZIP</option>
-        </select>
-      </label>
-      <label>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="fileType" data-filter-value="CSV">CSV</button>
+          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="fileType" data-filter-value="XML">XML</button>
+          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="fileType" data-filter-value="ZIP">ZIP</button>
+        </div>
+      </div>
+      <div class="filter-toggle-field">
         <span>状態</span>
-        <select name="status">
-          <option value="" {% if not filters.status %}selected{% endif %}>すべて</option>
-          <option value="DISCOVERED" {% if filters.status == 'DISCOVERED' %}selected{% endif %}>DISCOVERED</option>
-          <option value="IMPORTED" {% if filters.status == 'IMPORTED' %}selected{% endif %}>IMPORTED</option>
-          <option value="WAITING_CONFIRM" {% if filters.status == 'WAITING_CONFIRM' %}selected{% endif %}>WAITING_CONFIRM</option>
-          <option value="ERROR" {% if filters.status == 'ERROR' %}selected{% endif %}>ERROR</option>
-        </select>
-      </label>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="DISCOVERED">DISCOVERED</button>
+          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="IMPORTED">IMPORTED</button>
+          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="WAITING_CONFIRM">WAITING</button>
+          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="ERROR">ERROR</button>
+        </div>
+      </div>
       <label>
         <span>表示件数</span>
         <input name="limit" value="{{ limit }}">
@@ -85,7 +83,7 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr data-filter-text="{{ row.id }} {{ row.file_type }} {{ row.file_name }} {{ row.relative_path }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.status }} {{ row.summary_message or '' }} {{ row.etl_run_id or '' }}">
+          <tr data-filter-text="{{ row.id }} {{ row.file_type }} {{ row.file_name }} {{ row.relative_path }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.status }} {{ row.summary_message or '' }} {{ row.etl_run_id or '' }}" data-file-type="{{ row.file_type }}" data-status="{{ row.status }}">
             <td>{{ row.id }}</td>
             <td><span class="status-pill status-muted">{{ row.file_type }}</span></td>
             <td>

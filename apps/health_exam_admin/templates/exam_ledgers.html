@@ -33,25 +33,23 @@
         <span>event</span>
         <input name="event_id" value="{{ filters.event_id or '' }}">
       </label>
-      <label>
+      <div class="filter-toggle-field">
         <span>source</span>
-        <select name="source_type">
-          <option value="" {% if not filters.source_type %}selected{% endif %}>すべて</option>
-          <option value="CSV" {% if filters.source_type == 'CSV' %}selected{% endif %}>CSV</option>
-          <option value="XML" {% if filters.source_type == 'XML' %}selected{% endif %}>XML</option>
-          <option value="PAPER" {% if filters.source_type == 'PAPER' %}selected{% endif %}>PAPER</option>
-        </select>
-      </label>
-      <label>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="CSV">CSV</button>
+          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="XML">XML</button>
+          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="PAPER">PAPER</button>
+        </div>
+      </div>
+      <div class="filter-toggle-field">
         <span>法定チェック</span>
-        <select name="check_status">
-          <option value="" {% if not filters.check_status %}selected{% endif %}>すべて</option>
-          <option value="OK" {% if filters.check_status == 'OK' %}selected{% endif %}>OK</option>
-          <option value="NG" {% if filters.check_status == 'NG' %}selected{% endif %}>NG</option>
-          <option value="WARNING" {% if filters.check_status == 'WARNING' %}selected{% endif %}>WARNING</option>
-          <option value="PENDING" {% if filters.check_status == 'PENDING' %}selected{% endif %}>PENDING</option>
-        </select>
-      </label>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="OK">OK</button>
+          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="NG">NG</button>
+          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="WARNING">WARNING</button>
+          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="PENDING">PENDING</button>
+        </div>
+      </div>
       <label>
         <span>表示件数</span>
         <input name="limit" value="{{ limit }}">
@@ -85,7 +83,7 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr data-filter-text="{{ row.exam_ledger_id }} {{ row.event_id }} {{ row.source_type }} {{ row.file_receipt_id or '' }} {{ row.src_row_no or '' }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.subscriber_match_status or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.exam_date or '' }} {{ row.check_status }} {{ row.check_reason or '' }} {{ row.xml_export_status }} {{ row.merge_status }} {{ row.xml_file_name or '' }} {{ row.mapping_version or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }}">
+          <tr data-filter-text="{{ row.exam_ledger_id }} {{ row.event_id }} {{ row.source_type }} {{ row.file_receipt_id or '' }} {{ row.src_row_no or '' }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.subscriber_match_status or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.exam_date or '' }} {{ row.check_status }} {{ row.check_reason or '' }} {{ row.xml_export_status }} {{ row.merge_status }} {{ row.xml_file_name or '' }} {{ row.mapping_version or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }}" data-source-type="{{ row.source_type }}" data-check-status="{{ row.check_status }}">
             <td>{{ row.exam_ledger_id }}</td>
             <td>
               <span class="status-pill status-muted">{{ row.source_type }}</span>
