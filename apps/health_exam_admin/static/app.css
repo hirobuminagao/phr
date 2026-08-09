@@ -271,6 +271,63 @@ button[type="submit"]:hover {
   font-size: 20px;
 }
 
+.home-menu-section {
+  margin-top: 20px;
+}
+
+.home-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.home-menu-card {
+  min-height: 142px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.home-menu-card:hover {
+  border-color: #a7d8c9;
+  box-shadow: 0 10px 24px rgba(31, 41, 51, 0.08);
+}
+
+.home-menu-card strong,
+.home-menu-card small {
+  display: block;
+}
+
+.home-menu-card strong {
+  font-size: 18px;
+}
+
+.home-menu-card small {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.home-menu-card .status-pill {
+  justify-self: start;
+}
+
+.home-menu-card.is-disabled {
+  background: #f7fafc;
+  color: var(--muted);
+}
+
+.home-menu-card.is-disabled:hover {
+  border-color: var(--line);
+  box-shadow: none;
+}
+
 .permission-panel {
   margin-top: 20px;
 }

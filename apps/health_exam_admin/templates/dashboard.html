@@ -51,11 +51,145 @@
     or "xml_export.official" in user.permissions
     or "hia_upload.perform" in user.permissions
     or "hia_upload_status.edit" in user.permissions %}
-  <section class="work-list">
-    <a class="work-link" href="/export-lists">
-      <span>HIA XML 出力リスト</span>
-      <strong>出力対象の確認・作成へ</strong>
-    </a>
+  <section class="home-menu-section">
+    <div class="section-heading">
+      <div>
+        <h2>出力・HIAアップロード</h2>
+        <p class="subtle">受領済み結果を確認し、HIAへアップロードするXMLを作成・管理します。</p>
+      </div>
+    </div>
+    <div class="home-menu-grid">
+      <a class="home-menu-card" href="/export-lists">
+        <span class="status-pill status-ready">利用可</span>
+        <strong>出力リスト</strong>
+        <small>出力対象の箱を作成し、追加済みの人を確認する</small>
+      </a>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>XML出力実行</strong>
+        <small>READYの出力リストからreview/official XMLを出力する</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>HIAアップロード作業</strong>
+        <small>ZIP単位でアップロード完了、エラー、再対応を記帳する</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>個人case詳細</strong>
+        <small>1人分の採用値、source、法定チェック、理由ありOKを確認する</small>
+      </article>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="home-menu-section">
+    <div class="section-heading">
+      <div>
+        <h2>取込・チェック</h2>
+        <p class="subtle">健診機関から受け取ったCSV/XMLを取り込み、エラーと確認事項を整理します。</p>
+      </div>
+    </div>
+    <div class="home-menu-grid">
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>受領ファイル一覧</strong>
+        <small>scan/import対象のCSV/XML、未設定施設、再取込対象を見る</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>健診結果取込実行</strong>
+        <small>scan、import、checkを画面から実行して結果を確認する</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>法定チェック結果</strong>
+        <small>source単位/case単位のOK、NG、理由ありOKを確認する</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>normalizeエラー確認</strong>
+        <small>変換できないraw値を辞書追加、除外、確認事項へ振り分ける</small>
+      </article>
+    </div>
+  </section>
+
+  <section class="home-menu-section">
+    <div class="section-heading">
+      <div>
+        <h2>補正・加入者・紙健診</h2>
+        <p class="subtle">人単位の不足情報、加入者突合、紙健診入力を扱います。</p>
+      </div>
+    </div>
+    <div class="home-menu-grid">
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>基本情報補正</strong>
+        <small>氏名カナ、郵便番号、住所、記号番号などを補正する</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>加入者突合NG修正</strong>
+        <small>候補検索、比較、手動確定で正しい加入者へ紐付ける</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>HIAダッシュボードCSV</strong>
+        <small>HIA管理画面から取得したCSVを取り込み、状態へ反映する</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>紙健診入力</strong>
+        <small>紙から起こした基本情報と検査値をテンプレートに沿って登録する</small>
+      </article>
+    </div>
+  </section>
+
+  {% if "users.manage" in user.permissions %}
+  <section class="home-menu-section">
+    <div class="section-heading">
+      <div>
+        <h2>管理</h2>
+        <p class="subtle">利用者、権限、セキュリティ、業務設定、マスタを管理します。</p>
+      </div>
+    </div>
+    <div class="home-menu-grid">
+      <a class="home-menu-card" href="/admin/users">
+        <span class="status-pill status-ready">利用可</span>
+        <strong>アカウント管理</strong>
+        <small>利用者登録、承認、無効化、IP制限、個人別作業権限</small>
+      </a>
+      <a class="home-menu-card" href="/admin/permissions">
+        <span class="status-pill status-ready">利用可</span>
+        <strong>権限設定</strong>
+        <small>ロールごとの権限を設定する</small>
+      </a>
+      <a class="home-menu-card" href="/admin/security">
+        <span class="status-pill status-ready">利用可</span>
+        <strong>セキュリティ</strong>
+        <small>自動ログアウト、個人情報監査ログ設定を管理する</small>
+      </a>
+      <a class="home-menu-card" href="/admin/audit-logs">
+        <span class="status-pill status-ready">利用可</span>
+        <strong>監査ログ</strong>
+        <small>個人情報閲覧、設定変更などの操作履歴を確認する</small>
+      </a>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>健保管理</strong>
+        <small>event、加入者アップロード、HIA連携、出力/納品設定</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>健診機関管理</strong>
+        <small>フォルダalias、CSVマッピング、紙テンプレート、確認事項</small>
+      </article>
+      <article class="home-menu-card is-disabled">
+        <span class="status-pill status-pending">準備中</span>
+        <strong>マスタ管理</strong>
+        <small>normalize辞書、検査項目、出力ポリシー、郵便番号住所</small>
+      </article>
+    </div>
   </section>
   {% endif %}
 
