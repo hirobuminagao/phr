@@ -27,7 +27,7 @@
     <form method="get" action="/exam-ledgers" class="filter-form filter-form-wide">
       <label>
         <span>キーワード</span>
-        <input name="q" value="{{ filters.q or '' }}" placeholder="HIA ID / 氏名 / カナ / 施設 / XML名">
+        <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 施設 / XML名" data-live-filter-input="#exam-ledger-table">
       </label>
       <label>
         <span>event</span>
@@ -71,7 +71,7 @@
       </div>
     </div>
     <div class="table-panel">
-      <table class="data-table exam-ledger-table">
+      <table id="exam-ledger-table" class="data-table exam-ledger-table" data-empty-message="表示中のledgerに一致するものはありません。">
         <thead>
           <tr>
             <th>ID</th>
@@ -85,7 +85,7 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr>
+          <tr data-filter-text="{{ row.exam_ledger_id }} {{ row.event_id }} {{ row.source_type }} {{ row.file_receipt_id or '' }} {{ row.src_row_no or '' }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.subscriber_match_status or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.exam_date or '' }} {{ row.check_status }} {{ row.check_reason or '' }} {{ row.xml_export_status }} {{ row.merge_status }} {{ row.xml_file_name or '' }} {{ row.mapping_version or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }}">
             <td>{{ row.exam_ledger_id }}</td>
             <td>
               <span class="status-pill status-muted">{{ row.source_type }}</span>

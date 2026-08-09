@@ -27,7 +27,7 @@
     <form method="get" action="/file-receipts" class="filter-form filter-form-wide">
       <label>
         <span>キーワード</span>
-        <input name="q" value="{{ filters.q or '' }}" placeholder="ファイル名 / 施設名 / パス">
+        <input id="receipt-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="ファイル名 / 施設名 / パス" data-live-filter-input="#file-receipt-table">
       </label>
       <label>
         <span>event</span>
@@ -71,7 +71,7 @@
       </div>
     </div>
     <div class="table-panel">
-      <table class="data-table file-receipt-table">
+      <table id="file-receipt-table" class="data-table file-receipt-table" data-empty-message="表示中のファイルに一致するものはありません。">
         <thead>
           <tr>
             <th>ID</th>
@@ -85,7 +85,7 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr>
+          <tr data-filter-text="{{ row.id }} {{ row.file_type }} {{ row.file_name }} {{ row.relative_path }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.status }} {{ row.summary_message or '' }} {{ row.etl_run_id or '' }}">
             <td>{{ row.id }}</td>
             <td><span class="status-pill status-muted">{{ row.file_type }}</span></td>
             <td>
