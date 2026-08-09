@@ -239,6 +239,77 @@ button[type="submit"]:hover {
   gap: 6px;
 }
 
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(420px, 1.4fr);
+  gap: 18px;
+  align-items: stretch;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.home-hero h2 {
+  margin: 14px 0 6px;
+  font-size: 24px;
+}
+
+.home-hero p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.home-hero-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.home-action-button {
+  min-height: 94px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 16px;
+  border: 1px solid #b9c5d2;
+  border-radius: 8px;
+  background: #f8fbfd;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.home-action-button:hover {
+  border-color: #8fb8ad;
+  background: #eef8f5;
+}
+
+.home-action-button strong {
+  font-size: 18px;
+}
+
+.home-action-button span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.home-action-button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.home-action-button.is-primary:hover {
+  background: var(--accent-dark);
+}
+
+.home-action-button.is-primary span {
+  color: rgba(255, 255, 255, 0.86);
+}
+
 .summary-card span {
   color: var(--muted);
   font-weight: 700;
@@ -281,12 +352,16 @@ button[type="submit"]:hover {
   gap: 12px;
 }
 
+.home-menu-grid.is-compact {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
 .home-menu-card {
-  min-height: 142px;
+  min-height: 132px;
   display: grid;
   align-content: start;
-  gap: 10px;
-  padding: 16px;
+  gap: 8px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -303,7 +378,7 @@ button[type="submit"]:hover {
 }
 
 .home-menu-card strong {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .home-menu-card small {
@@ -338,6 +413,7 @@ button[type="submit"]:hover {
 .home-menu-card.is-disabled {
   background: #f7fafc;
   color: var(--muted);
+  opacity: 0.84;
 }
 
 .home-menu-card.is-disabled:hover {
@@ -871,6 +947,10 @@ button[type="submit"]:hover {
   }
 
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-hero {
     grid-template-columns: 1fr;
   }
 

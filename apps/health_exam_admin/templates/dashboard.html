@@ -21,22 +21,30 @@
 </header>
 
 <main class="page">
-  <section class="summary-grid">
-    <article class="summary-card">
-      <span>ログインユーザー</span>
-      <strong>{{ user.display_name }}</strong>
-      <small>{{ user.employee_no }}</small>
-    </article>
-    <article class="summary-card">
-      <span>部署</span>
-      <strong>{{ user.department_name or "未設定" }}</strong>
-      <small>{{ user.email or "" }}</small>
-    </article>
-    <article class="summary-card">
-      <span>権限数</span>
-      <strong>{{ user.permissions|length }}</strong>
-      <small>{{ approval_status_label(user.approval_status, is_active=user.is_active) }}</small>
-    </article>
+  <section class="home-hero">
+    <div>
+      <span class="status-pill status-ready">{{ approval_status_label(user.approval_status, is_active=user.is_active) }}</span>
+      <h2>{{ user.display_name }}さんの作業メニュー</h2>
+      <p>{{ user.department_name or "部署未設定" }} / {{ user.employee_no }}</p>
+    </div>
+    <div class="home-hero-actions">
+      {% if "export_lists.view" in user.permissions or "export_lists.edit" in user.permissions %}
+      <a class="home-action-button is-primary" href="/export-lists">
+        <strong>出力リスト</strong>
+        <span>対象者の箱を作る・確認する</span>
+      </a>
+      {% endif %}
+      <a class="home-action-button" href="/account">
+        <strong>登録情報</strong>
+        <span>名前・連絡先・パスワード</span>
+      </a>
+      {% if "users.manage" in user.permissions %}
+      <a class="home-action-button" href="/admin/users">
+        <strong>アカウント管理</strong>
+        <span>承認・無効化・権限</span>
+      </a>
+      {% endif %}
+    </div>
   </section>
 
   {% if user.must_change_password %}
@@ -54,15 +62,15 @@
   <section class="home-menu-section">
     <div class="section-heading">
       <div>
-        <h2>出力・HIAアップロード</h2>
-        <p class="subtle">受領済み結果を確認し、HIAへアップロードするXMLを作成・管理します。</p>
+        <h2>よく使う作業</h2>
+        <p class="subtle">今すぐ使える作業を上に、準備中の作業は状態だけ確認できるようにしています。</p>
       </div>
     </div>
-    <div class="home-menu-grid">
+    <div class="home-menu-grid is-compact">
       <article class="home-menu-card">
         <span class="status-pill status-ready">利用可</span>
         <strong>出力リスト</strong>
-        <small>出力対象の箱を作成し、追加済みの人を確認する</small>
+        <small>出力対象の箱を作成し、追加済みの人を確認</small>
         <a class="home-menu-button" href="/export-lists">開く</a>
       </article>
       <article class="home-menu-card is-disabled">
@@ -91,7 +99,7 @@
         <p class="subtle">健診機関から受け取ったCSV/XMLを取り込み、エラーと確認事項を整理します。</p>
       </div>
     </div>
-    <div class="home-menu-grid">
+    <div class="home-menu-grid is-compact">
       <article class="home-menu-card is-disabled">
         <span class="status-pill status-pending">準備中</span>
         <strong>受領ファイル一覧</strong>
@@ -122,7 +130,7 @@
         <p class="subtle">人単位の不足情報、加入者突合、紙健診入力を扱います。</p>
       </div>
     </div>
-    <div class="home-menu-grid">
+    <div class="home-menu-grid is-compact">
       <article class="home-menu-card is-disabled">
         <span class="status-pill status-pending">準備中</span>
         <strong>基本情報補正</strong>
@@ -154,7 +162,7 @@
         <p class="subtle">利用者、権限、セキュリティ、業務設定、マスタを管理します。</p>
       </div>
     </div>
-    <div class="home-menu-grid">
+    <div class="home-menu-grid is-compact">
       <article class="home-menu-card">
         <span class="status-pill status-ready">利用可</span>
         <strong>アカウント管理</strong>
