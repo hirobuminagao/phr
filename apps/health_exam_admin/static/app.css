@@ -291,12 +291,10 @@ button[type="submit"]:hover {
   border-radius: 8px;
   background: var(--panel);
   color: var(--text);
-  text-decoration: none;
 }
 
 .home-menu-card:hover {
-  border-color: #a7d8c9;
-  box-shadow: 0 10px 24px rgba(31, 41, 51, 0.08);
+  border-color: var(--line);
 }
 
 .home-menu-card strong,
@@ -316,6 +314,25 @@ button[type="submit"]:hover {
 
 .home-menu-card .status-pill {
   justify-self: start;
+}
+
+.home-menu-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  margin-top: 4px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.home-menu-button:hover {
+  background: var(--accent-dark);
 }
 
 .home-menu-card.is-disabled {
