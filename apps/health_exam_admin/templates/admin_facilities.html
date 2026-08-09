@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% set title = "健診機関・alias管理" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>健診機関・alias管理</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/events">イベント設定</a>
+    <a class="ghost-button" href="/admin/users">アカウント管理</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>新規健診機関</h2>
+        <p class="subtle">フォルダalias、CSVマッピング、出力絞り込みで使う健診機関マスタです。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/facilities" class="form-grid facility-form">
+      <label>
+        <span>健診機関コード</span>
+        <input name="exam_facility_code" placeholder="例: 1310438796">
+      </label>
+      <label>
+        <span>表示名</span>
+        <input name="exam_facility_display_name" placeholder="画面・帳票で見たい名前">
+      </label>
+      <label class="form-wide-field">
+        <span>健診機関名 <i class="required-mark">必須</i></span>
+        <input name="exam_facility_name" required placeholder="正式名称">
+      </label>
+      <label>
+        <span>種別</span>
+        <input name="exam_facility_type" placeholder="例: EXAM_FACILITY">
+      </label>
+      <label>
+        <span>医療機関コード</span>
+        <input name="medical_institution_code">
+      </label>
+      <label>
+        <span>予約側コード</span>
+        <input name="reservation_system_medical_institution_code">
+      </label>
+      <label>
+        <span>郵便番号</span>
+        <input name="postal_code">
+      </label>
+      <label>
+        <span>電話番号</span>
+        <input name="phone_number">
+      </label>
+      <label class="form-wide-field">
+        <span>住所</span>
+        <input name="address">
+      </label>
+      <label class="form-wide-field">
+        <span>メモ</span>
+        <textarea name="note" rows="2"></textarea>
+      </label>
+      <div class="form-section">
+        <label class="binary-switch switch-on">
+          <input type="checkbox" name="is_active" value="1" checked>
+          <span>有効</span>
+          <span>無効</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">健診機関を作成</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>健診機関一覧</h2>
+        <p class="subtle">支払基金などのオープンデータ由来の名称と、運用上見たい表示名を分けて管理します。</p>
+      </div>
+    </div>
+    <div class="filter-card compact-filter">
+      <label>
+        <span>キーワード</span>
+        <input data-live-filter-input="#facility-admin-table" placeholder="コード / 名称 / 住所 / メモ">
+      </label>
+    </div>
+    <div class="table-panel">
+      <table id="facility-admin-table" class="data-table admin-master-table" data-empty-message="一致する健診機関はありません。">
+        <thead>
+          <tr>
+            <th>コード・名称</th>
+            <th>関連コード</th>
+            <th>連絡先</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for facility in facility_rows %}
+          <tr data-filter-text="{{ facility.exam_facility_code }} {{ facility.exam_facility_name }} {{ facility.exam_facility_display_name }} {{ facility.medical_institution_code }} {{ facility.reservation_system_medical_institution_code }} {{ facility.address }} {{ facility.note }}">
+            <td>
+              <form id="facility-form-{{ facility.exam_facility_id }}" method="post" action="/admin/facilities/{{ facility.exam_facility_id }}" class="compact-master-form">
+                <div class="master-inline-fields">
+                  <label>
+                    <span>ID</span>
+                    <input value="{{ facility.exam_facility_id }}" disabled>
+                  </label>
+                  <label>
+                    <span>健診機関コード</span>
+                    <input name="exam_facility_code" value="{{ facility.exam_facility_code or '' }}">
+                  </label>
+                </div>
+                <label>
+                  <span>健診機関名</span>
+                  <input name="exam_facility_name" value="{{ facility.exam_facility_name or '' }}" required>
+                </label>
+                <label>
+                  <span>表示名</span>
+                  <input name="exam_facility_display_name" value="{{ facility.exam_facility_display_name or '' }}">
+                </label>
+              </form>
+            </td>
+            <td>
+              <div class="master-inline-fields">
+                <label>
+                  <span>種別</span>
+                  <input name="exam_facility_type" value="{{ facility.exam_facility_type or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
+                </label>
+                <label>
+                  <span>医療機関コード</span>
+                  <input name="medical_institution_code" value="{{ facility.medical_institution_code or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
+                </label>
+                <label>
+                  <span>予約側コード</span>
+                  <input name="reservation_system_medical_institution_code" value="{{ facility.reservation_system_medical_institution_code or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
+                </label>
+              </div>
+            </td>
+            <td>
+              <div class="master-inline-fields">
+                <label>
+                  <span>郵便番号</span>
+                  <input name="postal_code" value="{{ facility.postal_code or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
+                </label>
+                <label>
+                  <span>電話番号</span>
+                  <input name="phone_number" value="{{ facility.phone_number or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
+                </label>
+              </div>
+              <label>
+                <span>住所</span>
+                <input name="address" value="{{ facility.address or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
+              </label>
+              <label>
+                <span>メモ</span>
+                <textarea name="note" rows="2" form="facility-form-{{ facility.exam_facility_id }}">{{ facility.note or '' }}</textarea>
+              </label>
+              {% if facility.data_source_name %}<small>source: {{ facility.data_source_name }}</small>{% endif %}
+            </td>
+            <td>
+              <label class="binary-switch {{ 'switch-on' if facility.is_active else 'switch-off' }}">
+                <input type="checkbox" name="is_active" value="1" form="facility-form-{{ facility.exam_facility_id }}" {% if facility.is_active %}checked{% endif %}>
+                <span>有効</span>
+                <span>無効</span>
+              </label>
+              <small>更新 {{ facility.updated_at }}</small>
+            </td>
+            <td>
+              <button type="submit" form="facility-form-{{ facility.exam_facility_id }}">更新</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5">健診機関はまだありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>新規フォルダalias</h2>
+        <p class="subtle">scan時にフォルダ名から健診機関を確定するための対応表です。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/folder-aliases" class="form-grid facility-form">
+      <label>
+        <span>イベント</span>
+        <select name="event_id" required>
+          {% for event in event_options %}
+          <option value="{{ event.event_id }}">{{ event.event_name or event.event_id }} / {{ event.insurer_number }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-wide-field">
+        <span>実フォルダ名 <i class="required-mark">必須</i></span>
+        <input name="src_folder_raw" required placeholder="例: 1310438796_ヒロオカクリニック">
+      </label>
+      <label>
+        <span>正規化後名</span>
+        <input name="dst_folder_norm" placeholder="空なら実フォルダ名と同じ">
+      </label>
+      <label>
+        <span>紐づく健診機関ID/コード</span>
+        <input name="exam_facility_selector" placeholder="例: 1310438796">
+      </label>
+      <label class="form-wide-field">
+        <span>メモ</span>
+        <textarea name="note" rows="2"></textarea>
+      </label>
+      <div class="form-section alias-switches">
+        <label class="binary-switch switch-off">
+          <input type="checkbox" name="manual_judgement" value="1">
+          <span>手動判断</span>
+          <span>通常</span>
+        </label>
+        <label class="binary-switch switch-on">
+          <input type="checkbox" name="is_active" value="1" checked>
+          <span>有効</span>
+          <span>無効</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">aliasを作成</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>フォルダalias一覧</h2>
+        <p class="subtle">未設定フォルダや施設名変更が出たら、ここで紐づけを修正します。</p>
+      </div>
+    </div>
+    <div class="filter-card compact-filter">
+      <label>
+        <span>キーワード</span>
+        <input data-live-filter-input="#alias-admin-table" placeholder="イベント / フォルダ名 / 健診機関名 / メモ">
+      </label>
+    </div>
+    <div class="table-panel">
+      <table id="alias-admin-table" class="data-table admin-master-table alias-table" data-empty-message="一致するaliasはありません。">
+        <thead>
+          <tr>
+            <th>イベント・フォルダ</th>
+            <th>紐づく健診機関</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for alias in alias_rows %}
+          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.note }}">
+            <td>
+              <form id="alias-form-{{ alias.alias_id }}" method="post" action="/admin/folder-aliases/{{ alias.alias_id }}" class="compact-master-form">
+                <div class="master-inline-fields">
+                  <label>
+                    <span>ID</span>
+                    <input value="{{ alias.alias_id }}" disabled>
+                  </label>
+                  <label>
+                    <span>イベント</span>
+                    <select name="event_id">
+                      {% for event in event_options %}
+                      <option value="{{ event.event_id }}" {% if event.event_id == alias.event_id %}selected{% endif %}>{{ event.event_name or event.event_id }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                </div>
+                <label>
+                  <span>実フォルダ名</span>
+                  <input name="src_folder_raw" value="{{ alias.src_folder_raw or '' }}" required>
+                </label>
+                <label>
+                  <span>正規化後名</span>
+                  <input name="dst_folder_norm" value="{{ alias.dst_folder_norm or '' }}">
+                </label>
+              </form>
+            </td>
+            <td>
+              <label>
+                <span>健診機関ID/コード</span>
+                <input name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}" form="alias-form-{{ alias.alias_id }}">
+              </label>
+              <strong>{{ alias.exam_facility_display_name or alias.exam_facility_name or '未確定' }}</strong>
+              {% if alias.exam_facility_code %}<small>{{ alias.exam_facility_code }}</small>{% endif %}
+              <label>
+                <span>メモ</span>
+                <textarea name="note" rows="2" form="alias-form-{{ alias.alias_id }}">{{ alias.note or '' }}</textarea>
+              </label>
+            </td>
+            <td>
+              <div class="alias-switches">
+                <label class="binary-switch {{ 'switch-on' if alias.manual_judgement else 'switch-off' }}">
+                  <input type="checkbox" name="manual_judgement" value="1" form="alias-form-{{ alias.alias_id }}" {% if alias.manual_judgement %}checked{% endif %}>
+                  <span>手動判断</span>
+                  <span>通常</span>
+                </label>
+                <label class="binary-switch {{ 'switch-on' if alias.is_active else 'switch-off' }}">
+                  <input type="checkbox" name="is_active" value="1" form="alias-form-{{ alias.alias_id }}" {% if alias.is_active %}checked{% endif %}>
+                  <span>有効</span>
+                  <span>無効</span>
+                </label>
+              </div>
+              <small>更新 {{ alias.updated_at }}</small>
+            </td>
+            <td>
+              <button type="submit" form="alias-form-{{ alias.alias_id }}">更新</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4">フォルダaliasはまだありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

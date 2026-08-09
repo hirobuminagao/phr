@@ -588,6 +588,53 @@ button[type="submit"]:hover {
   min-width: 1320px;
 }
 
+.admin-master-table {
+  min-width: 1280px;
+}
+
+.admin-master-table label {
+  gap: 5px;
+}
+
+.admin-master-table input:not([type="checkbox"]),
+.admin-master-table select {
+  min-height: 36px;
+}
+
+.admin-master-table textarea {
+  min-height: 72px;
+}
+
+.compact-master-form {
+  display: grid;
+  gap: 10px;
+}
+
+.facility-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.facility-form .form-actions {
+  align-self: end;
+}
+
+.master-inline-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.alias-table {
+  min-width: 1120px;
+}
+
+.alias-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
 .event-table label,
 .compact-event-form label {
   gap: 5px;

@@ -885,6 +885,132 @@ def normalize_event_form(form: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _form_text(form: dict[str, str], key: str) -> str | None:
+    text = (form.get(key) or "").strip()
+    return text or None
+
+
+def load_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          exam_facility_id,
+          exam_facility_code,
+          exam_facility_name,
+          exam_facility_display_name,
+          exam_facility_type,
+          medical_institution_code,
+          reservation_system_medical_institution_code,
+          postal_code,
+          address,
+          phone_number,
+          data_source_name,
+          note,
+          is_active,
+          updated_at
+        FROM {qname(master_db())}.exam_facilities
+        ORDER BY is_active DESC, exam_facility_code IS NULL, exam_facility_code, exam_facility_name
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          mfa.alias_id,
+          mfa.event_id,
+          ev.event_name,
+          ev.event_year,
+          mfa.src_folder_raw,
+          mfa.dst_folder_norm,
+          mfa.exam_facility_id,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          ef.exam_facility_display_name,
+          mfa.manual_judgement,
+          mfa.note,
+          mfa.is_active,
+          mfa.updated_at
+        FROM {qname(master_db())}.medical_folder_aliases mfa
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN {qname(dev_db())}.event ev
+          ON ev.event_id = mfa.event_id
+        ORDER BY mfa.is_active DESC, mfa.event_id DESC, mfa.src_folder_raw
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def normalize_facility_form(form: dict[str, str]) -> dict[str, Any]:
+    values = {
+        "exam_facility_code": _form_text(form, "exam_facility_code"),
+        "exam_facility_name": _form_text(form, "exam_facility_name"),
+        "exam_facility_display_name": _form_text(form, "exam_facility_display_name"),
+        "exam_facility_type": _form_text(form, "exam_facility_type"),
+        "medical_institution_code": _form_text(form, "medical_institution_code"),
+        "reservation_system_medical_institution_code": _form_text(
+            form, "reservation_system_medical_institution_code"
+        ),
+        "postal_code": _form_text(form, "postal_code"),
+        "address": _form_text(form, "address"),
+        "phone_number": _form_text(form, "phone_number"),
+        "note": _form_text(form, "note"),
+        "is_active": 1 if form.get("is_active") == "1" else 0,
+    }
+    if not values["exam_facility_name"]:
+        raise ValueError("健診機関名は必須です。")
+    if not values["exam_facility_display_name"]:
+        values["exam_facility_display_name"] = values["exam_facility_name"]
+    return values
+
+
+def resolve_exam_facility_selector(cur: Any, selector: str | None) -> int | None:
+    text = (selector or "").strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return int(text)
+    cur.execute(
+        f"""
+        SELECT exam_facility_id
+        FROM {qname(master_db())}.exam_facilities
+        WHERE exam_facility_code = %s
+        LIMIT 1
+        """,
+        (text,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("指定された健診機関ID/コードが見つかりません。")
+    return int(row["exam_facility_id"])
+
+
+def normalize_folder_alias_form(cur: Any, form: dict[str, str]) -> dict[str, Any]:
+    event_id_text = (form.get("event_id") or "").strip()
+    src_folder_raw = _form_text(form, "src_folder_raw")
+    dst_folder_norm = _form_text(form, "dst_folder_norm") or src_folder_raw
+    if not event_id_text:
+        raise ValueError("イベントは必須です。")
+    if not src_folder_raw:
+        raise ValueError("フォルダ名は必須です。")
+    return {
+        "event_id": int(event_id_text),
+        "src_folder_raw": src_folder_raw,
+        "dst_folder_norm": dst_folder_norm,
+        "exam_facility_id": resolve_exam_facility_selector(cur, form.get("exam_facility_selector")),
+        "manual_judgement": 1 if form.get("manual_judgement") == "1" else 0,
+        "note": _form_text(form, "note"),
+        "is_active": 1 if form.get("is_active") == "1" else 0,
+    }
+
+
 def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
@@ -1608,6 +1734,278 @@ async def update_admin_event(request: Request, event_id: int) -> Response:
             conn.rollback()
             raise
     return RedirectResponse("/admin/events?message=イベントを更新しました。", status_code=303)
+
+
+@app.get("/admin/facilities", response_class=HTMLResponse)
+def admin_facilities(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            facility_rows = load_facility_admin_rows(cur)
+            alias_rows = load_folder_alias_admin_rows(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_facilities.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "facility_rows": facility_rows,
+            "alias_rows": alias_rows,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/facilities", response_class=HTMLResponse)
+async def create_admin_facility(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            values = normalize_facility_form(form)
+            cur.execute(
+                f"""
+                INSERT INTO {qname(master_db())}.exam_facilities (
+                  exam_facility_code,
+                  exam_facility_name,
+                  exam_facility_display_name,
+                  exam_facility_type,
+                  medical_institution_code,
+                  reservation_system_medical_institution_code,
+                  postal_code,
+                  address,
+                  phone_number,
+                  note,
+                  is_active
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    values["exam_facility_code"],
+                    values["exam_facility_name"],
+                    values["exam_facility_display_name"],
+                    values["exam_facility_type"],
+                    values["medical_institution_code"],
+                    values["reservation_system_medical_institution_code"],
+                    values["postal_code"],
+                    values["address"],
+                    values["phone_number"],
+                    values["note"],
+                    values["is_active"],
+                ),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="ADMIN_EXAM_FACILITY_CREATE",
+                target_schema=master_db(),
+                target_table="exam_facilities",
+                target_id=str(cur.lastrowid or ""),
+                after=values,
+            )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/facilities?message=健診機関を作成しました。", status_code=303)
+
+
+@app.post("/admin/facilities/{exam_facility_id}", response_class=HTMLResponse)
+async def update_admin_facility(request: Request, exam_facility_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            values = normalize_facility_form(form)
+            cur.execute(
+                f"""
+                UPDATE {qname(master_db())}.exam_facilities
+                   SET exam_facility_code = %s,
+                       exam_facility_name = %s,
+                       exam_facility_display_name = %s,
+                       exam_facility_type = %s,
+                       medical_institution_code = %s,
+                       reservation_system_medical_institution_code = %s,
+                       postal_code = %s,
+                       address = %s,
+                       phone_number = %s,
+                       note = %s,
+                       is_active = %s
+                 WHERE exam_facility_id = %s
+                """,
+                (
+                    values["exam_facility_code"],
+                    values["exam_facility_name"],
+                    values["exam_facility_display_name"],
+                    values["exam_facility_type"],
+                    values["medical_institution_code"],
+                    values["reservation_system_medical_institution_code"],
+                    values["postal_code"],
+                    values["address"],
+                    values["phone_number"],
+                    values["note"],
+                    values["is_active"],
+                    exam_facility_id,
+                ),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="ADMIN_EXAM_FACILITY_UPDATE",
+                target_schema=master_db(),
+                target_table="exam_facilities",
+                target_id=str(exam_facility_id),
+                after=values,
+            )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/facilities?message=健診機関を更新しました。", status_code=303)
+
+
+@app.post("/admin/folder-aliases", response_class=HTMLResponse)
+async def create_admin_folder_alias(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            values = normalize_folder_alias_form(cur, form)
+            cur.execute(
+                f"""
+                INSERT INTO {qname(master_db())}.medical_folder_aliases (
+                  event_id,
+                  src_folder_raw,
+                  dst_folder_norm,
+                  exam_facility_id,
+                  manual_judgement,
+                  note,
+                  is_active
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    values["event_id"],
+                    values["src_folder_raw"],
+                    values["dst_folder_norm"],
+                    values["exam_facility_id"],
+                    values["manual_judgement"],
+                    values["note"],
+                    values["is_active"],
+                ),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="ADMIN_FOLDER_ALIAS_CREATE",
+                target_schema=master_db(),
+                target_table="medical_folder_aliases",
+                target_id=str(cur.lastrowid or ""),
+                after=values,
+            )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/facilities?message=フォルダaliasを作成しました。", status_code=303)
+
+
+@app.post("/admin/folder-aliases/{alias_id}", response_class=HTMLResponse)
+async def update_admin_folder_alias(request: Request, alias_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            values = normalize_folder_alias_form(cur, form)
+            cur.execute(
+                f"""
+                UPDATE {qname(master_db())}.medical_folder_aliases
+                   SET event_id = %s,
+                       src_folder_raw = %s,
+                       dst_folder_norm = %s,
+                       exam_facility_id = %s,
+                       manual_judgement = %s,
+                       note = %s,
+                       is_active = %s
+                 WHERE alias_id = %s
+                """,
+                (
+                    values["event_id"],
+                    values["src_folder_raw"],
+                    values["dst_folder_norm"],
+                    values["exam_facility_id"],
+                    values["manual_judgement"],
+                    values["note"],
+                    values["is_active"],
+                    alias_id,
+                ),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="ADMIN_FOLDER_ALIAS_UPDATE",
+                target_schema=master_db(),
+                target_table="medical_folder_aliases",
+                target_id=str(alias_id),
+                after=values,
+            )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/facilities?message=フォルダaliasを更新しました。", status_code=303)
 
 
 @app.get("/exam-ledgers", response_class=HTMLResponse)
