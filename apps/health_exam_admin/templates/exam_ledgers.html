@@ -30,26 +30,32 @@
         <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 施設 / XML名" data-live-filter-input="#exam-ledger-table">
       </label>
       <label>
-        <span>event</span>
-        <input name="event_id" value="{{ filters.event_id or '' }}">
+        <span>イベント</span>
+        <select name="event_id">
+          {% for event in event_options %}
+            <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+              {{ event.event_name or ("event " ~ event.event_id) }}
+            </option>
+          {% endfor %}
+        </select>
       </label>
-      <div class="filter-toggle-field">
-        <span>source</span>
+      <fieldset class="filter-condition-block">
+        <legend>source</legend>
         <div class="filter-toggle-group">
           <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="CSV">CSV</button>
           <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="XML">XML</button>
           <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="PAPER">PAPER</button>
         </div>
-      </div>
-      <div class="filter-toggle-field">
-        <span>法定チェック</span>
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>法定チェック</legend>
         <div class="filter-toggle-group">
           <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="OK">OK</button>
           <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="NG">NG</button>
           <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="WARNING">WARNING</button>
           <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="PENDING">PENDING</button>
         </div>
-      </div>
+      </fieldset>
       <label>
         <span>表示件数</span>
         <input name="limit" value="{{ limit }}">

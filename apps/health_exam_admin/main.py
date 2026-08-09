@@ -97,6 +97,10 @@ def master_db() -> str:
     return os.getenv("PHR_MASTER_DB", "phr_master")
 
 
+def dev_db() -> str:
+    return os.getenv("PHR_DEV_DB", "dev_phr")
+
+
 def db_prefix() -> str:
     return os.getenv("PHR_DB_PREFIX", "PHR_DB_")
 
@@ -818,6 +822,23 @@ def parse_positive_int(value: str | None, *, default: int, maximum: int) -> int:
     return min(parsed, maximum)
 
 
+def load_event_options(cur: Any) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          event_id,
+          event_name,
+          event_year,
+          event_type,
+          insurer_number
+        FROM {qname(dev_db())}.event
+        WHERE is_active = 1
+        ORDER BY event_year DESC, event_id DESC
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
@@ -1380,6 +1401,7 @@ def file_receipts(request: Request) -> Response:
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
+            event_options = load_event_options(cur)
             rows = load_file_receipt_rows(cur, filters=filters, limit=limit)
             conn.commit()
         except Exception:
@@ -1393,6 +1415,7 @@ def file_receipts(request: Request) -> Response:
             "rows": rows,
             "filters": filters,
             "limit": limit,
+            "event_options": event_options,
         },
     )
 
@@ -1416,6 +1439,7 @@ def exam_ledgers(request: Request) -> Response:
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
+            event_options = load_event_options(cur)
             rows = load_exam_ledger_rows(cur, filters=filters, limit=limit)
             if audit_enabled(cur):
                 for row in rows:
@@ -1447,6 +1471,7 @@ def exam_ledgers(request: Request) -> Response:
             "rows": rows,
             "filters": filters,
             "limit": limit,
+            "event_options": event_options,
         },
     )
 
