@@ -613,8 +613,8 @@ def log_audit(
     after: dict[str, Any] | None = None,
 ) -> None:
     cur.execute(
-        """
-        INSERT INTO app_audit_logs (
+        f"""
+        INSERT INTO {qname(app_db())}.app_audit_logs (
           app_user_id,
           employee_no,
           action_code,
@@ -804,6 +804,145 @@ def load_xml_export_lists(cur: Any, *, limit: int = 30) -> list[dict[str, Any]]:
         LIMIT %s
         """,
         (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def parse_positive_int(value: str | None, *, default: int, maximum: int) -> int:
+    try:
+        parsed = int(str(value or "").strip())
+    except ValueError:
+        return default
+    if parsed <= 0:
+        return default
+    return min(parsed, maximum)
+
+
+def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    event_id = filters.get("event_id", "").strip()
+    file_type = filters.get("file_type", "").strip()
+    status = filters.get("status", "").strip()
+    query = filters.get("q", "").strip()
+    if event_id:
+        where_parts.append("event_id = %s")
+        params.append(event_id)
+    if file_type:
+        where_parts.append("file_type = %s")
+        params.append(file_type)
+    if status:
+        where_parts.append("status = %s")
+        params.append(status)
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              file_name LIKE %s
+              OR relative_path LIKE %s
+              OR facility_name LIKE %s
+              OR facility_code LIKE %s
+            )
+            """
+        )
+        params.extend([like, like, like, like])
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    cur.execute(
+        f"""
+        SELECT
+          id,
+          event_id,
+          file_type,
+          file_name,
+          relative_path,
+          file_sha256,
+          facility_code,
+          facility_name,
+          exam_facility_id,
+          matched_csv_format_version_id,
+          status,
+          summary_message,
+          etl_run_id,
+          first_seen_at,
+          last_seen_at,
+          processed_at,
+          updated_at
+        FROM {qname(health_db())}.file_receipts
+        {where_sql}
+        ORDER BY updated_at DESC, id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    event_id = filters.get("event_id", "").strip()
+    source_type = filters.get("source_type", "").strip()
+    check_status = filters.get("check_status", "").strip()
+    query = filters.get("q", "").strip()
+    if event_id:
+        where_parts.append("event_id = %s")
+        params.append(event_id)
+    if source_type:
+        where_parts.append("source_type = %s")
+        params.append(source_type)
+    if check_status:
+        where_parts.append("check_status = %s")
+        params.append(check_status)
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              hia_subscriber_id LIKE %s
+              OR person_id_custom LIKE %s
+              OR name_full_raw LIKE %s
+              OR name_kana_raw LIKE %s
+              OR facility_name LIKE %s
+              OR xml_file_name LIKE %s
+            )
+            """
+        )
+        params.extend([like, like, like, like, like, like])
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    cur.execute(
+        f"""
+        SELECT
+          exam_ledger_id,
+          event_id,
+          source_type,
+          file_receipt_id,
+          src_row_no,
+          hia_subscriber_id,
+          person_id_custom,
+          subscriber_match_status,
+          facility_code,
+          facility_name,
+          exam_date,
+          name_full_raw,
+          name_kana_raw,
+          health_exam_report_category,
+          program_code,
+          mapping_version,
+          exam_item_count,
+          exam_item_error_count,
+          check_status,
+          check_reason,
+          xml_export_status,
+          merge_status,
+          xml_file_name,
+          updated_at
+        FROM {qname(health_db())}.exam_ledgers
+        {where_sql}
+        ORDER BY updated_at DESC, exam_ledger_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -1220,6 +1359,96 @@ def logout(request: Request) -> RedirectResponse:
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
+
+
+@app.get("/file-receipts", response_class=HTMLResponse)
+def file_receipts(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "file_type": request.query_params.get("file_type", ""),
+        "status": request.query_params.get("status", ""),
+        "q": request.query_params.get("q", ""),
+        "limit": request.query_params.get("limit", "200"),
+    }
+    limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            rows = load_file_receipt_rows(cur, filters=filters, limit=limit)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "file_receipts.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "filters": filters,
+            "limit": limit,
+        },
+    )
+
+
+@app.get("/exam-ledgers", response_class=HTMLResponse)
+def exam_ledgers(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "source_type": request.query_params.get("source_type", ""),
+        "check_status": request.query_params.get("check_status", ""),
+        "q": request.query_params.get("q", ""),
+        "limit": request.query_params.get("limit", "200"),
+    }
+    limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            rows = load_exam_ledger_rows(cur, filters=filters, limit=limit)
+            if audit_enabled(cur):
+                for row in rows:
+                    log_audit(
+                        cur,
+                        request=request,
+                        user=user,
+                        action_code="PERSONAL_INFO_VIEW_EXAM_LEDGER",
+                        target_schema=health_db(),
+                        target_table="exam_ledgers",
+                        target_id=str(row.get("exam_ledger_id") or ""),
+                        after={
+                            "exam_ledger_id": row.get("exam_ledger_id"),
+                            "hia_subscriber_id": row.get("hia_subscriber_id"),
+                            "person_id_custom": row.get("person_id_custom"),
+                            "exam_date": str(row.get("exam_date") or ""),
+                            "facility_code": row.get("facility_code"),
+                        },
+                    )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_ledgers.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "filters": filters,
+            "limit": limit,
+        },
+    )
 
 
 @app.get("/export-lists", response_class=HTMLResponse)

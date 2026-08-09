@@ -632,6 +632,10 @@ button[type="submit"]:hover {
   align-items: start;
 }
 
+.filter-form-wide {
+  grid-template-columns: minmax(260px, 1.5fr) minmax(90px, 0.45fr) minmax(120px, 0.55fr) minmax(150px, 0.65fr) minmax(90px, 0.45fr) auto;
+}
+
 .filter-form label {
   display: grid;
   grid-template-rows: 24px var(--control-height);
@@ -1020,6 +1024,11 @@ button[type="submit"]:hover {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-form,
+  .filter-form-wide {
     grid-template-columns: 1fr;
   }
 

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% set title = "exam ledgers" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">HEALTH EXAM RESULT</p>
+    <h1>exam ledgers</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/file-receipts">受領ファイル</a>
+    <a class="ghost-button" href="/export-lists">出力リスト</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">CSV/XML/紙の取込単位を確認します。氏名などの個人情報を表示するため監査ログに残ります。</p>
+      </div>
+    </div>
+    <form method="get" action="/exam-ledgers" class="filter-form filter-form-wide">
+      <label>
+        <span>キーワード</span>
+        <input name="q" value="{{ filters.q or '' }}" placeholder="HIA ID / 氏名 / カナ / 施設 / XML名">
+      </label>
+      <label>
+        <span>event</span>
+        <input name="event_id" value="{{ filters.event_id or '' }}">
+      </label>
+      <label>
+        <span>source</span>
+        <select name="source_type">
+          <option value="" {% if not filters.source_type %}selected{% endif %}>すべて</option>
+          <option value="CSV" {% if filters.source_type == 'CSV' %}selected{% endif %}>CSV</option>
+          <option value="XML" {% if filters.source_type == 'XML' %}selected{% endif %}>XML</option>
+          <option value="PAPER" {% if filters.source_type == 'PAPER' %}selected{% endif %}>PAPER</option>
+        </select>
+      </label>
+      <label>
+        <span>法定チェック</span>
+        <select name="check_status">
+          <option value="" {% if not filters.check_status %}selected{% endif %}>すべて</option>
+          <option value="OK" {% if filters.check_status == 'OK' %}selected{% endif %}>OK</option>
+          <option value="NG" {% if filters.check_status == 'NG' %}selected{% endif %}>NG</option>
+          <option value="WARNING" {% if filters.check_status == 'WARNING' %}selected{% endif %}>WARNING</option>
+          <option value="PENDING" {% if filters.check_status == 'PENDING' %}selected{% endif %}>PENDING</option>
+        </select>
+      </label>
+      <label>
+        <span>表示件数</span>
+        <input name="limit" value="{{ limit }}">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/exam-ledgers">クリア</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>ledger一覧</h2>
+        <p class="subtle">最新 {{ rows|length }} 件を表示しています。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table exam-ledger-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>source</th>
+            <th>受診者</th>
+            <th>健診機関 / 受診日</th>
+            <th>項目</th>
+            <th>状態</th>
+            <th>source情報</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.exam_ledger_id }}</td>
+            <td>
+              <span class="status-pill status-muted">{{ row.source_type }}</span>
+              <small>file {{ row.file_receipt_id or "-" }} / row {{ row.src_row_no or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ row.name_full_raw or "氏名なし" }}</strong>
+              <small>{{ row.name_kana_raw or "" }}</small>
+              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ row.facility_name or "未設定" }}</strong>
+              <small>{{ row.facility_code or "" }} / {{ row.exam_date or "受診日なし" }}</small>
+            </td>
+            <td>
+              <strong>{{ row.exam_item_count or 0 }}件</strong>
+              <small>error {{ row.exam_item_error_count or 0 }}</small>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if row.check_status == 'OK' else 'status-pending' if row.check_status == 'PENDING' else 'status-muted' }}">{{ row.check_status }}</span>
+              <small>{{ row.check_reason or "" }}</small>
+              <small>export {{ row.xml_export_status }} / merge {{ row.merge_status }}</small>
+            </td>
+            <td>
+              <strong>{{ row.xml_file_name or row.mapping_version or "-" }}</strong>
+              <small>報告 {{ row.health_exam_report_category or "-" }} / program {{ row.program_code or "-" }}</small>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7">対象ledgerはありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

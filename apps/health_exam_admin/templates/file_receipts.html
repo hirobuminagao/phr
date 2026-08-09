@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% set title = "受領ファイル一覧" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">FROM MEDICAL</p>
+    <h1>受領ファイル一覧</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/exam-ledgers">exam ledgers</a>
+    <a class="ghost-button" href="/export-lists">出力リスト</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">scanで見つかったファイルとimport状態を確認します。</p>
+      </div>
+    </div>
+    <form method="get" action="/file-receipts" class="filter-form filter-form-wide">
+      <label>
+        <span>キーワード</span>
+        <input name="q" value="{{ filters.q or '' }}" placeholder="ファイル名 / 施設名 / パス">
+      </label>
+      <label>
+        <span>event</span>
+        <input name="event_id" value="{{ filters.event_id or '' }}">
+      </label>
+      <label>
+        <span>種別</span>
+        <select name="file_type">
+          <option value="" {% if not filters.file_type %}selected{% endif %}>すべて</option>
+          <option value="CSV" {% if filters.file_type == 'CSV' %}selected{% endif %}>CSV</option>
+          <option value="XML" {% if filters.file_type == 'XML' %}selected{% endif %}>XML</option>
+          <option value="ZIP" {% if filters.file_type == 'ZIP' %}selected{% endif %}>ZIP</option>
+        </select>
+      </label>
+      <label>
+        <span>状態</span>
+        <select name="status">
+          <option value="" {% if not filters.status %}selected{% endif %}>すべて</option>
+          <option value="DISCOVERED" {% if filters.status == 'DISCOVERED' %}selected{% endif %}>DISCOVERED</option>
+          <option value="IMPORTED" {% if filters.status == 'IMPORTED' %}selected{% endif %}>IMPORTED</option>
+          <option value="WAITING_CONFIRM" {% if filters.status == 'WAITING_CONFIRM' %}selected{% endif %}>WAITING_CONFIRM</option>
+          <option value="ERROR" {% if filters.status == 'ERROR' %}selected{% endif %}>ERROR</option>
+        </select>
+      </label>
+      <label>
+        <span>表示件数</span>
+        <input name="limit" value="{{ limit }}">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/file-receipts">クリア</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>ファイル一覧</h2>
+        <p class="subtle">最新 {{ rows|length }} 件を表示しています。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table file-receipt-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>種別</th>
+            <th>ファイル</th>
+            <th>健診機関</th>
+            <th>状態</th>
+            <th>scan/import</th>
+            <th>メッセージ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td><span class="status-pill status-muted">{{ row.file_type }}</span></td>
+            <td>
+              <strong>{{ row.file_name }}</strong>
+              <small title="{{ row.relative_path }}">{{ row.relative_path }}</small>
+            </td>
+            <td>
+              <strong>{{ row.facility_name or "未設定" }}</strong>
+              <small>{{ row.facility_code or "" }}</small>
+            </td>
+            <td><span class="status-pill {{ 'status-ready' if row.status == 'IMPORTED' else 'status-pending' if row.status == 'WAITING_CONFIRM' else 'status-muted' }}">{{ row.status }}</span></td>
+            <td>
+              <strong>run {{ row.etl_run_id or "-" }}</strong>
+              <small>初回 {{ row.first_seen_at or "-" }} / 処理 {{ row.processed_at or "-" }}</small>
+            </td>
+            <td><small>{{ row.summary_message or "" }}</small></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7">対象ファイルはありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
