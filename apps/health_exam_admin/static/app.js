@@ -67,4 +67,15 @@
       tableFilters.applyFilter();
     });
   }
+
+  for (const input of document.querySelectorAll(".binary-switch input")) {
+    const update = () => {
+      const label = input.closest(".binary-switch");
+      if (!label) return;
+      label.classList.toggle("switch-on", input.checked);
+      label.classList.toggle("switch-off", !input.checked);
+    };
+    input.addEventListener("change", update);
+    update();
+  }
 })();

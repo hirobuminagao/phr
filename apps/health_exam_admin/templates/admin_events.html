@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% set title = "イベント設定" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>イベント設定</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/users">アカウント管理</a>
+    <a class="ghost-button" href="/admin/security">セキュリティ</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>新規イベント</h2>
+        <p class="subtle">取込、チェック、出力の対象になるイベントを登録します。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/events" class="form-grid event-form">
+      <label>
+        <span>イベント名</span>
+        <input name="event_name" placeholder="例: トランス・コスモス健康保険組合 2026年度定期健診">
+      </label>
+      <label>
+        <span>保険者番号</span>
+        <input name="insurer_number" placeholder="06139463">
+      </label>
+      <label>
+        <span>年度</span>
+        <input name="event_year" type="number" value="2026">
+      </label>
+      <label>
+        <span>イベント種別</span>
+        <input name="event_type" value="HEALTH_EXAM">
+      </label>
+      <label>
+        <span>年齢判定</span>
+        <select name="age_rule_type">
+          <option value="FIXED_DATE">基準日</option>
+          <option value="EXAM_DATE">受診日</option>
+        </select>
+      </label>
+      <label>
+        <span>年齢基準日</span>
+        <input name="age_reference_date" type="date" value="2026-11-30">
+      </label>
+      <label class="form-wide-field">
+        <span>結果ルートパス</span>
+        <input name="result_root_path" placeholder="共有フォルダまたはローカル検証用パス">
+      </label>
+      <div class="form-section">
+        <label class="binary-switch switch-on">
+          <input type="checkbox" name="is_active" value="1" checked>
+          <span>有効</span>
+          <span>無効</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">イベントを作成</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>イベント一覧</h2>
+        <p class="subtle">イベント名は各一覧画面の条件表示に使います。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table event-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>基本</th>
+            <th>年齢判定</th>
+            <th>結果ルート</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+          <tr>
+            <td>{{ event.event_id }}</td>
+            <td>
+              <form id="event-form-{{ event.event_id }}" method="post" action="/admin/events/{{ event.event_id }}" class="compact-event-form">
+                <label>
+                  <span>イベント名</span>
+                  <input name="event_name" value="{{ event.event_name or '' }}">
+                </label>
+                <div class="event-inline-fields">
+                  <label>
+                    <span>保険者番号</span>
+                    <input name="insurer_number" value="{{ event.insurer_number }}">
+                  </label>
+                  <label>
+                    <span>年度</span>
+                    <input name="event_year" type="number" value="{{ event.event_year }}">
+                  </label>
+                  <label>
+                    <span>種別</span>
+                    <input name="event_type" value="{{ event.event_type }}">
+                  </label>
+                </div>
+              </form>
+            </td>
+            <td>
+              <div class="event-inline-fields" form="event-form-{{ event.event_id }}">
+                <label>
+                  <span>方式</span>
+                  <select name="age_rule_type" form="event-form-{{ event.event_id }}">
+                    <option value="FIXED_DATE" {% if event.age_rule_type == 'FIXED_DATE' %}selected{% endif %}>基準日</option>
+                    <option value="EXAM_DATE" {% if event.age_rule_type == 'EXAM_DATE' %}selected{% endif %}>受診日</option>
+                  </select>
+                </label>
+                <label>
+                  <span>基準日</span>
+                  <input name="age_reference_date" type="date" value="{{ event.age_reference_date or '' }}" form="event-form-{{ event.event_id }}">
+                </label>
+              </div>
+            </td>
+            <td>
+              <label>
+                <span>パス</span>
+                <input name="result_root_path" value="{{ event.result_root_path or '' }}" form="event-form-{{ event.event_id }}">
+              </label>
+            </td>
+            <td>
+              <label class="binary-switch {{ 'switch-on' if event.is_active else 'switch-off' }}">
+                <input type="checkbox" name="is_active" value="1" form="event-form-{{ event.event_id }}" {% if event.is_active %}checked{% endif %}>
+                <span>有効</span>
+                <span>無効</span>
+              </label>
+              <small>更新 {{ event.updated_at }}</small>
+            </td>
+            <td>
+              <button type="submit" form="event-form-{{ event.event_id }}">更新</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6">イベントはまだありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

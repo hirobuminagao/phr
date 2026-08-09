@@ -580,6 +580,35 @@ button[type="submit"]:hover {
   margin-bottom: 0;
 }
 
+.form-wide-field {
+  grid-column: 1 / -1;
+}
+
+.event-table {
+  min-width: 1320px;
+}
+
+.event-table label,
+.compact-event-form label {
+  gap: 5px;
+}
+
+.event-table input,
+.event-table select {
+  min-height: 36px;
+}
+
+.compact-event-form {
+  display: grid;
+  gap: 10px;
+}
+
+.event-inline-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  gap: 8px;
+}
+
 .work-permission-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));

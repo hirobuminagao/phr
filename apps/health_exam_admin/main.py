@@ -839,6 +839,52 @@ def load_event_options(cur: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_admin_event_rows(cur: Any) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          event_id,
+          insurer_number,
+          event_year,
+          event_type,
+          event_name,
+          age_rule_type,
+          age_reference_date,
+          result_root_path,
+          is_active,
+          updated_at
+        FROM {qname(dev_db())}.event
+        ORDER BY event_year DESC, event_id DESC
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def normalize_event_form(form: dict[str, str]) -> dict[str, Any]:
+    insurer_number = form.get("insurer_number", "").strip()
+    event_year = form.get("event_year", "").strip()
+    event_type = form.get("event_type", "").strip() or "HEALTH_EXAM"
+    event_name = form.get("event_name", "").strip() or None
+    age_rule_type = form.get("age_rule_type", "").strip() or "FIXED_DATE"
+    age_reference_date = form.get("age_reference_date", "").strip() or None
+    result_root_path = form.get("result_root_path", "").strip() or None
+    is_active = 1 if form.get("is_active") == "1" else 0
+    if not insurer_number:
+        raise ValueError("保険者番号は必須です。")
+    if not event_year:
+        raise ValueError("年度は必須です。")
+    return {
+        "insurer_number": insurer_number,
+        "event_year": int(event_year),
+        "event_type": event_type,
+        "event_name": event_name,
+        "age_rule_type": age_rule_type,
+        "age_reference_date": age_reference_date,
+        "result_root_path": result_root_path,
+        "is_active": is_active,
+    }
+
+
 def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
@@ -1418,6 +1464,150 @@ def file_receipts(request: Request) -> Response:
             "event_options": event_options,
         },
     )
+
+
+@app.get("/admin/events", response_class=HTMLResponse)
+def admin_events(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            events = load_admin_event_rows(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_events.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/events", response_class=HTMLResponse)
+async def create_admin_event(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            values = normalize_event_form(form)
+            cur.execute(
+                f"""
+                INSERT INTO {qname(dev_db())}.event (
+                  insurer_number,
+                  event_year,
+                  event_type,
+                  event_name,
+                  age_rule_type,
+                  age_reference_date,
+                  result_root_path,
+                  is_active
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    values["insurer_number"],
+                    values["event_year"],
+                    values["event_type"],
+                    values["event_name"],
+                    values["age_rule_type"],
+                    values["age_reference_date"],
+                    values["result_root_path"],
+                    values["is_active"],
+                ),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="ADMIN_EVENT_CREATE",
+                target_schema=dev_db(),
+                target_table="event",
+                target_id=str(cur.lastrowid or ""),
+                after=values,
+            )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return RedirectResponse(f"/admin/events?error={quote(str(exc))}", status_code=303)
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/events?message=イベントを作成しました。", status_code=303)
+
+
+@app.post("/admin/events/{event_id}", response_class=HTMLResponse)
+async def update_admin_event(request: Request, event_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            values = normalize_event_form(form)
+            cur.execute(
+                f"""
+                UPDATE {qname(dev_db())}.event
+                   SET insurer_number = %s,
+                       event_year = %s,
+                       event_type = %s,
+                       event_name = %s,
+                       age_rule_type = %s,
+                       age_reference_date = %s,
+                       result_root_path = %s,
+                       is_active = %s
+                 WHERE event_id = %s
+                """,
+                (
+                    values["insurer_number"],
+                    values["event_year"],
+                    values["event_type"],
+                    values["event_name"],
+                    values["age_rule_type"],
+                    values["age_reference_date"],
+                    values["result_root_path"],
+                    values["is_active"],
+                    event_id,
+                ),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="ADMIN_EVENT_UPDATE",
+                target_schema=dev_db(),
+                target_table="event",
+                target_id=str(event_id),
+                after=values,
+            )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return RedirectResponse(f"/admin/events?error={quote(str(exc))}", status_code=303)
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse("/admin/events?message=イベントを更新しました。", status_code=303)
 
 
 @app.get("/exam-ledgers", response_class=HTMLResponse)
