@@ -239,10 +239,10 @@ button[type="submit"]:hover {
   gap: 6px;
 }
 
-.home-hero {
+.admin-home-head {
   display: grid;
-  grid-template-columns: minmax(260px, 0.8fr) minmax(420px, 1.4fr);
-  gap: 18px;
+  grid-template-columns: minmax(280px, 0.7fr) minmax(560px, 1.3fr);
+  gap: 16px;
   align-items: stretch;
   padding: 20px;
   border: 1px solid var(--line);
@@ -250,18 +250,25 @@ button[type="submit"]:hover {
   background: var(--panel);
 }
 
-.home-hero h2 {
-  margin: 14px 0 6px;
+.admin-user-block {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 10px;
+}
+
+.admin-user-block h2 {
+  margin: 0 0 6px;
   font-size: 24px;
 }
 
-.home-hero p {
+.admin-user-block p {
   margin: 0;
   color: var(--muted);
   font-weight: 700;
 }
 
-.home-hero-actions {
+.admin-quick-actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
@@ -278,6 +285,7 @@ button[type="submit"]:hover {
   background: #f8fbfd;
   color: var(--text);
   text-decoration: none;
+  box-shadow: 0 1px 0 rgba(31, 41, 51, 0.04);
 }
 
 .home-action-button:hover {
@@ -344,6 +352,53 @@ button[type="submit"]:hover {
 
 .home-menu-section {
   margin-top: 20px;
+}
+
+.admin-module-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.admin-module-row {
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 86px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-module-row:last-child {
+  border-bottom: 0;
+}
+
+.admin-module-row strong,
+.admin-module-row small {
+  display: block;
+}
+
+.admin-module-row strong {
+  font-size: 16px;
+}
+
+.admin-module-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.admin-module-row .home-menu-button,
+.admin-module-row > .status-pill:last-child {
+  justify-self: end;
+}
+
+.admin-module-row.is-disabled {
+  background: #f8fafc;
 }
 
 .home-menu-grid {
@@ -950,8 +1005,18 @@ button[type="submit"]:hover {
     grid-template-columns: 1fr;
   }
 
-  .home-hero {
+  .admin-home-head {
     grid-template-columns: 1fr;
+  }
+
+  .admin-module-row {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .admin-module-row .home-menu-button,
+  .admin-module-row > .status-pill:last-child {
+    justify-self: start;
   }
 
   .form-grid {
