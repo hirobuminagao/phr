@@ -1299,12 +1299,15 @@ def run_hia_fund_delivery_step(cur: Any, *, action: str, raw: dict[str, Any], us
             status_override="success" if dry_run else None,
             extra_notes=(
                 f"delivery_list_ids={','.join(str(item.delivery_list_id) for item in summaries)} "
-                f"output_zips={','.join(str(item.output_zip_name) for item in summaries)}"
+                f"output_zips={','.join(str(item.output_zip_name) for item in summaries)} "
+                f"summary_csvs={','.join(str(item.summary_csv_path) for item in summaries if item.summary_csv_path)}"
             ),
         )
         return (
             f"健保納品ZIP出力: lists={len(summaries)} members={sum(item.members_seen for item in summaries)} "
-            f"outputs={','.join(str(item.output_zip_name) for item in summaries)} dry_run={int(dry_run)}",
+            f"outputs={','.join(str(item.output_zip_name) for item in summaries)} "
+            f"summary_csvs={','.join(str(item.summary_csv_path) for item in summaries if item.summary_csv_path)} "
+            f"dry_run={int(dry_run)}",
             dry_run,
         )
 

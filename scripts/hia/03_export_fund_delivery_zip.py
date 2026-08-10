@@ -232,7 +232,8 @@ def main() -> int:
                     f"delivery_run_ids={','.join(str(item.delivery_run_id) for item in summaries)} "
                     f"source_zip_count={sum(item.source_zip_count for item in summaries)} "
                     f"report_category_10_count={sum(item.report_category_10_count for item in summaries)} "
-                    f"output_zips={','.join(str(item.output_zip_name) for item in summaries)}"
+                    f"output_zips={','.join(str(item.output_zip_name) for item in summaries)} "
+                    f"summary_csvs={','.join(str(item.summary_csv_path) for item in summaries if item.summary_csv_path)}"
                 ),
             )
             if dry_run:
@@ -251,7 +252,9 @@ def main() -> int:
         f"members={sum(item.members_seen for item in summaries)} "
         f"written={sum(item.members_written for item in summaries)} "
         f"source_zips={sum(item.source_zip_count for item in summaries)} "
-        f"output_zips={','.join(str(item.output_zip_name) for item in summaries)}"
+        f"output_zips={','.join(str(item.output_zip_name) for item in summaries)} "
+        f"summary_csvs={','.join(str(item.summary_csv_path) for item in summaries if item.summary_csv_path)} "
+        f"members_csvs={','.join(str(item.members_csv_path) for item in summaries if item.members_csv_path)}"
     )
     return 0
 

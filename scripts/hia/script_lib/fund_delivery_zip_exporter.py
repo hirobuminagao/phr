@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+import csv
 import hashlib
 import re
 import shutil
@@ -42,6 +43,8 @@ class FundDeliveryZipExportSummary:
     output_zip_name: str | None = None
     output_zip_path: str | None = None
     output_zip_sha256: str | None = None
+    summary_csv_path: str | None = None
+    members_csv_path: str | None = None
     source_zip_count: int = 0
     report_category_10_count: int = 0
     errors: int = 0
@@ -383,6 +386,101 @@ def finalize_delivery_run(cur: Any, *, delivery_run_id: int, output_zip_sha256: 
     )
 
 
+def _csv_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _write_output_csvs(
+    output_dir: Path,
+    *,
+    delivery_run_id: int,
+    list_row: dict[str, Any],
+    output_zip_name: str,
+    rows: list[dict[str, Any]],
+) -> tuple[Path, Path]:
+    summary_path = output_dir / f"{Path(output_zip_name).stem}_summary.csv"
+    members_path = output_dir / f"{Path(output_zip_name).stem}_members.csv"
+
+    grouped: dict[tuple[str, str, str], int] = {}
+    for row in rows:
+        key = (
+            _csv_text(row.get("exam_month")),
+            _csv_text(row.get("facility_code")),
+            _csv_text(row.get("facility_name")),
+        )
+        grouped[key] = grouped.get(key, 0) + 1
+
+    with summary_path.open("w", encoding="utf-8-sig", newline="") as fp:
+        writer = csv.writer(fp)
+        writer.writerow([
+            "delivery_run_id",
+            "delivery_list_id",
+            "output_zip_name",
+            "insurer_number",
+            "exam_month",
+            "facility_code",
+            "facility_name",
+            "person_count",
+        ])
+        for (exam_month, facility_code, facility_name), count in sorted(grouped.items()):
+            writer.writerow([
+                delivery_run_id,
+                list_row["delivery_list_id"],
+                output_zip_name,
+                list_row["insurer_number"],
+                exam_month,
+                facility_code,
+                facility_name,
+                count,
+            ])
+
+    with members_path.open("w", encoding="utf-8-sig", newline="") as fp:
+        writer = csv.writer(fp)
+        writer.writerow([
+            "delivery_run_id",
+            "delivery_list_id",
+            "output_zip_name",
+            "output_xml_filename",
+            "person_year_id",
+            "hia_download_xml_id",
+            "person_xml_event_id",
+            "exam_date",
+            "exam_month",
+            "facility_code",
+            "facility_name",
+            "report_category_code",
+            "program_type_code",
+            "source_zip_name",
+            "source_xml_filename",
+            "source_xml_sha256",
+            "output_xml_sha256",
+        ])
+        for row in rows:
+            writer.writerow([
+                delivery_run_id,
+                list_row["delivery_list_id"],
+                output_zip_name,
+                row["output_xml_filename"],
+                row["person_year_id"],
+                row["hia_download_xml_id"],
+                row["person_xml_event_id"],
+                row["exam_date"],
+                row["exam_month"],
+                row["facility_code"],
+                row["facility_name"],
+                row["report_category_code"],
+                row["program_type_code"],
+                row["source_zip_name"],
+                row["source_xml_filename"],
+                row["source_xml_sha256"],
+                row["output_xml_sha256"],
+            ])
+
+    return summary_path, members_path
+
+
 def export_fund_delivery_zip(
     cur: Any,
     *,
@@ -432,8 +530,17 @@ def export_fund_delivery_zip(
     )
     inserted = insert_delivery_members(cur, delivery_run_id=delivery_run_id, rows=written_rows)
     finalize_delivery_run(cur, delivery_run_id=delivery_run_id, output_zip_sha256=output_zip_sha256)
+    summary_csv_path, members_csv_path = _write_output_csvs(
+        output_dir,
+        delivery_run_id=delivery_run_id,
+        list_row=list_row,
+        output_zip_name=output_zip_name,
+        rows=written_rows,
+    )
 
     summary.delivery_run_id = delivery_run_id
     summary.members_written = inserted
     summary.output_zip_sha256 = output_zip_sha256
+    summary.summary_csv_path = str(summary_csv_path)
+    summary.members_csv_path = str(members_csv_path)
     return summary

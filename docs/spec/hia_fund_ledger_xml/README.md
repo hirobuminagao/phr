@@ -153,6 +153,16 @@ ZIP名は `送信元コード_保険者番号_提出日出力番号_送信回数
 送信回数 `auto` の場合、同一提出日・送信元・保険者番号・出力番号の既存出力を見て、0始まりで採番する。
 例: `1322100106_06139463_202608100_0.zip`
 
+`03` はZIPと同じフォルダに、確認用CSVも出力する。
+
+|ファイル|内容|用途|
+|---|---|---|
+|`{zip_stem}_summary.csv`|`delivery_run_id`, `delivery_list_id`, `output_zip_name`, `insurer_number`, `exam_month`, `facility_code`, `facility_name`, `person_count`|健診機関・受診月ごとの納品人数確認|
+|`{zip_stem}_members.csv`|出力XMLファイル名、元XML/元ZIP、`person_year_id`, `hia_download_xml_id`, `exam_date`, `facility_code`, `report_category_code` 等|ZIP内XMLと原本XMLの追跡、再確認|
+
+CSVはExcelで開きやすいように UTF-8 BOM付きで出力する。
+個人氏名などの機微情報は初期実装ではCSVへ出さず、DB上の台帳IDから追跡する。
+
 健保提出済み反映 dry-run:
 
 ```bash
