@@ -74,8 +74,11 @@ HIAからダウンロードしたZIP単位の台帳。
 主な項目:
 
 - `download_zip_id`
+- `etl_run_id`
+- `event_id`
 - `insurer_number`
 - `facility_code`
+- `facility_name`
 - `folder_name`
 - `zip_name`
 - `dl_date`
@@ -84,6 +87,7 @@ HIAからダウンロードしたZIP単位の台帳。
 - `source_zip_path`
 - `archive_zip_path`
 - `import_status`
+- `import_reason`
 - `xml_count_total`
 - `xml_count_success`
 - `xml_count_error`
@@ -102,21 +106,29 @@ ZIP内のXML 1ファイルごとの原本台帳。
 
 - `hia_download_xml_id`
 - `download_zip_id`
+- `etl_run_id`
+- `event_id`
 - `xml_filename`
 - `xml_inner_path`
 - `xml_sha256`
 - `exam_date`
 - `exam_year`
+- `exam_month`
 - `facility_code`
 - `facility_name`
-- `report_category`
-- `health_program_code`
+- `report_category_code`
+- `program_type_code`
 - `insurer_number`
 - `insurance_symbol_raw`
 - `insurance_number_raw`
+- `insurance_symbol_match`
+- `insurance_number_match`
 - `birthdate`
 - `name_kana_raw`
+- `name_kana_norm`
 - `gender_code`
+- `person_id_custom`
+- `identity_hash`
 - `parse_status`
 - `parse_reason`
 - `is_active_in_zip`
@@ -132,17 +144,27 @@ ZIP内のXML 1ファイルごとの原本台帳。
 主な項目:
 
 - `person_year_id`
+- `event_id`
 - `person_id_custom`
 - `identity_hash`
+- `name_kana_raw`
 - `name_kana_norm`
 - `gender_code`
 - `exam_year`
 - `insurer_number`
+- `insurance_symbol_raw`
+- `insurance_number_raw`
 - `insurance_symbol_match`
 - `insurance_number_match`
 - `birthdate`
+- `report_category_code`
+- `program_type_code`
 - `first_seen_dl_date`
+- `first_seen_download_zip_id`
+- `first_seen_hia_download_xml_id`
 - `last_seen_dl_date`
+- `last_seen_download_zip_id`
+- `last_seen_hia_download_xml_id`
 - `dl_count`
 - `created_at`
 - `updated_at`
@@ -158,6 +180,7 @@ XMLを人×年度へ紐付けた履歴。
 - `person_xml_event_id`
 - `person_year_id`
 - `hia_download_xml_id`
+- `download_zip_id`
 - `event_type`
 - `event_status`
 - `is_current`
@@ -181,21 +204,145 @@ XMLを人×年度へ紐付けた履歴。
 
 健保納品ZIP作成単位の履歴。
 
+出力runは出力リストを元に作成する。HIAから受け取ったZIP単位ではなく、原則として受診月単位で納品ZIPを作る。
+
 主な項目:
 
 - `delivery_run_id`
+- `etl_run_id`
+- `delivery_list_id`
+- `event_id`
 - `insurer_number`
+- `output_mode`
+- `exam_month`
 - `delivery_policy`
+- `same_exam_date_policy`
+- `include_delivery_status`
 - `source_dl_date`
+- `source_download_zip_id`
 - `source_zip_name`
 - `output_zip_name`
 - `output_zip_path`
+- `output_zip_sha256`
 - `delivery_status`
 - `delivery_xml_count`
 - `delivery_person_count`
+- `excluded_prior_count`
+- `excluded_rule_count`
+- `deduped_xml_count`
 - `created_at`
 - `created_by`
 - `note`
+
+### fund_delivery_xml_candidates
+
+健保納品候補になるXML単位の状態。
+
+同一人物・同一年度で未提出候補が複数ある場合でも、原本XMLは消さず、採用・非採用だけをこのテーブルで管理する。
+
+主な項目:
+
+- `delivery_candidate_id`
+- `event_id`
+- `person_year_id`
+- `hia_download_xml_id`
+- `person_xml_event_id`
+- `exam_date`
+- `exam_month`
+- `dl_date`
+- `send_seq`
+- `candidate_status`
+- `selection_policy`
+- `selection_reason`
+- `not_selected_reason`
+- `created_at`
+- `updated_at`
+
+想定する `candidate_status`:
+
+- `SELECTED`: 出力候補として採用。
+- `NOT_SELECTED`: 候補ではあるが、同一人物内の別XMLを採用したため非採用。
+- `REVIEW_REQUIRED`: 自動採用できず、人の確認待ち。
+- `EXCLUDED`: 納品対象外。
+
+### fund_delivery_person_status
+
+人×年度単位の現在の健保納品状態。
+
+履歴は `fund_delivery_members` に残し、今どう扱うかはこのテーブルで見る。
+
+主な項目:
+
+- `delivery_person_status_id`
+- `event_id`
+- `person_year_id`
+- `current_hia_download_xml_id`
+- `current_delivery_candidate_id`
+- `delivery_tracking_status`
+- `tracking_reason`
+- `last_delivery_run_id`
+- `last_delivery_member_id`
+- `last_delivered_at`
+- `last_delivered_by`
+- `redelivery_reason`
+- `created_at`
+- `updated_at`
+
+想定する `delivery_tracking_status`:
+
+- `NOT_DELIVERED`: 未提出。
+- `DELIVERED`: 提出済み。
+- `REDELIVERY_NEEDED`: 修正版などで再提出したい。
+- `EXCLUDED`: 提出対象外。
+- `REVIEW_REQUIRED`: 人の確認待ち。
+
+### fund_delivery_lists
+
+健保納品ZIPを作るための出力リスト。
+
+画面では、候補を検索し、対象者をこのリストへ追加してから出力する。
+
+主な項目:
+
+- `delivery_list_id`
+- `event_id`
+- `insurer_number`
+- `list_name`
+- `list_status`
+- `output_mode`
+- `exam_month`
+- `delivery_policy`
+- `same_exam_date_policy`
+- `include_delivery_status`
+- `search_condition_note`
+- `submitted_at`
+- `submitted_by`
+- `submission_note`
+- `created_by`
+- `created_at`
+- `updated_at`
+
+想定する `output_mode`:
+
+- `EXAM_MONTH`: 受診月単位で出力する通常モード。
+- `ALL`: 条件対象をまとめて出力する確認・再作成モード。
+
+### fund_delivery_list_members
+
+出力リストに追加された人単位の明細。
+
+主な項目:
+
+- `delivery_list_member_id`
+- `delivery_list_id`
+- `person_year_id`
+- `delivery_candidate_id`
+- `hia_download_xml_id`
+- `list_member_status`
+- `list_member_reason`
+- `added_by`
+- `created_at`
+- `updated_at`
 
 ### fund_delivery_members
 
@@ -207,6 +354,7 @@ XMLを人×年度へ紐付けた履歴。
 - `delivery_run_id`
 - `person_year_id`
 - `hia_download_xml_id`
+- `delivery_candidate_id`
 - `person_xml_event_id`
 - `xml_filename`
 - `xml_sha256`
@@ -214,10 +362,45 @@ XMLを人×年度へ紐付けた履歴。
 - `facility_name`
 - `exam_date`
 - `exam_month`
+- `report_category_code`
+- `program_type_code`
 - `member_status`
+- `member_reason`
+- `submitted_at`
+- `submitted_by`
+- `submission_note`
 - `created_at`
 
 累計サマリーはこのテーブルから集計する。
+
+### 提出済み記帳
+
+健保への提出完了は、人が出力リスト単位で記帳できるようにする。
+
+画面では、出力リスト詳細から「このリストを提出済みにする」を実行する。
+
+一括提出済み時の反映先:
+
+- `fund_delivery_lists`
+  - `list_status = SUBMITTED`
+  - `submitted_at`
+  - `submitted_by`
+  - `submission_note`
+- `fund_delivery_members`
+  - `member_status = SUBMITTED`
+  - `submitted_at`
+  - `submitted_by`
+  - `submission_note`
+- `fund_delivery_person_status`
+  - `delivery_tracking_status = DELIVERED`
+  - `last_delivery_run_id`
+  - `last_delivery_member_id`
+  - `last_delivered_at`
+  - `last_delivered_by`
+
+提出済み記帳は履歴を消さずに状態を進める操作とする。
+
+誤操作時の戻しは別操作として用意し、直接UPDATE前提にはしない。
 
 ### fund_delivery_exclusion_rules
 
@@ -253,9 +436,10 @@ XMLを人×年度へ紐付けた履歴。
 ```text
 scripts/hia/
   01_import_downloaded_xml_zip.py
-  02_link_downloaded_xml_to_person_year.py
-  03_build_fund_delivery_zip.py
-  04_summarize_fund_delivery.py
+  02_build_fund_delivery_candidates.py
+  03_create_fund_delivery_list.py
+  04_build_fund_delivery_zip.py
+  05_summarize_fund_delivery.py
 ```
 
 処理本体は `scripts/hia/script_lib` に置く。
@@ -293,25 +477,56 @@ HIAからダウンロードしたZIPを取り込む。
 - `hia_download_xmls`
 - archive ZIP
 
-### 02_link_downloaded_xml_to_person_year.py
+初期実装方針:
 
-XML台帳を人×年度へ紐付ける。
+- `scripts/hia/01_import_downloaded_xml_zip.py` を入口にする。
+- 既定入力は `data/hia_export/input_zip/{insurer_number}/*.zip`。
+- 既定アーカイブは `copy` とし、入力ZIPを即時移動しない。
+- `--archive-mode move` 指定時のみ旧実装に近い移動運用にする。
+- `--dry-run` ではDB更新もアーカイブ作成も残さない。
+- ZIPの同一性は `insurer_number + zip_name` を基本にする。
+- `zip_sha256` は検索・確認用であり、履歴台帳上の一意制約にはしない。
+
+### 02_build_fund_delivery_candidates.py
+
+HIAダウンロードXML台帳から、人×年度の納品候補と現在状態を作る。
 
 出力:
 
 - `hia_person_years`
 - `hia_person_xml_events`
+- `fund_delivery_xml_candidates`
+- `fund_delivery_person_status`
 
-### 03_build_fund_delivery_zip.py
+### 03_create_fund_delivery_list.py
+
+健保納品ZIPの出力リストを作る。
+
+入力:
+
+- `fund_delivery_xml_candidates`
+- `fund_delivery_person_status`
+
+出力:
+
+- `fund_delivery_lists`
+- `fund_delivery_list_members`
+
+画面化後は、検索条件入力、候補確認、個別追加・削除をこの手順で扱う。
+
+CLI初期実装では、受診月・健保・提出状態を条件にリストを作成できるようにする。
+
+### 04_build_fund_delivery_zip.py
 
 健保納品ZIPを作る。
 
 入力:
 
+- `fund_delivery_lists`
+- `fund_delivery_list_members`
+- `fund_delivery_xml_candidates`
+- `fund_delivery_person_status`
 - `hia_download_xmls`
-- `hia_person_years`
-- `hia_person_xml_events`
-- 設定 `delivery_policy`
 
 出力:
 
@@ -319,7 +534,7 @@ XML台帳を人×年度へ紐付ける。
 - `fund_delivery_runs`
 - `fund_delivery_members`
 
-### 04_summarize_fund_delivery.py
+### 05_summarize_fund_delivery.py
 
 納品履歴からサマリーを出す。
 
@@ -330,23 +545,63 @@ XML台帳を人×年度へ紐付ける。
 - ZIP単位
 - 累計
 
+## output_mode
+
+出力リスト作成時に選ぶ。
+
+### EXAM_MONTH
+
+受診月単位で出力する通常モード。
+
+### ALL
+
+条件対象をまとめて出力する確認・再作成モード。
+
 ## delivery_policy
 
-健保納品時の同一人物重複制御は設定で切り替える。
+出力リスト作成時に選ぶ。
 
-### EXCLUDE_PRIOR
+### NOT_DELIVERED_ONLY
 
-既存互換。
+未提出の人だけを出力対象にする。
 
-過去に同一人物×年度が納品対象または納品済みの場合、今回ZIP側から除外する。
+### REDELIVERY_ONLY
 
-### PREFER_CURRENT
+再提出対象だけを出力対象にする。
 
-修正版納品用。
+### NOT_DELIVERED_AND_REDELIVERY
 
-過去に同一人物×年度が存在しても、今回選択したXMLを納品対象にする。
+未提出と再提出対象を出力対象にする。
 
-この場合、過去XMLは削除せず、`hia_person_xml_events` 上で `SUPERSEDED` または納品履歴上の旧版として追跡する。
+### ALL
+
+提出済みも含めて条件対象を出力する。
+
+確認用・再作成用。
+
+## same_exam_date_policy
+
+同一人物・同一年度・同一受診日のXML候補が複数ある場合の採用方針。
+
+画面化後は出力リスト作成条件として選択できるようにする。
+
+### LATEST_DOWNLOAD
+
+`dl_date + send_seq` が新しい方を採用する。
+
+### EARLIEST_DOWNLOAD
+
+`dl_date + send_seq` が古い方を採用する。
+
+### MANUAL_REVIEW
+
+自動採用せず、確認待ちにする。
+
+## 旧 delivery_policy との関係
+
+旧実装の `EXCLUDE_PRIOR` / `PREFER_CURRENT` は、ZIP単位の塊制御としては採用しない。
+
+v2では、受診月ベースの出力リスト、人単位の `delivery_tracking_status`、XML候補単位の `candidate_status` で表現する。
 
 ## サマリー方針
 
