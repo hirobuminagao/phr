@@ -2,10 +2,11 @@
 
 ## Status
 
-Current as of 2026-08-05.
+Current as of 2026-08-10.
 
 CSV健診結果取込、法定チェック、CSVからHIA向けXML出力までは一通り動作確認済みである。
 次の実装は、取込そのものを増やす段階ではなく、運用で人ごとに管理するための台帳、補正、結合、HIA状態連携を整える段階である。
+FastAPI管理画面は、スクリプト運用を置き換える完成版ではなく、まず確認・編集・台帳化しやすい入口として段階的に拡張している。
 
 ## Already Working
 
@@ -43,6 +44,18 @@ CSV健診結果取込、法定チェック、CSVからHIA向けXML出力まで�
 - 最新状態は `work_other.hia_dashboard_status` に保持する。
 - 2025年度の年度最終状態は `work_other.hia_dashboard_year_end_status` にスナップショット保管済み。
 - 新フォーマットでは先頭にHIA加入者IDが追加されているため、取込・照合ロジックの追従が必要である。
+
+### FastAPI Admin Screen
+
+- `apps/health_exam_admin` に社内ローカル向け管理画面を実装中。
+- ログイン、登録申請、承認、無効化、パスワード初期化、本人情報変更、ロール変更、個人別作業権限ON/OFFは実装済み。
+- セキュリティ設定、自動ログアウト、IP制限、個人情報監査ログの設定/参照入口は実装済み。
+- HOMEには、今すぐ使える作業と準備中の作業を分けて表示する。
+- 受領ファイル一覧、統合ledger一覧、出力リスト一覧/詳細は実装済み。
+- イベント設定画面は実装済み。`dev_phr.event` のevent名、年度、保険者番号、年齢基準日、結果ルート等を管理する。
+- 健診機関・alias管理画面は実装済み。`phr_master.exam_facilities` と `phr_master.medical_folder_aliases` を作成・更新できる。
+- 健診機関・alias管理では、5万件超の健診機関マスタを巨大プルダウンにせず、aliasの紐づけ先は健診機関IDまたは健診機関コード入力で解決する。
+- 出力実行、HIAアップロード記帳、個人case詳細、基本情報補正、加入者突合NG修正、CSVマッピング管理、紙健診入力は後続。
 
 ## Main Remaining Implementations
 
@@ -257,7 +270,8 @@ XML出力条件を画面から指定できるようにする。
 現状:
 
 - CLI/YAMLによる出力は実装済み。
-- local FastAPIなどの画面は未実装。
+- 出力リストの作成、一覧、詳細確認はFastAPI管理画面に実装済み。
+- XML出力実行ボタン、出力結果のアップロード作業記帳、個人case詳細からの理由ありOK操作は未実装。
 
 #### 8.1 HIA XML出力リスト画面モック確定メモ
 
@@ -306,7 +320,26 @@ XML出力条件を画面から指定できるようにする。
 初期画面実装では、テンプレート登録や基本情報補正の本体処理は含めない。
 テンプレート登録は別画面/API、基本情報補正は出力リストまたはcase詳細から遷移する後続画面/APIとして扱う。
 
-### 9. HIA Upload and Delivery Status
+### 9. Master and Facility Admin UI
+
+健診機関、フォルダalias、eventなど、取込・出力・画面絞り込みに必要な運用マスタを画面から扱う。
+
+現状:
+
+- event設定画面は実装済み。
+- 健診機関・alias管理画面は実装済み。
+- `exam_facilities` の新規作成/更新、キーワード絞り込みに対応済み。
+- `medical_folder_aliases` の新規作成/更新、キーワード絞り込みに対応済み。
+- 操作は監査ログへ記録する。
+
+未実装:
+
+- 健診機関名/コードの部分一致サジェスト。
+- CSVフォーマット/マッピング管理。
+- 紙健診テンプレート管理。
+- normalize辞書、検査項目、出力ポリシー、郵便番号住所マスタなどの共通マスタ管理。
+
+### 10. HIA Upload and Delivery Status
 
 XML出力後、人がHIAへアップロードしたか、その後健保・事業所へ納品したかを管理する。
 
@@ -324,7 +357,7 @@ XML出力後、人がHIAへアップロードしたか、その後健保・事�
 - XML出力履歴はある。
 - HIAアップロード以降の人手ステータス管理は未実装。
 
-### 10. Paper Input
+### 11. Paper Input
 
 紙から作成した健診結果も、今回のフォーマットに沿って登録できるようにする。
 
@@ -344,7 +377,7 @@ XML出力後、人がHIAへアップロードしたか、その後健保・事�
 - 旧「紙→Excel→DB→normalize→export」資産はある。
 - 新統合ledger前提の画面入力は未実装。
 
-### 11. Standardization and Mapping Intelligence Layer
+### 12. Standardization and Mapping Intelligence Layer
 
 CSV取込で蓄積したサンプル、マッピング、名寄せ辞書、エラー判断を、納品処理とは別の標準化資産として扱う。
 

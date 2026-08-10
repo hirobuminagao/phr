@@ -15,7 +15,7 @@
 
 ## Documents
 
-2026-08-05時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `33_implementation_status_and_xml_handoff.md`、人単位・結合出力の残実装整理が `38_health_exam_remaining_implementation_summary.md` である。
+2026-08-10時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。
 実際のカラム・処理挙動は適用対象のDDL、migration、seed、コードを優先する。
 `05_design_history.md` は協議履歴、`30_pre_implementation_review.md` は実装着手時の基準点であり、旧案や当時の未決事項が残っていても現在正とは限らない。
 
@@ -74,7 +74,7 @@
   - `exam_ledgers` と `person_event` / `person_event_status_items` の責務分離、出力制御の置き場所、実装順をまとめる。
 - `38_health_exam_remaining_implementation_summary.md`
   - `exam_ledgers` へ取込を集約した後の、結合出力case、人単位event状態、HIA連携、基本情報補正、出力画面の残タスクを整理する。
-  - 2026-08-06時点では、source単位check、case作成、case値作成、case単位check、出力可否summary、case基点XML exporter、HIAアップロード作業リストの器まで実装済みである。
+  - 2026-08-10時点では、source単位check、case作成、case値作成、case単位check、出力可否summary、case基点XML exporter、出力リスト、受領ファイル一覧、統合ledger一覧、event設定、健診機関・alias管理まで実装済みである。
 - `39_hia_xml_export_run_mock.html`
   - HIA XML出力リスト画面のモック。
   - 箱作成前は出力リストの基本情報と初期追加対象だけを扱い、箱作成後は人追加モーダルで施設、受診月、氏名カナ、HIA加入者ID等からcaseを検索・追加してXML出力する画面イメージとして扱う。
@@ -86,7 +86,7 @@
   - 構成元source、採用済み整値、法定チェック、理由ありOK、出力/HIA履歴を1人単位で確認する画面イメージとして扱う。
 - `42_admin_screen_scope_and_priority.md`
   - 健診管理画面全体のスコープ、優先度、マスタ管理画面候補、個人別作業権限方針を整理する。
-  - 出力リスト、HIAアップロード、加入者アップロード、予約CSV、紙健診入力、マスタ編集などの画面化順を決めるための棚卸しとして扱う。
+  - 出力リスト、受領ファイル一覧、統合ledger一覧、event設定、健診機関・alias管理などの実装済み画面と、HIAアップロード、加入者アップロード、予約CSV、紙健診入力、マスタ編集などの後続画面を分けて扱う。
 
 ## ADR Policy
 
