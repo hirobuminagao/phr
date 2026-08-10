@@ -1,0 +1,5 @@
+sample_key,event_id,insurer_number,insurance_symbol,insurance_number,insurance_branchnumber,birth,gender_code,name_kana_full,name_kanji_full,hia_subscriber_id,relationship_name,qualification_acquired_date,qualification_lost_date,employee_code,note
+SAMPLE_HIA_001,2,06139463,100,700001,,1978-04-12,1,サンプル タロウ,サンプル 太郎,HIA_SAMPLE_001,本人,2020-04-01,,SMP001,normal first-time sample
+SAMPLE_HIA_002,2,06139463,100,700002,,1984-09-21,2,サンプル ハナコ,サンプル 花子,HIA_SAMPLE_002,本人,2021-04-01,,SMP002,same exam date duplicate old/new sample
+SAMPLE_HIA_003,2,06139463,100,700003,,1991-02-03,2,サンプル ミカ,サンプル 美香,HIA_SAMPLE_003,本人,2022-04-01,,SMP003,XML intentionally missing insurance number
+SAMPLE_HIA_004,2,06139463,トラ-01,700004,01,1969-12-30,1,サンプル ジロウ,サンプル 次郎,HIA_SAMPLE_004,本人,2019-04-01,,SMP004,symbol and branch normalization sample

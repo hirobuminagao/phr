@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <code code="40" codeSystem="1.2.392.200119.6.1001" displayName="その他健診情報"/>
+  <recordTarget>
+    <patientRole>
+      <id root="1.2.392.200119.6.101" extension="06139463"/>
+      <id root="1.2.392.200119.6.204" extension="100"/>
+      <patient>
+        <name><family>サンプル</family><given>ミカ</given></name>
+        <administrativeGenderCode code="2"/>
+        <birthTime value="19910203"/>
+      </patient>
+    </patientRole>
+  </recordTarget>
+  <author>
+    <assignedAuthor>
+      <representedOrganization>
+        <id root="1.2.392.200119.6.102" extension="0110717770"/>
+        <name>札幌きたはち健診センター</name>
+      </representedOrganization>
+    </assignedAuthor>
+  </author>
+  <documentationOf>
+    <serviceEvent>
+      <code code="990" codeSystem="1.2.392.200119.6.1002" displayName="その他健診"/>
+      <effectiveTime><low value="20260603"/></effectiveTime>
+    </serviceEvent>
+  </documentationOf>
+</ClinicalDocument>
