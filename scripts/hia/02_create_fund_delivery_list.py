@@ -34,6 +34,22 @@ def default_list_name(exam_month: str | None, output_mode: str) -> str:
     return f"全件_健保納品リスト_{stamp}"
 
 
+def _string_list(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list | tuple):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()]
+
+
+def _list_name(base_name: str | None, exam_month: str | None, output_mode: str, total_months: int) -> str:
+    if base_name and output_mode == "EXAM_MONTH" and total_months > 1:
+        return f"{exam_month}_{base_name}"
+    return base_name or default_list_name(exam_month, output_mode)
+
+
 def parse_args() -> argparse.Namespace:
     bootstrap = argparse.ArgumentParser(add_help=False)
     bootstrap.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
@@ -52,7 +68,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--insurer-number", default=str(config_value(data, "insurer_number", DEFAULT_INSURER_NUMBER)))
     parser.add_argument("--list-name", default=config_value(section, "list_name", None))
     parser.add_argument("--output-mode", choices=("EXAM_MONTH", "ALL"), default=str(config_value(section, "output_mode", "EXAM_MONTH")))
-    parser.add_argument("--exam-month", default=config_value(section, "exam_month", None), help="YYYYMM. Required when output-mode=EXAM_MONTH.")
+    parser.add_argument("--exam-month", action="append", default=None, help="YYYYMM. Can be repeated. Required when output-mode=EXAM_MONTH.")
+    parser.set_defaults(config_exam_month=config_value(section, "exam_month", None))
+    parser.set_defaults(config_exam_months=section.get("exam_months"))
     parser.add_argument(
         "--delivery-policy",
         choices=("NOT_DELIVERED_ONLY", "REDELIVERY_ONLY", "NOT_DELIVERED_AND_REDELIVERY", "ALL"),
@@ -79,20 +97,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     dry_run = not args.confirm
-    config = FundDeliveryListConfig(
-        event_id=args.event_id,
-        insurer_number=args.insurer_number,
-        list_name=args.list_name or default_list_name(args.exam_month, args.output_mode),
-        output_mode=args.output_mode,
-        exam_month=args.exam_month,
-        delivery_policy=args.delivery_policy,
-        same_exam_date_policy=args.same_exam_date_policy,
-        grouping_mode=args.grouping_mode,
-        sender_code=args.sender_code,
-        sender_name=args.sender_name,
-        created_by=args.created_by,
-        dry_run=dry_run,
-    )
+    if args.output_mode == "EXAM_MONTH":
+        exam_months = args.exam_month or _string_list(args.config_exam_months) or _string_list(args.config_exam_month)
+        if not exam_months:
+            raise ValueError("exam_month or exam_months is required when output-mode=EXAM_MONTH")
+    else:
+        exam_months = [None]
 
     mysql_params = load_mysql_base_params()
     with connect_ctx(mysql_params, database=args.database, autocommit=False) as conn:
@@ -111,12 +121,29 @@ def main() -> int:
         )
 
         try:
-            summary = build_fund_delivery_list(cur, config)
+            summaries = []
+            for exam_month in exam_months:
+                config = FundDeliveryListConfig(
+                    event_id=args.event_id,
+                    insurer_number=args.insurer_number,
+                    list_name=_list_name(args.list_name, exam_month, args.output_mode, len(exam_months)),
+                    output_mode=args.output_mode,
+                    exam_month=exam_month,
+                    delivery_policy=args.delivery_policy,
+                    same_exam_date_policy=args.same_exam_date_policy,
+                    grouping_mode=args.grouping_mode,
+                    sender_code=args.sender_code,
+                    sender_name=args.sender_name,
+                    created_by=args.created_by,
+                    dry_run=dry_run,
+                )
+                summaries.append(build_fund_delivery_list(cur, config))
+
             metrics = RunMetrics()
-            metrics.rows_seen = summary.valid_xmls_seen
-            metrics.rows_inserted = summary.list_members_inserted + summary.list_created
-            metrics.rows_updated = summary.candidates_upserted + summary.person_status_upserted
-            metrics.rows_skipped = summary.skipped_by_delivery_policy
+            metrics.rows_seen = sum(item.valid_xmls_seen for item in summaries)
+            metrics.rows_inserted = sum(item.list_members_inserted + item.list_created for item in summaries)
+            metrics.rows_updated = sum(item.candidates_upserted + item.person_status_upserted for item in summaries)
+            metrics.rows_skipped = sum(item.skipped_by_delivery_policy for item in summaries)
 
             if dry_run:
                 conn.rollback()
@@ -130,12 +157,13 @@ def main() -> int:
                 metrics,
                 status_override=status_override,
                 extra_notes=(
-                    f"list_id={summary.list_id} "
-                    f"candidate_groups={summary.candidate_groups_seen} "
-                    f"selected={summary.selected_candidates} "
-                    f"not_selected={summary.not_selected_candidates} "
-                    f"review_required={summary.review_required_candidates} "
-                    f"members={summary.list_members_seen}"
+                    f"list_ids={','.join(str(item.list_id) for item in summaries)} "
+                    f"months={','.join(str(month) for month in exam_months if month)} "
+                    f"candidate_groups={sum(item.candidate_groups_seen for item in summaries)} "
+                    f"selected={sum(item.selected_candidates for item in summaries)} "
+                    f"not_selected={sum(item.not_selected_candidates for item in summaries)} "
+                    f"review_required={sum(item.review_required_candidates for item in summaries)} "
+                    f"members={sum(item.list_members_seen for item in summaries)}"
                 ),
             )
             if dry_run:
@@ -148,11 +176,17 @@ def main() -> int:
 
     print(
         "create_fund_delivery_list "
-        f"dry_run={1 if dry_run else 0} list_id={summary.list_id} "
-        f"valid_xmls={summary.valid_xmls_seen} groups={summary.candidate_groups_seen} "
-        f"candidates={summary.candidates_upserted} selected={summary.selected_candidates} "
-        f"not_selected={summary.not_selected_candidates} review_required={summary.review_required_candidates} "
-        f"members={summary.list_members_seen} skipped_by_policy={summary.skipped_by_delivery_policy}"
+        f"dry_run={1 if dry_run else 0} "
+        f"list_ids={','.join(str(item.list_id) for item in summaries)} "
+        f"months={','.join(str(month) for month in exam_months if month)} "
+        f"valid_xmls={sum(item.valid_xmls_seen for item in summaries)} "
+        f"groups={sum(item.candidate_groups_seen for item in summaries)} "
+        f"candidates={sum(item.candidates_upserted for item in summaries)} "
+        f"selected={sum(item.selected_candidates for item in summaries)} "
+        f"not_selected={sum(item.not_selected_candidates for item in summaries)} "
+        f"review_required={sum(item.review_required_candidates for item in summaries)} "
+        f"members={sum(item.list_members_seen for item in summaries)} "
+        f"skipped_by_policy={sum(item.skipped_by_delivery_policy for item in summaries)}"
     )
     return 0
 

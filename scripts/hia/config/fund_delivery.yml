@@ -17,6 +17,10 @@ download_import:
 list:
   list_name:
   output_mode: EXAM_MONTH
+  # 複数月を月ごとの納品リストとして作成する。
+  # 単月運用だけなら exam_months を1件にする。旧互換の exam_month も残す。
+  exam_months:
+    - "202605"
   exam_month: "202605"
   delivery_policy: NOT_DELIVERED_ONLY
   same_exam_date_policy: LATEST_DOWNLOAD
@@ -34,7 +38,8 @@ export:
   xsd_dir: scripts/from_medical/source/XSD/mhlw_v4_20230331_v08
   delivery_date:
   output_seq: 0
-  send_seq: 1
+  # auto = 同一提出日・送信元・保険者番号・出力番号の既存出力を見て次の送信回数を採番する。
+  send_seq: auto
   created_by:
   # false = dry-run、true = ZIP作成とDB反映
   confirm: true

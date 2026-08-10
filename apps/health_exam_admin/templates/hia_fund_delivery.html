@@ -41,7 +41,7 @@
         <input type="hidden" name="action" value="create_list">
         <span class="status-pill status-ready">02</span>
         <strong>納品リスト作成</strong>
-        <small>{{ config.list.exam_month }} / {{ config.list.delivery_policy }} / {{ config.list.same_exam_date_policy }}</small>
+        <small>{{ config.list.exam_months or config.list.exam_month }} / {{ config.list.delivery_policy }} / {{ config.list.same_exam_date_policy }}</small>
         <button type="submit">リスト作成</button>
       </form>
       <form method="post" action="/hia/fund-delivery/run" class="fund-step-card">

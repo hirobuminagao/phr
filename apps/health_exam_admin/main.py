@@ -835,6 +835,21 @@ def latest_fund_delivery_list_id(cur: Any) -> int | None:
     return int(row["delivery_list_id"]) if row else None
 
 
+def ready_fund_delivery_list_ids(cur: Any) -> list[int]:
+    cur.execute(
+        """
+        SELECT delivery_list_id
+          FROM fund_delivery_lists
+         WHERE list_status IN ('READY', 'CREATED')
+         ORDER BY
+           CASE WHEN exam_month IS NULL THEN 1 ELSE 0 END,
+           exam_month,
+           delivery_list_id
+        """
+    )
+    return [int(row["delivery_list_id"]) for row in cur.fetchall() or []]
+
+
 def latest_fund_delivery_exported_list_id(cur: Any) -> int | None:
     cur.execute(
         """
@@ -969,6 +984,16 @@ def build_hia_download_import_config(raw: dict[str, Any]) -> HiaDownloadImportCo
     )
 
 
+def _string_list(value: Any) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    if isinstance(value, list | tuple):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()]
+
+
 def fund_delivery_actor(user: dict[str, Any]) -> str:
     employee_number = str(user.get("employee_number") or "").strip()
     display_name = str(user.get("display_name") or "").strip()
@@ -977,50 +1002,144 @@ def fund_delivery_actor(user: dict[str, Any]) -> str:
     return employee_number or display_name or "health_exam_admin"
 
 
-def build_fund_delivery_list_config(raw: dict[str, Any], *, actor: str | None = None) -> FundDeliveryListConfig:
+def build_fund_delivery_list_configs(raw: dict[str, Any], *, actor: str | None = None) -> list[FundDeliveryListConfig]:
     section = fund_delivery_section(raw, "list")
     event_id = config_value(raw, "event_id", None)
     insurer_number = str(config_value(raw, "insurer_number", "06139463"))
     output_mode = str(config_value(section, "output_mode", "EXAM_MONTH"))
-    exam_month = config_value(section, "exam_month", None)
-    list_name = config_value(section, "list_name", None)
-    if not list_name:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        list_name = f"{exam_month}_健保納品リスト_{stamp}" if output_mode == "EXAM_MONTH" else f"全件_健保納品リスト_{stamp}"
-    return FundDeliveryListConfig(
-        event_id=None if event_id in (None, "") else int(event_id),
-        insurer_number=insurer_number,
-        list_name=str(list_name),
-        output_mode=output_mode,
-        exam_month=None if exam_month in (None, "") else str(exam_month),
-        delivery_policy=str(config_value(section, "delivery_policy", "NOT_DELIVERED_ONLY")),
-        same_exam_date_policy=str(config_value(section, "same_exam_date_policy", "LATEST_DOWNLOAD")),
-        grouping_mode=str(config_value(section, "grouping_mode", "ALL")),
-        sender_code=str(config_value(section, "sender_code", "1322100106")),
-        sender_name=config_value(section, "sender_name", None),
-        created_by=config_value(section, "created_by", actor),
-        dry_run=not config_bool(section, "confirm", False),
+    if output_mode == "EXAM_MONTH":
+        exam_months = _string_list(section.get("exam_months")) or _string_list(config_value(section, "exam_month", None))
+        if not exam_months:
+            raise ValueError("list.exam_months または list.exam_month が必要です。")
+    else:
+        exam_months = [None]
+    configs = []
+    for exam_month in exam_months:
+        list_name = config_value(section, "list_name", None)
+        if list_name and output_mode == "EXAM_MONTH" and len(exam_months) > 1:
+            list_name = f"{exam_month}_{list_name}"
+        if not list_name:
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            list_name = f"{exam_month}_健保納品リスト_{stamp}" if output_mode == "EXAM_MONTH" else f"全件_健保納品リスト_{stamp}"
+        configs.append(FundDeliveryListConfig(
+            event_id=None if event_id in (None, "") else int(event_id),
+            insurer_number=insurer_number,
+            list_name=str(list_name),
+            output_mode=output_mode,
+            exam_month=None if exam_month in (None, "") else str(exam_month),
+            delivery_policy=str(config_value(section, "delivery_policy", "NOT_DELIVERED_ONLY")),
+            same_exam_date_policy=str(config_value(section, "same_exam_date_policy", "LATEST_DOWNLOAD")),
+            grouping_mode=str(config_value(section, "grouping_mode", "ALL")),
+            sender_code=str(config_value(section, "sender_code", "1322100106")),
+            sender_name=config_value(section, "sender_name", None),
+            created_by=config_value(section, "created_by", actor),
+            dry_run=not config_bool(section, "confirm", False),
+        ))
+    return configs
+
+
+def build_fund_delivery_list_config(raw: dict[str, Any], *, actor: str | None = None) -> FundDeliveryListConfig:
+    configs = build_fund_delivery_list_configs(raw, actor=actor)
+    if len(configs) != 1:
+        raise ValueError("複数月設定です。build_fund_delivery_list_configs を使ってください。")
+    return configs[0]
+
+
+def _delivery_date(value: str | None) -> str:
+    if value:
+        return value
+    return datetime.now().strftime("%Y%m%d")
+
+
+def next_fund_delivery_send_seq(
+    cur: Any,
+    *,
+    sender_code: str,
+    insurer_number: str,
+    delivery_date: str,
+    output_seq: int,
+) -> int:
+    prefix = f"{sender_code}_{insurer_number}_{delivery_date}{output_seq}_"
+    cur.execute(
+        """
+        SELECT output_zip_name
+          FROM fund_delivery_runs
+         WHERE output_zip_name LIKE %s
+        """,
+        (prefix + "%.zip",),
     )
+    max_seq = 0
+    for row in cur.fetchall() or []:
+        name = str(row["output_zip_name"])
+        if name.startswith(prefix) and name.endswith(".zip"):
+            seq_text = name[len(prefix) : -4]
+            if seq_text.isdigit():
+                max_seq = max(max_seq, int(seq_text))
+    return max_seq + 1
+
+
+def fund_delivery_list_header(cur: Any, delivery_list_id: int) -> dict[str, Any]:
+    cur.execute(
+        """
+        SELECT delivery_list_id, sender_code, insurer_number
+          FROM fund_delivery_lists
+         WHERE delivery_list_id = %s
+        """,
+        (delivery_list_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError(f"fund_delivery_list not found: delivery_list_id={delivery_list_id}")
+    return dict(row)
+
+
+def build_fund_delivery_zip_configs(cur: Any, raw: dict[str, Any], *, actor: str | None = None) -> list[FundDeliveryZipExportConfig]:
+    section = fund_delivery_section(raw, "export")
+    delivery_list_id = config_value(section, "delivery_list_id", None)
+    if delivery_list_id in (None, ""):
+        delivery_list_ids = ready_fund_delivery_list_ids(cur)
+    else:
+        delivery_list_ids = [int(delivery_list_id)]
+    if not delivery_list_ids:
+        raise ValueError("出力待ちの健保納品リストがありません。先にリストを作成してください。")
+    output_seq = int(config_value(section, "output_seq", 0))
+    send_seq_raw = str(config_value(section, "send_seq", 1)).strip()
+    auto_send_seq = send_seq_raw.lower() == "auto"
+    next_send_seq: int | None = None
+    configs = []
+    for list_id in delivery_list_ids:
+        if auto_send_seq:
+            header = fund_delivery_list_header(cur, list_id)
+            if next_send_seq is None:
+                next_send_seq = next_fund_delivery_send_seq(
+                    cur,
+                    sender_code=str(header["sender_code"]),
+                    insurer_number=str(header["insurer_number"]),
+                    delivery_date=_delivery_date(config_value(section, "delivery_date", None)),
+                    output_seq=output_seq,
+                )
+            send_seq = next_send_seq
+            next_send_seq += 1
+        else:
+            send_seq = int(send_seq_raw)
+        configs.append(FundDeliveryZipExportConfig(
+            delivery_list_id=list_id,
+            output_base_dir=_config_path(section.get("output_base_dir"), REPO_ROOT / "data" / "fund_delivery" / "output"),
+            xsd_dir=_config_path(section.get("xsd_dir"), REPO_ROOT / "scripts" / "from_medical" / "source" / "XSD" / "mhlw_v4_20230331_v08"),
+            delivery_date=config_value(section, "delivery_date", None),
+            output_seq=output_seq,
+            send_seq=send_seq,
+            created_by=config_value(section, "created_by", actor),
+            dry_run=not config_bool(section, "confirm", False),
+        ))
+    return configs
 
 
 def build_fund_delivery_zip_config(cur: Any, raw: dict[str, Any], *, actor: str | None = None) -> FundDeliveryZipExportConfig:
-    section = fund_delivery_section(raw, "export")
-    delivery_list_id = config_value(section, "delivery_list_id", None)
-    resolved_id = None if delivery_list_id in (None, "") else int(delivery_list_id)
-    if resolved_id is None:
-        resolved_id = latest_fund_delivery_list_id(cur)
-    if resolved_id is None:
-        raise ValueError("出力待ちの健保納品リストがありません。先にリストを作成してください。")
-    return FundDeliveryZipExportConfig(
-        delivery_list_id=resolved_id,
-        output_base_dir=_config_path(section.get("output_base_dir"), REPO_ROOT / "data" / "fund_delivery" / "output"),
-        xsd_dir=_config_path(section.get("xsd_dir"), REPO_ROOT / "scripts" / "from_medical" / "source" / "XSD" / "mhlw_v4_20230331_v08"),
-        delivery_date=config_value(section, "delivery_date", None),
-        output_seq=int(config_value(section, "output_seq", 0)),
-        send_seq=int(config_value(section, "send_seq", 1)),
-        created_by=config_value(section, "created_by", actor),
-        dry_run=not config_bool(section, "confirm", False),
-    )
+    configs = build_fund_delivery_zip_configs(cur, raw, actor=actor)
+    if len(configs) != 1:
+        raise ValueError("複数リストが対象です。build_fund_delivery_zip_configs を使ってください。")
+    return configs[0]
 
 
 def build_fund_delivery_submission_config(cur: Any, raw: dict[str, Any], *, actor: str | None = None) -> FundDeliverySubmissionConfig:
@@ -1100,7 +1219,8 @@ def run_hia_fund_delivery_step(cur: Any, *, action: str, raw: dict[str, Any], us
         )
 
     if action == "create_list":
-        config = build_fund_delivery_list_config(raw, actor=actor)
+        configs = build_fund_delivery_list_configs(raw, actor=actor)
+        dry_run = configs[0].dry_run if configs else True
         run_id = start_run(
             cur,
             phase="HIA_CREATE_FUND_DELIVERY_LIST",
@@ -1109,32 +1229,38 @@ def run_hia_fund_delivery_step(cur: Any, *, action: str, raw: dict[str, Any], us
             db_path=None,
             input_base=None,
             input_file=None,
-            insurer_number=config.insurer_number,
-            dry_run=config.dry_run,
+            insurer_number=str(config_value(raw, "insurer_number", "")),
+            dry_run=dry_run,
             limit_rows=None,
         )
-        summary = build_fund_delivery_list(cur, config)
+        summaries = [build_fund_delivery_list(cur, config) for config in configs]
         metrics = RunMetrics(
-            rows_seen=summary.valid_xmls_seen,
-            rows_inserted=summary.list_members_inserted + summary.list_created,
-            rows_updated=summary.candidates_upserted + summary.person_status_upserted,
-            rows_skipped=summary.skipped_by_delivery_policy,
+            rows_seen=sum(item.valid_xmls_seen for item in summaries),
+            rows_inserted=sum(item.list_members_inserted + item.list_created for item in summaries),
+            rows_updated=sum(item.candidates_upserted + item.person_status_upserted for item in summaries),
+            rows_skipped=sum(item.skipped_by_delivery_policy for item in summaries),
         )
         finish_run(
             cur,
             run_id,
             metrics,
-            status_override="success" if config.dry_run else None,
-            extra_notes=f"list_id={summary.list_id} selected={summary.selected_candidates} members={summary.list_members_seen}",
+            status_override="success" if dry_run else None,
+            extra_notes=(
+                f"list_ids={','.join(str(item.list_id) for item in summaries)} "
+                f"selected={sum(item.selected_candidates for item in summaries)} "
+                f"members={sum(item.list_members_seen for item in summaries)}"
+            ),
         )
         return (
-            f"納品リスト作成: list_id={summary.list_id} selected={summary.selected_candidates} "
-            f"members={summary.list_members_seen} skipped={summary.skipped_by_delivery_policy} dry_run={int(config.dry_run)}",
-            config.dry_run,
+            f"納品リスト作成: lists={len(summaries)} selected={sum(item.selected_candidates for item in summaries)} "
+            f"members={sum(item.list_members_seen for item in summaries)} skipped={sum(item.skipped_by_delivery_policy for item in summaries)} "
+            f"dry_run={int(dry_run)}",
+            dry_run,
         )
 
     if action == "export_zip":
-        config = build_fund_delivery_zip_config(cur, raw, actor=actor)
+        configs = build_fund_delivery_zip_configs(cur, raw, actor=actor)
+        dry_run = configs[0].dry_run if configs else True
         run_id = start_run(
             cur,
             phase="HIA_EXPORT_FUND_DELIVERY_ZIP",
@@ -1144,22 +1270,29 @@ def run_hia_fund_delivery_step(cur: Any, *, action: str, raw: dict[str, Any], us
             input_base=None,
             input_file=None,
             insurer_number=None,
-            dry_run=config.dry_run,
+            dry_run=dry_run,
             limit_rows=None,
         )
-        summary = export_fund_delivery_zip(cur, config=config, etl_run_id=run_id)
-        metrics = RunMetrics(rows_seen=summary.members_seen, rows_inserted=summary.members_written, errors=summary.errors)
+        summaries = [export_fund_delivery_zip(cur, config=config, etl_run_id=run_id) for config in configs]
+        metrics = RunMetrics(
+            rows_seen=sum(item.members_seen for item in summaries),
+            rows_inserted=sum(item.members_written for item in summaries),
+            errors=sum(item.errors for item in summaries),
+        )
         finish_run(
             cur,
             run_id,
             metrics,
-            status_override="success" if config.dry_run else None,
-            extra_notes=f"delivery_list_id={summary.delivery_list_id} output_zip={summary.output_zip_name}",
+            status_override="success" if dry_run else None,
+            extra_notes=(
+                f"delivery_list_ids={','.join(str(item.delivery_list_id) for item in summaries)} "
+                f"output_zips={','.join(str(item.output_zip_name) for item in summaries)}"
+            ),
         )
         return (
-            f"健保納品ZIP出力: list_id={summary.delivery_list_id} run_id={summary.delivery_run_id} "
-            f"members={summary.members_seen} output={summary.output_zip_name} dry_run={int(config.dry_run)}",
-            config.dry_run,
+            f"健保納品ZIP出力: lists={len(summaries)} members={sum(item.members_seen for item in summaries)} "
+            f"outputs={','.join(str(item.output_zip_name) for item in summaries)} dry_run={int(dry_run)}",
+            dry_run,
         )
 
     if action == "mark_submitted":
