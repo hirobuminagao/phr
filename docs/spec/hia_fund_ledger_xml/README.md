@@ -63,6 +63,21 @@ hia_person_xml_events
 
 `02` 以降で必要になる候補選定、同日重複の新旧選択、除外ルール適用、サマリー集計は、個別スクリプトとして表へ出さず `script_lib` に分ける。
 
+## 管理画面の扱い
+
+`apps/health_exam_admin` に HIA → 健保納品の確認画面と実行ボタンを追加している。
+
+ただし、2026-08-10時点では **正式運用投入前** とする。
+
+理由:
+
+- 画面からの納品リスト削除が未実装。
+- 同一 `event_id` / `insurer_number` / `exam_month` の READY / CREATED リストが複数残った場合、`03` で複数リストが出力対象になり得る。
+- 出力対象リストを画面上で最終確認してから実行する導線がまだ不足している。
+
+そのため、画面は当面、疎通確認・状態確認・実装検証用として扱う。
+正式運用では、リスト削除、同一月リスト重複防止、出力対象確認、提出済み記帳の操作が揃ってから使用開始する。
+
 ## 初期出力単位
 
 健保向け納品では、初期実装は健診機関単位に分割せず、健保向けにまとめて出力する。
@@ -96,6 +111,23 @@ python scripts/hia/02_create_fund_delivery_list.py --event-id 2 --exam-month 202
 
 `02` は `--confirm` を付けない限りDBへリストを作らない。
 
+`fund_delivery.yml` では、`list.exam_months` に複数月を指定できる。
+この場合、`02` は月ごとに `fund_delivery_lists` を作成する。
+
+```yaml
+list:
+  output_mode: EXAM_MONTH
+  exam_months:
+    - "202605"
+    - "202606"
+```
+
+注意:
+
+- `02` はリスト履歴を新規作成する処理であり、同一条件の既存リストを自動削除しない。
+- 試行で作成した READY / CREATED リストを残したまま `03` を未指定実行すると、出力対象に含まれる可能性がある。
+- 03未実行の試行リストは、`fund_delivery_list_members` → `fund_delivery_lists` の順で整理する。
+
 健保納品ZIP出力 dry-run:
 
 ```bash
@@ -111,9 +143,15 @@ python scripts/hia/03_export_fund_delivery_zip.py --delivery-list-id 1 --confirm
 `03` は `fund_delivery_lists` / `fund_delivery_list_members` に固定された対象だけを出力する。
 候補の再選定は行わない。
 
+`delivery_list_id` 未指定の場合は、READY / CREATED の出力待ちリストを月順で出力する。
+複数月指定で作成したリストを一括出力するための挙動であり、同一月の試行リストが複数残っている場合は重複出力の原因になる。
+
 初期実装の出力先は `data/fund_delivery/output/{yyyymmdd_hhmmss}/{exam_month}/`。
 ZIP名は `送信元コード_保険者番号_提出日出力番号_送信回数.zip` 形式とする。
-例: `1322100106_06139463_202608100_1.zip`
+提出日は任意指定可能で、未指定時は実行日を使用する。
+出力番号と送信回数はどちらも `0-9` の一桁とする。
+送信回数 `auto` の場合、同一提出日・送信元・保険者番号・出力番号の既存出力を見て、0始まりで採番する。
+例: `1322100106_06139463_202608100_0.zip`
 
 健保提出済み反映 dry-run:
 
@@ -488,19 +526,27 @@ identity 関連の確認は、まず以下の共通 spec を参照する。
 - HIA ZIP 取込入口: `scripts/hia/01_import_downloaded_xml_zip.py`
 - XML検証 / identity生成 / `hia_download_*` / `hia_person_*` 更新
 - HIA fund delivery サンプルデータ生成
-
-実装予定機能
-
 - 納品リスト作成入口: `scripts/hia/02_create_fund_delivery_list.py`
 - 健保納品ZIP出力入口: `scripts/hia/03_export_fund_delivery_zip.py`
 - 提出済み反映入口: `scripts/hia/04_mark_fund_delivery_submitted.py`
 - ix08 / su08 自動再生成
+- FastAPI管理画面からの確認・実行入口
 
 対応スクリプト
 
 - `scripts/hia/01_import_downloaded_xml_zip.py`
+- `scripts/hia/02_create_fund_delivery_list.py`
+- `scripts/hia/03_export_fund_delivery_zip.py`
+- `scripts/hia/04_mark_fund_delivery_submitted.py`
 - `scripts/hia/script_lib/hia_download_importer.py`
 - `scripts/hia/script_lib/hia_download_xml_parser.py`
+
+正式運用前の残項目
+
+- 管理画面からの納品リスト削除
+- 同一月READY/CREATEDリスト重複時の停止または選択UI
+- 出力対象リストの画面確認
+- 提出済み/エラー記帳の画面運用固め
 
 今後のドキュメント更新方針
 
