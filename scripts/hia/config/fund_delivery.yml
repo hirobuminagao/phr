@@ -21,6 +21,7 @@ list:
   # 単月運用だけなら exam_months を1件にする。旧互換の exam_month も残す。
   exam_months:
     - "202605"
+    - "202606"
   exam_month: "202605"
   delivery_policy: NOT_DELIVERED_ONLY
   same_exam_date_policy: LATEST_DOWNLOAD
