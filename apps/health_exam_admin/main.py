@@ -4,6 +4,7 @@ import os
 import json
 import secrets
 import string
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote
@@ -15,11 +16,30 @@ from fastapi.templating import Jinja2Templates
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.etl.metrics import RunMetrics
+from scripts.lib.etl.runs import finish_run, start_run
 from scripts.lib.examination.lookup import qname
 from scripts.from_medical.script_lib.hia_xml_export_loader import (
     ExportSelectors,
     decide_candidate,
     fetch_candidates,
+)
+from scripts.hia.script_lib.config_loader import config_bool, config_value, load_yaml_config
+from scripts.hia.script_lib.fund_delivery_list_builder import (
+    FundDeliveryListConfig,
+    build_fund_delivery_list,
+)
+from scripts.hia.script_lib.fund_delivery_submission_marker import (
+    FundDeliverySubmissionConfig,
+    mark_fund_delivery_submitted,
+)
+from scripts.hia.script_lib.fund_delivery_zip_exporter import (
+    FundDeliveryZipExportConfig,
+    export_fund_delivery_zip,
+)
+from scripts.hia.script_lib.hia_download_importer import (
+    HiaDownloadImportConfig,
+    import_hia_download_zips,
 )
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
@@ -33,6 +53,7 @@ from scripts.phr_app.script_lib.app_auth import (
 
 
 APP_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = APP_ROOT.parents[1]
 SESSION_COOKIE_NAME = "phr_app_session"
 LOGIN_ERROR_MESSAGES = {
     "USER_NOT_FOUND": "社員番号またはパスワードが違います。",
@@ -753,6 +774,439 @@ def readiness_label(status: str | None) -> str:
 
 templates.env.globals["list_status_label"] = list_status_label
 templates.env.globals["readiness_label"] = readiness_label
+
+
+def fund_delivery_status_label(status: str | None) -> str:
+    labels = {
+        "DRAFT": "下書き",
+        "READY": "出力待ち",
+        "CREATED": "作成済み",
+        "SUBMITTED": "提出済み",
+        "PARTIAL_SUBMITTED": "一部提出済み",
+        "PENDING": "保留",
+        "SUBMISSION_ERROR": "提出エラー",
+        "PARTIAL_ERROR": "一部エラー",
+        "ERROR": "エラー",
+        "IMPORTED": "取込済み",
+        "PROCESSING": "処理中",
+        "PARSED": "読取OK",
+    }
+    return labels.get(status or "", status or "")
+
+
+templates.env.globals["fund_delivery_status_label"] = fund_delivery_status_label
+
+
+FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
+HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
+
+
+def _config_path(value: Any, default: Path) -> Path:
+    if value in (None, ""):
+        return default
+    path = Path(str(value)).expanduser()
+    if path.is_absolute():
+        return path
+    return REPO_ROOT / path
+
+
+def load_fund_delivery_page_config() -> dict[str, Any]:
+    return load_yaml_config(FUND_DELIVERY_CONFIG_PATH)
+
+
+def fund_delivery_section(config: dict[str, Any], key: str) -> dict[str, Any]:
+    section = config.get(key) or {}
+    if not isinstance(section, dict):
+        raise ValueError(f"{key} must be a mapping in fund_delivery.yml")
+    return section
+
+
+def latest_fund_delivery_list_id(cur: Any) -> int | None:
+    cur.execute(
+        """
+        SELECT delivery_list_id
+          FROM fund_delivery_lists
+         WHERE list_status IN ('READY', 'CREATED')
+         ORDER BY delivery_list_id DESC
+         LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    return int(row["delivery_list_id"]) if row else None
+
+
+def latest_fund_delivery_exported_list_id(cur: Any) -> int | None:
+    cur.execute(
+        """
+        SELECT l.delivery_list_id
+          FROM fund_delivery_lists l
+          JOIN fund_delivery_runs r
+            ON r.delivery_list_id = l.delivery_list_id
+         WHERE r.delivery_status IN ('CREATED', 'PARTIAL_SUBMITTED', 'PENDING', 'SUBMISSION_ERROR')
+         ORDER BY r.delivery_run_id DESC
+         LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    return int(row["delivery_list_id"]) if row else None
+
+
+def load_fund_delivery_summary(cur: Any) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    for table_name, key in (
+        ("hia_download_zips", "download_zips"),
+        ("hia_download_xmls", "download_xmls"),
+        ("fund_delivery_lists", "delivery_lists"),
+        ("fund_delivery_runs", "delivery_runs"),
+        ("fund_delivery_members", "delivery_members"),
+    ):
+        cur.execute(f"SELECT COUNT(*) AS cnt FROM {table_name}")
+        summary[key] = int((cur.fetchone() or {}).get("cnt") or 0)
+    return summary
+
+
+def load_fund_delivery_zip_rows(cur: Any, *, limit: int = 20) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT
+          download_zip_id,
+          event_id,
+          insurer_number,
+          facility_code,
+          folder_name,
+          zip_name,
+          dl_date,
+          send_seq,
+          import_status,
+          import_reason,
+          xml_count_total,
+          xml_count_success,
+          xml_count_error,
+          updated_at
+        FROM hia_download_zips
+        ORDER BY download_zip_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_fund_delivery_list_rows(cur: Any, *, limit: int = 20) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT
+          l.delivery_list_id,
+          l.event_id,
+          l.insurer_number,
+          l.list_name,
+          l.list_status,
+          l.output_mode,
+          l.exam_month,
+          l.delivery_policy,
+          l.same_exam_date_policy,
+          l.created_at,
+          COUNT(lm.delivery_list_member_id) AS member_count
+        FROM fund_delivery_lists l
+        LEFT JOIN fund_delivery_list_members lm
+          ON lm.delivery_list_id = l.delivery_list_id
+        GROUP BY
+          l.delivery_list_id,
+          l.event_id,
+          l.insurer_number,
+          l.list_name,
+          l.list_status,
+          l.output_mode,
+          l.exam_month,
+          l.delivery_policy,
+          l.same_exam_date_policy,
+          l.created_at
+        ORDER BY l.delivery_list_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_fund_delivery_run_rows(cur: Any, *, limit: int = 20) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT
+          delivery_run_id,
+          delivery_list_id,
+          event_id,
+          insurer_number,
+          output_mode,
+          exam_month,
+          output_zip_name,
+          output_zip_path,
+          delivery_status,
+          delivery_xml_count,
+          delivery_person_count,
+          created_at,
+          updated_at
+        FROM fund_delivery_runs
+        ORDER BY delivery_run_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def build_hia_download_import_config(raw: dict[str, Any]) -> HiaDownloadImportConfig:
+    section = fund_delivery_section(raw, "download_import")
+    event_id = config_value(raw, "event_id", None)
+    return HiaDownloadImportConfig(
+        project_root=REPO_ROOT,
+        input_zip_dir=_config_path(section.get("input_zip_dir"), HIA_EXPORT_DIR / "input_zip"),
+        archive_zip_dir=_config_path(section.get("archive_zip_dir"), HIA_EXPORT_DIR / "archive_zip"),
+        work_dir=_config_path(section.get("work_dir"), HIA_EXPORT_DIR / "work"),
+        event_id=None if event_id in (None, "") else int(event_id),
+        archive_mode=str(config_value(section, "archive_mode", "copy")),
+        dry_run=config_bool(section, "dry_run", False),
+    )
+
+
+def fund_delivery_actor(user: dict[str, Any]) -> str:
+    employee_number = str(user.get("employee_number") or "").strip()
+    display_name = str(user.get("display_name") or "").strip()
+    if employee_number and display_name:
+        return f"{employee_number} {display_name}"
+    return employee_number or display_name or "health_exam_admin"
+
+
+def build_fund_delivery_list_config(raw: dict[str, Any], *, actor: str | None = None) -> FundDeliveryListConfig:
+    section = fund_delivery_section(raw, "list")
+    event_id = config_value(raw, "event_id", None)
+    insurer_number = str(config_value(raw, "insurer_number", "06139463"))
+    output_mode = str(config_value(section, "output_mode", "EXAM_MONTH"))
+    exam_month = config_value(section, "exam_month", None)
+    list_name = config_value(section, "list_name", None)
+    if not list_name:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        list_name = f"{exam_month}_健保納品リスト_{stamp}" if output_mode == "EXAM_MONTH" else f"全件_健保納品リスト_{stamp}"
+    return FundDeliveryListConfig(
+        event_id=None if event_id in (None, "") else int(event_id),
+        insurer_number=insurer_number,
+        list_name=str(list_name),
+        output_mode=output_mode,
+        exam_month=None if exam_month in (None, "") else str(exam_month),
+        delivery_policy=str(config_value(section, "delivery_policy", "NOT_DELIVERED_ONLY")),
+        same_exam_date_policy=str(config_value(section, "same_exam_date_policy", "LATEST_DOWNLOAD")),
+        grouping_mode=str(config_value(section, "grouping_mode", "ALL")),
+        sender_code=str(config_value(section, "sender_code", "1322100106")),
+        sender_name=config_value(section, "sender_name", None),
+        created_by=config_value(section, "created_by", actor),
+        dry_run=not config_bool(section, "confirm", False),
+    )
+
+
+def build_fund_delivery_zip_config(cur: Any, raw: dict[str, Any], *, actor: str | None = None) -> FundDeliveryZipExportConfig:
+    section = fund_delivery_section(raw, "export")
+    delivery_list_id = config_value(section, "delivery_list_id", None)
+    resolved_id = None if delivery_list_id in (None, "") else int(delivery_list_id)
+    if resolved_id is None:
+        resolved_id = latest_fund_delivery_list_id(cur)
+    if resolved_id is None:
+        raise ValueError("出力待ちの健保納品リストがありません。先にリストを作成してください。")
+    return FundDeliveryZipExportConfig(
+        delivery_list_id=resolved_id,
+        output_base_dir=_config_path(section.get("output_base_dir"), REPO_ROOT / "data" / "fund_delivery" / "output"),
+        xsd_dir=_config_path(section.get("xsd_dir"), REPO_ROOT / "scripts" / "from_medical" / "source" / "XSD" / "mhlw_v4_20230331_v08"),
+        delivery_date=config_value(section, "delivery_date", None),
+        output_seq=int(config_value(section, "output_seq", 0)),
+        send_seq=int(config_value(section, "send_seq", 1)),
+        created_by=config_value(section, "created_by", actor),
+        dry_run=not config_bool(section, "confirm", False),
+    )
+
+
+def build_fund_delivery_submission_config(cur: Any, raw: dict[str, Any], *, actor: str | None = None) -> FundDeliverySubmissionConfig:
+    section = fund_delivery_section(raw, "submission")
+    delivery_list_id = config_value(section, "delivery_list_id", None)
+    resolved_id = None if delivery_list_id in (None, "") else int(delivery_list_id)
+    if resolved_id is None:
+        resolved_id = latest_fund_delivery_exported_list_id(cur)
+    if resolved_id is None:
+        raise ValueError("提出済みにできる健保納品出力がありません。先にZIP出力してください。")
+    member_ids_raw = config_value(section, "delivery_member_ids", [])
+    if isinstance(member_ids_raw, str):
+        member_ids = tuple(int(part.strip()) for part in member_ids_raw.split(",") if part.strip())
+    else:
+        member_ids = tuple(int(item) for item in (member_ids_raw or []))
+    submitted_at_raw = config_value(section, "submitted_at", None)
+    submitted_at = None
+    if submitted_at_raw:
+        text = str(submitted_at_raw)
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                submitted_at = datetime.strptime(text, fmt)
+                break
+            except ValueError:
+                pass
+        if submitted_at is None:
+            raise ValueError("submitted_at は YYYY-MM-DD、YYYY-MM-DD HH:MM:SS、YYYY-MM-DDTHH:MM:SS のいずれかで指定してください。")
+    return FundDeliverySubmissionConfig(
+        delivery_list_id=resolved_id,
+        delivery_member_ids=member_ids,
+        all_members=config_bool(section, "all_members", True),
+        target_status=str(config_value(section, "status", "SUBMITTED")),
+        submitted_at=submitted_at,
+        submitted_by=config_value(section, "submitted_by", actor),
+        submission_note=config_value(section, "note", None),
+        dry_run=not config_bool(section, "confirm", False),
+    )
+
+
+def run_hia_fund_delivery_step(cur: Any, *, action: str, raw: dict[str, Any], user: dict[str, Any]) -> tuple[str, bool]:
+    database = str(config_value(raw, "database", health_db()))
+    actor = fund_delivery_actor(user)
+    if action == "import_download":
+        config = build_hia_download_import_config(raw)
+        run_id = start_run(
+            cur,
+            phase="HIA_IMPORT_DOWNLOADED_XML_ZIP",
+            source="HIA",
+            db_schema=database,
+            db_path=None,
+            input_base=str(config.input_zip_dir),
+            input_file=None,
+            insurer_number=None,
+            dry_run=config.dry_run,
+            limit_rows=None,
+        )
+        summary = import_hia_download_zips(cur, config=config, run_id=run_id)
+        metrics = RunMetrics(
+            files=summary.files_seen,
+            rows_seen=summary.xml_seen,
+            rows_inserted=summary.xml_inserted + summary.person_years_upserted + summary.person_xml_events_upserted,
+            rows_updated=summary.xml_updated,
+            rows_skipped=summary.files_skipped,
+            errors=summary.errors,
+        )
+        finish_run(
+            cur,
+            run_id,
+            metrics,
+            status_override="success" if config.dry_run else None,
+            extra_notes=f"files_imported={summary.files_imported} xml_inserted={summary.xml_inserted} xml_updated={summary.xml_updated}",
+        )
+        return (
+            f"HIA ZIP取込: files={summary.files_seen} imported={summary.files_imported} "
+            f"xml={summary.xml_seen} errors={summary.errors} dry_run={int(config.dry_run)}",
+            config.dry_run,
+        )
+
+    if action == "create_list":
+        config = build_fund_delivery_list_config(raw, actor=actor)
+        run_id = start_run(
+            cur,
+            phase="HIA_CREATE_FUND_DELIVERY_LIST",
+            source="HIA",
+            db_schema=database,
+            db_path=None,
+            input_base=None,
+            input_file=None,
+            insurer_number=config.insurer_number,
+            dry_run=config.dry_run,
+            limit_rows=None,
+        )
+        summary = build_fund_delivery_list(cur, config)
+        metrics = RunMetrics(
+            rows_seen=summary.valid_xmls_seen,
+            rows_inserted=summary.list_members_inserted + summary.list_created,
+            rows_updated=summary.candidates_upserted + summary.person_status_upserted,
+            rows_skipped=summary.skipped_by_delivery_policy,
+        )
+        finish_run(
+            cur,
+            run_id,
+            metrics,
+            status_override="success" if config.dry_run else None,
+            extra_notes=f"list_id={summary.list_id} selected={summary.selected_candidates} members={summary.list_members_seen}",
+        )
+        return (
+            f"納品リスト作成: list_id={summary.list_id} selected={summary.selected_candidates} "
+            f"members={summary.list_members_seen} skipped={summary.skipped_by_delivery_policy} dry_run={int(config.dry_run)}",
+            config.dry_run,
+        )
+
+    if action == "export_zip":
+        config = build_fund_delivery_zip_config(cur, raw, actor=actor)
+        run_id = start_run(
+            cur,
+            phase="HIA_EXPORT_FUND_DELIVERY_ZIP",
+            source="HIA",
+            db_schema=database,
+            db_path=None,
+            input_base=None,
+            input_file=None,
+            insurer_number=None,
+            dry_run=config.dry_run,
+            limit_rows=None,
+        )
+        summary = export_fund_delivery_zip(cur, config=config, etl_run_id=run_id)
+        metrics = RunMetrics(rows_seen=summary.members_seen, rows_inserted=summary.members_written, errors=summary.errors)
+        finish_run(
+            cur,
+            run_id,
+            metrics,
+            status_override="success" if config.dry_run else None,
+            extra_notes=f"delivery_list_id={summary.delivery_list_id} output_zip={summary.output_zip_name}",
+        )
+        return (
+            f"健保納品ZIP出力: list_id={summary.delivery_list_id} run_id={summary.delivery_run_id} "
+            f"members={summary.members_seen} output={summary.output_zip_name} dry_run={int(config.dry_run)}",
+            config.dry_run,
+        )
+
+    if action == "mark_submitted":
+        config = build_fund_delivery_submission_config(cur, raw, actor=actor)
+        run_id = start_run(
+            cur,
+            phase="HIA_MARK_FUND_DELIVERY_SUBMITTED",
+            source="HIA",
+            db_schema=database,
+            db_path=None,
+            input_base=None,
+            input_file=None,
+            insurer_number=None,
+            dry_run=config.dry_run,
+            limit_rows=None,
+        )
+        summary = mark_fund_delivery_submitted(cur, config)
+        metrics = RunMetrics(
+            rows_seen=summary.members_seen,
+            rows_updated=summary.members_updated + summary.runs_updated + summary.person_status_updated,
+            errors=summary.errors,
+        )
+        finish_run(
+            cur,
+            run_id,
+            metrics,
+            status_override="success" if config.dry_run else None,
+            extra_notes=f"delivery_list_id={summary.delivery_list_id} list_status={summary.list_status}",
+        )
+        return (
+            f"提出済み反映: list_id={summary.delivery_list_id} status={summary.list_status} "
+            f"members={summary.members_seen} updated={summary.members_updated} dry_run={int(config.dry_run)}",
+            config.dry_run,
+        )
+
+    raise ValueError(f"未対応の操作です: {action}")
+
+
+def load_fund_delivery_page_data(cur: Any) -> dict[str, Any]:
+    raw = load_fund_delivery_page_config()
+    return {
+        "config": raw,
+        "summary": load_fund_delivery_summary(cur),
+        "download_zips": load_fund_delivery_zip_rows(cur),
+        "delivery_lists": load_fund_delivery_list_rows(cur),
+        "delivery_runs": load_fund_delivery_run_rows(cur),
+    }
 
 
 def load_ops_xml_export_lists(cur: Any, *, limit: int = 30) -> list[dict[str, Any]]:
@@ -1590,6 +2044,57 @@ def file_receipts(request: Request) -> Response:
             "event_options": event_options,
         },
     )
+
+
+@app.get("/hia/fund-delivery", response_class=HTMLResponse)
+def hia_fund_delivery(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        page_data = load_fund_delivery_page_data(cur)
+    return templates.TemplateResponse(
+        "hia_fund_delivery.html",
+        {
+            "request": request,
+            "user": user,
+            **page_data,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+            "can_submit": has_any_permission(user, ("hia_upload_status.edit", "users.manage")),
+        },
+    )
+
+
+@app.post("/hia/fund-delivery/run", response_class=HTMLResponse)
+async def run_hia_fund_delivery(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    action = form.get("action", "").strip()
+    if action == "mark_submitted" and not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            raw = load_fund_delivery_page_config()
+            message, dry_run = run_hia_fund_delivery_step(cur, action=action, raw=raw, user=user)
+            if dry_run:
+                conn.rollback()
+            else:
+                conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/hia/fund-delivery?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/hia/fund-delivery?message={quote(message)}", status_code=303)
 
 
 @app.get("/admin/events", response_class=HTMLResponse)

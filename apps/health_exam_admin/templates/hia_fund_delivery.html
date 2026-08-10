@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% set title = "HIA健保納品" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">HIA → 健保</p>
+    <h1>健保納品</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page export-page">
+  {% if message %}
+    <div class="notice">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>実行</h2>
+        <p class="subtle">設定値は <code>scripts/hia/config/fund_delivery.yml</code> を使います。ボタンは上から順に実行します。</p>
+      </div>
+    </div>
+    <div class="fund-step-grid">
+      <form method="post" action="/hia/fund-delivery/run" class="fund-step-card">
+        <input type="hidden" name="action" value="import_download">
+        <span class="status-pill status-ready">01</span>
+        <strong>HIA ZIP取込</strong>
+        <small>{{ config.download_import.input_zip_dir }} から保険者番号フォルダ配下のZIPを取り込みます。</small>
+        <button type="submit">取込を実行</button>
+      </form>
+      <form method="post" action="/hia/fund-delivery/run" class="fund-step-card">
+        <input type="hidden" name="action" value="create_list">
+        <span class="status-pill status-ready">02</span>
+        <strong>納品リスト作成</strong>
+        <small>{{ config.list.exam_month }} / {{ config.list.delivery_policy }} / {{ config.list.same_exam_date_policy }}</small>
+        <button type="submit">リスト作成</button>
+      </form>
+      <form method="post" action="/hia/fund-delivery/run" class="fund-step-card">
+        <input type="hidden" name="action" value="export_zip">
+        <span class="status-pill status-ready">03</span>
+        <strong>ZIP出力</strong>
+        <small>最新の出力待ちリストを使い、健保納品ZIPを出力します。</small>
+        <button type="submit">ZIP出力</button>
+      </form>
+      <form method="post" action="/hia/fund-delivery/run" class="fund-step-card">
+        <input type="hidden" name="action" value="mark_submitted">
+        <span class="status-pill status-pending">04</span>
+        <strong>提出済み反映</strong>
+        <small>アップロード後に実行します。現在 confirm={{ config.submission.confirm }} です。</small>
+        <button type="submit" {% if not can_submit %}disabled{% endif %}>提出済みにする</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <div class="summary-card"><span>取込ZIP</span><strong>{{ summary.download_zips }}</strong></div>
+    <div class="summary-card"><span>XML</span><strong>{{ summary.download_xmls }}</strong></div>
+    <div class="summary-card"><span>納品リスト</span><strong>{{ summary.delivery_lists }}</strong></div>
+    <div class="summary-card"><span>出力履歴</span><strong>{{ summary.delivery_runs }}</strong></div>
+    <div class="summary-card"><span>納品XML</span><strong>{{ summary.delivery_members }}</strong></div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>納品リスト</h2>
+        <p class="subtle">最新20件。03の未指定実行は最新の出力待ちリストを使います。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table fund-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>リスト</th>
+            <th>状態</th>
+            <th>条件</th>
+            <th>人数</th>
+            <th>作成</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in delivery_lists %}
+          <tr>
+            <td>{{ item.delivery_list_id }}</td>
+            <td><strong>{{ item.list_name }}</strong><small>{{ item.insurer_number }}</small></td>
+            <td><span class="status-pill status-ready">{{ fund_delivery_status_label(item.list_status) }}</span></td>
+            <td><strong>{{ item.output_mode }} {{ item.exam_month or "" }}</strong><small>{{ item.delivery_policy }} / {{ item.same_exam_date_policy }}</small></td>
+            <td><strong>{{ item.member_count or 0 }}人</strong></td>
+            <td><small>{{ item.created_at }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">納品リストはまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>出力履歴</h2>
+        <p class="subtle">HIAへアップロードするZIPと状態を確認します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table fund-run-table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>List</th>
+            <th>状態</th>
+            <th>ZIP</th>
+            <th>人数</th>
+            <th>作成</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in delivery_runs %}
+          <tr>
+            <td>{{ item.delivery_run_id }}</td>
+            <td>{{ item.delivery_list_id }}</td>
+            <td><span class="status-pill status-ready">{{ fund_delivery_status_label(item.delivery_status) }}</span></td>
+            <td><strong>{{ item.output_zip_name }}</strong><small>{{ item.output_zip_path }}</small></td>
+            <td><strong>{{ item.delivery_person_count }}人</strong><small>XML {{ item.delivery_xml_count }}</small></td>
+            <td><small>{{ item.created_at }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">出力履歴はまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>取込ZIP</h2>
+        <p class="subtle">最新20件。エラーがある場合はZIPまたはXMLの不足情報を確認します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table fund-zip-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>ZIP</th>
+            <th>状態</th>
+            <th>XML</th>
+            <th>受領</th>
+            <th>理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in download_zips %}
+          <tr>
+            <td>{{ item.download_zip_id }}</td>
+            <td><strong>{{ item.zip_name }}</strong><small>{{ item.folder_name }} / {{ item.facility_code }}</small></td>
+            <td><span class="status-pill status-ready">{{ fund_delivery_status_label(item.import_status) }}</span></td>
+            <td><strong>{{ item.xml_count_success }}/{{ item.xml_count_total }}</strong><small>error {{ item.xml_count_error }}</small></td>
+            <td><strong>{{ item.dl_date }}</strong><small>送信 {{ item.send_seq }}</small></td>
+            <td><small>{{ item.import_reason or "" }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">取込ZIPはまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
