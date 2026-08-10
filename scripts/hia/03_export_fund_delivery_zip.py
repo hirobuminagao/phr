@@ -78,6 +78,9 @@ def resolve_delivery_list_id(cur: Any, requested_id: int | None) -> int:
 
 def _delivery_date(value: str | None) -> str:
     if value:
+        text = value.strip()
+        if len(text) != 8 or not text.isdigit():
+            raise ValueError(f"delivery_date must be YYYYMMDD: {value}")
         return value
     from datetime import date
 
@@ -102,14 +105,23 @@ def next_send_seq(
         (prefix + "%.zip",),
     )
     max_seq = 0
+    found = False
     for row in cur.fetchall() or []:
         name = str(row["output_zip_name"])
         if not name.startswith(prefix) or not name.endswith(".zip"):
             continue
         seq_text = name[len(prefix) : -4]
         if seq_text.isdigit():
+            found = True
             max_seq = max(max_seq, int(seq_text))
-    return max_seq + 1
+    return max_seq + 1 if found else 0
+
+
+def validate_output_digits(*, output_seq: int, send_seq: int) -> None:
+    if not 0 <= output_seq <= 9:
+        raise ValueError(f"output_seq must be 0-9: {output_seq}")
+    if not 0 <= send_seq <= 9:
+        raise ValueError(f"send_seq must be 0-9: {send_seq}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -186,6 +198,7 @@ def main() -> int:
                     next_auto_send_seq += 1
                 else:
                     send_seq = int(args.send_seq)
+                validate_output_digits(output_seq=args.output_seq, send_seq=send_seq)
 
                 config = FundDeliveryZipExportConfig(
                     delivery_list_id=delivery_list_id,

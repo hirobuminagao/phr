@@ -1047,7 +1047,10 @@ def build_fund_delivery_list_config(raw: dict[str, Any], *, actor: str | None = 
 
 def _delivery_date(value: str | None) -> str:
     if value:
-        return value
+        text = value.strip()
+        if len(text) != 8 or not text.isdigit():
+            raise ValueError(f"export.delivery_date は YYYYMMDD で指定してください: {value}")
+        return text
     return datetime.now().strftime("%Y%m%d")
 
 
@@ -1069,13 +1072,22 @@ def next_fund_delivery_send_seq(
         (prefix + "%.zip",),
     )
     max_seq = 0
+    found = False
     for row in cur.fetchall() or []:
         name = str(row["output_zip_name"])
         if name.startswith(prefix) and name.endswith(".zip"):
             seq_text = name[len(prefix) : -4]
             if seq_text.isdigit():
+                found = True
                 max_seq = max(max_seq, int(seq_text))
-    return max_seq + 1
+    return max_seq + 1 if found else 0
+
+
+def validate_fund_delivery_output_digits(*, output_seq: int, send_seq: int) -> None:
+    if not 0 <= output_seq <= 9:
+        raise ValueError(f"export.output_seq は 0-9 の一桁で指定してください: {output_seq}")
+    if not 0 <= send_seq <= 9:
+        raise ValueError(f"export.send_seq は 0-9 の一桁または auto で指定してください: {send_seq}")
 
 
 def fund_delivery_list_header(cur: Any, delivery_list_id: int) -> dict[str, Any]:
@@ -1122,6 +1134,7 @@ def build_fund_delivery_zip_configs(cur: Any, raw: dict[str, Any], *, actor: str
             next_send_seq += 1
         else:
             send_seq = int(send_seq_raw)
+        validate_fund_delivery_output_digits(output_seq=output_seq, send_seq=send_seq)
         configs.append(FundDeliveryZipExportConfig(
             delivery_list_id=list_id,
             output_base_dir=_config_path(section.get("output_base_dir"), REPO_ROOT / "data" / "fund_delivery" / "output"),
