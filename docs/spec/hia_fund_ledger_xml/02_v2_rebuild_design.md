@@ -455,23 +455,19 @@ XMLを人×年度へ紐付けた履歴。
 ```text
 scripts/hia/
   01_import_downloaded_xml_zip.py
-  02_build_fund_delivery_candidates.py
-  03_create_fund_delivery_list.py
-  04_build_fund_delivery_zip.py
-  05_summarize_fund_delivery.py
+  02_create_fund_delivery_list.py
+  03_export_fund_delivery_zip.py
+  04_mark_fund_delivery_submitted.py
 ```
 
 処理本体は `scripts/hia/script_lib` に置く。
 
 ```text
 scripts/hia/script_lib/
-  hia_xml_zip_io.py
-  hia_xml_parser.py
-  hia_download_repository.py
-  hia_person_linker.py
-  fund_delivery_selector.py
-  fund_delivery_zip_builder.py
-  fund_delivery_summary.py
+  hia_download_importer.py
+  hia_download_xml_parser.py
+  fund_delivery_list_builder.py
+  fund_delivery_zip_exporter.py
 ```
 
 設定は `scripts/hia/config` に置く。
@@ -506,28 +502,22 @@ HIAからダウンロードしたZIPを取り込む。
 - ZIPの同一性は `insurer_number + zip_name` を基本にする。
 - `zip_sha256` は検索・確認用であり、履歴台帳上の一意制約にはしない。
 
-### 02_build_fund_delivery_candidates.py
-
-HIAダウンロードXML台帳から、人×年度の納品候補と現在状態を作る。
-
-出力:
-
-- `hia_person_years`
-- `hia_person_xml_events`
-- `fund_delivery_xml_candidates`
-- `fund_delivery_person_status`
-
-### 03_create_fund_delivery_list.py
+### 02_create_fund_delivery_list.py
 
 健保納品ZIPの出力リストを作る。
 
 入力:
 
+- `hia_download_xmls`
+- `hia_person_years`
+- `hia_person_xml_events`
 - `fund_delivery_xml_candidates`
 - `fund_delivery_person_status`
 
 出力:
 
+- `fund_delivery_xml_candidates`
+- `fund_delivery_person_status`
 - `fund_delivery_lists`
 - `fund_delivery_list_members`
 
@@ -535,7 +525,7 @@ HIAダウンロードXML台帳から、人×年度の納品候補と現在状態
 
 CLI初期実装では、受診月・健保・提出状態を条件にリストを作成できるようにする。
 
-### 04_build_fund_delivery_zip.py
+### 03_export_fund_delivery_zip.py
 
 健保納品ZIPを作る。
 
@@ -549,11 +539,39 @@ CLI初期実装では、受診月・健保・提出状態を条件にリスト�
 
 出力:
 
-- `data/hia_export/output_to_fund`
+- `data/fund_delivery/output/{yyyymmdd_hhmmss}/{exam_month}`
 - `fund_delivery_runs`
 - `fund_delivery_members`
 
-### 05_summarize_fund_delivery.py
+方針:
+
+- `fund_delivery_lists` / `fund_delivery_list_members` に固定された対象だけを出す。
+- 出力時に候補の再選定はしない。
+- 初期実装は `grouping_mode = ALL` のみ対応する。
+- 元ZIP内の個人XMLを読み、出力ZIP内では `DATA/h000001.xml` から連番化する。
+- `ix08_V08.xml` / `su08_V08.xml` は、元ZIPの原文が使える場合は件数のみ最小置換する。
+- 元ZIP側に件数タグがない場合は、XSDに合う最小XMLを生成する。
+- `XSD` は `scripts/from_medical/source/XSD/mhlw_v4_20230331_v08` を同梱する。
+- `fund_delivery_runs.delivery_status` と `fund_delivery_members.member_status` は `CREATED` とし、健保提出済みへの更新は `04` で行う。
+
+### 04_mark_fund_delivery_submitted.py
+
+健保への提出完了を反映する。
+
+入力:
+
+- `fund_delivery_lists`
+- `fund_delivery_runs`
+- `fund_delivery_members`
+- `fund_delivery_person_status`
+
+出力:
+
+- `fund_delivery_lists.submitted_*`
+- `fund_delivery_members.submitted_*`
+- `fund_delivery_person_status.last_delivered_*`
+
+## サマリー
 
 納品履歴からサマリーを出す。
 

@@ -96,6 +96,25 @@ python scripts/hia/02_create_fund_delivery_list.py --event-id 2 --exam-month 202
 
 `02` は `--confirm` を付けない限りDBへリストを作らない。
 
+健保納品ZIP出力 dry-run:
+
+```bash
+python scripts/hia/03_export_fund_delivery_zip.py --delivery-list-id 1
+```
+
+健保納品ZIP出力 apply:
+
+```bash
+python scripts/hia/03_export_fund_delivery_zip.py --delivery-list-id 1 --confirm
+```
+
+`03` は `fund_delivery_lists` / `fund_delivery_list_members` に固定された対象だけを出力する。
+候補の再選定は行わない。
+
+初期実装の出力先は `data/fund_delivery/output/{yyyymmdd_hhmmss}/{exam_month}/`。
+ZIP名は `送信元コード_保険者番号_提出日出力番号_送信回数.zip` 形式とする。
+例: `1322100106_06139463_202608100_1.zip`
+
 ---
 
 # 基本設計方針
