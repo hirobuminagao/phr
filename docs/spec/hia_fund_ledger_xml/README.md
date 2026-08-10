@@ -25,9 +25,11 @@ ZIP import
   ↓
 XML検証 / 正規化
   ↓
-hia_xml_events ledger
+hia_download_xmls
   ↓
 hia_person_years ledger
+  ↓
+hia_person_xml_events
   ↓
 納品対象抽出
   ↓
@@ -110,6 +112,33 @@ XML 読込時も **同一正規化関数**で変換して照合する。
 ここでいう同一正規化関数とは、HIA_fund_ledger_xml 専用実装ではなく、identity 共通lib（`scripts/lib/identity/`）に定義された primitive / base_norm / field / builder の各レイヤを指す。
 
 本パイプラインは、共通libで生成された match 値・person_id_custom・identity_hash を前提に人物年度台帳を構築する。
+
+---
+
+# v2 再構築方針
+
+2026-08時点で、HIAから健保へのXML納品工程は、既存 `scripts/work_folder` 実装を参考にしつつ、`scripts/hia` と `health_exam_result` の正式台帳へ再構築する方針とする。
+
+v2では、現行 `hia_xml_events` が兼ねている以下の責務を分ける。
+
+- HIAからダウンロードしたXML原本台帳
+- 人×年度へのXML紐付け履歴
+- 健保納品ZIP作成履歴
+- 健保納品メンバー履歴
+
+採用する主なテーブル名は以下とする。
+
+- `health_exam_result.hia_download_zips`
+- `health_exam_result.hia_download_xmls`
+- `health_exam_result.hia_person_years`
+- `health_exam_result.hia_person_xml_events`
+- `health_exam_result.fund_delivery_runs`
+- `health_exam_result.fund_delivery_members`
+- `health_exam_result.fund_delivery_exclusion_rules`
+
+詳細は以下を参照する。
+
+- `02_v2_rebuild_design.md`
 
 ---
 
@@ -209,7 +238,11 @@ XML検証
 
 ---
 
-# 台帳構造（v1 実装）
+# 台帳構造（v1 実装・参考）
+
+この章は旧 `work_other` / `scripts/work_folder` 実装の整理である。
+
+v2では `hia_xml_events` をそのまま正式採用せず、XML原本台帳は `hia_download_xmls`、人への紐付け履歴は `hia_person_xml_events` に分ける。
 
 本台帳は HIA_fund_ledger_xml 固有の ledger であるが、人物識別に用いる canonical 値は全世界観共通の identity 共通lib に従って生成する。
 
