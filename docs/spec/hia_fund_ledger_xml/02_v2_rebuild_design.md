@@ -206,6 +206,12 @@ XMLを人×年度へ紐付けた履歴。
 
 出力runは出力リストを元に作成する。HIAから受け取ったZIP単位ではなく、原則として受診月単位で納品ZIPを作る。
 
+初期実装では健診機関単位に分割せず、健保向けにまとめて出力する。
+
+- `grouping_mode = ALL`
+- 送信元コードは `1322100106`
+- 後続で健診機関単位が必要になった場合は `grouping_mode = BY_FACILITY` を追加実装する。
+
 主な項目:
 
 - `delivery_run_id`
@@ -215,6 +221,9 @@ XMLを人×年度へ紐付けた履歴。
 - `insurer_number`
 - `output_mode`
 - `exam_month`
+- `grouping_mode`
+- `sender_code`
+- `sender_name`
 - `delivery_policy`
 - `same_exam_date_policy`
 - `include_delivery_status`
@@ -302,6 +311,13 @@ XMLを人×年度へ紐付けた履歴。
 
 画面では、候補を検索し、対象者をこのリストへ追加してから出力する。
 
+リスト作成時点で出力単位と送信元を固定し、出力runへ写す。
+
+初期値:
+
+- `grouping_mode = ALL`
+- `sender_code = 1322100106`
+
 主な項目:
 
 - `delivery_list_id`
@@ -311,6 +327,9 @@ XMLを人×年度へ紐付けた履歴。
 - `list_status`
 - `output_mode`
 - `exam_month`
+- `grouping_mode`
+- `sender_code`
+- `sender_name`
 - `delivery_policy`
 - `same_exam_date_policy`
 - `include_delivery_status`

@@ -63,6 +63,17 @@ hia_person_xml_events
 
 `02` 以降で必要になる候補選定、同日重複の新旧選択、除外ルール適用、サマリー集計は、個別スクリプトとして表へ出さず `script_lib` に分ける。
 
+## 初期出力単位
+
+健保向け納品では、初期実装は健診機関単位に分割せず、健保向けにまとめて出力する。
+
+- `grouping_mode = ALL`
+- 送信元コードは `1322100106`
+- `fund_delivery_lists` にリスト作成時の `grouping_mode` / `sender_code` を保持する。
+- `fund_delivery_runs` に出力時点の `grouping_mode` / `sender_code` を写す。
+
+後続バージョンで健診機関単位出力が必要になった場合は、画面のリスト作成時に `ALL` / `BY_FACILITY` を切り替え、`03_export_fund_delivery_zip.py` が `grouping_mode` に従って出力グループを分ける。
+
 ---
 
 # 基本設計方針

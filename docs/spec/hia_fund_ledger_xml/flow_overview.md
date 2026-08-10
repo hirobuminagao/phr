@@ -106,6 +106,8 @@ hia_person_years 再集計（人物×年度スナップショット）
 
 ・対象受診月
 ・未提出/再提出/全件などの出力ポリシー
+・初期出力単位は grouping_mode=ALL
+・送信元コードは 1322100106
 ・同一人物・同一受診日が複数ある場合の新旧選択
 ・exclusion_rules 適用
 ・fund_delivery_lists / fund_delivery_list_members 更新

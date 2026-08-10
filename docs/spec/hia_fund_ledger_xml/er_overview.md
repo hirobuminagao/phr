@@ -102,6 +102,8 @@ The v2 design separates these responsibilities:
 | list_name                   |
 | output_mode                 |
 | exam_month                  |
+| grouping_mode               |
+| sender_code                 |
 | delivery_policy             |
 | same_exam_date_policy       |
 | list_status                 |
@@ -132,6 +134,8 @@ The v2 design separates these responsibilities:
 | event_id                    |
 | output_mode                 |
 | exam_month                  |
+| grouping_mode               |
+| sender_code                 |
 | output_zip_name             |
 | output_zip_path             |
 | delivery_status             |
