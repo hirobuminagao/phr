@@ -10,6 +10,36 @@ Current as of 2026-08-05.
 
 ## Decisions
 
+### DDL / Migration Operation Rules
+
+- DDLは新規環境を作るための最新版スキーマ定義として更新してよい。
+- migrationは既存環境を最新版DDLへ近づけるための差分履歴であり、実行環境に一度でも適用された可能性がある時点で変更禁止とする。
+- migrationを変更できるのは、実行環境にまだ適用していないことを明確に確認できている場合だけとする。
+- 適用済みまたは適用済みの可能性があるmigrationに不備、命名変更、カラム不足、view差分が見つかった場合は、既存migrationを編集せず、新しい日付・連番のrepair/add/change migrationを追加する。
+- DDLを更新した場合、既存DBが対象となる変更については、同じ変更を表す新規migrationを同時に作成する。
+- DDLのみ更新してmigrationを後回しにしない。
+- migrationファイル名は `YYYYMMDD_NNN_<target_db_name>_<action>_<summary>.sql` を基本とし、配置先は機能名ではなく変更対象DB名で決める。
+- 実行環境でduplicateが出た場合は、同名migrationを編集して再実行するのではなく、`information_schema` で現状を確認し、必要に応じて救済migrationを作る。
+- fresh構築ではDDLを正とし、既存環境では適用済みmigration履歴と新規migrationを正とする。
+- 今回の反省として、`20260806_002` の出力リストテーブル名変更は既存migration更新ではなく、新規repair migrationで扱うべきだった。以後同様の変更は新規migrationで行う。
+
+### Script and App Placement Rules
+
+- 人が直接実行する健診結果取込・チェック・出力の業務CLIは `scripts/from_medical/` 直下に置く。
+- `scripts/from_medical/` 直下には、運用手順上の番号付き入口スクリプトを置く。例: `01_scan_files.py`, `02_import_xml.py`, `02_02_exam_result_csv_import.py`, `03_00_check_imported_exam_ledgers.py`, `03_05_create_xml_export_list.py`, `04_export_hia_xml.py`。
+- 医療機関受領物の取込・法定check・HIA XML出力に閉じる業務固有共通処理は `scripts/from_medical/script_lib/` に置く。
+- 医療機関取込・出力のYAML設定は `scripts/from_medical/config/` に置く。
+- HIAダッシュボードCSVなどHIA側から取得する情報の取込・同期は `scripts/hia/` に置く。
+- 健診eventに対する人単位の母集団作成、状態同期、HIA/予約/納品状態の集約は `scripts/health_exam_event/` に置く。
+- 汎用的に他処理から使うDB lookup、normalize、identity、CSV loader、住所補完などは `scripts/lib/` に置く。
+- 郵便番号CSV loaderなど、業務フローではなくマスタ更新や検証のための保守用スクリプトは `scripts/dev_tools/` に置く。
+- FastAPIの社内ローカル管理画面は `apps/health_exam_admin/` に置く。画面はDB正本を直接置き換えるのではなく、人の確認、補正、実行指示、状態記帳の入口とする。
+- 画面から既存CLI相当の処理を実行する場合でも、業務ロジックは可能な限り `scripts/*/script_lib` または `scripts/lib` へ寄せ、FastAPI側は認証、権限、入力、画面表示、監査ログ、処理呼び出しに集中させる。
+- 画面専用のユーザー、権限、セッション、監査ログは `phr_app` DBへ置く。
+- 健診結果、取込、チェック、出力リスト、XML/ZIP出力履歴、HIAアップロード状態などの業務データは `health_exam_result` DBへ置く。
+- 健診機関、alias、CSV format、CSV mapping、normalize辞書、郵便番号住所、出力ポリシーなどの共通マスタは `phr_master` DBへ置く。
+- 加入者、event、person_event、人単位状態は既存 `dev_phr` DBを使う。
+
 ### Primary Objective
 
 - 本 spec の主目的は `02_02_exam_result_csv_import` の設計前提を固めることである。

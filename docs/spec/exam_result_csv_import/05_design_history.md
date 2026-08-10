@@ -1877,7 +1877,7 @@ FastAPI管理画面の現状同期と健診機関・alias管理の実装区切�
 
 - `health_exam_result` に、取込結果、検査値、清書case、XML出力履歴に加えて、画面で人が操作する出力対象リストが増えた。
 - `xml_export_lists` / `xml_export_list_cases` という名前だと、実際に出力されたXML/ZIP履歴なのか、人が作る作業箱なのかが分かりにくい。
-- 画面DBは実行環境へまだ反映していないため、既存データ移行よりも、正式適用前にDDLとコードの命名を直す方が安全である。
+- 当初は画面DBが実行環境へまだ反映されていない前提でDDLと既存migration名を更新したが、実行環境では旧名migrationが適用済みだったため、duplicateや旧名/新名混在を招いた。
 
 ### 決定
 
@@ -1886,5 +1886,43 @@ FastAPI管理画面の現状同期と健診機関・alias管理の実装区切�
 - `xml_export_zips` / `xml_export_members` は、実際に出力されたXML/ZIP履歴なので現行名を維持する。
 - `exam_export_cases` / `exam_export_case_values` は、清書XMLを作るための人単位データなので現行名を維持する。
 - 主キー・参照カラム名の `xml_export_list_id` / `xml_export_list_case_id` は、既存CLI引数、URL、ZIP履歴参照との互換性を優先して今回は維持する。
-- 実行環境には未適用のため、既存テーブルrename migrationは作成しない。
-- fresh適用用DDLと `20260806_002_health_exam_result_create_ops_xml_export_lists.sql` を正とする。
+- 既に実行環境へ適用された可能性があるmigrationは変更してはならない。
+- DDLはfresh構築用の最新版として更新し、既存環境向けには新規repair migrationを追加する。
+- 旧名 `xml_export_lists` / `xml_export_list_cases` が存在する環境は、`20260810_001_health_exam_result_fix_ops_xml_export_list_table_names.sql` で `ops_` 名へ寄せる。
+
+---
+
+## DH-20260810-03 / 2026-08-10 JST
+
+### テーマ
+
+DDL / migration運用ルールとスクリプト配置責務の明文化
+
+### 背景
+
+- 画面実装、出力リスト、HIAアップロード作業、健診機関管理が進み、`health_exam_result` / `phr_master` / `phr_app` / `dev_phr` にまたがる変更が増えている。
+- `20260806_002` の出力リストテーブル名変更で、DDL更新とmigration履歴更新を混同し、実行環境でduplicateが発生した。
+- 今後、HIAアップロード後の健保納品、HIAダッシュボード、予約、紙健診、基本情報補正など画面/スクリプトが増えるため、配置責務も明確にしておく必要がある。
+
+### 決定
+
+- DDLは最新版スキーマとして更新してよい。
+- migrationは既存環境への差分履歴であり、実行環境に一度でも適用された可能性がある時点で変更禁止とする。
+- migrationを変更できるのは、実行環境にまだ適用していないことを明確に確認できている場合だけとする。
+- 適用済みまたは適用済みの可能性があるmigrationに不備、命名変更、カラム不足、view差分が見つかった場合は、既存migrationを編集せず、新しい日付・連番のrepair/add/change migrationを追加する。
+- duplicateが出た場合は、同名migrationを編集して再実行するのではなく、`information_schema` で現状を確認し、必要に応じて救済migrationを作る。
+- 人が直接実行する健診結果取込・チェック・出力CLIは `scripts/from_medical/` 直下に置く。
+- 医療機関受領物処理に閉じた共通ロジックは `scripts/from_medical/script_lib/`、設定は `scripts/from_medical/config/` に置く。
+- HIA側から取得する情報の取込・同期は `scripts/hia/` に置く。
+- eventに対する人単位の母集団、状態同期、HIA/予約/納品状態の集約は `scripts/health_exam_event/` に置く。
+- PHR内で共通利用するlookup、identity、normalize、CSV loader、住所補完は `scripts/lib/` に置く。
+- 保守・検証・マスタ更新用ツールは `scripts/dev_tools/` に置く。
+- FastAPI社内管理画面は `apps/health_exam_admin/` に置き、画面は確認、補正、実行指示、状態記帳、監査ログの入口とする。
+
+### 後続
+
+- HIAから健保へのXML納品部分は、HIA後工程としてリファクタリングする。
+- 既存の同一人物重複納品除外スクリプトは、2025年度後半時点の「古い出力を残して新しい方から取り除く」用途が中心だった。
+- 今回は、整理前にHIAへアップロード済みのXMLがあり、その後に修正済みの新しいXMLを健保へ納品したいケースがある。
+- そのため、後続リファクタリングでは「旧出力優先で新出力を落とす」だけでなく、「修正版を正として納品対象にする」モードを設計する。
+- 判定キーは、event、HIA加入者IDまたはsubscriber、健診日、健診機関、出力run、修正版/正式版の区別を候補とする。
