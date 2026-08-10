@@ -87,41 +87,42 @@ def _delivery_date(value: str | None) -> str:
     return date.today().strftime("%Y%m%d")
 
 
-def next_send_seq(
+def next_output_seq(
     cur: Any,
     *,
     sender_code: str,
     insurer_number: str,
     delivery_date: str,
-    output_seq: int,
+    service_event_type_code: str,
 ) -> int:
-    prefix = f"{sender_code}_{insurer_number}_{delivery_date}{output_seq}_"
+    prefix = f"{sender_code}_{insurer_number}_{delivery_date}"
+    suffix = f"_{service_event_type_code}.zip"
     cur.execute(
         """
         SELECT output_zip_name
           FROM fund_delivery_runs
          WHERE output_zip_name LIKE %s
         """,
-        (prefix + "%.zip",),
+        (prefix + "%",),
     )
-    max_seq = 0
+    max_seq = -1
     found = False
     for row in cur.fetchall() or []:
         name = str(row["output_zip_name"])
-        if not name.startswith(prefix) or not name.endswith(".zip"):
+        if not name.startswith(prefix) or not name.endswith(suffix):
             continue
-        seq_text = name[len(prefix) : -4]
+        seq_text = name[len(prefix) : -len(suffix)]
         if seq_text.isdigit():
             found = True
             max_seq = max(max_seq, int(seq_text))
     return max_seq + 1 if found else 0
 
 
-def validate_output_digits(*, output_seq: int, send_seq: int) -> None:
+def validate_output_digits(*, output_seq: int, service_event_type_code: str) -> None:
     if not 0 <= output_seq <= 9:
         raise ValueError(f"output_seq must be 0-9: {output_seq}")
-    if not 0 <= send_seq <= 9:
-        raise ValueError(f"send_seq must be 0-9: {send_seq}")
+    if len(service_event_type_code) != 1 or not service_event_type_code.isdigit():
+        raise ValueError(f"service_event_type_code must be one digit: {service_event_type_code}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -142,8 +143,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-base-dir", type=Path, default=_path_from_config(section.get("output_base_dir"), DEFAULT_OUTPUT_DIR))
     parser.add_argument("--xsd-dir", type=Path, default=_path_from_config(section.get("xsd_dir"), DEFAULT_XSD_DIR))
     parser.add_argument("--delivery-date", default=config_value(section, "delivery_date", None), help="YYYYMMDD. Defaults to today.")
-    parser.add_argument("--output-seq", type=int, default=int(config_value(section, "output_seq", 0)), help="MHLW-style output sequence digit.")
-    parser.add_argument("--send-seq", default=str(config_value(section, "send_seq", 1)), help="MHLW-style send sequence. Use 'auto' to increment per output ZIP.")
+    parser.add_argument("--output-seq", default=str(config_value(section, "output_seq", 0)), help="MHLW same-day output sequence digit. Use 'auto' to increment per output ZIP.")
+    parser.add_argument("--service-event-type-code", default=str(config_value(section, "service_event_type_code", 1)), help="MHLW service event type code. Health check result is 1.")
     parser.add_argument("--created-by", default=config_value(section, "created_by", None))
     parser.add_argument(
         "--confirm",
@@ -176,37 +177,36 @@ def main() -> int:
 
         try:
             summaries = []
-            auto_send_seq = str(args.send_seq).strip().lower() == "auto"
-            next_auto_send_seq: int | None = None
+            auto_output_seq = str(args.output_seq).strip().lower() == "auto"
+            next_auto_output_seq: int | None = None
             for delivery_list_id in delivery_list_ids:
-                list_row = None
-                send_seq: int
-                if auto_send_seq:
+                output_seq: int
+                if auto_output_seq:
                     from scripts.hia.script_lib.fund_delivery_zip_exporter import load_delivery_list
 
                     list_row = load_delivery_list(cur, delivery_list_id)
                     delivery_date = _delivery_date(args.delivery_date)
-                    if next_auto_send_seq is None:
-                        next_auto_send_seq = next_send_seq(
+                    if next_auto_output_seq is None:
+                        next_auto_output_seq = next_output_seq(
                             cur,
                             sender_code=str(list_row["sender_code"]),
                             insurer_number=str(list_row["insurer_number"]),
                             delivery_date=delivery_date,
-                            output_seq=args.output_seq,
+                            service_event_type_code=str(args.service_event_type_code),
                         )
-                    send_seq = next_auto_send_seq
-                    next_auto_send_seq += 1
+                    output_seq = next_auto_output_seq
+                    next_auto_output_seq += 1
                 else:
-                    send_seq = int(args.send_seq)
-                validate_output_digits(output_seq=args.output_seq, send_seq=send_seq)
+                    output_seq = int(args.output_seq)
+                validate_output_digits(output_seq=output_seq, service_event_type_code=str(args.service_event_type_code))
 
                 config = FundDeliveryZipExportConfig(
                     delivery_list_id=delivery_list_id,
                     output_base_dir=args.output_base_dir,
                     xsd_dir=args.xsd_dir,
                     delivery_date=args.delivery_date,
-                    output_seq=args.output_seq,
-                    send_seq=send_seq,
+                    output_seq=output_seq,
+                    service_event_type_code=str(args.service_event_type_code),
                     created_by=args.created_by,
                     dry_run=dry_run,
                 )

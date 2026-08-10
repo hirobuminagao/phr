@@ -39,10 +39,10 @@ export:
   xsd_dir: scripts/from_medical/source/XSD/mhlw_v4_20230331_v08
   # blank = 実行日(today)。任意指定する場合は YYYYMMDD。
   delivery_date:
-  # 厚労省伝送ZIP名の出力番号。0-9の一桁。
-  output_seq: 0
-  # auto = 同一提出日・送信元・保険者番号・出力番号の既存出力を見て0始まりで送信回数を採番する。指定する場合は0-9の一桁。
-  send_seq: auto
+  # 厚労省伝送ZIP/XML名の同日作成回数。0-9の一桁。autoなら既存出力を見て0始まりで採番。
+  output_seq: auto
+  # 厚労省伝送ZIP/XML名の実施区分コード。健診結果は1。
+  service_event_type_code: "1"
   created_by:
   # false = dry-run、true = ZIP作成とDB反映
   confirm: true

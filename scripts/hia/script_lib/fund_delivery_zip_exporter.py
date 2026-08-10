@@ -29,7 +29,7 @@ class FundDeliveryZipExportConfig:
     xsd_dir: Path = DEFAULT_XSD_DIR
     delivery_date: str | None = None
     output_seq: int = 0
-    send_seq: int = 1
+    service_event_type_code: str = "1"
     created_by: str | None = None
     dry_run: bool = True
 
@@ -169,7 +169,16 @@ def _output_zip_name(config: FundDeliveryZipExportConfig, list_row: dict[str, An
     delivery_date = config.delivery_date or _today_yyyymmdd()
     sender_code = str(list_row["sender_code"])
     insurer_number = str(list_row["insurer_number"])
-    return f"{sender_code}_{insurer_number}_{delivery_date}{config.output_seq}_{config.send_seq}.zip"
+    return f"{sender_code}_{insurer_number}_{delivery_date}{config.output_seq}_{config.service_event_type_code}.zip"
+
+
+def _output_data_xml_name(config: FundDeliveryZipExportConfig, list_row: dict[str, Any], serial_no: int) -> str:
+    delivery_date = config.delivery_date or _today_yyyymmdd()
+    sender_code = str(list_row["sender_code"])
+    return (
+        f"h{sender_code}{delivery_date}{config.output_seq}"
+        f"{config.service_event_type_code}{serial_no:06d}.xml"
+    )
 
 
 def _read_zip_member(row: dict[str, Any]) -> bytes:
@@ -267,7 +276,7 @@ def _write_payload_dir(
     data_dir.mkdir(parents=True, exist_ok=True)
     written_rows: list[dict[str, Any]] = []
     for index, row in enumerate(rows, start=1):
-        output_filename = f"h{index:06d}.xml"
+        output_filename = _output_data_xml_name(config, list_row, index)
         content = _read_zip_member(row)
         output_path = data_dir / output_filename
         output_path.write_bytes(content)
@@ -336,7 +345,8 @@ def create_delivery_run(
             member_count,
             member_count,
             config.created_by,
-            f"source_zip_count={source_zip_count}; output_seq={config.output_seq}; send_seq={config.send_seq}",
+            f"source_zip_count={source_zip_count}; output_seq={config.output_seq}; "
+            f"service_event_type_code={config.service_event_type_code}",
         ),
     )
     return int(cur.lastrowid)

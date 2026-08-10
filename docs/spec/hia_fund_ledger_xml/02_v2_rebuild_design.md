@@ -548,7 +548,8 @@ CLI初期実装では、受診月・健保・提出状態を条件にリスト�
 - `fund_delivery_lists` / `fund_delivery_list_members` に固定された対象だけを出す。
 - 出力時に候補の再選定はしない。
 - 初期実装は `grouping_mode = ALL` のみ対応する。
-- 元ZIP内の個人XMLを読み、出力ZIP内では `DATA/h000001.xml` から連番化する。
+- 元ZIP内の個人XMLを読み、出力ZIP内では厚労省の送付用ファイルアーカイブ仕様に合わせて `DATA/h{送信元コード}{提出日}{同日作成回数}{実施区分コード}{連番6桁}.xml` へ連番化する。
+- 実施区分コードは健診結果のため `1` とする。
 - `ix08_V08.xml` / `su08_V08.xml` は、元ZIPの原文が使える場合は件数のみ最小置換する。
 - 元ZIP側に件数タグがない場合は、XSDに合う最小XMLを生成する。
 - `XSD` は `scripts/from_medical/source/XSD/mhlw_v4_20230331_v08` を同梱する。
