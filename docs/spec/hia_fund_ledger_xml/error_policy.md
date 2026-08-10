@@ -80,27 +80,27 @@ XML 検証
     ↓
     import_status = ERROR
     ↓
-    hia_import_zip_errors に記録
+    hia_download_zips / hia_download_xmls にエラー状態を記録
     ↓
     hia_person_years 未更新
     ↓
-    hia_xml_events 未登録
+    hia_person_xml_events 未登録
 ```
 
-重要なのは、**エラー内容は記録するが ledger は更新しない** こと。
+重要なのは、**ZIP/XML原本台帳にはエラー内容を記録するが、人年度台帳と人イベント台帳は更新しない** こと。
 
 ---
 
-# 記録するエラー情報（v1 実装）
+# 記録するエラー情報（v2）
 
 エラーは、少なくとも以下を追跡できるようにする。
 
-- zip_id
+- download_zip_id
 - zip_name
 - xml_filename
+- xml_inner_path
 - error_code
-- error_message
-- error_detail
+- parse_reason
 - created_at
 
 必要に応じて、複数 XML のエラーを 1 ZIP に紐づけて保持する。
@@ -124,11 +124,11 @@ ZIP 取込
 ↓
 再取込
 ↓
-正常時のみ ledger 記帳
+正常時のみ hia_person_years / hia_person_xml_events 反映
 ```
 
-ここで重要なのは、**初回エラー時点では ledger に何も書かれていない** こと。
-これにより再取込時の二重記帳や不整合を防ぐ。
+ここで重要なのは、**初回エラー時点では人年度台帳へ反映しない** こと。
+ZIP/XML原本台帳にはエラー証跡を残し、再取込時の原因追跡に使う。
 
 ---
 
@@ -148,14 +148,14 @@ XML 単位で部分成功にすると、以下の事故が起こりやすい。
 
 # ledger 更新の条件
 
-以下の条件を **すべて満たした ZIP のみ** ledger 更新対象とする。
+以下の条件を **すべて満たした XML のみ** 人年度台帳への反映対象とする。
 
 - XML 構造が読める
 - `genderCode` が存在する
 - `exam_date` が存在する
 - 人物照合キーが生成できる
 
-条件を 1 つでも満たさない場合は、未記帳エラーとする。
+条件を 1 つでも満たさない場合は、`hia_download_xmls.parse_status = ERROR` とし、`hia_person_years` / `hia_person_xml_events` には反映しない。
 
 ---
 
@@ -173,12 +173,11 @@ XML 単位で部分成功にすると、以下の事故が起こりやすい。
 
 # ステータス
 
-v1 実装完了（2026-03）。
+v2 再構築中（2026-08）。
 
-本ドキュメントは現在の ZIP 単位エラーポリシーを freeze した状態を示す。
+本ドキュメントは HIA ZIP/XML 取込時のエラーポリシーを示す。
 
 対応実装
 
-- ZIP 単位 all-or-nothing
-- hia_import_zip_errors へのエラー記録
-- 成功時のみ hia_person_years / hia_xml_events 更新
+- HIAダウンロードZIP/XML台帳へのエラー記録
+- 成功XMLのみ `hia_person_years` / `hia_person_xml_events` へ反映

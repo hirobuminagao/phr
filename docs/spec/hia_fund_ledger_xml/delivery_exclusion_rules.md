@@ -39,7 +39,9 @@
 ```text
 最新月対象抽出
 ↓
-過去登場済み除外
+提出済み/再提出ポリシー適用
+↓
+同一人物・同一受診日の候補選定
 ↓
 delivery exclusion rules 適用
 ↓
@@ -72,20 +74,20 @@ delivery exclusion rules 適用
 想定テーブル名:
 
 ```text
-hia_delivery_exclusion_rules
+fund_delivery_exclusion_rules
 ```
 
 想定する保持項目:
 
 |項目|意味|
 |---|---|
+|event_id|イベントID|
 |insurer_number|保険者番号|
-|target_schema|対象 DB / schema 名|
 |target_table|対象テーブル名|
 |target_column|対象カラム名|
 |match_type|一致条件種別|
 |match_value|除外判定に使う値|
-|reason|除外理由|
+|exclusion_reason|除外理由|
 |source_note|除外根拠 / 情報源|
 |is_enabled|有効フラグ|
 |created_at|登録日時|
@@ -117,12 +119,12 @@ v1 実装では `EQUAL` を使用する。
 |項目|値の例|
 |---|---|
 |insurer_number|06139463|
-|target_schema|work_other|
-|target_table|hia_xml_events|
+|event_id|2|
+|target_table|hia_download_xmls|
 |target_column|facility_code|
 |match_type|EQUAL|
 |match_value|12345678|
-|reason|契約外医療機関|
+|exclusion_reason|契約外医療機関|
 |source_note|健保から提供|
 |is_enabled|1|
 
@@ -177,9 +179,11 @@ HIA ZIP 取込
 ↓
 ledger 記帳
 ↓
-最新月対象抽出
+出力リスト候補抽出
 ↓
-過去登場済み除外
+提出済み/再提出ポリシー適用
+↓
+同一人物・同一受診日の候補選定
 ↓
 delivery exclusion rules 適用
 ↓
@@ -201,13 +205,13 @@ delivery exclusion rules 適用
 
 # ステータス
 
-v1 実装完了（2026-03）。
+v2 再構築中（2026-08）。
 
-本ドキュメントは現在の納品再構成時の除外ルールを freeze した状態を示す。
+本ドキュメントは健保納品リスト作成時の除外ルールを示す。
 
 対応実装
 
 - ledger 取込では除外しない
 - delivery layer で除外適用
-- hia_delivery_exclusion_rules テーブルによる制御
+- fund_delivery_exclusion_rules テーブルによる制御
 - facility_code による契約外医療機関除外

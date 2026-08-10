@@ -21,9 +21,9 @@ HIA
   ↓
 ZIP (月締め)
   ↓
-ZIP import
+01 HIAダウンロードZIP取込
   ↓
-XML検証 / 正規化
+内部処理: XML検証 / 正規化 / 人年度台帳反映
   ↓
 hia_download_xmls
   ↓
@@ -31,10 +31,37 @@ hia_person_years ledger
   ↓
 hia_person_xml_events
   ↓
-納品対象抽出
+02 健保納品リスト作成
   ↓
-Fund納品 ZIP 再構成
+03 健保納品ZIP出力
+  ↓
+04 提出済み反映
 ```
+
+---
+
+# スクリプト配置方針
+
+番号付きで `scripts/hia/` 直下に置くのは、人がRunボタンを押す業務工程だけとする。
+
+細かい処理は `scripts/hia/script_lib/` へ置き、直下の番号付きスクリプトから呼び出す。
+
+目的:
+
+- 実行順を人が迷わないようにする。
+- 画面化したときのボタン単位とCLI単位を揃える。
+- 内部処理を細かく分けても、運用入口を増やしすぎない。
+
+想定する外部Run入口:
+
+| script | 人が押す工程 | 内部で行う主な処理 |
+| --- | --- | --- |
+| `01_import_downloaded_xml_zip.py` | HIAから落としたZIPを取り込む | ZIP名解析、XML抽出、XML検証、identity生成、`hia_download_*` / `hia_person_*` 更新 |
+| `02_create_fund_delivery_list.py` | 納品対象リストを作る | 候補抽出、重複候補選定、未提出/再提出判定、`fund_delivery_*` リスト更新 |
+| `03_export_fund_delivery_zip.py` | 納品ZIPを出力する | リストに含まれるXMLを集め、受診月単位でZIPを再構成、出力履歴更新 |
+| `04_mark_fund_delivery_submitted.py` | 提出済みにする | リスト/メンバー/人年度の提出済み状態を更新 |
+
+`02` 以降で必要になる候補選定、同日重複の新旧選択、除外ルール適用、サマリー集計は、個別スクリプトとして表へ出さず `script_lib` に分ける。
 
 ---
 
@@ -216,9 +243,7 @@ send_seq は厚労省ファイル伝送仕様の送信回数部分。
 |genderCode|必須|
 |exam_date|必須|
 
-これらが欠落する XML が含まれる場合
-
-**ZIP 単位で未記帳**。
+これらが欠落する XML が含まれる場合、v2ではZIP/XML台帳へエラーとして記帳する。
 
 処理方針
 
@@ -231,22 +256,20 @@ XML検証
     ↓
     ZIP ERROR
     ↓
-    台帳未記帳
+    hia_download_zips / hia_download_xmls にエラー状態を記帳
 ```
 
 修正後に再アップロード・再取込する。
 
 ---
 
-# 台帳構造（v1 実装・参考）
+# 台帳構造（v2 正式）
 
-この章は旧 `work_other` / `scripts/work_folder` 実装の整理である。
+v2では、旧 `hia_xml_events` のようにXML原本台帳と人イベントを兼ねる構造にしない。
 
-v2では `hia_xml_events` をそのまま正式採用せず、XML原本台帳は `hia_download_xmls`、人への紐付け履歴は `hia_person_xml_events` に分ける。
+XML原本台帳は `hia_download_xmls`、人への紐付け履歴は `hia_person_xml_events`、健保納品管理は `fund_delivery_*` に分ける。
 
-本台帳は HIA_fund_ledger_xml 固有の ledger であるが、人物識別に用いる canonical 値は全世界観共通の identity 共通lib に従って生成する。
-
-## person_year ledger
+## hia_person_years
 
 ```text
 person_id_custom
@@ -265,69 +288,81 @@ last_seen_dl_date
 dl_count
 ```
 
-## hia_xml_events ledger
+## hia_download_xmls
 
 ```
-xml_event_id
-person_year_id
+hia_download_xml_id
+download_zip_id
 xml_filename
+xml_inner_path
 xml_sha256
 exam_date
+exam_month
 facility_code
 facility_name
-zip_id
+parse_status
+parse_reason
+person_id_custom
+identity_hash
+```
+
+## hia_person_xml_events
+
+```
+person_xml_event_id
+person_year_id
+hia_download_xml_id
+download_zip_id
+event_type
+event_status
+is_current
 ```
 
 ---
 
-
-# 納品対象抽出ルール（v1 実装）
+# 納品対象抽出ルール（v2）
 
 Fund 向け納品 ZIP を再構成する際、対象 XML は以下の順序で抽出される。
 
-1. **対象 dl_date の ZIP を基準にする**
+1. **出力リストを基準にする**
 
-   対象月は `hia_import_zips.dl_date` で指定する。
+   画面またはCLIで作成された `fund_delivery_lists` / `fund_delivery_list_members` を対象にする。
 
-2. **過去同一人物（同一年度）を除外**
+2. **受診月・提出状態で候補を絞る**
 
-   以下キーが一致する人物が過去の dl_date に存在する場合は除外する。
+   基本は受診月単位。必要に応じて全件モードも使用する。
+
+3. **同一人物・同一受診日の候補を選ぶ**
+
+   以下キーが一致する候補が複数ある場合、新旧どちらを採用するかポリシーで決める。
 
    ```
    person_id_custom
-   + name_kana_norm
-   + gender_code
-   + exam_year
+   + exam_date
    ```
 
-3. **除外ルール適用**
+4. **除外ルール適用**
 
-   `hia_delivery_exclusion_rules` に登録された条件を適用する。
+   `fund_delivery_exclusion_rules` に登録された条件を適用する。
 
-   v1 実装では主に以下を使用。
-
-   - `facility_code` = 契約外医療機関
-
-4. **XML 重複除外**
-
-   `xml_sha256` を用いて同一 XML を除外する。
-
-5. **報告区分による件数集計**
-
-   XML 内の `report_category` を使用する。
-
-   - `report_category = 10` → 特定健診
-
-6. **ix08 / su08 再生成**
+5. **ix08 / su08 再生成**
 
    納品 ZIP 生成時に index / summary を再構成する。
 
    |項目|算出方法|
    |---|---|
    |ix08 totalRecordCount|DATA フォルダ XML 件数|
-   |su08 totalSubjectCount|report_category = 10 件数|
+   |su08 totalSubjectCount|report_category_code = 10 件数|
 
 ix08 / su08 は **原文 XML を保持したまま必要な値のみ書き換える**。
+
+---
+
+# v1 実装の扱い
+
+旧 `work_other` / `scripts/work_folder` 実装は参考元とする。
+
+v2の正式実装では、旧DB/旧スクリプトのテーブル名をそのまま採用しない。
 
 # 将来拡張
 
@@ -362,25 +397,26 @@ identity 関連の確認は、まず以下の共通 spec を参照する。
 
 # ステータス
 
-本仕様は **v1 実装完了（2026‑03）時点の内容をベースにしつつ、v1.1.0 に向けて identity 共通lib前提・event 接続前提へ更新中** とする。
+本仕様は **v2 再構築中（2026-08）** とする。
 
 実装済み機能
 
-- HIA ZIP 取込パイプライン
-- XML 検証
-- person_year ledger 構築
-- xml event ledger 構築
-- 過去登場者除外ロジック
-- 納品対象抽出
-- Fund 向け納品 ZIP 再構成
+- HIA ZIP 取込入口: `scripts/hia/01_import_downloaded_xml_zip.py`
+- XML検証 / identity生成 / `hia_download_*` / `hia_person_*` 更新
+- HIA fund delivery サンプルデータ生成
+
+実装予定機能
+
+- 納品リスト作成入口: `scripts/hia/02_create_fund_delivery_list.py`
+- 健保納品ZIP出力入口: `scripts/hia/03_export_fund_delivery_zip.py`
+- 提出済み反映入口: `scripts/hia/04_mark_fund_delivery_submitted.py`
 - ix08 / su08 自動再生成
-- HIA_fund_ledger_xml 固有要件と identity 共通lib との接続整理（進行中）
 
 対応スクリプト
 
-- `hia_import_zip.py`
-- `hia_parse_xml.py`
-- `hia_build_delivery_zip.py`
+- `scripts/hia/01_import_downloaded_xml_zip.py`
+- `scripts/hia/script_lib/hia_download_importer.py`
+- `scripts/hia/script_lib/hia_download_xml_parser.py`
 
 今後のドキュメント更新方針
 

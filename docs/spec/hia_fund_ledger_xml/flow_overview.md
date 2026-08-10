@@ -22,7 +22,7 @@ HIA SYSTEM
 
   ↓
 
-ZIP import
+01 HIAダウンロードZIP取込
 
   ↓
 
@@ -58,7 +58,7 @@ XML 検証
   │      ↓
   │   error.txt 出力
   │      ↓
-  │   DB未記帳
+  │   hia_download_zips / hia_download_xmls にエラーとして記帳
   │
   └ エラーなし
          ↓
@@ -76,7 +76,7 @@ exam_year
 
          ↓
 
-hia_import_zips 更新
+hia_download_zips 更新
 
 ・zip_name 単位で UPSERT
 ・zip_sha256 一致なら skip
@@ -84,18 +84,17 @@ hia_import_zips 更新
 
          ↓
 
-hia_xml_events 最新化
+hia_download_xmls 最新化
 
-・対象 zip_id 配下を一旦 is_deleted=1
-・今回存在する XML イベントを is_deleted=0 で更新/復帰
-・今回初出のイベントを追加
-・今回存在しなかったイベントは is_deleted=1 のまま残す
+・ZIP内XMLごとの原本台帳を更新
+・今回存在するXMLを is_active_in_zip=1 として保持
+・同一ZIP再取込時はXML sha / parse状態を更新
 
          ↓
 
 hia_person_years 再集計（人物×年度スナップショット）
 
-・is_deleted=0 の xml_event のみ集計
+・parse_status=OK かつ is_active_in_zip=1 の XML を集計
 ・dl_count = 有効イベント件数
 ・0件なら last_seen_* を NULL に戻す
 ・1件以上なら最新イベントで last_seen_* を更新
@@ -103,21 +102,44 @@ hia_person_years 再集計（人物×年度スナップショット）
 
          ↓
 
-納品対象抽出
+02 健保納品リスト作成
 
-・対象 dl_date
-・過去同一 person_year 除外
+・対象受診月
+・未提出/再提出/全件などの出力ポリシー
+・同一人物・同一受診日が複数ある場合の新旧選択
 ・exclusion_rules 適用
-・xml_sha256 重複除外
+・fund_delivery_lists / fund_delivery_list_members 更新
 
          ↓
 
-Fund 納品用 ZIP 再構成
+03 Fund 納品用 ZIP 再構成
 
 ・DATA XML コピー
 ・ix08 totalRecordCount 再計算
 ・su08 totalSubjectCount 再計算
+
+         ↓
+
+04 提出済み反映
+
+・リスト単位で提出済みにする
+・member単位、人年度単位の提出済み状態を更新
 ```
+
+---
+
+# 外部Run入口
+
+番号付きで `scripts/hia/` 直下に置くのは、人がRunボタンを押す工程だけとする。
+
+| script | 工程 | 備考 |
+| --- | --- | --- |
+| `01_import_downloaded_xml_zip.py` | HIA ZIP取込 | 実装済み |
+| `02_create_fund_delivery_list.py` | 納品リスト作成 | 候補選定などは `script_lib` |
+| `03_export_fund_delivery_zip.py` | 健保納品ZIP出力 | 受診月単位/全件モード対応 |
+| `04_mark_fund_delivery_submitted.py` | 提出済み反映 | 画面化時は一括提出済みボタン |
+
+内部処理は `scripts/hia/script_lib/` に逃がし、番号付きスクリプトを増やしすぎない。
 
 ---
 
@@ -199,9 +221,9 @@ person year ledger
 # 台帳関係
 
 ```text
-hia_import_zips
+hia_download_zips
 
-  ├ zip_name (UNIQUE)
+  ├ zip_name
   ├ zip_sha256
   ├ dl_date
   ├ send_seq
@@ -210,15 +232,15 @@ hia_import_zips
         │ 1:N
         ▼
 
-hia_xml_events
+hia_download_xmls
 
   ├ person_year_id
-  ├ zip_id
+  ├ download_zip_id
   ├ exam_date
   ├ facility_code
   ├ xml_sha256
   ├ xml_filename
-  ├ is_deleted
+  ├ is_active_in_zip
   └ dl_date（zip 経由）
 
         │ N:1
@@ -235,27 +257,40 @@ hia_person_years
 
 ---
 
-# hia_xml_events 更新ルール
+# hia_download_xmls 更新ルール
 
-一意イベントの暫定キーは以下とする。
+XML原本台帳は、HIAからダウンロードしたZIP内のXML 1ファイルを1行として保持する。
 
-```text
-(person_year_id, zip_id, exam_date, facility_code)
-```
+主な考え方:
 
-補足:
+- `download_zip_id + xml_inner_path` をZIP内XMLの基本識別とする。
+- XMLファイル名だけを人物識別には使わない。
+- XML本文から抽出した個人識別項目で `person_id_custom` / `identity_hash` を生成する。
+- 必須項目不足は `parse_status=ERROR` として台帳に残す。
+- 正常XMLのみ `hia_person_years` / `hia_person_xml_events` へ反映する。
 
-- `facility_code` の NULL は空文字へ正規化する
-- `xml_filename` は識別には使わない
-- ZIP再取込時は対象 `zip_id` 配下を一旦 `is_deleted=1` にする
-- 今回存在したイベントのみ `is_deleted=0` に戻す
-- これにより「前はいたが今回消えた人」を追跡可能にする
+---
+
+# hia_person_xml_events 更新ルール
+
+XML原本を人×年度へ紐付けた履歴を保持する。
+
+初期実装では `parse_status=OK` のXMLを `LINKED` として登録し、`hia_person_years` のスナップショットを更新する。
+
+将来的に手動除外、差替え、納品採用などを人履歴へ残す場合は、以下の `event_type` を使う。
+
+- `LINKED`
+- `UNLINKED`
+- `SUPERSEDED`
+- `DELIVERY_SELECTED`
+- `DELIVERED`
+- `DELIVERY_EXCLUDED`
 
 ---
 
 # hia_person_years 再集計ルール
 
-`hia_person_years` は `hia_xml_events(is_deleted=0)` を集約して更新する。
+`hia_person_years` は `hia_download_xmls(parse_status=OK, is_active_in_zip=1)` と `hia_person_xml_events` を元に更新する。
 本テーブルはログではなく、人物×年度単位の「最新スナップショット」を保持する集約テーブルである。
 
 - `dl_count` は有効イベント件数
@@ -266,7 +301,7 @@ hia_person_years
   - `last_seen_xml_filename = NULL`
 - 有効イベントが 1 件以上ある場合:
   - `last_seen_*` は最新イベントから再設定する
-- XMLイベントの履歴は `hia_xml_events` に保持し、`hia_person_years` は常に再計算で再現可能とする
+- XMLイベントの履歴は `hia_person_xml_events` に保持し、`hia_person_years` は再計算で再現可能とする
 
 ---
 
@@ -283,13 +318,13 @@ hia_person_years
 
 # ステータス
 
-v1 実装完了（2026‑03）。
+v2 再構築中（2026-08）。
 
-本フローは実装上、zip_name 単位の最新 ZIP 管理と、hia_xml_events の is_deleted による最新有効集合管理を採用している。
+本フローは、HIAダウンロードZIP/XML台帳を `hia_download_*`、人への紐付け履歴を `hia_person_*`、健保納品管理を `fund_delivery_*` に分ける。
 
 主な実装スクリプト
 
-- hia_import_zip.py
-- hia_parse_xml.py
-- hia_build_delivery_zip.py
+- `scripts/hia/01_import_downloaded_xml_zip.py`
+- `scripts/hia/script_lib/hia_download_importer.py`
+- `scripts/hia/script_lib/hia_download_xml_parser.py`
 ```

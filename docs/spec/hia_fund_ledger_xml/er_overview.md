@@ -1,7 +1,13 @@
 # HIA_fund_ledger_xml ER Overview
 
-This document describes the entity relationships used by the **HIA_fund_ledger_xml** pipeline.  
-The pipeline manages downloaded HIA ZIP files, their XML contents, person-year identity matching, and delivery exclusion rules.
+This document describes the v2 entity relationships for HIA downloaded XML and fund delivery.
+
+The v2 design separates these responsibilities:
+
+- HIA downloaded ZIP/XML source ledgers
+- Person-year linkage ledgers
+- Fund delivery list/run/member ledgers
+- Operational exclusion rules
 
 ---
 
@@ -9,218 +15,223 @@ The pipeline manages downloaded HIA ZIP files, their XML contents, person-year i
 
 ```text
 +-----------------------------+
-| hia_import_zips             |
+| hia_download_zips           |
 +-----------------------------+
-| PK zip_id                   |
+| PK download_zip_id          |
+| event_id                    |
 | insurer_number              |
+| facility_code               |
 | folder_name                 |
 | zip_name                    |
 | dl_date                     |
 | send_seq                    |
 | zip_sha256                  |
-| xml_count_total             |
-| xml_count_success           |
-| xml_count_error             |
+| source_zip_path             |
+| archive_zip_path            |
 | import_status               |
-| created_at                  |
-| updated_at                  |
 +-----------------------------+
         | 1
-        | 
+        |
         | N
         v
 +-----------------------------+
-| hia_xml_events              |
+| hia_download_xmls           |
 +-----------------------------+
-| PK xml_event_id             |
-| FK zip_id                   |
-| FK person_year_id           |
+| PK hia_download_xml_id      |
+| FK download_zip_id          |
+| event_id                    |
 | xml_filename                |
+| xml_inner_path              |
 | xml_sha256                  |
 | exam_date                   |
+| exam_year                   |
+| exam_month                  |
 | facility_code               |
 | facility_name               |
-| report_category             |
-| health_program_code         |
-| created_at                  |
+| report_category_code        |
+| program_type_code           |
+| person_id_custom            |
+| identity_hash               |
+| parse_status                |
++-----------------------------+
+        | 1
+        |
+        | N
+        v
++-----------------------------+
+| hia_person_xml_events       |
++-----------------------------+
+| PK person_xml_event_id      |
+| FK person_year_id           |
+| FK hia_download_xml_id      |
+| FK download_zip_id          |
+| event_type                  |
+| event_status                |
+| is_current                  |
 +-----------------------------+
         | N
         |
+        | 1
         v
 +-----------------------------+
 | hia_person_years            |
 +-----------------------------+
 | PK person_year_id           |
+| event_id                    |
 | person_id_custom            |
-| name_kana_norm              |
-| gender_code                 |
+| identity_hash               |
 | exam_year                   |
 | insurer_number              |
-| insurance_symbol            |
-| insurance_number            |
+| insurance_symbol_match      |
+| insurance_number_match      |
 | birthdate                   |
-| name_kana_raw               |
+| name_kana_norm              |
 | dl_count                    |
 | first_seen_dl_date          |
-| first_seen_zip_name         |
-| first_seen_xml_filename     |
 | last_seen_dl_date           |
-| last_seen_zip_name          |
-| last_seen_xml_filename      |
-| created_at                  |
-| updated_at                  |
++-----------------------------+
+```
+
+```text
++-----------------------------+
+| fund_delivery_lists         |
++-----------------------------+
+| PK delivery_list_id         |
+| event_id                    |
+| insurer_number              |
+| list_name                   |
+| output_mode                 |
+| exam_month                  |
+| delivery_policy             |
+| same_exam_date_policy       |
+| list_status                 |
+| submitted_at                |
++-----------------------------+
+        | 1
+        |
+        | N
+        v
++-----------------------------+
+| fund_delivery_list_members  |
++-----------------------------+
+| PK delivery_list_member_id  |
+| FK delivery_list_id         |
+| FK person_year_id           |
+| FK selected_hia_download_xml_id |
+| member_status               |
+| selection_reason            |
++-----------------------------+
+```
+
+```text
++-----------------------------+
+| fund_delivery_runs          |
++-----------------------------+
+| PK delivery_run_id          |
+| FK delivery_list_id         |
+| event_id                    |
+| output_mode                 |
+| exam_month                  |
+| output_zip_name             |
+| output_zip_path             |
+| delivery_status             |
++-----------------------------+
+        | 1
+        |
+        | N
+        v
++-----------------------------+
+| fund_delivery_members       |
++-----------------------------+
+| PK delivery_member_id       |
+| FK delivery_run_id          |
+| FK delivery_list_member_id  |
+| FK person_year_id           |
+| FK hia_download_xml_id      |
+| output_xml_filename         |
+| member_status               |
++-----------------------------+
+```
+
+```text
++-----------------------------+
+| fund_delivery_xml_candidates|
++-----------------------------+
+| PK delivery_candidate_id    |
+| event_id                    |
+| FK person_year_id           |
+| FK hia_download_xml_id      |
+| FK person_xml_event_id      |
+| exam_date                   |
+| exam_month                  |
+| dl_date                     |
+| send_seq                    |
+| candidate_status            |
+| selection_policy            |
 +-----------------------------+
 
++-----------------------------+
+| fund_delivery_person_status |
++-----------------------------+
+| PK delivery_person_status_id|
+| event_id                    |
+| FK person_year_id           |
+| exam_year                   |
+| delivery_tracking_status    |
+| last_delivered_at           |
+| redelivery_required         |
++-----------------------------+
 
 +-----------------------------+
-| hia_import_zip_errors       |
-+-----------------------------+
-| PK zip_error_id             |
-| FK zip_id                   |
-| xml_filename                |
-| error_code                  |
-| error_message               |
-| error_detail                |
-| created_at                  |
-+-----------------------------+
-
-
-+----------------------------------+
-| hia_delivery_exclusion_rules     |
-+----------------------------------+
-| PK exclusion_rule_id             |
-| insurer_number                   |
-| target_schema                    |
-| target_table                     |
-| target_column                    |
-| match_type                       |
-| match_value                      |
-| exclusion_reason                 |
-| source_note                      |
-| is_enabled                       |
-| created_at                       |
-| updated_at                       |
-+----------------------------------+
+| fund_delivery_exclusion_rules |
++-------------------------------+
+| PK exclusion_rule_id          |
+| event_id                      |
+| insurer_number                |
+| target_table                  |
+| target_column                 |
+| match_type                    |
+| match_value                   |
+| exclusion_reason              |
+| is_enabled                    |
++-------------------------------+
 ```
 
 ---
 
 ## Relationship Summary
 
-### ZIP → XML
+### ZIP -> XML
 
-`hia_import_zips` → `hia_xml_events`
+`hia_download_zips` -> `hia_download_xmls`
 
-* One ZIP contains multiple XML files.
-* Each XML record references the ZIP it originated from.
+One HIA downloaded ZIP contains multiple XML files.
 
-Relationship type:
+### XML -> Person Year
 
-```
-1 ZIP : N XML
-```
+`hia_download_xmls` -> `hia_person_xml_events` -> `hia_person_years`
 
----
+XML source facts and person-year linkage history are separated.
 
-### XML → Person Year
+### Candidate -> List -> Run
 
-`hia_xml_events` → `hia_person_years`
+`fund_delivery_xml_candidates` stores selectable XML candidates.
 
-* Each XML is matched to a **person + exam_year** record.
-* A person-year may appear multiple times across different downloads.
+`fund_delivery_lists` / `fund_delivery_list_members` are the human-controlled output list.
 
-Relationship type:
-
-```
-1 person_year : N XML events
-```
+`fund_delivery_runs` / `fund_delivery_members` are the actual ZIP output history.
 
 ---
 
-### ZIP → Error Ledger
+## Script Boundary
 
-`hia_import_zips` → `hia_import_zip_errors`
+Only human-operated entry scripts are placed directly under `scripts/hia/`.
 
-* ZIP processing may produce multiple errors.
-* Errors may occur before or after XML parsing.
+Detailed selection, dedupe, summary, and ZIP construction logic should live under `scripts/hia/script_lib/`.
 
-Relationship type:
-
-```
-1 ZIP : N errors
-```
-
----
-
-### Delivery Exclusion Rules
-
-`hia_delivery_exclusion_rules` is **not linked via foreign keys**.
-
-Instead it is used by the delivery rebuild logic to dynamically filter data.
-
-Typical example:
-
-```
-Exclude facility_code = 'XXXX'
-for insurer_number = '06139463'
-```
-
-This allows operations teams to control exclusions **without modifying application code**.
-
----
-
-## Conceptual Data Flow
-
-```
-HIA ZIP Download
-        |
-        v
-hia_import_zips
-        |
-        v
-hia_person_years
-        |
-        v
-hia_xml_events
-
-Errors → hia_import_zip_errors
-
-Delivery rebuild
-        |
-        v
-Apply hia_delivery_exclusion_rules
-```
-
----
-
-## Design Intent
-
-The structure separates responsibilities clearly:
-
-| Layer | Responsibility |
-|------|----------------|
-| ZIP ledger | track downloaded packages |
-| XML ledger | track individual XML files |
-| Person-year ledger | identity matching and deduplication |
-| Error ledger | processing failures |
-| Exclusion rules | operational delivery filtering |
-
-This design allows the system to:
-
-* reconstruct insurer deliveries
-* track historical downloads
-* detect duplicate XML files
-* isolate processing errors
-* support operational filtering rules
-
----
-
-## Future Extension Possibilities
-
-Potential future tables may include:
-
-* `hia_exam_events` (separate exam event abstraction)
-* `hia_delivery_history` (record rebuilt delivery ZIPs)
-* `hia_exclusion_hits` (log when exclusion rules match records)
-
-These are intentionally not included in v1 to keep the initial pipeline simple.
+| script | purpose |
+| --- | --- |
+| `01_import_downloaded_xml_zip.py` | import downloaded HIA ZIP/XML |
+| `02_create_fund_delivery_list.py` | create fund delivery list |
+| `03_export_fund_delivery_zip.py` | export fund delivery ZIP |
+| `04_mark_fund_delivery_submitted.py` | mark delivery list as submitted |
