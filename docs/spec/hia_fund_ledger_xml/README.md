@@ -74,6 +74,28 @@ hia_person_xml_events
 
 後続バージョンで健診機関単位出力が必要になった場合は、画面のリスト作成時に `ALL` / `BY_FACILITY` を切り替え、`03_export_fund_delivery_zip.py` が `grouping_mode` に従って出力グループを分ける。
 
+## CLI実行例
+
+HIA ZIP取込:
+
+```bash
+python scripts/hia/01_import_downloaded_xml_zip.py --event-id 2
+```
+
+健保納品リスト作成 dry-run:
+
+```bash
+python scripts/hia/02_create_fund_delivery_list.py --event-id 2 --exam-month 202605
+```
+
+健保納品リスト作成 apply:
+
+```bash
+python scripts/hia/02_create_fund_delivery_list.py --event-id 2 --exam-month 202605 --confirm
+```
+
+`02` は `--confirm` を付けない限りDBへリストを作らない。
+
 ---
 
 # 基本設計方針

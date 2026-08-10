@@ -94,7 +94,7 @@ hia_download_xmls 最新化
 
 hia_person_years 再集計（人物×年度スナップショット）
 
-・parse_status=OK かつ is_active_in_zip=1 の XML を集計
+・parse_status=PARSED かつ is_active_in_zip=1 の XML を集計
 ・dl_count = 有効イベント件数
 ・0件なら last_seen_* を NULL に戻す
 ・1件以上なら最新イベントで last_seen_* を更新
@@ -137,7 +137,7 @@ hia_person_years 再集計（人物×年度スナップショット）
 | script | 工程 | 備考 |
 | --- | --- | --- |
 | `01_import_downloaded_xml_zip.py` | HIA ZIP取込 | 実装済み |
-| `02_create_fund_delivery_list.py` | 納品リスト作成 | 候補選定などは `script_lib` |
+| `02_create_fund_delivery_list.py` | 納品リスト作成 | 実装済み。候補選定などは `script_lib` |
 | `03_export_fund_delivery_zip.py` | 健保納品ZIP出力 | 受診月単位/全件モード対応 |
 | `04_mark_fund_delivery_submitted.py` | 提出済み反映 | 画面化時は一括提出済みボタン |
 
@@ -277,7 +277,7 @@ XML原本台帳は、HIAからダウンロードしたZIP内のXML 1ファイル
 
 XML原本を人×年度へ紐付けた履歴を保持する。
 
-初期実装では `parse_status=OK` のXMLを `LINKED` として登録し、`hia_person_years` のスナップショットを更新する。
+初期実装では `parse_status=PARSED` のXMLを `LINKED` として登録し、`hia_person_years` のスナップショットを更新する。
 
 将来的に手動除外、差替え、納品採用などを人履歴へ残す場合は、以下の `event_type` を使う。
 
@@ -292,7 +292,7 @@ XML原本を人×年度へ紐付けた履歴を保持する。
 
 # hia_person_years 再集計ルール
 
-`hia_person_years` は `hia_download_xmls(parse_status=OK, is_active_in_zip=1)` と `hia_person_xml_events` を元に更新する。
+`hia_person_years` は `hia_download_xmls(parse_status=PARSED, is_active_in_zip=1)` と `hia_person_xml_events` を元に更新する。
 本テーブルはログではなく、人物×年度単位の「最新スナップショット」を保持する集約テーブルである。
 
 - `dl_count` は有効イベント件数
