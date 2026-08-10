@@ -238,4 +238,4 @@ Detailed selection, dedupe, summary, and ZIP construction logic should live unde
 | `01_import_downloaded_xml_zip.py` | import downloaded HIA ZIP/XML |
 | `02_create_fund_delivery_list.py` | create fund delivery list |
 | `03_export_fund_delivery_zip.py` | export fund delivery ZIP |
-| `04_mark_fund_delivery_submitted.py` | mark delivery list as submitted |
+| `04_mark_fund_delivery_submitted.py` | mark delivery members as submitted/error/pending |

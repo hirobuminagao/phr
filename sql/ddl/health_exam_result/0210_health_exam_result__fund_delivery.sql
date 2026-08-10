@@ -205,7 +205,7 @@ CREATE TABLE `health_exam_result`.`fund_delivery_members` (
   `exam_month` char(6) DEFAULT NULL,
   `report_category_code` varchar(64) DEFAULT NULL,
   `program_type_code` varchar(64) DEFAULT NULL,
-  `member_status` varchar(32) NOT NULL DEFAULT 'DELIVERED',
+  `member_status` varchar(32) NOT NULL DEFAULT 'CREATED',
   `member_reason` text DEFAULT NULL,
   `submitted_at` datetime(3) DEFAULT NULL,
   `submitted_by` varchar(190) DEFAULT NULL,

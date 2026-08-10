@@ -115,6 +115,38 @@ python scripts/hia/03_export_fund_delivery_zip.py --delivery-list-id 1 --confirm
 ZIP名は `送信元コード_保険者番号_提出日出力番号_送信回数.zip` 形式とする。
 例: `1322100106_06139463_202608100_1.zip`
 
+健保提出済み反映 dry-run:
+
+```bash
+python scripts/hia/04_mark_fund_delivery_submitted.py --delivery-list-id 1 --all --submitted-by nagao
+```
+
+健保提出済み反映 apply:
+
+```bash
+python scripts/hia/04_mark_fund_delivery_submitted.py --delivery-list-id 1 --all --submitted-by nagao --confirm
+```
+
+`04` は個人単位を基本にする。
+`--all` はリスト内の全 `fund_delivery_members` を処理するショートカット。
+
+個別に反映する場合:
+
+```bash
+python scripts/hia/04_mark_fund_delivery_submitted.py --delivery-list-id 1 --delivery-member-id 10 --submitted-by nagao --confirm
+```
+
+状態は以下を扱う。
+
+|状態|意味|
+|---|---|
+|`SUBMITTED`|健保へ提出済み|
+|`SUBMISSION_ERROR`|提出時エラー|
+|`PENDING`|提出保留|
+
+`SUBMITTED` の場合のみ、`fund_delivery_person_status.delivery_tracking_status` を `DELIVERED` に進める。
+提出エラーや保留は、個人の最終提出状態を進めず、member/list/run の作業状態として残す。
+
 ---
 
 # 基本設計方針

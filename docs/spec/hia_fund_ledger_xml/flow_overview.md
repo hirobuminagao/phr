@@ -139,7 +139,7 @@ hia_person_years 再集計（人物×年度スナップショット）
 | `01_import_downloaded_xml_zip.py` | HIA ZIP取込 | 実装済み |
 | `02_create_fund_delivery_list.py` | 納品リスト作成 | 実装済み。候補選定などは `script_lib` |
 | `03_export_fund_delivery_zip.py` | 健保納品ZIP出力 | 受診月単位/全件モード対応 |
-| `04_mark_fund_delivery_submitted.py` | 提出済み反映 | 画面化時は一括提出済みボタン |
+| `04_mark_fund_delivery_submitted.py` | 提出済み反映 | 個人単位が基本。`--all` はリスト内全員の一括更新 |
 
 内部処理は `scripts/hia/script_lib/` に逃がし、番号付きスクリプトを増やしすぎない。
 
