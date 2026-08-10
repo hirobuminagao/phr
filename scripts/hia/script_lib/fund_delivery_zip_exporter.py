@@ -45,6 +45,7 @@ class FundDeliveryZipExportSummary:
     output_zip_sha256: str | None = None
     summary_csv_path: str | None = None
     members_csv_path: str | None = None
+    person_raw_csv_path: str | None = None
     source_zip_count: int = 0
     report_category_10_count: int = 0
     errors: int = 0
@@ -109,6 +110,9 @@ def load_delivery_members(cur: Any, delivery_list_id: int) -> list[dict[str, Any
             lm.delivery_candidate_id,
             lm.hia_download_xml_id,
             c.person_xml_event_id,
+            py.identity_hash,
+            py.birthdate,
+            py.exam_year,
             x.download_zip_id,
             x.xml_filename AS source_xml_filename,
             x.xml_inner_path,
@@ -126,6 +130,8 @@ def load_delivery_members(cur: Any, delivery_list_id: int) -> list[dict[str, Any
             z.dl_date,
             z.send_seq
           FROM fund_delivery_list_members lm
+          JOIN hia_person_years py
+            ON py.person_year_id = lm.person_year_id
           JOIN hia_download_xmls x
             ON x.hia_download_xml_id = lm.hia_download_xml_id
           JOIN hia_download_zips z
@@ -392,6 +398,35 @@ def _csv_text(value: Any) -> str:
     return str(value)
 
 
+def _parse_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _fiscal_year_end_age(birthdate: Any, exam_year: Any) -> str:
+    born = _parse_date(birthdate)
+    if born is None or exam_year in (None, ""):
+        return ""
+    try:
+        year = int(exam_year)
+    except (TypeError, ValueError):
+        return ""
+    as_of = date(year + 1, 3, 31)
+    age = as_of.year - born.year - ((as_of.month, as_of.day) < (born.month, born.day))
+    return str(age)
+
+
 def _write_output_csvs(
     output_dir: Path,
     *,
@@ -399,9 +434,10 @@ def _write_output_csvs(
     list_row: dict[str, Any],
     output_zip_name: str,
     rows: list[dict[str, Any]],
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path]:
     summary_path = output_dir / f"{Path(output_zip_name).stem}_summary.csv"
     members_path = output_dir / f"{Path(output_zip_name).stem}_members.csv"
+    person_raw_path = output_dir / f"{Path(output_zip_name).stem}_person_raw.csv"
 
     grouped: dict[tuple[str, str, str], int] = {}
     for row in rows:
@@ -478,7 +514,51 @@ def _write_output_csvs(
                 row["output_xml_sha256"],
             ])
 
-    return summary_path, members_path
+    with person_raw_path.open("w", encoding="utf-8-sig", newline="") as fp:
+        writer = csv.writer(fp)
+        writer.writerow([
+            "delivery_run_id",
+            "delivery_list_id",
+            "output_zip_name",
+            "output_xml_filename",
+            "person_year_id",
+            "identity_hash",
+            "facility_code",
+            "facility_name",
+            "exam_month",
+            "exam_date",
+            "birthdate",
+            "fiscal_year_end_age",
+            "report_category_code",
+            "program_type_code",
+            "source_zip_name",
+            "source_xml_filename",
+            "source_xml_sha256",
+            "output_xml_sha256",
+        ])
+        for row in rows:
+            writer.writerow([
+                delivery_run_id,
+                list_row["delivery_list_id"],
+                output_zip_name,
+                row["output_xml_filename"],
+                row["person_year_id"],
+                row["identity_hash"],
+                row["facility_code"],
+                row["facility_name"],
+                row["exam_month"],
+                row["exam_date"],
+                row["birthdate"],
+                _fiscal_year_end_age(row.get("birthdate"), row.get("exam_year")),
+                row["report_category_code"],
+                row["program_type_code"],
+                row["source_zip_name"],
+                row["source_xml_filename"],
+                row["source_xml_sha256"],
+                row["output_xml_sha256"],
+            ])
+
+    return summary_path, members_path, person_raw_path
 
 
 def export_fund_delivery_zip(
@@ -530,7 +610,7 @@ def export_fund_delivery_zip(
     )
     inserted = insert_delivery_members(cur, delivery_run_id=delivery_run_id, rows=written_rows)
     finalize_delivery_run(cur, delivery_run_id=delivery_run_id, output_zip_sha256=output_zip_sha256)
-    summary_csv_path, members_csv_path = _write_output_csvs(
+    summary_csv_path, members_csv_path, person_raw_csv_path = _write_output_csvs(
         output_dir,
         delivery_run_id=delivery_run_id,
         list_row=list_row,
@@ -543,4 +623,5 @@ def export_fund_delivery_zip(
     summary.output_zip_sha256 = output_zip_sha256
     summary.summary_csv_path = str(summary_csv_path)
     summary.members_csv_path = str(members_csv_path)
+    summary.person_raw_csv_path = str(person_raw_csv_path)
     return summary

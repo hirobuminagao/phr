@@ -159,9 +159,12 @@ ZIP名は `送信元コード_保険者番号_提出日出力番号_送信回数
 |---|---|---|
 |`{zip_stem}_summary.csv`|`delivery_run_id`, `delivery_list_id`, `output_zip_name`, `insurer_number`, `exam_month`, `facility_code`, `facility_name`, `person_count`|健診機関・受診月ごとの納品人数確認|
 |`{zip_stem}_members.csv`|出力XMLファイル名、元XML/元ZIP、`person_year_id`, `hia_download_xml_id`, `exam_date`, `facility_code`, `report_category_code` 等|ZIP内XMLと原本XMLの追跡、再確認|
+|`{zip_stem}_person_raw.csv`|`delivery_run_id`, `delivery_list_id`, `output_zip_name`, `output_xml_filename`, `person_year_id`, `identity_hash`, `facility_code`, `facility_name`, `exam_month`, `exam_date`, `birthdate`, `fiscal_year_end_age`, `report_category_code`, `program_type_code`, `source_zip_name`, `source_xml_filename` 等|健保向け累計集計の素材。毎回分を追記して、Excel等で累計・重複制御・月別/健診機関別集計を行う|
 
 CSVはExcelで開きやすいように UTF-8 BOM付きで出力する。
 個人氏名などの機微情報は初期実装ではCSVへ出さず、DB上の台帳IDから追跡する。
+累計集計用のraw CSVは、氏名・記号番号を出さず、`identity_hash` と出力/元ZIP名、健診機関、受診月、受診日、生年月日、年度末年齢を中心に出す。
+年度末年齢は `hia_person_years.exam_year` の翌年3月31日時点で計算する。
 
 健保提出済み反映 dry-run:
 

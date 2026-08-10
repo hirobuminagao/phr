@@ -233,7 +233,8 @@ def main() -> int:
                     f"source_zip_count={sum(item.source_zip_count for item in summaries)} "
                     f"report_category_10_count={sum(item.report_category_10_count for item in summaries)} "
                     f"output_zips={','.join(str(item.output_zip_name) for item in summaries)} "
-                    f"summary_csvs={','.join(str(item.summary_csv_path) for item in summaries if item.summary_csv_path)}"
+                    f"summary_csvs={','.join(str(item.summary_csv_path) for item in summaries if item.summary_csv_path)} "
+                    f"person_raw_csvs={','.join(str(item.person_raw_csv_path) for item in summaries if item.person_raw_csv_path)}"
                 ),
             )
             if dry_run:
@@ -254,7 +255,8 @@ def main() -> int:
         f"source_zips={sum(item.source_zip_count for item in summaries)} "
         f"output_zips={','.join(str(item.output_zip_name) for item in summaries)} "
         f"summary_csvs={','.join(str(item.summary_csv_path) for item in summaries if item.summary_csv_path)} "
-        f"members_csvs={','.join(str(item.members_csv_path) for item in summaries if item.members_csv_path)}"
+        f"members_csvs={','.join(str(item.members_csv_path) for item in summaries if item.members_csv_path)} "
+        f"person_raw_csvs={','.join(str(item.person_raw_csv_path) for item in summaries if item.person_raw_csv_path)}"
     )
     return 0
 
