@@ -58,7 +58,7 @@ SELECT
 FROM `health_exam_result`.`xml_export_zips` AS zez
 INNER JOIN `health_exam_result`.`xml_export_members` AS zem
   ON zem.`xml_export_zip_id` = zez.`xml_export_zip_id`
-LEFT JOIN `health_exam_result`.`xml_export_lists` AS xel
+LEFT JOIN `health_exam_result`.`ops_xml_export_lists` AS xel
   ON xel.`xml_export_list_id` = zez.`xml_export_list_id`
 LEFT JOIN `health_exam_result`.`exam_export_cases` AS eec
   ON zem.`ledger_type` = 'CASE'

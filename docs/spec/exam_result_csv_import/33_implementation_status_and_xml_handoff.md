@@ -46,8 +46,8 @@ Current as of 2026-08-06.
   -> exam_export_cases.export_readiness_status / export_readiness_reason
 
 03_05_create_xml_export_list.py
-  -> xml_export_lists
-  -> xml_export_list_cases
+  -> ops_xml_export_lists
+  -> ops_xml_export_list_cases
   -> 画面実装前の正式CLI入口として、出力可能caseをREADYリスト化
 
 04_export_hia_xml.py

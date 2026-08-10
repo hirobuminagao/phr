@@ -1691,7 +1691,7 @@ HIA XML出力の出力リスト方式
 
 - 画面運用では「出力リスト」を作成し、検索した `exam_export_cases` を追加・確認してからXML出力する方式を正とする。
 - 出力リストは人が操作する作業箱、`etl_runs` は実行ログ、`xml_export_zips` / `xml_export_members` は実際に出力された履歴として責務を分ける。
-- 初期DDL名は `xml_export_lists` / `xml_export_list_cases` とする。
+- 初期DDL名は `ops_xml_export_lists` / `ops_xml_export_list_cases` とする。
 - `run_id` という名前はETL実行履歴と混同しやすいため、出力対象の作業箱には使わない。
 - `xml_export_zips` へ `xml_export_list_id` を追加し、HIAアップロード作業リストから元の出力リストへたどれるようにする。
 - CLIの直接条件指定出力は当面残すが、画面運用の正ルートは出力リスト方式とする。
@@ -1730,11 +1730,11 @@ HIA XML出力リストと出力履歴連携の実装
 
 ### 決定
 
-- `xml_export_lists` / `xml_export_list_cases` を正式テーブルとして追加する。
+- `ops_xml_export_lists` / `ops_xml_export_list_cases` を正式テーブルとして追加する。
 - `xml_export_zips` に `xml_export_list_id` を追加し、ZIP履歴から出力リストへ辿れるようにする。
 - `v_xml_export_hia_upload_worklist` に出力リストID、リスト名、リスト状態を追加する。
 - CLI運用として、`03_05_create_xml_export_list.py` で出力リストを作成し、`04_export_hia_xml.py --xml-export-list-id` で対象リストを出力できるようにする。
-- `xml_export_members` は引き続き個人XML単位の出力履歴正本とし、出力成功時に `xml_export_list_cases` も `EXPORTED` へ更新する。
+- `xml_export_members` は引き続き個人XML単位の出力履歴正本とし、出力成功時に `ops_xml_export_list_cases` も `EXPORTED` へ更新する。
 
 ---
 
@@ -1864,3 +1864,27 @@ FastAPI管理画面の現状同期と健診機関・alias管理の実装区切�
 - `38_health_exam_remaining_implementation_summary.md` にFastAPI管理画面の実装済み範囲と残範囲を追記する。
 - `42_admin_screen_scope_and_priority.md` に健診機関・alias管理画面の実装済み内容と後続範囲を追記する。
 - `README.md` の現在正ドキュメントと画面スコープ説明を2026-08-10時点へ更新する。
+
+---
+
+## DH-20260810-02 / 2026-08-10 JST
+
+### テーマ
+
+出力対象リストをops系テーブル名へ寄せる
+
+### 背景
+
+- `health_exam_result` に、取込結果、検査値、清書case、XML出力履歴に加えて、画面で人が操作する出力対象リストが増えた。
+- `xml_export_lists` / `xml_export_list_cases` という名前だと、実際に出力されたXML/ZIP履歴なのか、人が作る作業箱なのかが分かりにくい。
+- 画面DBは実行環境へまだ反映していないため、既存データ移行よりも、正式適用前にDDLとコードの命名を直す方が安全である。
+
+### 決定
+
+- 出力対象リストの物理テーブル名を `ops_xml_export_lists` / `ops_xml_export_list_cases` とする。
+- `ops_` は、人が画面や運用で操作する作業台帳を示す接頭辞として扱う。
+- `xml_export_zips` / `xml_export_members` は、実際に出力されたXML/ZIP履歴なので現行名を維持する。
+- `exam_export_cases` / `exam_export_case_values` は、清書XMLを作るための人単位データなので現行名を維持する。
+- 主キー・参照カラム名の `xml_export_list_id` / `xml_export_list_case_id` は、既存CLI引数、URL、ZIP履歴参照との互換性を優先して今回は維持する。
+- 実行環境には未適用のため、既存テーブルrename migrationは作成しない。
+- fresh適用用DDLと `20260806_002_health_exam_result_create_ops_xml_export_lists.sql` を正とする。

@@ -1,4 +1,4 @@
-CREATE TABLE `health_exam_result`.`xml_export_lists` (
+CREATE TABLE `health_exam_result`.`ops_xml_export_lists` (
   `xml_export_list_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `event_id` bigint NOT NULL,
   `list_name` varchar(255) NOT NULL COMMENT '人が識別する出力リスト名',
@@ -22,18 +22,18 @@ CREATE TABLE `health_exam_result`.`xml_export_lists` (
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
   PRIMARY KEY (`xml_export_list_id`),
-  KEY `idx_xml_export_lists_event` (`event_id`),
-  KEY `idx_xml_export_lists_status` (`list_status`),
-  KEY `idx_xml_export_lists_exam_month` (`requested_exam_month`),
-  KEY `idx_xml_export_lists_export_run` (`export_etl_run_id`),
-  CONSTRAINT `fk_xml_export_lists_export_run`
+  KEY `idx_ops_xml_export_lists_event` (`event_id`),
+  KEY `idx_ops_xml_export_lists_status` (`list_status`),
+  KEY `idx_ops_xml_export_lists_exam_month` (`requested_exam_month`),
+  KEY `idx_ops_xml_export_lists_export_run` (`export_etl_run_id`),
+  CONSTRAINT `fk_ops_xml_export_lists_export_run`
     FOREIGN KEY (`export_etl_run_id`) REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_ja_0900_as_cs;
 
-CREATE TABLE `health_exam_result`.`xml_export_list_cases` (
+CREATE TABLE `health_exam_result`.`ops_xml_export_list_cases` (
   `xml_export_list_case_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `xml_export_list_id` bigint unsigned NOT NULL,
   `exam_export_case_id` bigint unsigned NOT NULL,
@@ -53,15 +53,15 @@ CREATE TABLE `health_exam_result`.`xml_export_list_cases` (
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
   PRIMARY KEY (`xml_export_list_case_id`),
-  UNIQUE KEY `uq_xml_export_list_cases_list_case` (`xml_export_list_id`, `exam_export_case_id`),
-  KEY `idx_xml_export_list_cases_case` (`exam_export_case_id`),
-  KEY `idx_xml_export_list_cases_status` (`list_case_status`),
-  KEY `idx_xml_export_list_cases_export_member` (`exported_xml_export_member_id`),
-  CONSTRAINT `fk_xml_export_list_cases_list`
-    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`xml_export_lists` (`xml_export_list_id`),
-  CONSTRAINT `fk_xml_export_list_cases_case`
+  UNIQUE KEY `uq_ops_xml_export_list_cases_list_case` (`xml_export_list_id`, `exam_export_case_id`),
+  KEY `idx_ops_xml_export_list_cases_case` (`exam_export_case_id`),
+  KEY `idx_ops_xml_export_list_cases_status` (`list_case_status`),
+  KEY `idx_ops_xml_export_list_cases_export_member` (`exported_xml_export_member_id`),
+  CONSTRAINT `fk_ops_xml_export_list_cases_list`
+    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`ops_xml_export_lists` (`xml_export_list_id`),
+  CONSTRAINT `fk_ops_xml_export_list_cases_case`
     FOREIGN KEY (`exam_export_case_id`) REFERENCES `health_exam_result`.`exam_export_cases` (`exam_export_case_id`),
-  CONSTRAINT `fk_xml_export_list_cases_export_member`
+  CONSTRAINT `fk_ops_xml_export_list_cases_export_member`
     FOREIGN KEY (`exported_xml_export_member_id`) REFERENCES `health_exam_result`.`xml_export_members` (`xml_export_member_id`)
 )
 ENGINE=InnoDB
@@ -74,7 +74,7 @@ ALTER TABLE `health_exam_result`.`xml_export_zips`
     AFTER `etl_run_id`,
   ADD KEY `idx_xml_export_zips_export_list` (`xml_export_list_id`),
   ADD CONSTRAINT `fk_xml_export_zips_export_list`
-    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`xml_export_lists` (`xml_export_list_id`);
+    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`ops_xml_export_lists` (`xml_export_list_id`);
 
 CREATE OR REPLACE VIEW `health_exam_result`.`v_xml_export_hia_upload_worklist` AS
 SELECT
@@ -136,7 +136,7 @@ SELECT
 FROM `health_exam_result`.`xml_export_zips` AS zez
 INNER JOIN `health_exam_result`.`xml_export_members` AS zem
   ON zem.`xml_export_zip_id` = zez.`xml_export_zip_id`
-LEFT JOIN `health_exam_result`.`xml_export_lists` AS xel
+LEFT JOIN `health_exam_result`.`ops_xml_export_lists` AS xel
   ON xel.`xml_export_list_id` = zez.`xml_export_list_id`
 LEFT JOIN `health_exam_result`.`exam_export_cases` AS eec
   ON zem.`ledger_type` = 'CASE'

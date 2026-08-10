@@ -200,13 +200,13 @@ XML exporterは、初期版では `EXPORT_READY` と `APPROVED_WITH_REASON` のc
 `etl_runs` はスクリプト実行履歴、エラー、処理件数を残す技術ログである。
 出力リストは、どのcaseを今回HIAへ出す候補にしたか、誰が確認したか、どのZIP出力につながったかを管理する業務用リストである。
 
-初期DDLは `20260806_002_health_exam_result_create_xml_export_lists.sql` で追加する。
+初期DDLは `20260806_002_health_exam_result_create_ops_xml_export_lists.sql` で追加する。
 既存 `xml_export_zips` / `xml_export_members` とは責務を分け、出力リストは作業選択、ZIP/memberは出力事実の正本とする。
 
 | table | role |
 | --- | --- |
-| `xml_export_lists` | 出力対象を集める作業リスト。event、リスト名、状態、抽出条件、件数、出力実行結果を持つ |
-| `xml_export_list_cases` | 出力リストに追加された `exam_export_cases`。追加時点の出力可否snapshot、選択状態、除外理由を持つ |
+| `ops_xml_export_lists` | 出力対象を集める作業リスト。event、リスト名、状態、抽出条件、件数、出力実行結果を持つ |
+| `ops_xml_export_list_cases` | 出力リストに追加された `exam_export_cases`。追加時点の出力可否snapshot、選択状態、除外理由を持つ |
 
 状態の概念は以下とする。
 
@@ -228,7 +228,7 @@ CLI暫定運用では、画面の代わりに以下の2段階で実行できる�
 
 ```text
 1. scripts/from_medical/03_05_create_xml_export_list.py
-   条件に合う export_readiness_status OK相当のcaseを xml_export_lists / xml_export_list_cases へ登録する。
+   条件に合う export_readiness_status OK相当のcaseを ops_xml_export_lists / ops_xml_export_list_cases へ登録する。
    標準ではREADYな出力リストを作成し、画面前のスクリプト運用ではこの入口を正式手順とする。
    リスト名を省略した場合は、event、受診月、実行日時から自動採番する。
 
@@ -538,7 +538,7 @@ HIAアップロード担当者への依頼は「`yyyymmdd_hhmmss` に出力し�
 このモードは、作成したXML/ZIPを人が確認するためのヒロ確認用であり、HIAアップロード対象フォルダを汚さないことを目的とする。
 ZIP内部のルートフォルダ名、個人XML名、XSD構成は正式出力と同じにする。
 違いは外側の配置場所だけである。
-ETL run と `etl_errors` は実行証跡として残すが、`xml_export_zips` / `xml_export_members`、`exam_export_cases.xml_export_status`、`xml_export_lists` / `xml_export_list_cases` の正式出力状態は更新しない。
+ETL run と `etl_errors` は実行証跡として残すが、`xml_export_zips` / `xml_export_members`、`exam_export_cases.xml_export_status`、`ops_xml_export_lists` / `ops_xml_export_list_cases` の正式出力状態は更新しない。
 
 ```text
 <repo>/data/hia_xml_review_exports/

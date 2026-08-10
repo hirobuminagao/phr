@@ -309,7 +309,7 @@ def resolve_latest_xml_export_list(cur: Any, config: ExportConfig) -> ExportConf
     cur.execute(
         f"""
         SELECT xml_export_list_id, list_name, list_status
-        FROM {qname(config.health_db)}.xml_export_lists
+        FROM {qname(config.health_db)}.ops_xml_export_lists
         WHERE event_id = %s
           AND list_status IN ('READY', 'PARTIAL', 'ERROR')
         ORDER BY xml_export_list_id DESC
@@ -442,7 +442,7 @@ def mark_export_list_started(cur: Any, *, config: ExportConfig, run_id: int) -> 
         return
     cur.execute(
         f"""
-        UPDATE {qname(config.health_db)}.xml_export_lists
+        UPDATE {qname(config.health_db)}.ops_xml_export_lists
         SET
           list_status = 'EXPORTING',
           export_etl_run_id = %s,
@@ -471,7 +471,7 @@ def mark_export_list_finished(cur: Any, *, config: ExportConfig, run_id: int, su
         status = "READY"
     cur.execute(
         f"""
-        UPDATE {qname(config.health_db)}.xml_export_lists xel
+        UPDATE {qname(config.health_db)}.ops_xml_export_lists xel
         SET
           xel.list_status = %s,
           xel.export_etl_run_id = %s,
@@ -501,7 +501,7 @@ def mark_export_list_case_error(cur: Any, *, config: ExportConfig, exam_export_c
         return
     cur.execute(
         f"""
-        UPDATE {qname(config.health_db)}.xml_export_list_cases
+        UPDATE {qname(config.health_db)}.ops_xml_export_list_cases
         SET
           list_case_status = 'EXPORT_ERROR',
           export_error_reason = %s,
@@ -555,7 +555,7 @@ def insert_history(cur: Any, *, config: ExportConfig, run_id: int, group: list[d
         if config.selectors.xml_export_list_id is not None:
             cur.execute(
                 f"""
-                UPDATE {qname(config.health_db)}.xml_export_list_cases
+                UPDATE {qname(config.health_db)}.ops_xml_export_list_cases
                 SET
                   list_case_status = 'EXPORTED',
                   exported_xml_export_member_id = %s,

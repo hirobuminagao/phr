@@ -1,4 +1,4 @@
-CREATE TABLE `health_exam_result`.`xml_export_lists` (
+CREATE TABLE `health_exam_result`.`ops_xml_export_lists` (
   `xml_export_list_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `event_id` bigint NOT NULL,
   `list_name` varchar(255) NOT NULL COMMENT '人が識別する出力リスト名',
@@ -22,11 +22,11 @@ CREATE TABLE `health_exam_result`.`xml_export_lists` (
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
   PRIMARY KEY (`xml_export_list_id`),
-  KEY `idx_xml_export_lists_event` (`event_id`),
-  KEY `idx_xml_export_lists_status` (`list_status`),
-  KEY `idx_xml_export_lists_exam_month` (`requested_exam_month`),
-  KEY `idx_xml_export_lists_export_run` (`export_etl_run_id`),
-  CONSTRAINT `fk_xml_export_lists_export_run`
+  KEY `idx_ops_xml_export_lists_event` (`event_id`),
+  KEY `idx_ops_xml_export_lists_status` (`list_status`),
+  KEY `idx_ops_xml_export_lists_exam_month` (`requested_exam_month`),
+  KEY `idx_ops_xml_export_lists_export_run` (`export_etl_run_id`),
+  CONSTRAINT `fk_ops_xml_export_lists_export_run`
     FOREIGN KEY (`export_etl_run_id`) REFERENCES `health_exam_result`.`etl_runs` (`run_id`)
 )
 ENGINE=InnoDB

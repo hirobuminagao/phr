@@ -135,7 +135,7 @@ def create_list(cur: Any, config: Config, rows: list[dict[str, Any]]) -> int:
     confirmed_by = config.created_by if config.confirm else None
     cur.execute(
         f"""
-        INSERT INTO {qname(config.health_db)}.xml_export_lists (
+        INSERT INTO {qname(config.health_db)}.ops_xml_export_lists (
           event_id, list_name, list_status, selector_summary,
           requested_exam_month, requested_facility_codes, include_exported,
           requested_file_date, requested_split_no, created_by, confirmed_by, confirmed_at
@@ -160,7 +160,7 @@ def create_list(cur: Any, config: Config, rows: list[dict[str, Any]]) -> int:
     for row in rows:
         cur.execute(
             f"""
-            INSERT INTO {qname(config.health_db)}.xml_export_list_cases (
+            INSERT INTO {qname(config.health_db)}.ops_xml_export_list_cases (
               xml_export_list_id, exam_export_case_id, list_case_status,
               export_readiness_status_snapshot, export_readiness_reason_snapshot,
               added_by

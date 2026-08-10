@@ -5,7 +5,7 @@ dev_db: dev_phr
 master_db: phr_master
 
 xsd_bundle_id: mhlw_v4_20230331_v08
-# Default script-run operation uses the latest READY xml_export_lists row created by 03_05.
+# Default script-run operation uses the latest READY ops_xml_export_lists row created by 03_05.
 # Use --all-facilities or set all_facilities: true only for direct condition-based export.
 use_latest_xml_export_list: true
 all_facilities: false
@@ -20,7 +20,7 @@ facility_ids: []
 file_receipt_ids: []
 # ledger_ids: health_exam_result.exam_export_cases.exam_export_case_id.
 ledger_ids: []
-# xml_export_list_id: health_exam_result.xml_export_lists.xml_export_list_id.
+# xml_export_list_id: health_exam_result.ops_xml_export_lists.xml_export_list_id.
 # When specified, only cases selected in that output list are exported.
 xml_export_list_id:
 # Person selectors for one-person or limited re-export.

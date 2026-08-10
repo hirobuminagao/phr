@@ -1,4 +1,4 @@
-CREATE TABLE `health_exam_result`.`xml_export_list_cases` (
+CREATE TABLE `health_exam_result`.`ops_xml_export_list_cases` (
   `xml_export_list_case_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `xml_export_list_id` bigint unsigned NOT NULL,
   `exam_export_case_id` bigint unsigned NOT NULL,
@@ -18,15 +18,15 @@ CREATE TABLE `health_exam_result`.`xml_export_list_cases` (
   `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
   PRIMARY KEY (`xml_export_list_case_id`),
-  UNIQUE KEY `uq_xml_export_list_cases_list_case` (`xml_export_list_id`, `exam_export_case_id`),
-  KEY `idx_xml_export_list_cases_case` (`exam_export_case_id`),
-  KEY `idx_xml_export_list_cases_status` (`list_case_status`),
-  KEY `idx_xml_export_list_cases_export_member` (`exported_xml_export_member_id`),
-  CONSTRAINT `fk_xml_export_list_cases_list`
-    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`xml_export_lists` (`xml_export_list_id`),
-  CONSTRAINT `fk_xml_export_list_cases_case`
+  UNIQUE KEY `uq_ops_xml_export_list_cases_list_case` (`xml_export_list_id`, `exam_export_case_id`),
+  KEY `idx_ops_xml_export_list_cases_case` (`exam_export_case_id`),
+  KEY `idx_ops_xml_export_list_cases_status` (`list_case_status`),
+  KEY `idx_ops_xml_export_list_cases_export_member` (`exported_xml_export_member_id`),
+  CONSTRAINT `fk_ops_xml_export_list_cases_list`
+    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`ops_xml_export_lists` (`xml_export_list_id`),
+  CONSTRAINT `fk_ops_xml_export_list_cases_case`
     FOREIGN KEY (`exam_export_case_id`) REFERENCES `health_exam_result`.`exam_export_cases` (`exam_export_case_id`),
-  CONSTRAINT `fk_xml_export_list_cases_export_member`
+  CONSTRAINT `fk_ops_xml_export_list_cases_export_member`
     FOREIGN KEY (`exported_xml_export_member_id`) REFERENCES `health_exam_result`.`xml_export_members` (`xml_export_member_id`)
 )
 ENGINE=InnoDB

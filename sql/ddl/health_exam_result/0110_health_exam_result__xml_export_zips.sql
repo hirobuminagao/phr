@@ -38,7 +38,7 @@ CREATE TABLE `health_exam_result`.`xml_export_zips` (
   CONSTRAINT `fk_xml_export_zips_run`
     FOREIGN KEY (`etl_run_id`) REFERENCES `health_exam_result`.`etl_runs` (`run_id`),
   CONSTRAINT `fk_xml_export_zips_export_list`
-    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`xml_export_lists` (`xml_export_list_id`)
+    FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`ops_xml_export_lists` (`xml_export_list_id`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

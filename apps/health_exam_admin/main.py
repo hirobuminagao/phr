@@ -755,7 +755,7 @@ templates.env.globals["list_status_label"] = list_status_label
 templates.env.globals["readiness_label"] = readiness_label
 
 
-def load_xml_export_lists(cur: Any, *, limit: int = 30) -> list[dict[str, Any]]:
+def load_ops_xml_export_lists(cur: Any, *, limit: int = 30) -> list[dict[str, Any]]:
     cur.execute(
         f"""
         SELECT
@@ -781,8 +781,8 @@ def load_xml_export_lists(cur: Any, *, limit: int = 30) -> list[dict[str, Any]]:
           SUM(CASE WHEN xelc.list_case_status = 'READY' THEN 1 ELSE 0 END) AS ready_count,
           SUM(CASE WHEN xelc.list_case_status = 'EXPORTED' THEN 1 ELSE 0 END) AS exported_count,
           SUM(CASE WHEN xelc.list_case_status = 'EXPORT_ERROR' THEN 1 ELSE 0 END) AS error_count
-        FROM {qname(health_db())}.xml_export_lists xel
-        LEFT JOIN {qname(health_db())}.xml_export_list_cases xelc
+        FROM {qname(health_db())}.ops_xml_export_lists xel
+        LEFT JOIN {qname(health_db())}.ops_xml_export_list_cases xelc
           ON xelc.xml_export_list_id = xel.xml_export_list_id
          AND xelc.removed_at IS NULL
         GROUP BY
@@ -1144,7 +1144,7 @@ def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[st
     cur.execute(
         f"""
         SELECT *
-        FROM {qname(health_db())}.xml_export_lists
+        FROM {qname(health_db())}.ops_xml_export_lists
         WHERE xml_export_list_id = %s
         """,
         (xml_export_list_id,),
@@ -1153,7 +1153,7 @@ def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[st
     return dict(row) if row else None
 
 
-def load_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list[dict[str, Any]]:
+def load_ops_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list[dict[str, Any]]:
     cur.execute(
         f"""
         SELECT
@@ -1181,7 +1181,7 @@ def load_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list[dic
           eec.xml_export_status,
           ef.exam_facility_code,
           ef.exam_facility_name
-        FROM {qname(health_db())}.xml_export_list_cases xelc
+        FROM {qname(health_db())}.ops_xml_export_list_cases xelc
         INNER JOIN {qname(health_db())}.exam_export_cases eec
           ON eec.exam_export_case_id = xelc.exam_export_case_id
         LEFT JOIN {qname(master_db())}.exam_facilities ef
@@ -1238,7 +1238,7 @@ def create_xml_export_list_from_form(cur: Any, *, form: dict[str, str], user: di
     created_by = str(user.get("employee_no") or user.get("display_name") or "")
     cur.execute(
         f"""
-        INSERT INTO {qname(health_db())}.xml_export_lists (
+        INSERT INTO {qname(health_db())}.ops_xml_export_lists (
           event_id, list_name, list_status, selector_summary,
           requested_exam_month, requested_facility_codes, include_exported,
           requested_file_date, requested_split_no, created_by, confirmed_by, confirmed_at
@@ -1272,7 +1272,7 @@ def create_xml_export_list_from_form(cur: Any, *, form: dict[str, str], user: di
     for row in selected:
         cur.execute(
             f"""
-            INSERT INTO {qname(health_db())}.xml_export_list_cases (
+            INSERT INTO {qname(health_db())}.ops_xml_export_list_cases (
               xml_export_list_id, exam_export_case_id, list_case_status,
               export_readiness_status_snapshot, export_readiness_reason_snapshot,
               added_by
@@ -2084,7 +2084,7 @@ def export_lists(request: Request) -> Response:
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            lists = load_xml_export_lists(cur)
+            lists = load_ops_xml_export_lists(cur)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -2153,7 +2153,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             if not export_list:
                 conn.commit()
                 return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
-            cases = load_xml_export_list_cases(cur, xml_export_list_id=xml_export_list_id)
+            cases = load_ops_xml_export_list_cases(cur, xml_export_list_id=xml_export_list_id)
             log_personal_info_view(
                 cur,
                 request=request,

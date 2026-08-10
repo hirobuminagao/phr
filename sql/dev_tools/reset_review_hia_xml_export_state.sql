@@ -44,7 +44,7 @@ INNER JOIN tmp_review_xml_export_zips AS trz
 WHERE zem.event_id = @event_id
   AND zem.ledger_type = 'CASE';
 
-UPDATE health_exam_result.xml_export_list_cases AS xelc
+UPDATE health_exam_result.ops_xml_export_list_cases AS xelc
 INNER JOIN tmp_review_xml_export_members AS trm
   ON trm.xml_export_member_id = xelc.exported_xml_export_member_id
 SET
@@ -79,7 +79,7 @@ FROM health_exam_result.xml_export_zips AS zez
 INNER JOIN tmp_review_xml_export_zips AS trz
   ON trz.xml_export_zip_id = zez.xml_export_zip_id;
 
-UPDATE health_exam_result.xml_export_lists AS xel
+UPDATE health_exam_result.ops_xml_export_lists AS xel
 INNER JOIN (
   SELECT DISTINCT xml_export_list_id
   FROM tmp_review_xml_export_zips

@@ -88,7 +88,7 @@ def fetch_candidates(
     if selectors.xml_export_list_id is not None:
         filters.append(
             "EXISTS ("
-            f"SELECT 1 FROM {qname(health_db)}.xml_export_list_cases xelc "
+            f"SELECT 1 FROM {qname(health_db)}.ops_xml_export_list_cases xelc "
             "WHERE xelc.exam_export_case_id = eec.exam_export_case_id "
             "AND xelc.xml_export_list_id = %s "
             "AND xelc.list_case_status IN ('SELECTED', 'READY', 'EXPORT_ERROR') "
