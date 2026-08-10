@@ -1,0 +1,52 @@
+# HIAからダウンロードしたXMLを健保向けに納品する一連の既定値。
+# VSCode Runボタン運用では、必要な値はここを変更してから各スクリプトを実行する。
+
+database: health_exam_result
+event_id: 2
+insurer_number: "06139463"
+
+download_import:
+  # input_zip_dir配下は 保険者番号/ZIP の構成にする。
+  # 例: data/hia_export/input_zip/06139463/0110717770_06139463_202606010_1.zip
+  input_zip_dir: data/hia_export/input_zip
+  archive_zip_dir: data/hia_export/archive_zip
+  work_dir: data/hia_export/work
+  archive_mode: copy
+  dry_run: false
+
+list:
+  list_name:
+  output_mode: EXAM_MONTH
+  exam_month: "202605"
+  delivery_policy: NOT_DELIVERED_ONLY
+  same_exam_date_policy: LATEST_DOWNLOAD
+  grouping_mode: ALL
+  sender_code: "1322100106"
+  sender_name:
+  created_by:
+  # false = dry-run、true = DBへ反映
+  confirm: true
+
+export:
+  # blank = 最新READYの健保納品リストを自動採用
+  delivery_list_id:
+  output_base_dir: data/hia_fund_delivery_exports
+  xsd_dir: scripts/from_medical/source/XSD/mhlw_v4_20230331_v08
+  delivery_date:
+  output_seq: 0
+  send_seq: 1
+  created_by:
+  # false = dry-run、true = ZIP作成とDB反映
+  confirm: true
+
+submission:
+  # blank = 最新READY/EXPORTEDの健保納品リストを自動採用
+  delivery_list_id:
+  delivery_member_ids: []
+  all_members: true
+  status: SUBMITTED
+  submitted_at:
+  submitted_by:
+  note:
+  # false = dry-run、true = 提出済み反映
+  confirm: false

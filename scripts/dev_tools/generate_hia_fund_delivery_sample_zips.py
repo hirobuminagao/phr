@@ -9,7 +9,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SAMPLE_XML_DIR = PROJECT_ROOT / "docs" / "spec" / "hia_fund_ledger_xml" / "samples" / "hia_download_xml"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "hia_export" / "input_zip" / "sample_hia_fund_delivery"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "hia_export" / "input_zip" / "06139463"
 
 
 ZIP_FIXTURES = [

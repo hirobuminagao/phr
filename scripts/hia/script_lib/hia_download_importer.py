@@ -84,7 +84,11 @@ def parse_zip_context(zip_path: Path) -> dict[str, Any]:
 def find_zip_files(input_zip_dir: Path) -> list[Path]:
     if not input_zip_dir.exists():
         return []
-    return sorted(input_zip_dir.glob("*/*.zip"))
+    return sorted(
+        zip_path
+        for zip_path in input_zip_dir.glob("*/*.zip")
+        if zip_path.parent.name.isdigit()
+    )
 
 
 def _reset_dir(path: Path) -> None:

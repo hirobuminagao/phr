@@ -280,6 +280,7 @@ def upsert_person_status(cur: Any, config: FundDeliveryListConfig) -> int:
 
 
 def create_delivery_list(cur: Any, config: FundDeliveryListConfig) -> int:
+    list_status = "READY" if not config.dry_run else "DRAFT"
     search_note = (
         f"output_mode={config.output_mode}; exam_month={config.exam_month}; "
         f"delivery_policy={config.delivery_policy}; same_exam_date_policy={config.same_exam_date_policy}; "
@@ -292,7 +293,7 @@ def create_delivery_list(cur: Any, config: FundDeliveryListConfig) -> int:
             grouping_mode, sender_code, sender_name, delivery_policy, same_exam_date_policy,
             include_delivery_status, search_condition_note, created_by
         ) VALUES (
-            %s, %s, %s, 'DRAFT', %s, %s,
+            %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s,
             %s, %s, %s
         )
@@ -301,6 +302,7 @@ def create_delivery_list(cur: Any, config: FundDeliveryListConfig) -> int:
             config.event_id,
             config.insurer_number,
             config.list_name,
+            list_status,
             config.output_mode,
             config.exam_month,
             config.grouping_mode,

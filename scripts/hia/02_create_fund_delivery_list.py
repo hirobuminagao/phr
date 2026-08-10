@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 import sys
+from typing import Any, Mapping
 
 if __name__ == "__main__" and __package__ is None:
     project_root = Path(__file__).resolve().parents[2]
@@ -14,6 +15,7 @@ from scripts.hia.script_lib.fund_delivery_list_builder import (  # noqa: E402
     FundDeliveryListConfig,
     build_fund_delivery_list,
 )
+from scripts.hia.script_lib.config_loader import config_bool, config_value, load_yaml_config  # noqa: E402
 from scripts.lib.db.config import load_mysql_base_params  # noqa: E402
 from scripts.lib.db.mysql import connect_ctx, dict_cursor  # noqa: E402
 from scripts.lib.etl.metrics import RunMetrics  # noqa: E402
@@ -22,6 +24,7 @@ from scripts.lib.etl.runs import finish_run, start_run  # noqa: E402
 
 DEFAULT_INSURER_NUMBER = "06139463"
 DEFAULT_SENDER_CODE = "1322100106"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "fund_delivery.yml"
 
 
 def default_list_name(exam_month: str | None, output_mode: str) -> str:
@@ -32,32 +35,42 @@ def default_list_name(exam_month: str | None, output_mode: str) -> str:
 
 
 def parse_args() -> argparse.Namespace:
+    bootstrap = argparse.ArgumentParser(add_help=False)
+    bootstrap.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+    known, _ = bootstrap.parse_known_args()
+    data = load_yaml_config(Path(known.config))
+    section = data.get("list") or {}
+    if not isinstance(section, Mapping):
+        raise ValueError("list must be a mapping in fund_delivery.yml")
     parser = argparse.ArgumentParser(
         description="Create a fund delivery output list from imported HIA XML ledgers.",
+        parents=[bootstrap],
     )
-    parser.add_argument("--database", default="health_exam_result")
-    parser.add_argument("--event-id", type=int, default=None)
-    parser.add_argument("--insurer-number", default=DEFAULT_INSURER_NUMBER)
-    parser.add_argument("--list-name", default=None)
-    parser.add_argument("--output-mode", choices=("EXAM_MONTH", "ALL"), default="EXAM_MONTH")
-    parser.add_argument("--exam-month", default=None, help="YYYYMM. Required when output-mode=EXAM_MONTH.")
+    parser.add_argument("--database", default=config_value(data, "database", "health_exam_result"))
+    event_id = config_value(data, "event_id", None)
+    parser.add_argument("--event-id", type=int, default=None if event_id in (None, "") else int(event_id))
+    parser.add_argument("--insurer-number", default=str(config_value(data, "insurer_number", DEFAULT_INSURER_NUMBER)))
+    parser.add_argument("--list-name", default=config_value(section, "list_name", None))
+    parser.add_argument("--output-mode", choices=("EXAM_MONTH", "ALL"), default=str(config_value(section, "output_mode", "EXAM_MONTH")))
+    parser.add_argument("--exam-month", default=config_value(section, "exam_month", None), help="YYYYMM. Required when output-mode=EXAM_MONTH.")
     parser.add_argument(
         "--delivery-policy",
         choices=("NOT_DELIVERED_ONLY", "REDELIVERY_ONLY", "NOT_DELIVERED_AND_REDELIVERY", "ALL"),
-        default="NOT_DELIVERED_ONLY",
+        default=str(config_value(section, "delivery_policy", "NOT_DELIVERED_ONLY")),
     )
     parser.add_argument(
         "--same-exam-date-policy",
         choices=("LATEST_DOWNLOAD", "EARLIEST_DOWNLOAD", "MANUAL_REVIEW"),
-        default="LATEST_DOWNLOAD",
+        default=str(config_value(section, "same_exam_date_policy", "LATEST_DOWNLOAD")),
     )
-    parser.add_argument("--grouping-mode", choices=("ALL", "BY_FACILITY"), default="ALL")
-    parser.add_argument("--sender-code", default=DEFAULT_SENDER_CODE)
-    parser.add_argument("--sender-name", default=None)
-    parser.add_argument("--created-by", default=None)
+    parser.add_argument("--grouping-mode", choices=("ALL", "BY_FACILITY"), default=str(config_value(section, "grouping_mode", "ALL")))
+    parser.add_argument("--sender-code", default=str(config_value(section, "sender_code", DEFAULT_SENDER_CODE)))
+    parser.add_argument("--sender-name", default=config_value(section, "sender_name", None))
+    parser.add_argument("--created-by", default=config_value(section, "created_by", None))
     parser.add_argument(
         "--confirm",
         action="store_true",
+        default=config_bool(section, "confirm", False),
         help="Apply changes. Without this flag the script runs as dry-run.",
     )
     return parser.parse_args()
