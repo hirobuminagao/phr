@@ -90,6 +90,58 @@
     <div class="summary-card"><span>納品XML</span><strong>{{ summary.delivery_members }}</strong></div>
   </section>
 
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">出力履歴、納品XML明細、取込ZIPを画面内で絞り込みます。</p>
+      </div>
+    </div>
+    <div class="fund-filter-grid">
+      <label>
+        <span>出力履歴</span>
+        <input data-live-filter-input="#fund-run-table" autocomplete="off" placeholder="ZIP / リスト / 月 / 状態">
+      </label>
+      <label>
+        <span>納品XML明細</span>
+        <input data-live-filter-input="#fund-member-table" autocomplete="off" placeholder="カナ / 記号番号 / 健診機関 / XML / 状態">
+      </label>
+      <label>
+        <span>取込ZIP</span>
+        <input data-live-filter-input="#fund-zip-table" autocomplete="off" placeholder="ZIP / 健診機関 / 状態 / 理由">
+      </label>
+    </div>
+    <div class="fund-filter-toggles">
+      <fieldset class="filter-condition-block">
+        <legend>出力履歴状態</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#fund-run-table" data-filter-field="status" data-filter-value="CREATED">作成済み</button>
+          <button type="button" data-live-filter-toggle="#fund-run-table" data-filter-field="status" data-filter-value="SUBMITTED">提出済み</button>
+          <button type="button" data-live-filter-toggle="#fund-run-table" data-filter-field="status" data-filter-value="PARTIAL_SUBMITTED">一部提出済み</button>
+          <button type="button" data-live-filter-toggle="#fund-run-table" data-filter-field="status" data-filter-value="SUBMISSION_ERROR">提出エラー</button>
+          <button type="button" data-live-filter-toggle="#fund-run-table" data-filter-field="status" data-filter-value="PENDING">保留</button>
+        </div>
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>納品XML状態</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#fund-member-table" data-filter-field="status" data-filter-value="CREATED">作成済み</button>
+          <button type="button" data-live-filter-toggle="#fund-member-table" data-filter-field="status" data-filter-value="SUBMITTED">提出済み</button>
+          <button type="button" data-live-filter-toggle="#fund-member-table" data-filter-field="status" data-filter-value="SUBMISSION_ERROR">提出エラー</button>
+          <button type="button" data-live-filter-toggle="#fund-member-table" data-filter-field="status" data-filter-value="PENDING">保留</button>
+        </div>
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>取込ZIP状態</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#fund-zip-table" data-filter-field="status" data-filter-value="IMPORTED">取込済み</button>
+          <button type="button" data-live-filter-toggle="#fund-zip-table" data-filter-field="status" data-filter-value="ERROR">エラー</button>
+          <button type="button" data-live-filter-toggle="#fund-zip-table" data-filter-field="status" data-filter-value="SKIPPED">スキップ</button>
+        </div>
+      </fieldset>
+    </div>
+  </section>
+
   <section class="panel">
     <div class="section-heading">
       <div>
@@ -98,9 +150,9 @@
       </div>
     </div>
     <div class="table-panel">
-      <table class="data-table fund-table">
+      <table id="fund-list-table" class="data-table fund-table" data-empty-message="表示中の納品リストに一致するものはありません。">
         <thead>
-          <tr>
+          <tr data-filter-text="{{ item.delivery_list_id }} {{ item.list_name }} {{ item.insurer_number }} {{ item.list_status }} {{ item.output_mode }} {{ item.exam_month or '' }} {{ item.delivery_policy }} {{ item.same_exam_date_policy }}" data-status="{{ item.list_status }}">
             <th>ID</th>
             <th>リスト</th>
             <th>状態</th>
@@ -135,9 +187,9 @@
       </div>
     </div>
     <div class="table-panel">
-      <table class="data-table fund-run-table">
+      <table id="fund-run-table" class="data-table fund-run-table" data-empty-message="表示中の出力履歴に一致するものはありません。">
         <thead>
-          <tr>
+          <tr data-filter-text="{{ item.delivery_run_id }} {{ item.delivery_list_id }} {{ item.list_name or '' }} {{ item.insurer_number }} {{ item.output_mode }} {{ item.exam_month or '' }} {{ item.output_zip_name }} {{ item.output_zip_path }} {{ item.delivery_status }} {{ item.created_at }}" data-status="{{ item.delivery_status }}">
             <th>Run</th>
             <th>List</th>
             <th>状態</th>
@@ -187,9 +239,9 @@
       </div>
     </div>
     <div class="table-panel">
-      <table class="data-table fund-member-table">
+      <table id="fund-member-table" class="data-table fund-member-table" data-empty-message="表示中の納品XML明細に一致するものはありません。">
         <thead>
-          <tr>
+          <tr data-filter-text="{{ item.delivery_member_id }} {{ item.delivery_run_id }} {{ item.delivery_list_id }} {{ item.list_name or '' }} {{ item.person_id_custom or '' }} {{ item.name_kana_norm or '' }} {{ item.gender_code or '' }} {{ item.birthdate or '' }} {{ item.insurance_symbol_match or '' }} {{ item.insurance_number_match or '' }} {{ item.xml_filename }} {{ item.facility_code or '' }} {{ item.facility_name or '' }} {{ item.exam_date or '' }} {{ item.exam_month or '' }} {{ item.member_status }} {{ item.submitted_by or '' }} {{ item.submission_note or '' }}" data-status="{{ item.member_status }}">
             <th>Member</th>
             <th>人</th>
             <th>健診</th>
@@ -248,9 +300,9 @@
       </div>
     </div>
     <div class="table-panel">
-      <table class="data-table fund-zip-table">
+      <table id="fund-zip-table" class="data-table fund-zip-table" data-empty-message="表示中の取込ZIPに一致するものはありません。">
         <thead>
-          <tr>
+          <tr data-filter-text="{{ item.download_zip_id }} {{ item.insurer_number }} {{ item.facility_code }} {{ item.folder_name }} {{ item.zip_name }} {{ item.dl_date }} {{ item.send_seq }} {{ item.import_status }} {{ item.import_reason or '' }}" data-status="{{ item.import_status }}">
             <th>ID</th>
             <th>ZIP</th>
             <th>状態</th>
