@@ -26,7 +26,7 @@
     <div class="section-heading">
       <div>
         <h2>実行</h2>
-        <p class="subtle">設定値は <code>scripts/hia/config/fund_delivery.yml</code> を使います。ボタンは上から順に実行します。</p>
+        <p class="subtle">設定値は <code>scripts/hia/config/fund_delivery.yml</code> を使います。01〜04の順繰り実行は維持し、下の一覧では画面運用用に状態を個別修正できます。</p>
       </div>
     </div>
     <div class="warning-strip">
@@ -76,7 +76,7 @@
         <input type="hidden" name="action" value="mark_submitted">
         <span class="status-pill status-pending">04</span>
         <strong>提出済み反映</strong>
-        <small>アップロード後に実行します。現在 confirm={{ config.submission.confirm }} です。</small>
+        <small>アップロード後に実行します。現在 confirm={{ config.submission.confirm }} です。画面下部では個人/ZIP単位でも状態変更できます。</small>
         <button type="submit" {% if not can_submit %}disabled{% endif %}>提出済みにする</button>
       </form>
     </div>
@@ -143,6 +143,7 @@
             <th>状態</th>
             <th>ZIP</th>
             <th>人数</th>
+            <th>提出記帳</th>
             <th>作成</th>
           </tr>
         </thead>
@@ -150,14 +151,89 @@
           {% for item in delivery_runs %}
           <tr>
             <td>{{ item.delivery_run_id }}</td>
-            <td>{{ item.delivery_list_id }}</td>
+            <td><strong>{{ item.delivery_list_id }}</strong><small>{{ item.list_name or "" }}</small></td>
             <td><span class="status-pill status-ready">{{ fund_delivery_status_label(item.delivery_status) }}</span></td>
             <td><strong>{{ item.output_zip_name }}</strong><small>{{ item.output_zip_path }}</small></td>
             <td><strong>{{ item.delivery_person_count }}人</strong><small>XML {{ item.delivery_xml_count }}</small></td>
+            <td>
+              <form method="post" action="/hia/fund-delivery/members/status" class="inline-status-form">
+                <input type="hidden" name="target_scope" value="run">
+                <input type="hidden" name="delivery_list_id" value="{{ item.delivery_list_id }}">
+                <input type="hidden" name="delivery_run_id" value="{{ item.delivery_run_id }}">
+                <select name="target_status" {% if not can_submit %}disabled{% endif %}>
+                  <option value="SUBMITTED">提出済み</option>
+                  <option value="SUBMISSION_ERROR">提出エラー</option>
+                  <option value="PENDING">保留に戻す</option>
+                </select>
+                <input name="note" placeholder="メモ">
+                <button type="submit" {% if not can_submit %}disabled{% endif %}>更新</button>
+              </form>
+            </td>
             <td><small>{{ item.created_at }}</small></td>
           </tr>
           {% else %}
-          <tr><td colspan="6">出力履歴はまだありません。</td></tr>
+          <tr><td colspan="7">出力履歴はまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>納品XML明細</h2>
+        <p class="subtle">最新120件。HIAアップロード結果に合わせて、個人単位で提出済み、提出エラー、保留に戻すを記帳します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table fund-member-table">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>人</th>
+            <th>健診</th>
+            <th>XML</th>
+            <th>状態</th>
+            <th>提出記帳</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in delivery_members %}
+          <tr>
+            <td><strong>{{ item.delivery_member_id }}</strong><small>run {{ item.delivery_run_id }} / list {{ item.delivery_list_id }}</small></td>
+            <td>
+              <strong>{{ item.name_kana_norm or "-" }}</strong>
+              <small>{{ item.person_id_custom or "-" }} / {{ item.insurance_symbol_match or "-" }}-{{ item.insurance_number_match or "-" }}</small>
+              <small>{{ item.birthdate or "" }} / {{ item.gender_code or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.facility_name or "-" }}</strong>
+              <small>{{ item.facility_code or "-" }} / {{ item.exam_date or "-" }}</small>
+            </td>
+            <td><strong>{{ item.xml_filename }}</strong><small>{{ item.list_name or "" }}</small></td>
+            <td>
+              <span class="status-pill status-ready">{{ fund_delivery_status_label(item.member_status) }}</span>
+              <small>{{ item.submitted_at or "" }} {{ item.submitted_by or "" }}</small>
+              {% if item.submission_note %}<small>{{ item.submission_note }}</small>{% endif %}
+            </td>
+            <td>
+              <form method="post" action="/hia/fund-delivery/members/status" class="inline-status-form">
+                <input type="hidden" name="target_scope" value="member">
+                <input type="hidden" name="delivery_list_id" value="{{ item.delivery_list_id }}">
+                <input type="hidden" name="delivery_member_id" value="{{ item.delivery_member_id }}">
+                <select name="target_status" {% if not can_submit %}disabled{% endif %}>
+                  <option value="SUBMITTED">提出済み</option>
+                  <option value="SUBMISSION_ERROR">提出エラー</option>
+                  <option value="PENDING">保留に戻す</option>
+                </select>
+                <input name="note" placeholder="エラー内容・メモ">
+                <button type="submit" {% if not can_submit %}disabled{% endif %}>更新</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">納品XML明細はまだありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>

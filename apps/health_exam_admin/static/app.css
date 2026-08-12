@@ -1032,11 +1032,37 @@ button[type="submit"]:hover {
 }
 
 .fund-run-table {
-  min-width: 1120px;
+  min-width: 1360px;
 }
 
 .fund-zip-table {
   min-width: 1040px;
+}
+
+.fund-member-table {
+  min-width: 1560px;
+}
+
+.fund-member-table td {
+  vertical-align: top;
+}
+
+.inline-status-form {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(140px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 340px;
+}
+
+.inline-status-form select,
+.inline-status-form input,
+.inline-status-form button {
+  min-height: 38px;
+}
+
+.inline-status-form input {
+  min-width: 0;
 }
 
 .export-create-panel {

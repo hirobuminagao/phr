@@ -548,6 +548,7 @@ identity 関連の確認は、まず以下の共通 spec を参照する。
 - 提出済み反映入口: `scripts/hia/04_mark_fund_delivery_submitted.py`
 - ix08 / su08 自動再生成
 - FastAPI管理画面からの確認・実行入口
+- FastAPI管理画面からのZIP単位/個人XML単位の提出済み・提出エラー・保留記帳
 
 対応スクリプト
 
@@ -563,7 +564,16 @@ identity 関連の確認は、まず以下の共通 spec を参照する。
 - 管理画面からの納品リスト削除
 - 同一月READY/CREATEDリスト重複時の停止または選択UI
 - 出力対象リストの画面確認
-- 提出済み/エラー記帳の画面運用固め
+- 提出済み/エラー記帳の運用詳細確認
+
+画面運用の考え方
+
+- `scripts/hia/01_import_downloaded_xml_zip.py`、`02_create_fund_delivery_list.py`、`03_export_fund_delivery_zip.py`、`04_mark_fund_delivery_submitted.py` の順繰り実行は引き続き維持する。
+- FastAPI管理画面では、順繰り実行ボタンに加えて、出力履歴ごとの一括記帳と個人XML単位の個別記帳を行えるようにする。
+- 個人XML単位の状態は `fund_delivery_members.member_status`、ZIP単位の状態は `fund_delivery_runs.delivery_status`、リスト全体の状態は `fund_delivery_lists.list_status` に集約する。
+- HIAアップロードで全件正常なら、出力履歴単位で `SUBMITTED` に更新する。
+- 一部だけHIAアップロードエラーの場合は、該当個人XMLを `SUBMISSION_ERROR` とし、再対応待ちは `PENDING` に戻せるようにする。
+- `fund_delivery_person_status.delivery_tracking_status` は、`SUBMITTED` の時だけ `DELIVERED` に進める。提出エラーや保留は作業状態として記帳し、過去の提出済み事実を自動で壊さない。
 
 今後のドキュメント更新方針
 

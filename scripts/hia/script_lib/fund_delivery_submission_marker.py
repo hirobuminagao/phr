@@ -89,6 +89,8 @@ def update_members(cur: Any, config: FundDeliverySubmissionConfig, rows: list[di
     if config.target_status == "SUBMITTED":
         submitted_fields = ", submitted_at = %s, submitted_by = %s"
         params.extend([submitted_at, config.submitted_by])
+    else:
+        submitted_fields = ", submitted_at = NULL, submitted_by = NULL"
     cur.execute(
         f"""
         UPDATE fund_delivery_members
@@ -227,6 +229,8 @@ def update_list(cur: Any, config: FundDeliverySubmissionConfig) -> str:
     if list_status == "SUBMITTED":
         submitted_fields = ", submitted_at = %s, submitted_by = %s"
         params.extend([submitted_at, config.submitted_by])
+    else:
+        submitted_fields = ", submitted_at = NULL, submitted_by = NULL"
     cur.execute(
         f"""
         UPDATE fund_delivery_lists

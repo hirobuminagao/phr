@@ -957,21 +957,65 @@ def load_fund_delivery_run_rows(cur: Any, *, limit: int = 20) -> list[dict[str, 
     cur.execute(
         """
         SELECT
-          delivery_run_id,
-          delivery_list_id,
-          event_id,
-          insurer_number,
-          output_mode,
-          exam_month,
-          output_zip_name,
-          output_zip_path,
-          delivery_status,
-          delivery_xml_count,
-          delivery_person_count,
-          created_at,
-          updated_at
-        FROM fund_delivery_runs
-        ORDER BY delivery_run_id DESC
+          r.delivery_run_id,
+          r.delivery_list_id,
+          l.list_name,
+          r.event_id,
+          r.insurer_number,
+          r.output_mode,
+          r.exam_month,
+          r.output_zip_name,
+          r.output_zip_path,
+          r.delivery_status,
+          r.delivery_xml_count,
+          r.delivery_person_count,
+          r.created_at,
+          r.updated_at
+        FROM fund_delivery_runs r
+        LEFT JOIN fund_delivery_lists l
+          ON l.delivery_list_id = r.delivery_list_id
+        ORDER BY r.delivery_run_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_fund_delivery_member_rows(cur: Any, *, limit: int = 120) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT
+          m.delivery_member_id,
+          m.delivery_run_id,
+          r.delivery_list_id,
+          l.list_name,
+          m.person_year_id,
+          py.person_id_custom,
+          py.name_kana_norm,
+          py.gender_code,
+          py.birthdate,
+          py.insurance_symbol_match,
+          py.insurance_number_match,
+          m.xml_filename,
+          m.facility_code,
+          m.facility_name,
+          m.exam_date,
+          m.exam_month,
+          m.member_status,
+          m.member_reason,
+          m.submitted_at,
+          m.submitted_by,
+          m.submission_note,
+          m.updated_at
+        FROM fund_delivery_members m
+        JOIN fund_delivery_runs r
+          ON r.delivery_run_id = m.delivery_run_id
+        LEFT JOIN fund_delivery_lists l
+          ON l.delivery_list_id = r.delivery_list_id
+        LEFT JOIN hia_person_years py
+          ON py.person_year_id = m.person_year_id
+        ORDER BY m.delivery_member_id DESC
         LIMIT %s
         """,
         (limit,),
@@ -1205,6 +1249,54 @@ def build_fund_delivery_submission_config(cur: Any, raw: dict[str, Any], *, acto
     )
 
 
+def build_fund_delivery_submission_config_from_form(
+    cur: Any,
+    form: dict[str, str],
+    *,
+    actor: str | None = None,
+) -> FundDeliverySubmissionConfig:
+    delivery_list_id = int(form.get("delivery_list_id") or "0")
+    delivery_run_id = int(form.get("delivery_run_id") or "0")
+    delivery_member_id = int(form.get("delivery_member_id") or "0")
+    target_scope = (form.get("target_scope") or "member").strip()
+    target_status = (form.get("target_status") or "SUBMITTED").strip()
+    note = (form.get("note") or "").strip() or None
+    if delivery_list_id <= 0:
+        raise ValueError("delivery_list_id が不正です。")
+    member_ids: tuple[int, ...]
+    if target_scope == "run":
+        if delivery_run_id <= 0:
+            raise ValueError("delivery_run_id が不正です。")
+        cur.execute(
+            """
+            SELECT delivery_member_id
+              FROM fund_delivery_members
+             WHERE delivery_run_id = %s
+             ORDER BY delivery_member_id
+            """,
+            (delivery_run_id,),
+        )
+        member_ids = tuple(int(row["delivery_member_id"]) for row in (cur.fetchall() or []))
+        if not member_ids:
+            raise ValueError(f"delivery_run_id={delivery_run_id} の納品XMLがありません。")
+    elif target_scope == "member":
+        if delivery_member_id <= 0:
+            raise ValueError("delivery_member_id が不正です。")
+        member_ids = (delivery_member_id,)
+    else:
+        raise ValueError(f"target_scope が不正です: {target_scope}")
+    return FundDeliverySubmissionConfig(
+        delivery_list_id=delivery_list_id,
+        delivery_member_ids=member_ids,
+        all_members=False,
+        target_status=target_status,
+        submitted_at=None,
+        submitted_by=actor,
+        submission_note=note,
+        dry_run=False,
+    )
+
+
 def run_hia_fund_delivery_step(cur: Any, *, action: str, raw: dict[str, Any], user: dict[str, Any]) -> tuple[str, bool]:
     database = str(config_value(raw, "database", health_db()))
     actor = fund_delivery_actor(user)
@@ -1368,6 +1460,7 @@ def load_fund_delivery_page_data(cur: Any) -> dict[str, Any]:
         "download_zips": load_fund_delivery_zip_rows(cur),
         "delivery_lists": load_fund_delivery_list_rows(cur),
         "delivery_runs": load_fund_delivery_run_rows(cur),
+        "delivery_members": load_fund_delivery_member_rows(cur),
     }
 
 
@@ -2257,6 +2350,60 @@ async def run_hia_fund_delivery(request: Request) -> Response:
             conn.rollback()
             return RedirectResponse(f"/hia/fund-delivery?error={quote(str(exc))}", status_code=303)
     return RedirectResponse(f"/hia/fund-delivery?message={quote(message)}", status_code=303)
+
+
+@app.post("/hia/fund-delivery/members/status", response_class=HTMLResponse)
+async def update_hia_fund_delivery_member_status(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            config = build_fund_delivery_submission_config_from_form(
+                cur,
+                form,
+                actor=fund_delivery_actor(user),
+            )
+            run_id = start_run(
+                cur,
+                phase="HIA_MARK_FUND_DELIVERY_SUBMITTED",
+                source="HIA",
+                db_schema=health_db(),
+                db_path=None,
+                input_base=None,
+                input_file=None,
+                insurer_number=None,
+                dry_run=False,
+                limit_rows=None,
+            )
+            summary = mark_fund_delivery_submitted(cur, config)
+            metrics = RunMetrics(
+                rows_seen=summary.members_seen,
+                rows_updated=summary.members_updated + summary.runs_updated + summary.person_status_updated,
+                errors=summary.errors,
+            )
+            finish_run(
+                cur,
+                run_id,
+                metrics,
+                extra_notes=(
+                    f"delivery_list_id={summary.delivery_list_id} "
+                    f"target_status={config.target_status} list_status={summary.list_status}"
+                ),
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/hia/fund-delivery?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse(
+        f"/hia/fund-delivery?message={quote(f'納品状態を更新しました: {config.target_status} {summary.members_seen}件')}",
+        status_code=303,
+    )
 
 
 @app.get("/admin/events", response_class=HTMLResponse)
