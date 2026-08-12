@@ -32,6 +32,24 @@
     <div class="warning-strip">
       この画面は実装確認中です。正式運用は、リスト削除、同一月リスト重複防止、出力対象確認の操作が揃ってから開始します。
     </div>
+    <div class="fund-config-strip">
+      <div>
+        <span>出力先</span>
+        <strong>{{ config.export.output_base_dir }}</strong>
+      </div>
+      <div>
+        <span>提出日</span>
+        <strong>{{ config.export.delivery_date or "実行日" }}</strong>
+      </div>
+      <div>
+        <span>同日作成回数</span>
+        <strong>{{ config.export.output_seq }}</strong>
+      </div>
+      <div>
+        <span>実施区分</span>
+        <strong>{{ config.export.service_event_type_code or "1" }}</strong>
+      </div>
+    </div>
     <div class="fund-step-grid">
       <form method="post" action="/hia/fund-delivery/run" class="fund-step-card">
         <input type="hidden" name="action" value="import_download">
@@ -51,7 +69,7 @@
         <input type="hidden" name="action" value="export_zip">
         <span class="status-pill status-ready">03</span>
         <strong>ZIP出力</strong>
-        <small>出力待ちリストを月順に使い、健保納品ZIPを出力します。同じ月の試行リストが残っている場合は先に整理します。</small>
+        <small>出力待ちリストを月順に使い、健保納品ZIP、summary、members、person raw CSVを出力します。同じ月の試行リストが残っている場合は先に整理します。</small>
         <button type="submit">ZIP出力</button>
       </form>
       <form method="post" action="/hia/fund-delivery/run" class="fund-step-card">

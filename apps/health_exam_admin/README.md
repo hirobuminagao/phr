@@ -7,6 +7,31 @@
 - `phr_app` のユーザーでログインする。
 - DB設定ロール/権限を読み、ログイン後画面に表示する。
 - 出力リスト画面への入口を持つ。
+- 受領ファイル、統合ledger、HIA XML出力リスト、HIA→健保納品の状態確認入口を持つ。
+
+## 実行環境DB反映メモ
+
+画面系は実行環境へ未反映の可能性があるため、反映タイミングは別途確認してから行う。
+
+画面ログイン/権限管理に必要:
+
+- `sql/ddl/phr_app/0000_phr_app__database.sql`
+- `sql/ddl/phr_app/0010_phr_app__user_management.sql`
+- `sql/migrations/phr_app/20260807_001_phr_app_create_user_management.sql`
+- `sql/migrations/phr_app/20260807_002_phr_app_add_user_approval.sql`
+- `sql/migrations/phr_app/20260807_003_phr_app_add_user_permission_overrides.sql`
+- `sql/migrations/phr_app/20260807_004_phr_app_add_security_settings.sql`
+
+HIA XML出力リスト画面に必要:
+
+- `sql/ddl/health_exam_result/0108_health_exam_result__ops_xml_export_lists.sql`
+- `sql/ddl/health_exam_result/0121_health_exam_result__ops_xml_export_list_cases.sql`
+- `sql/migrations/health_exam_result/20260806_002_health_exam_result_create_ops_xml_export_lists.sql`
+- `sql/migrations/health_exam_result/20260810_001_health_exam_result_fix_ops_xml_export_list_table_names.sql`
+
+健保納品画面は既存の HIA→健保納品テーブルを参照する。
+新規環境は `sql/ddl/health_exam_result/0190_health_exam_result__hia_download_ledgers.sql`、`0200_health_exam_result__hia_person_years.sql`、`0210_health_exam_result__fund_delivery.sql` を含むDDL一式を使用する。
+既存環境は適用済みmigrationを確認して、不足分だけ新規migrationで補う。
 
 ## Docker起動
 

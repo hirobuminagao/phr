@@ -8,6 +8,7 @@
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/account">登録情報</a>
+    <a class="ghost-button" href="/hia/fund-delivery">健保納品</a>
     {% if "users.manage" in user.permissions %}
     <a class="ghost-button" href="/admin/users">アカウント管理</a>
     <a class="ghost-button" href="/admin/permissions">権限設定</a>
@@ -36,6 +37,10 @@
         <span>対象者の箱を作る・確認する</span>
       </a>
       {% endif %}
+      <a class="home-action-button" href="/hia/fund-delivery">
+        <strong>健保納品</strong>
+        <span>HIA ZIPから健保向けXMLを作る</span>
+      </a>
       <a class="home-action-button" href="/account">
         <strong>登録情報</strong>
         <span>名前・連絡先・パスワード</span>
