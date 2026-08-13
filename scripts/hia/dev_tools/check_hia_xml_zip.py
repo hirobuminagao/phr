@@ -5,6 +5,7 @@ import argparse
 import csv
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 import re
 import sys
@@ -46,6 +47,8 @@ class Finding:
     message: str
     namecode_source: str | None = None
     value_preview: str | None = None
+    xsd_element: str | None = None
+    xsd_attribute: str | None = None
     mhlw_byte_length: int | None = None
     max_byte_length: int | None = None
     can_fix: bool = False
@@ -161,15 +164,53 @@ def _namecode_for_xsd_error(document: etree._Element, error: XsdValidationError)
     namecode, display_name = _namecode_for_element(element)
     if not namecode:
         return None, None, None
+    if not display_name:
+        display_name = _exam_item_name_for_namecode(namecode)
     return namecode, display_name, source
 
 
 def _display_name_for_namecode(document: etree._Element, namecode: str) -> str | None:
     xpath = f".//*[local-name()='observation']/*[local-name()='code'][@code={namecode!r}]"
     code = document.xpath(xpath)
-    if not code:
+    if code:
+        display_name = str(code[0].get("displayName") or "").strip()
+        if display_name:
+            return display_name
+    return _exam_item_name_for_namecode(namecode)
+
+
+@lru_cache(maxsize=1)
+def _load_exam_item_names() -> dict[str, str]:
+    path = PROJECT_ROOT / "scripts" / "work_folder" / "mat" / "kenshin_item_master.csv"
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8-sig", newline="") as fp:
+        reader = csv.DictReader(fp)
+        return {
+            str(row.get("項目コード（17桁）") or "").strip(): str(row.get("項目名") or "").strip()
+            for row in reader
+            if str(row.get("項目コード（17桁）") or "").strip()
+        }
+
+
+def _exam_item_name_for_namecode(namecode: str | None) -> str | None:
+    if not namecode:
         return None
-    return code[0].get("displayName")
+    return _load_exam_item_names().get(str(namecode).strip())
+
+
+def _xsd_error_context(message: str) -> dict[str, str | None]:
+    element_match = re.search(r"Element '([^']+)'", message)
+    attribute_match = re.search(r"attribute '([^']+)'", message)
+    value_match = re.search(r"The value '([^']*)'", message)
+    element = element_match.group(1) if element_match else None
+    if element and element.startswith("{") and "}" in element:
+        element = element.rsplit("}", 1)[1]
+    return {
+        "element": element,
+        "attribute": attribute_match.group(1) if attribute_match else None,
+        "value": value_match.group(1) if value_match else None,
+    }
 
 
 def _text_preview(value: str | None, limit: int = 80) -> str | None:
@@ -281,6 +322,7 @@ def _check_and_fix_xml(
             xsd_errors = [XsdValidationError(message=str(exc))]
         for error in xsd_errors:
             namecode, display_name, namecode_source = _namecode_for_xsd_error(document, error)
+            context = _xsd_error_context(error.message)
             findings.append(
                 Finding(
                     zip_path=str(zip_path),
@@ -291,6 +333,9 @@ def _check_and_fix_xml(
                     item_display_name=display_name,
                     namecode_source=namecode_source,
                     message=error.message,
+                    value_preview=context["value"],
+                    xsd_element=context["element"],
+                    xsd_attribute=context["attribute"],
                 )
             )
 
@@ -363,6 +408,8 @@ def write_report(findings: list[Finding], output_dir: Path) -> Path:
         "namecode_source",
         "message",
         "value_preview",
+        "xsd_element",
+        "xsd_attribute",
         "mhlw_byte_length",
         "max_byte_length",
         "can_fix",

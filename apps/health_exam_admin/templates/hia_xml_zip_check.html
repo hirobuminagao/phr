@@ -175,8 +175,13 @@
               {% if row.fix_note %}
                 <small>修正内容: {{ row.fix_note }}</small>
               {% endif %}
+              {% if row.xsd_element or row.xsd_attribute %}
+                <small>要素/属性: {{ row.xsd_element or "-" }}{% if row.xsd_attribute %} / {{ row.xsd_attribute }}{% endif %}</small>
+              {% endif %}
               {% if row.value_preview %}
                 <small>値: {{ row.value_preview }}</small>
+              {% elif row.value_preview == "" %}
+                <small>値: 空</small>
               {% endif %}
               {% if row.mhlw_byte_length %}
                 <small>{{ row.mhlw_byte_length }} / {{ row.max_byte_length }} byte</small>
