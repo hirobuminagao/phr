@@ -2,6 +2,10 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..")).Path
+$hostName = $env:PHR_ADMIN_HOST
+if ([string]::IsNullOrWhiteSpace($hostName)) {
+    $hostName = "127.0.0.1"
+}
 $port = 8011
 $runDir = Join-Path $repoRoot ".run"
 $pidFile = Join-Path $runDir "health_exam_admin_launcher.pid"
@@ -183,12 +187,16 @@ Set-Content -Path $pidFile -Value $PID -Encoding ascii
 Write-Host "PHR Health Exam Admin"
 Write-Host "Repository: $repoRoot"
 Write-Host "URL       : http://127.0.0.1:$port"
+if ($hostName -eq "0.0.0.0") {
+    Write-Host "LAN URL   : http://<this PC IP>:$port"
+}
+Write-Host "Bind Host : $hostName"
 Write-Host ""
 Write-Host "Stop: Ctrl + C"
 Write-Host ""
 
 try {
-    python -m uvicorn apps.health_exam_admin.main:app --host 127.0.0.1 --port $port --reload
+    python -m uvicorn apps.health_exam_admin.main:app --host $hostName --port $port --reload
 }
 catch {
     Write-Host ""

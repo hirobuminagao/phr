@@ -7,6 +7,7 @@
       <p class="eyebrow">PHR</p>
       <h1>健診管理</h1>
       <p class="subtle">社員番号でログインしてください。</p>
+      <p class="subtle">この端末のIP: <strong>{{ request_ip or "取得できません" }}</strong></p>
     </div>
 
     {% if error %}

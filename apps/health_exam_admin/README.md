@@ -91,6 +91,18 @@ python -m uvicorn apps.health_exam_admin.main:app --host 127.0.0.1 --port 8011 -
 http://127.0.0.1:8011
 ```
 
+別PCから接続する場合は、待ち受け先を `0.0.0.0` またはそのPCのLAN側IPにする。
+
+```powershell
+python -m uvicorn apps.health_exam_admin.main:app --host 0.0.0.0 --port 8011 --reload
+```
+
+別PCのブラウザからは以下の形式で開く。
+
+```text
+http://<起動しているPCのIP>:8011
+```
+
 `--reload` はローカル確認用。ソースを更新すると自動で反映される。
 
 VSCodeとは別ウィンドウで起動したい場合は、以下を使う。
@@ -106,3 +118,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev_tools\create_hea
 ```
 
 作成された `PHR Health Exam Admin` ショートカットをダブルクリックすると、管理画面用のPowerShellがVSCodeとは別に起動する。
+このショートカット起動は既定で `127.0.0.1` 待ち受けのため、起動したPCだけからアクセスできる。
+同じLAN内の別PCからもアクセスする場合は、環境変数 `PHR_ADMIN_HOST=0.0.0.0` を設定して起動する。

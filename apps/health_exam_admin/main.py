@@ -159,6 +159,8 @@ async def read_form(request: Request) -> dict[str, str]:
 
 def current_user(request: Request) -> dict[str, Any] | None:
     token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        return None
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=app_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
@@ -2408,7 +2410,7 @@ def index(request: Request) -> HTMLResponse:
 
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse("login.html", {"request": request, "error": None, "request_ip": client_ip(request)})
 
 
 @app.get("/register", response_class=HTMLResponse)
@@ -2583,7 +2585,11 @@ async def login(request: Request) -> Response:
         reason = result.failure_reason or "LOGIN_FAILED"
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "error": LOGIN_ERROR_MESSAGES.get(reason, "ログインできませんでした。")},
+            {
+                "request": request,
+                "error": LOGIN_ERROR_MESSAGES.get(reason, "ログインできませんでした。"),
+                "request_ip": client_ip(request),
+            },
             status_code=401,
         )
 
