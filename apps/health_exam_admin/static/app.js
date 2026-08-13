@@ -1,4 +1,28 @@
 (() => {
+  const cookieValue = (name) => {
+    const prefix = `${name}=`;
+    for (const part of document.cookie.split(";")) {
+      const value = part.trim();
+      if (value.startsWith(prefix)) {
+        return decodeURIComponent(value.slice(prefix.length));
+      }
+    }
+    return "";
+  };
+
+  for (const form of document.querySelectorAll("form")) {
+    if ((form.getAttribute("method") || "get").toLowerCase() !== "post") continue;
+    form.addEventListener("submit", () => {
+      const token = cookieValue("phr_app_csrf");
+      if (!token || form.querySelector("input[name='_csrf_token']")) return;
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "_csrf_token";
+      input.value = token;
+      form.appendChild(input);
+    });
+  }
+
   const normalize = (value) => String(value || "").toLocaleLowerCase().replace(/\s+/g, "");
   const filters = new Map();
 
@@ -16,7 +40,10 @@
     const emptyMessage = table.dataset.emptyMessage || "一致する行はありません。";
     const emptyRow = document.createElement("tr");
     emptyRow.hidden = true;
-    emptyRow.innerHTML = `<td colspan="${table.querySelectorAll("thead th").length || 1}">${emptyMessage}</td>`;
+    const emptyCell = document.createElement("td");
+    emptyCell.colSpan = table.querySelectorAll("thead th").length || 1;
+    emptyCell.textContent = emptyMessage;
+    emptyRow.appendChild(emptyCell);
     table.querySelector("tbody").appendChild(emptyRow);
 
     const applyFilter = () => {

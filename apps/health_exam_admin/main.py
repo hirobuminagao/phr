@@ -62,6 +62,8 @@ from scripts.phr_app.script_lib.app_auth import (
 APP_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = APP_ROOT.parents[1]
 SESSION_COOKIE_NAME = "phr_app_session"
+CSRF_COOKIE_NAME = "phr_app_csrf"
+CSRF_FIELD_NAME = "_csrf_token"
 LOGIN_ERROR_MESSAGES = {
     "USER_NOT_FOUND": "社員番号またはパスワードが違います。",
     "PASSWORD_MISMATCH": "社員番号またはパスワードが違います。",
@@ -131,6 +133,46 @@ async def restrict_admin_client_ip(request: Request, call_next: Any) -> Response
         if request_ip not in allowed_ips:
             return Response("Forbidden: client IP is not allowed.", status_code=403)
     return await call_next(request)
+
+
+def is_csrf_exempt_path(path: str) -> bool:
+    return path in {"/login", "/register"} or path.startswith("/static/")
+
+
+async def request_csrf_token(request: Request) -> str | None:
+    header_value = request.headers.get("x-csrf-token")
+    if header_value:
+        return header_value
+    content_type = request.headers.get("content-type", "")
+    if (
+        content_type.startswith("application/x-www-form-urlencoded")
+        or content_type.startswith("multipart/form-data")
+    ):
+        form = await request.form()
+        value = form.get(CSRF_FIELD_NAME)
+        return str(value) if value is not None else None
+    return None
+
+
+@app.middleware("http")
+async def protect_post_with_csrf(request: Request, call_next: Any) -> Response:
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not is_csrf_exempt_path(request.url.path):
+        cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+        submitted_token = await request_csrf_token(request)
+        if not cookie_token or not submitted_token or not secrets.compare_digest(cookie_token, submitted_token):
+            return Response("Forbidden: invalid CSRF token.", status_code=403)
+
+    response = await call_next(request)
+    if not request.cookies.get(CSRF_COOKIE_NAME):
+        response.set_cookie(
+            CSRF_COOKIE_NAME,
+            secrets.token_urlsafe(32),
+            httponly=False,
+            samesite="lax",
+            secure=False,
+            max_age=60 * 60 * 12,
+        )
+    return response
 
 
 @app.middleware("http")
