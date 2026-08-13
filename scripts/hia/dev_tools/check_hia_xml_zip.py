@@ -52,6 +52,13 @@ class Finding:
     fixed: bool = False
 
 
+@dataclass(frozen=True)
+class XsdValidationError:
+    message: str
+    line: int | None = None
+    column: int | None = None
+
+
 @dataclass
 class Summary:
     zip_files_seen: int = 0
@@ -86,12 +93,19 @@ def _load_schema(path: Path) -> etree.XMLSchema:
     return etree.XMLSchema(etree.parse(str(path.resolve())))
 
 
-def _validate_xml(content: bytes, xsd_path: Path) -> list[str]:
+def _validate_xml(content: bytes, xsd_path: Path) -> list[XsdValidationError]:
     schema = _load_schema(xsd_path)
     document = etree.fromstring(content, parser=XML_PARSER)
     if schema.validate(document):
         return []
-    return [str(error) for error in schema.error_log]
+    return [
+        XsdValidationError(
+            message=str(error),
+            line=error.line or None,
+            column=error.column or None,
+        )
+        for error in schema.error_log
+    ]
 
 
 def _namecode_for_value(value: etree._Element) -> tuple[str | None, str | None]:
@@ -104,6 +118,46 @@ def _namecode_for_value(value: etree._Element) -> tuple[str | None, str | None]:
     if code is None:
         return None, None
     return code.get("code"), code.get("displayName")
+
+
+def _namecode_for_element(element: etree._Element | None) -> tuple[str | None, str | None]:
+    current = element
+    while current is not None:
+        if etree.QName(current).localname == "observation":
+            code = current.find(f"{{{NS_HL7}}}code")
+            if code is not None:
+                return code.get("code"), code.get("displayName")
+        current = current.getparent()
+    return None, None
+
+
+def _element_near_line(document: etree._Element, line: int | None) -> etree._Element | None:
+    if line is None:
+        return None
+    candidates = [
+        element
+        for element in document.iter()
+        if element.sourceline is not None and element.sourceline <= line
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda element: int(element.sourceline or 0))
+
+
+def _namecode_for_xsd_error(document: etree._Element, error: XsdValidationError) -> tuple[str | None, str | None]:
+    namecode = _extract_namecode_from_xsd_error(error.message)
+    if namecode:
+        display_name = _display_name_for_namecode(document, namecode)
+        return namecode, display_name
+    return _namecode_for_element(_element_near_line(document, error.line))
+
+
+def _display_name_for_namecode(document: etree._Element, namecode: str) -> str | None:
+    xpath = f".//*[local-name()='observation']/*[local-name()='code'][@code={namecode!r}]"
+    code = document.xpath(xpath)
+    if not code:
+        return None
+    return code[0].get("displayName")
 
 
 def _text_preview(value: str | None, limit: int = 80) -> str | None:
@@ -209,17 +263,18 @@ def _check_and_fix_xml(
         try:
             xsd_errors = _validate_xml(updated_content, schema_path)
         except Exception as exc:
-            xsd_errors = [str(exc)]
-        for message in xsd_errors:
+            xsd_errors = [XsdValidationError(message=str(exc))]
+        for error in xsd_errors:
+            namecode, display_name = _namecode_for_xsd_error(document, error)
             findings.append(
                 Finding(
                     zip_path=str(zip_path),
                     xml_inner_path=inner_path,
                     check_type="XSD",
                     severity="ERROR",
-                    namecode=_extract_namecode_from_xsd_error(message),
-                    item_display_name=None,
-                    message=message,
+                    namecode=namecode,
+                    item_display_name=display_name,
+                    message=error.message,
                 )
             )
 
