@@ -1,10 +1,13 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
+$repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..")).Path
 $port = 8011
+$runDir = Join-Path $repoRoot ".run"
+$pidFile = Join-Path $runDir "health_exam_admin_launcher.pid"
 
 Set-Location $repoRoot
+New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
 function Get-HealthExamAdminProcesses {
     $processes = @()
@@ -100,8 +103,44 @@ function Stop-PortOwners {
     }
 }
 
+function Get-SavedLauncherProcess {
+    if (-not (Test-Path $pidFile)) {
+        return $null
+    }
+    try {
+        $savedPid = [int]((Get-Content $pidFile -ErrorAction Stop | Select-Object -First 1).Trim())
+        if ($savedPid -eq $PID) {
+            return $null
+        }
+        return Get-CimInstance Win32_Process -Filter "ProcessId = $savedPid" -ErrorAction SilentlyContinue
+    }
+    catch {
+        return $null
+    }
+}
+
+$savedLauncher = Get-SavedLauncherProcess
+$savedLauncherLooksActive = $savedLauncher -and $savedLauncher.CommandLine -and (
+    $savedLauncher.CommandLine -like "*start_health_exam_admin.ps1*" -or
+    $savedLauncher.CommandLine -like "*apps.health_exam_admin.main:app*"
+)
+
+$portIsUsed = $false
+try {
+    $portIsUsed = [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+}
+catch {
+    $portIsUsed = $false
+}
+
+$savedExistingProcesses = @()
+if ($savedLauncherLooksActive) {
+    $savedExistingProcesses += $savedLauncher
+}
+
 $existingProcesses = @(Get-HealthExamAdminProcesses)
-if ($existingProcesses.Count -gt 0) {
+$existingProcesses = @(($existingProcesses + $savedExistingProcesses) | Where-Object { $_ -and $_.ProcessId -and $_.ProcessId -ne $PID } | Sort-Object ProcessId -Unique)
+if ($existingProcesses.Count -gt 0 -or $portIsUsed) {
     Write-Host "Health Exam Admin appears to be already running."
     Write-Host ""
     foreach ($process in $existingProcesses) {
@@ -110,6 +149,9 @@ if ($existingProcesses.Count -gt 0) {
             $commandLine = $commandLine.Substring(0, 120) + "..."
         }
         Write-Host ("PID {0}: {1}" -f $process.ProcessId, ($commandLine -or $process.Name))
+    }
+    if ($existingProcesses.Count -eq 0 -and $portIsUsed) {
+        Write-Host "Port $port is already in use."
     }
     Write-Host ""
     $answer = Read-Host "Restart it? (Y/N)"
@@ -136,6 +178,8 @@ if ($existingProcesses.Count -gt 0) {
     Write-Host ""
 }
 
+Set-Content -Path $pidFile -Value $PID -Encoding ascii
+
 Write-Host "PHR Health Exam Admin"
 Write-Host "Repository: $repoRoot"
 Write-Host "URL       : http://127.0.0.1:$port"
@@ -153,4 +197,16 @@ catch {
     Write-Host ""
     Read-Host "Press Enter to close"
     exit 1
+}
+finally {
+    try {
+        if (Test-Path $pidFile) {
+            $savedPid = (Get-Content $pidFile -ErrorAction SilentlyContinue | Select-Object -First 1)
+            if ([string]$savedPid -eq [string]$PID) {
+                Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    catch {
+    }
 }
