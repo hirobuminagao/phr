@@ -140,6 +140,7 @@
             <div class="xml-error-badges">
               <span class="status-pill {{ row.status_class }}">{{ row.severity_label }} / {{ row.label }}</span>
               <span class="status-pill {{ row.fixability_class }}">{{ row.fixability_label }}</span>
+              <span class="status-pill {{ row.namecode_source_class }}">{{ row.namecode_source_label }}</span>
             </div>
             <div>
               <strong>{{ row.namecode or "-" }}{% if row.item_display_name %} / {{ row.item_display_name }}{% endif %}</strong>

@@ -44,6 +44,7 @@ class Finding:
     namecode: str | None
     item_display_name: str | None
     message: str
+    namecode_source: str | None = None
     value_preview: str | None = None
     mhlw_byte_length: int | None = None
     max_byte_length: int | None = None
@@ -131,25 +132,36 @@ def _namecode_for_element(element: etree._Element | None) -> tuple[str | None, s
     return None, None
 
 
-def _element_near_line(document: etree._Element, line: int | None) -> etree._Element | None:
+def _element_for_error_line(document: etree._Element, line: int | None) -> tuple[etree._Element | None, str | None]:
     if line is None:
-        return None
+        return None, None
+    exact_candidates = [
+        element
+        for element in document.iter()
+        if element.sourceline is not None and element.sourceline == line
+    ]
+    if exact_candidates:
+        return exact_candidates[-1], "ERROR_LINE_ELEMENT"
     candidates = [
         element
         for element in document.iter()
         if element.sourceline is not None and element.sourceline <= line
     ]
     if not candidates:
-        return None
-    return max(candidates, key=lambda element: int(element.sourceline or 0))
+        return None, None
+    return max(candidates, key=lambda element: int(element.sourceline or 0)), "NEAREST_PREVIOUS_ELEMENT"
 
 
-def _namecode_for_xsd_error(document: etree._Element, error: XsdValidationError) -> tuple[str | None, str | None]:
+def _namecode_for_xsd_error(document: etree._Element, error: XsdValidationError) -> tuple[str | None, str | None, str | None]:
     namecode = _extract_namecode_from_xsd_error(error.message)
     if namecode:
         display_name = _display_name_for_namecode(document, namecode)
-        return namecode, display_name
-    return _namecode_for_element(_element_near_line(document, error.line))
+        return namecode, display_name, "MESSAGE_CODE"
+    element, source = _element_for_error_line(document, error.line)
+    namecode, display_name = _namecode_for_element(element)
+    if not namecode:
+        return None, None, None
+    return namecode, display_name, source
 
 
 def _display_name_for_namecode(document: etree._Element, namecode: str) -> str | None:
@@ -211,6 +223,7 @@ def _check_and_fix_xml(
                         severity="FIXED" if fix else "WARNING",
                         namecode=namecode,
                         item_display_name=display_name,
+                        namecode_source="VALUE_PARENT_OBSERVATION",
                         message=f"codeSystem is empty; can fill from known namecode: {replacement}",
                         value_preview=value.get("code"),
                         can_fix=True,
@@ -227,6 +240,7 @@ def _check_and_fix_xml(
                         severity="ERROR",
                         namecode=namecode,
                         item_display_name=display_name,
+                        namecode_source="VALUE_PARENT_OBSERVATION" if namecode else None,
                         message="codeSystem is empty and no safe fix rule is registered",
                         value_preview=value.get("code"),
                     )
@@ -244,6 +258,7 @@ def _check_and_fix_xml(
                         severity="ERROR",
                         namecode=namecode,
                         item_display_name=display_name,
+                        namecode_source="VALUE_PARENT_OBSERVATION" if namecode else None,
                         message="ST/TX text exceeds MHLW byte length limit",
                         value_preview=_text_preview(text),
                         mhlw_byte_length=byte_length,
@@ -265,7 +280,7 @@ def _check_and_fix_xml(
         except Exception as exc:
             xsd_errors = [XsdValidationError(message=str(exc))]
         for error in xsd_errors:
-            namecode, display_name = _namecode_for_xsd_error(document, error)
+            namecode, display_name, namecode_source = _namecode_for_xsd_error(document, error)
             findings.append(
                 Finding(
                     zip_path=str(zip_path),
@@ -274,6 +289,7 @@ def _check_and_fix_xml(
                     severity="ERROR",
                     namecode=namecode,
                     item_display_name=display_name,
+                    namecode_source=namecode_source,
                     message=error.message,
                 )
             )
@@ -344,6 +360,7 @@ def write_report(findings: list[Finding], output_dir: Path) -> Path:
         "check_type",
         "namecode",
         "item_display_name",
+        "namecode_source",
         "message",
         "value_preview",
         "mhlw_byte_length",

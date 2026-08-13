@@ -1147,6 +1147,24 @@ def xml_zip_check_message_label(finding: Any) -> str:
     return str(finding.check_type or "その他")
 
 
+def xml_zip_namecode_source_label(source: str | None) -> str:
+    labels = {
+        "VALUE_PARENT_OBSERVATION": "該当valueの親",
+        "MESSAGE_CODE": "XSDメッセージ内",
+        "ERROR_LINE_ELEMENT": "XSDエラー行",
+        "NEAREST_PREVIOUS_ELEMENT": "XSD直前要素推定",
+    }
+    return labels.get(str(source or ""), "未特定")
+
+
+def xml_zip_namecode_source_class(source: str | None) -> str:
+    if source in {"VALUE_PARENT_OBSERVATION", "MESSAGE_CODE", "ERROR_LINE_ELEMENT"}:
+        return "status-ok"
+    if source == "NEAREST_PREVIOUS_ELEMENT":
+        return "status-pending"
+    return "status-neutral"
+
+
 def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for finding in findings:
@@ -1168,6 +1186,7 @@ def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]
         severity_label = "エラー" if severity == "ERROR" else "警告"
         status_class = "status-danger" if severity == "ERROR" else "status-pending"
         can_fix = bool(getattr(finding, "can_fix", False))
+        namecode_source = getattr(finding, "namecode_source", None)
         row["finding_count"] += 1
         if severity == "ERROR":
             row["error_count"] += 1
@@ -1184,6 +1203,9 @@ def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]
                 "label": label,
                 "namecode": finding.namecode,
                 "item_display_name": finding.item_display_name,
+                "namecode_source": namecode_source,
+                "namecode_source_label": xml_zip_namecode_source_label(namecode_source),
+                "namecode_source_class": xml_zip_namecode_source_class(namecode_source),
                 "message": finding.message,
                 "value_preview": finding.value_preview,
                 "mhlw_byte_length": finding.mhlw_byte_length,
