@@ -42,10 +42,6 @@
           <small data-file-drop-name>またはクリックしてファイルを選択</small>
         </div>
       </div>
-      <label class="checkbox-row">
-        <input type="checkbox" name="fix" value="1">
-        <span>安全に直せるものは修正版ZIPを作成する（codeSystem / displayName）</span>
-      </label>
       <button type="submit">チェック実行</button>
     </form>
     <div class="xml-check-config">
@@ -102,6 +98,12 @@
         <span>元ファイル</span>
         <strong>{{ result.original_filename }}</strong>
         <small>{{ result.upload_path }}</small>
+        {% if result.fixable_count %}
+        <form method="post" action="/hia/xml-zip-check/create-fixed" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを作成しています">
+          <input type="hidden" name="upload_path" value="{{ result.upload_path }}">
+          <button type="submit">修正版ZIPを作成</button>
+        </form>
+        {% endif %}
         <form method="post" action="/hia/xml-zip-check/delete-upload" class="xml-check-delete-form">
           <input type="hidden" name="upload_path" value="{{ result.upload_path }}">
           <button type="submit" class="ghost-button danger-button">アップロードファイルを削除</button>

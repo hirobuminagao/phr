@@ -36,6 +36,8 @@ CODE_SYSTEM_BY_NAMECODE = {
     "1B040Z122015Z0111": "1.2.392.200119.6.2100",
 }
 
+ZIP_REQUIRED_CHILDREN = {"DATA", "XSD"}
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -74,6 +76,109 @@ class Summary:
     fixed: int = 0
     fixed_zip_path: str | None = None
     report_csv_path: str | None = None
+
+
+def _zip_structure_findings(zip_path: Path, names: list[str]) -> list[Finding]:
+    findings: list[Finding] = []
+    if not names:
+        return [
+            Finding(
+                zip_path=str(zip_path),
+                xml_inner_path="-",
+                check_type="ZIP_STRUCTURE",
+                severity="ERROR",
+                namecode=None,
+                item_display_name=None,
+                message="ZIP is empty",
+            )
+        ]
+
+    normalized_names = [name.replace("\\", "/").strip("/") for name in names if name and not name.endswith("/")]
+    top_levels = {name.split("/", 1)[0] for name in normalized_names if name}
+    root_dirs = {
+        top
+        for top in top_levels
+        if re.match(r"^\d{10}_\d{8}_\d{9}_1$", top)
+    }
+    if len(root_dirs) != 1:
+        findings.append(
+            Finding(
+                zip_path=str(zip_path),
+                xml_inner_path="-",
+                check_type="ZIP_STRUCTURE",
+                severity="ERROR",
+                namecode=None,
+                item_display_name=None,
+                message=(
+                    "ZIP root must contain exactly one MHLW transmission folder "
+                    "(facility_insurer_yyyymmddN_1)"
+                ),
+                value_preview=", ".join(sorted(top_levels))[:160],
+            )
+        )
+        return findings
+
+    root_dir = next(iter(root_dirs))
+    root_entries = {
+        name.split("/", 2)[1]
+        for name in normalized_names
+        if name.startswith(f"{root_dir}/") and len(name.split("/", 2)) >= 2
+    }
+    missing_children = sorted(ZIP_REQUIRED_CHILDREN - root_entries)
+    if missing_children:
+        findings.append(
+            Finding(
+                zip_path=str(zip_path),
+                xml_inner_path=root_dir,
+                check_type="ZIP_STRUCTURE",
+                severity="ERROR",
+                namecode=None,
+                item_display_name=None,
+                message=f"ZIP root folder is missing required child folder(s): {', '.join(missing_children)}",
+            )
+        )
+
+    data_xmls = [
+        name
+        for name in normalized_names
+        if name.startswith(f"{root_dir}/DATA/") and Path(name).suffix.lower() == ".xml"
+    ]
+    if not data_xmls:
+        findings.append(
+            Finding(
+                zip_path=str(zip_path),
+                xml_inner_path=f"{root_dir}/DATA",
+                check_type="ZIP_STRUCTURE",
+                severity="ERROR",
+                namecode=None,
+                item_display_name=None,
+                message="DATA folder has no person XML files",
+            )
+        )
+
+    misplaced_xmls = [
+        name
+        for name in normalized_names
+        if Path(name).suffix.lower() == ".xml"
+        and not (
+            name.startswith(f"{root_dir}/DATA/")
+            or name in {f"{root_dir}/ix08_V08.xml", f"{root_dir}/su08_V08.xml"}
+        )
+    ]
+    if misplaced_xmls:
+        findings.append(
+            Finding(
+                zip_path=str(zip_path),
+                xml_inner_path=root_dir,
+                check_type="ZIP_STRUCTURE",
+                severity="WARNING",
+                namecode=None,
+                item_display_name=None,
+                message="XML files exist outside expected MHLW locations",
+                value_preview=", ".join(misplaced_xmls[:8]),
+            )
+        )
+    return findings
 
 
 def _resolve_path(path: str | Path) -> Path:
@@ -440,6 +545,8 @@ def check_zip(
     findings: list[Finding] = []
     fixed_zip_path = _fixed_zip_path(zip_path, fixed_output_dir) if fix else None
     with zipfile.ZipFile(zip_path, "r") as zin:
+        zip_names = zin.namelist()
+        findings.extend(_zip_structure_findings(zip_path, zip_names))
         zout = zipfile.ZipFile(fixed_zip_path, "w", compression=zipfile.ZIP_DEFLATED) if fixed_zip_path else None
         try:
             for info in zin.infolist():

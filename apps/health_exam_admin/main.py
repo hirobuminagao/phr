@@ -1144,6 +1144,10 @@ def xml_zip_check_message_label(finding: Any) -> str:
         return "ST/TX文字数超過"
     if finding.check_type == "CODE_SYSTEM_EMPTY":
         return "codeSystem空"
+    if finding.check_type == "DISPLAY_NAME_EMPTY":
+        return "displayName空"
+    if finding.check_type == "ZIP_STRUCTURE":
+        return "ZIP構造"
     if finding.check_type == "XML_PARSE":
         return "XML構文エラー"
     return str(finding.check_type or "その他")
@@ -1326,6 +1330,7 @@ def build_xml_zip_check_result(
         "errors": sum(1 for item in findings if item.severity == "ERROR"),
         "warnings": sum(1 for item in findings if item.severity == "WARNING"),
         "fixed": sum(1 for item in findings if item.fixed),
+        "fixable_count": sum(1 for item in findings if getattr(item, "can_fix", False)),
         "error_summaries": serialize_xml_zip_error_summaries(findings),
         "display_groups": serialize_xml_zip_display_groups(findings),
         "display_name_options": display_name_options,
@@ -2696,7 +2701,6 @@ def hia_xml_zip_check(request: Request) -> Response:
 async def run_hia_xml_zip_check(
     request: Request,
     zip_file: UploadFile = File(...),
-    fix: str | None = Form(None),
 ) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
@@ -2733,7 +2737,7 @@ async def run_hia_xml_zip_check(
         result = build_xml_zip_check_result(
             upload_path=upload_path,
             original_filename=original_filename,
-            fix=fix == "1",
+            fix=False,
         )
     except Exception as exc:
         return templates.TemplateResponse(
@@ -2759,6 +2763,65 @@ async def run_hia_xml_zip_check(
             "result": result,
             "error": None,
             "message": "チェックが完了しました。",
+            "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+            "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+            "uploaded_files": load_xml_zip_uploaded_files(),
+        },
+    )
+
+
+@app.post("/hia/xml-zip-check/create-fixed", response_class=HTMLResponse)
+async def create_fixed_hia_xml_zip(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not xml_zip_check_allowed(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    upload_path_text = str(form.get("upload_path") or "").strip()
+    upload_path = Path(upload_path_text)
+    if not upload_path_text or not is_path_under(upload_path, HIA_XML_ZIP_CHECK_UPLOAD_DIR):
+        return RedirectResponse(
+            f"/hia/xml-zip-check?error={quote('修正できるのはアップロード済みZIPだけです。')}",
+            status_code=303,
+        )
+    if not upload_path.exists() or not upload_path.is_file():
+        return RedirectResponse(
+            f"/hia/xml-zip-check?error={quote('アップロード済みZIPが見つかりません。')}",
+            status_code=303,
+        )
+
+    try:
+        result = build_xml_zip_check_result(
+            upload_path=upload_path,
+            original_filename=upload_path.name,
+            fix=True,
+        )
+    except Exception as exc:
+        return templates.TemplateResponse(
+            "hia_xml_zip_check.html",
+            {
+                "request": request,
+                "user": user,
+                "result": None,
+                "error": str(exc),
+                "message": None,
+                "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+                "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+                "uploaded_files": load_xml_zip_uploaded_files(),
+            },
+            status_code=500,
+        )
+
+    return templates.TemplateResponse(
+        "hia_xml_zip_check.html",
+        {
+            "request": request,
+            "user": user,
+            "result": result,
+            "error": None,
+            "message": "修正版ZIPを作成しました。",
             "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
             "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
             "uploaded_files": load_xml_zip_uploaded_files(),
