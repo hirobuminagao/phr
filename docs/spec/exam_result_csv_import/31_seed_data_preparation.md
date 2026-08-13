@@ -70,6 +70,8 @@ Implemented and expanded.
 
 `sql/migrations/dev_phr/20260806_001_dev_phr_add_gastric_cancer_risk_exam_item_master.sql` は、m4 fixture候補から胃がんリスク検査系を正式昇格したmigrationである。対象はヘリコバクターピロリ抗体IgG判定、ABCD分類、ヘリコバクターピロリ抗体、ペプシノゲン1、ペプシノゲン2、ペプシノゲン1/2比、ペプシノゲン判定である。これらは検査結果として受け止める項目であり、出力ポリシーseedでは止めない。
 `sql/migrations/dev_phr/20260806_002_dev_phr_add_clia_tumor_marker_exam_item_master.sql` は、CA125とCA19-9のCLIA法variantを正式昇格したmigrationである。既存のその他/不明method版と同じく任意腫瘍マーカー値として受け止め、出力ポリシーseedでは止めない。
+`sql/migrations/dev_phr/20260813_001_dev_phr_add_display_name_fix_exam_item_master_rows.sql` は、XML ZIPチェックで `displayName` 空かつ `exam_item_master` 未登録として検出された項目のうち、任意検査結果として受け止めるものを正式昇格したmigrationである。対象は標準体重、骨塩定量DIP法3variant、子宮頸部細胞診の所見有無、CA15-3である。
+第3期質問項目 `9N806000000000011`、施設独自または確認待ちの `Z9F120000Z9725049` / `Z9N22000000000011` / `Z9N22160800000049` は、この時点では `exam_item_master` へ正式追加しない。XML ZIPチェック上は確認待ちとして残し、施設回答または出力ポリシー判断後に扱いを決める。
 
 施設確認後に「XMLへそのまま出す」または「証跡のみ残してXMLへ出さない」を切り替える項目は、normalize辞書や `exam_item_master` だけで表現しない。
 `phr_master.exam_item_output_policies` に `exam_facility_id` と `namecode` 単位で登録し、`INCLUDE` / `EXCLUDE` / `REVIEW_REQUIRED` を指定する。
