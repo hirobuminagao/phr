@@ -118,6 +118,24 @@
     });
   }
 
+  const processingOverlay = document.querySelector("[data-processing-overlay]");
+  const processingTitle = document.querySelector("[data-processing-overlay-title]");
+  const processingMessage = document.querySelector("[data-processing-overlay-message]");
+  for (const form of document.querySelectorAll("[data-processing-form]")) {
+    form.addEventListener("submit", () => {
+      const button = form.querySelector("button[type='submit']");
+      const message = form.getAttribute("data-processing-message") || "処理しています";
+      if (processingTitle) processingTitle.textContent = message;
+      if (processingMessage) processingMessage.textContent = "ファイル数や内容によって時間がかかることがあります。";
+      if (processingOverlay) processingOverlay.hidden = false;
+      if (button) {
+        button.disabled = true;
+        button.textContent = "処理中";
+      }
+      form.classList.add("is-processing");
+    });
+  }
+
   for (const filter of document.querySelectorAll("[data-xml-finding-controls]")) {
     const targetSelector = filter.getAttribute("data-xml-finding-controls");
     const target = targetSelector ? document.querySelector(targetSelector) : null;

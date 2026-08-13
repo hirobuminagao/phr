@@ -27,10 +27,10 @@
     <div class="section-heading">
       <div>
         <h2>ZIPをチェック</h2>
-        <p class="subtle">HIAアップロード用、または健保納品用のZIPを指定します。XSD、ST文字数、空のcodeSystemを確認します。</p>
+        <p class="subtle">HIAアップロード用、または健保納品用のZIPを指定します。XSD、ST文字数、空のcodeSystem/displayNameを確認します。</p>
       </div>
     </div>
-    <form method="post" action="/hia/xml-zip-check" enctype="multipart/form-data" class="xml-check-form">
+    <form method="post" action="/hia/xml-zip-check" enctype="multipart/form-data" class="xml-check-form" data-processing-form data-processing-message="XML ZIPをチェックしています">
       <div class="xml-drop-zone" data-file-drop-zone>
         <label>
           <span>ZIPファイル</span>
@@ -44,7 +44,7 @@
       </div>
       <label class="checkbox-row">
         <input type="checkbox" name="fix" value="1">
-        <span>安全に直せるものは修正版ZIPを作成する</span>
+        <span>安全に直せるものは修正版ZIPを作成する（codeSystem / displayName）</span>
       </label>
       <button type="submit">チェック実行</button>
     </form>
@@ -211,4 +211,14 @@
   </section>
   {% endif %}
 </main>
+
+<div class="processing-overlay" data-processing-overlay hidden>
+  <div class="processing-dialog" role="status" aria-live="polite">
+    <div class="processing-spinner" aria-hidden="true"></div>
+    <div>
+      <strong data-processing-overlay-title>処理中</strong>
+      <span data-processing-overlay-message>しばらくお待ちください。</span>
+    </div>
+  </div>
+</div>
 {% endblock %}
