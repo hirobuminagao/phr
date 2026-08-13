@@ -67,7 +67,7 @@
           <small>{{ file.modified_at }} / {{ file.size_mb }} MB</small>
         </div>
         <div class="xml-uploaded-file-actions">
-          <form method="post" action="/hia/xml-zip-check/recheck" data-processing-form data-processing-message="ZIPを再チェックしています">
+          <form method="post" action="/hia/xml-zip-check/recheck?zip_path={{ file.check_path|url_quote }}" data-processing-form data-processing-message="ZIPを再チェックしています">
             <input type="hidden" name="zip_path" value="{{ file.check_path }}">
             <button type="submit" name="zip_path" value="{{ file.check_path }}">再チェック</button>
           </form>
@@ -106,7 +106,7 @@
         <span>元ファイル</span>
         <strong>{{ result.original_filename }}</strong>
         <small>{{ result.upload_path }}</small>
-        <form method="post" action="/hia/xml-zip-check/recheck" class="xml-check-delete-form" data-processing-form data-processing-message="元ZIPを再チェックしています">
+        <form method="post" action="/hia/xml-zip-check/recheck?zip_path={{ result.upload_path|url_quote }}" class="xml-check-delete-form" data-processing-form data-processing-message="元ZIPを再チェックしています">
           <input type="hidden" name="zip_path" value="{{ result.upload_path }}">
           <button type="submit" name="zip_path" value="{{ result.upload_path }}">元ZIPを再チェック</button>
         </form>
@@ -126,7 +126,7 @@
       <div>
         <span>修正版ZIP</span>
         <strong>{{ result.fixed_zip_path }}</strong>
-        <form method="post" action="/hia/xml-zip-check/recheck" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを再チェックしています">
+        <form method="post" action="/hia/xml-zip-check/recheck?zip_path={{ result.fixed_zip_path|url_quote }}" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを再チェックしています">
           <input type="hidden" name="zip_path" value="{{ result.fixed_zip_path }}">
           <button type="submit" name="zip_path" value="{{ result.fixed_zip_path }}">このZIPを再チェック</button>
         </form>

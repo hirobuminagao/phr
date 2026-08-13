@@ -101,6 +101,7 @@ WORK_PERMISSION_ITEMS = (
 app = FastAPI(title="PHR Health Exam Admin")
 app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=APP_ROOT / "templates")
+templates.env.filters["url_quote"] = lambda value: quote(str(value or ""), safe="")
 
 
 def admin_allowed_client_ips() -> set[str]:
@@ -3050,7 +3051,7 @@ async def recheck_hia_xml_zip(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     form = await read_form(request)
-    zip_path_text = str(form.get("zip_path") or "").strip()
+    zip_path_text = str(form.get("zip_path") or request.query_params.get("zip_path") or "").strip()
     zip_path = app_data_path_from_form_value(zip_path_text)
     debug = path_debug_payload(submitted_value=zip_path_text, resolved_path=zip_path, allowed_base=APP_DATA_DIR)
     debug["form"] = safe_form_debug(form)
