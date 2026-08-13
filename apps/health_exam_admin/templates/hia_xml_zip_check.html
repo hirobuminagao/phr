@@ -110,16 +110,18 @@
           <input type="hidden" name="zip_path" value="{{ result.upload_path }}">
           <button type="submit" name="zip_path" value="{{ result.upload_path }}">元ZIPを再チェック</button>
         </form>
-        {% if result.fixable_count %}
+        {% if result.can_create_fixed %}
         <form method="post" action="/hia/xml-zip-check/create-fixed?upload_path={{ result.upload_path|url_quote }}" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを作成しています">
           <input type="hidden" name="upload_path" value="{{ result.upload_path }}">
           <button type="submit" name="upload_path" value="{{ result.upload_path }}">修正版ZIPを作成</button>
         </form>
         {% endif %}
+        {% if result.can_delete_upload %}
         <form method="post" action="/hia/xml-zip-check/delete-upload?upload_path={{ result.upload_path|url_quote }}" class="xml-check-delete-form">
           <input type="hidden" name="upload_path" value="{{ result.upload_path }}">
           <button type="submit" name="upload_path" value="{{ result.upload_path }}" class="ghost-button danger-button">アップロードファイルを削除</button>
         </form>
+        {% endif %}
       </div>
       <div><span>CSVレポート</span><strong>{{ result.report_csv_path }}</strong></div>
       {% if result.fixed_zip_path %}

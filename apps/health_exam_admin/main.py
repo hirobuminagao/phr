@@ -1497,9 +1497,12 @@ def build_xml_zip_check_result(
             if item.severity in {"ERROR", "WARNING"} and str(item.item_display_name or "").strip()
         }
     )
+    is_uploaded_zip = is_path_under(upload_path, HIA_XML_ZIP_CHECK_UPLOAD_DIR)
+    fixable_count = sum(1 for item in findings if getattr(item, "can_fix", False))
     return {
         "original_filename": original_filename,
         "upload_path": str(upload_path),
+        "is_uploaded_zip": is_uploaded_zip,
         "report_csv_path": str(report_csv_path),
         "fixed_zip_path": summary.fixed_zip_path,
         "fix": fix,
@@ -1509,7 +1512,9 @@ def build_xml_zip_check_result(
         "errors": sum(1 for item in findings if item.severity == "ERROR"),
         "warnings": sum(1 for item in findings if item.severity == "WARNING"),
         "fixed": sum(1 for item in findings if item.fixed),
-        "fixable_count": sum(1 for item in findings if getattr(item, "can_fix", False)),
+        "fixable_count": fixable_count,
+        "can_create_fixed": is_uploaded_zip and fixable_count > 0,
+        "can_delete_upload": is_uploaded_zip,
         "error_summaries": serialize_xml_zip_error_summaries(findings),
         "display_groups": serialize_xml_zip_display_groups(findings),
         "display_name_options": display_name_options,
