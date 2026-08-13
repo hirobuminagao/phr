@@ -1480,12 +1480,14 @@ def build_xml_zip_check_result(
     fix: bool,
 ) -> dict[str, Any]:
     item_names = load_exam_item_names_for_xml_zip_check()
+    item_result_code_oids = load_exam_item_result_code_oids_for_xml_zip_check()
     summary, findings = check_hia_xml_zip_file(
         upload_path,
         xsd_dir=XML_ZIP_CHECK_XSD_DIR,
         fix=fix,
         fixed_output_dir=XML_ZIP_CHECK_REPORT_DIR / "fixed",
         item_names=item_names,
+        item_result_code_oids=item_result_code_oids,
     )
     report_csv_path = write_hia_xml_zip_check_report(findings, XML_ZIP_CHECK_REPORT_DIR)
     display_name_options = sorted(
@@ -1532,6 +1534,29 @@ def load_exam_item_names_for_xml_zip_check() -> dict[str, str]:
             str(row["namecode"]).strip(): str(row.get("item_name") or "").strip()
             for row in cur.fetchall()
             if str(row.get("namecode") or "").strip() and str(row.get("item_name") or "").strip()
+        }
+
+
+def load_exam_item_result_code_oids_for_xml_zip_check() -> dict[str, str]:
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            f"""
+            SELECT
+                namecode,
+                result_code_oid
+            FROM {qname(dev_db())}.exam_item_master
+            WHERE namecode IS NOT NULL
+              AND namecode <> ''
+              AND result_code_oid IS NOT NULL
+              AND result_code_oid <> ''
+            """
+        )
+        return {
+            str(row["namecode"]).strip(): str(row.get("result_code_oid") or "").strip()
+            for row in cur.fetchall()
+            if str(row.get("namecode") or "").strip() and str(row.get("result_code_oid") or "").strip()
         }
 
 

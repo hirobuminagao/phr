@@ -370,6 +370,7 @@ def _check_and_fix_xml(
     xsd_dir: Path,
     fix: bool,
     item_names: Mapping[str, str] | None = None,
+    item_result_code_oids: Mapping[str, str] | None = None,
 ) -> tuple[bytes, list[Finding]]:
     findings: list[Finding] = []
     updated_content = content
@@ -428,6 +429,8 @@ def _check_and_fix_xml(
         if value_type in {"CD", "CO"} and (value.get("codeSystem") or "") == "":
             namecode, display_name = _namecode_for_value(value, item_names=item_names)
             replacement = CODE_SYSTEM_BY_NAMECODE.get(namecode or "")
+            if not replacement and namecode and item_result_code_oids is not None:
+                replacement = item_result_code_oids.get(namecode) or ""
             if replacement:
                 if fix:
                     value.set("codeSystem", replacement)
@@ -547,6 +550,7 @@ def check_zip(
     fix: bool,
     fixed_output_dir: Path,
     item_names: Mapping[str, str] | None = None,
+    item_result_code_oids: Mapping[str, str] | None = None,
 ) -> tuple[Summary, list[Finding]]:
     summary = Summary(zip_files_seen=1)
     findings: list[Finding] = []
@@ -568,6 +572,7 @@ def check_zip(
                         xsd_dir=xsd_dir,
                         fix=fix,
                         item_names=item_names,
+                        item_result_code_oids=item_result_code_oids,
                     )
                     findings.extend(item_findings)
                 if zout is not None:
