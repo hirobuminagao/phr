@@ -9,7 +9,7 @@ import string
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -147,13 +147,18 @@ async def request_csrf_token(request: Request) -> str | None:
     if header_value:
         return header_value
     content_type = request.headers.get("content-type", "")
-    if (
-        content_type.startswith("application/x-www-form-urlencoded")
-        or content_type.startswith("multipart/form-data")
-    ):
-        form = await request.form()
-        value = form.get(CSRF_FIELD_NAME)
-        return str(value) if value is not None else None
+    body = await request.body()
+    if content_type.startswith("application/x-www-form-urlencoded"):
+        values = parse_qs(body.decode("utf-8", errors="replace"), keep_blank_values=True)
+        token_values = values.get(CSRF_FIELD_NAME)
+        return token_values[0] if token_values else None
+    if content_type.startswith("multipart/form-data"):
+        match = re.search(
+            rb'name="' + re.escape(CSRF_FIELD_NAME.encode("utf-8")) + rb'"\r?\n\r?\n([^\r\n]*)',
+            body,
+        )
+        if match:
+            return match.group(1).decode("utf-8", errors="replace")
     return None
 
 
