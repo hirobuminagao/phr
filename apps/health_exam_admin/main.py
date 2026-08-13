@@ -2980,16 +2980,20 @@ async def create_fixed_hia_xml_zip(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     form = await read_form(request)
-    upload_path_text = str(form.get("upload_path") or "").strip()
+    upload_path_text = str(form.get("upload_path") or request.query_params.get("upload_path") or "").strip()
     upload_path = Path(upload_path_text)
+    debug = path_debug_payload(submitted_value=upload_path_text, resolved_path=upload_path, allowed_base=HIA_XML_ZIP_CHECK_UPLOAD_DIR)
+    debug["form"] = safe_form_debug(form)
     if not upload_path_text or not is_path_under(upload_path, HIA_XML_ZIP_CHECK_UPLOAD_DIR):
+        LOGGER.warning("XML ZIP create-fixed rejected outside upload root: %s", json.dumps(debug, ensure_ascii=False))
         return RedirectResponse(
-            f"/hia/xml-zip-check?error={quote('修正できるのはアップロード済みZIPだけです。')}",
+            f"/hia/xml-zip-check?error={quote(path_debug_message('修正できるのはアップロード済みZIPだけです。', debug))}",
             status_code=303,
         )
     if not upload_path.exists() or not upload_path.is_file():
+        LOGGER.warning("XML ZIP create-fixed target not found: %s", json.dumps(debug, ensure_ascii=False))
         return RedirectResponse(
-            f"/hia/xml-zip-check?error={quote('アップロード済みZIPが見つかりません。')}",
+            f"/hia/xml-zip-check?error={quote(path_debug_message('アップロード済みZIPが見つかりません。', debug))}",
             status_code=303,
         )
 
@@ -3135,12 +3139,15 @@ async def delete_hia_xml_zip_upload(request: Request) -> Response:
     if not xml_zip_check_allowed(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
-    form = await request.form()
-    upload_path_text = str(form.get("upload_path") or "").strip()
+    form = await read_form(request)
+    upload_path_text = str(form.get("upload_path") or request.query_params.get("upload_path") or "").strip()
     upload_path = Path(upload_path_text)
+    debug = path_debug_payload(submitted_value=upload_path_text, resolved_path=upload_path, allowed_base=HIA_XML_ZIP_CHECK_UPLOAD_DIR)
+    debug["form"] = safe_form_debug(form)
     if not upload_path_text or not is_path_under(upload_path, HIA_XML_ZIP_CHECK_UPLOAD_DIR):
+        LOGGER.warning("XML ZIP delete rejected outside upload root: %s", json.dumps(debug, ensure_ascii=False))
         return RedirectResponse(
-            f"/hia/xml-zip-check?error={quote('削除できるのはアップロード済みZIPだけです。')}",
+            f"/hia/xml-zip-check?error={quote(path_debug_message('削除できるのはアップロード済みZIPだけです。', debug))}",
             status_code=303,
         )
     if not upload_path.exists():
