@@ -77,6 +77,7 @@
           <th>社員番号</th>
           <th>氏名</th>
           <th>部署</th>
+          <th>申請元IP</th>
           <th>ロール</th>
           <th>PW</th>
           <th>最終ログイン</th>
@@ -97,6 +98,7 @@
             <small>{{ row.display_name_kana or '' }}</small>
           </td>
           <td>{{ row.department_name or '' }}</td>
+          <td><small>{{ row.registration_ip or '' }}</small></td>
           <td>{{ row.role_names or '閲覧' }}</td>
           <td>{% if row.must_change_password %}<span class="status-pill status-pending">初期</span>{% endif %}</td>
           <td>{{ row.last_login_at or '' }}</td>

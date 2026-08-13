@@ -273,6 +273,13 @@ def load_admin_user_rows(cur: Any, *, filters: dict[str, str] | None = None) -> 
           u.approved_at,
           u.must_change_password,
           u.last_login_at,
+          (
+            SELECT GROUP_CONCAT(aip.allowed_ip ORDER BY aip.allowed_ip SEPARATOR ', ')
+            FROM app_user_allowed_ips aip
+            WHERE aip.app_user_id = u.app_user_id
+              AND aip.is_active = 1
+              AND (aip.label = '申請元IP' OR aip.note = 'self registration source ip')
+          ) AS registration_ip,
           GROUP_CONCAT(r.role_code ORDER BY r.role_code SEPARATOR ',') AS role_codes,
           GROUP_CONCAT(r.role_name ORDER BY r.role_code SEPARATOR ', ') AS role_names
         FROM app_users u
@@ -552,6 +559,22 @@ def replace_allowed_ips(
             """,
             (app_user_id, allowed_ip),
         )
+
+
+def add_registration_allowed_ip(cur: Any, *, app_user_id: int, request_ip: str | None) -> None:
+    if not request_ip:
+        return
+    cur.execute(
+        """
+        INSERT INTO app_user_allowed_ips (app_user_id, allowed_ip, label, is_active, note)
+        VALUES (%s, %s, '申請元IP', 1, 'self registration source ip')
+        ON DUPLICATE KEY UPDATE
+          label = VALUES(label),
+          is_active = VALUES(is_active),
+          note = VALUES(note)
+        """,
+        (app_user_id, request_ip),
+    )
 
 
 def allowed_ips_text(rows: list[dict[str, Any]]) -> str:
@@ -2156,13 +2179,14 @@ def login_form(request: Request) -> HTMLResponse:
 def register_form(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         "register.html",
-        {"request": request, "message": None, "error": None, "form": {}},
+        {"request": request, "message": None, "error": None, "form": {}, "request_ip": client_ip(request)},
     )
 
 
 @app.post("/register", response_class=HTMLResponse)
 async def register_user(request: Request) -> Response:
     form = await read_form(request)
+    request_ip = client_ip(request)
     employee_no = form.get("employee_no", "").strip()
     display_name = form.get("display_name", "").strip()
     display_name_kana = form.get("display_name_kana", "").strip() or None
@@ -2181,19 +2205,37 @@ async def register_user(request: Request) -> Response:
     if not employee_no or not display_name:
         return templates.TemplateResponse(
             "register.html",
-            {"request": request, "message": None, "error": "社員番号と氏名は必須です。", "form": form_values},
+            {
+                "request": request,
+                "message": None,
+                "error": "社員番号と氏名は必須です。",
+                "form": form_values,
+                "request_ip": request_ip,
+            },
             status_code=400,
         )
     if len(password) < 8:
         return templates.TemplateResponse(
             "register.html",
-            {"request": request, "message": None, "error": "パスワードは8文字以上にしてください。", "form": form_values},
+            {
+                "request": request,
+                "message": None,
+                "error": "パスワードは8文字以上にしてください。",
+                "form": form_values,
+                "request_ip": request_ip,
+            },
             status_code=400,
         )
     if password != password_confirm:
         return templates.TemplateResponse(
             "register.html",
-            {"request": request, "message": None, "error": "パスワードが一致しません。", "form": form_values},
+            {
+                "request": request,
+                "message": None,
+                "error": "パスワードが一致しません。",
+                "form": form_values,
+                "request_ip": request_ip,
+            },
             status_code=400,
         )
 
@@ -2206,7 +2248,13 @@ async def register_user(request: Request) -> Response:
                 conn.rollback()
                 return templates.TemplateResponse(
                     "register.html",
-                    {"request": request, "message": None, "error": "この社員番号はすでに登録されています。", "form": form_values},
+                    {
+                        "request": request,
+                        "message": None,
+                        "error": "この社員番号はすでに登録されています。",
+                        "form": form_values,
+                        "request_ip": request_ip,
+                    },
                     status_code=400,
                 )
 
@@ -2245,6 +2293,7 @@ async def register_user(request: Request) -> Response:
             )
             app_user_id = int(cur.lastrowid)
             assign_user_role(cur, app_user_id=app_user_id, role_code="VIEWER", assigned_by_app_user_id=None)
+            add_registration_allowed_ip(cur, app_user_id=app_user_id, request_ip=request_ip)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -2257,6 +2306,7 @@ async def register_user(request: Request) -> Response:
             "message": "登録申請を受け付けました。管理者の承認後にログインできます。",
             "error": None,
             "form": {},
+            "request_ip": request_ip,
         },
     )
 
