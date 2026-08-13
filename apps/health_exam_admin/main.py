@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import logging
 import re
 import secrets
 import string
@@ -61,6 +62,7 @@ from scripts.phr_app.script_lib.app_auth import (
 
 APP_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = APP_ROOT.parents[1]
+LOGGER = logging.getLogger("health_exam_admin")
 SESSION_COOKIE_NAME = "phr_app_session"
 CSRF_COOKIE_NAME = "phr_app_csrf"
 CSRF_FIELD_NAME = "_csrf_token"
@@ -1207,7 +1209,10 @@ def is_path_under(path: Path, base_dir: Path) -> bool:
 
 
 def app_data_path_from_form_value(value: str) -> Path:
-    path = Path(value)
+    normalized = value.strip().replace("¥", os.sep)
+    if os.sep != "\\":
+        normalized = normalized.replace("\\", os.sep)
+    path = Path(normalized)
     if path.is_absolute():
         return path
     parts = path.parts
@@ -1222,6 +1227,42 @@ def xml_zip_check_allowed(user: dict[str, Any]) -> bool:
 
 def xml_zip_check_input_allowed(path: Path) -> bool:
     return is_path_under(path, APP_DATA_DIR)
+
+
+def path_debug_payload(*, submitted_value: str, resolved_path: Path, allowed_base: Path) -> dict[str, Any]:
+    def _resolve_text(path: Path) -> str:
+        try:
+            return str(path.resolve())
+        except OSError as exc:
+            return f"<resolve_error:{type(exc).__name__}:{exc}>"
+
+    return {
+        "submitted_value": submitted_value,
+        "resolved_path": str(resolved_path),
+        "resolved_absolute_path": _resolve_text(resolved_path),
+        "allowed_base": str(allowed_base),
+        "allowed_base_absolute_path": _resolve_text(allowed_base),
+        "exists": resolved_path.exists(),
+        "is_file": resolved_path.is_file(),
+        "is_under_data": is_path_under(resolved_path, APP_DATA_DIR),
+        "repo_root": str(REPO_ROOT),
+        "cwd": str(Path.cwd()),
+    }
+
+
+def path_debug_message(prefix: str, debug: dict[str, Any]) -> str:
+    submitted = str(debug.get("submitted_value") or "(空)")
+    resolved = str(debug.get("resolved_path") or "(不明)")
+    try:
+        resolved_short = str(Path(resolved).relative_to(APP_DATA_DIR))
+    except (OSError, ValueError):
+        resolved_short = resolved
+    return (
+        f"{prefix} "
+        f"送信値={submitted} / 解決後={resolved_short} / "
+        f"exists={debug.get('exists')} / is_file={debug.get('is_file')} / "
+        f"data配下={debug.get('is_under_data')}"
+    )
 
 
 def serialize_xml_zip_findings(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
@@ -3001,18 +3042,22 @@ async def recheck_hia_xml_zip(request: Request) -> Response:
     form = await read_form(request)
     zip_path_text = str(form.get("zip_path") or "").strip()
     zip_path = app_data_path_from_form_value(zip_path_text)
+    debug = path_debug_payload(submitted_value=zip_path_text, resolved_path=zip_path, allowed_base=APP_DATA_DIR)
     if not zip_path_text or not xml_zip_check_input_allowed(zip_path):
+        LOGGER.warning("XML ZIP recheck rejected outside data root: %s", json.dumps(debug, ensure_ascii=False))
         return RedirectResponse(
-            f"/hia/xml-zip-check?error={quote('再チェックできるのはdata配下のZIPだけです。')}",
+            f"/hia/xml-zip-check?error={quote(path_debug_message('再チェックできるのはdata配下のZIPだけです。', debug))}",
             status_code=303,
         )
     if not zip_path.exists() or not zip_path.is_file():
+        LOGGER.warning("XML ZIP recheck target not found: %s", json.dumps(debug, ensure_ascii=False))
         return RedirectResponse(
-            f"/hia/xml-zip-check?error={quote('再チェック対象のZIPが見つかりません。')}",
+            f"/hia/xml-zip-check?error={quote(path_debug_message('再チェック対象のZIPが見つかりません。', debug))}",
             status_code=303,
         )
 
     try:
+        LOGGER.info("XML ZIP recheck accepted: %s", json.dumps(debug, ensure_ascii=False))
         result = build_xml_zip_check_result(
             upload_path=zip_path,
             original_filename=zip_path.name,
