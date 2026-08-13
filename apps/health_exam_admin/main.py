@@ -8,7 +8,7 @@ import string
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -223,9 +223,8 @@ def client_ip(request: Request) -> str | None:
 
 
 async def read_form(request: Request) -> dict[str, str]:
-    body = await request.body()
-    parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
-    return {key: values[-1] if values else "" for key, values in parsed.items()}
+    form = await request.form()
+    return {key: str(value) for key, value in form.multi_items()}
 
 
 def current_user(request: Request) -> dict[str, Any] | None:
