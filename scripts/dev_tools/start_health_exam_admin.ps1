@@ -54,6 +54,52 @@ function Wait-PortFree {
     return $false
 }
 
+function Stop-ProcessTree {
+    param([int]$ProcessId)
+
+    if (-not $ProcessId -or $ProcessId -eq $PID) {
+        return
+    }
+    try {
+        $null = & taskkill.exe /PID $ProcessId /T /F 2>&1
+        Write-Host ("Stopped process tree PID {0}" -f $ProcessId)
+    }
+    catch {
+        try {
+            Stop-Process -Id $ProcessId -Force -ErrorAction Stop
+            Write-Host ("Stopped PID {0}" -f $ProcessId)
+        }
+        catch {
+            Write-Host ("Could not stop PID {0}: {1}" -f $ProcessId, $_)
+        }
+    }
+}
+
+function Stop-PortOwners {
+    param([int]$Port)
+
+    try {
+        $listening = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+        foreach ($conn in $listening) {
+            if ($conn.OwningProcess -and $conn.OwningProcess -ne $PID) {
+                $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($conn.OwningProcess)" -ErrorAction SilentlyContinue
+                if ($process -and $process.CommandLine -and (
+                    $process.CommandLine -like "*apps.health_exam_admin.main:app*" -or
+                    $process.CommandLine -like "*start_health_exam_admin.ps1*"
+                )) {
+                    Stop-ProcessTree -ProcessId $conn.OwningProcess
+                }
+                else {
+                    Write-Host ("Port {0} is owned by PID {1}, but it does not look like Health Exam Admin. It was not stopped." -f $Port, $conn.OwningProcess)
+                }
+            }
+        }
+    }
+    catch {
+        Write-Host "Could not stop port $Port owner."
+    }
+}
+
 $existingProcesses = @(Get-HealthExamAdminProcesses)
 if ($existingProcesses.Count -gt 0) {
     Write-Host "Health Exam Admin appears to be already running."
@@ -74,18 +120,16 @@ if ($existingProcesses.Count -gt 0) {
     }
 
     foreach ($process in $existingProcesses) {
-        try {
-            Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
-            Write-Host ("Stopped PID {0}" -f $process.ProcessId)
-        }
-        catch {
-            Write-Host ("Could not stop PID {0}: {1}" -f $process.ProcessId, $_)
-        }
+        Stop-ProcessTree -ProcessId $process.ProcessId
+    }
+
+    if (-not (Wait-PortFree -Port $port -Seconds 3)) {
+        Stop-PortOwners -Port $port
     }
 
     if (-not (Wait-PortFree -Port $port)) {
         Write-Host ""
-        Write-Host "Port $port is still in use. Please close the old terminal or process, then run this shortcut again."
+        Write-Host "Port $port is still in use. The old terminal or process could not be closed automatically."
         Read-Host "Press Enter to close"
         exit 1
     }
