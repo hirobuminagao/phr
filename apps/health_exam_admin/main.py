@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import re
 import secrets
 import string
 from datetime import datetime
@@ -9,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -40,6 +41,12 @@ from scripts.hia.script_lib.fund_delivery_zip_exporter import (
 from scripts.hia.script_lib.hia_download_importer import (
     HiaDownloadImportConfig,
     import_hia_download_zips,
+)
+from scripts.hia.dev_tools.check_hia_xml_zip import (
+    DEFAULT_REPORT_DIR as XML_ZIP_CHECK_REPORT_DIR,
+    DEFAULT_XSD_DIR as XML_ZIP_CHECK_XSD_DIR,
+    check_zip as check_hia_xml_zip_file,
+    write_report as write_hia_xml_zip_check_report,
 )
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
@@ -808,6 +815,7 @@ templates.env.globals["fund_delivery_status_label"] = fund_delivery_status_label
 
 FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
 HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
+HIA_XML_ZIP_CHECK_UPLOAD_DIR = REPO_ROOT / "data" / "hia_xml_zip_checks" / "uploads"
 
 
 def _config_path(value: Any, default: Path) -> Path:
@@ -1053,6 +1061,66 @@ def fund_delivery_actor(user: dict[str, Any]) -> str:
     if employee_number and display_name:
         return f"{employee_number} {display_name}"
     return employee_number or display_name or "health_exam_admin"
+
+
+def safe_upload_file_name(filename: str | None, *, default: str = "upload.zip") -> str:
+    base_name = Path(filename or default).name
+    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", base_name).strip(" .")
+    return sanitized or default
+
+
+def xml_zip_check_allowed(user: dict[str, Any]) -> bool:
+    return has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage"))
+
+
+def serialize_xml_zip_findings(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for finding in findings[:limit]:
+        rows.append(
+            {
+                "severity": finding.severity,
+                "check_type": finding.check_type,
+                "xml_inner_path": finding.xml_inner_path,
+                "namecode": finding.namecode,
+                "item_display_name": finding.item_display_name,
+                "message": finding.message,
+                "value_preview": finding.value_preview,
+                "mhlw_byte_length": finding.mhlw_byte_length,
+                "max_byte_length": finding.max_byte_length,
+                "fixed": finding.fixed,
+            }
+        )
+    return rows
+
+
+def build_xml_zip_check_result(
+    *,
+    upload_path: Path,
+    original_filename: str,
+    fix: bool,
+) -> dict[str, Any]:
+    summary, findings = check_hia_xml_zip_file(
+        upload_path,
+        xsd_dir=XML_ZIP_CHECK_XSD_DIR,
+        fix=fix,
+        fixed_output_dir=XML_ZIP_CHECK_REPORT_DIR / "fixed",
+    )
+    report_csv_path = write_hia_xml_zip_check_report(findings, XML_ZIP_CHECK_REPORT_DIR)
+    return {
+        "original_filename": original_filename,
+        "upload_path": str(upload_path),
+        "report_csv_path": str(report_csv_path),
+        "fixed_zip_path": summary.fixed_zip_path,
+        "fix": fix,
+        "zip_files_seen": summary.zip_files_seen,
+        "xml_files_seen": summary.xml_files_seen,
+        "findings": len(findings),
+        "errors": sum(1 for item in findings if item.severity == "ERROR"),
+        "warnings": sum(1 for item in findings if item.severity == "WARNING"),
+        "fixed": sum(1 for item in findings if item.fixed),
+        "finding_rows": serialize_xml_zip_findings(findings),
+        "finding_rows_truncated": len(findings) > 200,
+    }
 
 
 def build_fund_delivery_list_configs(raw: dict[str, Any], *, actor: str | None = None) -> list[FundDeliveryListConfig]:
@@ -2321,6 +2389,98 @@ def hia_fund_delivery(request: Request) -> Response:
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
             "can_submit": has_any_permission(user, ("hia_upload_status.edit", "users.manage")),
+        },
+    )
+
+
+@app.get("/hia/xml-zip-check", response_class=HTMLResponse)
+def hia_xml_zip_check(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not xml_zip_check_allowed(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    return templates.TemplateResponse(
+        "hia_xml_zip_check.html",
+        {
+            "request": request,
+            "user": user,
+            "result": None,
+            "error": request.query_params.get("error"),
+            "message": request.query_params.get("message"),
+            "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+            "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+        },
+    )
+
+
+@app.post("/hia/xml-zip-check", response_class=HTMLResponse)
+async def run_hia_xml_zip_check(
+    request: Request,
+    zip_file: UploadFile = File(...),
+    fix: str | None = Form(None),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not xml_zip_check_allowed(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    original_filename = safe_upload_file_name(zip_file.filename)
+    if not original_filename.lower().endswith(".zip"):
+        return templates.TemplateResponse(
+            "hia_xml_zip_check.html",
+            {
+                "request": request,
+                "user": user,
+                "result": None,
+                "error": "ZIPファイルを指定してください。",
+                "message": None,
+                "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+                "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+            },
+            status_code=400,
+        )
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    upload_dir = HIA_XML_ZIP_CHECK_UPLOAD_DIR / stamp
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_path = upload_dir / original_filename
+    with upload_path.open("wb") as fp:
+        while chunk := await zip_file.read(1024 * 1024):
+            fp.write(chunk)
+
+    try:
+        result = build_xml_zip_check_result(
+            upload_path=upload_path,
+            original_filename=original_filename,
+            fix=fix == "1",
+        )
+    except Exception as exc:
+        return templates.TemplateResponse(
+            "hia_xml_zip_check.html",
+            {
+                "request": request,
+                "user": user,
+                "result": None,
+                "error": str(exc),
+                "message": None,
+                "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+                "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+            },
+            status_code=500,
+        )
+
+    return templates.TemplateResponse(
+        "hia_xml_zip_check.html",
+        {
+            "request": request,
+            "user": user,
+            "result": result,
+            "error": None,
+            "message": "チェックが完了しました。",
+            "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+            "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
         },
     )
 

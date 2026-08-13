@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% set title = "XML ZIPチェック" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">HIA / XML QA</p>
+    <h1>XML ZIPチェック</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/hia/fund-delivery">健保納品</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}
+    <div class="notice">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="panel xml-check-panel">
+    <div class="section-heading">
+      <div>
+        <h2>ZIPをチェック</h2>
+        <p class="subtle">HIAアップロード用、または健保納品用のZIPを指定します。XSD、ST文字数、空のcodeSystemを確認します。</p>
+      </div>
+    </div>
+    <form method="post" action="/hia/xml-zip-check" enctype="multipart/form-data" class="xml-check-form">
+      <label>
+        <span>ZIPファイル</span>
+        <input type="file" name="zip_file" accept=".zip" required>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="fix" value="1">
+        <span>安全に直せるものは修正版ZIPを作成する</span>
+      </label>
+      <button type="submit">チェック実行</button>
+    </form>
+    <div class="xml-check-config">
+      <div><span>XSD</span><strong>{{ xsd_dir }}</strong></div>
+      <div><span>レポート</span><strong>{{ report_dir }}</strong></div>
+    </div>
+  </section>
+
+  {% if result %}
+  <section class="summary-grid xml-check-summary">
+    <div class="summary-card"><span>XML</span><strong>{{ result.xml_files_seen }}</strong></div>
+    <div class="summary-card"><span>検出</span><strong>{{ result.findings }}</strong></div>
+    <div class="summary-card"><span>エラー</span><strong>{{ result.errors }}</strong></div>
+    <div class="summary-card"><span>警告</span><strong>{{ result.warnings }}</strong></div>
+    <div class="summary-card"><span>修正</span><strong>{{ result.fixed }}</strong></div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>出力</h2>
+        <p class="subtle">画面では先頭200件まで表示します。全件確認はCSVレポートを使います。</p>
+      </div>
+    </div>
+    <div class="xml-check-paths">
+      <div><span>元ファイル</span><strong>{{ result.original_filename }}</strong><small>{{ result.upload_path }}</small></div>
+      <div><span>CSVレポート</span><strong>{{ result.report_csv_path }}</strong></div>
+      {% if result.fixed_zip_path %}
+      <div><span>修正版ZIP</span><strong>{{ result.fixed_zip_path }}</strong></div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel table-panel">
+    <table class="data-table xml-check-table">
+      <thead>
+        <tr>
+          <th>状態</th>
+          <th>種類</th>
+          <th>XML</th>
+          <th>namecode</th>
+          <th>内容</th>
+          <th>値</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in result.finding_rows %}
+        <tr>
+          <td>
+            <span class="status-pill {{ 'status-ready' if row.severity == 'FIXED' else 'status-pending' if row.severity == 'WARNING' else 'status-danger' }}">
+              {{ row.severity }}
+            </span>
+          </td>
+          <td>{{ row.check_type }}</td>
+          <td><strong>{{ row.xml_inner_path }}</strong></td>
+          <td>
+            <strong>{{ row.namecode or "-" }}</strong>
+            <small>{{ row.item_display_name or "" }}</small>
+          </td>
+          <td>{{ row.message }}</td>
+          <td>
+            {% if row.value_preview %}<strong>{{ row.value_preview }}</strong>{% endif %}
+            {% if row.mhlw_byte_length %}
+              <small>{{ row.mhlw_byte_length }} / {{ row.max_byte_length }} byte</small>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">検出事項はありません。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if result.finding_rows_truncated %}
+      <p class="subtle table-note">画面表示は200件で省略しています。CSVレポートで全件を確認してください。</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

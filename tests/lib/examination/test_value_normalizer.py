@@ -1,4 +1,4 @@
-from scripts.lib.examination.value_normalizer import normalize_exam_item_value
+from scripts.lib.examination.value_normalizer import mhlw_text_byte_length, normalize_exam_item_value
 
 
 def test_normalize_numeric_less_than_symbol_preserves_raw_and_uses_threshold() -> None:
@@ -77,3 +77,36 @@ def test_normalize_halfwidth_kana_cancel_is_no_result() -> None:
     assert result.normalize_status == "SKIPPED"
     assert result.normalize_reason == "RAW_VALUE_NO_RESULT"
     assert result.validation_status == "WARNING"
+
+
+def test_mhlw_text_byte_length_counts_ascii_as_one_and_non_ascii_as_two() -> None:
+    assert mhlw_text_byte_length("ABCあいう") == 9
+
+
+def test_normalize_st_at_mhlw_text_limit_is_valid() -> None:
+    result = normalize_exam_item_value(
+        None,
+        namecode="9N511000000000049",
+        raw_value="あ" * 128,
+        exam_item={"data_type": "ST", "unit": None},
+    )
+
+    assert result.normalized_value == "あ" * 128
+    assert result.normalize_status == "OK"
+    assert result.validation_status == "VALID"
+
+
+def test_normalize_st_over_mhlw_text_limit_is_invalid() -> None:
+    result = normalize_exam_item_value(
+        None,
+        namecode="9N511000000000049",
+        raw_value="あ" * 129,
+        exam_item={"data_type": "ST", "unit": None},
+    )
+
+    assert result.raw_value == "あ" * 129
+    assert result.normalized_value is None
+    assert result.normalize_status == "ERROR"
+    assert result.normalize_reason == "ST_MAX_BYTE_LENGTH_EXCEEDED"
+    assert result.validation_status == "INVALID"
+    assert result.validation_reason == "ST_MAX_BYTE_LENGTH_EXCEEDED"

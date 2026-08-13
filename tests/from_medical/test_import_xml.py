@@ -317,3 +317,39 @@ def test_insert_exam_item_values_includes_section_columns_and_params() -> None:
         "2.16.840.1.113883.5.83",
         "High",
     )
+
+
+def test_normalize_xml_exam_item_rows_fills_missing_code_system_from_master(monkeypatch) -> None:
+    config = SimpleNamespace(dev_db="dev_phr", master_db="phr_master")
+
+    def fake_get_exam_items(cur, namecodes, *, dev_db):
+        return {
+            "1B040Z121015Z0111": {
+                "data_type": "CD",
+                "result_code_oid": "1.2.392.200119.6.2100",
+            }
+        }
+
+    monkeypatch.setattr(import_xml, "get_exam_items", fake_get_exam_items)
+
+    rows = import_xml.normalize_xml_exam_item_rows(
+        None,
+        config,
+        [
+            {
+                "namecode": "1B040Z121015Z0111",
+                "raw_value": None,
+                "raw_value_type": "CD",
+                "raw_unit": None,
+                "code_system": "",
+                "code_value": "2",
+                "code_display": None,
+            }
+        ],
+    )
+
+    assert rows[0]["code_system"] == "1.2.392.200119.6.2100"
+    assert rows[0]["code_value"] == "2"
+    assert rows[0]["normalize_status"] == "OK"
+    assert rows[0]["normalize_reason"] == "XML_CODE_SYSTEM_FILLED_FROM_MASTER"
+    assert rows[0]["validation_status"] == "VALID"

@@ -874,6 +874,11 @@ button[type="submit"]:hover {
   color: #876100;
 }
 
+.status-danger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
 .status-muted {
   background: #edf1f5;
   color: var(--muted);
@@ -1065,6 +1070,76 @@ button[type="submit"]:hover {
 
 .fund-member-table td {
   vertical-align: top;
+}
+
+.xml-check-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.xml-check-form {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(260px, 0.7fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.checkbox-row {
+  min-height: var(--control-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.xml-check-config,
+.xml-check-paths {
+  display: grid;
+  gap: 10px;
+}
+
+.xml-check-config div,
+.xml-check-paths div {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.xml-check-config span,
+.xml-check-paths span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.xml-check-config strong,
+.xml-check-paths strong,
+.xml-check-paths small {
+  overflow-wrap: anywhere;
+}
+
+.xml-check-summary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.xml-check-table {
+  min-width: 1100px;
+}
+
+.xml-check-table td {
+  vertical-align: top;
+}
+
+.table-note {
+  margin: 12px 0 0;
 }
 
 .inline-status-form {
@@ -1277,6 +1352,11 @@ button[type="submit"]:hover {
   }
 
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .xml-check-form,
+  .xml-check-summary {
     grid-template-columns: 1fr;
   }
 

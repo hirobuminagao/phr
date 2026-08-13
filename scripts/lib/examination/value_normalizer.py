@@ -43,6 +43,7 @@ UNMEASURABLE_WORDS = {
 NUMERIC_DATA_TYPES = {"PQ", "INT", "REAL"}
 CODE_DATA_TYPES = {"CD", "CO"}
 TEXT_DATA_TYPES = {"ST", "TX"}
+MHLW_TEXT_MAX_BYTES = 256
 NUMERIC_LESS_THAN_PATTERN = re.compile(r"^(?:<|＜)\s*([+-]?\d+(?:\.\d+)?)$")
 NUMERIC_LESS_THAN_JA_PATTERN = re.compile(r"^([+-]?\d+(?:\.\d+)?)\s*(?:未満|以下)$")
 UNIT_ALIASES = {
@@ -199,6 +200,14 @@ def _numeric_text(value: str) -> tuple[str, str | None]:
         if match:
             return match.group(1), "RAW_VALUE_NUMERIC_COMPARATOR_NORMALIZED"
     return compact, None
+
+
+def mhlw_text_byte_length(value: str | None) -> int:
+    """Return MHLW spec byte length: ASCII is 1 byte, other chars are 2 bytes."""
+
+    if value is None:
+        return 0
+    return sum(1 if ord(char) <= 0x7F else 2 for char in value)
 
 
 def _ok(
@@ -400,6 +409,13 @@ def normalize_exam_item_value(
         )
 
     if data_type in TEXT_DATA_TYPES or data_type is None:
+        if data_type in TEXT_DATA_TYPES and mhlw_text_byte_length(value) > MHLW_TEXT_MAX_BYTES:
+            return _error(
+                raw_value=raw_text,
+                raw_value_type=data_type,
+                raw_unit=unit,
+                reason="ST_MAX_BYTE_LENGTH_EXCEEDED",
+            )
         return _ok(
             raw_value=raw_text,
             raw_value_type=data_type,

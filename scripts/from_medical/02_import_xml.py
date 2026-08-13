@@ -1004,24 +1004,18 @@ def normalize_xml_exam_item_rows(
                         "validation_reason": "RESULT_CODE_OID_MISMATCH",
                     }
                 )
-            elif result_code_oid and not code_system:
-                normalized_row.update(
-                    {
-                        "normalize_status": "ERROR",
-                        "normalize_reason": "RESULT_CODE_OID_MISSING_IN_XML",
-                        "validation_status": "INVALID",
-                        "validation_reason": "RESULT_CODE_OID_MISSING_IN_XML",
-                    }
-                )
             else:
+                filled_code_system = code_system or result_code_oid
                 normalized_row.update(
                     {
                         "raw_value_type": data_type,
-                        "code_system": code_system or result_code_oid,
+                        "code_system": filled_code_system,
                         "code_value": code_value,
                         "code_display": code_display,
                         "normalize_status": "OK",
-                        "normalize_reason": "XML_CODE_MATCH",
+                        "normalize_reason": "XML_CODE_SYSTEM_FILLED_FROM_MASTER"
+                        if result_code_oid and not code_system
+                        else "XML_CODE_MATCH",
                         "validation_status": "VALID",
                         "validation_reason": None,
                     }

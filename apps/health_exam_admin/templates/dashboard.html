@@ -37,10 +37,16 @@
         <span>対象者の箱を作る・確認する</span>
       </a>
       {% endif %}
+      {% if "hia_upload.perform" in user.permissions or "hia_upload_status.edit" in user.permissions or "users.manage" in user.permissions %}
       <a class="home-action-button" href="/hia/fund-delivery">
         <strong>健保納品</strong>
         <span>HIA ZIPから健保向けXMLを作る</span>
       </a>
+      <a class="home-action-button" href="/hia/xml-zip-check">
+        <strong>XML ZIPチェック</strong>
+        <span>XSD・文字数・codeSystemを確認</span>
+      </a>
+      {% endif %}
       <a class="home-action-button" href="/account">
         <strong>登録情報</strong>
         <span>名前・連絡先・パスワード</span>
@@ -93,6 +99,11 @@
         <span class="status-pill status-ready">利用可</span>
         <div><strong>健保納品</strong><small>HIAからダウンロードしたXML ZIPを健保向けに出力する</small></div>
         <a class="home-menu-button" href="/hia/fund-delivery">開く</a>
+      </div>
+      <div class="admin-module-row">
+        <span class="status-pill status-ready">利用可</span>
+        <div><strong>XML ZIPチェック</strong><small>ZIP内XMLのXSD、ST文字数、空のcodeSystemを確認し、修正可能なものは修正版ZIPを作る</small></div>
+        <a class="home-menu-button" href="/hia/xml-zip-check">開く</a>
       </div>
       <div class="admin-module-row is-disabled">
         <span class="status-pill status-pending">準備中</span>
