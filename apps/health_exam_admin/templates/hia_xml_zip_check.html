@@ -66,11 +66,19 @@
     <div class="section-heading">
       <div>
         <h2>出力</h2>
-        <p class="subtle">画面にはエラーだけ表示します。警告、修正済み、全件確認はCSVレポートを使います。</p>
+        <p class="subtle">画面にはエラーと警告を表示します。修正済みを含む全件確認はCSVレポートを使います。</p>
       </div>
     </div>
     <div class="xml-check-paths">
-      <div><span>元ファイル</span><strong>{{ result.original_filename }}</strong><small>{{ result.upload_path }}</small></div>
+      <div>
+        <span>元ファイル</span>
+        <strong>{{ result.original_filename }}</strong>
+        <small>{{ result.upload_path }}</small>
+        <form method="post" action="/hia/xml-zip-check/delete-upload" class="xml-check-delete-form">
+          <input type="hidden" name="upload_path" value="{{ result.upload_path }}">
+          <button type="submit" class="ghost-button danger-button">アップロードファイルを削除</button>
+        </form>
+      </div>
       <div><span>CSVレポート</span><strong>{{ result.report_csv_path }}</strong></div>
       {% if result.fixed_zip_path %}
       <div><span>修正版ZIP</span><strong>{{ result.fixed_zip_path }}</strong></div>
@@ -79,20 +87,37 @@
   </section>
 
   <section class="panel">
-    <div class="xml-error-group-list">
-      {% for group in result.error_groups %}
-      <article class="xml-error-group">
+    <div class="section-heading">
+      <div>
+        <h2>検出内容</h2>
+        <p class="subtle">エラーと警告を切り替えて確認できます。ボタンを外すと該当行だけ非表示になります。</p>
+      </div>
+      <div class="filter-toggle-group" data-xml-severity-filter="#xml-finding-groups">
+        <button type="button" class="is-active" data-severity-value="ERROR" aria-pressed="true">エラー</button>
+        <button type="button" class="is-active" data-severity-value="WARNING" aria-pressed="true">警告</button>
+      </div>
+    </div>
+    <div class="xml-error-group-list" id="xml-finding-groups">
+      {% for group in result.display_groups %}
+      <article class="xml-error-group" data-xml-finding-group>
         <header>
           <div>
             <strong>{{ group.xml_inner_path }}</strong>
             <small>{{ group.label_summary }}</small>
           </div>
-          <span class="status-pill status-danger">{{ group.error_count }}件</span>
+          <div class="xml-error-group-counts">
+            {% if group.error_count %}
+              <span class="status-pill status-danger">エラー {{ group.error_count }}件</span>
+            {% endif %}
+            {% if group.warning_count %}
+              <span class="status-pill status-pending">警告 {{ group.warning_count }}件</span>
+            {% endif %}
+          </div>
         </header>
         <div class="xml-error-items">
-          {% for row in group.errors %}
-          <div class="xml-error-item">
-            <span class="status-pill status-danger">{{ row.label }}</span>
+          {% for row in group.findings %}
+          <div class="xml-error-item" data-xml-severity="{{ row.severity }}">
+            <span class="status-pill {{ row.status_class }}">{{ row.severity_label }} / {{ row.label }}</span>
             <div>
               <strong>{{ row.namecode or "-" }}{% if row.item_display_name %} / {{ row.item_display_name }}{% endif %}</strong>
               <small>{{ row.message }}</small>
@@ -108,10 +133,10 @@
         </div>
       </article>
       {% else %}
-      <p class="subtle">画面表示するエラーはありません。警告や修正済みを含む全件はCSVレポートを確認してください。</p>
+      <p class="subtle">画面表示するエラー/警告はありません。修正済みを含む全件はCSVレポートを確認してください。</p>
       {% endfor %}
     </div>
-    {% if result.error_groups_truncated %}
+    {% if result.display_groups_truncated %}
       <p class="subtle table-note">ファイル表示は200件で省略しています。CSVレポートで全件を確認してください。</p>
     {% endif %}
   </section>

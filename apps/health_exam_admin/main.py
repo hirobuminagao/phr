@@ -1092,6 +1092,14 @@ def safe_upload_file_name(filename: str | None, *, default: str = "upload.zip") 
     return sanitized or default
 
 
+def is_path_under(path: Path, base_dir: Path) -> bool:
+    try:
+        path.resolve().relative_to(base_dir.resolve())
+    except ValueError:
+        return False
+    return True
+
+
 def xml_zip_check_allowed(user: dict[str, Any]) -> bool:
     return has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage"))
 
@@ -1139,26 +1147,39 @@ def xml_zip_check_message_label(finding: Any) -> str:
     return str(finding.check_type or "その他")
 
 
-def serialize_xml_zip_error_groups(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
+def serialize_xml_zip_display_groups(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for finding in findings:
-        if finding.severity != "ERROR":
+        if finding.severity not in {"ERROR", "WARNING"}:
             continue
         key = str(finding.xml_inner_path or "")
         row = grouped.setdefault(
             key,
             {
                 "xml_inner_path": key,
+                "finding_count": 0,
                 "error_count": 0,
+                "warning_count": 0,
                 "labels": {},
-                "errors": [],
+                "findings": [],
             },
         )
-        row["error_count"] += 1
+        severity = str(finding.severity or "")
+        severity_label = "エラー" if severity == "ERROR" else "警告"
+        status_class = "status-danger" if severity == "ERROR" else "status-pending"
+        row["finding_count"] += 1
+        if severity == "ERROR":
+            row["error_count"] += 1
+        elif severity == "WARNING":
+            row["warning_count"] += 1
         label = xml_zip_check_message_label(finding)
-        row["labels"][label] = row["labels"].get(label, 0) + 1
-        row["errors"].append(
+        label_key = f"{severity_label}: {label}"
+        row["labels"][label_key] = row["labels"].get(label_key, 0) + 1
+        row["findings"].append(
             {
+                "severity": severity,
+                "severity_label": severity_label,
+                "status_class": status_class,
                 "label": label,
                 "namecode": finding.namecode,
                 "item_display_name": finding.item_display_name,
@@ -1168,7 +1189,7 @@ def serialize_xml_zip_error_groups(findings: list[Any], *, limit: int = 200) -> 
                 "max_byte_length": finding.max_byte_length,
             }
         )
-    rows = sorted(grouped.values(), key=lambda item: (-int(item["error_count"]), item["xml_inner_path"]))
+    rows = sorted(grouped.values(), key=lambda item: (-int(item["error_count"]), -int(item["warning_count"]), item["xml_inner_path"]))
     for row in rows:
         row["label_summary"] = " / ".join(
             f"{label} {count}件"
@@ -1202,8 +1223,8 @@ def build_xml_zip_check_result(
         "errors": sum(1 for item in findings if item.severity == "ERROR"),
         "warnings": sum(1 for item in findings if item.severity == "WARNING"),
         "fixed": sum(1 for item in findings if item.fixed),
-        "error_groups": serialize_xml_zip_error_groups(findings),
-        "error_groups_truncated": len({item.xml_inner_path for item in findings if item.severity == "ERROR"}) > 200,
+        "display_groups": serialize_xml_zip_display_groups(findings),
+        "display_groups_truncated": len({item.xml_inner_path for item in findings if item.severity in {"ERROR", "WARNING"}}) > 200,
     }
 
 
@@ -2593,6 +2614,47 @@ async def run_hia_xml_zip_check(
             "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
             "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
         },
+    )
+
+
+@app.post("/hia/xml-zip-check/delete-upload")
+async def delete_hia_xml_zip_upload(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not xml_zip_check_allowed(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await request.form()
+    upload_path_text = str(form.get("upload_path") or "").strip()
+    upload_path = Path(upload_path_text)
+    if not upload_path_text or not is_path_under(upload_path, HIA_XML_ZIP_CHECK_UPLOAD_DIR):
+        return RedirectResponse(
+            f"/hia/xml-zip-check?error={quote('削除できるのはアップロード済みZIPだけです。')}",
+            status_code=303,
+        )
+    if not upload_path.exists():
+        return RedirectResponse(
+            f"/hia/xml-zip-check?message={quote('アップロードファイルは既にありません。')}",
+            status_code=303,
+        )
+    if not upload_path.is_file():
+        return RedirectResponse(
+            f"/hia/xml-zip-check?error={quote('削除対象がファイルではありません。')}",
+            status_code=303,
+        )
+
+    upload_path.unlink()
+    try:
+        parent = upload_path.parent
+        if parent != HIA_XML_ZIP_CHECK_UPLOAD_DIR and is_path_under(parent, HIA_XML_ZIP_CHECK_UPLOAD_DIR):
+            parent.rmdir()
+    except OSError:
+        pass
+
+    return RedirectResponse(
+        f"/hia/xml-zip-check?message={quote('アップロードファイルを削除しました。CSVレポートは残しています。')}",
+        status_code=303,
     )
 
 

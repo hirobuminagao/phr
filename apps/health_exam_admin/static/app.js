@@ -117,4 +117,39 @@
       setFileName();
     });
   }
+
+  for (const filter of document.querySelectorAll("[data-xml-severity-filter]")) {
+    const targetSelector = filter.getAttribute("data-xml-severity-filter");
+    const target = targetSelector ? document.querySelector(targetSelector) : null;
+    if (!target) continue;
+
+    const buttons = Array.from(filter.querySelectorAll("[data-severity-value]"));
+    const groups = Array.from(target.querySelectorAll("[data-xml-finding-group]"));
+
+    const applySeverityFilter = () => {
+      const active = new Set(
+        buttons.filter((button) => button.classList.contains("is-active")).map((button) => button.dataset.severityValue),
+      );
+
+      for (const group of groups) {
+        let visibleCount = 0;
+        for (const item of group.querySelectorAll("[data-xml-severity]")) {
+          const matched = active.has(item.getAttribute("data-xml-severity"));
+          item.hidden = !matched;
+          if (matched) visibleCount += 1;
+        }
+        group.hidden = visibleCount === 0;
+      }
+    };
+
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        button.classList.toggle("is-active");
+        button.setAttribute("aria-pressed", button.classList.contains("is-active") ? "true" : "false");
+        applySeverityFilter();
+      });
+    }
+
+    applySeverityFilter();
+  }
 })();
