@@ -111,7 +111,14 @@
       </div>
       <div><span>CSVレポート</span><strong>{{ result.report_csv_path }}</strong></div>
       {% if result.fixed_zip_path %}
-      <div><span>修正版ZIP</span><strong>{{ result.fixed_zip_path }}</strong></div>
+      <div>
+        <span>修正版ZIP</span>
+        <strong>{{ result.fixed_zip_path }}</strong>
+        <form method="post" action="/hia/xml-zip-check/recheck" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを再チェックしています">
+          <input type="hidden" name="zip_path" value="{{ result.fixed_zip_path }}">
+          <button type="submit">このZIPを再チェック</button>
+        </form>
+      </div>
       {% endif %}
     </div>
   </section>

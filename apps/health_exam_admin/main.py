@@ -1104,6 +1104,10 @@ def xml_zip_check_allowed(user: dict[str, Any]) -> bool:
     return has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage"))
 
 
+def xml_zip_check_input_allowed(path: Path) -> bool:
+    return is_path_under(path, HIA_XML_ZIP_CHECK_UPLOAD_DIR) or is_path_under(path, XML_ZIP_CHECK_REPORT_DIR / "fixed")
+
+
 def serialize_xml_zip_findings(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for finding in findings[:limit]:
@@ -2822,6 +2826,65 @@ async def create_fixed_hia_xml_zip(request: Request) -> Response:
             "result": result,
             "error": None,
             "message": "修正版ZIPを作成しました。",
+            "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+            "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+            "uploaded_files": load_xml_zip_uploaded_files(),
+        },
+    )
+
+
+@app.post("/hia/xml-zip-check/recheck", response_class=HTMLResponse)
+async def recheck_hia_xml_zip(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not xml_zip_check_allowed(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    zip_path_text = str(form.get("zip_path") or "").strip()
+    zip_path = Path(zip_path_text)
+    if not zip_path_text or not xml_zip_check_input_allowed(zip_path):
+        return RedirectResponse(
+            f"/hia/xml-zip-check?error={quote('再チェックできるのはアップロード済みZIPまたは修正版ZIPだけです。')}",
+            status_code=303,
+        )
+    if not zip_path.exists() or not zip_path.is_file():
+        return RedirectResponse(
+            f"/hia/xml-zip-check?error={quote('再チェック対象のZIPが見つかりません。')}",
+            status_code=303,
+        )
+
+    try:
+        result = build_xml_zip_check_result(
+            upload_path=zip_path,
+            original_filename=zip_path.name,
+            fix=False,
+        )
+    except Exception as exc:
+        return templates.TemplateResponse(
+            "hia_xml_zip_check.html",
+            {
+                "request": request,
+                "user": user,
+                "result": None,
+                "error": str(exc),
+                "message": None,
+                "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
+                "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+                "uploaded_files": load_xml_zip_uploaded_files(),
+            },
+            status_code=500,
+        )
+
+    return templates.TemplateResponse(
+        "hia_xml_zip_check.html",
+        {
+            "request": request,
+            "user": user,
+            "result": result,
+            "error": None,
+            "message": "再チェックが完了しました。",
             "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
             "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
             "uploaded_files": load_xml_zip_uploaded_files(),
