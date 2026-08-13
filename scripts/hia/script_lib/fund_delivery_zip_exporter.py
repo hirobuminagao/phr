@@ -292,10 +292,12 @@ def _write_payload_dir(
 
 
 def _zip_dir(source_dir: Path, output_zip_path: Path) -> None:
+    archive_root = source_dir.name
     with zipfile.ZipFile(output_zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in sorted(source_dir.rglob("*")):
             if path.is_file():
-                zf.write(path, path.relative_to(source_dir).as_posix())
+                archive_path = Path(archive_root) / path.relative_to(source_dir)
+                zf.write(path, archive_path.as_posix())
 
 
 def create_delivery_run(
