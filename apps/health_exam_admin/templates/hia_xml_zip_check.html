@@ -66,7 +66,7 @@
     <div class="section-heading">
       <div>
         <h2>出力</h2>
-        <p class="subtle">画面では先頭200件まで表示します。全件確認はCSVレポートを使います。</p>
+        <p class="subtle">画面にはエラーだけ表示します。警告、修正済み、全件確認はCSVレポートを使います。</p>
       </div>
     </div>
     <div class="xml-check-paths">
@@ -113,12 +113,12 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="6">検出事項はありません。</td></tr>
+        <tr><td colspan="6">画面表示するエラーはありません。警告や修正済みを含む全件はCSVレポートを確認してください。</td></tr>
         {% endfor %}
       </tbody>
     </table>
     {% if result.finding_rows_truncated %}
-      <p class="subtle table-note">画面表示は200件で省略しています。CSVレポートで全件を確認してください。</p>
+      <p class="subtle table-note">エラー表示は200件で省略しています。CSVレポートで全件を確認してください。</p>
     {% endif %}
   </section>
   {% endif %}

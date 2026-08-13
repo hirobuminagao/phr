@@ -1118,8 +1118,8 @@ def build_xml_zip_check_result(
         "errors": sum(1 for item in findings if item.severity == "ERROR"),
         "warnings": sum(1 for item in findings if item.severity == "WARNING"),
         "fixed": sum(1 for item in findings if item.fixed),
-        "finding_rows": serialize_xml_zip_findings(findings),
-        "finding_rows_truncated": len(findings) > 200,
+        "finding_rows": serialize_xml_zip_findings([item for item in findings if item.severity == "ERROR"]),
+        "finding_rows_truncated": sum(1 for item in findings if item.severity == "ERROR") > 200,
     }
 
 
