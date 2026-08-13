@@ -78,47 +78,41 @@
     </div>
   </section>
 
-  <section class="panel table-panel">
-    <table class="data-table xml-check-table">
-      <thead>
-        <tr>
-          <th>状態</th>
-          <th>種類</th>
-          <th>XML</th>
-          <th>namecode</th>
-          <th>内容</th>
-          <th>値</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in result.finding_rows %}
-        <tr>
-          <td>
-            <span class="status-pill {{ 'status-ready' if row.severity == 'FIXED' else 'status-pending' if row.severity == 'WARNING' else 'status-danger' }}">
-              {{ row.severity }}
-            </span>
-          </td>
-          <td>{{ row.check_type }}</td>
-          <td><strong>{{ row.xml_inner_path }}</strong></td>
-          <td>
-            <strong>{{ row.namecode or "-" }}</strong>
-            <small>{{ row.item_display_name or "" }}</small>
-          </td>
-          <td>{{ row.message }}</td>
-          <td>
-            {% if row.value_preview %}<strong>{{ row.value_preview }}</strong>{% endif %}
-            {% if row.mhlw_byte_length %}
-              <small>{{ row.mhlw_byte_length }} / {{ row.max_byte_length }} byte</small>
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6">画面表示するエラーはありません。警告や修正済みを含む全件はCSVレポートを確認してください。</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% if result.finding_rows_truncated %}
-      <p class="subtle table-note">エラー表示は200件で省略しています。CSVレポートで全件を確認してください。</p>
+  <section class="panel">
+    <div class="xml-error-group-list">
+      {% for group in result.error_groups %}
+      <article class="xml-error-group">
+        <header>
+          <div>
+            <strong>{{ group.xml_inner_path }}</strong>
+            <small>{{ group.label_summary }}</small>
+          </div>
+          <span class="status-pill status-danger">{{ group.error_count }}件</span>
+        </header>
+        <div class="xml-error-items">
+          {% for row in group.errors %}
+          <div class="xml-error-item">
+            <span class="status-pill status-danger">{{ row.label }}</span>
+            <div>
+              <strong>{{ row.namecode or "-" }}{% if row.item_display_name %} / {{ row.item_display_name }}{% endif %}</strong>
+              <small>{{ row.message }}</small>
+              {% if row.value_preview %}
+                <small>値: {{ row.value_preview }}</small>
+              {% endif %}
+              {% if row.mhlw_byte_length %}
+                <small>{{ row.mhlw_byte_length }} / {{ row.max_byte_length }} byte</small>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </article>
+      {% else %}
+      <p class="subtle">画面表示するエラーはありません。警告や修正済みを含む全件はCSVレポートを確認してください。</p>
+      {% endfor %}
+    </div>
+    {% if result.error_groups_truncated %}
+      <p class="subtle table-note">ファイル表示は200件で省略しています。CSVレポートで全件を確認してください。</p>
     {% endif %}
   </section>
   {% endif %}

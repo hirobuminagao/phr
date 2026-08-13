@@ -1116,6 +1116,67 @@ def serialize_xml_zip_findings(findings: list[Any], *, limit: int = 200) -> list
     return rows
 
 
+def xml_zip_check_message_label(finding: Any) -> str:
+    message = str(finding.message or "")
+    if finding.check_type == "XSD":
+        if "minLength" in message:
+            return "XSD: 必須文字数不足(minLength)"
+        if "maxLength" in message:
+            return "XSD: 最大文字数超過(maxLength)"
+        if "No matching global declaration" in message:
+            return "XSD: ルート要素不一致"
+        if "This element is not expected" in message:
+            return "XSD: 要素位置/順序不一致"
+        if "attribute" in message and "not allowed" in message:
+            return "XSD: 許可されない属性"
+        return "XSD: その他"
+    if finding.check_type == "ST_MAX_BYTE_LENGTH_EXCEEDED":
+        return "ST/TX文字数超過"
+    if finding.check_type == "CODE_SYSTEM_EMPTY":
+        return "codeSystem空"
+    if finding.check_type == "XML_PARSE":
+        return "XML構文エラー"
+    return str(finding.check_type or "その他")
+
+
+def serialize_xml_zip_error_groups(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for finding in findings:
+        if finding.severity != "ERROR":
+            continue
+        key = str(finding.xml_inner_path or "")
+        row = grouped.setdefault(
+            key,
+            {
+                "xml_inner_path": key,
+                "error_count": 0,
+                "labels": {},
+                "errors": [],
+            },
+        )
+        row["error_count"] += 1
+        label = xml_zip_check_message_label(finding)
+        row["labels"][label] = row["labels"].get(label, 0) + 1
+        row["errors"].append(
+            {
+                "label": label,
+                "namecode": finding.namecode,
+                "item_display_name": finding.item_display_name,
+                "message": finding.message,
+                "value_preview": finding.value_preview,
+                "mhlw_byte_length": finding.mhlw_byte_length,
+                "max_byte_length": finding.max_byte_length,
+            }
+        )
+    rows = sorted(grouped.values(), key=lambda item: (-int(item["error_count"]), item["xml_inner_path"]))
+    for row in rows:
+        row["label_summary"] = " / ".join(
+            f"{label} {count}件"
+            for label, count in sorted(row["labels"].items(), key=lambda item: (-int(item[1]), str(item[0])))
+        )
+    return rows[:limit]
+
+
 def build_xml_zip_check_result(
     *,
     upload_path: Path,
@@ -1141,8 +1202,8 @@ def build_xml_zip_check_result(
         "errors": sum(1 for item in findings if item.severity == "ERROR"),
         "warnings": sum(1 for item in findings if item.severity == "WARNING"),
         "fixed": sum(1 for item in findings if item.fixed),
-        "finding_rows": serialize_xml_zip_findings([item for item in findings if item.severity == "ERROR"]),
-        "finding_rows_truncated": sum(1 for item in findings if item.severity == "ERROR") > 200,
+        "error_groups": serialize_xml_zip_error_groups(findings),
+        "error_groups_truncated": len({item.xml_inner_path for item in findings if item.severity == "ERROR"}) > 200,
     }
 
 
