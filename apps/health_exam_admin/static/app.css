@@ -1325,6 +1325,14 @@ button[type="submit"]:disabled {
   overflow-wrap: anywhere;
 }
 
+.xml-uploaded-file-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 .xml-check-summary {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }

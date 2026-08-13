@@ -778,6 +778,37 @@ def log_audit(
     )
 
 
+def log_app_operation(
+    *,
+    request: Request,
+    user: dict[str, Any],
+    action_code: str,
+    target_schema: str | None = None,
+    target_table: str | None = None,
+    target_id: str | None = None,
+    after: dict[str, Any] | None = None,
+) -> None:
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code=action_code,
+                    target_schema=target_schema,
+                    target_table=target_table,
+                    target_id=target_id,
+                    after=after,
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+
 def log_personal_info_view(
     cur: Any,
     *,
@@ -2820,6 +2851,22 @@ async def run_hia_xml_zip_check(
             original_filename=original_filename,
             fix=False,
         )
+        log_app_operation(
+            request=request,
+            user=user,
+            action_code="HIA_XML_ZIP_CHECK",
+            target_schema="file",
+            target_table="hia_xml_zip_check_uploads",
+            target_id=str(upload_path),
+            after={
+                "original_filename": original_filename,
+                "xml_files_seen": result.get("xml_files_seen"),
+                "findings": result.get("findings"),
+                "errors": result.get("errors"),
+                "warnings": result.get("warnings"),
+                "report_csv_path": result.get("report_csv_path"),
+            },
+        )
     except Exception as exc:
         return templates.TemplateResponse(
             "hia_xml_zip_check.html",
@@ -2878,6 +2925,23 @@ async def create_fixed_hia_xml_zip(request: Request) -> Response:
             upload_path=upload_path,
             original_filename=upload_path.name,
             fix=True,
+        )
+        log_app_operation(
+            request=request,
+            user=user,
+            action_code="HIA_XML_ZIP_CREATE_FIXED",
+            target_schema="file",
+            target_table="hia_xml_zip_check_uploads",
+            target_id=str(upload_path),
+            after={
+                "original_filename": upload_path.name,
+                "fixed_zip_path": result.get("fixed_zip_path"),
+                "fixed": result.get("fixed"),
+                "findings": result.get("findings"),
+                "errors": result.get("errors"),
+                "warnings": result.get("warnings"),
+                "report_csv_path": result.get("report_csv_path"),
+            },
         )
     except Exception as exc:
         return templates.TemplateResponse(
@@ -2938,6 +3002,22 @@ async def recheck_hia_xml_zip(request: Request) -> Response:
             original_filename=zip_path.name,
             fix=False,
         )
+        log_app_operation(
+            request=request,
+            user=user,
+            action_code="HIA_XML_ZIP_RECHECK",
+            target_schema="file",
+            target_table="hia_xml_zip_check_uploads",
+            target_id=str(zip_path),
+            after={
+                "original_filename": zip_path.name,
+                "xml_files_seen": result.get("xml_files_seen"),
+                "findings": result.get("findings"),
+                "errors": result.get("errors"),
+                "warnings": result.get("warnings"),
+                "report_csv_path": result.get("report_csv_path"),
+            },
+        )
     except Exception as exc:
         return templates.TemplateResponse(
             "hia_xml_zip_check.html",
@@ -2996,6 +3076,7 @@ async def delete_hia_xml_zip_upload(request: Request) -> Response:
             status_code=303,
         )
 
+    file_size = upload_path.stat().st_size
     upload_path.unlink()
     try:
         parent = upload_path.parent
@@ -3003,6 +3084,15 @@ async def delete_hia_xml_zip_upload(request: Request) -> Response:
             parent.rmdir()
     except OSError:
         pass
+    log_app_operation(
+        request=request,
+        user=user,
+        action_code="HIA_XML_ZIP_DELETE_UPLOAD",
+        target_schema="file",
+        target_table="hia_xml_zip_check_uploads",
+        target_id=str(upload_path),
+        after={"deleted_path": str(upload_path), "size_bytes": file_size},
+    )
 
     return RedirectResponse(
         f"/hia/xml-zip-check?message={quote('アップロードファイルを削除しました。CSVレポートは残しています。')}",
