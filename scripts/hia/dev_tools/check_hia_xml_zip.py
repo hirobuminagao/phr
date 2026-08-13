@@ -352,11 +352,12 @@ def _text_preview(value: str | None, limit: int = 80) -> str | None:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
-def _iter_code_elements_missing_display_name(document: etree._Element) -> list[etree._Element]:
+def _iter_code_elements_with_empty_display_name(document: etree._Element) -> list[etree._Element]:
     return [
         code
         for code in document.xpath(".//*[local-name()='code'][@code]")
         if str(code.get("code") or "").strip()
+        and code.get("displayName") is not None
         and str(code.get("displayName") or "").strip() == ""
     ]
 
@@ -389,14 +390,16 @@ def _check_and_fix_xml(
         return updated_content, findings
 
     changed = False
-    for code in _iter_code_elements_missing_display_name(document):
+    for code in _iter_code_elements_with_empty_display_name(document):
         namecode = str(code.get("code") or "").strip()
         item_name = _exam_item_name_for_namecode(namecode, item_names=item_names)
-        if not item_name:
-            continue
         if fix:
-            code.set("displayName", item_name)
+            if item_name:
+                code.set("displayName", item_name)
+            else:
+                code.attrib.pop("displayName", None)
             changed = True
+        fix_note = f"displayName={item_name}" if item_name else "remove empty displayName attribute"
         findings.append(
             Finding(
                 zip_path=str(zip_path),
@@ -405,13 +408,17 @@ def _check_and_fix_xml(
                 severity="FIXED" if fix else "WARNING",
                 namecode=namecode,
                 item_display_name=item_name,
-                namecode_source="EXAM_ITEM_MASTER",
-                message="displayName is empty; can fill from exam_item_master",
+                namecode_source="EXAM_ITEM_MASTER" if item_name else "XML_CODE",
+                message=(
+                    "displayName is empty; can fill from exam_item_master"
+                    if item_name
+                    else "displayName is empty; can remove optional empty attribute"
+                ),
                 value_preview="",
                 xsd_element="code",
                 xsd_attribute="displayName",
                 can_fix=True,
-                fix_note=f"displayName={item_name}",
+                fix_note=fix_note,
                 fixed=fix,
             )
         )

@@ -1417,9 +1417,14 @@ def serialize_xml_zip_error_summaries(findings: list[Any]) -> list[dict[str, Any
         xsd_attribute = str(getattr(finding, "xsd_attribute", "") or "").strip()
         value_preview = getattr(finding, "value_preview", None)
         if check_type == "DISPLAY_NAME_EMPTY":
-            key = "display_name_fixable"
-            title = "displayName空 / 項目名あり"
-            description = "exam_item_masterから項目名を補完できます。修正版ZIP作成の対象です。"
+            if item_name:
+                key = "display_name_fixable"
+                title = "displayName空 / 項目名あり"
+                description = "exam_item_masterから項目名を補完できます。修正版ZIP作成の対象です。"
+            else:
+                key = "display_name_remove_empty"
+                title = "displayName空 / 項目名未登録"
+                description = "displayName属性は任意のため、空属性を削除してXSDエラーを解消できます。項目自体の扱いは確認対象に残します。"
             status_class = "status-ok"
         elif (
             check_type == "XSD"
