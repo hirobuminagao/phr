@@ -345,10 +345,12 @@ def _xsd_error_context(message: str) -> dict[str, str | None]:
     }
 
 
-def _text_preview(value: str | None, limit: int = 80) -> str | None:
+def _text_preview(value: str | None, limit: int | None = 80) -> str | None:
     if value is None:
         return None
     text = value.replace("\r", "\\r").replace("\n", "\\n")
+    if limit is None:
+        return text
     return text if len(text) <= limit else text[:limit] + "..."
 
 
@@ -480,7 +482,7 @@ def _check_and_fix_xml(
                         item_display_name=display_name,
                         namecode_source="VALUE_PARENT_OBSERVATION" if namecode else None,
                         message="ST/TX text exceeds MHLW byte length limit",
-                        value_preview=_text_preview(text),
+                        value_preview=_text_preview(text, limit=None),
                         mhlw_byte_length=byte_length,
                         max_byte_length=MHLW_TEXT_MAX_BYTES,
                     )
