@@ -2991,7 +2991,7 @@ async def recheck_hia_xml_zip(request: Request) -> Response:
     zip_path = Path(zip_path_text)
     if not zip_path_text or not xml_zip_check_input_allowed(zip_path):
         return RedirectResponse(
-            f"/hia/xml-zip-check?error={quote('再チェックできるのはアップロード済みZIPまたは修正版ZIPだけです。')}",
+            f"/hia/xml-zip-check?error={quote('再チェックできるのは管理中ZIPだけです。')}",
             status_code=303,
         )
     if not zip_path.exists() or not zip_path.is_file():

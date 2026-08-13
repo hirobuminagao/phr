@@ -106,6 +106,10 @@
         <span>元ファイル</span>
         <strong>{{ result.original_filename }}</strong>
         <small>{{ result.upload_path }}</small>
+        <form method="post" action="/hia/xml-zip-check/recheck" class="xml-check-delete-form" data-processing-form data-processing-message="元ZIPを再チェックしています">
+          <input type="hidden" name="zip_path" value="{{ result.upload_path }}">
+          <button type="submit">元ZIPを再チェック</button>
+        </form>
         {% if result.fixable_count %}
         <form method="post" action="/hia/xml-zip-check/create-fixed" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを作成しています">
           <input type="hidden" name="upload_path" value="{{ result.upload_path }}">
