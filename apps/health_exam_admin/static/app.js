@@ -118,23 +118,40 @@
     });
   }
 
-  for (const filter of document.querySelectorAll("[data-xml-severity-filter]")) {
-    const targetSelector = filter.getAttribute("data-xml-severity-filter");
+  for (const filter of document.querySelectorAll("[data-xml-finding-controls]")) {
+    const targetSelector = filter.getAttribute("data-xml-finding-controls");
     const target = targetSelector ? document.querySelector(targetSelector) : null;
     if (!target) continue;
 
-    const buttons = Array.from(filter.querySelectorAll("[data-severity-value]"));
+    const buttons = Array.from(filter.querySelectorAll("[data-xml-filter-field][data-xml-filter-value]"));
+    const displayNameInput = filter.querySelector("[data-xml-display-name-filter]");
     const groups = Array.from(target.querySelectorAll("[data-xml-finding-group]"));
 
-    const applySeverityFilter = () => {
-      const active = new Set(
-        buttons.filter((button) => button.classList.contains("is-active")).map((button) => button.dataset.severityValue),
-      );
+    const applyFindingFilter = () => {
+      const activeByField = new Map();
+      for (const button of buttons) {
+        const field = button.dataset.xmlFilterField;
+        const value = button.dataset.xmlFilterValue;
+        if (!field || value == null || !button.classList.contains("is-active")) continue;
+        const values = activeByField.get(field) || new Set();
+        values.add(value);
+        activeByField.set(field, values);
+      }
+      const displayNameKeyword = normalize(displayNameInput ? displayNameInput.value : "");
 
       for (const group of groups) {
         let visibleCount = 0;
-        for (const item of group.querySelectorAll("[data-xml-severity]")) {
-          const matched = active.has(item.getAttribute("data-xml-severity"));
+        for (const item of group.querySelectorAll("[data-xml-severity][data-xml-fixability]")) {
+          let matched = true;
+          for (const [field, values] of activeByField.entries()) {
+            if (!values.has(item.getAttribute(`data-xml-${field}`))) {
+              matched = false;
+              break;
+            }
+          }
+          if (matched && displayNameKeyword) {
+            matched = normalize(item.getAttribute("data-xml-display-name")).includes(displayNameKeyword);
+          }
           item.hidden = !matched;
           if (matched) visibleCount += 1;
         }
@@ -146,10 +163,14 @@
       button.addEventListener("click", () => {
         button.classList.toggle("is-active");
         button.setAttribute("aria-pressed", button.classList.contains("is-active") ? "true" : "false");
-        applySeverityFilter();
+        applyFindingFilter();
       });
     }
 
-    applySeverityFilter();
+    if (displayNameInput) {
+      displayNameInput.addEventListener("input", applyFindingFilter);
+    }
+
+    applyFindingFilter();
   }
 })();

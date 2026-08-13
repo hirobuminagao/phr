@@ -47,6 +47,8 @@ class Finding:
     value_preview: str | None = None
     mhlw_byte_length: int | None = None
     max_byte_length: int | None = None
+    can_fix: bool = False
+    fix_note: str | None = None
     fixed: bool = False
 
 
@@ -157,6 +159,8 @@ def _check_and_fix_xml(
                         item_display_name=display_name,
                         message=f"codeSystem is empty; can fill from known namecode: {replacement}",
                         value_preview=value.get("code"),
+                        can_fix=True,
+                        fix_note=f"codeSystem={replacement}",
                         fixed=fix,
                     )
                 )
@@ -289,6 +293,8 @@ def write_report(findings: list[Finding], output_dir: Path) -> Path:
         "value_preview",
         "mhlw_byte_length",
         "max_byte_length",
+        "can_fix",
+        "fix_note",
         "fixed",
     ]
     with path.open("w", encoding="utf-8-sig", newline="") as fp:

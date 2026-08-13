@@ -879,6 +879,16 @@ button[type="submit"]:hover {
   color: var(--danger-text);
 }
 
+.status-ok {
+  background: #e8f6f1;
+  color: #147d64;
+}
+
+.status-neutral {
+  background: #edf1f5;
+  color: #5a6878;
+}
+
 .status-muted {
   background: #edf1f5;
   color: var(--muted);
@@ -1222,6 +1232,26 @@ button[type="submit"]:hover {
   justify-content: flex-end;
   gap: 8px;
   flex: 0 0 auto;
+}
+
+.xml-finding-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.xml-finding-controls label {
+  width: min(360px, 100%);
+  margin: 0;
+}
+
+.xml-error-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-content: start;
 }
 
 .xml-error-group > header strong,

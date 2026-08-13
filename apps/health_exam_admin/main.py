@@ -1167,6 +1167,7 @@ def serialize_xml_zip_display_groups(findings: list[Any], *, limit: int = 200) -
         severity = str(finding.severity or "")
         severity_label = "エラー" if severity == "ERROR" else "警告"
         status_class = "status-danger" if severity == "ERROR" else "status-pending"
+        can_fix = bool(getattr(finding, "can_fix", False))
         row["finding_count"] += 1
         if severity == "ERROR":
             row["error_count"] += 1
@@ -1187,6 +1188,11 @@ def serialize_xml_zip_display_groups(findings: list[Any], *, limit: int = 200) -
                 "value_preview": finding.value_preview,
                 "mhlw_byte_length": finding.mhlw_byte_length,
                 "max_byte_length": finding.max_byte_length,
+                "can_fix": can_fix,
+                "fixability": "FIXABLE" if can_fix else "MANUAL",
+                "fixability_label": "修正可" if can_fix else "手動確認",
+                "fixability_class": "status-ok" if can_fix else "status-neutral",
+                "fix_note": getattr(finding, "fix_note", None),
             }
         )
     rows = sorted(grouped.values(), key=lambda item: (-int(item["error_count"]), -int(item["warning_count"]), item["xml_inner_path"]))
@@ -1211,6 +1217,13 @@ def build_xml_zip_check_result(
         fixed_output_dir=XML_ZIP_CHECK_REPORT_DIR / "fixed",
     )
     report_csv_path = write_hia_xml_zip_check_report(findings, XML_ZIP_CHECK_REPORT_DIR)
+    display_name_options = sorted(
+        {
+            str(item.item_display_name).strip()
+            for item in findings
+            if item.severity in {"ERROR", "WARNING"} and str(item.item_display_name or "").strip()
+        }
+    )
     return {
         "original_filename": original_filename,
         "upload_path": str(upload_path),
@@ -1225,6 +1238,7 @@ def build_xml_zip_check_result(
         "fixed": sum(1 for item in findings if item.fixed),
         "display_groups": serialize_xml_zip_display_groups(findings),
         "display_groups_truncated": len({item.xml_inner_path for item in findings if item.severity in {"ERROR", "WARNING"}}) > 200,
+        "display_name_options": display_name_options,
     }
 
 

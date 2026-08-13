@@ -92,9 +92,24 @@
         <h2>検出内容</h2>
         <p class="subtle">エラーと警告を切り替えて確認できます。ボタンを外すと該当行だけ非表示になります。</p>
       </div>
-      <div class="filter-toggle-group" data-xml-severity-filter="#xml-finding-groups">
-        <button type="button" class="is-active" data-severity-value="ERROR" aria-pressed="true">エラー</button>
-        <button type="button" class="is-active" data-severity-value="WARNING" aria-pressed="true">警告</button>
+      <div class="xml-finding-controls" data-xml-finding-controls="#xml-finding-groups">
+        <label>
+          <span>項目名 / displayName</span>
+          <input type="text" list="xml-display-name-options" placeholder="例: 便潜血 / 医師の診断" data-xml-display-name-filter>
+        </label>
+        <datalist id="xml-display-name-options">
+          {% for option in result.display_name_options %}
+            <option value="{{ option }}"></option>
+          {% endfor %}
+        </datalist>
+        <div class="filter-toggle-group">
+          <button type="button" class="is-active" data-xml-filter-field="severity" data-xml-filter-value="ERROR" aria-pressed="true">エラー</button>
+          <button type="button" class="is-active" data-xml-filter-field="severity" data-xml-filter-value="WARNING" aria-pressed="true">警告</button>
+        </div>
+        <div class="filter-toggle-group">
+          <button type="button" class="is-active" data-xml-filter-field="fixability" data-xml-filter-value="FIXABLE" aria-pressed="true">修正可</button>
+          <button type="button" class="is-active" data-xml-filter-field="fixability" data-xml-filter-value="MANUAL" aria-pressed="true">手動確認</button>
+        </div>
       </div>
     </div>
     <div class="xml-error-group-list" id="xml-finding-groups">
@@ -116,11 +131,22 @@
         </header>
         <div class="xml-error-items">
           {% for row in group.findings %}
-          <div class="xml-error-item" data-xml-severity="{{ row.severity }}">
-            <span class="status-pill {{ row.status_class }}">{{ row.severity_label }} / {{ row.label }}</span>
+          <div
+            class="xml-error-item"
+            data-xml-severity="{{ row.severity }}"
+            data-xml-fixability="{{ row.fixability }}"
+            data-xml-display-name="{{ row.item_display_name or '' }}"
+          >
+            <div class="xml-error-badges">
+              <span class="status-pill {{ row.status_class }}">{{ row.severity_label }} / {{ row.label }}</span>
+              <span class="status-pill {{ row.fixability_class }}">{{ row.fixability_label }}</span>
+            </div>
             <div>
               <strong>{{ row.namecode or "-" }}{% if row.item_display_name %} / {{ row.item_display_name }}{% endif %}</strong>
               <small>{{ row.message }}</small>
+              {% if row.fix_note %}
+                <small>修正内容: {{ row.fix_note }}</small>
+              {% endif %}
               {% if row.value_preview %}
                 <small>値: {{ row.value_preview }}</small>
               {% endif %}
