@@ -68,7 +68,7 @@
         </div>
         <div class="xml-uploaded-file-actions">
           <form method="post" action="/hia/xml-zip-check/recheck" data-processing-form data-processing-message="ZIPを再チェックしています">
-            <input type="hidden" name="zip_path" value="{{ file.path }}">
+            <input type="hidden" name="zip_path" value="{{ file.check_path }}">
             <button type="submit">再チェック</button>
           </form>
           {% if file.can_delete %}

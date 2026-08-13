@@ -1200,10 +1200,21 @@ def safe_upload_file_name(filename: str | None, *, default: str = "upload.zip") 
 
 def is_path_under(path: Path, base_dir: Path) -> bool:
     try:
-        path.resolve().relative_to(base_dir.resolve())
-    except ValueError:
+        path_abs = os.path.normcase(os.path.abspath(path.resolve()))
+        base_abs = os.path.normcase(os.path.abspath(base_dir.resolve()))
+        return os.path.commonpath([path_abs, base_abs]) == base_abs
+    except (OSError, ValueError):
         return False
-    return True
+
+
+def app_data_path_from_form_value(value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    parts = path.parts
+    if parts and parts[0] == "data":
+        return REPO_ROOT / path
+    return APP_DATA_DIR / path
 
 
 def xml_zip_check_allowed(user: dict[str, Any]) -> bool:
@@ -1481,7 +1492,8 @@ def load_xml_zip_uploaded_files() -> list[dict[str, Any]]:
             {
                 "name": path.name,
                 "path": str(path),
-                "relative_path": str(path.relative_to(HIA_XML_ZIP_CHECK_ROOT_DIR)),
+                "check_path": str(path.relative_to(APP_DATA_DIR)),
+                "relative_path": str(path.relative_to(APP_DATA_DIR)),
                 "size_mb": round(stat.st_size / 1024 / 1024, 2),
                 "modified_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                 "kind": "アップロード" if can_delete else "修正版/確認用",
@@ -2989,7 +3001,7 @@ async def recheck_hia_xml_zip(request: Request) -> Response:
 
     form = await read_form(request)
     zip_path_text = str(form.get("zip_path") or "").strip()
-    zip_path = Path(zip_path_text)
+    zip_path = app_data_path_from_form_value(zip_path_text)
     if not zip_path_text or not xml_zip_check_input_allowed(zip_path):
         return RedirectResponse(
             f"/hia/xml-zip-check?error={quote('再チェックできるのはdata配下のZIPだけです。')}",
