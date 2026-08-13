@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
@@ -112,7 +113,7 @@ def _validate_xml(content: bytes, xsd_path: Path) -> list[XsdValidationError]:
     ]
 
 
-def _namecode_for_value(value: etree._Element) -> tuple[str | None, str | None]:
+def _namecode_for_value(value: etree._Element, item_names: Mapping[str, str] | None = None) -> tuple[str | None, str | None]:
     observation = value.getparent()
     while observation is not None and etree.QName(observation).localname != "observation":
         observation = observation.getparent()
@@ -121,7 +122,11 @@ def _namecode_for_value(value: etree._Element) -> tuple[str | None, str | None]:
     code = observation.find(f"{{{NS_HL7}}}code")
     if code is None:
         return None, None
-    return code.get("code"), code.get("displayName")
+    namecode = code.get("code")
+    display_name = str(code.get("displayName") or "").strip()
+    if not display_name:
+        display_name = _exam_item_name_for_namecode(namecode, item_names=item_names) or ""
+    return namecode, display_name or None
 
 
 def _namecode_for_element(element: etree._Element | None) -> tuple[str | None, str | None]:
@@ -155,48 +160,70 @@ def _element_for_error_line(document: etree._Element, line: int | None) -> tuple
     return max(candidates, key=lambda element: int(element.sourceline or 0)), "NEAREST_PREVIOUS_ELEMENT"
 
 
-def _namecode_for_xsd_error(document: etree._Element, error: XsdValidationError) -> tuple[str | None, str | None, str | None]:
+def _namecode_for_xsd_error(
+    document: etree._Element,
+    error: XsdValidationError,
+    *,
+    item_names: Mapping[str, str] | None = None,
+) -> tuple[str | None, str | None, str | None]:
     namecode = _extract_namecode_from_xsd_error(error.message)
     if namecode:
-        display_name = _display_name_for_namecode(document, namecode)
+        display_name = _display_name_for_namecode(document, namecode, item_names=item_names)
         return namecode, display_name, "MESSAGE_CODE"
     element, source = _element_for_error_line(document, error.line)
     namecode, display_name = _namecode_for_element(element)
     if not namecode:
         return None, None, None
     if not display_name:
-        display_name = _exam_item_name_for_namecode(namecode)
+        display_name = _exam_item_name_for_namecode(namecode, item_names=item_names)
     return namecode, display_name, source
 
 
-def _display_name_for_namecode(document: etree._Element, namecode: str) -> str | None:
+def _display_name_for_namecode(
+    document: etree._Element,
+    namecode: str,
+    *,
+    item_names: Mapping[str, str] | None = None,
+) -> str | None:
     xpath = f".//*[local-name()='observation']/*[local-name()='code'][@code={namecode!r}]"
     code = document.xpath(xpath)
     if code:
         display_name = str(code[0].get("displayName") or "").strip()
         if display_name:
             return display_name
-    return _exam_item_name_for_namecode(namecode)
+    return _exam_item_name_for_namecode(namecode, item_names=item_names)
 
 
 @lru_cache(maxsize=1)
 def _load_exam_item_names() -> dict[str, str]:
-    path = PROJECT_ROOT / "scripts" / "work_folder" / "mat" / "kenshin_item_master.csv"
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8-sig", newline="") as fp:
-        reader = csv.DictReader(fp)
-        return {
-            str(row.get("項目コード（17桁）") or "").strip(): str(row.get("項目名") or "").strip()
-            for row in reader
-            if str(row.get("項目コード（17桁）") or "").strip()
-        }
+    names: dict[str, str] = {}
+    for sql_path in _exam_item_master_sql_paths():
+        if not sql_path.exists():
+            continue
+        text = sql_path.read_text(encoding="utf-8")
+        for match in re.finditer(r"\('([^']{17})',\s*'((?:\\'|[^'])*)'", text):
+            namecode = match.group(1).strip()
+            item_name = match.group(2).replace("\\'", "'").strip()
+            if namecode and item_name:
+                names.setdefault(namecode, item_name)
+    return names
 
 
-def _exam_item_name_for_namecode(namecode: str | None) -> str | None:
+def _exam_item_master_sql_paths() -> list[Path]:
+    paths = [PROJECT_ROOT / "sql" / "export_sql" / "exam_item_master.sql"]
+    migration_dir = PROJECT_ROOT / "sql" / "migrations" / "dev_phr"
+    if migration_dir.exists():
+        paths.extend(sorted(migration_dir.glob("*exam_item_master*.sql")))
+    return paths
+
+
+def _exam_item_name_for_namecode(namecode: str | None, item_names: Mapping[str, str] | None = None) -> str | None:
     if not namecode:
         return None
-    return _load_exam_item_names().get(str(namecode).strip())
+    normalized = str(namecode).strip()
+    if item_names is not None:
+        return item_names.get(normalized)
+    return _load_exam_item_names().get(normalized)
 
 
 def _xsd_error_context(message: str) -> dict[str, str | None]:
@@ -227,6 +254,7 @@ def _check_and_fix_xml(
     content: bytes,
     xsd_dir: Path,
     fix: bool,
+    item_names: Mapping[str, str] | None = None,
 ) -> tuple[bytes, list[Finding]]:
     findings: list[Finding] = []
     updated_content = content
@@ -250,7 +278,7 @@ def _check_and_fix_xml(
     for value in document.xpath(".//*[local-name()='value']"):
         value_type = value.get(f"{{{NS_XSI}}}type")
         if value_type in {"CD", "CO"} and (value.get("codeSystem") or "") == "":
-            namecode, display_name = _namecode_for_value(value)
+            namecode, display_name = _namecode_for_value(value, item_names=item_names)
             replacement = CODE_SYSTEM_BY_NAMECODE.get(namecode or "")
             if replacement:
                 if fix:
@@ -290,7 +318,7 @@ def _check_and_fix_xml(
             text = value.text or ""
             byte_length = mhlw_text_byte_length(text)
             if byte_length > MHLW_TEXT_MAX_BYTES:
-                namecode, display_name = _namecode_for_value(value)
+                namecode, display_name = _namecode_for_value(value, item_names=item_names)
                 findings.append(
                     Finding(
                         zip_path=str(zip_path),
@@ -321,7 +349,7 @@ def _check_and_fix_xml(
         except Exception as exc:
             xsd_errors = [XsdValidationError(message=str(exc))]
         for error in xsd_errors:
-            namecode, display_name, namecode_source = _namecode_for_xsd_error(document, error)
+            namecode, display_name, namecode_source = _namecode_for_xsd_error(document, error, item_names=item_names)
             context = _xsd_error_context(error.message)
             findings.append(
                 Finding(
@@ -364,7 +392,14 @@ def _fixed_zip_path(source: Path, output_dir: Path) -> Path:
     return output_dir / f"{source.stem}_fixed{source.suffix}"
 
 
-def check_zip(zip_path: Path, *, xsd_dir: Path, fix: bool, fixed_output_dir: Path) -> tuple[Summary, list[Finding]]:
+def check_zip(
+    zip_path: Path,
+    *,
+    xsd_dir: Path,
+    fix: bool,
+    fixed_output_dir: Path,
+    item_names: Mapping[str, str] | None = None,
+) -> tuple[Summary, list[Finding]]:
     summary = Summary(zip_files_seen=1)
     findings: list[Finding] = []
     fixed_zip_path = _fixed_zip_path(zip_path, fixed_output_dir) if fix else None
@@ -382,6 +417,7 @@ def check_zip(zip_path: Path, *, xsd_dir: Path, fix: bool, fixed_output_dir: Pat
                         content=content,
                         xsd_dir=xsd_dir,
                         fix=fix,
+                        item_names=item_names,
                     )
                     findings.extend(item_findings)
                 if zout is not None:
