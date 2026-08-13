@@ -1147,7 +1147,7 @@ def xml_zip_check_message_label(finding: Any) -> str:
     return str(finding.check_type or "その他")
 
 
-def serialize_xml_zip_display_groups(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
+def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for finding in findings:
         if finding.severity not in {"ERROR", "WARNING"}:
@@ -1201,7 +1201,7 @@ def serialize_xml_zip_display_groups(findings: list[Any], *, limit: int = 200) -
             f"{label} {count}件"
             for label, count in sorted(row["labels"].items(), key=lambda item: (-int(item[1]), str(item[0])))
         )
-    return rows[:limit]
+    return rows
 
 
 def build_xml_zip_check_result(
@@ -1237,7 +1237,6 @@ def build_xml_zip_check_result(
         "warnings": sum(1 for item in findings if item.severity == "WARNING"),
         "fixed": sum(1 for item in findings if item.fixed),
         "display_groups": serialize_xml_zip_display_groups(findings),
-        "display_groups_truncated": len({item.xml_inner_path for item in findings if item.severity in {"ERROR", "WARNING"}}) > 200,
         "display_name_options": display_name_options,
     }
 
