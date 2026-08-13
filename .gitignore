@@ -39,6 +39,7 @@ logs/*
 !logs/com_pc/
 !logs/com_pc/**
 *.log
+*.pid
 
 # local tooling / scratch scripts
 local_ops/
