@@ -1119,6 +1119,13 @@ button[type="submit"]:hover {
 
 .xml-drop-zone.has-file {
   border-color: var(--accent);
+  background: #e9f7f3;
+  box-shadow: inset 0 0 0 1px rgba(20, 125, 100, 0.18);
+}
+
+.xml-drop-zone.has-file .xml-drop-message strong,
+.xml-drop-zone.has-file .xml-drop-message small {
+  color: var(--accent-dark);
 }
 
 .xml-drop-message {
