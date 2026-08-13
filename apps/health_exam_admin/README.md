@@ -78,6 +78,19 @@ PHR_MASTER_DB=phr_master
 PHR_DEV_DB=dev_phr
 ```
 
+LAN内の特定端末だけ許可する場合:
+
+```text
+PHR_ADMIN_HOST=0.0.0.0
+PHR_ADMIN_ALLOWED_CLIENT_IPS=192.168.1.25,192.168.1.26
+PHR_ADMIN_TRUST_PROXY_HEADERS=0
+```
+
+`PHR_ADMIN_ALLOWED_CLIENT_IPS` を設定すると、記載したIP以外はログイン画面にも到達できない。
+未設定の場合は、ユーザーごとのログイン時IP制限だけを使う。
+接続元IPは既定でFastAPIが直接受けたIPを見る。
+Caddy等の信頼済みプロキシ配下で `X-Forwarded-For` を使う場合だけ、`PHR_ADMIN_TRUST_PROXY_HEADERS=1` にする。
+
 起動:
 
 ```powershell

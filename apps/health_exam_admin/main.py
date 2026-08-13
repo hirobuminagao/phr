@@ -99,6 +99,40 @@ app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=APP_ROOT / "templates")
 
 
+def admin_allowed_client_ips() -> set[str]:
+    raw = os.getenv("PHR_ADMIN_ALLOWED_CLIENT_IPS", "")
+    values = {
+        item.strip()
+        for item in raw.replace("\n", ",").split(",")
+        if item.strip()
+    }
+    if not values:
+        return set()
+    values.update({"127.0.0.1", "::1"})
+    return values
+
+
+def request_client_ip(request: Request) -> str | None:
+    forwarded = None
+    if os.getenv("PHR_ADMIN_TRUST_PROXY_HEADERS", "0") == "1":
+        forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    if request.client:
+        return request.client.host
+    return None
+
+
+@app.middleware("http")
+async def restrict_admin_client_ip(request: Request, call_next: Any) -> Response:
+    allowed_ips = admin_allowed_client_ips()
+    if allowed_ips:
+        request_ip = request_client_ip(request)
+        if request_ip not in allowed_ips:
+            return Response("Forbidden: client IP is not allowed.", status_code=403)
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def force_utf8_html_response(request: Request, call_next: Any) -> Response:
     response = await call_next(request)
@@ -143,12 +177,7 @@ def db_prefix() -> str:
 
 
 def client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip()
-    if request.client:
-        return request.client.host
-    return None
+    return request_client_ip(request)
 
 
 async def read_form(request: Request) -> dict[str, str]:

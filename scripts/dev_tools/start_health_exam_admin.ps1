@@ -2,7 +2,31 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..")).Path
+$envPath = Join-Path $repoRoot "scripts\.env"
+
+function Get-DotEnvValue {
+    param([string]$Path, [string]$Key)
+
+    if (-not (Test-Path $Path)) {
+        return $null
+    }
+    foreach ($line in Get-Content -Path $Path -Encoding UTF8) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#") -or -not $trimmed.Contains("=")) {
+            continue
+        }
+        $parts = $trimmed.Split("=", 2)
+        if ($parts[0].Trim() -eq $Key) {
+            return $parts[1].Trim().Trim('"').Trim("'")
+        }
+    }
+    return $null
+}
+
 $hostName = $env:PHR_ADMIN_HOST
+if ([string]::IsNullOrWhiteSpace($hostName)) {
+    $hostName = Get-DotEnvValue -Path $envPath -Key "PHR_ADMIN_HOST"
+}
 if ([string]::IsNullOrWhiteSpace($hostName)) {
     $hostName = "127.0.0.1"
 }
