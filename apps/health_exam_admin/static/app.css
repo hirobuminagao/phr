@@ -1357,6 +1357,10 @@ button[type="submit"]:hover {
   display: grid;
 }
 
+.xml-error-items[hidden] {
+  display: none;
+}
+
 .xml-error-item {
   display: grid;
   grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
