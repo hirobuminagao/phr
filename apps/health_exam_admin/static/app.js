@@ -12,14 +12,25 @@
 
   for (const form of document.querySelectorAll("form")) {
     if ((form.getAttribute("method") || "get").toLowerCase() !== "post") continue;
-    form.addEventListener("submit", () => {
+    form.addEventListener("submit", (event) => {
       const token = cookieValue("phr_app_csrf");
-      if (!token || form.querySelector("input[name='_csrf_token']")) return;
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "_csrf_token";
-      input.value = token;
-      form.appendChild(input);
+      if (token && !form.querySelector("input[name='_csrf_token']")) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "_csrf_token";
+        input.value = token;
+        form.appendChild(input);
+      }
+
+      const submitter = event.submitter;
+      form.querySelectorAll("input[data-submit-shadow='true']").forEach((node) => node.remove());
+      if (!submitter || !submitter.name) return;
+      const shadow = document.createElement("input");
+      shadow.type = "hidden";
+      shadow.name = submitter.name;
+      shadow.value = submitter.value;
+      shadow.dataset.submitShadow = "true";
+      form.appendChild(shadow);
     });
   }
 
