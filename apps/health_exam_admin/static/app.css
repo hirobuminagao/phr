@@ -1342,6 +1342,67 @@ button[type="submit"]:disabled {
   gap: 14px;
 }
 
+.xml-error-summary-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.xml-error-summary-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.xml-error-summary-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.xml-error-summary-head strong,
+.xml-error-summary-head small {
+  display: block;
+}
+
+.xml-error-summary-head small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.xml-namecode-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.xml-namecode-chip {
+  max-width: 100%;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xml-namecode-chip b {
+  color: var(--accent-dark);
+}
+
 .xml-error-group {
   border: 1px solid var(--line);
   border-radius: 8px;

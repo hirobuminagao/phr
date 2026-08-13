@@ -113,6 +113,9 @@ def _add_organization(parent: ET.Element, facility: Facility) -> None:
 
 
 def _add_exam_item_observation(parent: ET.Element, item: ExamItem) -> ET.Element:
+    if not item.display_name:
+        raise ValueError(f"{item.namecode}: displayName is missing")
+
     observation_attrs = {"classCode": "OBS", "moodCode": "EVN"}
     if item.negation_ind is not None:
         observation_attrs["negationInd"] = "true" if item.negation_ind else "false"

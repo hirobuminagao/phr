@@ -144,6 +144,33 @@
         </div>
       </div>
     </div>
+    <div class="xml-error-summary-list">
+      {% for summary in result.error_summaries %}
+      <article class="xml-error-summary-card">
+        <div class="xml-error-summary-head">
+          <div>
+            <strong>{{ summary.title }}</strong>
+            <small>{{ summary.description }}</small>
+          </div>
+          <span class="status-pill {{ summary.status_class }}">{{ summary.count }}件</span>
+        </div>
+        {% if summary.namecodes %}
+        <div class="xml-namecode-chip-list">
+          {% for item in summary.namecodes %}
+          <span class="xml-namecode-chip" title="{{ item.namecode }}{% if item.item_name %} / {{ item.item_name }}{% endif %}">
+            {{ item.namecode }}{% if item.item_name %} / {{ item.item_name }}{% endif %} <b>{{ item.count }}</b>
+          </span>
+          {% endfor %}
+          {% if summary.has_more_namecodes %}
+          <span class="xml-namecode-chip">他 {{ summary.namecode_count - 40 }}件</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </article>
+      {% else %}
+      <p class="subtle">種類別に集計する検出内容はありません。</p>
+      {% endfor %}
+    </div>
     <div class="xml-error-group-list" id="xml-finding-groups">
       {% for group in result.display_groups %}
       <article class="xml-error-group" data-xml-finding-group>
@@ -168,6 +195,7 @@
             class="xml-error-item"
             data-xml-severity="{{ row.severity }}"
             data-xml-fixability="{{ row.fixability }}"
+            data-xml-check-type="{{ row.check_type }}"
             data-xml-display-name="{{ row.item_display_name or '' }}"
           >
             <div class="xml-error-badges">

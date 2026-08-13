@@ -1203,6 +1203,7 @@ def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]
                 "severity_label": severity_label,
                 "status_class": status_class,
                 "label": label,
+                "check_type": finding.check_type,
                 "namecode": finding.namecode,
                 "item_display_name": finding.item_display_name,
                 "namecode_source": namecode_source,
@@ -1228,6 +1229,67 @@ def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]
             for label, count in sorted(row["labels"].items(), key=lambda item: (-int(item[1]), str(item[0])))
         )
     return rows
+
+
+def serialize_xml_zip_error_summaries(findings: list[Any]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for finding in findings:
+        check_type = str(getattr(finding, "check_type", "") or "")
+        namecode = str(getattr(finding, "namecode", "") or "").strip()
+        item_name = str(getattr(finding, "item_display_name", "") or "").strip()
+        xsd_element = str(getattr(finding, "xsd_element", "") or "").strip()
+        xsd_attribute = str(getattr(finding, "xsd_attribute", "") or "").strip()
+        value_preview = getattr(finding, "value_preview", None)
+        if check_type == "DISPLAY_NAME_EMPTY":
+            key = "display_name_fixable"
+            title = "displayName空 / 項目名あり"
+            description = "exam_item_masterから項目名を補完できます。修正版ZIP作成の対象です。"
+            status_class = "status-ok"
+        elif (
+            check_type == "XSD"
+            and xsd_element == "code"
+            and xsd_attribute == "displayName"
+            and value_preview == ""
+            and namecode
+            and not item_name
+        ):
+            key = "display_name_item_missing"
+            title = "displayName空 / 項目名未登録"
+            description = "namecodeは取れていますが、exam_item_masterで項目名が見つかりません。マスタ追加判断が必要です。"
+            status_class = "status-danger"
+        else:
+            label = xml_zip_check_message_label(finding)
+            key = f"{check_type}:{label}:{bool(getattr(finding, 'can_fix', False))}"
+            title = label
+            description = "同じ種類の検出内容です。詳細は下のファイル別一覧で確認します。"
+            status_class = "status-ok" if getattr(finding, "can_fix", False) else "status-neutral"
+
+        row = grouped.setdefault(
+            key,
+            {
+                "key": key,
+                "title": title,
+                "description": description,
+                "status_class": status_class,
+                "count": 0,
+                "namecodes": {},
+            },
+        )
+        row["count"] += 1
+        if namecode:
+            names = row["namecodes"].setdefault(namecode, {"namecode": namecode, "item_name": item_name, "count": 0})
+            names["count"] += 1
+            if item_name:
+                names["item_name"] = item_name
+
+    result: list[dict[str, Any]] = []
+    for row in grouped.values():
+        namecodes = sorted(row["namecodes"].values(), key=lambda item: (-int(item["count"]), str(item["namecode"])))
+        row["namecode_count"] = len(namecodes)
+        row["namecodes"] = namecodes[:40]
+        row["has_more_namecodes"] = len(namecodes) > 40
+        result.append(row)
+    return sorted(result, key=lambda item: (-int(item["count"]), str(item["title"])))
 
 
 def build_xml_zip_check_result(
@@ -1264,6 +1326,7 @@ def build_xml_zip_check_result(
         "errors": sum(1 for item in findings if item.severity == "ERROR"),
         "warnings": sum(1 for item in findings if item.severity == "WARNING"),
         "fixed": sum(1 for item in findings if item.fixed),
+        "error_summaries": serialize_xml_zip_error_summaries(findings),
         "display_groups": serialize_xml_zip_display_groups(findings),
         "display_name_options": display_name_options,
     }
