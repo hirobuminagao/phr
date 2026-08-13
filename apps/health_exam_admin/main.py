@@ -1250,6 +1250,16 @@ def path_debug_payload(*, submitted_value: str, resolved_path: Path, allowed_bas
     }
 
 
+def safe_form_debug(form: dict[str, str]) -> dict[str, str]:
+    safe: dict[str, str] = {}
+    for key, value in form.items():
+        if key == CSRF_FIELD_NAME:
+            safe[key] = "<csrf>"
+        else:
+            safe[key] = value
+    return safe
+
+
 def path_debug_message(prefix: str, debug: dict[str, Any]) -> str:
     submitted = str(debug.get("submitted_value") or "(空)")
     resolved = str(debug.get("resolved_path") or "(不明)")
@@ -3043,6 +3053,7 @@ async def recheck_hia_xml_zip(request: Request) -> Response:
     zip_path_text = str(form.get("zip_path") or "").strip()
     zip_path = app_data_path_from_form_value(zip_path_text)
     debug = path_debug_payload(submitted_value=zip_path_text, resolved_path=zip_path, allowed_base=APP_DATA_DIR)
+    debug["form"] = safe_form_debug(form)
     if not zip_path_text or not xml_zip_check_input_allowed(zip_path):
         LOGGER.warning("XML ZIP recheck rejected outside data root: %s", json.dumps(debug, ensure_ascii=False))
         return RedirectResponse(

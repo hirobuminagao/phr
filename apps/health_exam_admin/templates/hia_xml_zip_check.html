@@ -69,7 +69,7 @@
         <div class="xml-uploaded-file-actions">
           <form method="post" action="/hia/xml-zip-check/recheck" data-processing-form data-processing-message="ZIPを再チェックしています">
             <input type="hidden" name="zip_path" value="{{ file.check_path }}">
-            <button type="submit">再チェック</button>
+            <button type="submit" name="zip_path" value="{{ file.check_path }}">再チェック</button>
           </form>
           {% if file.can_delete %}
           <form method="post" action="/hia/xml-zip-check/delete-upload">
@@ -108,7 +108,7 @@
         <small>{{ result.upload_path }}</small>
         <form method="post" action="/hia/xml-zip-check/recheck" class="xml-check-delete-form" data-processing-form data-processing-message="元ZIPを再チェックしています">
           <input type="hidden" name="zip_path" value="{{ result.upload_path }}">
-          <button type="submit">元ZIPを再チェック</button>
+          <button type="submit" name="zip_path" value="{{ result.upload_path }}">元ZIPを再チェック</button>
         </form>
         {% if result.fixable_count %}
         <form method="post" action="/hia/xml-zip-check/create-fixed" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを作成しています">
@@ -128,7 +128,7 @@
         <strong>{{ result.fixed_zip_path }}</strong>
         <form method="post" action="/hia/xml-zip-check/recheck" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを再チェックしています">
           <input type="hidden" name="zip_path" value="{{ result.fixed_zip_path }}">
-          <button type="submit">このZIPを再チェック</button>
+          <button type="submit" name="zip_path" value="{{ result.fixed_zip_path }}">このZIPを再チェック</button>
         </form>
       </div>
       {% endif %}
