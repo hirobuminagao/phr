@@ -1079,9 +1079,50 @@ button[type="submit"]:hover {
 
 .xml-check-form {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(260px, 0.7fr) auto;
+  grid-template-columns: minmax(320px, 1fr) minmax(260px, 0.7fr) auto;
   gap: 14px;
   align-items: end;
+}
+
+.xml-drop-zone {
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 2px dashed #b9c5d2;
+  border-radius: 8px;
+  background: #f8fafc;
+  transition: border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+}
+
+.xml-drop-zone label {
+  margin: 0;
+}
+
+.xml-drop-zone.is-dragover {
+  border-color: var(--accent);
+  background: #e9f7f3;
+  box-shadow: 0 0 0 4px rgba(20, 125, 100, 0.12);
+}
+
+.xml-drop-zone.has-file {
+  border-color: var(--accent);
+}
+
+.xml-drop-message {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.xml-drop-message strong {
+  font-size: 15px;
+}
+
+.xml-drop-message small {
+  overflow-wrap: anywhere;
 }
 
 .checkbox-row {

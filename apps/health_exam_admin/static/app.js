@@ -78,4 +78,43 @@
     input.addEventListener("change", update);
     update();
   }
+
+  for (const zone of document.querySelectorAll("[data-file-drop-zone]")) {
+    const input = zone.querySelector("[data-file-drop-input]");
+    const nameNode = zone.querySelector("[data-file-drop-name]");
+    if (!input) continue;
+
+    const setFileName = () => {
+      const file = input.files && input.files[0];
+      if (nameNode) {
+        nameNode.textContent = file ? file.name : "またはクリックしてファイルを選択";
+      }
+      zone.classList.toggle("has-file", Boolean(file));
+    };
+
+    input.addEventListener("change", setFileName);
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      zone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        zone.classList.add("is-dragover");
+      });
+    }
+
+    for (const eventName of ["dragleave", "drop"]) {
+      zone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        zone.classList.remove("is-dragover");
+      });
+    }
+
+    zone.addEventListener("drop", (event) => {
+      const files = event.dataTransfer && event.dataTransfer.files;
+      if (!files || !files.length) return;
+      const transfer = new DataTransfer();
+      transfer.items.add(files[0]);
+      input.files = transfer.files;
+      setFileName();
+    });
+  }
 })();

@@ -31,10 +31,16 @@
       </div>
     </div>
     <form method="post" action="/hia/xml-zip-check" enctype="multipart/form-data" class="xml-check-form">
-      <label>
-        <span>ZIPファイル</span>
-        <input type="file" name="zip_file" accept=".zip" required>
-      </label>
+      <div class="xml-drop-zone" data-file-drop-zone>
+        <label>
+          <span>ZIPファイル</span>
+          <input type="file" name="zip_file" accept=".zip" required data-file-drop-input>
+        </label>
+        <div class="xml-drop-message">
+          <strong>ここにZIPをドロップ</strong>
+          <small data-file-drop-name>またはクリックしてファイルを選択</small>
+        </div>
+      </div>
       <label class="checkbox-row">
         <input type="checkbox" name="fix" value="1">
         <span>安全に直せるものは修正版ZIPを作成する</span>
