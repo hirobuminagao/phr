@@ -52,3 +52,43 @@ docker run --rm -p 8011:8011 \
 ```text
 http://localhost:8011
 ```
+
+## Windows 直起動
+
+実行環境でDockerを使わない場合は、VSCodeのターミナルからFastAPIを直接起動する。
+
+初回のみ依存ライブラリを入れる。
+
+```powershell
+cd C:\Users\1107858.KSMD\work\phr
+python -m pip install -r apps\health_exam_admin\requirements.txt
+```
+
+DB接続は `scripts\.env` または環境変数で指定する。
+`scripts\.env` を使う場合の例:
+
+```text
+PHR_DB_HOST=localhost
+PHR_DB_PORT=3306
+PHR_DB_USER=root
+PHR_DB_PASSWORD=your_password
+PHR_APP_DB=phr_app
+PHR_HEALTH_DB=health_exam_result
+PHR_MASTER_DB=phr_master
+PHR_DEV_DB=dev_phr
+```
+
+起動:
+
+```powershell
+cd C:\Users\1107858.KSMD\work\phr
+python -m uvicorn apps.health_exam_admin.main:app --host 127.0.0.1 --port 8011 --reload
+```
+
+ブラウザ:
+
+```text
+http://127.0.0.1:8011
+```
+
+`--reload` はローカル確認用。ソースを更新すると自動で反映される。
