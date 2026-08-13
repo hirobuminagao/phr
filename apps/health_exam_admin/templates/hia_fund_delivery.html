@@ -152,7 +152,7 @@
     <div class="table-panel">
       <table id="fund-list-table" class="data-table fund-table" data-empty-message="表示中の納品リストに一致するものはありません。">
         <thead>
-          <tr data-filter-text="{{ item.delivery_list_id }} {{ item.list_name }} {{ item.insurer_number }} {{ item.list_status }} {{ item.output_mode }} {{ item.exam_month or '' }} {{ item.delivery_policy }} {{ item.same_exam_date_policy }}" data-status="{{ item.list_status }}">
+          <tr>
             <th>ID</th>
             <th>リスト</th>
             <th>状態</th>
@@ -163,7 +163,7 @@
         </thead>
         <tbody>
           {% for item in delivery_lists %}
-          <tr>
+          <tr data-filter-text="{{ item.delivery_list_id }} {{ item.list_name }} {{ item.insurer_number }} {{ item.list_status }} {{ item.output_mode }} {{ item.exam_month or '' }} {{ item.delivery_policy }} {{ item.same_exam_date_policy }}" data-status="{{ item.list_status }}">
             <td>{{ item.delivery_list_id }}</td>
             <td><strong>{{ item.list_name }}</strong><small>{{ item.insurer_number }}</small></td>
             <td><span class="status-pill status-ready">{{ fund_delivery_status_label(item.list_status) }}</span></td>
@@ -189,7 +189,7 @@
     <div class="table-panel">
       <table id="fund-run-table" class="data-table fund-run-table" data-empty-message="表示中の出力履歴に一致するものはありません。">
         <thead>
-          <tr data-filter-text="{{ item.delivery_run_id }} {{ item.delivery_list_id }} {{ item.list_name or '' }} {{ item.insurer_number }} {{ item.output_mode }} {{ item.exam_month or '' }} {{ item.output_zip_name }} {{ item.output_zip_path }} {{ item.delivery_status }} {{ item.created_at }}" data-status="{{ item.delivery_status }}">
+          <tr>
             <th>Run</th>
             <th>List</th>
             <th>状態</th>
@@ -201,7 +201,7 @@
         </thead>
         <tbody>
           {% for item in delivery_runs %}
-          <tr>
+          <tr data-filter-text="{{ item.delivery_run_id }} {{ item.delivery_list_id }} {{ item.list_name or '' }} {{ item.insurer_number }} {{ item.output_mode }} {{ item.exam_month or '' }} {{ item.output_zip_name }} {{ item.output_zip_path }} {{ item.delivery_status }} {{ item.created_at }}" data-status="{{ item.delivery_status }}">
             <td>{{ item.delivery_run_id }}</td>
             <td><strong>{{ item.delivery_list_id }}</strong><small>{{ item.list_name or "" }}</small></td>
             <td><span class="status-pill status-ready">{{ fund_delivery_status_label(item.delivery_status) }}</span></td>
@@ -241,7 +241,7 @@
     <div class="table-panel">
       <table id="fund-member-table" class="data-table fund-member-table" data-empty-message="表示中の納品XML明細に一致するものはありません。">
         <thead>
-          <tr data-filter-text="{{ item.delivery_member_id }} {{ item.delivery_run_id }} {{ item.delivery_list_id }} {{ item.list_name or '' }} {{ item.person_id_custom or '' }} {{ item.name_kana_norm or '' }} {{ item.gender_code or '' }} {{ item.birthdate or '' }} {{ item.insurance_symbol_match or '' }} {{ item.insurance_number_match or '' }} {{ item.xml_filename }} {{ item.facility_code or '' }} {{ item.facility_name or '' }} {{ item.exam_date or '' }} {{ item.exam_month or '' }} {{ item.member_status }} {{ item.submitted_by or '' }} {{ item.submission_note or '' }}" data-status="{{ item.member_status }}">
+          <tr>
             <th>Member</th>
             <th>人</th>
             <th>健診</th>
@@ -252,7 +252,7 @@
         </thead>
         <tbody>
           {% for item in delivery_members %}
-          <tr>
+          <tr data-filter-text="{{ item.delivery_member_id }} {{ item.delivery_run_id }} {{ item.delivery_list_id }} {{ item.list_name or '' }} {{ item.person_id_custom or '' }} {{ item.name_kana_norm or '' }} {{ item.gender_code or '' }} {{ item.birthdate or '' }} {{ item.insurance_symbol_match or '' }} {{ item.insurance_number_match or '' }} {{ item.xml_filename }} {{ item.facility_code or '' }} {{ item.facility_name or '' }} {{ item.exam_date or '' }} {{ item.exam_month or '' }} {{ item.member_status }} {{ item.submitted_by or '' }} {{ item.submission_note or '' }}" data-status="{{ item.member_status }}">
             <td><strong>{{ item.delivery_member_id }}</strong><small>run {{ item.delivery_run_id }} / list {{ item.delivery_list_id }}</small></td>
             <td>
               <strong>{{ item.name_kana_norm or "-" }}</strong>
@@ -302,7 +302,7 @@
     <div class="table-panel">
       <table id="fund-zip-table" class="data-table fund-zip-table" data-empty-message="表示中の取込ZIPに一致するものはありません。">
         <thead>
-          <tr data-filter-text="{{ item.download_zip_id }} {{ item.insurer_number }} {{ item.facility_code }} {{ item.folder_name }} {{ item.zip_name }} {{ item.dl_date }} {{ item.send_seq }} {{ item.import_status }} {{ item.import_reason or '' }}" data-status="{{ item.import_status }}">
+          <tr>
             <th>ID</th>
             <th>ZIP</th>
             <th>状態</th>
@@ -313,7 +313,7 @@
         </thead>
         <tbody>
           {% for item in download_zips %}
-          <tr>
+          <tr data-filter-text="{{ item.download_zip_id }} {{ item.insurer_number }} {{ item.facility_code }} {{ item.folder_name }} {{ item.zip_name }} {{ item.dl_date }} {{ item.send_seq }} {{ item.import_status }} {{ item.import_reason or '' }}" data-status="{{ item.import_status }}">
             <td>{{ item.download_zip_id }}</td>
             <td><strong>{{ item.zip_name }}</strong><small>{{ item.folder_name }} / {{ item.facility_code }}</small></td>
             <td><span class="status-pill status-ready">{{ fund_delivery_status_label(item.import_status) }}</span></td>
