@@ -942,6 +942,7 @@ templates.env.globals["fund_delivery_status_label"] = fund_delivery_status_label
 
 FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
 HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
+APP_DATA_DIR = REPO_ROOT / "data"
 HIA_XML_ZIP_CHECK_UPLOAD_DIR = REPO_ROOT / "data" / "hia_xml_zip_checks" / "uploads"
 HIA_XML_ZIP_CHECK_ROOT_DIR = REPO_ROOT / "data" / "hia_xml_zip_checks"
 
@@ -1210,7 +1211,7 @@ def xml_zip_check_allowed(user: dict[str, Any]) -> bool:
 
 
 def xml_zip_check_input_allowed(path: Path) -> bool:
-    return is_path_under(path, HIA_XML_ZIP_CHECK_ROOT_DIR)
+    return is_path_under(path, APP_DATA_DIR)
 
 
 def serialize_xml_zip_findings(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
@@ -2312,10 +2313,10 @@ def load_ops_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list
           xelc.exported_at,
           eec.hia_subscriber_id,
           eec.person_id_custom,
-          eec.insured_card_symbol,
-          eec.insured_card_number,
-          eec.name_kana,
-          eec.birth_date,
+          eec.insurance_symbol_export_value AS insured_card_symbol,
+          eec.insurance_number_export_value AS insured_card_number,
+          eec.name_kana_export_value AS name_kana,
+          eec.birthdate AS birth_date,
           eec.exam_date,
           eec.exam_facility_id,
           eec.export_readiness_status,
@@ -2991,7 +2992,7 @@ async def recheck_hia_xml_zip(request: Request) -> Response:
     zip_path = Path(zip_path_text)
     if not zip_path_text or not xml_zip_check_input_allowed(zip_path):
         return RedirectResponse(
-            f"/hia/xml-zip-check?error={quote('再チェックできるのは管理中ZIPだけです。')}",
+            f"/hia/xml-zip-check?error={quote('再チェックできるのはdata配下のZIPだけです。')}",
             status_code=303,
         )
     if not zip_path.exists() or not zip_path.is_file():
