@@ -943,6 +943,7 @@ templates.env.globals["fund_delivery_status_label"] = fund_delivery_status_label
 FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
 HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
 HIA_XML_ZIP_CHECK_UPLOAD_DIR = REPO_ROOT / "data" / "hia_xml_zip_checks" / "uploads"
+HIA_XML_ZIP_CHECK_ROOT_DIR = REPO_ROOT / "data" / "hia_xml_zip_checks"
 
 
 def _config_path(value: Any, default: Path) -> Path:
@@ -1209,7 +1210,7 @@ def xml_zip_check_allowed(user: dict[str, Any]) -> bool:
 
 
 def xml_zip_check_input_allowed(path: Path) -> bool:
-    return is_path_under(path, HIA_XML_ZIP_CHECK_UPLOAD_DIR) or is_path_under(path, XML_ZIP_CHECK_REPORT_DIR / "fixed")
+    return is_path_under(path, HIA_XML_ZIP_CHECK_ROOT_DIR)
 
 
 def serialize_xml_zip_findings(findings: list[Any], *, limit: int = 200) -> list[dict[str, Any]]:
@@ -1467,20 +1468,23 @@ def load_exam_item_names_for_xml_zip_check() -> dict[str, str]:
 
 
 def load_xml_zip_uploaded_files() -> list[dict[str, Any]]:
-    if not HIA_XML_ZIP_CHECK_UPLOAD_DIR.exists():
+    if not HIA_XML_ZIP_CHECK_ROOT_DIR.exists():
         return []
     rows: list[dict[str, Any]] = []
-    for path in HIA_XML_ZIP_CHECK_UPLOAD_DIR.rglob("*.zip"):
-        if not path.is_file() or not is_path_under(path, HIA_XML_ZIP_CHECK_UPLOAD_DIR):
+    for path in HIA_XML_ZIP_CHECK_ROOT_DIR.rglob("*.zip"):
+        if not path.is_file() or not is_path_under(path, HIA_XML_ZIP_CHECK_ROOT_DIR):
             continue
         stat = path.stat()
+        can_delete = is_path_under(path, HIA_XML_ZIP_CHECK_UPLOAD_DIR)
         rows.append(
             {
                 "name": path.name,
                 "path": str(path),
-                "relative_path": str(path.relative_to(HIA_XML_ZIP_CHECK_UPLOAD_DIR)),
+                "relative_path": str(path.relative_to(HIA_XML_ZIP_CHECK_ROOT_DIR)),
                 "size_mb": round(stat.st_size / 1024 / 1024, 2),
                 "modified_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "kind": "アップロード" if can_delete else "修正版/確認用",
+                "can_delete": can_delete,
             }
         )
     return sorted(rows, key=lambda row: str(row["modified_at"]), reverse=True)
