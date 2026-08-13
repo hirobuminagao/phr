@@ -53,6 +53,33 @@
     </div>
   </section>
 
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>アップロード済みZIP</h2>
+        <p class="subtle">チェック用に保存された元ZIPです。CSVレポートや修正版ZIPは削除対象に含めていません。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ uploaded_files|length }}件</span>
+    </div>
+    <div class="xml-uploaded-file-list">
+      {% for file in uploaded_files %}
+      <article class="xml-uploaded-file">
+        <div>
+          <strong>{{ file.name }}</strong>
+          <small>{{ file.relative_path }}</small>
+          <small>{{ file.modified_at }} / {{ file.size_mb }} MB</small>
+        </div>
+        <form method="post" action="/hia/xml-zip-check/delete-upload">
+          <input type="hidden" name="upload_path" value="{{ file.path }}">
+          <button type="submit" class="ghost-button danger-button">削除</button>
+        </form>
+      </article>
+      {% else %}
+      <p class="subtle">アップロード済みZIPはありません。</p>
+      {% endfor %}
+    </div>
+  </section>
+
   {% if result %}
   <section class="summary-grid xml-check-summary">
     <div class="summary-card"><span>XML</span><strong>{{ result.xml_files_seen }}</strong></div>

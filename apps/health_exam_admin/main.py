@@ -1263,6 +1263,26 @@ def build_xml_zip_check_result(
     }
 
 
+def load_xml_zip_uploaded_files() -> list[dict[str, Any]]:
+    if not HIA_XML_ZIP_CHECK_UPLOAD_DIR.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in HIA_XML_ZIP_CHECK_UPLOAD_DIR.rglob("*.zip"):
+        if not path.is_file() or not is_path_under(path, HIA_XML_ZIP_CHECK_UPLOAD_DIR):
+            continue
+        stat = path.stat()
+        rows.append(
+            {
+                "name": path.name,
+                "path": str(path),
+                "relative_path": str(path.relative_to(HIA_XML_ZIP_CHECK_UPLOAD_DIR)),
+                "size_mb": round(stat.st_size / 1024 / 1024, 2),
+                "modified_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+    return sorted(rows, key=lambda row: str(row["modified_at"]), reverse=True)
+
+
 def build_fund_delivery_list_configs(raw: dict[str, Any], *, actor: str | None = None) -> list[FundDeliveryListConfig]:
     section = fund_delivery_section(raw, "list")
     event_id = config_value(raw, "event_id", None)
@@ -2577,6 +2597,7 @@ def hia_xml_zip_check(request: Request) -> Response:
             "message": request.query_params.get("message"),
             "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
             "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+            "uploaded_files": load_xml_zip_uploaded_files(),
         },
     )
 
@@ -2605,6 +2626,7 @@ async def run_hia_xml_zip_check(
                 "message": None,
                 "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
                 "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+                "uploaded_files": load_xml_zip_uploaded_files(),
             },
             status_code=400,
         )
@@ -2634,6 +2656,7 @@ async def run_hia_xml_zip_check(
                 "message": None,
                 "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
                 "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+                "uploaded_files": load_xml_zip_uploaded_files(),
             },
             status_code=500,
         )
@@ -2648,6 +2671,7 @@ async def run_hia_xml_zip_check(
             "message": "チェックが完了しました。",
             "xsd_dir": str(XML_ZIP_CHECK_XSD_DIR),
             "report_dir": str(XML_ZIP_CHECK_REPORT_DIR),
+            "uploaded_files": load_xml_zip_uploaded_files(),
         },
     )
 
