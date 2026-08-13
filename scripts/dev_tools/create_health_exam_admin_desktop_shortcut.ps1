@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Resolve-Path (Join-Path $scriptDir "..\..")
+$repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..")).Path
 $launcherPath = Join-Path $scriptDir "start_health_exam_admin.cmd"
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 $shortcutPath = Join-Path $desktopPath "PHR Health Exam Admin.lnk"
