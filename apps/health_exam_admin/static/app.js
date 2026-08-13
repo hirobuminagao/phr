@@ -124,8 +124,17 @@
     if (!target) continue;
 
     const buttons = Array.from(filter.querySelectorAll("[data-xml-filter-field][data-xml-filter-value]"));
+    const accordionActionButtons = Array.from(filter.querySelectorAll("[data-xml-accordion-action]"));
     const displayNameInput = filter.querySelector("[data-xml-display-name-filter]");
     const groups = Array.from(target.querySelectorAll("[data-xml-finding-group]"));
+
+    const setGroupExpanded = (group, expanded) => {
+      const toggle = group.querySelector("[data-xml-accordion-toggle]");
+      const items = group.querySelector(".xml-error-items");
+      if (!toggle || !items) return;
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+      items.hidden = !expanded;
+    };
 
     const applyFindingFilter = () => {
       const activeByField = new Map();
@@ -159,11 +168,31 @@
       }
     };
 
+    for (const group of groups) {
+      const toggle = group.querySelector("[data-xml-accordion-toggle]");
+      if (!toggle) continue;
+      setGroupExpanded(group, false);
+      toggle.addEventListener("click", () => {
+        setGroupExpanded(group, toggle.getAttribute("aria-expanded") !== "true");
+      });
+    }
+
     for (const button of buttons) {
       button.addEventListener("click", () => {
         button.classList.toggle("is-active");
         button.setAttribute("aria-pressed", button.classList.contains("is-active") ? "true" : "false");
         applyFindingFilter();
+      });
+    }
+
+    for (const button of accordionActionButtons) {
+      button.addEventListener("click", () => {
+        const shouldExpand = button.dataset.xmlAccordionAction === "expand";
+        for (const group of groups) {
+          if (!group.hidden) {
+            setGroupExpanded(group, shouldExpand);
+          }
+        }
       });
     }
 

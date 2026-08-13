@@ -137,12 +137,16 @@
           <button type="button" class="is-active" data-xml-filter-field="fixability" data-xml-filter-value="FIXABLE" aria-pressed="true">修正可</button>
           <button type="button" class="is-active" data-xml-filter-field="fixability" data-xml-filter-value="MANUAL" aria-pressed="true">手動確認</button>
         </div>
+        <div class="filter-toggle-group">
+          <button type="button" data-xml-accordion-action="expand">全て開く</button>
+          <button type="button" data-xml-accordion-action="collapse">全て閉じる</button>
+        </div>
       </div>
     </div>
     <div class="xml-error-group-list" id="xml-finding-groups">
       {% for group in result.display_groups %}
       <article class="xml-error-group" data-xml-finding-group>
-        <header>
+        <button type="button" class="xml-error-group-header" data-xml-accordion-toggle aria-expanded="false">
           <div>
             <strong>{{ group.xml_inner_path }}</strong>
             <small>{{ group.label_summary }}</small>
@@ -155,8 +159,9 @@
               <span class="status-pill status-pending">警告 {{ group.warning_count }}件</span>
             {% endif %}
           </div>
-        </header>
-        <div class="xml-error-items">
+          <span class="xml-accordion-icon" aria-hidden="true"></span>
+        </button>
+        <div class="xml-error-items" hidden>
           {% for row in group.findings %}
           <div
             class="xml-error-item"
