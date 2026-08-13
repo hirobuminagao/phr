@@ -1108,7 +1108,47 @@ button[type="submit"]:hover {
 }
 
 .xml-drop-zone label {
+  display: grid;
+  gap: 8px;
   margin: 0;
+}
+
+.xml-drop-zone input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.file-picker-button {
+  min-height: var(--control-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 0 16px;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.xml-drop-zone label:hover .file-picker-button,
+.xml-drop-zone input[type="file"]:focus-visible + .file-picker-button {
+  border-color: var(--accent);
+  background: #eef8f5;
+  color: var(--accent-dark);
+}
+
+.xml-drop-zone.has-file .file-picker-button {
+  border-color: var(--accent);
+  background: #fff;
+  color: var(--accent-dark);
 }
 
 .xml-drop-zone.is-dragover {
