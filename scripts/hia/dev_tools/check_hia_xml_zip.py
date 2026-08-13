@@ -60,6 +60,14 @@ class Finding:
 
 
 @dataclass(frozen=True)
+class ManualTextFix:
+    xml_inner_path: str
+    namecode: str | None
+    original_text: str
+    replacement_text: str
+
+
+@dataclass(frozen=True)
 class XsdValidationError:
     message: str
     line: int | None = None
@@ -373,6 +381,7 @@ def _check_and_fix_xml(
     fix: bool,
     item_names: Mapping[str, str] | None = None,
     item_result_code_oids: Mapping[str, str] | None = None,
+    manual_text_fixes: Mapping[tuple[str, str, str], str] | None = None,
 ) -> tuple[bytes, list[Finding]]:
     findings: list[Finding] = []
     updated_content = content
@@ -472,19 +481,40 @@ def _check_and_fix_xml(
             byte_length = mhlw_text_byte_length(text)
             if byte_length > MHLW_TEXT_MAX_BYTES:
                 namecode, display_name = _namecode_for_value(value, item_names=item_names)
+                replacement = None
+                if manual_text_fixes is not None:
+                    replacement = manual_text_fixes.get((inner_path, namecode or "", text))
+                replacement_byte_length = mhlw_text_byte_length(replacement) if replacement is not None else None
+                applied = False
+                fix_note = None
+                severity = "ERROR"
+                message = "ST/TX text exceeds MHLW byte length limit"
+                if fix and replacement is not None:
+                    if replacement_byte_length <= MHLW_TEXT_MAX_BYTES:
+                        value.text = replacement
+                        changed = True
+                        applied = True
+                        severity = "FIXED"
+                        message = "ST/TX text was replaced with manually edited text"
+                        fix_note = f"manual text replacement: {replacement_byte_length}/{MHLW_TEXT_MAX_BYTES} byte"
+                    else:
+                        fix_note = f"manual text replacement is still too long: {replacement_byte_length}/{MHLW_TEXT_MAX_BYTES} byte"
                 findings.append(
                     Finding(
                         zip_path=str(zip_path),
                         xml_inner_path=inner_path,
                         check_type="ST_MAX_BYTE_LENGTH_EXCEEDED",
-                        severity="ERROR",
+                        severity=severity,
                         namecode=namecode,
                         item_display_name=display_name,
                         namecode_source="VALUE_PARENT_OBSERVATION" if namecode else None,
-                        message="ST/TX text exceeds MHLW byte length limit",
+                        message=message,
                         value_preview=_text_preview(text, limit=None),
                         mhlw_byte_length=byte_length,
                         max_byte_length=MHLW_TEXT_MAX_BYTES,
+                        can_fix=True,
+                        fix_note=fix_note,
+                        fixed=applied,
                     )
                 )
 
@@ -553,10 +583,16 @@ def check_zip(
     fixed_output_dir: Path,
     item_names: Mapping[str, str] | None = None,
     item_result_code_oids: Mapping[str, str] | None = None,
+    manual_text_fixes: list[ManualTextFix] | None = None,
 ) -> tuple[Summary, list[Finding]]:
     summary = Summary(zip_files_seen=1)
     findings: list[Finding] = []
     fixed_zip_path = _fixed_zip_path(zip_path, fixed_output_dir) if fix else None
+    manual_text_fix_map = {
+        (item.xml_inner_path, item.namecode or "", item.original_text): item.replacement_text
+        for item in manual_text_fixes or []
+        if item.replacement_text.strip()
+    }
     with zipfile.ZipFile(zip_path, "r") as zin:
         zip_names = zin.namelist()
         findings.extend(_zip_structure_findings(zip_path, zip_names))
@@ -575,6 +611,7 @@ def check_zip(
                         fix=fix,
                         item_names=item_names,
                         item_result_code_oids=item_result_code_oids,
+                        manual_text_fixes=manual_text_fix_map,
                     )
                     findings.extend(item_findings)
                 if zout is not None:

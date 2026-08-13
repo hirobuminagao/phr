@@ -111,7 +111,7 @@
           <button type="submit" name="zip_path" value="{{ result.upload_path }}">元ZIPを再チェック</button>
         </form>
         {% if result.can_create_fixed %}
-        <form method="post" action="/hia/xml-zip-check/create-fixed?upload_path={{ result.upload_path|url_quote }}" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを作成しています">
+        <form id="xml-create-fixed-form" method="post" action="/hia/xml-zip-check/create-fixed?upload_path={{ result.upload_path|url_quote }}" class="xml-check-delete-form" data-processing-form data-processing-message="修正版ZIPを作成しています">
           <input type="hidden" name="upload_path" value="{{ result.upload_path }}">
           <button type="submit" name="upload_path" value="{{ result.upload_path }}">修正版ZIPを作成</button>
         </form>
@@ -249,6 +249,22 @@
               {% endif %}
               {% if row.mhlw_byte_length %}
                 <small>{{ row.mhlw_byte_length }} / {{ row.max_byte_length }} byte</small>
+              {% endif %}
+              {% if row.manual_fix_field and result.can_create_fixed %}
+                <div class="manual-xml-fix-editor">
+                  <input type="hidden" name="{{ row.manual_fix_field }}__xml_inner_path" value="{{ group.xml_inner_path }}" form="xml-create-fixed-form">
+                  <input type="hidden" name="{{ row.manual_fix_field }}__namecode" value="{{ row.namecode or '' }}" form="xml-create-fixed-form">
+                  <input type="hidden" name="{{ row.manual_fix_field }}__original_text" value="{{ row.value_preview or '' }}" form="xml-create-fixed-form">
+                  <label>
+                    <span>修正後テキスト</span>
+                    <textarea
+                      name="{{ row.manual_fix_field }}__replacement"
+                      rows="4"
+                      form="xml-create-fixed-form"
+                      placeholder="上限内に要約したST/TX本文を入力"
+                    >{{ row.value_preview or '' }}</textarea>
+                  </label>
+                </div>
               {% endif %}
             </div>
           </div>

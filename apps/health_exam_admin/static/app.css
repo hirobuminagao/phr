@@ -1512,6 +1512,26 @@ button[type="submit"]:disabled {
   overflow-wrap: anywhere;
 }
 
+.manual-xml-fix-editor {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #d4dde8;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.manual-xml-fix-editor label {
+  display: grid;
+  gap: 6px;
+}
+
+.manual-xml-fix-editor textarea {
+  min-height: 108px;
+  resize: vertical;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .table-note {
   margin: 12px 0 0;
 }

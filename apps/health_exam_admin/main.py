@@ -46,6 +46,7 @@ from scripts.hia.script_lib.hia_download_importer import (
 from scripts.hia.dev_tools.check_hia_xml_zip import (
     DEFAULT_REPORT_DIR as XML_ZIP_CHECK_REPORT_DIR,
     DEFAULT_XSD_DIR as XML_ZIP_CHECK_XSD_DIR,
+    ManualTextFix,
     check_zip as check_hia_xml_zip_file,
     write_report as write_hia_xml_zip_check_report,
 )
@@ -1350,6 +1351,7 @@ def xml_zip_namecode_source_class(source: str | None) -> str:
 
 def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
+    manual_fix_index = 0
     for finding in findings:
         if finding.severity not in {"ERROR", "WARNING"}:
             continue
@@ -1378,6 +1380,10 @@ def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]
         label = xml_zip_check_message_label(finding)
         label_key = f"{severity_label}: {label}"
         row["labels"][label_key] = row["labels"].get(label_key, 0) + 1
+        manual_fix_field = None
+        if finding.check_type == "ST_MAX_BYTE_LENGTH_EXCEEDED":
+            manual_fix_index += 1
+            manual_fix_field = f"manual_text_fix_{manual_fix_index}"
         row["findings"].append(
             {
                 "severity": severity,
@@ -1401,6 +1407,7 @@ def serialize_xml_zip_display_groups(findings: list[Any]) -> list[dict[str, Any]
                 "fixability_label": "修正可" if can_fix else "手動確認",
                 "fixability_class": "status-ok" if can_fix else "status-neutral",
                 "fix_note": getattr(finding, "fix_note", None),
+                "manual_fix_field": manual_fix_field,
             }
         )
     rows = sorted(grouped.values(), key=lambda item: (-int(item["error_count"]), -int(item["warning_count"]), item["xml_inner_path"]))
@@ -1483,6 +1490,7 @@ def build_xml_zip_check_result(
     upload_path: Path,
     original_filename: str,
     fix: bool,
+    manual_text_fixes: list[ManualTextFix] | None = None,
 ) -> dict[str, Any]:
     item_names = load_exam_item_names_for_xml_zip_check()
     item_result_code_oids = load_exam_item_result_code_oids_for_xml_zip_check()
@@ -1493,6 +1501,7 @@ def build_xml_zip_check_result(
         fixed_output_dir=XML_ZIP_CHECK_REPORT_DIR / "fixed",
         item_names=item_names,
         item_result_code_oids=item_result_code_oids,
+        manual_text_fixes=manual_text_fixes,
     )
     report_csv_path = write_hia_xml_zip_check_report(findings, XML_ZIP_CHECK_REPORT_DIR)
     display_name_options = sorted(
@@ -1524,6 +1533,30 @@ def build_xml_zip_check_result(
         "display_groups": serialize_xml_zip_display_groups(findings),
         "display_name_options": display_name_options,
     }
+
+
+def manual_text_fixes_from_form(form: dict[str, str]) -> list[ManualTextFix]:
+    fixes: list[ManualTextFix] = []
+    prefixes = sorted(
+        {
+            key.removesuffix("__replacement")
+            for key in form
+            if key.startswith("manual_text_fix_") and key.endswith("__replacement")
+        }
+    )
+    for prefix in prefixes:
+        replacement = str(form.get(f"{prefix}__replacement") or "").strip()
+        if not replacement:
+            continue
+        fixes.append(
+            ManualTextFix(
+                xml_inner_path=str(form.get(f"{prefix}__xml_inner_path") or ""),
+                namecode=str(form.get(f"{prefix}__namecode") or "") or None,
+                original_text=str(form.get(f"{prefix}__original_text") or ""),
+                replacement_text=replacement,
+            )
+        )
+    return fixes
 
 
 def load_exam_item_names_for_xml_zip_check() -> dict[str, str]:
@@ -3033,10 +3066,12 @@ async def create_fixed_hia_xml_zip(request: Request) -> Response:
         )
 
     try:
+        manual_text_fixes = manual_text_fixes_from_form(form)
         result = build_xml_zip_check_result(
             upload_path=upload_path,
             original_filename=upload_path.name,
             fix=True,
+            manual_text_fixes=manual_text_fixes,
         )
         log_app_operation(
             request=request,
@@ -3053,6 +3088,7 @@ async def create_fixed_hia_xml_zip(request: Request) -> Response:
                 "errors": result.get("errors"),
                 "warnings": result.get("warnings"),
                 "report_csv_path": result.get("report_csv_path"),
+                "manual_text_fixes": len(manual_text_fixes),
             },
         )
     except Exception as exc:
