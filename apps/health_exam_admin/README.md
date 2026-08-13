@@ -92,3 +92,17 @@ http://127.0.0.1:8011
 ```
 
 `--reload` はローカル確認用。ソースを更新すると自動で反映される。
+
+VSCodeとは別ウィンドウで起動したい場合は、以下を使う。
+
+```powershell
+scripts\dev_tools\start_health_exam_admin.cmd
+```
+
+デスクトップに起動ショートカットを作る場合は、初回だけ以下を実行する。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev_tools\create_health_exam_admin_desktop_shortcut.ps1
+```
+
+作成された `PHR Health Exam Admin` ショートカットをダブルクリックすると、管理画面用のPowerShellがVSCodeとは別に起動する。
