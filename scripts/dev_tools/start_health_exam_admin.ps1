@@ -28,7 +28,7 @@ if ([string]::IsNullOrWhiteSpace($hostName)) {
     $hostName = Get-DotEnvValue -Path $envPath -Key "PHR_ADMIN_HOST"
 }
 if ([string]::IsNullOrWhiteSpace($hostName)) {
-    $hostName = "127.0.0.1"
+    $hostName = "0.0.0.0"
 }
 $port = 8011
 $runDir = Join-Path $repoRoot ".run"

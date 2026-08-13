@@ -95,7 +95,7 @@ Caddy等の信頼済みプロキシ配下で `X-Forwarded-For` を使う場合�
 
 ```powershell
 cd C:\Users\1107858.KSMD\work\phr
-python -m uvicorn apps.health_exam_admin.main:app --host 127.0.0.1 --port 8011 --reload
+python -m uvicorn apps.health_exam_admin.main:app --host 0.0.0.0 --port 8011 --reload
 ```
 
 ブラウザ:
@@ -104,11 +104,7 @@ python -m uvicorn apps.health_exam_admin.main:app --host 127.0.0.1 --port 8011 -
 http://127.0.0.1:8011
 ```
 
-別PCから接続する場合は、待ち受け先を `0.0.0.0` またはそのPCのLAN側IPにする。
-
-```powershell
-python -m uvicorn apps.health_exam_admin.main:app --host 0.0.0.0 --port 8011 --reload
-```
+`0.0.0.0` で起動しても、起動PC自身のブラウザからは `http://127.0.0.1:8011` で開ける。
 
 別PCのブラウザからは以下の形式で開く。
 
@@ -131,5 +127,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev_tools\create_hea
 ```
 
 作成された `PHR Health Exam Admin` ショートカットをダブルクリックすると、管理画面用のPowerShellがVSCodeとは別に起動する。
-このショートカット起動は既定で `127.0.0.1` 待ち受けのため、起動したPCだけからアクセスできる。
-同じLAN内の別PCからもアクセスする場合は、環境変数 `PHR_ADMIN_HOST=0.0.0.0` を設定して起動する。
+このショートカット起動は既定で `0.0.0.0` 待ち受けのため、同じLAN内の別PCからもアクセスできる。
+起動PCだけに閉じたい場合は、環境変数 `PHR_ADMIN_HOST=127.0.0.1` を設定して起動する。
