@@ -82,7 +82,7 @@
           <tr>
             <th>ID</th>
             <th>種別</th>
-            <th>内包/OK</th>
+            <th>OK/内包</th>
             <th>ファイル</th>
             <th>健診機関</th>
             <th>状態</th>
@@ -97,18 +97,18 @@
             <td><span class="status-pill status-muted">{{ row.file_type }}</span></td>
             <td>
               <strong>
-                {{ row.processable_count if row.processable_count is not none else row.source_count }}
-                / {{ row.ok_count }}
+                {{ row.ok_count }}
+                {% if row.ng_count %} / {{ row.ng_count }}{% endif %}
+                / {{ row.processable_count if row.processable_count is not none else row.source_count }}
               </strong>
               <small>
                 {% if row.file_type == 'CSV' %}
-                  人数 / OK
+                  OK{% if row.ng_count %} / NG{% endif %} / 人数
                 {% elif row.file_type == 'ZIP' %}
-                  XML / OK
+                  OK{% if row.ng_count %} / NG{% endif %} / XML
                 {% else %}
-                  件数 / OK
+                  OK{% if row.ng_count %} / NG{% endif %} / 件数
                 {% endif %}
-                {% if row.ng_count %} / NG {{ row.ng_count }}{% endif %}
                 {% if row.pending_count %} / 未 {{ row.pending_count }}{% endif %}
               </small>
             </td>
