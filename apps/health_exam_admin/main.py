@@ -2834,6 +2834,8 @@ def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -
         output_mode,
         "--no-latest-xml-export-list",
     ]
+    if output_mode == "review":
+        cmd.extend(["--include-exported", "--review-output-root", str(HIA_XML_REVIEW_EXPORT_ROOT_DIR)])
     completed = subprocess.run(
         cmd,
         cwd=REPO_ROOT,
@@ -2845,6 +2847,8 @@ def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -
     output = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip())
     if completed.returncode != 0:
         raise RuntimeError(output or f"XML export failed: returncode={completed.returncode}")
+    if output_mode == "review" and "[OK]" not in output:
+        raise RuntimeError(output or "確認用ZIPは作成されませんでした。出力対象が0件の可能性があります。")
     return output or "XML出力が完了しました。"
 
 

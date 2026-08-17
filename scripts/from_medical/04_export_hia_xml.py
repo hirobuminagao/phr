@@ -194,7 +194,10 @@ def _output_mode(value: Any) -> str:
 def _review_output_root(value: Any) -> Path:
     if value in (None, ""):
         return REVIEW_OUTPUT_DEFAULT_ROOT
-    return Path(str(value)).expanduser()
+    path = Path(str(value)).expanduser()
+    if path.is_absolute():
+        return path
+    return REPO_ROOT / path
 
 
 def load_config(args: argparse.Namespace) -> ExportConfig:
