@@ -4262,19 +4262,26 @@ def exam_ledger_search(request: Request) -> Response:
         or search_filters["insurance_number"]
         or search_filters["insurance_symbol"]
     )
+    search_error = "記号だけでは検索できません。保険番号も入力してください。" if (
+        search_filters["insurance_symbol"] and not search_filters["insurance_number"]
+        and not search_filters["name_kana"] and not search_filters["hia_subscriber_id"]
+    ) else None
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
-            search_results = search_exam_ledger_candidates(
-                cur,
-                event_id=search_filters["event_id"],
-                name_kana=search_filters["name_kana"],
-                hia_subscriber_id=search_filters["hia_subscriber_id"],
-                insurance_symbol=search_filters["insurance_symbol"],
-                insurance_number=search_filters["insurance_number"],
-            )
+            if search_error:
+                search_results = []
+            else:
+                search_results = search_exam_ledger_candidates(
+                    cur,
+                    event_id=search_filters["event_id"],
+                    name_kana=search_filters["name_kana"],
+                    hia_subscriber_id=search_filters["hia_subscriber_id"],
+                    insurance_symbol=search_filters["insurance_symbol"],
+                    insurance_number=search_filters["insurance_number"],
+                )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -4290,6 +4297,7 @@ def exam_ledger_search(request: Request) -> Response:
             "search_filters": search_filters,
             "search_results": search_results,
             "has_search": has_search,
+            "search_error": search_error,
         },
     )
 
@@ -4324,14 +4332,21 @@ def exam_ledger_detail(request: Request, exam_ledger_id: int) -> Response:
                 or search_filters["insurance_number"]
                 or search_filters["insurance_symbol"]
             )
-            search_results = search_exam_ledger_candidates(
-                cur,
-                event_id=search_filters["event_id"],
-                name_kana=search_filters["name_kana"],
-                hia_subscriber_id=search_filters["hia_subscriber_id"],
-                insurance_symbol=search_filters["insurance_symbol"],
-                insurance_number=search_filters["insurance_number"],
-            )
+            search_error = "記号だけでは検索できません。保険番号も入力してください。" if (
+                search_filters["insurance_symbol"] and not search_filters["insurance_number"]
+                and not search_filters["name_kana"] and not search_filters["hia_subscriber_id"]
+            ) else None
+            if search_error:
+                search_results = []
+            else:
+                search_results = search_exam_ledger_candidates(
+                    cur,
+                    event_id=search_filters["event_id"],
+                    name_kana=search_filters["name_kana"],
+                    hia_subscriber_id=search_filters["hia_subscriber_id"],
+                    insurance_symbol=search_filters["insurance_symbol"],
+                    insurance_number=search_filters["insurance_number"],
+                )
             if audit_enabled(cur):
                 log_audit(
                     cur,
@@ -4365,6 +4380,7 @@ def exam_ledger_detail(request: Request, exam_ledger_id: int) -> Response:
             "search_filters": search_filters,
             "search_results": search_results,
             "has_search": has_search,
+            "search_error": search_error,
         },
     )
 

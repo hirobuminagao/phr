@@ -60,8 +60,12 @@
         <a class="ghost-button" href="/exam-ledgers/search">クリア</a>
       </div>
     </form>
+    {% if search_error %}
+      <div class="alert">{{ search_error }}</div>
+    {% endif %}
     {% if has_search %}
-      {% if search_results %}
+      {% if search_error %}
+      {% elif search_results %}
       <div class="ledger-search-results">
         <p class="subtle">検索結果 {{ search_results|length }} 件。対象のledgerを選択してください。</p>
         <div class="ledger-result-list">
