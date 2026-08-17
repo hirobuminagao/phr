@@ -976,25 +976,29 @@ a.home-menu-card:hover {
   color: #fff;
 }
 
-.receipt-mode-field {
+.receipt-mode-field,
+.source-kind-picker {
   display: grid;
   gap: 8px;
   color: var(--muted);
   font-weight: 700;
 }
 
-.receipt-mode-options {
+.receipt-mode-options,
+.source-kind-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
   gap: 8px;
 }
 
-.receipt-mode-option {
+.receipt-mode-option,
+.source-kind-option {
   position: relative;
   min-width: 0;
 }
 
-.receipt-mode-option input {
+.receipt-mode-option input,
+.source-kind-option input {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
@@ -1002,7 +1006,8 @@ a.home-menu-card:hover {
   pointer-events: none;
 }
 
-.receipt-mode-option span {
+.receipt-mode-option span,
+.source-kind-option span {
   min-height: var(--control-height);
   display: flex;
   align-items: center;
@@ -1017,15 +1022,22 @@ a.home-menu-card:hover {
   text-align: center;
 }
 
-.receipt-mode-option input:checked + span {
+.receipt-mode-option input:checked + span,
+.source-kind-option input:checked + span {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
 }
 
-.receipt-mode-option input:focus-visible + span {
+.receipt-mode-option input:focus-visible + span,
+.source-kind-option input:focus-visible + span {
   outline: 3px solid rgba(20, 125, 100, 0.24);
   outline-offset: 2px;
+}
+
+.source-kind-picker small {
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .filter-actions {

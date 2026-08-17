@@ -156,6 +156,68 @@
     update();
   }
 
+  const modeFromSourceKinds = (selected) => {
+    const hasXml = selected.has("XML");
+    const hasCsv = selected.has("CSV");
+    const hasPaper = selected.has("PAPER");
+    if (!hasXml && !hasCsv && !hasPaper) return "UNKNOWN";
+    if (hasXml && !hasCsv && !hasPaper) return "XML_ONLY";
+    if (!hasXml && hasCsv && !hasPaper) return "CSV_ONLY";
+    if (hasXml && hasCsv && !hasPaper) return "XML_CSV_MERGE";
+    if (!hasXml && !hasCsv && hasPaper) return "PAPER_ONLY";
+    if (hasXml && !hasCsv && hasPaper) return "XML_PAPER_MERGE";
+    if (!hasXml && hasCsv && hasPaper) return "CSV_PAPER_MERGE";
+    return "XML_CSV_PAPER_MERGE";
+  };
+
+  const sourceKindsFromMode = (mode) => {
+    const values = {
+      UNKNOWN: [],
+      XML_ONLY: ["XML"],
+      CSV_ONLY: ["CSV"],
+      XML_CSV_MERGE: ["XML", "CSV"],
+      PAPER_ONLY: ["PAPER"],
+      XML_PAPER_MERGE: ["XML", "PAPER"],
+      CSV_PAPER_MERGE: ["CSV", "PAPER"],
+      XML_CSV_PAPER_MERGE: ["XML", "CSV", "PAPER"],
+    };
+    return new Set(values[mode] || []);
+  };
+
+  const sourceModeLabel = (mode) => {
+    const labels = {
+      UNKNOWN: "未設定",
+      XML_ONLY: "XMLのみ",
+      CSV_ONLY: "CSVのみ",
+      XML_CSV_MERGE: "XML+CSV",
+      PAPER_ONLY: "紙のみ",
+      XML_PAPER_MERGE: "XML+紙",
+      CSV_PAPER_MERGE: "CSV+紙",
+      XML_CSV_PAPER_MERGE: "XML+CSV+紙",
+    };
+    return labels[mode] || "未設定";
+  };
+
+  for (const picker of document.querySelectorAll("[data-source-kind-picker]")) {
+    const hidden = picker.querySelector("[data-source-mode-value]");
+    const label = picker.querySelector("[data-source-kind-label]");
+    const options = Array.from(picker.querySelectorAll("[data-source-kind-option]"));
+
+    const update = () => {
+      const selected = new Set(options.filter((option) => option.checked).map((option) => option.value));
+      const mode = modeFromSourceKinds(selected);
+      if (hidden) hidden.value = mode;
+      if (label) label.textContent = sourceModeLabel(mode);
+    };
+
+    const initial = sourceKindsFromMode((hidden && hidden.value) || picker.dataset.currentMode || "UNKNOWN");
+    for (const option of options) {
+      option.checked = initial.has(option.value);
+      option.addEventListener("change", update);
+    }
+    update();
+  }
+
   const closeModal = (modal) => {
     if (!modal) return;
     modal.hidden = true;

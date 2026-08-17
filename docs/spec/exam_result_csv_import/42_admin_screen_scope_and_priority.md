@@ -153,6 +153,8 @@ aliasに保持する運用設定:
 
 受領モードは現時点では `expected_source_mode` の1カラムで管理する。
 XML/CSV/紙の3種類で最大8パターンに収まるため、初期運用では別テーブルや複数booleanへ分解しない。
+画面上は8パターンを直接選ばせず、一覧フィルタ・登録・編集ともに `XML` / `CSV` / `紙` の組み合わせボタンで操作する。
+未選択を `UNKNOWN`、選択された組み合わせを `expected_source_mode` の保存値へ変換する。
 将来、受領source種別がさらに増える、または同一aliasで月別・契約別に組み合わせが変わる場合は、履歴テーブルまたはsource種別別の子テーブルへ切り出す。
 
 将来、同一event・同一alias内で月別に受領方式やテンプレートが頻繁に変わる場合は、`medical_folder_alias_receipt_settings` のような履歴テーブルへ切り出し、`valid_from` / `valid_to` を持たせる。
