@@ -79,8 +79,30 @@
         <p class="subtle">raw値、正規化後の値、コード、単位、エラー理由を一ファイル内の項目として確認します。</p>
       </div>
     </div>
+    <div class="exam-item-filter-bar">
+      <label>
+        <span>検査項目名 / namecode</span>
+        <input data-live-filter-input="#exam-item-detail-table" autocomplete="off" placeholder="項目名 / namecode">
+      </label>
+      <fieldset class="filter-condition-block">
+        <legend>normalize</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#exam-item-detail-table" data-filter-field="normalizeStatus" data-filter-value="ERROR">ERROR</button>
+          <button type="button" data-live-filter-toggle="#exam-item-detail-table" data-filter-field="normalizeStatus" data-filter-value="OK">OK</button>
+          <button type="button" data-live-filter-toggle="#exam-item-detail-table" data-filter-field="normalizeStatus" data-filter-value="SKIPPED">SKIPPED</button>
+        </div>
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>validation</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#exam-item-detail-table" data-filter-field="validationStatus" data-filter-value="INVALID">INVALID</button>
+          <button type="button" data-live-filter-toggle="#exam-item-detail-table" data-filter-field="validationStatus" data-filter-value="VALID">VALID</button>
+          <button type="button" data-live-filter-toggle="#exam-item-detail-table" data-filter-field="validationStatus" data-filter-value="WARNING">WARNING</button>
+        </div>
+      </fieldset>
+    </div>
     <div class="table-panel">
-      <table class="data-table exam-item-detail-table">
+      <table id="exam-item-detail-table" class="data-table exam-item-detail-table" data-empty-message="一致する検査結果値はありません。">
         <thead>
           <tr>
             <th>状態</th>
@@ -93,7 +115,7 @@
         </thead>
         <tbody>
           {% for item in item_rows %}
-          <tr class="{{ 'is-error-row' if item.validation_status == 'INVALID' or item.normalize_status == 'ERROR' else '' }}">
+          <tr class="{{ 'is-error-row' if item.validation_status == 'INVALID' or item.normalize_status == 'ERROR' else '' }}" data-filter-text="{{ item.namecode_display_name or '' }} {{ item.namecode or '' }}" data-normalize-status="{{ item.normalize_status or '' }}" data-validation-status="{{ item.validation_status or '' }}">
             <td>
               <span class="status-pill {{ 'status-ready' if item.validation_status == 'VALID' else 'status-danger' if item.validation_status == 'INVALID' else 'status-pending' }}">{{ item.validation_status or "-" }}</span>
               <small>normalize {{ item.normalize_status or "-" }}</small>
