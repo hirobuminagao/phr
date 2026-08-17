@@ -21,7 +21,7 @@
   </nav>
 </header>
 
-<main class="page">
+<main id="home-top" class="page">
   <section class="admin-home-head">
     <div class="admin-user-block">
       <span class="status-pill status-ready">{{ approval_status_label(user.approval_status, is_active=user.is_active) }}</span>
@@ -69,6 +69,7 @@
 
   <nav class="floating-category-nav" aria-label="カテゴリ移動">
     <strong>カテゴリ</strong>
+    <a href="#home-top">TOP</a>
     {% if "export_lists.view" in user.permissions
       or "export_lists.edit" in user.permissions
       or "xml_export.official" in user.permissions
