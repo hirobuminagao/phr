@@ -133,6 +133,27 @@
 | 施設別normalize/独自値 | 施設固有の表記や独自値の確認方針を管理する | 共通辞書へ昇格するかは別判断 |
 | 健診機関確認事項 | 医療機関への問い合わせ、回答、対応状況を管理する | namecode誤用、独自コード等 |
 
+#### フォルダaliasの受領設定
+
+フォルダaliasは、単なるフォルダ名の名寄せだけでなく、event内のその健診機関フォルダをどう受領・取込する想定かを管理する入口とする。
+
+aliasに保持する運用設定:
+
+- 想定受領モード: `UNKNOWN` / `XML_ONLY` / `CSV_ONLY` / `XML_CSV_MERGE`
+- 使用するCSVテンプレート: `csv_format_versions.csv_format_version_id`
+
+責務分離:
+
+- `medical_folder_aliases`: event内のフォルダaliasに対する運用設定。scan/import前に「このフォルダはXMLのみか、CSVのみか、XML+CSV結合か」「どのCSVテンプレートを使うか」を人が確認・設定する。
+- `file_receipts`: 実際に受領・検出したファイルの台帳。XML/CSVの実績、sha256、取込状態、format照合結果を保持する。
+- `csv_format_versions`: CSVテンプレート本体。ヘッダー、文字コード、format version、mapping versionを保持する。
+
+このため、受領モードとCSVテンプレート参照は `medical_folder_aliases` に直持ちする。
+同じ健診機関でもeventやフォルダ運用が変わる可能性があるため、健診機関マスタ本体ではなく `event_id + src_folder_raw` で一意なalias側に置く。
+
+将来、同一event・同一alias内で月別に受領方式やテンプレートが頻繁に変わる場合は、`medical_folder_alias_receipt_settings` のような履歴テーブルへ切り出し、`valid_from` / `valid_to` を持たせる。
+初期運用では設定粒度を増やしすぎないため、alias直持ちを正式方針とする。
+
 ## マスタ管理画面
 
 マスタ管理は、業務相手先ごとの設定ではなく、辞書、項目、参照データ、共通ポリシーを扱う。
