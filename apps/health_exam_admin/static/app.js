@@ -145,6 +145,20 @@
     }
   }
 
+  for (const button of document.querySelectorAll("[data-server-filter-toggle]")) {
+    button.setAttribute("aria-pressed", button.classList.contains("is-active") ? "true" : "false");
+    button.addEventListener("click", () => {
+      const field = button.getAttribute("data-server-filter-toggle");
+      const value = button.dataset.filterValue || "";
+      const form = button.closest("form");
+      if (!field || !form) return;
+      const input = form.querySelector(`[data-server-filter-value="${field}"]`);
+      if (!input) return;
+      input.value = input.value === value ? "" : value;
+      form.requestSubmit();
+    });
+  }
+
   for (const input of document.querySelectorAll(".binary-switch input")) {
     const update = () => {
       const label = input.closest(".binary-switch");

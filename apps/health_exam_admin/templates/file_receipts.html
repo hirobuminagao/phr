@@ -25,6 +25,8 @@
       </div>
     </div>
     <form method="get" action="/file-receipts" class="filter-form filter-form-wide">
+      <input type="hidden" name="file_type" value="{{ filters.file_type or '' }}" data-server-filter-value="file_type">
+      <input type="hidden" name="status" value="{{ filters.status or '' }}" data-server-filter-value="status">
       <label>
         <span>キーワード</span>
         <input id="receipt-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="ファイル名 / 施設名 / パス" data-live-filter-input="#file-receipt-table">
@@ -42,18 +44,18 @@
       <fieldset class="filter-condition-block">
         <legend>種別</legend>
         <div class="filter-toggle-group">
-          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="fileType" data-filter-value="CSV">CSV</button>
-          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="fileType" data-filter-value="XML">XML</button>
-          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="fileType" data-filter-value="ZIP">ZIP</button>
+          <button type="button" class="{{ 'is-active' if filters.file_type == 'CSV' else '' }}" data-server-filter-toggle="file_type" data-filter-value="CSV">CSV</button>
+          <button type="button" class="{{ 'is-active' if filters.file_type == 'XML' else '' }}" data-server-filter-toggle="file_type" data-filter-value="XML">XML</button>
+          <button type="button" class="{{ 'is-active' if filters.file_type == 'ZIP' else '' }}" data-server-filter-toggle="file_type" data-filter-value="ZIP">ZIP</button>
         </div>
       </fieldset>
       <fieldset class="filter-condition-block">
         <legend>状態</legend>
         <div class="filter-toggle-group">
-          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="DISCOVERED">DISCOVERED</button>
-          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="IMPORTED">IMPORTED</button>
-          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="WAITING_CONFIRM">WAITING</button>
-          <button type="button" data-live-filter-toggle="#file-receipt-table" data-filter-field="status" data-filter-value="ERROR">ERROR</button>
+          <button type="button" class="{{ 'is-active' if filters.status == 'DISCOVERED' else '' }}" data-server-filter-toggle="status" data-filter-value="DISCOVERED">DISCOVERED</button>
+          <button type="button" class="{{ 'is-active' if filters.status == 'IMPORTED' else '' }}" data-server-filter-toggle="status" data-filter-value="IMPORTED">IMPORTED</button>
+          <button type="button" class="{{ 'is-active' if filters.status == 'WAITING_CONFIRM' else '' }}" data-server-filter-toggle="status" data-filter-value="WAITING_CONFIRM">WAITING</button>
+          <button type="button" class="{{ 'is-active' if filters.status == 'ERROR' else '' }}" data-server-filter-toggle="status" data-filter-value="ERROR">ERROR</button>
         </div>
       </fieldset>
       <label>
