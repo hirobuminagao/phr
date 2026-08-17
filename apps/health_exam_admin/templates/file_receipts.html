@@ -82,6 +82,7 @@
           <tr>
             <th>ID</th>
             <th>種別</th>
+            <th>内包/OK</th>
             <th>ファイル</th>
             <th>健診機関</th>
             <th>状態</th>
@@ -94,6 +95,23 @@
           <tr data-filter-text="{{ row.id }} {{ row.file_type }} {{ row.file_name }} {{ row.relative_path }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.status }} {{ row.summary_message or '' }} {{ row.etl_run_id or '' }}" data-file-type="{{ row.file_type }}" data-status="{{ row.status }}">
             <td>{{ row.id }}</td>
             <td><span class="status-pill status-muted">{{ row.file_type }}</span></td>
+            <td>
+              <strong>
+                {{ row.processable_count if row.processable_count is not none else row.source_count }}
+                / {{ row.ok_count }}
+              </strong>
+              <small>
+                {% if row.file_type == 'CSV' %}
+                  人数 / OK
+                {% elif row.file_type == 'ZIP' %}
+                  XML / OK
+                {% else %}
+                  件数 / OK
+                {% endif %}
+                {% if row.ng_count %} / NG {{ row.ng_count }}{% endif %}
+                {% if row.pending_count %} / 未 {{ row.pending_count }}{% endif %}
+              </small>
+            </td>
             <td>
               <strong>{{ row.file_name }}</strong>
               <small title="{{ row.relative_path }}">{{ row.relative_path }}</small>
@@ -111,7 +129,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="7">対象ファイルはありません。</td>
+            <td colspan="8">対象ファイルはありません。</td>
           </tr>
           {% endfor %}
         </tbody>

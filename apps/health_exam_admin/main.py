@@ -2483,23 +2483,23 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
     status = filters.get("status", "").strip()
     query = filters.get("q", "").strip()
     if event_id:
-        where_parts.append("event_id = %s")
+        where_parts.append("fr.event_id = %s")
         params.append(event_id)
     if file_type:
-        where_parts.append("file_type = %s")
+        where_parts.append("fr.file_type = %s")
         params.append(file_type)
     if status:
-        where_parts.append("status = %s")
+        where_parts.append("fr.status = %s")
         params.append(status)
     if query:
         like = f"%{query}%"
         where_parts.append(
             """
             (
-              file_name LIKE %s
-              OR relative_path LIKE %s
-              OR facility_name LIKE %s
-              OR facility_code LIKE %s
+              fr.file_name LIKE %s
+              OR fr.relative_path LIKE %s
+              OR fr.facility_name LIKE %s
+              OR fr.facility_code LIKE %s
             )
             """
         )
@@ -2508,26 +2508,43 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
     cur.execute(
         f"""
         SELECT
-          id,
-          event_id,
-          file_type,
-          file_name,
-          relative_path,
-          file_sha256,
-          facility_code,
-          facility_name,
-          exam_facility_id,
-          matched_csv_format_version_id,
-          status,
-          summary_message,
-          etl_run_id,
-          first_seen_at,
-          last_seen_at,
-          processed_at,
-          updated_at
-        FROM {qname(health_db())}.file_receipts
+          fr.id,
+          fr.event_id,
+          fr.file_type,
+          fr.file_name,
+          fr.relative_path,
+          fr.file_sha256,
+          fr.processable_count,
+          COALESCE(ledger_counts.source_count, 0) AS source_count,
+          COALESCE(ledger_counts.ok_count, 0) AS ok_count,
+          COALESCE(ledger_counts.ng_count, 0) AS ng_count,
+          COALESCE(ledger_counts.pending_count, 0) AS pending_count,
+          fr.facility_code,
+          fr.facility_name,
+          fr.exam_facility_id,
+          fr.matched_csv_format_version_id,
+          fr.status,
+          fr.summary_message,
+          fr.etl_run_id,
+          fr.first_seen_at,
+          fr.last_seen_at,
+          fr.processed_at,
+          fr.updated_at
+        FROM {qname(health_db())}.file_receipts AS fr
+        LEFT JOIN (
+          SELECT
+            file_receipt_id,
+            COUNT(*) AS source_count,
+            SUM(CASE WHEN check_status = 'OK' THEN 1 ELSE 0 END) AS ok_count,
+            SUM(CASE WHEN check_status = 'NG' THEN 1 ELSE 0 END) AS ng_count,
+            SUM(CASE WHEN check_status NOT IN ('OK', 'NG') OR check_status IS NULL THEN 1 ELSE 0 END) AS pending_count
+          FROM {qname(health_db())}.exam_ledgers
+          WHERE file_receipt_id IS NOT NULL
+          GROUP BY file_receipt_id
+        ) AS ledger_counts
+          ON ledger_counts.file_receipt_id = fr.id
         {where_sql}
-        ORDER BY updated_at DESC, id DESC
+        ORDER BY fr.updated_at DESC, fr.id DESC
         LIMIT %s
         """,
         (*params, limit),
