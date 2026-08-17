@@ -135,13 +135,19 @@
         <span>人・番号</span>
         <input name="case_q" value="{{ candidate_filters.case_q }}" placeholder="氏名カナ / HIA ID / 記号番号 / case_id">
       </label>
-      <label>
-        <span>健診機関</span>
-        <input name="facility_q" value="{{ candidate_filters.facility_q }}" placeholder="健診機関名 / コード">
-      </label>
+      <div class="export-facility-picker">
+        <span class="field-label">健診機関コード</span>
+        <textarea id="facility-codes-input" name="facility_codes" rows="2" placeholder="空欄なら全施設。複数は改行またはカンマ">{{ candidate_filters.facility_codes }}</textarea>
+        <button type="button" class="ghost-button" data-modal-open="export-facility-picker-modal">受領フォルダから選ぶ</button>
+        <small id="facility-codes-summary">未指定: 全施設</small>
+      </div>
       <label>
         <span>受診月</span>
         <input name="exam_month" value="{{ candidate_filters.exam_month or export_list.requested_exam_month or '' }}" placeholder="2026-05">
+      </label>
+      <label>
+        <span>健診機関名</span>
+        <input name="facility_q" value="{{ candidate_filters.facility_q }}" placeholder="名称で補助検索">
       </label>
       <div class="filter-block compact-choice-block">
         <span>対象状態</span>
@@ -178,8 +184,8 @@
         </thead>
         <tbody>
           {% for case in add_candidates %}
-          {% set already_active = case.existing_list_case_id and not case.existing_removed_at %}
-          {% set was_removed = case.existing_list_case_id and case.existing_removed_at %}
+          {% set already_active = case.existing_list_case_id is not none and case.existing_removed_at is none %}
+          {% set was_removed = case.existing_list_case_id is not none and case.existing_removed_at is not none %}
           <tr>
             <td>
               <span class="status-pill status-ready">{{ readiness_label(case.export_readiness_status) }}</span>
@@ -205,7 +211,7 @@
             </td>
             <td>
               {% if already_active %}
-                <button class="ghost-button" type="button" disabled>追加済み</button>
+                <button class="ghost-button" type="button" disabled aria-disabled="true">追加済み</button>
               {% else %}
                 <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/add">
                   <input type="hidden" name="exam_export_case_id" value="{{ case.exam_export_case_id }}">
@@ -224,6 +230,78 @@
     </div>
     {% endif %}
   </section>
+  {% endif %}
+
+  {% if can_edit %}
+  <div id="export-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="export-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">受領フォルダ alias</p>
+          <h2 id="export-facility-picker-title">健診機関を選択</h2>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          検索
+          <input data-live-filter-input="#export-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="export-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>受領フォルダ</th>
+              <th>実績</th>
+              <th>追加</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alias in folder_aliases %}
+            {% set code = alias.exam_facility_code or "" %}
+            <tr data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}">
+              <td>
+                <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
+                <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode or "未設定" }}</small>
+              </td>
+              <td>
+                <strong title="{{ alias.src_folder_raw or '' }}">{{ alias.src_folder_raw or "" }}</strong>
+                <small>{{ alias.csv_mapping_version or "CSVテンプレートなし" }}</small>
+              </td>
+              <td>
+                <strong>XML {{ alias.xml_file_count or 0 }} / CSV {{ alias.csv_file_count or 0 }}</strong>
+                <small>受領実績</small>
+              </td>
+              <td>
+                {% if code %}
+                <button
+                  type="button"
+                  class="ghost-button"
+                  data-export-facility-add
+                  data-facility-code="{{ code }}"
+                  data-facility-name="{{ alias.exam_facility_name or alias.src_folder_raw or code }}"
+                >追加</button>
+                {% else %}
+                <span class="status-pill status-muted">不可</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4">受領フォルダaliasがありません。</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+    </section>
+  </div>
   {% endif %}
 
   <section class="panel">

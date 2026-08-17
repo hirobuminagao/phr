@@ -2833,6 +2833,11 @@ def load_export_case_add_candidates(
     params: list[Any] = [event_id]
     query = filters.get("case_q", "").strip()
     facility_query = filters.get("facility_q", "").strip()
+    facility_codes = tuple(
+        item.strip()
+        for item in (filters.get("facility_codes") or "").replace(",", "\n").splitlines()
+        if item.strip()
+    )
     exam_month = filters.get("exam_month", "").strip()
     readiness_values = tuple(
         value
@@ -2859,6 +2864,9 @@ def load_export_case_add_candidates(
         like = f"%{facility_query}%"
         where_parts.append("(ef.exam_facility_code LIKE %s OR ef.exam_facility_name LIKE %s)")
         params.extend([like, like])
+    if facility_codes:
+        where_parts.append(f"ef.exam_facility_code IN ({', '.join(['%s'] * len(facility_codes))})")
+        params.extend(facility_codes)
     if exam_month:
         where_parts.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
         params.append(exam_month)
@@ -4757,6 +4765,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             candidate_filters = {
                 "case_q": request.query_params.get("case_q", ""),
                 "facility_q": request.query_params.get("facility_q", ""),
+                "facility_codes": request.query_params.get("facility_codes", ""),
                 "exam_month": request.query_params.get("exam_month", ""),
                 "include_export_ready": request.query_params.get("include_export_ready", "1"),
                 "include_approved_with_reason": request.query_params.get("include_approved_with_reason", "1"),
@@ -4774,6 +4783,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
                 else []
             )
             review_downloads = load_review_xml_export_downloads(event_id=int(export_list["event_id"]))
+            folder_aliases = load_alias_facility_admin_rows(cur)
             log_personal_info_view(
                 cur,
                 request=request,
@@ -4796,6 +4806,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "add_candidates": add_candidates,
             "candidate_filters": candidate_filters,
             "show_candidates": show_candidates,
+            "folder_aliases": folder_aliases,
             "review_downloads": review_downloads,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),

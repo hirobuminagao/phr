@@ -295,9 +295,22 @@
     const values = facilityCodeValues();
     facilityCodesSummary.textContent = values.length ? `${values.length}施設を指定中` : "未指定: 全施設";
   };
-  if (facilityCodesInput) {
-    facilityCodesInput.addEventListener("input", updateFacilityCodesSummary);
+  const updateFacilityAddButtons = () => {
+    const values = new Set(facilityCodeValues());
+    for (const button of document.querySelectorAll("[data-export-facility-add]")) {
+      const code = String(button.getAttribute("data-facility-code") || "").trim();
+      const added = code && values.has(code);
+      button.textContent = added ? "追加済み" : "追加";
+      button.disabled = Boolean(added);
+    }
+  };
+  const updateFacilityPickerState = () => {
     updateFacilityCodesSummary();
+    updateFacilityAddButtons();
+  };
+  if (facilityCodesInput) {
+    facilityCodesInput.addEventListener("input", updateFacilityPickerState);
+    updateFacilityPickerState();
   }
   for (const button of document.querySelectorAll("[data-export-facility-add]")) {
     button.addEventListener("click", () => {
@@ -309,11 +322,7 @@
         values.push(code);
         facilityCodesInput.value = values.join("\n");
       }
-      for (const sameCodeButton of document.querySelectorAll(`[data-export-facility-add][data-facility-code="${CSS.escape(code)}"]`)) {
-        sameCodeButton.textContent = "追加済み";
-        sameCodeButton.disabled = true;
-      }
-      updateFacilityCodesSummary();
+      updateFacilityPickerState();
     });
   }
 
