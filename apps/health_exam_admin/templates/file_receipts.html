@@ -27,6 +27,7 @@
     <form method="get" action="/file-receipts" class="filter-form filter-form-wide">
       <input type="hidden" name="file_type" value="{{ filters.file_type or '' }}" data-server-filter-value="file_type">
       <input type="hidden" name="status" value="{{ filters.status or '' }}" data-server-filter-value="status">
+      <input type="hidden" name="receipt_check" value="{{ filters.receipt_check or '' }}" data-server-filter-value="receipt_check">
       <label>
         <span>キーワード</span>
         <input id="receipt-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="ファイル名 / 施設名 / パス" data-live-filter-input="#file-receipt-table">
@@ -56,6 +57,14 @@
           <button type="button" class="{{ 'is-active' if filters.status == 'IMPORTED' else '' }}" data-server-filter-toggle="status" data-filter-value="IMPORTED">IMPORTED</button>
           <button type="button" class="{{ 'is-active' if filters.status == 'WAITING_CONFIRM' else '' }}" data-server-filter-toggle="status" data-filter-value="WAITING_CONFIRM">WAITING</button>
           <button type="button" class="{{ 'is-active' if filters.status == 'ERROR' else '' }}" data-server-filter-toggle="status" data-filter-value="ERROR">ERROR</button>
+        </div>
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>法定チェック</legend>
+        <div class="filter-toggle-group">
+          <button type="button" class="{{ 'is-active' if filters.receipt_check == 'HAS_NG' else '' }}" data-server-filter-toggle="receipt_check" data-filter-value="HAS_NG">NGあり</button>
+          <button type="button" class="{{ 'is-active' if filters.receipt_check == 'OK_ONLY' else '' }}" data-server-filter-toggle="receipt_check" data-filter-value="OK_ONLY">OKのみ</button>
+          <button type="button" class="{{ 'is-active' if filters.receipt_check == 'HAS_PENDING' else '' }}" data-server-filter-toggle="receipt_check" data-filter-value="HAS_PENDING">未チェックあり</button>
         </div>
       </fieldset>
       <label>

@@ -2481,6 +2481,7 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
     event_id = filters.get("event_id", "").strip()
     file_type = filters.get("file_type", "").strip()
     status = filters.get("status", "").strip()
+    receipt_check = filters.get("receipt_check", "").strip()
     query = filters.get("q", "").strip()
     if event_id:
         where_parts.append("fr.event_id = %s")
@@ -2491,6 +2492,18 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
     if status:
         where_parts.append("fr.status = %s")
         params.append(status)
+    if receipt_check == "HAS_NG":
+        where_parts.append("COALESCE(ledger_counts.ng_count, 0) > 0")
+    elif receipt_check == "OK_ONLY":
+        where_parts.append(
+            """
+            COALESCE(ledger_counts.source_count, 0) > 0
+            AND COALESCE(ledger_counts.ng_count, 0) = 0
+            AND COALESCE(ledger_counts.pending_count, 0) = 0
+            """
+        )
+    elif receipt_check == "HAS_PENDING":
+        where_parts.append("COALESCE(ledger_counts.pending_count, 0) > 0")
     if query:
         like = f"%{query}%"
         where_parts.append(
@@ -3081,6 +3094,7 @@ def file_receipts(request: Request) -> Response:
         "event_id": request.query_params.get("event_id", "2"),
         "file_type": request.query_params.get("file_type", ""),
         "status": request.query_params.get("status", ""),
+        "receipt_check": request.query_params.get("receipt_check", ""),
         "q": request.query_params.get("q", ""),
         "limit": request.query_params.get("limit", "200"),
     }
