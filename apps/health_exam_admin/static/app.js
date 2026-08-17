@@ -47,6 +47,7 @@
       keywordInput: input,
       toggleGroups: new Map(),
       toggleModes: new Map(),
+      toggleMatchModes: new Map(),
     };
     filters.set(tableSelector, tableFilters);
     const emptyMessage = table.dataset.emptyMessage || "一致する行はありません。";
@@ -67,7 +68,20 @@
         for (const [field, values] of tableFilters.toggleGroups.entries()) {
           if (!values.size) continue;
           if (values.has("__ALL__")) continue;
-          if (!values.has(String(row.dataset[field] || ""))) {
+          const matchMode = tableFilters.toggleMatchModes.get(field) || "exactAny";
+          const rowValue = String(row.dataset[field] || "");
+          if (matchMode === "allTokens") {
+            const tokens = new Set(rowValue.split(/\s+/).filter(Boolean));
+            for (const value of values) {
+              if (!tokens.has(value)) {
+                togglesMatched = false;
+                break;
+              }
+            }
+            if (!togglesMatched) break;
+            continue;
+          }
+          if (!values.has(rowValue)) {
             togglesMatched = false;
             break;
           }
@@ -91,7 +105,9 @@
     const tableFilters = filters.get(tableSelector);
     if (!tableFilters || !field || value == null) continue;
     const mode = button.dataset.filterMode || "multi";
+    const matchMode = button.dataset.filterMatch || "exactAny";
     tableFilters.toggleModes.set(field, mode);
+    tableFilters.toggleMatchModes.set(field, matchMode);
 
     button.setAttribute("aria-pressed", "false");
     button.addEventListener("click", () => {

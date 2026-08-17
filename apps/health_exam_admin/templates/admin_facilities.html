@@ -57,10 +57,10 @@
       <div class="filter-toggle-field">
         <span>受領方式</span>
         <div class="filter-toggle-group">
-          <button type="button" class="is-active" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="__ALL__" data-filter-mode="single">すべて</button>
-          {% for mode in source_mode_options %}
-          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="{{ mode.value }}" data-filter-mode="single">{{ mode.label }}</button>
-          {% endfor %}
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceKinds" data-filter-value="UNKNOWN" data-filter-match="allTokens">未設定</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceKinds" data-filter-value="XML" data-filter-match="allTokens">XML</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceKinds" data-filter-value="CSV" data-filter-match="allTokens">CSV</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceKinds" data-filter-value="PAPER" data-filter-match="allTokens">紙</button>
         </div>
       </div>
     </div>
@@ -78,7 +78,7 @@
         </thead>
         <tbody>
           {% for alias in alias_rows %}
-          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.expected_source_mode_label }} {{ alias.csv_mapping_version }} {{ alias.csv_format_name }} {{ alias.receipt_source_mode_label }} {{ alias.note }}" data-event-id="{{ alias.event_id }}" data-source-mode="{{ alias.expected_source_mode or 'UNKNOWN' }}" data-csv-template="{{ 'HAS' if alias.csv_format_version_id else 'NONE' }}">
+          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.expected_source_mode_label }} {{ alias.csv_mapping_version }} {{ alias.csv_format_name }} {{ alias.receipt_source_mode_label }} {{ alias.note }}" data-event-id="{{ alias.event_id }}" data-source-kinds="{{ alias.source_mode_filter_tokens }}" data-csv-template="{{ 'HAS' if alias.csv_format_version_id else 'NONE' }}">
             <td>
               <strong>{{ alias.event_name or alias.event_id }}</strong>
               <small>event_id {{ alias.event_id }} / alias_id {{ alias.alias_id }}</small>

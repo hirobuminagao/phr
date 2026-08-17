@@ -2296,6 +2296,7 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
         row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+        row["source_mode_filter_tokens"] = source_mode_filter_tokens(row.get("expected_source_mode"))
         row["receipt_source_mode_label"] = receipt_source_mode_label(
             row.get("xml_file_count"),
             row.get("csv_file_count"),
@@ -2356,6 +2357,21 @@ def source_mode_options() -> list[dict[str, str]]:
 
 def source_mode_values() -> set[str]:
     return {option["value"] for option in source_mode_options()}
+
+
+def source_mode_filter_tokens(value: Any) -> str:
+    mode = str(value or "UNKNOWN")
+    tokens_by_mode = {
+        "UNKNOWN": "UNKNOWN",
+        "XML_ONLY": "XML",
+        "CSV_ONLY": "CSV",
+        "XML_CSV_MERGE": "XML CSV",
+        "PAPER_ONLY": "PAPER",
+        "XML_PAPER_MERGE": "XML PAPER",
+        "CSV_PAPER_MERGE": "CSV PAPER",
+        "XML_CSV_PAPER_MERGE": "XML CSV PAPER",
+    }
+    return tokens_by_mode.get(mode, "UNKNOWN")
 
 
 def receipt_source_mode_label(xml_count: Any, csv_count: Any) -> str:
