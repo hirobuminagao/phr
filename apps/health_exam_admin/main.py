@@ -2558,10 +2558,14 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     event_id = filters.get("event_id", "").strip()
     source_type = filters.get("source_type", "").strip()
     check_status = filters.get("check_status", "").strip()
+    file_receipt_id = filters.get("file_receipt_id", "").strip()
     query = filters.get("q", "").strip()
     if event_id:
         where_parts.append("event_id = %s")
         params.append(event_id)
+    if file_receipt_id:
+        where_parts.append("file_receipt_id = %s")
+        params.append(file_receipt_id)
     if source_type:
         where_parts.append("source_type = %s")
         params.append(source_type)
@@ -4052,6 +4056,7 @@ def exam_ledgers(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     filters = {
         "event_id": request.query_params.get("event_id", "2"),
+        "file_receipt_id": request.query_params.get("file_receipt_id", ""),
         "source_type": request.query_params.get("source_type", ""),
         "check_status": request.query_params.get("check_status", ""),
         "q": request.query_params.get("q", ""),

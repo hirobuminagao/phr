@@ -7,7 +7,7 @@
     <h1>受領ファイル一覧</h1>
   </div>
   <nav class="top-actions">
-    <a class="ghost-button" href="/exam-ledgers">exam ledgers</a>
+    <a class="ghost-button" href="/exam-ledgers">健診結果一覧（受領）</a>
     <a class="ghost-button" href="/export-lists">出力リスト</a>
     <a class="ghost-button" href="/">HOME</a>
     <form method="post" action="/logout">
@@ -96,11 +96,11 @@
             <td>{{ row.id }}</td>
             <td><span class="status-pill status-muted">{{ row.file_type }}</span></td>
             <td>
-              <strong>
+              <a class="inline-link" href="/exam-ledgers?event_id={{ row.event_id }}&file_receipt_id={{ row.id }}&limit=1000">
                 {{ row.ok_count }}
                 {% if row.ng_count %} / {{ row.ng_count }}{% endif %}
                 / {{ row.processable_count if row.processable_count is not none else row.source_count }}
-              </strong>
+              </a>
               <small>
                 {% if row.file_type == 'CSV' %}
                   OK{% if row.ng_count %} / NG{% endif %} / 人数

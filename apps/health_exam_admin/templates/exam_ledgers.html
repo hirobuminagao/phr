@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% set title = "exam ledgers" %}
+{% set title = "健診結果一覧（受領）" %}
 {% block body %}
 <header class="topbar">
   <div>
     <p class="eyebrow">HEALTH EXAM RESULT</p>
-    <h1>exam ledgers</h1>
+    <h1>健診結果一覧（受領）</h1>
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/file-receipts">受領ファイル</a>
@@ -21,10 +21,16 @@
     <div class="section-heading">
       <div>
         <h2>絞り込み</h2>
-        <p class="subtle">CSV/XML/紙の取込単位を確認します。氏名などの個人情報を表示するため監査ログに残ります。</p>
+        <p class="subtle">受領ファイルから取り込まれた人ごとの結果を確認します。氏名などの個人情報を表示するため監査ログに残ります。</p>
+        {% if filters.file_receipt_id %}
+        <p class="subtle">受領ファイルID {{ filters.file_receipt_id }} で絞り込み中です。</p>
+        {% endif %}
       </div>
     </div>
     <form method="get" action="/exam-ledgers" class="filter-form filter-form-wide">
+      {% if filters.file_receipt_id %}
+      <input type="hidden" name="file_receipt_id" value="{{ filters.file_receipt_id }}">
+      {% endif %}
       <label>
         <span>キーワード</span>
         <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 施設 / XML名" data-live-filter-input="#exam-ledger-table">
@@ -62,7 +68,7 @@
       </label>
       <div class="filter-actions">
         <button type="submit">検索</button>
-        <a class="ghost-button" href="/exam-ledgers">クリア</a>
+        <a class="ghost-button" href="{{ '/exam-ledgers?event_id=' ~ filters.event_id if filters.file_receipt_id else '/exam-ledgers' }}">クリア</a>
       </div>
     </form>
   </section>
@@ -70,7 +76,7 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>ledger一覧</h2>
+        <h2>健診結果一覧</h2>
         <p class="subtle">最新 {{ rows|length }} 件を表示しています。</p>
       </div>
     </div>

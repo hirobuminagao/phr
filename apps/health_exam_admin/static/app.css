@@ -976,6 +976,17 @@ a.home-menu-card:hover {
   color: #fff;
 }
 
+.inline-link {
+  color: var(--accent);
+  font-weight: 900;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.inline-link:hover {
+  color: var(--accent-dark);
+}
+
 .receipt-mode-field,
 .source-kind-picker {
   display: grid;
