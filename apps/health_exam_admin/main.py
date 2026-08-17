@@ -2308,6 +2308,14 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
     return rows
 
 
+def load_received_folder_alias_rows(cur: Any, *, limit: int = 400) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in load_folder_alias_admin_rows(cur, limit=limit)
+        if int(row.get("xml_file_count") or 0) > 0 or int(row.get("csv_file_count") or 0) > 0
+    ]
+
+
 def load_csv_format_options(cur: Any, *, limit: int = 500) -> list[dict[str, Any]]:
     cur.execute(
         f"""
@@ -4691,7 +4699,7 @@ def export_lists(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             lists = load_ops_xml_export_lists(cur)
-            folder_aliases = load_folder_alias_admin_rows(cur)
+            folder_aliases = load_received_folder_alias_rows(cur)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -4783,7 +4791,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
                 else []
             )
             review_downloads = load_review_xml_export_downloads(event_id=int(export_list["event_id"]))
-            folder_aliases = load_alias_facility_admin_rows(cur)
+            folder_aliases = load_received_folder_alias_rows(cur)
             log_personal_info_view(
                 cur,
                 request=request,
