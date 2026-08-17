@@ -33,7 +33,86 @@ HIA XML出力リスト画面に必要:
 新規環境は `sql/ddl/health_exam_result/0190_health_exam_result__hia_download_ledgers.sql`、`0200_health_exam_result__hia_person_years.sql`、`0210_health_exam_result__fund_delivery.sql` を含むDDL一式を使用する。
 既存環境は適用済みmigrationを確認して、不足分だけ新規migrationで補う。
 
-## Docker起動
+## m4ローカル起動（Docker）
+
+m4ローカルでは、管理画面はDockerで起動する。
+Windows実行環境のように `python -m uvicorn ...` を直接実行しない。
+
+Codexに「m4ローカルのサイトを起動して」と依頼された場合は、この節を見て起動する。
+
+前提:
+
+- Docker Desktopを起動しておく。
+- MySQLコンテナ `tokuho_mysql` が起動している。
+- DB接続情報は `scripts/.env` を `--env-file` でコンテナへ渡す。
+- `scripts/.env` はgit管理しない。
+- コンテナ内からホスト側MySQLへ接続するため、起動時に `PHR_DB_HOST=host.docker.internal` を上書きする。
+- 管理画面は `http://127.0.0.1:8011/login` で開く。
+
+起動手順:
+
+```bash
+cd /Users/hiro/work/phr
+open -a Docker
+docker ps
+```
+
+`tokuho_mysql` が出ていることを確認する。
+
+最新ソースを反映して管理画面イメージを作り直す。
+
+```bash
+docker build -f apps/health_exam_admin/Dockerfile -t phr-health-exam-admin:latest .
+```
+
+既存の管理画面コンテナがあれば止める。
+
+```bash
+docker rm -f phr-health-exam-admin
+```
+
+管理画面コンテナを起動する。
+
+```bash
+docker run -d \
+  --name phr-health-exam-admin \
+  --env-file scripts/.env \
+  -e PHR_DB_HOST=host.docker.internal \
+  -e PHR_ADMIN_HOST=0.0.0.0 \
+  -p 8011:8011 \
+  phr-health-exam-admin:latest
+```
+
+起動確認:
+
+```bash
+docker logs --tail 80 phr-health-exam-admin
+curl -I http://127.0.0.1:8011/login
+```
+
+`curl -I` は `HEAD` のため `405 Method Not Allowed` になることがある。
+ログイン画面の確認はGETで行う。
+
+```bash
+curl -s -o /tmp/phr_admin_login.html -w '%{http_code}\n' http://127.0.0.1:8011/login
+```
+
+`200` が返れば起動OK。
+
+ブラウザ:
+
+```text
+http://127.0.0.1:8011/login
+```
+
+よくある間違い:
+
+- m4でローカルPythonへ `python-multipart` などを入れて起動しようとしない。m4はDockerイメージ内の `requirements.txt` で依存を持つ。
+- `--reload` はm4 Docker起動では使わない。ソース変更後は再ビルドしてコンテナを起動し直す。
+- `scripts/.env` は `.dockerignore` でイメージに入らないため、必ず `--env-file scripts/.env` を付ける。
+- Docker内で `PHR_DB_HOST=localhost` にすると管理画面コンテナ自身を見に行く。m4では `host.docker.internal` を使う。
+
+## Docker起動（一般例）
 
 ```bash
 docker build -f apps/health_exam_admin/Dockerfile -t phr-health-exam-admin .
