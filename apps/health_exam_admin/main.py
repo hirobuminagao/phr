@@ -3924,7 +3924,7 @@ async def create_admin_folder_alias(request: Request) -> Response:
         except Exception:
             conn.rollback()
             raise
-    return RedirectResponse("/admin/folder-aliases?message=フォルダaliasを作成しました。", status_code=303)
+    return RedirectResponse("/admin/folder-aliases?message=受領フォルダを作成しました。", status_code=303)
 
 
 @app.post("/admin/folder-aliases/{alias_id}", response_class=HTMLResponse)
@@ -3984,7 +3984,7 @@ async def update_admin_folder_alias(request: Request, alias_id: int) -> Response
         except Exception:
             conn.rollback()
             raise
-    return RedirectResponse("/admin/folder-aliases?message=フォルダaliasを更新しました。", status_code=303)
+    return RedirectResponse("/admin/folder-aliases?message=受領フォルダを更新しました。", status_code=303)
 
 
 @app.get("/exam-ledgers", response_class=HTMLResponse)

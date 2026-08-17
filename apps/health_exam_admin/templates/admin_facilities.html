@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% set title = "フォルダalias管理" %}
+{% set title = "健診機関受領フォルダ管理" %}
 {% block body %}
 <header class="topbar">
   <div>
     <p class="eyebrow">Admin</p>
-    <h1>フォルダalias管理</h1>
+    <h1>健診機関受領フォルダ管理</h1>
   </div>
   <nav class="top-actions">
-    <a class="ghost-button" href="/admin/folder-aliases/new">aliasを新規作成</a>
+    <a class="ghost-button" href="/admin/folder-aliases/new">受領フォルダを新規作成</a>
     <a class="ghost-button" href="/admin/facility-master">健診機関マスタ</a>
     <a class="ghost-button" href="/admin/events">イベント設定</a>
     <a class="ghost-button" href="/admin/users">アカウント管理</a>
@@ -25,11 +25,11 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>管理対象フォルダalias</h2>
-        <p class="subtle">作業フローで使う健診機関は、イベントのフォルダaliasを起点に管理します。未設定フォルダや施設名変更が出たら、ここで紐づけを修正します。</p>
+        <h2>管理対象の受領フォルダ</h2>
+        <p class="subtle">作業フローで使う健診機関は、イベントごとの受領フォルダを起点に管理します。受領方式、CSVテンプレート、施設名変更が出たら、ここで紐づけを修正します。</p>
       </div>
       <div class="section-actions">
-        <a class="ghost-button" href="/admin/folder-aliases/new">aliasを追加</a>
+        <a class="ghost-button" href="/admin/folder-aliases/new">受領フォルダを追加</a>
       </div>
     </div>
     <div class="event-tabs" aria-label="イベント切り替え">
@@ -44,15 +44,33 @@
     <div class="filter-card compact-filter">
       <label>
         <span>キーワード</span>
-        <input data-live-filter-input="#alias-admin-table" placeholder="フォルダ名 / 健診機関名 / メモ">
+        <input data-live-filter-input="#alias-admin-table" placeholder="フォルダ名 / 健診機関名 / CSVテンプレート / メモ">
       </label>
+      <div class="filter-toggle-field">
+        <span>CSVテンプレート</span>
+        <div class="filter-toggle-group">
+          <button type="button" class="is-active" data-live-filter-toggle="#alias-admin-table" data-filter-field="csvTemplate" data-filter-value="__ALL__" data-filter-mode="single">すべて</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="csvTemplate" data-filter-value="HAS" data-filter-mode="single">あり</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="csvTemplate" data-filter-value="NONE" data-filter-mode="single">なし</button>
+        </div>
+      </div>
+      <div class="filter-toggle-field">
+        <span>受領方式</span>
+        <div class="filter-toggle-group">
+          <button type="button" class="is-active" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="__ALL__" data-filter-mode="single">すべて</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="XML_ONLY" data-filter-mode="single">XMLのみ</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="CSV_ONLY" data-filter-mode="single">CSVのみ</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="XML_CSV_MERGE" data-filter-mode="single">XML+CSV</button>
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="UNKNOWN" data-filter-mode="single">未設定</button>
+        </div>
+      </div>
     </div>
     <div class="table-panel">
       <table id="alias-admin-table" class="data-table admin-master-table alias-table" data-empty-message="一致するaliasはありません。">
         <thead>
           <tr>
             <th>イベント</th>
-            <th>フォルダalias</th>
+            <th>受領フォルダ</th>
             <th>紐づく健診機関</th>
             <th>受領設定</th>
             <th>状態</th>
@@ -61,7 +79,7 @@
         </thead>
         <tbody>
           {% for alias in alias_rows %}
-          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.expected_source_mode_label }} {{ alias.csv_mapping_version }} {{ alias.csv_format_name }} {{ alias.receipt_source_mode_label }} {{ alias.note }}" data-event-id="{{ alias.event_id }}">
+          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.expected_source_mode_label }} {{ alias.csv_mapping_version }} {{ alias.csv_format_name }} {{ alias.receipt_source_mode_label }} {{ alias.note }}" data-event-id="{{ alias.event_id }}" data-source-mode="{{ alias.expected_source_mode or 'UNKNOWN' }}" data-csv-template="{{ 'HAS' if alias.csv_format_version_id else 'NONE' }}">
             <td>
               <strong>{{ alias.event_name or alias.event_id }}</strong>
               <small>event_id {{ alias.event_id }} / alias_id {{ alias.alias_id }}</small>
@@ -97,8 +115,8 @@
                 <section class="edit-modal__panel" role="dialog" aria-modal="true" aria-labelledby="alias-edit-title-{{ alias.alias_id }}">
                   <div class="edit-modal__head">
                     <div>
-                      <p class="eyebrow">Folder alias</p>
-                      <h2 id="alias-edit-title-{{ alias.alias_id }}">aliasを編集</h2>
+                      <p class="eyebrow">Receipt folder</p>
+                      <h2 id="alias-edit-title-{{ alias.alias_id }}">受領フォルダを編集</h2>
                     </div>
                     <button type="button" class="ghost-button" data-modal-close>閉じる</button>
                   </div>
@@ -174,7 +192,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="6">フォルダaliasはまだありません。</td>
+            <td colspan="6">受領フォルダはまだありません。</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -185,7 +203,7 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>aliasに紐づく健診機関</h2>
+        <h2>受領フォルダに紐づく健診機関</h2>
         <p class="subtle">この画面では確認だけに留めます。名称・コード・住所などの共通マスタ編集は健診機関マスタで行います。</p>
       </div>
       <div class="section-actions">
@@ -213,13 +231,13 @@
               <small>予約側 {{ facility.reservation_system_medical_institution_code or "-" }}</small>
             </td>
             <td>
-              <span class="status-pill status-neutral">alias {{ facility.alias_count }}件</span>
+              <span class="status-pill status-neutral">受領フォルダ {{ facility.alias_count }}件</span>
               <span class="status-pill {{ 'status-ready' if facility.is_active else 'status-muted' }}">{{ '有効' if facility.is_active else '無効' }}</span>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="3">aliasに紐づく健診機関はまだありません。</td>
+            <td colspan="3">受領フォルダに紐づく健診機関はまだありません。</td>
           </tr>
           {% endfor %}
         </tbody>
