@@ -2171,7 +2171,7 @@ def _form_text(form: dict[str, str], key: str) -> str | None:
     return text or None
 
 
-def load_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[str, Any]]:
+def load_alias_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[str, Any]]:
     cur.execute(
         f"""
         SELECT
@@ -2210,6 +2210,33 @@ def load_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[str, An
           ef.is_active,
           ef.updated_at
         ORDER BY ef.is_active DESC, ef.exam_facility_code IS NULL, ef.exam_facility_code, ef.exam_facility_name
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_facility_master_admin_rows(cur: Any, *, limit: int = 500) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          exam_facility_id,
+          exam_facility_code,
+          exam_facility_name,
+          exam_facility_display_name,
+          exam_facility_type,
+          medical_institution_code,
+          reservation_system_medical_institution_code,
+          postal_code,
+          address,
+          phone_number,
+          data_source_name,
+          note,
+          is_active,
+          updated_at
+        FROM {qname(master_db())}.exam_facilities
+        ORDER BY is_active DESC, exam_facility_code IS NULL, exam_facility_code, exam_facility_name
         LIMIT %s
         """,
         (limit,),
@@ -3500,8 +3527,9 @@ async def update_admin_event(request: Request, event_id: int) -> Response:
     return RedirectResponse("/admin/events?message=イベントを更新しました。", status_code=303)
 
 
+@app.get("/admin/folder-aliases", response_class=HTMLResponse)
 @app.get("/admin/facilities", response_class=HTMLResponse)
-def admin_facilities(request: Request) -> Response:
+def admin_folder_aliases(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -3512,7 +3540,7 @@ def admin_facilities(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
-            facility_rows = load_facility_admin_rows(cur)
+            alias_facility_rows = load_alias_facility_admin_rows(cur)
             alias_rows = load_folder_alias_admin_rows(cur)
             conn.commit()
         except Exception:
@@ -3524,8 +3552,36 @@ def admin_facilities(request: Request) -> Response:
             "request": request,
             "user": user,
             "event_options": event_options,
-            "facility_rows": facility_rows,
+            "alias_facility_rows": alias_facility_rows,
             "alias_rows": alias_rows,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.get("/admin/facility-master", response_class=HTMLResponse)
+def admin_facility_master(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            facility_rows = load_facility_master_admin_rows(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_facility_master.html",
+        {
+            "request": request,
+            "user": user,
+            "facility_rows": facility_rows,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -3611,7 +3667,7 @@ async def create_admin_facility(request: Request) -> Response:
         except Exception:
             conn.rollback()
             raise
-    return RedirectResponse("/admin/facilities?message=健診機関を作成しました。", status_code=303)
+    return RedirectResponse("/admin/facility-master?message=健診機関を作成しました。", status_code=303)
 
 
 @app.post("/admin/facilities/{exam_facility_id}", response_class=HTMLResponse)
@@ -3671,11 +3727,11 @@ async def update_admin_facility(request: Request, exam_facility_id: int) -> Resp
             conn.commit()
         except ValueError as exc:
             conn.rollback()
-            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+            return RedirectResponse(f"/admin/facility-master?error={quote(str(exc))}", status_code=303)
         except Exception:
             conn.rollback()
             raise
-    return RedirectResponse("/admin/facilities?message=健診機関を更新しました。", status_code=303)
+    return RedirectResponse("/admin/facility-master?message=健診機関を更新しました。", status_code=303)
 
 
 @app.get("/admin/folder-aliases/new", response_class=HTMLResponse)
@@ -3755,7 +3811,7 @@ async def create_admin_folder_alias(request: Request) -> Response:
         except Exception:
             conn.rollback()
             raise
-    return RedirectResponse("/admin/facilities?message=フォルダaliasを作成しました。", status_code=303)
+    return RedirectResponse("/admin/folder-aliases?message=フォルダaliasを作成しました。", status_code=303)
 
 
 @app.post("/admin/folder-aliases/{alias_id}", response_class=HTMLResponse)
@@ -3807,11 +3863,11 @@ async def update_admin_folder_alias(request: Request, alias_id: int) -> Response
             conn.commit()
         except ValueError as exc:
             conn.rollback()
-            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+            return RedirectResponse(f"/admin/folder-aliases?error={quote(str(exc))}", status_code=303)
         except Exception:
             conn.rollback()
             raise
-    return RedirectResponse("/admin/facilities?message=フォルダaliasを更新しました。", status_code=303)
+    return RedirectResponse("/admin/folder-aliases?message=フォルダaliasを更新しました。", status_code=303)
 
 
 @app.get("/exam-ledgers", response_class=HTMLResponse)

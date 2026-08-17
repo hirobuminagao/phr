@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% set title = "健診機関・alias管理" %}
+{% set title = "フォルダalias管理" %}
 {% block body %}
 <header class="topbar">
   <div>
     <p class="eyebrow">Admin</p>
-    <h1>健診機関・alias管理</h1>
+    <h1>フォルダalias管理</h1>
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/admin/folder-aliases/new">aliasを新規作成</a>
-    <a class="ghost-button" href="/admin/facilities/new">健診機関を新規作成</a>
+    <a class="ghost-button" href="/admin/facility-master">健診機関マスタ</a>
     <a class="ghost-button" href="/admin/events">イベント設定</a>
     <a class="ghost-button" href="/admin/users">アカウント管理</a>
     <a class="ghost-button" href="/">HOME</a>
@@ -26,7 +26,7 @@
     <div class="section-heading">
       <div>
         <h2>管理対象フォルダalias</h2>
-        <p class="subtle">イベントに追加されたaliasを管理対象として扱います。未設定フォルダや施設名変更が出たら、ここで紐づけを修正します。</p>
+        <p class="subtle">作業フローで使う健診機関は、イベントのフォルダaliasを起点に管理します。未設定フォルダや施設名変更が出たら、ここで紐づけを修正します。</p>
       </div>
       <div class="section-actions">
         <a class="ghost-button" href="/admin/folder-aliases/new">aliasを追加</a>
@@ -122,107 +122,40 @@
     <div class="section-heading">
       <div>
         <h2>aliasに紐づく健診機関</h2>
-        <p class="subtle">全健診機関マスタではなく、現在の運用で使っている健診機関だけを表示します。</p>
+        <p class="subtle">この画面では確認だけに留めます。名称・コード・住所などの共通マスタ編集は健診機関マスタで行います。</p>
       </div>
       <div class="section-actions">
-        <a class="ghost-button" href="/admin/facilities/new">健診機関を追加</a>
+        <a class="ghost-button" href="/admin/facility-master">マスタを開く</a>
       </div>
     </div>
-    <div class="filter-card compact-filter">
-      <label>
-        <span>キーワード</span>
-        <input data-live-filter-input="#facility-admin-table" placeholder="コード / 名称 / 住所 / メモ">
-      </label>
-    </div>
     <div class="table-panel">
-      <table id="facility-admin-table" class="data-table admin-master-table" data-empty-message="一致する健診機関はありません。">
+      <table class="data-table admin-master-table">
         <thead>
           <tr>
-            <th>コード・名称</th>
+            <th>健診機関</th>
             <th>関連コード</th>
-            <th>連絡先</th>
             <th>状態</th>
-            <th>操作</th>
           </tr>
         </thead>
         <tbody>
-          {% for facility in facility_rows %}
-          <tr data-filter-text="{{ facility.exam_facility_code }} {{ facility.exam_facility_name }} {{ facility.exam_facility_display_name }} {{ facility.medical_institution_code }} {{ facility.reservation_system_medical_institution_code }} {{ facility.address }} {{ facility.note }}">
+          {% for facility in alias_facility_rows %}
+          <tr>
             <td>
-              <form id="facility-form-{{ facility.exam_facility_id }}" method="post" action="/admin/facilities/{{ facility.exam_facility_id }}" class="compact-master-form">
-                <div class="master-inline-fields">
-                  <label>
-                    <span>ID</span>
-                    <input value="{{ facility.exam_facility_id }}" disabled>
-                  </label>
-                  <label>
-                    <span>健診機関コード</span>
-                    <input name="exam_facility_code" value="{{ facility.exam_facility_code or '' }}">
-                  </label>
-                </div>
-                <label>
-                  <span>健診機関名</span>
-                  <input name="exam_facility_name" value="{{ facility.exam_facility_name or '' }}" required>
-                </label>
-                <label>
-                  <span>表示名</span>
-                  <input name="exam_facility_display_name" value="{{ facility.exam_facility_display_name or '' }}">
-                </label>
-              </form>
+              <strong>{{ facility.exam_facility_display_name or facility.exam_facility_name }}</strong>
+              <small>{{ facility.exam_facility_code or "コードなし" }}</small>
             </td>
             <td>
-              <div class="master-inline-fields">
-                <label>
-                  <span>種別</span>
-                  <input name="exam_facility_type" value="{{ facility.exam_facility_type or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
-                </label>
-                <label>
-                  <span>医療機関コード</span>
-                  <input name="medical_institution_code" value="{{ facility.medical_institution_code or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
-                </label>
-                <label>
-                  <span>予約側コード</span>
-                  <input name="reservation_system_medical_institution_code" value="{{ facility.reservation_system_medical_institution_code or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
-                </label>
-              </div>
-            </td>
-            <td>
-              <div class="master-inline-fields">
-                <label>
-                  <span>郵便番号</span>
-                  <input name="postal_code" value="{{ facility.postal_code or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
-                </label>
-                <label>
-                  <span>電話番号</span>
-                  <input name="phone_number" value="{{ facility.phone_number or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
-                </label>
-              </div>
-              <label>
-                <span>住所</span>
-                <input name="address" value="{{ facility.address or '' }}" form="facility-form-{{ facility.exam_facility_id }}">
-              </label>
-              <label>
-                <span>メモ</span>
-                <textarea name="note" rows="2" form="facility-form-{{ facility.exam_facility_id }}">{{ facility.note or '' }}</textarea>
-              </label>
-              {% if facility.data_source_name %}<small>source: {{ facility.data_source_name }}</small>{% endif %}
+              <small>医療機関 {{ facility.medical_institution_code or "-" }}</small>
+              <small>予約側 {{ facility.reservation_system_medical_institution_code or "-" }}</small>
             </td>
             <td>
               <span class="status-pill status-neutral">alias {{ facility.alias_count }}件</span>
-              <label class="binary-switch {{ 'switch-on' if facility.is_active else 'switch-off' }}">
-                <input type="checkbox" name="is_active" value="1" form="facility-form-{{ facility.exam_facility_id }}" {% if facility.is_active %}checked{% endif %}>
-                <span>有効</span>
-                <span>無効</span>
-              </label>
-              <small>更新 {{ facility.updated_at }}</small>
-            </td>
-            <td>
-              <button type="submit" form="facility-form-{{ facility.exam_facility_id }}">更新</button>
+              <span class="status-pill {{ 'status-ready' if facility.is_active else 'status-muted' }}">{{ '有効' if facility.is_active else '無効' }}</span>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="5">aliasに紐づく健診機関はまだありません。</td>
+            <td colspan="3">aliasに紐づく健診機関はまだありません。</td>
           </tr>
           {% endfor %}
         </tbody>
