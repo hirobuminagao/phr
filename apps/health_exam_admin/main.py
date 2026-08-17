@@ -3542,6 +3542,10 @@ def admin_folder_aliases(request: Request) -> Response:
             event_options = load_event_options(cur)
             alias_facility_rows = load_alias_facility_admin_rows(cur)
             alias_rows = load_folder_alias_admin_rows(cur)
+            alias_count_by_event: dict[str, int] = {}
+            for row in alias_rows:
+                key = str(row.get("event_id") or "")
+                alias_count_by_event[key] = alias_count_by_event.get(key, 0) + 1
             conn.commit()
         except Exception:
             conn.rollback()
@@ -3552,6 +3556,7 @@ def admin_folder_aliases(request: Request) -> Response:
             "request": request,
             "user": user,
             "event_options": event_options,
+            "alias_count_by_event": alias_count_by_event,
             "alias_facility_rows": alias_facility_rows,
             "alias_rows": alias_rows,
             "message": request.query_params.get("message"),

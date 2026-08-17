@@ -32,10 +32,19 @@
         <a class="ghost-button" href="/admin/folder-aliases/new">aliasを追加</a>
       </div>
     </div>
+    <div class="event-tabs" aria-label="イベント切り替え">
+      <button type="button" class="is-active" data-live-filter-toggle="#alias-admin-table" data-filter-field="eventId" data-filter-value="__ALL__" data-filter-mode="single">すべて <span>{{ alias_rows|length }}</span></button>
+      {% for event in event_options %}
+      {% set event_key = event.event_id|string %}
+      <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="eventId" data-filter-value="{{ event.event_id }}" data-filter-mode="single">
+        {{ event.event_name or event.event_id }} <span>{{ alias_count_by_event.get(event_key, 0) }}</span>
+      </button>
+      {% endfor %}
+    </div>
     <div class="filter-card compact-filter">
       <label>
         <span>キーワード</span>
-        <input data-live-filter-input="#alias-admin-table" placeholder="イベント / フォルダ名 / 健診機関名 / メモ">
+        <input data-live-filter-input="#alias-admin-table" placeholder="フォルダ名 / 健診機関名 / メモ">
       </label>
     </div>
     <div class="table-panel">
@@ -51,7 +60,7 @@
         </thead>
         <tbody>
           {% for alias in alias_rows %}
-          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.note }}">
+          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.note }}" data-event-id="{{ alias.event_id }}">
             <td>
               <strong>{{ alias.event_name or alias.event_id }}</strong>
               <small>event_id {{ alias.event_id }} / alias_id {{ alias.alias_id }}</small>

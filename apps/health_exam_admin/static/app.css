@@ -694,6 +694,46 @@ a.home-menu-card:hover {
   min-width: 1120px;
 }
 
+.event-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.event-tabs button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #c9d6e2;
+  border-radius: 999px;
+  background: #f7fafc;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.event-tabs button span {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #e8eef5;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.event-tabs button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.event-tabs button.is-active span {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
 .admin-master-table td > strong,
 .admin-master-table td > small {
   display: block;

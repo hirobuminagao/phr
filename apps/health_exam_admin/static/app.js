@@ -46,6 +46,7 @@
     const tableFilters = {
       keywordInput: input,
       toggleGroups: new Map(),
+      toggleModes: new Map(),
     };
     filters.set(tableSelector, tableFilters);
     const emptyMessage = table.dataset.emptyMessage || "一致する行はありません。";
@@ -65,6 +66,7 @@
         let togglesMatched = true;
         for (const [field, values] of tableFilters.toggleGroups.entries()) {
           if (!values.size) continue;
+          if (values.has("__ALL__")) continue;
           if (!values.has(String(row.dataset[field] || ""))) {
             togglesMatched = false;
             break;
@@ -88,22 +90,43 @@
     const value = button.dataset.filterValue;
     const tableFilters = filters.get(tableSelector);
     if (!tableFilters || !field || value == null) continue;
+    const mode = button.dataset.filterMode || "multi";
+    tableFilters.toggleModes.set(field, mode);
 
     button.setAttribute("aria-pressed", "false");
     button.addEventListener("click", () => {
       const group = tableFilters.toggleGroups.get(field) || new Set();
-      if (group.has(value)) {
-        group.delete(value);
-        button.classList.remove("is-active");
-        button.setAttribute("aria-pressed", "false");
-      } else {
+      if (mode === "single") {
+        for (const other of document.querySelectorAll(`[data-live-filter-toggle="${tableSelector}"][data-filter-field="${field}"]`)) {
+          other.classList.remove("is-active");
+          other.setAttribute("aria-pressed", "false");
+        }
+        group.clear();
         group.add(value);
         button.classList.add("is-active");
         button.setAttribute("aria-pressed", "true");
+      } else {
+        if (group.has(value)) {
+          group.delete(value);
+          button.classList.remove("is-active");
+          button.setAttribute("aria-pressed", "false");
+        } else {
+          group.add(value);
+          button.classList.add("is-active");
+          button.setAttribute("aria-pressed", "true");
+        }
       }
       tableFilters.toggleGroups.set(field, group);
       tableFilters.applyFilter();
     });
+    if (button.classList.contains("is-active")) {
+      button.setAttribute("aria-pressed", "true");
+      const group = tableFilters.toggleGroups.get(field) || new Set();
+      if (mode === "single") group.clear();
+      group.add(value);
+      tableFilters.toggleGroups.set(field, group);
+      tableFilters.applyFilter();
+    }
   }
 
   for (const input of document.querySelectorAll(".binary-switch input")) {
