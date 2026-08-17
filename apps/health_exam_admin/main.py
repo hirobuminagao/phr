@@ -2255,9 +2255,16 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
           mfa.src_folder_raw,
           mfa.dst_folder_norm,
           mfa.exam_facility_id,
+          mfa.expected_source_mode,
+          mfa.csv_format_version_id,
           ef.exam_facility_code,
           ef.exam_facility_name,
           ef.exam_facility_display_name,
+          cfv.mapping_version AS csv_mapping_version,
+          cfv.format_name AS csv_format_name,
+          cfv.is_active AS csv_format_is_active,
+          receipt_counts.xml_file_count,
+          receipt_counts.csv_file_count,
           mfa.manual_judgement,
           mfa.note,
           mfa.is_active,
@@ -2265,6 +2272,20 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
         FROM {qname(master_db())}.medical_folder_aliases mfa
         LEFT JOIN {qname(master_db())}.exam_facilities ef
           ON ef.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN {qname(master_db())}.csv_format_versions cfv
+          ON cfv.csv_format_version_id = mfa.csv_format_version_id
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            SUM(CASE WHEN file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
+            SUM(CASE WHEN file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count
+          FROM {qname(health_db())}.file_receipts
+          WHERE exam_facility_id IS NOT NULL
+          GROUP BY event_id, exam_facility_id
+        ) receipt_counts
+          ON receipt_counts.event_id = mfa.event_id
+         AND receipt_counts.exam_facility_id = mfa.exam_facility_id
         LEFT JOIN {qname(dev_db())}.event ev
           ON ev.event_id = mfa.event_id
         ORDER BY mfa.is_active DESC, mfa.event_id DESC, mfa.src_folder_raw
@@ -2272,7 +2293,60 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
         """,
         (limit,),
     )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+        row["receipt_source_mode_label"] = receipt_source_mode_label(
+            row.get("xml_file_count"),
+            row.get("csv_file_count"),
+        )
+    return rows
+
+
+def load_csv_format_options(cur: Any, *, limit: int = 500) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          cfv.csv_format_version_id,
+          cfv.exam_facility_id,
+          cfv.mapping_version,
+          cfv.format_name,
+          cfv.is_default_for_facility,
+          cfv.is_active,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          ef.exam_facility_display_name
+        FROM {qname(master_db())}.csv_format_versions cfv
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = cfv.exam_facility_id
+        ORDER BY cfv.is_active DESC, cfv.is_default_for_facility DESC, ef.exam_facility_code, cfv.mapping_version
+        LIMIT %s
+        """,
+        (limit,),
+    )
     return [dict(row) for row in cur.fetchall()]
+
+
+def source_mode_label(value: Any) -> str:
+    labels = {
+        "UNKNOWN": "未設定",
+        "XML_ONLY": "XMLのみ",
+        "CSV_ONLY": "CSVのみ",
+        "XML_CSV_MERGE": "XML+CSV結合",
+    }
+    return labels.get(str(value or "UNKNOWN"), str(value or "未設定"))
+
+
+def receipt_source_mode_label(xml_count: Any, csv_count: Any) -> str:
+    xml_num = int(xml_count or 0)
+    csv_num = int(csv_count or 0)
+    if xml_num and csv_num:
+        return f"XML+CSV受領 ({xml_num}/{csv_num})"
+    if xml_num:
+        return f"XML受領 ({xml_num})"
+    if csv_num:
+        return f"CSV受領 ({csv_num})"
+    return "受領実績なし"
 
 
 def normalize_facility_form(form: dict[str, str]) -> dict[str, Any]:
@@ -2319,19 +2393,45 @@ def resolve_exam_facility_selector(cur: Any, selector: str | None) -> int | None
     return int(row["exam_facility_id"])
 
 
+def resolve_csv_format_version_selector(cur: Any, selector: str | None) -> int | None:
+    text = (selector or "").strip()
+    if not text:
+        return None
+    if not text.isdigit():
+        raise ValueError("CSVテンプレートはIDで指定してください。")
+    cur.execute(
+        f"""
+        SELECT csv_format_version_id
+        FROM {qname(master_db())}.csv_format_versions
+        WHERE csv_format_version_id = %s
+        LIMIT 1
+        """,
+        (int(text),),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError("指定されたCSVテンプレートが見つかりません。")
+    return int(row["csv_format_version_id"])
+
+
 def normalize_folder_alias_form(cur: Any, form: dict[str, str]) -> dict[str, Any]:
     event_id_text = (form.get("event_id") or "").strip()
     src_folder_raw = _form_text(form, "src_folder_raw")
     dst_folder_norm = _form_text(form, "dst_folder_norm") or src_folder_raw
+    expected_source_mode = _form_text(form, "expected_source_mode") or "UNKNOWN"
     if not event_id_text:
         raise ValueError("イベントは必須です。")
     if not src_folder_raw:
         raise ValueError("フォルダ名は必須です。")
+    if expected_source_mode not in {"UNKNOWN", "XML_ONLY", "CSV_ONLY", "XML_CSV_MERGE"}:
+        raise ValueError("受領モードの指定が不正です。")
     return {
         "event_id": int(event_id_text),
         "src_folder_raw": src_folder_raw,
         "dst_folder_norm": dst_folder_norm,
         "exam_facility_id": resolve_exam_facility_selector(cur, form.get("exam_facility_selector")),
+        "expected_source_mode": expected_source_mode,
+        "csv_format_version_id": resolve_csv_format_version_selector(cur, form.get("csv_format_version_id")),
         "manual_judgement": 1 if form.get("manual_judgement") == "1" else 0,
         "note": _form_text(form, "note"),
         "is_active": 1 if form.get("is_active") == "1" else 0,
@@ -3542,6 +3642,7 @@ def admin_folder_aliases(request: Request) -> Response:
             event_options = load_event_options(cur)
             alias_facility_rows = load_alias_facility_admin_rows(cur)
             alias_rows = load_folder_alias_admin_rows(cur)
+            csv_format_options = load_csv_format_options(cur)
             alias_count_by_event: dict[str, int] = {}
             for row in alias_rows:
                 key = str(row.get("event_id") or "")
@@ -3559,6 +3660,7 @@ def admin_folder_aliases(request: Request) -> Response:
             "alias_count_by_event": alias_count_by_event,
             "alias_facility_rows": alias_facility_rows,
             "alias_rows": alias_rows,
+            "csv_format_options": csv_format_options,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -3750,6 +3852,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
         event_options = load_event_options(cur)
+        csv_format_options = load_csv_format_options(cur)
         cur.close()
     return templates.TemplateResponse(
         "admin_folder_alias_new.html",
@@ -3757,6 +3860,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
             "request": request,
             "user": user,
             "event_options": event_options,
+            "csv_format_options": csv_format_options,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -3783,17 +3887,21 @@ async def create_admin_folder_alias(request: Request) -> Response:
                   src_folder_raw,
                   dst_folder_norm,
                   exam_facility_id,
+                  expected_source_mode,
+                  csv_format_version_id,
                   manual_judgement,
                   note,
                   is_active
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     values["event_id"],
                     values["src_folder_raw"],
                     values["dst_folder_norm"],
                     values["exam_facility_id"],
+                    values["expected_source_mode"],
+                    values["csv_format_version_id"],
                     values["manual_judgement"],
                     values["note"],
                     values["is_active"],
@@ -3839,6 +3947,8 @@ async def update_admin_folder_alias(request: Request, alias_id: int) -> Response
                        src_folder_raw = %s,
                        dst_folder_norm = %s,
                        exam_facility_id = %s,
+                       expected_source_mode = %s,
+                       csv_format_version_id = %s,
                        manual_judgement = %s,
                        note = %s,
                        is_active = %s
@@ -3849,6 +3959,8 @@ async def update_admin_folder_alias(request: Request, alias_id: int) -> Response
                     values["src_folder_raw"],
                     values["dst_folder_norm"],
                     values["exam_facility_id"],
+                    values["expected_source_mode"],
+                    values["csv_format_version_id"],
                     values["manual_judgement"],
                     values["note"],
                     values["is_active"],

@@ -54,13 +54,14 @@
             <th>イベント</th>
             <th>フォルダalias</th>
             <th>紐づく健診機関</th>
+            <th>受領設定</th>
             <th>状態</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           {% for alias in alias_rows %}
-          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.note }}" data-event-id="{{ alias.event_id }}">
+          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.expected_source_mode_label }} {{ alias.csv_mapping_version }} {{ alias.csv_format_name }} {{ alias.receipt_source_mode_label }} {{ alias.note }}" data-event-id="{{ alias.event_id }}">
             <td>
               <strong>{{ alias.event_name or alias.event_id }}</strong>
               <small>event_id {{ alias.event_id }} / alias_id {{ alias.alias_id }}</small>
@@ -73,6 +74,16 @@
               <strong>{{ alias.exam_facility_display_name or alias.exam_facility_name or '未確定' }}</strong>
               {% if alias.exam_facility_code %}<small>{{ alias.exam_facility_code }}</small>{% endif %}
               {% if alias.note %}<small>メモ: {{ alias.note }}</small>{% endif %}
+            </td>
+            <td>
+              <span class="status-pill status-neutral">{{ alias.expected_source_mode_label }}</span>
+              <small>実績: {{ alias.receipt_source_mode_label }}</small>
+              {% if alias.csv_mapping_version %}
+              <strong>{{ alias.csv_mapping_version }}</strong>
+              {% if alias.csv_format_name %}<small>{{ alias.csv_format_name }}</small>{% endif %}
+              {% else %}
+              <small>CSVテンプレート未設定</small>
+              {% endif %}
             </td>
             <td>
               <span class="status-pill {{ 'status-pending' if alias.manual_judgement else 'status-neutral' }}">{{ '手動確定' if alias.manual_judgement else '自動紐づけ' }}</span>
@@ -116,6 +127,26 @@
                       <span>健診機関ID/コード</span>
                       <input name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}">
                     </label>
+                    <label>
+                      <span>想定受領モード</span>
+                      <select name="expected_source_mode">
+                        <option value="UNKNOWN" {% if alias.expected_source_mode == 'UNKNOWN' %}selected{% endif %}>未設定</option>
+                        <option value="XML_ONLY" {% if alias.expected_source_mode == 'XML_ONLY' %}selected{% endif %}>XMLのみ</option>
+                        <option value="CSV_ONLY" {% if alias.expected_source_mode == 'CSV_ONLY' %}selected{% endif %}>CSVのみ</option>
+                        <option value="XML_CSV_MERGE" {% if alias.expected_source_mode == 'XML_CSV_MERGE' %}selected{% endif %}>XML+CSV結合</option>
+                      </select>
+                    </label>
+                    <label class="form-wide-field">
+                      <span>CSVテンプレート</span>
+                      <select name="csv_format_version_id">
+                        <option value="">未設定</option>
+                        {% for fmt in csv_format_options %}
+                        <option value="{{ fmt.csv_format_version_id }}" {% if fmt.csv_format_version_id == alias.csv_format_version_id %}selected{% endif %}>
+                          {{ fmt.exam_facility_display_name or fmt.exam_facility_name or fmt.exam_facility_code or '施設未設定' }} / {{ fmt.mapping_version }}{% if fmt.format_name %} / {{ fmt.format_name }}{% endif %}{% if not fmt.is_active %} / 無効{% endif %}
+                        </option>
+                        {% endfor %}
+                      </select>
+                    </label>
                     <div class="form-section alias-switches">
                       <label class="binary-switch {{ 'switch-on' if alias.manual_judgement else 'switch-off' }}">
                         <input type="checkbox" name="manual_judgement" value="1" {% if alias.manual_judgement %}checked{% endif %}>
@@ -143,7 +174,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="5">フォルダaliasはまだありません。</td>
+            <td colspan="6">フォルダaliasはまだありません。</td>
           </tr>
           {% endfor %}
         </tbody>

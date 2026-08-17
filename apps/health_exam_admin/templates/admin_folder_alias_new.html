@@ -48,6 +48,26 @@
         <span>紐づく健診機関ID/コード</span>
         <input name="exam_facility_selector" placeholder="例: 1310438796">
       </label>
+      <label>
+        <span>想定受領モード</span>
+        <select name="expected_source_mode">
+          <option value="UNKNOWN">未設定</option>
+          <option value="XML_ONLY">XMLのみ</option>
+          <option value="CSV_ONLY">CSVのみ</option>
+          <option value="XML_CSV_MERGE">XML+CSV結合</option>
+        </select>
+      </label>
+      <label class="form-wide-field">
+        <span>CSVテンプレート</span>
+        <select name="csv_format_version_id">
+          <option value="">未設定</option>
+          {% for fmt in csv_format_options %}
+          <option value="{{ fmt.csv_format_version_id }}">
+            {{ fmt.exam_facility_display_name or fmt.exam_facility_name or fmt.exam_facility_code or '施設未設定' }} / {{ fmt.mapping_version }}{% if fmt.format_name %} / {{ fmt.format_name }}{% endif %}{% if not fmt.is_active %} / 無効{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
       <label class="form-wide-field">
         <span>メモ</span>
         <textarea name="note" rows="3"></textarea>
