@@ -281,6 +281,42 @@
     button.addEventListener("click", () => closeModal(button.closest(".edit-modal")));
   }
 
+  const facilityCodesInput = document.getElementById("facility-codes-input");
+  const facilityCodesSummary = document.getElementById("facility-codes-summary");
+  const facilityCodeValues = () => {
+    if (!facilityCodesInput) return [];
+    return facilityCodesInput.value
+      .split(/[\s,，、]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  };
+  const updateFacilityCodesSummary = () => {
+    if (!facilityCodesInput || !facilityCodesSummary) return;
+    const values = facilityCodeValues();
+    facilityCodesSummary.textContent = values.length ? `${values.length}施設を指定中` : "未指定: 全施設";
+  };
+  if (facilityCodesInput) {
+    facilityCodesInput.addEventListener("input", updateFacilityCodesSummary);
+    updateFacilityCodesSummary();
+  }
+  for (const button of document.querySelectorAll("[data-export-facility-add]")) {
+    button.addEventListener("click", () => {
+      if (!facilityCodesInput) return;
+      const code = String(button.getAttribute("data-facility-code") || "").trim();
+      if (!code) return;
+      const values = facilityCodeValues();
+      if (!values.includes(code)) {
+        values.push(code);
+        facilityCodesInput.value = values.join("\n");
+      }
+      for (const sameCodeButton of document.querySelectorAll(`[data-export-facility-add][data-facility-code="${CSS.escape(code)}"]`)) {
+        sameCodeButton.textContent = "追加済み";
+        sameCodeButton.disabled = true;
+      }
+      updateFacilityCodesSummary();
+    });
+  }
+
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     closeHelpPopovers();

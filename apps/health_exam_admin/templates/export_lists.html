@@ -45,8 +45,13 @@
       </label>
       <label>
         健診機関コード
-        <input name="facility_codes" placeholder="空欄なら全施設。複数は改行またはカンマ">
+        <textarea id="facility-codes-input" name="facility_codes" rows="3" placeholder="空欄なら全施設。複数は改行またはカンマ"></textarea>
       </label>
+      <div class="export-facility-picker">
+        <span class="field-label">健診機関選択</span>
+        <button type="button" class="ghost-button" data-modal-open="export-facility-picker-modal">受領フォルダから選ぶ</button>
+        <small id="facility-codes-summary">未指定: 全施設</small>
+      </div>
       <div class="export-option-group">
         <span class="field-label">箱作成時に含める対象</span>
         <label class="check-line">
@@ -144,5 +149,77 @@
       </table>
     </div>
   </section>
+
+  {% if can_edit %}
+  <div id="export-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="export-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">受領フォルダ alias</p>
+          <h2 id="export-facility-picker-title">健診機関を選択</h2>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          検索
+          <input data-live-filter-input="#export-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="export-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>受領フォルダ</th>
+              <th>実績</th>
+              <th>追加</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alias in folder_aliases %}
+            {% set code = alias.exam_facility_code or "" %}
+            <tr data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}">
+              <td>
+                <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
+                <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode or "未設定" }}</small>
+              </td>
+              <td>
+                <strong title="{{ alias.src_folder_raw or '' }}">{{ alias.src_folder_raw or "" }}</strong>
+                <small>{{ alias.csv_mapping_version or "CSVテンプレートなし" }}</small>
+              </td>
+              <td>
+                <strong>XML {{ alias.xml_file_count or 0 }} / CSV {{ alias.csv_file_count or 0 }}</strong>
+                <small>受領実績</small>
+              </td>
+              <td>
+                {% if code %}
+                <button
+                  type="button"
+                  class="ghost-button"
+                  data-export-facility-add
+                  data-facility-code="{{ code }}"
+                  data-facility-name="{{ alias.exam_facility_name or alias.src_folder_raw or code }}"
+                >追加</button>
+                {% else %}
+                <span class="status-pill status-muted">不可</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4">受領フォルダaliasがありません。</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+    </section>
+  </div>
+  {% endif %}
 </main>
 {% endblock %}

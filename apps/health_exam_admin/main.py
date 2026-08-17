@@ -4435,6 +4435,7 @@ def export_lists(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             lists = load_ops_xml_export_lists(cur)
+            folder_aliases = load_folder_alias_admin_rows(cur)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -4445,6 +4446,7 @@ def export_lists(request: Request) -> Response:
             "request": request,
             "user": user,
             "lists": lists,
+            "folder_aliases": folder_aliases,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
             "can_edit": has_permission(user, "export_lists.edit"),

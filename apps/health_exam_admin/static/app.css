@@ -811,6 +811,38 @@ a.home-menu-card:hover {
   gap: 10px;
 }
 
+.export-facility-picker {
+  display: grid;
+  align-content: end;
+  gap: 7px;
+}
+
+.export-facility-modal {
+  width: min(1180px, calc(100vw - 32px));
+}
+
+.export-facility-search {
+  margin-bottom: 14px;
+}
+
+.export-facility-picker-table-panel {
+  max-height: min(62vh, 680px);
+  overflow: auto;
+}
+
+.compact-table th,
+.compact-table td {
+  padding: 10px 12px;
+}
+
+.compact-table td strong,
+.compact-table td small {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .event-table label,
 .compact-event-form label {
   gap: 5px;
