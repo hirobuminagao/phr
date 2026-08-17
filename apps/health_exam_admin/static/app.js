@@ -117,6 +117,32 @@
     update();
   }
 
+  const closeModal = (modal) => {
+    if (!modal) return;
+    modal.hidden = true;
+    document.body.classList.remove("has-open-modal");
+  };
+
+  for (const button of document.querySelectorAll("[data-modal-open]")) {
+    button.addEventListener("click", () => {
+      const modal = document.getElementById(button.getAttribute("data-modal-open") || "");
+      if (!modal) return;
+      modal.hidden = false;
+      document.body.classList.add("has-open-modal");
+      const firstInput = modal.querySelector("input:not([disabled]), select, textarea, button");
+      if (firstInput) firstInput.focus();
+    });
+  }
+
+  for (const button of document.querySelectorAll("[data-modal-close]")) {
+    button.addEventListener("click", () => closeModal(button.closest(".edit-modal")));
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    closeModal(document.querySelector(".edit-modal:not([hidden])"));
+  });
+
   for (const zone of document.querySelectorAll("[data-file-drop-zone]")) {
     const input = zone.querySelector("[data-file-drop-input]");
     const nameNode = zone.querySelector("[data-file-drop-name]");

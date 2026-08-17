@@ -42,7 +42,8 @@
       <table id="alias-admin-table" class="data-table admin-master-table alias-table" data-empty-message="一致するaliasはありません。">
         <thead>
           <tr>
-            <th>イベント・フォルダ</th>
+            <th>イベント</th>
+            <th>フォルダalias</th>
             <th>紐づく健診機関</th>
             <th>状態</th>
             <th>操作</th>
@@ -52,65 +53,88 @@
           {% for alias in alias_rows %}
           <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.note }}">
             <td>
-              <form id="alias-form-{{ alias.alias_id }}" method="post" action="/admin/folder-aliases/{{ alias.alias_id }}" class="compact-master-form">
-                <div class="master-inline-fields">
-                  <label>
-                    <span>ID</span>
-                    <input value="{{ alias.alias_id }}" disabled>
-                  </label>
-                  <label>
-                    <span>イベント</span>
-                    <select name="event_id">
-                      {% for event in event_options %}
-                      <option value="{{ event.event_id }}" {% if event.event_id == alias.event_id %}selected{% endif %}>{{ event.event_name or event.event_id }}</option>
-                      {% endfor %}
-                    </select>
-                  </label>
-                </div>
-                <label>
-                  <span>実フォルダ名</span>
-                  <input name="src_folder_raw" value="{{ alias.src_folder_raw or '' }}" required>
-                </label>
-                <label>
-                  <span>正規化後名</span>
-                  <input name="dst_folder_norm" value="{{ alias.dst_folder_norm or '' }}">
-                </label>
-              </form>
+              <strong>{{ alias.event_name or alias.event_id }}</strong>
+              <small>event_id {{ alias.event_id }} / alias_id {{ alias.alias_id }}</small>
             </td>
             <td>
-              <label>
-                <span>健診機関ID/コード</span>
-                <input name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}" form="alias-form-{{ alias.alias_id }}">
-              </label>
+              <strong>{{ alias.src_folder_raw or "-" }}</strong>
+              <small>正規化後: {{ alias.dst_folder_norm or alias.src_folder_raw or "-" }}</small>
+            </td>
+            <td>
               <strong>{{ alias.exam_facility_display_name or alias.exam_facility_name or '未確定' }}</strong>
               {% if alias.exam_facility_code %}<small>{{ alias.exam_facility_code }}</small>{% endif %}
-              <label>
-                <span>メモ</span>
-                <textarea name="note" rows="2" form="alias-form-{{ alias.alias_id }}">{{ alias.note or '' }}</textarea>
-              </label>
+              {% if alias.note %}<small>メモ: {{ alias.note }}</small>{% endif %}
             </td>
             <td>
-              <div class="alias-switches">
-                <label class="binary-switch {{ 'switch-on' if alias.manual_judgement else 'switch-off' }}">
-                  <input type="checkbox" name="manual_judgement" value="1" form="alias-form-{{ alias.alias_id }}" {% if alias.manual_judgement %}checked{% endif %}>
-                  <span>手動判断</span>
-                  <span>通常</span>
-                </label>
-                <label class="binary-switch {{ 'switch-on' if alias.is_active else 'switch-off' }}">
-                  <input type="checkbox" name="is_active" value="1" form="alias-form-{{ alias.alias_id }}" {% if alias.is_active %}checked{% endif %}>
-                  <span>有効</span>
-                  <span>無効</span>
-                </label>
-              </div>
+              <span class="status-pill {{ 'status-pending' if alias.manual_judgement else 'status-neutral' }}">{{ '手動確定' if alias.manual_judgement else '自動紐づけ' }}</span>
+              <span class="status-pill {{ 'status-ready' if alias.is_active else 'status-muted' }}">{{ '有効' if alias.is_active else '無効' }}</span>
               <small>更新 {{ alias.updated_at }}</small>
             </td>
             <td>
-              <button type="submit" form="alias-form-{{ alias.alias_id }}">更新</button>
+              <button type="button" class="ghost-button" data-modal-open="alias-edit-{{ alias.alias_id }}">編集</button>
+              <div id="alias-edit-{{ alias.alias_id }}" class="edit-modal" hidden>
+                <div class="edit-modal__backdrop" data-modal-close></div>
+                <section class="edit-modal__panel" role="dialog" aria-modal="true" aria-labelledby="alias-edit-title-{{ alias.alias_id }}">
+                  <div class="edit-modal__head">
+                    <div>
+                      <p class="eyebrow">Folder alias</p>
+                      <h2 id="alias-edit-title-{{ alias.alias_id }}">aliasを編集</h2>
+                    </div>
+                    <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+                  </div>
+                  <form id="alias-form-{{ alias.alias_id }}" method="post" action="/admin/folder-aliases/{{ alias.alias_id }}" class="form-grid facility-form">
+                    <label>
+                      <span>alias ID</span>
+                      <input value="{{ alias.alias_id }}" disabled>
+                    </label>
+                    <label>
+                      <span>イベント</span>
+                      <select name="event_id">
+                        {% for event in event_options %}
+                        <option value="{{ event.event_id }}" {% if event.event_id == alias.event_id %}selected{% endif %}>{{ event.event_name or event.event_id }}</option>
+                        {% endfor %}
+                      </select>
+                    </label>
+                    <label class="form-wide-field">
+                      <span>実フォルダ名</span>
+                      <input name="src_folder_raw" value="{{ alias.src_folder_raw or '' }}" required>
+                    </label>
+                    <label class="form-wide-field">
+                      <span>正規化後名</span>
+                      <input name="dst_folder_norm" value="{{ alias.dst_folder_norm or '' }}">
+                    </label>
+                    <label>
+                      <span>健診機関ID/コード</span>
+                      <input name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}">
+                    </label>
+                    <div class="form-section alias-switches">
+                      <label class="binary-switch {{ 'switch-on' if alias.manual_judgement else 'switch-off' }}">
+                        <input type="checkbox" name="manual_judgement" value="1" {% if alias.manual_judgement %}checked{% endif %}>
+                        <span>手動確定</span>
+                        <span>自動</span>
+                      </label>
+                      <label class="binary-switch {{ 'switch-on' if alias.is_active else 'switch-off' }}">
+                        <input type="checkbox" name="is_active" value="1" {% if alias.is_active %}checked{% endif %}>
+                        <span>有効</span>
+                        <span>無効</span>
+                      </label>
+                    </div>
+                    <label class="form-wide-field">
+                      <span>メモ</span>
+                      <textarea name="note" rows="3">{{ alias.note or '' }}</textarea>
+                    </label>
+                    <div class="form-actions edit-modal__actions">
+                      <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+                      <button type="submit">更新</button>
+                    </div>
+                  </form>
+                </section>
+              </div>
             </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="4">フォルダaliasはまだありません。</td>
+            <td colspan="5">フォルダaliasはまだありません。</td>
           </tr>
           {% endfor %}
         </tbody>
