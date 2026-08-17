@@ -2812,7 +2812,7 @@ def load_ops_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list
           ON ef.exam_facility_id = eec.exam_facility_id
         WHERE xelc.xml_export_list_id = %s
           AND xelc.removed_at IS NULL
-        ORDER BY ef.exam_facility_code, eec.exam_date, eec.name_kana, xelc.xml_export_list_case_id
+        ORDER BY ef.exam_facility_code, eec.exam_date, eec.name_kana_export_value, xelc.xml_export_list_case_id
         """,
         (xml_export_list_id,),
     )
