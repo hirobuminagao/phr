@@ -2697,6 +2697,55 @@ def load_exam_item_value_rows(cur: Any, *, exam_ledger_id: int) -> list[dict[str
     return [dict(row) for row in cur.fetchall()]
 
 
+def search_exam_ledger_candidates(
+    cur: Any,
+    *,
+    event_id: str,
+    name_kana: str,
+    hia_subscriber_id: str,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    clauses = ["event_id = %s"]
+    params: list[Any] = [event_id]
+    if name_kana:
+        clauses.append("name_kana_raw LIKE %s")
+        params.append(f"%{name_kana}%")
+    if hia_subscriber_id:
+        clauses.append("hia_subscriber_id LIKE %s")
+        params.append(f"%{hia_subscriber_id}%")
+    if not name_kana and not hia_subscriber_id:
+        return []
+    where_sql = " AND ".join(clauses)
+    cur.execute(
+        f"""
+        SELECT
+          exam_ledger_id,
+          event_id,
+          source_type,
+          file_receipt_id,
+          src_row_no,
+          hia_subscriber_id,
+          name_full_raw,
+          name_kana_raw,
+          facility_name,
+          facility_code,
+          exam_date,
+          check_status,
+          xml_export_status,
+          exam_item_error_count,
+          xml_file_name,
+          mapping_version,
+          updated_at
+        FROM {qname(health_db())}.exam_ledgers
+        WHERE {where_sql}
+        ORDER BY updated_at DESC, exam_ledger_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[str, Any] | None:
     cur.execute(
         f"""
@@ -4177,6 +4226,49 @@ def exam_ledgers(request: Request) -> Response:
     )
 
 
+@app.get("/exam-ledgers/search", response_class=HTMLResponse)
+def exam_ledger_search(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    search_filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "name_kana": request.query_params.get("name_kana", "").strip(),
+        "hia_subscriber_id": request.query_params.get("hia_subscriber_id", "").strip(),
+    }
+    has_search = bool(search_filters["name_kana"] or search_filters["hia_subscriber_id"])
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            search_results = search_exam_ledger_candidates(
+                cur,
+                event_id=search_filters["event_id"],
+                name_kana=search_filters["name_kana"],
+                hia_subscriber_id=search_filters["hia_subscriber_id"],
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_ledger_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "ledger": None,
+            "item_rows": [],
+            "event_options": event_options,
+            "search_filters": search_filters,
+            "search_results": search_results,
+            "has_search": has_search,
+        },
+    )
+
+
 @app.get("/exam-ledgers/{exam_ledger_id}", response_class=HTMLResponse)
 def exam_ledger_detail(request: Request, exam_ledger_id: int) -> Response:
     user = require_user(request)
@@ -4193,6 +4285,19 @@ def exam_ledger_detail(request: Request, exam_ledger_id: int) -> Response:
                 conn.commit()
                 return RedirectResponse("/exam-ledgers?error=健診結果が見つかりません。", status_code=303)
             item_rows = load_exam_item_value_rows(cur, exam_ledger_id=exam_ledger_id)
+            event_options = load_event_options(cur)
+            search_filters = {
+                "event_id": str(ledger.get("event_id") or "2"),
+                "name_kana": request.query_params.get("name_kana", "").strip(),
+                "hia_subscriber_id": request.query_params.get("hia_subscriber_id", "").strip(),
+            }
+            has_search = bool(search_filters["name_kana"] or search_filters["hia_subscriber_id"])
+            search_results = search_exam_ledger_candidates(
+                cur,
+                event_id=search_filters["event_id"],
+                name_kana=search_filters["name_kana"],
+                hia_subscriber_id=search_filters["hia_subscriber_id"],
+            )
             if audit_enabled(cur):
                 log_audit(
                     cur,
@@ -4222,6 +4327,10 @@ def exam_ledger_detail(request: Request, exam_ledger_id: int) -> Response:
             "user": user,
             "ledger": ledger,
             "item_rows": item_rows,
+            "event_options": event_options,
+            "search_filters": search_filters,
+            "search_results": search_results,
+            "has_search": has_search,
         },
     )
 

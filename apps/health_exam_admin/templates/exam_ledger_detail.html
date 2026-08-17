@@ -7,7 +7,11 @@
     <h1>健診結果詳細（受領）</h1>
   </div>
   <nav class="top-actions">
+    {% if ledger %}
     <a class="ghost-button" href="/exam-ledgers?event_id={{ ledger.event_id }}&file_receipt_id={{ ledger.file_receipt_id or '' }}&limit=2000">一覧へ戻る</a>
+    {% else %}
+    <a class="ghost-button" href="/exam-ledgers">一覧へ戻る</a>
+    {% endif %}
     <a class="ghost-button" href="/file-receipts">受領ファイル</a>
     <a class="ghost-button" href="/">HOME</a>
     <form method="post" action="/logout">
@@ -17,6 +21,62 @@
 </header>
 
 <main class="page">
+  <section class="panel ledger-person-search">
+    <div class="section-heading">
+      <div>
+        <h2>人から探す</h2>
+        <p class="subtle">氏名カナまたはHIA subscriber IDで、この詳細画面から直接ledgerを探します。</p>
+      </div>
+    </div>
+    <form method="get" action="/exam-ledgers/search" class="ledger-person-search-form">
+      <label>
+        <span>イベント</span>
+        <select name="event_id">
+          {% for event in event_options %}
+            <option value="{{ event.event_id }}" {% if search_filters.event_id|string == event.event_id|string %}selected{% endif %}>
+              {{ event.event_name or ("event " ~ event.event_id) }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>氏名カナ</span>
+        <input name="name_kana" value="{{ search_filters.name_kana or '' }}" autocomplete="off" placeholder="ナガオ タロウ">
+      </label>
+      <label>
+        <span>HIA subscriber ID</span>
+        <input name="hia_subscriber_id" value="{{ search_filters.hia_subscriber_id or '' }}" autocomplete="off" placeholder="HIA加入者ID">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/exam-ledgers/search">クリア</a>
+      </div>
+    </form>
+    {% if has_search %}
+      {% if search_results %}
+      <div class="ledger-search-results">
+        <p class="subtle">検索結果 {{ search_results|length }} 件。対象のledgerを選択してください。</p>
+        <div class="ledger-result-list">
+          {% for result in search_results %}
+          <a class="ledger-result-card" href="/exam-ledgers/{{ result.exam_ledger_id }}?name_kana={{ search_filters.name_kana|urlencode }}&hia_subscriber_id={{ search_filters.hia_subscriber_id|urlencode }}">
+            <span class="status-pill {{ 'status-ready' if result.check_status == 'OK' else 'status-danger' if result.check_status == 'NG' else 'status-pending' }}">{{ result.check_status or "-" }}</span>
+            <div>
+              <strong>ledger {{ result.exam_ledger_id }} / {{ result.name_kana_raw or "カナなし" }}</strong>
+              <small>{{ result.name_full_raw or "氏名なし" }} / HIA {{ result.hia_subscriber_id or "-" }}</small>
+              <small>{{ result.facility_name or "健診機関なし" }} / {{ result.exam_date or "受診日なし" }} / {{ result.source_type }}</small>
+              <small>{{ result.xml_file_name or result.mapping_version or "" }}</small>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <p class="empty-note">HITなし</p>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  {% if ledger %}
   <section class="panel ledger-detail-head">
     <div>
       <p class="eyebrow">{{ ledger.source_type }} / ledger {{ ledger.exam_ledger_id }}</p>
@@ -28,7 +88,9 @@
       <span class="status-pill {{ 'status-ready' if ledger.xml_export_status == 'READY' else 'status-muted' }}">export {{ ledger.xml_export_status }}</span>
     </div>
   </section>
+  {% endif %}
 
+  {% if ledger %}
   <section class="summary-grid ledger-summary-grid">
     <div class="summary-card">
       <span>受領source</span>
@@ -51,7 +113,9 @@
       <small>報告 {{ ledger.health_exam_report_category or "-" }} / program {{ ledger.program_code or "-" }}</small>
     </div>
   </section>
+  {% endif %}
 
+  {% if ledger %}
   <section class="panel">
     <div class="section-heading">
       <div>
@@ -71,7 +135,9 @@
       <div class="detail-grid-wide"><span>法定チェック理由</span><strong>{{ ledger.check_reason or "OK" }}</strong><small>merge {{ ledger.merge_status }} / {{ ledger.merge_reason or "" }}</small></div>
     </div>
   </section>
+  {% endif %}
 
+  {% if ledger %}
   <section class="panel">
     <div class="section-heading">
       <div>
@@ -153,5 +219,6 @@
       </table>
     </div>
   </section>
+  {% endif %}
 </main>
 {% endblock %}
