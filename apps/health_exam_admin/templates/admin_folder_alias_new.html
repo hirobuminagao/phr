@@ -48,15 +48,17 @@
         <span>紐づく健診機関ID/コード</span>
         <input name="exam_facility_selector" placeholder="例: 1310438796">
       </label>
-      <label>
+      <div class="form-wide-field receipt-mode-field">
         <span>想定受領モード</span>
-        <select name="expected_source_mode">
-          <option value="UNKNOWN">未設定</option>
-          <option value="XML_ONLY">XMLのみ</option>
-          <option value="CSV_ONLY">CSVのみ</option>
-          <option value="XML_CSV_MERGE">XML+CSV結合</option>
-        </select>
-      </label>
+        <div class="receipt-mode-options">
+          {% for mode in source_mode_options %}
+          <label class="receipt-mode-option">
+            <input type="radio" name="expected_source_mode" value="{{ mode.value }}" {% if mode.value == 'UNKNOWN' %}checked{% endif %}>
+            <span>{{ mode.label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
       <label class="form-wide-field">
         <span>CSVテンプレート</span>
         <select name="csv_format_version_id">

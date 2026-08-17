@@ -976,6 +976,58 @@ a.home-menu-card:hover {
   color: #fff;
 }
 
+.receipt-mode-field {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.receipt-mode-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.receipt-mode-option {
+  position: relative;
+  min-width: 0;
+}
+
+.receipt-mode-option input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.receipt-mode-option span {
+  min-height: var(--control-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.receipt-mode-option input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.receipt-mode-option input:focus-visible + span {
+  outline: 3px solid rgba(20, 125, 100, 0.24);
+  outline-offset: 2px;
+}
+
 .filter-actions {
   display: flex;
   gap: 8px;

@@ -58,10 +58,9 @@
         <span>受領方式</span>
         <div class="filter-toggle-group">
           <button type="button" class="is-active" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="__ALL__" data-filter-mode="single">すべて</button>
-          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="XML_ONLY" data-filter-mode="single">XMLのみ</button>
-          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="CSV_ONLY" data-filter-mode="single">CSVのみ</button>
-          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="XML_CSV_MERGE" data-filter-mode="single">XML+CSV</button>
-          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="UNKNOWN" data-filter-mode="single">未設定</button>
+          {% for mode in source_mode_options %}
+          <button type="button" data-live-filter-toggle="#alias-admin-table" data-filter-field="sourceMode" data-filter-value="{{ mode.value }}" data-filter-mode="single">{{ mode.label }}</button>
+          {% endfor %}
         </div>
       </div>
     </div>
@@ -145,15 +144,17 @@
                       <span>健診機関ID/コード</span>
                       <input name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}">
                     </label>
-                    <label>
+                    <div class="form-wide-field receipt-mode-field">
                       <span>想定受領モード</span>
-                      <select name="expected_source_mode">
-                        <option value="UNKNOWN" {% if alias.expected_source_mode == 'UNKNOWN' %}selected{% endif %}>未設定</option>
-                        <option value="XML_ONLY" {% if alias.expected_source_mode == 'XML_ONLY' %}selected{% endif %}>XMLのみ</option>
-                        <option value="CSV_ONLY" {% if alias.expected_source_mode == 'CSV_ONLY' %}selected{% endif %}>CSVのみ</option>
-                        <option value="XML_CSV_MERGE" {% if alias.expected_source_mode == 'XML_CSV_MERGE' %}selected{% endif %}>XML+CSV結合</option>
-                      </select>
-                    </label>
+                      <div class="receipt-mode-options">
+                        {% for mode in source_mode_options %}
+                        <label class="receipt-mode-option">
+                          <input type="radio" name="expected_source_mode" value="{{ mode.value }}" {% if (alias.expected_source_mode or 'UNKNOWN') == mode.value %}checked{% endif %}>
+                          <span>{{ mode.label }}</span>
+                        </label>
+                        {% endfor %}
+                      </div>
+                    </div>
                     <label class="form-wide-field">
                       <span>CSVテンプレート</span>
                       <select name="csv_format_version_id">

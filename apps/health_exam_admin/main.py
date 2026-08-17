@@ -2333,8 +2333,29 @@ def source_mode_label(value: Any) -> str:
         "XML_ONLY": "XMLのみ",
         "CSV_ONLY": "CSVのみ",
         "XML_CSV_MERGE": "XML+CSV結合",
+        "PAPER_ONLY": "紙のみ",
+        "XML_PAPER_MERGE": "XML+紙結合",
+        "CSV_PAPER_MERGE": "CSV+紙結合",
+        "XML_CSV_PAPER_MERGE": "XML+CSV+紙結合",
     }
     return labels.get(str(value or "UNKNOWN"), str(value or "未設定"))
+
+
+def source_mode_options() -> list[dict[str, str]]:
+    return [
+        {"value": "UNKNOWN", "label": "未設定"},
+        {"value": "XML_ONLY", "label": "XMLのみ"},
+        {"value": "CSV_ONLY", "label": "CSVのみ"},
+        {"value": "XML_CSV_MERGE", "label": "XML+CSV"},
+        {"value": "PAPER_ONLY", "label": "紙のみ"},
+        {"value": "XML_PAPER_MERGE", "label": "XML+紙"},
+        {"value": "CSV_PAPER_MERGE", "label": "CSV+紙"},
+        {"value": "XML_CSV_PAPER_MERGE", "label": "XML+CSV+紙"},
+    ]
+
+
+def source_mode_values() -> set[str]:
+    return {option["value"] for option in source_mode_options()}
 
 
 def receipt_source_mode_label(xml_count: Any, csv_count: Any) -> str:
@@ -2423,7 +2444,7 @@ def normalize_folder_alias_form(cur: Any, form: dict[str, str]) -> dict[str, Any
         raise ValueError("イベントは必須です。")
     if not src_folder_raw:
         raise ValueError("フォルダ名は必須です。")
-    if expected_source_mode not in {"UNKNOWN", "XML_ONLY", "CSV_ONLY", "XML_CSV_MERGE"}:
+    if expected_source_mode not in source_mode_values():
         raise ValueError("受領モードの指定が不正です。")
     return {
         "event_id": int(event_id_text),
@@ -3661,6 +3682,7 @@ def admin_folder_aliases(request: Request) -> Response:
             "alias_facility_rows": alias_facility_rows,
             "alias_rows": alias_rows,
             "csv_format_options": csv_format_options,
+            "source_mode_options": source_mode_options(),
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -3861,6 +3883,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
             "user": user,
             "event_options": event_options,
             "csv_format_options": csv_format_options,
+            "source_mode_options": source_mode_options(),
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },

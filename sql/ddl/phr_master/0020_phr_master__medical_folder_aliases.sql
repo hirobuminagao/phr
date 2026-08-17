@@ -4,7 +4,7 @@ CREATE TABLE `phr_master`.`medical_folder_aliases` (
   `src_folder_raw` varchar(255) NOT NULL,
   `dst_folder_norm` varchar(255) NOT NULL,
   `exam_facility_id` bigint unsigned DEFAULT NULL,
-  `expected_source_mode` varchar(32) NOT NULL DEFAULT 'UNKNOWN' COMMENT '想定受領モード。UNKNOWN/XML_ONLY/CSV_ONLY/XML_CSV_MERGE',
+  `expected_source_mode` varchar(32) NOT NULL DEFAULT 'UNKNOWN' COMMENT '想定受領モード。UNKNOWN/XML_ONLY/CSV_ONLY/XML_CSV_MERGE/PAPER_ONLY/XML_PAPER_MERGE/CSV_PAPER_MERGE/XML_CSV_PAPER_MERGE',
   `csv_format_version_id` bigint unsigned DEFAULT NULL COMMENT 'このaliasで使用するCSVテンプレート',
   `manual_judgement` tinyint(1) NOT NULL DEFAULT 0,
   `note` text,

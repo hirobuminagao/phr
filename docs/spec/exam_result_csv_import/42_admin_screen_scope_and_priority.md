@@ -139,17 +139,21 @@
 
 aliasに保持する運用設定:
 
-- 想定受領モード: `UNKNOWN` / `XML_ONLY` / `CSV_ONLY` / `XML_CSV_MERGE`
+- 想定受領モード: `UNKNOWN` / `XML_ONLY` / `CSV_ONLY` / `XML_CSV_MERGE` / `PAPER_ONLY` / `XML_PAPER_MERGE` / `CSV_PAPER_MERGE` / `XML_CSV_PAPER_MERGE`
 - 使用するCSVテンプレート: `csv_format_versions.csv_format_version_id`
 
 責務分離:
 
-- `medical_folder_aliases`: event内の受領フォルダに対する運用設定。scan/import前に「このフォルダはXMLのみか、CSVのみか、XML+CSV結合か」「どのCSVテンプレートを使うか」を人が確認・設定する。
+- `medical_folder_aliases`: event内の受領フォルダに対する運用設定。scan/import前に「このフォルダはXMLのみか、CSVのみか、紙のみか、複数sourceを結合するか」「どのCSVテンプレートを使うか」を人が確認・設定する。
 - `file_receipts`: 実際に受領・検出したファイルの台帳。XML/CSVの実績、sha256、取込状態、format照合結果を保持する。
 - `csv_format_versions`: CSVテンプレート本体。ヘッダー、文字コード、format version、mapping versionを保持する。
 
 このため、受領モードとCSVテンプレート参照は `medical_folder_aliases` に直持ちする。
 同じ健診機関でもeventやフォルダ運用が変わる可能性があるため、健診機関マスタ本体ではなく `event_id + src_folder_raw` で一意なalias側に置く。
+
+受領モードは現時点では `expected_source_mode` の1カラムで管理する。
+XML/CSV/紙の3種類で最大8パターンに収まるため、初期運用では別テーブルや複数booleanへ分解しない。
+将来、受領source種別がさらに増える、または同一aliasで月別・契約別に組み合わせが変わる場合は、履歴テーブルまたはsource種別別の子テーブルへ切り出す。
 
 将来、同一event・同一alias内で月別に受領方式やテンプレートが頻繁に変わる場合は、`medical_folder_alias_receipt_settings` のような履歴テーブルへ切り出し、`valid_from` / `valid_to` を持たせる。
 初期運用では設定粒度を増やしすぎないため、alias直持ちを正式方針とする。
