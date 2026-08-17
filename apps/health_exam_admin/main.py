@@ -6,6 +6,8 @@ import logging
 import re
 import secrets
 import string
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -2817,6 +2819,33 @@ def load_ops_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list
     return [dict(row) for row in cur.fetchall()]
 
 
+def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -> str:
+    if output_mode not in {"review", "official"}:
+        raise ValueError("OUTPUT_MODE_INVALID")
+    script_path = REPO_ROOT / "scripts" / "from_medical" / "04_export_hia_xml.py"
+    cmd = [
+        sys.executable,
+        str(script_path),
+        "--xml-export-list-id",
+        str(xml_export_list_id),
+        "--output-mode",
+        output_mode,
+        "--no-latest-xml-export-list",
+    ]
+    completed = subprocess.run(
+        cmd,
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        timeout=60 * 30,
+        check=False,
+    )
+    output = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip())
+    if completed.returncode != 0:
+        raise RuntimeError(output or f"XML export failed: returncode={completed.returncode}")
+    return output or "XML出力が完了しました。"
+
+
 def create_xml_export_list_from_form(cur: Any, *, form: dict[str, str], user: dict[str, Any]) -> tuple[int, int, int]:
     event_id = int(form.get("event_id") or 2)
     list_name = (form.get("list_name") or "").strip()
@@ -4497,8 +4526,36 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
             "can_edit": has_permission(user, "export_lists.edit"),
+            "can_review_export": has_permission(user, "xml_export.review"),
             "can_export": has_permission(user, "xml_export.official"),
         },
+    )
+
+
+@app.post("/export-lists/{xml_export_list_id}/export", response_class=HTMLResponse)
+async def export_list_run(request: Request, xml_export_list_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    output_mode = (form.get("output_mode") or "review").strip().lower()
+    required_permission = "xml_export.official" if output_mode == "official" else "xml_export.review"
+    if not has_permission(user, required_permission):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    try:
+        result = run_hia_xml_export_from_list(xml_export_list_id=xml_export_list_id, output_mode=output_mode)
+    except Exception as exc:
+        message = str(exc).strip() or type(exc).__name__
+        return RedirectResponse(
+            f"/export-lists/{xml_export_list_id}?error={quote(message[:1800])}",
+            status_code=303,
+        )
+
+    mode_label = "本番03フォルダ出力" if output_mode == "official" else "確認出力"
+    return RedirectResponse(
+        f"/export-lists/{xml_export_list_id}?message={quote(mode_label + 'が完了しました。' + result[:1200])}",
+        status_code=303,
     )
 
 

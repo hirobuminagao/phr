@@ -645,6 +645,13 @@ a.home-menu-card:hover {
   grid-column: 1 / -1;
 }
 
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
 .form-section {
   grid-column: 1 / -1;
   display: grid;

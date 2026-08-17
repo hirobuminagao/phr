@@ -50,6 +50,31 @@
     </div>
   </section>
 
+  {% if can_review_export or can_export %}
+  <section class="panel export-run-panel">
+    <div class="section-heading">
+      <div>
+        <h2>XML出力</h2>
+        <p class="subtle">この出力リストに追加済みの人だけを対象にします。</p>
+      </div>
+    </div>
+    <div class="action-row">
+      {% if can_review_export %}
+      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export">
+        <input type="hidden" name="output_mode" value="review">
+        <button class="ghost-button" type="submit">確認用に出力</button>
+      </form>
+      {% endif %}
+      {% if can_export %}
+      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export">
+        <input type="hidden" name="output_mode" value="official">
+        <button type="submit">03フォルダへ本番出力</button>
+      </form>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
   <section class="panel">
     <div class="section-heading">
       <div>
