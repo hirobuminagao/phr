@@ -63,8 +63,8 @@
 
 | 画面 | 目的 | 主な操作 | 備考 |
 |---|---|---|---|
-| 出力リスト作成・編集 | HIAアップロード用XMLの出力対象を人が確認して箱へ入れる | リスト作成、case検索、追加、除外、READY化 | `39_hia_xml_export_run_mock.html` が現モック |
-| XML出力実行 | READYな出力リストからXML/ZIPを出力する | review/official出力、出力結果確認 | CLI `04_export_hia_xml.py` の画面入口 |
+| 出力リスト作成・編集 | HIAアップロード用XMLの出力対象を人が確認して箱へ入れる | リスト作成、alias一覧から健診機関追加、case検索、追加、除外、READY化 | 初期版は画面実装済み |
+| XML出力実行 | READYな出力リストからXML/ZIPを出力する | review/official出力、確認用ZIPダウンロード、確認用ZIP削除 | 初期版は画面実装済み。正式出力はCLI `04_export_hia_xml.py` を画面から呼び出す |
 | HIAアップロード作業リスト | 出力済みZIPをHIAへアップロードし、完了/エラーを記帳する | ZIP確認、アップロード完了、個人単位エラー記帳 | `40_hia_upload_worklist_mock.html` が現モック |
 | 個人出力case詳細 | 1人分の出力可否と採用値を確認する | source確認、採用値確認、理由ありOK | `41_exam_export_case_detail_mock.html` が現モック |
 | 基本情報補正 | HIA必須基本情報の不足や誤りを補正する | 氏名カナ、郵便番号、住所、記号番号等の補正 | 住所不足対応に必須 |
@@ -263,6 +263,59 @@ URL:
 - CSVフォーマット/マッピング登録。
 - 紙健診テンプレート登録。
 - 医療機関確認事項のワークフロー管理。
+
+### 出力リスト一覧/詳細
+
+実装場所:
+
+- `apps/health_exam_admin/main.py`
+- `apps/health_exam_admin/templates/export_lists.html`
+- `apps/health_exam_admin/templates/export_list_detail.html`
+- `apps/health_exam_admin/static/app.js`
+- `apps/health_exam_admin/static/app.css`
+
+URL:
+
+- `/export-lists`
+- `/export-lists/{xml_export_list_id}`
+
+権限:
+
+- `export_lists.view`: 出力リスト参照。
+- `export_lists.edit`: 出力リスト作成。
+- `xml_export.review`: 確認用出力、確認用ZIPダウンロード。
+- `xml_export.official`: 本番03フォルダ出力。
+
+扱うDB:
+
+- `health_exam_result.ops_xml_export_lists`
+- `health_exam_result.ops_xml_export_list_cases`
+- `health_exam_result.exam_export_cases`
+- `health_exam_result.xml_export_zips`
+- `health_exam_result.xml_export_members`
+- `phr_master.exam_facilities`
+- `phr_master.medical_folder_aliases`
+- 監査ログとして `phr_app.app_audit_logs`
+
+できること:
+
+- 出力リストの新規作成。
+- 初期条件に該当するcaseを出力リストへ追加。
+- 健診機関コード手入力。
+- 受領フォルダalias一覧を検索し、健診機関コードを出力リスト作成条件へ追加。
+- 出力リスト詳細で追加済みcaseを確認。
+- 出力リスト詳細から確認用XML/ZIPを出力。
+- 確認用ZIPを画面からダウンロードし、ダウンロード操作を監査ログへ記録する。
+- 確認用ZIPはダウンロード後に `data/hia_xml_review_exports` から削除する。
+- 出力リスト詳細から本番03フォルダへ正式XML/ZIPを出力。
+
+まだやらないこと:
+
+- 出力リスト作成後のcase追加/除外を画面で細かく編集すること。
+- 出力リストREADY化の明示操作。
+- 個人case詳細からの理由ありOK。
+- HIAアップロード完了/エラー記帳。
+- 基本情報補正の本体処理。
 
 ## 未決事項
 

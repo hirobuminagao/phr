@@ -535,7 +535,7 @@ HIAアップロード担当者への依頼は「`yyyymmdd_hhmmss` に出力し�
 ### Review Output Mode
 
 確認用出力では `output_mode = review` を指定する。
-このモードは、作成したXML/ZIPを人が確認するためのヒロ確認用であり、HIAアップロード対象フォルダを汚さないことを目的とする。
+このモードは、作成したXML/ZIPを人が確認するための確認用であり、HIAアップロード対象フォルダを汚さないことを目的とする。
 ZIP内部のルートフォルダ名、個人XML名、XSD構成は正式出力と同じにする。
 違いは外側の配置場所だけである。
 ETL run と `etl_errors` は実行証跡として残すが、`xml_export_zips` / `xml_export_members`、`exam_export_cases.xml_export_status`、`ops_xml_export_lists` / `ops_xml_export_list_cases` の正式出力状態は更新しない。
@@ -551,8 +551,14 @@ ETL run と `etl_errors` は実行証跡として残すが、`xml_export_zips` /
 ```
 
 `review_output_root` を指定した場合は、上記 `<repo>/data/hia_xml_review_exports` の代わりにそのパスを使う。
+ただし相対パスを指定した場合は、実行カレントディレクトリではなく `<repo>` からの相対パスとして解決する。
 確認用出力は、正式アップロード依頼には使用しない。
 確認後に正式出力する場合は、同じ出力リストを `output_mode = official` で再実行する。
+
+FastAPI管理画面からの確認用出力では、確認用ZIPを出力リスト詳細画面に表示する。
+確認用ZIPは、画面からダウンロードした時点で `app_audit_logs` に `HIA_XML_REVIEW_DOWNLOAD` として記録し、ダウンロードレスポンス送信後に `data/hia_xml_review_exports` から削除する。
+確認用ZIPは正式な `xml_export_zips` / `xml_export_members` には記録しない。
+そのため、正式出力済みcaseであっても確認用には再生成できるようにし、確認用出力では既出力除外条件を適用しない。
 
 最終出力物は以下の命名規則で作るZIPである。
 個人XML名とZIP内部の構成は公式仕様を正とし、旧exporterの実装は補助的に参照する。

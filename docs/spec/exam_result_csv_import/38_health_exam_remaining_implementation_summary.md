@@ -244,8 +244,8 @@ XMLとCSV、または複数CSVで不足項目を補い、1つの論理健診結�
 - 設計方針はある。
 - XML出力候補の命名は `exam_export_cases` / `exam_export_case_sources` / `exam_export_case_values` に寄せる。
 - 旧COMBINED ledger方式の試作 `build_combined_exam_ledgers.py` は削除済み。本流にはしない。
-- 結合出力用case DDL、case作成、case value採用、case単位checkは `exam_ledgers + exam_item_values` 起点で整備する。
-- case起点exportは未実装。
+- 結合出力用case DDL、case作成、case value採用、case単位checkは `exam_ledgers + exam_item_values` 起点で整備済み。
+- case起点exportは `04_export_hia_xml.py` とFastAPI管理画面の出力リスト詳細から実行できる。
 
 ### 8. Export Control UI
 
@@ -271,7 +271,11 @@ XML出力条件を画面から指定できるようにする。
 
 - CLI/YAMLによる出力は実装済み。
 - 出力リストの作成、一覧、詳細確認はFastAPI管理画面に実装済み。
-- XML出力実行ボタン、出力結果のアップロード作業記帳、個人case詳細からの理由ありOK操作は未実装。
+- 出力リスト作成画面では、健診機関コード手入力に加えて、受領フォルダalias一覧から健診機関を検索して追加できる。
+- 出力リスト詳細画面から、同じリストを対象に `review` 確認用出力と `official` 本番03フォルダ出力を実行できる。
+- `review` 確認用出力では、ZIPを `data/hia_xml_review_exports/event_<event_id>` 配下へ作成し、詳細画面の確認用ZIP一覧からダウンロードできる。ダウンロード時は監査ログへ記録し、ダウンロード後に確認用ZIPを削除する。
+- `official` 本番出力では、従来どおり健診機関フォルダ配下の `03_健診結果（アップロードデータ）` に出力し、正式出力履歴とcase/list状態を更新する。
+- 出力結果のHIAアップロード作業記帳、個人case詳細からの理由ありOK操作は未実装。
 
 #### 8.1 HIA XML出力リスト画面モック確定メモ
 
@@ -315,10 +319,26 @@ XML出力条件を画面から指定できるようにする。
 - 出力リストへcase追加API。
 - 出力リストからcase削除API。
 - 出力リスト確定またはREADY化API。
-- 出力リスト指定のXML出力実行API。
+- 出力リスト指定のXML出力実行API。初期版は実装済み。
+- 確認用ZIPダウンロードAPI。初期版は実装済みで、ダウンロード後に確認用ZIPを削除する。
 
 初期画面実装では、テンプレート登録や基本情報補正の本体処理は含めない。
 テンプレート登録は別画面/API、基本情報補正は出力リストまたはcase詳細から遷移する後続画面/APIとして扱う。
+
+### 8.2 特定健診チェックの後続方針
+
+現行の `exam_check_results` は主に法定健診チェックを扱う。
+健保からのXMLエラー指摘では、特定健診項目としての構造、コード体系、単位、セクションが問題になるケースが見えてきている。
+
+後続では、法定チェックとは別に特定健診チェックを追加する。
+大まかな流れは以下とする。
+
+- 特定健診用の横持ちチェック値を全員分作る。
+- 法定健診チェックと同じ意味で既に満たせる項目は、同一性項目やnamecode対応を確認したうえで重複チェックを避ける。
+- 法定側にない特定健診項目は、特定健診チェック側の横持ち項目として追加する。
+- そのうえで年度末年齢、今回はevent基準日 `2026-11-30` 時点の満年齢により、特定健診対象/対象外を判定する。
+- 対象外はチェック対象外として扱い、対象者は `OK` / `NG` / 必要に応じて理由ありOKで管理する。
+- `exam_export_cases.health_exam_report_category` と `program_code` が、年齢判定と矛盾していないかも確認する。
 
 ### 9. Master and Facility Admin UI
 
