@@ -2638,6 +2638,65 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_exam_ledger_detail(cur: Any, *, exam_ledger_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {qname(health_db())}.exam_ledgers
+        WHERE exam_ledger_id = %s
+        LIMIT 1
+        """,
+        (exam_ledger_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_exam_item_value_rows(cur: Any, *, exam_ledger_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          id,
+          namecode,
+          namecode_display_name,
+          section_code,
+          section_name,
+          occurrence_no,
+          raw_value,
+          raw_value_type,
+          raw_unit,
+          normalized_value,
+          normalized_unit,
+          nullflavor,
+          code_system,
+          code_value,
+          code_display,
+          interpretation_code,
+          interpretation_name,
+          source_reference_lower,
+          source_reference_upper,
+          negation_ind,
+          normalize_status,
+          normalize_reason,
+          validation_status,
+          validation_reason,
+          extracted_run_id,
+          updated_at
+        FROM {qname(health_db())}.exam_item_values
+        WHERE ledger_type = 'EXAM'
+          AND ledger_id = %s
+        ORDER BY
+          CASE WHEN validation_status = 'INVALID' THEN 0 ELSE 1 END,
+          COALESCE(jun_no, 999999),
+          namecode,
+          occurrence_no,
+          id
+        """,
+        (exam_ledger_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[str, Any] | None:
     cur.execute(
         f"""
@@ -4114,6 +4173,55 @@ def exam_ledgers(request: Request) -> Response:
             "filters": filters,
             "limit": limit,
             "event_options": event_options,
+        },
+    )
+
+
+@app.get("/exam-ledgers/{exam_ledger_id}", response_class=HTMLResponse)
+def exam_ledger_detail(request: Request, exam_ledger_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            ledger = load_exam_ledger_detail(cur, exam_ledger_id=exam_ledger_id)
+            if ledger is None:
+                conn.commit()
+                return RedirectResponse("/exam-ledgers?error=健診結果が見つかりません。", status_code=303)
+            item_rows = load_exam_item_value_rows(cur, exam_ledger_id=exam_ledger_id)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="PERSONAL_INFO_VIEW_EXAM_LEDGER_DETAIL",
+                    target_schema=health_db(),
+                    target_table="exam_ledgers",
+                    target_id=str(exam_ledger_id),
+                    after={
+                        "exam_ledger_id": ledger.get("exam_ledger_id"),
+                        "hia_subscriber_id": ledger.get("hia_subscriber_id"),
+                        "person_id_custom": ledger.get("person_id_custom"),
+                        "exam_date": str(ledger.get("exam_date") or ""),
+                        "facility_code": ledger.get("facility_code"),
+                        "item_count": len(item_rows),
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_ledger_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "ledger": ledger,
+            "item_rows": item_rows,
         },
     )
 

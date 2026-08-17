@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% set title = "健診結果詳細（受領）" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">RECEIVED EXAM RESULT</p>
+    <h1>健診結果詳細（受領）</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/exam-ledgers?event_id={{ ledger.event_id }}&file_receipt_id={{ ledger.file_receipt_id or '' }}&limit=2000">一覧へ戻る</a>
+    <a class="ghost-button" href="/file-receipts">受領ファイル</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel ledger-detail-head">
+    <div>
+      <p class="eyebrow">{{ ledger.source_type }} / ledger {{ ledger.exam_ledger_id }}</p>
+      <h2>{{ ledger.name_kana_raw or "カナなし" }}</h2>
+      <p class="subtle">{{ ledger.name_full_raw or "氏名なし" }} / HIA {{ ledger.hia_subscriber_id or "-" }} / {{ ledger.subscriber_match_status or "突合状態なし" }}</p>
+    </div>
+    <div class="detail-status-stack">
+      <span class="status-pill {{ 'status-ready' if ledger.check_status == 'OK' else 'status-pending' if ledger.check_status == 'PENDING' else 'status-danger' }}">{{ ledger.check_status }}</span>
+      <span class="status-pill {{ 'status-ready' if ledger.xml_export_status == 'READY' else 'status-muted' }}">export {{ ledger.xml_export_status }}</span>
+    </div>
+  </section>
+
+  <section class="summary-grid ledger-summary-grid">
+    <div class="summary-card">
+      <span>受領source</span>
+      <strong>{{ ledger.source_type }}</strong>
+      <small>file {{ ledger.file_receipt_id or "-" }} / row {{ ledger.src_row_no or "-" }}</small>
+    </div>
+    <div class="summary-card">
+      <span>健診機関</span>
+      <strong>{{ ledger.facility_name or "未設定" }}</strong>
+      <small>{{ ledger.facility_code or "-" }} / {{ ledger.exam_date or "受診日なし" }}</small>
+    </div>
+    <div class="summary-card">
+      <span>取込項目</span>
+      <strong>{{ ledger.exam_item_count or item_rows|length }}件</strong>
+      <small>値エラー {{ ledger.exam_item_error_count or 0 }}</small>
+    </div>
+    <div class="summary-card">
+      <span>source情報</span>
+      <strong>{{ ledger.xml_file_name or ledger.mapping_version or "-" }}</strong>
+      <small>報告 {{ ledger.health_exam_report_category or "-" }} / program {{ ledger.program_code or "-" }}</small>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>基本情報・状態</h2>
+        <p class="subtle">この1件の取り込み元、基本情報補完、法定チェック結果を確認します。</p>
+      </div>
+    </div>
+    <div class="detail-grid">
+      <div><span>氏名カナ export</span><strong>{{ ledger.name_kana_export_value or "-" }}</strong><small>{{ ledger.name_kana_export_source or "" }} {{ ledger.name_kana_export_reason or "" }}</small></div>
+      <div><span>記号 export</span><strong>{{ ledger.insurance_symbol_export_value or "-" }}</strong><small>{{ ledger.insurance_symbol_export_source or "" }} {{ ledger.insurance_symbol_export_reason or "" }}</small></div>
+      <div><span>番号 export</span><strong>{{ ledger.insurance_number_export_value or "-" }}</strong><small>{{ ledger.insurance_number_export_source or "" }} {{ ledger.insurance_number_export_reason or "" }}</small></div>
+      <div><span>保険者番号</span><strong>{{ ledger.insurer_number_export_value or ledger.insurer_number or "-" }}</strong><small>{{ ledger.insurer_number_completion_status or "" }} {{ ledger.insurer_number_completion_reason or "" }}</small></div>
+      <div><span>郵便番号</span><strong>{{ ledger.postal_code_completed_value or ledger.postal_code or "-" }}</strong><small>{{ ledger.address_completion_status or "" }}</small></div>
+      <div><span>住所</span><strong>{{ ledger.address_completed_value or ledger.address or "-" }}</strong><small>{{ ledger.address_source or "" }} {{ ledger.address_completion_reason or "" }}</small></div>
+      <div><span>基本情報</span><strong>{{ ledger.basic_info_status or "-" }}</strong><small>{{ ledger.basic_info_reason or "" }}</small></div>
+      <div><span>検査値</span><strong>{{ ledger.exam_item_status or "-" }}</strong><small>{{ ledger.exam_item_reason or "" }}</small></div>
+      <div class="detail-grid-wide"><span>法定チェック理由</span><strong>{{ ledger.check_reason or "OK" }}</strong><small>merge {{ ledger.merge_status }} / {{ ledger.merge_reason or "" }}</small></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>検査結果値</h2>
+        <p class="subtle">raw値、正規化後の値、コード、単位、エラー理由を一ファイル内の項目として確認します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table exam-item-detail-table">
+        <thead>
+          <tr>
+            <th>状態</th>
+            <th>項目</th>
+            <th>raw</th>
+            <th>正規化・コード</th>
+            <th>単位・基準</th>
+            <th>理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in item_rows %}
+          <tr class="{{ 'is-error-row' if item.validation_status == 'INVALID' or item.normalize_status == 'ERROR' else '' }}">
+            <td>
+              <span class="status-pill {{ 'status-ready' if item.validation_status == 'VALID' else 'status-danger' if item.validation_status == 'INVALID' else 'status-pending' }}">{{ item.validation_status or "-" }}</span>
+              <small>normalize {{ item.normalize_status or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.namecode_display_name or "項目名なし" }}</strong>
+              <small>{{ item.namecode or "-" }}</small>
+              <small>{{ item.section_name or "" }} / occurrence {{ item.occurrence_no }}</small>
+            </td>
+            <td>
+              <strong>{{ item.raw_value if item.raw_value is not none else "空" }}</strong>
+              <small>{{ item.raw_value_type or "-" }} {{ item.raw_unit or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.normalized_value if item.normalized_value is not none else item.nullflavor or "-" }}</strong>
+              <small>{{ item.code_value or "" }} {{ item.code_display or "" }}</small>
+              <small>{{ item.code_system or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.normalized_unit or "-" }}</strong>
+              <small>基準 {{ item.source_reference_lower or "-" }} - {{ item.source_reference_upper or "-" }}</small>
+              <small>判定 {{ item.interpretation_code or "" }} {{ item.interpretation_name or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.validation_reason or item.normalize_reason or "-" }}</strong>
+              <small>value id {{ item.id }} / run {{ item.extracted_run_id or "-" }}</small>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6">検査結果値はありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

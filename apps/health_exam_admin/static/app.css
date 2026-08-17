@@ -1984,6 +1984,71 @@ a.home-menu-card:hover {
   width: 132px;
 }
 
+.ledger-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ledger-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.detail-grid span,
+.detail-grid strong,
+.detail-grid small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.detail-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.detail-grid strong {
+  margin-top: 4px;
+}
+
+.detail-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.exam-item-detail-table th:nth-child(1),
+.exam-item-detail-table td:nth-child(1) {
+  width: 120px;
+}
+
+.exam-item-detail-table th:nth-child(2),
+.exam-item-detail-table td:nth-child(2) {
+  width: 24%;
+}
+
+.exam-item-detail-table th:nth-child(6),
+.exam-item-detail-table td:nth-child(6) {
+  width: 22%;
+}
+
+.exam-item-detail-table tr.is-error-row td {
+  background: #fff6f6;
+}
+
 .switch-button,
 .binary-switch {
   position: relative;
@@ -2069,6 +2134,7 @@ a.home-menu-card:hover {
 .alias-table,
 .file-receipt-table,
 .exam-ledger-table,
+.exam-item-detail-table,
 .fund-table,
 .fund-run-table,
 .fund-zip-table,
@@ -2187,6 +2253,15 @@ a.home-menu-card:hover {
 
   .export-detail-head {
     flex-direction: column;
+  }
+
+  .ledger-detail-head {
+    flex-direction: column;
+  }
+
+  .ledger-summary-grid,
+  .detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .detail-status-stack,

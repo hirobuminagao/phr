@@ -107,13 +107,13 @@
         <tbody>
           {% for row in rows %}
           <tr data-filter-text="{{ row.exam_ledger_id }} {{ row.event_id }} {{ row.source_type }} {{ row.file_receipt_id or '' }} {{ row.src_row_no or '' }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.subscriber_match_status or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.exam_date or '' }} {{ row.check_status }} {{ row.check_reason or '' }} {{ row.xml_export_status }} {{ row.merge_status }} {{ row.xml_file_name or '' }} {{ row.mapping_version or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }}" data-source-type="{{ row.source_type }}" data-check-status="{{ row.check_status }}">
-            <td>{{ row.exam_ledger_id }}</td>
+            <td><a class="inline-link" href="/exam-ledgers/{{ row.exam_ledger_id }}">{{ row.exam_ledger_id }}</a></td>
             <td>
               <span class="status-pill status-muted">{{ row.source_type }}</span>
               <small>file {{ row.file_receipt_id or "-" }} / row {{ row.src_row_no or "-" }}</small>
             </td>
             <td>
-              <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
+              <strong><a class="inline-link" href="/exam-ledgers/{{ row.exam_ledger_id }}">{{ row.name_kana_raw or "カナなし" }}</a></strong>
               <small>{{ row.name_full_raw or "氏名なし" }}</small>
               <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
             </td>
