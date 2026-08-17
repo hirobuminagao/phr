@@ -121,6 +121,111 @@
   </section>
   {% endif %}
 
+  {% if can_edit %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>人を追加</h2>
+        <p class="subtle">再出力や個別対応で、このリストに追加するcaseを検索します。</p>
+      </div>
+    </div>
+    <form method="get" action="/export-lists/{{ export_list.xml_export_list_id }}" class="filter-form">
+      <input type="hidden" name="show_candidates" value="1">
+      <label>
+        <span>人・番号</span>
+        <input name="case_q" value="{{ candidate_filters.case_q }}" placeholder="氏名カナ / HIA ID / 記号番号 / case_id">
+      </label>
+      <label>
+        <span>健診機関</span>
+        <input name="facility_q" value="{{ candidate_filters.facility_q }}" placeholder="健診機関名 / コード">
+      </label>
+      <label>
+        <span>受診月</span>
+        <input name="exam_month" value="{{ candidate_filters.exam_month or export_list.requested_exam_month or '' }}" placeholder="2026-05">
+      </label>
+      <div class="filter-block compact-choice-block">
+        <span>対象状態</span>
+        <label class="inline-check">
+          <input type="checkbox" name="include_export_ready" value="1" {% if candidate_filters.include_export_ready == "1" %}checked{% endif %}>
+          READY
+        </label>
+        <label class="inline-check">
+          <input type="checkbox" name="include_approved_with_reason" value="1" {% if candidate_filters.include_approved_with_reason == "1" %}checked{% endif %}>
+          理由ありOK
+        </label>
+        <label class="inline-check">
+          <input type="checkbox" name="include_exported" value="1" {% if candidate_filters.include_exported == "1" %}checked{% endif %}>
+          出力済み
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/export-lists/{{ export_list.xml_export_list_id }}">クリア</a>
+      </div>
+    </form>
+
+    {% if show_candidates %}
+    <div class="table-panel">
+      <table class="data-table export-case-table">
+        <thead>
+          <tr>
+            <th>状態</th>
+            <th>加入者</th>
+            <th>健診機関 / 受診日 / HIA ID</th>
+            <th>法定チェック</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for case in add_candidates %}
+          {% set already_active = case.existing_list_case_id and not case.existing_removed_at %}
+          {% set was_removed = case.existing_list_case_id and case.existing_removed_at %}
+          <tr>
+            <td>
+              <span class="status-pill status-ready">{{ readiness_label(case.export_readiness_status) }}</span>
+              {% if already_active %}
+                <small>追加済み</small>
+              {% elif was_removed %}
+                <small>除外中</small>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ case.insured_card_symbol or "" }}-{{ case.insured_card_number or "" }}</strong>
+              <small>{{ case.name_kana or "氏名カナなし" }}</small>
+              <small>{{ case.birth_date or "生年月日なし" }}</small>
+            </td>
+            <td>
+              <strong title="{{ case.exam_facility_name or "" }}">{{ case.exam_facility_name or "健診機関なし" }}</strong>
+              <small>{{ case.exam_date or "受診日なし" }}</small>
+              <small>{{ case.hia_subscriber_id or "HIA IDなし" }}</small>
+            </td>
+            <td>
+              <strong>{{ case.check_status or "" }}</strong>
+              <small>{{ case.check_reason or case.export_readiness_reason or "" }}</small>
+            </td>
+            <td>
+              {% if already_active %}
+                <button class="ghost-button" type="button" disabled>追加済み</button>
+              {% else %}
+                <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/add">
+                  <input type="hidden" name="exam_export_case_id" value="{{ case.exam_export_case_id }}">
+                  <button type="submit">{{ "再追加" if was_removed else "追加" }}</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5">条件に合うcaseはありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section class="panel">
     <div class="section-heading">
       <div>
@@ -143,6 +248,7 @@
             <th>健診機関 / 受診日 / HIA ID</th>
             <th>法定チェック</th>
             <th>出力</th>
+            {% if can_edit %}<th>操作</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -170,10 +276,18 @@
               <strong>{{ case.xml_export_status or "" }}</strong>
               <small>{{ case.exported_at or "" }}</small>
             </td>
+            {% if can_edit %}
+            <td>
+              <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/{{ case.xml_export_list_case_id }}/remove" class="inline-action-form">
+                <input name="remove_reason" placeholder="理由 任意">
+                <button class="danger-button" type="submit">リストから外す</button>
+              </form>
+            </td>
+            {% endif %}
           </tr>
           {% else %}
           <tr>
-            <td colspan="5">このリストにはまだ人が追加されていません。</td>
+            <td colspan="{{ 6 if can_edit else 5 }}">このリストにはまだ人が追加されていません。</td>
           </tr>
           {% endfor %}
         </tbody>

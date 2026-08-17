@@ -2010,7 +2010,7 @@ a.home-menu-card:hover {
 }
 
 .export-case-table {
-  min-width: 1120px;
+  min-width: 1240px;
 }
 
 .export-case-table th:first-child,
@@ -2020,7 +2020,56 @@ a.home-menu-card:hover {
 
 .export-case-table th:last-child,
 .export-case-table td:last-child {
-  width: 132px;
+  width: 220px;
+}
+
+.export-detail-head .subtle {
+  overflow-wrap: anywhere;
+}
+
+.export-page .filter-form {
+  grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 1fr) minmax(130px, 0.55fr) minmax(300px, 1.1fr) auto;
+  align-items: end;
+}
+
+.compact-choice-block {
+  display: grid;
+  grid-template-rows: 24px var(--control-height);
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.compact-choice-block > span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.inline-check {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 7px;
+  grid-template-rows: none !important;
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.inline-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.inline-action-form {
+  display: grid;
+  gap: 8px;
+}
+
+.inline-action-form input {
+  min-width: 0;
+  width: 100%;
 }
 
 .ledger-detail-head {

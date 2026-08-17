@@ -2821,6 +2821,194 @@ def load_ops_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_export_case_add_candidates(
+    cur: Any,
+    *,
+    xml_export_list_id: int,
+    event_id: int,
+    filters: dict[str, str],
+    limit: int = 80,
+) -> list[dict[str, Any]]:
+    where_parts = ["eec.event_id = %s"]
+    params: list[Any] = [event_id]
+    query = filters.get("case_q", "").strip()
+    facility_query = filters.get("facility_q", "").strip()
+    exam_month = filters.get("exam_month", "").strip()
+    readiness_values = tuple(
+        value
+        for value in ("EXPORT_READY", "APPROVED_WITH_REASON", "EXPORTED")
+        if filters.get(f"include_{value.lower()}") == "1"
+    ) or ("EXPORT_READY", "APPROVED_WITH_REASON")
+
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              CAST(eec.exam_export_case_id AS CHAR) = %s
+              OR eec.hia_subscriber_id LIKE %s
+              OR eec.person_id_custom LIKE %s
+              OR eec.name_kana_export_value LIKE %s
+              OR eec.insurance_symbol_export_value LIKE %s
+              OR eec.insurance_number_export_value LIKE %s
+            )
+            """
+        )
+        params.extend([query, like, like, like, like, like])
+    if facility_query:
+        like = f"%{facility_query}%"
+        where_parts.append("(ef.exam_facility_code LIKE %s OR ef.exam_facility_name LIKE %s)")
+        params.extend([like, like])
+    if exam_month:
+        where_parts.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
+        params.append(exam_month)
+    where_parts.append(f"eec.export_readiness_status IN ({', '.join(['%s'] * len(readiness_values))})")
+    params.extend(readiness_values)
+
+    where_sql = " AND ".join(where_parts)
+    cur.execute(
+        f"""
+        SELECT
+          eec.exam_export_case_id,
+          eec.hia_subscriber_id,
+          eec.person_id_custom,
+          eec.insurance_symbol_export_value AS insured_card_symbol,
+          eec.insurance_number_export_value AS insured_card_number,
+          eec.name_kana_export_value AS name_kana,
+          eec.birthdate AS birth_date,
+          eec.exam_date,
+          eec.export_readiness_status,
+          eec.export_readiness_reason,
+          eec.check_status,
+          eec.check_reason,
+          eec.xml_export_status,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          xelc.xml_export_list_case_id AS existing_list_case_id,
+          xelc.removed_at AS existing_removed_at
+        FROM {qname(health_db())}.exam_export_cases eec
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = eec.exam_facility_id
+        LEFT JOIN {qname(health_db())}.ops_xml_export_list_cases xelc
+          ON xelc.xml_export_list_id = %s
+         AND xelc.exam_export_case_id = eec.exam_export_case_id
+        WHERE {where_sql}
+        ORDER BY
+          CASE WHEN xelc.removed_at IS NULL AND xelc.xml_export_list_case_id IS NOT NULL THEN 0 ELSE 1 END,
+          ef.exam_facility_code,
+          eec.exam_date,
+          eec.name_kana_export_value,
+          eec.exam_export_case_id
+        LIMIT %s
+        """,
+        (xml_export_list_id, *params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def add_export_case_to_list(
+    cur: Any,
+    *,
+    xml_export_list_id: int,
+    exam_export_case_id: int,
+    user: dict[str, Any],
+) -> str:
+    operator = str(user.get("employee_no") or user.get("display_name") or "")
+    cur.execute(
+        f"""
+        SELECT export_readiness_status, export_readiness_reason
+        FROM {qname(health_db())}.exam_export_cases
+        WHERE exam_export_case_id = %s
+        LIMIT 1
+        """,
+        (exam_export_case_id,),
+    )
+    case = cur.fetchone()
+    if not case:
+        raise ValueError("CASE_NOT_FOUND")
+    cur.execute(
+        f"""
+        SELECT xml_export_list_case_id, removed_at
+        FROM {qname(health_db())}.ops_xml_export_list_cases
+        WHERE xml_export_list_id = %s
+          AND exam_export_case_id = %s
+        LIMIT 1
+        """,
+        (xml_export_list_id, exam_export_case_id),
+    )
+    existing = cur.fetchone()
+    if existing and existing.get("removed_at") is None:
+        return "already"
+    if existing:
+        cur.execute(
+            f"""
+            UPDATE {qname(health_db())}.ops_xml_export_list_cases
+            SET
+              list_case_status = 'READY',
+              export_readiness_status_snapshot = %s,
+              export_readiness_reason_snapshot = %s,
+              added_by = %s,
+              added_at = CURRENT_TIMESTAMP(3),
+              removed_by = NULL,
+              removed_at = NULL,
+              remove_reason = NULL,
+              updated_at = CURRENT_TIMESTAMP(3)
+            WHERE xml_export_list_case_id = %s
+            """,
+            (
+                case.get("export_readiness_status"),
+                case.get("export_readiness_reason"),
+                operator,
+                existing["xml_export_list_case_id"],
+            ),
+        )
+        return "readded"
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_xml_export_list_cases (
+          xml_export_list_id, exam_export_case_id, list_case_status,
+          export_readiness_status_snapshot, export_readiness_reason_snapshot,
+          added_by
+        ) VALUES (%s, %s, 'READY', %s, %s, %s)
+        """,
+        (
+            xml_export_list_id,
+            exam_export_case_id,
+            case.get("export_readiness_status"),
+            case.get("export_readiness_reason"),
+            operator,
+        ),
+    )
+    return "added"
+
+
+def remove_export_list_case(
+    cur: Any,
+    *,
+    xml_export_list_id: int,
+    xml_export_list_case_id: int,
+    user: dict[str, Any],
+    reason: str | None,
+) -> int:
+    operator = str(user.get("employee_no") or user.get("display_name") or "")
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.ops_xml_export_list_cases
+        SET
+          list_case_status = 'REMOVED',
+          removed_by = %s,
+          removed_at = CURRENT_TIMESTAMP(3),
+          remove_reason = NULLIF(%s, ''),
+          updated_at = CURRENT_TIMESTAMP(3)
+        WHERE xml_export_list_id = %s
+          AND xml_export_list_case_id = %s
+          AND removed_at IS NULL
+        """,
+        (operator, reason or "", xml_export_list_id, xml_export_list_case_id),
+    )
+    return int(cur.rowcount or 0)
+
+
 def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -> str:
     if output_mode not in {"review", "official"}:
         raise ValueError("OUTPUT_MODE_INVALID")
@@ -4566,6 +4754,25 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
                 conn.commit()
                 return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
             cases = load_ops_xml_export_list_cases(cur, xml_export_list_id=xml_export_list_id)
+            candidate_filters = {
+                "case_q": request.query_params.get("case_q", ""),
+                "facility_q": request.query_params.get("facility_q", ""),
+                "exam_month": request.query_params.get("exam_month", ""),
+                "include_export_ready": request.query_params.get("include_export_ready", "1"),
+                "include_approved_with_reason": request.query_params.get("include_approved_with_reason", "1"),
+                "include_exported": request.query_params.get("include_exported", ""),
+            }
+            show_candidates = request.query_params.get("show_candidates") == "1"
+            add_candidates = (
+                load_export_case_add_candidates(
+                    cur,
+                    xml_export_list_id=xml_export_list_id,
+                    event_id=int(export_list["event_id"]),
+                    filters=candidate_filters,
+                )
+                if show_candidates
+                else []
+            )
             review_downloads = load_review_xml_export_downloads(event_id=int(export_list["event_id"]))
             log_personal_info_view(
                 cur,
@@ -4586,6 +4793,9 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "user": user,
             "export_list": export_list,
             "cases": cases,
+            "add_candidates": add_candidates,
+            "candidate_filters": candidate_filters,
+            "show_candidates": show_candidates,
             "review_downloads": review_downloads,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
@@ -4594,6 +4804,101 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "can_export": has_permission(user, "xml_export.official"),
         },
     )
+
+
+@app.post("/export-lists/{xml_export_list_id}/cases/add", response_class=HTMLResponse)
+async def export_list_case_add(request: Request, xml_export_list_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "export_lists.edit"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    try:
+        exam_export_case_id = int(str(form.get("exam_export_case_id") or "").strip())
+    except ValueError:
+        return RedirectResponse(
+            f"/export-lists/{xml_export_list_id}?error={quote('追加するcaseを選択してください。')}",
+            status_code=303,
+        )
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            action = add_export_case_to_list(
+                cur,
+                xml_export_list_id=xml_export_list_id,
+                exam_export_case_id=exam_export_case_id,
+                user=user,
+            )
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="XML_EXPORT_LIST_CASE_ADD",
+                    target_schema=health_db(),
+                    target_table="ops_xml_export_list_cases",
+                    target_id=str(xml_export_list_id),
+                    after={
+                        "xml_export_list_id": xml_export_list_id,
+                        "exam_export_case_id": exam_export_case_id,
+                        "action": action,
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    labels = {"added": "追加しました。", "readded": "再追加しました。", "already": "すでに追加済みです。"}
+    return RedirectResponse(
+        f"/export-lists/{xml_export_list_id}?message={quote(labels.get(action, '更新しました。'))}",
+        status_code=303,
+    )
+
+
+@app.post("/export-lists/{xml_export_list_id}/cases/{xml_export_list_case_id}/remove", response_class=HTMLResponse)
+async def export_list_case_remove(request: Request, xml_export_list_id: int, xml_export_list_case_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "export_lists.edit"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    reason = str(form.get("remove_reason") or "").strip()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            updated = remove_export_list_case(
+                cur,
+                xml_export_list_id=xml_export_list_id,
+                xml_export_list_case_id=xml_export_list_case_id,
+                user=user,
+                reason=reason,
+            )
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="XML_EXPORT_LIST_CASE_REMOVE",
+                    target_schema=health_db(),
+                    target_table="ops_xml_export_list_cases",
+                    target_id=str(xml_export_list_case_id),
+                    after={
+                        "xml_export_list_id": xml_export_list_id,
+                        "xml_export_list_case_id": xml_export_list_case_id,
+                        "remove_reason": reason,
+                        "updated": updated,
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    message = "リストから外しました。" if updated else "対象はすでに外されているか、見つかりません。"
+    return RedirectResponse(f"/export-lists/{xml_export_list_id}?message={quote(message)}", status_code=303)
 
 
 @app.post("/export-lists/{xml_export_list_id}/export", response_class=HTMLResponse)
