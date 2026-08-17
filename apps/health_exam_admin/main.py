@@ -2703,6 +2703,8 @@ def search_exam_ledger_candidates(
     event_id: str,
     name_kana: str,
     hia_subscriber_id: str,
+    insurance_symbol: str,
+    insurance_number: str,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     clauses = ["event_id = %s"]
@@ -2713,7 +2715,17 @@ def search_exam_ledger_candidates(
     if hia_subscriber_id:
         clauses.append("hia_subscriber_id LIKE %s")
         params.append(f"%{hia_subscriber_id}%")
-    if not name_kana and not hia_subscriber_id:
+    if insurance_number:
+        clauses.append(
+            "(insurance_number_raw LIKE %s OR insurance_number_match LIKE %s OR insurance_number_export_value LIKE %s)"
+        )
+        params.extend([f"%{insurance_number}%", f"%{insurance_number}%", f"%{insurance_number}%"])
+        if insurance_symbol:
+            clauses.append(
+                "(insurance_symbol_raw LIKE %s OR insurance_symbol_match LIKE %s OR insurance_symbol_export_value LIKE %s)"
+            )
+            params.extend([f"%{insurance_symbol}%", f"%{insurance_symbol}%", f"%{insurance_symbol}%"])
+    if not name_kana and not hia_subscriber_id and not insurance_number:
         return []
     where_sql = " AND ".join(clauses)
     cur.execute(
@@ -2725,6 +2737,10 @@ def search_exam_ledger_candidates(
           file_receipt_id,
           src_row_no,
           hia_subscriber_id,
+          insurance_symbol_raw,
+          insurance_symbol_export_value,
+          insurance_number_raw,
+          insurance_number_export_value,
           name_full_raw,
           name_kana_raw,
           facility_name,
@@ -4237,8 +4253,15 @@ def exam_ledger_search(request: Request) -> Response:
         "event_id": request.query_params.get("event_id", "2"),
         "name_kana": request.query_params.get("name_kana", "").strip(),
         "hia_subscriber_id": request.query_params.get("hia_subscriber_id", "").strip(),
+        "insurance_symbol": request.query_params.get("insurance_symbol", "").strip(),
+        "insurance_number": request.query_params.get("insurance_number", "").strip(),
     }
-    has_search = bool(search_filters["name_kana"] or search_filters["hia_subscriber_id"])
+    has_search = bool(
+        search_filters["name_kana"]
+        or search_filters["hia_subscriber_id"]
+        or search_filters["insurance_number"]
+        or search_filters["insurance_symbol"]
+    )
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
@@ -4249,6 +4272,8 @@ def exam_ledger_search(request: Request) -> Response:
                 event_id=search_filters["event_id"],
                 name_kana=search_filters["name_kana"],
                 hia_subscriber_id=search_filters["hia_subscriber_id"],
+                insurance_symbol=search_filters["insurance_symbol"],
+                insurance_number=search_filters["insurance_number"],
             )
             conn.commit()
         except Exception:
@@ -4290,13 +4315,22 @@ def exam_ledger_detail(request: Request, exam_ledger_id: int) -> Response:
                 "event_id": str(ledger.get("event_id") or "2"),
                 "name_kana": request.query_params.get("name_kana", "").strip(),
                 "hia_subscriber_id": request.query_params.get("hia_subscriber_id", "").strip(),
+                "insurance_symbol": request.query_params.get("insurance_symbol", "").strip(),
+                "insurance_number": request.query_params.get("insurance_number", "").strip(),
             }
-            has_search = bool(search_filters["name_kana"] or search_filters["hia_subscriber_id"])
+            has_search = bool(
+                search_filters["name_kana"]
+                or search_filters["hia_subscriber_id"]
+                or search_filters["insurance_number"]
+                or search_filters["insurance_symbol"]
+            )
             search_results = search_exam_ledger_candidates(
                 cur,
                 event_id=search_filters["event_id"],
                 name_kana=search_filters["name_kana"],
                 hia_subscriber_id=search_filters["hia_subscriber_id"],
+                insurance_symbol=search_filters["insurance_symbol"],
+                insurance_number=search_filters["insurance_number"],
             )
             if audit_enabled(cur):
                 log_audit(

@@ -2081,7 +2081,7 @@ a.home-menu-card:hover {
 
 .ledger-person-search-form {
   display: grid;
-  grid-template-columns: minmax(160px, 240px) minmax(220px, 1fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(160px, 220px) minmax(200px, 1fr) minmax(200px, 1fr) minmax(160px, 0.7fr) minmax(160px, 0.7fr) auto;
   gap: 12px;
   align-items: end;
 }

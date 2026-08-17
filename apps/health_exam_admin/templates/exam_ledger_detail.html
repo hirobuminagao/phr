@@ -47,6 +47,14 @@
         <span>HIA subscriber ID</span>
         <input name="hia_subscriber_id" value="{{ search_filters.hia_subscriber_id or '' }}" autocomplete="off" placeholder="HIA加入者ID">
       </label>
+      <label>
+        <span>保険記号</span>
+        <input name="insurance_symbol" value="{{ search_filters.insurance_symbol or '' }}" autocomplete="off" placeholder="番号と組み合わせ">
+      </label>
+      <label>
+        <span>保険番号</span>
+        <input name="insurance_number" value="{{ search_filters.insurance_number or '' }}" autocomplete="off" placeholder="番号のみでも検索可">
+      </label>
       <div class="filter-actions">
         <button type="submit">検索</button>
         <a class="ghost-button" href="/exam-ledgers/search">クリア</a>
@@ -58,11 +66,12 @@
         <p class="subtle">検索結果 {{ search_results|length }} 件。対象のledgerを選択してください。</p>
         <div class="ledger-result-list">
           {% for result in search_results %}
-          <a class="ledger-result-card" href="/exam-ledgers/{{ result.exam_ledger_id }}?name_kana={{ search_filters.name_kana|urlencode }}&hia_subscriber_id={{ search_filters.hia_subscriber_id|urlencode }}">
+          <a class="ledger-result-card" href="/exam-ledgers/{{ result.exam_ledger_id }}?name_kana={{ search_filters.name_kana|urlencode }}&hia_subscriber_id={{ search_filters.hia_subscriber_id|urlencode }}&insurance_symbol={{ search_filters.insurance_symbol|urlencode }}&insurance_number={{ search_filters.insurance_number|urlencode }}">
             <span class="status-pill {{ 'status-ready' if result.check_status == 'OK' else 'status-danger' if result.check_status == 'NG' else 'status-pending' }}">{{ result.check_status or "-" }}</span>
             <div>
               <strong>ledger {{ result.exam_ledger_id }} / {{ result.name_kana_raw or "カナなし" }}</strong>
               <small>{{ result.name_full_raw or "氏名なし" }} / HIA {{ result.hia_subscriber_id or "-" }}</small>
+              <small>記号 {{ result.insurance_symbol_export_value or result.insurance_symbol_raw or "-" }} / 番号 {{ result.insurance_number_export_value or result.insurance_number_raw or "-" }}</small>
               <small>{{ result.facility_name or "健診機関なし" }} / {{ result.exam_date or "受診日なし" }} / {{ result.source_type }}</small>
               <small>{{ result.xml_file_name or result.mapping_version or "" }}</small>
             </div>
