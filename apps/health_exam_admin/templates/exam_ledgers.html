@@ -102,8 +102,8 @@
               <small>file {{ row.file_receipt_id or "-" }} / row {{ row.src_row_no or "-" }}</small>
             </td>
             <td>
-              <strong>{{ row.name_full_raw or "氏名なし" }}</strong>
-              <small>{{ row.name_kana_raw or "" }}</small>
+              <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
+              <small>{{ row.name_full_raw or "氏名なし" }}</small>
               <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
             </td>
             <td>
