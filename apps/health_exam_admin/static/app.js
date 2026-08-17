@@ -159,6 +159,34 @@
     });
   }
 
+  const closeHelpPopovers = (exceptId = "") => {
+    for (const popover of document.querySelectorAll(".help-popover")) {
+      if (exceptId && popover.id === exceptId) continue;
+      popover.hidden = true;
+      const toggle = document.querySelector(`[data-help-toggle="${popover.id}"]`);
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+    }
+  };
+
+  for (const button of document.querySelectorAll("[data-help-toggle]")) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const targetId = button.getAttribute("data-help-toggle") || "";
+      const popover = document.getElementById(targetId);
+      if (!popover) return;
+      const willOpen = popover.hidden;
+      closeHelpPopovers(targetId);
+      popover.hidden = !willOpen;
+      button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target instanceof Element && (target.closest("[data-help-toggle]") || target.closest(".help-popover"))) return;
+    closeHelpPopovers();
+  });
+
   for (const input of document.querySelectorAll(".binary-switch input")) {
     const update = () => {
       const label = input.closest(".binary-switch");
@@ -255,6 +283,7 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    closeHelpPopovers();
     closeModal(document.querySelector(".edit-modal:not([hidden])"));
   });
 

@@ -987,6 +987,67 @@ a.home-menu-card:hover {
   color: var(--accent-dark);
 }
 
+.help-cell {
+  position: relative;
+}
+
+.table-help-heading {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.help-icon-button {
+  inline-size: 24px;
+  block-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #b9c5d2;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.help-icon-button:hover,
+.help-icon-button[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: #eef8f5;
+  color: var(--accent-dark);
+}
+
+.help-popover {
+  position: absolute;
+  z-index: 30;
+  inset-inline-start: 0;
+  top: calc(100% - 4px);
+  inline-size: min(360px, calc(100vw - 40px));
+  padding: 12px;
+  border: 1px solid #b9c5d2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 32px rgba(27, 40, 54, 0.18);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.help-popover strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.help-popover p {
+  margin: 6px 0 0;
+}
+
 .receipt-mode-field,
 .source-kind-picker {
   display: grid;

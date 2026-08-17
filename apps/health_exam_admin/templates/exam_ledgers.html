@@ -88,7 +88,18 @@
             <th>source</th>
             <th>受診者</th>
             <th>健診機関 / 受診日</th>
-            <th>項目</th>
+            <th class="help-cell">
+              <span class="table-help-heading">
+                取込項目
+                <button type="button" class="help-icon-button" data-help-toggle="exam-item-help" aria-expanded="false" aria-label="取込項目と値エラーの説明">?</button>
+              </span>
+              <div id="exam-item-help" class="help-popover" hidden>
+                <strong>取込項目と値エラー</strong>
+                <p>受領したCSV/XMLから、検査結果の値として取り込めた件数です。</p>
+                <p>値エラーは、法定チェックの不足ではありません。値の表記やコードが辞書にない、検査項目マスタにない、コード体系が合わないなど、XML出力に使う前に確認が必要な値の件数です。</p>
+                <p>法定健診項目の不足は、右側の「状態」と理由に表示されます。</p>
+              </div>
+            </th>
             <th>状態</th>
             <th>source情報</th>
           </tr>
@@ -112,7 +123,7 @@
             </td>
             <td>
               <strong>{{ row.exam_item_count or 0 }}件</strong>
-              <small>error {{ row.exam_item_error_count or 0 }}</small>
+              <small>値エラー {{ row.exam_item_error_count or 0 }}</small>
             </td>
             <td>
               <span class="status-pill {{ 'status-ready' if row.check_status == 'OK' else 'status-pending' if row.check_status == 'PENDING' else 'status-muted' }}">{{ row.check_status }}</span>
