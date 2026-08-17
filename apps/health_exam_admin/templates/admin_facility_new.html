@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% set title = "新規健診機関" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>新規健診機関</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/facilities">一覧へ戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page narrow-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>健診機関マスタを作成</h2>
+        <p class="subtle">フォルダaliasから紐づける先の健診機関を追加します。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/facilities" class="form-grid facility-form">
+      <label>
+        <span>健診機関コード</span>
+        <input name="exam_facility_code" placeholder="例: 1310438796" autofocus>
+      </label>
+      <label>
+        <span>表示名</span>
+        <input name="exam_facility_display_name" placeholder="画面・帳票で見たい名前">
+      </label>
+      <label class="form-wide-field">
+        <span>健診機関名 <i class="required-mark">必須</i></span>
+        <input name="exam_facility_name" required placeholder="正式名称">
+      </label>
+      <label>
+        <span>種別</span>
+        <input name="exam_facility_type" placeholder="例: EXAM_FACILITY">
+      </label>
+      <label>
+        <span>医療機関コード</span>
+        <input name="medical_institution_code">
+      </label>
+      <label>
+        <span>予約側コード</span>
+        <input name="reservation_system_medical_institution_code">
+      </label>
+      <label>
+        <span>郵便番号</span>
+        <input name="postal_code">
+      </label>
+      <label>
+        <span>電話番号</span>
+        <input name="phone_number">
+      </label>
+      <label class="form-wide-field">
+        <span>住所</span>
+        <input name="address">
+      </label>
+      <label class="form-wide-field">
+        <span>メモ</span>
+        <textarea name="note" rows="3"></textarea>
+      </label>
+      <div class="form-section">
+        <label class="binary-switch switch-on">
+          <input type="checkbox" name="is_active" value="1" checked>
+          <span>有効</span>
+          <span>無効</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">健診機関を作成</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

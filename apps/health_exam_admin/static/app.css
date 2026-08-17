@@ -513,6 +513,13 @@ button[type="submit"]:disabled {
   margin-bottom: 4px;
 }
 
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .narrow-page {
   max-width: 880px;
 }
@@ -631,6 +638,12 @@ button[type="submit"]:disabled {
 
 .alias-table {
   min-width: 1120px;
+}
+
+.admin-master-table td > strong,
+.admin-master-table td > small {
+  display: block;
+  margin-top: 6px;
 }
 
 .alias-switches {

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% set title = "新規フォルダalias" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>新規フォルダalias</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/facilities">一覧へ戻る</a>
+    <a class="ghost-button" href="/admin/facilities/new">健診機関を新規作成</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page narrow-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>フォルダaliasを作成</h2>
+        <p class="subtle">scan時にフォルダ名からイベント内の健診機関を確定するための対応表です。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/folder-aliases" class="form-grid facility-form">
+      <label>
+        <span>イベント <i class="required-mark">必須</i></span>
+        <select name="event_id" required>
+          {% for event in event_options %}
+          <option value="{{ event.event_id }}">{{ event.event_name or event.event_id }} / {{ event.insurer_number }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-wide-field">
+        <span>実フォルダ名 <i class="required-mark">必須</i></span>
+        <input name="src_folder_raw" required placeholder="例: 1310438796_ヒロオカクリニック" autofocus>
+      </label>
+      <label>
+        <span>正規化後名</span>
+        <input name="dst_folder_norm" placeholder="空なら実フォルダ名と同じ">
+      </label>
+      <label>
+        <span>紐づく健診機関ID/コード</span>
+        <input name="exam_facility_selector" placeholder="例: 1310438796">
+      </label>
+      <label class="form-wide-field">
+        <span>メモ</span>
+        <textarea name="note" rows="3"></textarea>
+      </label>
+      <div class="form-section alias-switches">
+        <label class="binary-switch switch-off">
+          <input type="checkbox" name="manual_judgement" value="1">
+          <span>手動判断</span>
+          <span>通常</span>
+        </label>
+        <label class="binary-switch switch-on">
+          <input type="checkbox" name="is_active" value="1" checked>
+          <span>有効</span>
+          <span>無効</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit">aliasを作成</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

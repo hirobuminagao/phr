@@ -2175,22 +2175,41 @@ def load_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[str, An
     cur.execute(
         f"""
         SELECT
-          exam_facility_id,
-          exam_facility_code,
-          exam_facility_name,
-          exam_facility_display_name,
-          exam_facility_type,
-          medical_institution_code,
-          reservation_system_medical_institution_code,
-          postal_code,
-          address,
-          phone_number,
-          data_source_name,
-          note,
-          is_active,
-          updated_at
-        FROM {qname(master_db())}.exam_facilities
-        ORDER BY is_active DESC, exam_facility_code IS NULL, exam_facility_code, exam_facility_name
+          ef.exam_facility_id,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          ef.exam_facility_display_name,
+          ef.exam_facility_type,
+          ef.medical_institution_code,
+          ef.reservation_system_medical_institution_code,
+          ef.postal_code,
+          ef.address,
+          ef.phone_number,
+          ef.data_source_name,
+          ef.note,
+          ef.is_active,
+          ef.updated_at,
+          COUNT(DISTINCT mfa.alias_id) AS alias_count,
+          MAX(mfa.updated_at) AS alias_last_updated_at
+        FROM {qname(master_db())}.exam_facilities ef
+        JOIN {qname(master_db())}.medical_folder_aliases mfa
+          ON mfa.exam_facility_id = ef.exam_facility_id
+        GROUP BY
+          ef.exam_facility_id,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          ef.exam_facility_display_name,
+          ef.exam_facility_type,
+          ef.medical_institution_code,
+          ef.reservation_system_medical_institution_code,
+          ef.postal_code,
+          ef.address,
+          ef.phone_number,
+          ef.data_source_name,
+          ef.note,
+          ef.is_active,
+          ef.updated_at
+        ORDER BY ef.is_active DESC, ef.exam_facility_code IS NULL, ef.exam_facility_code, ef.exam_facility_name
         LIMIT %s
         """,
         (limit,),
@@ -3513,6 +3532,24 @@ def admin_facilities(request: Request) -> Response:
     )
 
 
+@app.get("/admin/facilities/new", response_class=HTMLResponse)
+def new_admin_facility_form(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    return templates.TemplateResponse(
+        "admin_facility_new.html",
+        {
+            "request": request,
+            "user": user,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
 @app.post("/admin/facilities", response_class=HTMLResponse)
 async def create_admin_facility(request: Request) -> Response:
     user = require_user(request)
@@ -3570,7 +3607,7 @@ async def create_admin_facility(request: Request) -> Response:
             conn.commit()
         except ValueError as exc:
             conn.rollback()
-            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+            return RedirectResponse(f"/admin/facilities/new?error={quote(str(exc))}", status_code=303)
         except Exception:
             conn.rollback()
             raise
@@ -3641,6 +3678,30 @@ async def update_admin_facility(request: Request, exam_facility_id: int) -> Resp
     return RedirectResponse("/admin/facilities?message=健診機関を更新しました。", status_code=303)
 
 
+@app.get("/admin/folder-aliases/new", response_class=HTMLResponse)
+def new_admin_folder_alias_form(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        event_options = load_event_options(cur)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_folder_alias_new.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
 @app.post("/admin/folder-aliases", response_class=HTMLResponse)
 async def create_admin_folder_alias(request: Request) -> Response:
     user = require_user(request)
@@ -3690,7 +3751,7 @@ async def create_admin_folder_alias(request: Request) -> Response:
             conn.commit()
         except ValueError as exc:
             conn.rollback()
-            return RedirectResponse(f"/admin/facilities?error={quote(str(exc))}", status_code=303)
+            return RedirectResponse(f"/admin/folder-aliases/new?error={quote(str(exc))}", status_code=303)
         except Exception:
             conn.rollback()
             raise
