@@ -16,6 +16,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -357,6 +361,47 @@ button[type="submit"]:disabled {
 
 .home-menu-section {
   margin-top: 20px;
+  scroll-margin-top: 18px;
+}
+
+.floating-category-nav {
+  position: fixed;
+  z-index: 40;
+  top: 92px;
+  right: 18px;
+  display: grid;
+  gap: 7px;
+  width: 156px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 28px rgba(31, 41, 51, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.floating-category-nav strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.floating-category-nav a {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.floating-category-nav a:hover {
+  border-color: #a7d8c9;
+  background: #eef8f5;
+  color: var(--accent-dark);
 }
 
 .admin-module-list {
@@ -1774,6 +1819,25 @@ a.home-menu-card:hover {
 
   .admin-home-head {
     grid-template-columns: 1fr;
+  }
+
+  .floating-category-nav {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    align-items: center;
+  }
+
+  .floating-category-nav strong {
+    display: none;
+  }
+
+  .floating-category-nav a {
+    justify-content: center;
+    min-height: 38px;
   }
 
   .admin-module-row {

@@ -67,12 +67,29 @@
   </section>
   {% endif %}
 
+  <nav class="floating-category-nav" aria-label="カテゴリ移動">
+    <strong>カテゴリ</strong>
+    {% if "export_lists.view" in user.permissions
+      or "export_lists.edit" in user.permissions
+      or "xml_export.official" in user.permissions
+      or "hia_upload.perform" in user.permissions
+      or "hia_upload_status.edit" in user.permissions %}
+    <a href="#home-section-main">よく使う作業</a>
+    {% endif %}
+    <a href="#home-section-import">取込・チェック</a>
+    <a href="#home-section-correction">補正・加入者</a>
+    {% if "users.manage" in user.permissions %}
+    <a href="#home-section-admin">管理</a>
+    <a href="#home-section-system">システム管理</a>
+    {% endif %}
+  </nav>
+
   {% if "export_lists.view" in user.permissions
     or "export_lists.edit" in user.permissions
     or "xml_export.official" in user.permissions
     or "hia_upload.perform" in user.permissions
     or "hia_upload_status.edit" in user.permissions %}
-  <section class="home-menu-section">
+  <section id="home-section-main" class="home-menu-section">
     <div class="section-heading">
       <div>
         <h2>よく使う作業</h2>
@@ -111,7 +128,7 @@
   </section>
   {% endif %}
 
-  <section class="home-menu-section">
+  <section id="home-section-import" class="home-menu-section">
     <div class="section-heading">
       <div>
         <h2>取込・チェック</h2>
@@ -126,7 +143,7 @@
     </div>
   </section>
 
-  <section class="home-menu-section">
+  <section id="home-section-correction" class="home-menu-section">
     <div class="section-heading">
       <div>
         <h2>補正・加入者・紙健診</h2>
@@ -142,7 +159,7 @@
   </section>
 
   {% if "users.manage" in user.permissions %}
-  <section class="home-menu-section">
+  <section id="home-section-admin" class="home-menu-section">
     <div class="section-heading">
       <div>
         <h2>管理</h2>
@@ -157,7 +174,7 @@
     </div>
   </section>
 
-  <section class="home-menu-section">
+  <section id="home-section-system" class="home-menu-section">
     <div class="section-heading">
       <div>
         <h2>システム管理</h2>
