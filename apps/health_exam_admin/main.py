@@ -3096,9 +3096,9 @@ def file_receipts(request: Request) -> Response:
         "status": request.query_params.get("status", ""),
         "receipt_check": request.query_params.get("receipt_check", ""),
         "q": request.query_params.get("q", ""),
-        "limit": request.query_params.get("limit", "200"),
+        "limit": request.query_params.get("limit", "2000"),
     }
-    limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
+    limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
@@ -4074,9 +4074,9 @@ def exam_ledgers(request: Request) -> Response:
         "source_type": request.query_params.get("source_type", ""),
         "check_status": request.query_params.get("check_status", ""),
         "q": request.query_params.get("q", ""),
-        "limit": request.query_params.get("limit", "200"),
+        "limit": request.query_params.get("limit", "2000"),
     }
-    limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
+    limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
