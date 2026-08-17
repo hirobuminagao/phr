@@ -14,9 +14,10 @@ from typing import Any
 from urllib.parse import parse_qs, quote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.background import BackgroundTask
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
@@ -953,6 +954,7 @@ templates.env.globals["fund_delivery_status_label"] = fund_delivery_status_label
 FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
 HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
 APP_DATA_DIR = REPO_ROOT / "data"
+HIA_XML_REVIEW_EXPORT_ROOT_DIR = REPO_ROOT / "data" / "hia_xml_review_exports"
 HIA_XML_ZIP_CHECK_UPLOAD_DIR = REPO_ROOT / "data" / "hia_xml_zip_checks" / "uploads"
 HIA_XML_ZIP_CHECK_ROOT_DIR = REPO_ROOT / "data" / "hia_xml_zip_checks"
 
@@ -2846,6 +2848,59 @@ def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -
     return output or "XML出力が完了しました。"
 
 
+def review_export_event_root(event_id: int) -> Path:
+    return HIA_XML_REVIEW_EXPORT_ROOT_DIR / f"event_{event_id}"
+
+
+def load_review_xml_export_downloads(*, event_id: int, limit: int = 50) -> list[dict[str, Any]]:
+    root = review_export_event_root(event_id)
+    if not root.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for path in root.rglob("*.zip"):
+        if not path.is_file() or not is_path_under(path, root):
+            continue
+        stat = path.stat()
+        rows.append(
+            {
+                "name": path.name,
+                "download_path": str(path.relative_to(root)),
+                "relative_path": str(path.relative_to(REPO_ROOT)),
+                "size_mb": round(stat.st_size / 1024 / 1024, 2),
+                "modified_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+    return sorted(rows, key=lambda row: str(row["modified_at"]), reverse=True)[:limit]
+
+
+def resolve_review_xml_export_zip(*, event_id: int, relative_path: str) -> Path:
+    root = review_export_event_root(event_id)
+    normalized = relative_path.strip().replace("¥", os.sep)
+    if os.sep != "\\":
+        normalized = normalized.replace("\\", os.sep)
+    path = root / normalized
+    if not is_path_under(path, root):
+        raise ValueError("REVIEW_EXPORT_PATH_OUTSIDE_ROOT")
+    if not path.exists() or not path.is_file() or path.suffix.lower() != ".zip":
+        raise FileNotFoundError("REVIEW_EXPORT_ZIP_NOT_FOUND")
+    return path
+
+
+def delete_file_and_empty_parents(path: Path, *, stop_at: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+        stop_at_resolved = stop_at.resolve()
+        current = path.parent.resolve()
+        while current != stop_at_resolved and is_path_under(current, stop_at_resolved):
+            try:
+                current.rmdir()
+            except OSError:
+                break
+            current = current.parent
+    except OSError:
+        LOGGER.exception("failed to delete review export zip: %s", path)
+
+
 def create_xml_export_list_from_form(cur: Any, *, form: dict[str, str], user: dict[str, Any]) -> tuple[int, int, int]:
     event_id = int(form.get("event_id") or 2)
     list_name = (form.get("list_name") or "").strip()
@@ -4424,6 +4479,7 @@ def export_lists(request: Request) -> Response:
         (
             "export_lists.view",
             "export_lists.edit",
+            "xml_export.review",
             "xml_export.official",
             "hia_upload.perform",
             "hia_upload_status.edit",
@@ -4506,6 +4562,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
                 conn.commit()
                 return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
             cases = load_ops_xml_export_list_cases(cur, xml_export_list_id=xml_export_list_id)
+            review_downloads = load_review_xml_export_downloads(event_id=int(export_list["event_id"]))
             log_personal_info_view(
                 cur,
                 request=request,
@@ -4525,6 +4582,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "user": user,
             "export_list": export_list,
             "cases": cases,
+            "review_downloads": review_downloads,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
             "can_edit": has_permission(user, "export_lists.edit"),
@@ -4558,6 +4616,60 @@ async def export_list_run(request: Request, xml_export_list_id: int) -> Response
     return RedirectResponse(
         f"/export-lists/{xml_export_list_id}?message={quote(mode_label + 'が完了しました。' + result[:1200])}",
         status_code=303,
+    )
+
+
+@app.get("/export-lists/{xml_export_list_id}/review-zips/download")
+def download_review_xml_export_zip(request: Request, xml_export_list_id: int, path: str) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "xml_export.review"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            export_list = load_xml_export_list_detail(cur, xml_export_list_id=xml_export_list_id)
+            if not export_list:
+                conn.commit()
+                return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
+            event_id = int(export_list["event_id"])
+            zip_path = resolve_review_xml_export_zip(event_id=event_id, relative_path=path)
+            root = review_export_event_root(event_id)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="HIA_XML_REVIEW_DOWNLOAD",
+                    target_schema="file",
+                    target_table="hia_xml_review_exports",
+                    target_id=str(zip_path.relative_to(root)),
+                    after={
+                        "xml_export_list_id": xml_export_list_id,
+                        "event_id": event_id,
+                        "file_name": zip_path.name,
+                        "file_size": zip_path.stat().st_size,
+                    },
+                )
+            conn.commit()
+        except FileNotFoundError:
+            conn.rollback()
+            return RedirectResponse(
+                f"/export-lists/{xml_export_list_id}?error={quote('確認用ZIPが見つかりません。すでにダウンロード済みで削除された可能性があります。')}",
+                status_code=303,
+            )
+        except Exception:
+            conn.rollback()
+            raise
+
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=zip_path.name,
+        background=BackgroundTask(delete_file_and_empty_parents, zip_path, stop_at=root),
     )
 
 
