@@ -2506,15 +2506,49 @@ a.home-menu-card:hover {
 
 .inline-stop-form {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  align-items: center;
-  min-width: 360px;
+  align-items: stretch;
+  min-width: 0;
 }
 
 .inline-stop-form input {
   width: 100%;
   min-width: 0;
+  height: 38px;
+  font-size: 13px;
+}
+
+.inline-stop-form button {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.etl-run-table {
+  min-width: 980px;
+}
+
+.etl-run-table th:nth-child(1) {
+  width: 64px;
+}
+
+.etl-run-table th:nth-child(3) {
+  width: 110px;
+}
+
+.etl-run-table th:nth-child(4) {
+  width: 150px;
+}
+
+.etl-run-table th:nth-child(5) {
+  width: 80px;
+}
+
+.etl-run-table th:nth-child(9),
+.etl-run-action-col {
+  width: 190px;
 }
 
 @media (max-width: 760px) {
