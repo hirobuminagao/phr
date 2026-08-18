@@ -2799,6 +2799,125 @@ def search_exam_ledger_candidates(
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    event_id = filters.get("event_id", "").strip()
+    legal_check_result = filters.get("legal_check_result", "").strip()
+    specific_check_result = filters.get("specific_check_result", "").strip()
+    export_readiness_status = filters.get("export_readiness_status", "").strip()
+    query = filters.get("q", "").strip()
+    if event_id:
+        where_parts.append("eec.event_id = %s")
+        params.append(event_id)
+    if legal_check_result:
+        where_parts.append("COALESCE(ecr.legal_check_result, 'PENDING') = %s")
+        params.append(legal_check_result)
+    if specific_check_result:
+        where_parts.append("COALESCE(ecr.specific_check_result, 'PENDING') = %s")
+        params.append(specific_check_result)
+    if export_readiness_status:
+        where_parts.append("eec.export_readiness_status = %s")
+        params.append(export_readiness_status)
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              CAST(eec.exam_export_case_id AS CHAR) = %s
+              OR eec.hia_subscriber_id LIKE %s
+              OR eec.person_id_custom LIKE %s
+              OR eec.name_full_raw LIKE %s
+              OR eec.name_kana_raw LIKE %s
+              OR eec.facility_name LIKE %s
+              OR eec.facility_code LIKE %s
+              OR eec.insurance_number_raw LIKE %s
+              OR eec.insurance_number_export_value LIKE %s
+            )
+            """
+        )
+        params.extend([query, like, like, like, like, like, like, like, like])
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    cur.execute(
+        f"""
+        SELECT
+          eec.exam_export_case_id,
+          eec.event_id,
+          eec.subscriber_id,
+          eec.hia_subscriber_id,
+          eec.subscriber_match_status,
+          eec.person_id_custom,
+          eec.insurer_number,
+          eec.exam_facility_id,
+          eec.facility_code,
+          eec.facility_name,
+          eec.exam_date,
+          eec.health_exam_report_category,
+          eec.program_code,
+          eec.name_full_raw,
+          eec.name_kana_raw,
+          eec.birthdate,
+          eec.gender_code,
+          eec.source_mode,
+          eec.case_status,
+          eec.case_reason,
+          eec.merge_status,
+          eec.merge_reason,
+          eec.value_build_status,
+          eec.value_build_reason,
+          eec.case_value_count,
+          eec.check_status,
+          eec.check_reason,
+          eec.xml_export_status,
+          eec.output_zip_file_name,
+          eec.output_xml_file_name,
+          eec.manual_export_approved,
+          eec.export_readiness_status,
+          eec.export_readiness_reason,
+          eec.correction_status,
+          eec.updated_at,
+          COALESCE(ecr.legal_check_result, 'PENDING') AS legal_check_result,
+          ecr.legal_reason_summary,
+          COALESCE(ecr.specific_check_result, 'PENDING') AS specific_check_result,
+          ecr.specific_reason_summary,
+          COALESCE(src.source_count, 0) AS source_count,
+          COALESCE(src.xml_count, 0) AS xml_count,
+          COALESCE(src.csv_count, 0) AS csv_count,
+          COALESCE(src.paper_count, 0) AS paper_count
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest
+            ON latest.max_id = r1.id
+        ) AS ecr
+          ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN (
+          SELECT
+            exam_export_case_id,
+            COUNT(*) AS source_count,
+            SUM(CASE WHEN source_type = 'XML' THEN 1 ELSE 0 END) AS xml_count,
+            SUM(CASE WHEN source_type = 'CSV' THEN 1 ELSE 0 END) AS csv_count,
+            SUM(CASE WHEN source_type = 'PAPER' THEN 1 ELSE 0 END) AS paper_count
+          FROM {qname(health_db())}.exam_export_case_sources
+          GROUP BY exam_export_case_id
+        ) AS src
+          ON src.exam_export_case_id = eec.exam_export_case_id
+        {where_sql}
+        ORDER BY eec.updated_at DESC, eec.exam_export_case_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[str, Any] | None:
     cur.execute(
         f"""
@@ -5009,6 +5128,62 @@ def exam_ledger_search(request: Request) -> Response:
             "search_results": search_results,
             "has_search": has_search,
             "search_error": search_error,
+        },
+    )
+
+
+@app.get("/exam-export-cases", response_class=HTMLResponse)
+def exam_export_cases(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "legal_check_result": request.query_params.get("legal_check_result", ""),
+        "specific_check_result": request.query_params.get("specific_check_result", ""),
+        "export_readiness_status": request.query_params.get("export_readiness_status", ""),
+        "q": request.query_params.get("q", ""),
+        "limit": request.query_params.get("limit", "2000"),
+    }
+    limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            rows = load_exam_export_case_rows(cur, filters=filters, limit=limit)
+            if audit_enabled(cur):
+                for row in rows:
+                    log_audit(
+                        cur,
+                        request=request,
+                        user=user,
+                        action_code="PERSONAL_INFO_VIEW_EXAM_EXPORT_CASE",
+                        target_schema=health_db(),
+                        target_table="exam_export_cases",
+                        target_id=str(row.get("exam_export_case_id") or ""),
+                        after={
+                            "exam_export_case_id": row.get("exam_export_case_id"),
+                            "hia_subscriber_id": row.get("hia_subscriber_id"),
+                            "subscriber_id": row.get("subscriber_id"),
+                            "exam_date": str(row.get("exam_date") or ""),
+                        },
+                    )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_export_cases.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "filters": filters,
+            "rows": rows,
+            "limit": limit,
         },
     )
 

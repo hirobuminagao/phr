@@ -135,6 +135,14 @@ label {
   display: block;
 }
 
+.form-note {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 input:not([type="checkbox"]) {
   width: 100%;
   min-height: var(--control-height);
@@ -2660,6 +2668,24 @@ a.home-menu-card:hover {
 
 .etl-run-table th:nth-child(9),
 .etl-run-action-col {
+  width: 190px;
+}
+
+.exam-export-case-table {
+  min-width: 1180px;
+}
+
+.exam-export-case-table th:nth-child(1) {
+  width: 84px;
+}
+
+.exam-export-case-table th:nth-child(4),
+.exam-export-case-table th:nth-child(5),
+.exam-export-case-table th:nth-child(6) {
+  width: 150px;
+}
+
+.exam-export-case-table th:nth-child(7) {
   width: 190px;
 }
 
