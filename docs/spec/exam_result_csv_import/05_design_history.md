@@ -1982,6 +1982,7 @@ FastAPI管理画面の出力リスト/確認用出力の実装状態同期
 
 - `03_00_check_imported_exam_ledgers.py` と `03_04_check_exam_export_cases.py` の共通チェック処理で、法定チェック後に特定健診チェックを実行する。
 - 結果は既存の `exam_check_results.specific_check_result` / `specific_reason_summary` に保存する。
+- `specific_*` は元々特定健診チェックを想定していた枠であるため、初期実装では新しい結果カラムを増やさず、この既存枠を正として使う。
 - 年齢判定はevent年度の年度末日を使う。event=2は `event_year = 2026` の年度末 `2027-03-31` 時点の満年齢で40-74歳を対象とする。
 - `dev_phr.event.age_reference_date` は予約/運用上の年齢換算日と混同しないため、特定健診チェックでは参照しない。
 - 対象外は `specific_check_result = OK` とし、summaryに対象外理由を残す。
@@ -2017,14 +2018,16 @@ FastAPI管理画面の出力リスト/確認用出力の実装状態同期
 - 横持ちの基本範囲は、法定健診チェック（まずは労安則44。後続で他法定区分を追加可能）と特定健診チェックまでとする。
 - 横持ちにする理由は、一覧、集計、出力可否判定で毎回高速に参照するためである。
 - 特定健診チェックも、則44と同じく「制度detail code -> namecode候補 -> OK/MISSING/INVALID」の形へ寄せる。
-- 特定健診用detail codeは、則44の `4401001001` などと衝突しない体系で定義する。
+- 特定健診用detail codeは、則44の `4401001001` などと衝突しないよう先頭を `10` とする。
+- 特定健診用detail codeは `10` + チェックカテゴリ + 項番の体系で採番する。具体的な桁配分は初期seed作成時に確定するが、カテゴリ単位で一覧・集計・追加ができる形を優先する。
+- 特定健診チェック結果は、既存の `exam_check_results.specific_check_result` / `specific_reason_summary` を使う。
 - 必要namecode群は `dev_phr.exam_item_group_members` 等のルールマスタで管理する。
 - 健保、事業所、納品先、運用都合で追加したい任意チェックは、横持ち制度チェックへ混ぜない。
 - 任意チェックは後続でルールセット型の柔軟な仕組みに分ける。対象が限定されるため、多少重くなっても出力前・納品前の確認処理として許容する。
 
 ### 後続
 
-- 特定健診用detail code体系を決める。
+- 特定健診用detail codeのカテゴリと項番を決める。
 - 特定健診用の `exam_item_group_members` seedを作成する。
 - source単位とcase単位の両方で、特定健診detail code別のチェック結果を横持ちへ反映する。
 - 健保独自、事業所独自、納品先独自の任意チェック用ルールセット/結果テーブルを別途設計する。
