@@ -460,6 +460,9 @@ Current as of 2026-08-05.
 - 手動出力許可は法定チェックNGの原因が `MISSING` のみの場合に限定し、`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致、XML生成・XSD検証エラーは通過させない。
 - XML不足をCSVで実値補完して法定OKにする処理と、妊娠中等の業務確認によりMISSINGのまま条件付き出力OKにする処理は別レーンとして扱う。
 - 条件付き出力OKでは架空の検査値を作らず、`check_status = NG` / `check_reason` を維持したまま `manual_export_approved` / `manual_export_reason` / `manual_export_approved_by` / `manual_export_approved_at` を記録する。
+- `03_04_check_exam_export_cases.py` によるcase再チェックは、`exam_check_results` を再作成し、`exam_export_cases.check_status` / `check_reason` と出力可否summaryを再計算する。`manual_export_approved` / `manual_export_reason` / `manual_export_approved_by` / `manual_export_approved_at` は更新対象にしない。
+- `03_01_build_exam_export_cases.py` のcase再作成も、同じcaseキーで既存行を更新する場合は `manual_export_*` を更新対象にしない。そのため同一caseのままなら、全チェックを再実行しても理由ありOKは保持される。
+- ただし、加入者、健診日、健診機関、保険者番号などcase同一性キーが変わり、別caseとして新規作成された場合は、既存caseの `manual_export_*` は自動移行しない。理由ありOKは人が確認したcase単位の判断として扱う。
 - 初期のCSV補完診断対象は、視力 `4403004001`、聴力 `4403005001`、胸部X線 `4404001001`、心電図 `4411001001`、既往歴 `4401001001`、自覚症状 `4402001001`、他覚症状 `4402001002` の7分類とする。
 - ただしCSV取込自体は7分類へ絞らない。健診機関ごとの通常マッピングを作り、取込可能な検査値・基本情報は従来どおり全てsource値として取り込む。7分類は補完診断で重点的に見る分類であり、マッピング対象や取込対象を制限するものではない。
 - 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えず、架空の検査値を作らない。該当entryはXMLへ出力しない。
