@@ -49,6 +49,8 @@ PHR画面の利用者本体。
 
 - `users.view`
 - `users.manage`
+- `business_settings.view`
+- `business_settings.manage`
 - `exam_cases.view`
 - `exam_cases.edit`
 - `export_lists.view`
@@ -58,6 +60,13 @@ PHR画面の利用者本体。
 - `hia_upload.perform`
 - `hia_upload_status.edit`
 - `audit.view`
+
+管理カテゴリの扱い:
+
+- `business_settings.view`: イベント設定、健診機関マスタ、健診機関受領フォルダ管理など、業務側の管理カテゴリを参照する。
+- `business_settings.manage`: イベント設定、健診機関マスタ、健診機関受領フォルダ管理など、業務側の管理カテゴリを操作する。
+- `users.manage`: アカウント管理、権限設定、セキュリティ、監査ログなど、システム管理カテゴリを操作する。
+- 初期ロールでは `ADMIN` と `EDITOR` に `business_settings.view` / `business_settings.manage` を付与し、システム管理は `ADMIN` のみとする。
 
 ### `app_role_permissions`
 
@@ -84,6 +93,9 @@ PHR画面の利用者本体。
 | 出力リスト | `export_lists.view` | `export_lists.edit` |
 | XML出力 | `xml_export.review` | `xml_export.official` |
 | HIAアップロード | `hia_upload.perform` | `hia_upload_status.edit` |
+| 管理カテゴリ | `business_settings.view` | `business_settings.manage` |
+
+システム管理カテゴリの `users.manage` は、個人作業権限ON/OFFでは扱わず、管理者ロールの責務とする。
 
 権限判定順:
 

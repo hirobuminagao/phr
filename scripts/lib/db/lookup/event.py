@@ -46,3 +46,27 @@ def get_event_age_rule(
     )
     row = cursor.fetchone()
     return dict(row) if row else None
+
+
+def get_event_year(
+    cursor: Any,
+    *,
+    event_id: int,
+    dev_db: str = "dev_phr",
+) -> int | None:
+    cursor.execute(
+        f"""
+        SELECT event_year
+        FROM {qname(dev_db)}.event
+        WHERE event_id = %s
+        LIMIT 1
+        """,
+        (event_id,),
+    )
+    row = cursor.fetchone()
+    if not row or row.get("event_year") is None:
+        return None
+    try:
+        return int(row["event_year"])
+    except (TypeError, ValueError):
+        return None

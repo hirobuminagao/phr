@@ -29,9 +29,13 @@ from scripts.from_medical.script_lib.article44_models import Article44Result, Ch
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
 from scripts.from_medical.script_lib.article44_value_loader import load_article44_value_map
 from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
+from scripts.from_medical.script_lib.specific_health_checker import SPECIFIC_REQUIRED_NAMECODES
+from scripts.from_medical.script_lib.specific_health_checker import aggregate_specific_result
+from scripts.lib.db.lookup.event import get_event_year
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK
 from scripts.lib.examination.models import STATUS_ALTERNATIVE, STATUS_CALCULATED, STATUS_INVALID, STATUS_MISSING, STATUS_OK
+from scripts.lib.examination.report_classification import fiscal_year_end_date
 
 
 HEALTH_EXAM_RESULT_DB = "health_exam_result"
@@ -552,7 +556,9 @@ def fetch_target_xml_ledgers(
           id,
           event_id,
           subscriber_id,
-          hia_subscriber_id
+          hia_subscriber_id,
+          exam_date,
+          birthdate
         FROM {qname(health_db)}.xml_ledger
         WHERE event_id = %s
           AND xml_status = 'READY'
@@ -583,7 +589,9 @@ def fetch_target_csv_ledgers(
           csv_row_ledger_id AS id,
           event_id,
           subscriber_id,
-          hia_subscriber_id
+          hia_subscriber_id,
+          exam_date,
+          birthdate
         FROM {qname(health_db)}.csv_row_ledger
         WHERE event_id = %s
           AND row_status IN ('READY', 'ERROR')
@@ -618,7 +626,9 @@ def fetch_target_exam_ledgers(
           source_csv_row_ledger_id,
           event_id,
           subscriber_id,
-          hia_subscriber_id
+          hia_subscriber_id,
+          exam_date,
+          birthdate
         FROM {qname(health_db)}.exam_ledgers
         WHERE event_id = %s
           AND (
@@ -654,7 +664,9 @@ def fetch_target_case_ledgers(
           exam_export_case_id,
           event_id,
           subscriber_id,
-          hia_subscriber_id
+          hia_subscriber_id,
+          exam_date,
+          birthdate
         FROM {qname(health_db)}.exam_export_cases
         WHERE event_id = %s
           AND value_build_status = 'READY'
@@ -733,6 +745,9 @@ def process_ledgers(
     summary: CheckSummary,
 ) -> None:
     required_namecodes = fetch_article44_required_namecodes(dev_cur, dev_db=config.dev_db)
+    specific_required_namecodes = SPECIFIC_REQUIRED_NAMECODES
+    event_year = get_event_year(dev_cur, event_id=config.event_id, dev_db=config.dev_db)
+    fiscal_year_end = fiscal_year_end_date(event_year) if event_year is not None else None
 
     ledgers = fetch_target_check_ledgers(health_cur, config=config)
     ledger_refs = [(str(ledger["ledger_type"]), int(ledger["id"])) for ledger in ledgers]
@@ -755,8 +770,20 @@ def process_ledgers(
         article44_result = check_article44(value_map)
         validate_article44_result(article44_result)
         legal_result, legal_summary = aggregate_article44_legal_result(article44_result)
-        specific_result = None
-        specific_summary = None
+        specific_value_map = load_article44_value_map(
+            health_cur,
+            ledger_type=value_ledger_type,
+            ledger_id=value_ledger_id,
+            required_namecodes=specific_required_namecodes,
+            result_db=config.health_db,
+            dev_db=config.dev_db,
+        )
+        specific_result, specific_summary = aggregate_specific_result(
+            value_map=specific_value_map,
+            birthdate=ledger.get("birthdate"),
+            age_reference_date=fiscal_year_end,
+            legal_result=legal_result,
+        )
         check_status = aggregate_check_status(legal_result)
         check_reason = legal_summary
         if check_status == CHECK_STATUS_OK:

@@ -79,8 +79,10 @@
     {% endif %}
     <a href="#home-section-import">取込・チェック</a>
     <a href="#home-section-correction">補正・加入者</a>
-    {% if "users.manage" in user.permissions %}
+    {% if "business_settings.view" in user.permissions or "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
     <a href="#home-section-admin">管理</a>
+    {% endif %}
+    {% if "users.manage" in user.permissions %}
     <a href="#home-section-system">システム管理</a>
     {% endif %}
   </nav>
@@ -160,7 +162,7 @@
     </div>
   </section>
 
-  {% if "users.manage" in user.permissions %}
+  {% if "business_settings.view" in user.permissions or "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
   <section id="home-section-admin" class="home-menu-section">
     <div class="section-heading">
       <div>
@@ -175,7 +177,9 @@
       <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>マスタ管理</strong><small>normalize辞書、検査項目、出力ポリシー、郵便番号住所</small></div><span class="status-pill status-muted">未実装</span></div>
     </div>
   </section>
+  {% endif %}
 
+  {% if "users.manage" in user.permissions %}
   <section id="home-section-system" class="home-menu-section">
     <div class="section-heading">
       <div>

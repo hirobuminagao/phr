@@ -28,6 +28,10 @@ def classify_report_codes_by_age(
     return OTHER_REPORT_CATEGORY, OTHER_PROGRAM_CODE
 
 
+def fiscal_year_end_date(event_year: int) -> date:
+    return date(int(event_year) + 1, 3, 31)
+
+
 def resolve_age_reference_date(
     *,
     age_rule_type: str | None,

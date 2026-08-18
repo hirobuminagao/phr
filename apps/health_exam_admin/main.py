@@ -100,7 +100,17 @@ WORK_PERMISSION_ITEMS = (
         "view_codes": ("hia_upload.perform",),
         "edit_codes": ("hia_upload_status.edit",),
     },
+    {
+        "key": "business_settings",
+        "name": "管理カテゴリ",
+        "description": "イベント、健診機関、受領フォルダなど業務側の管理を担当する",
+        "view_codes": ("business_settings.view",),
+        "edit_codes": ("business_settings.manage",),
+    },
 )
+BUSINESS_SETTINGS_VIEW_PERMISSION = "business_settings.view"
+BUSINESS_SETTINGS_PERMISSION = "business_settings.manage"
+SYSTEM_SETTINGS_PERMISSION = "users.manage"
 
 app = FastAPI(title="PHR Health Exam Admin")
 app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
@@ -277,6 +287,17 @@ def has_any_permission(user: dict[str, Any], permission_codes: tuple[str, ...]) 
     return any(permission_code in permissions for permission_code in permission_codes)
 
 
+def can_manage_business_settings(user: dict[str, Any]) -> bool:
+    return has_any_permission(user, (BUSINESS_SETTINGS_PERMISSION, SYSTEM_SETTINGS_PERMISSION))
+
+
+def can_view_business_settings(user: dict[str, Any]) -> bool:
+    return has_any_permission(
+        user,
+        (BUSINESS_SETTINGS_VIEW_PERMISSION, BUSINESS_SETTINGS_PERMISSION, SYSTEM_SETTINGS_PERMISSION),
+    )
+
+
 def require_user(request: Request) -> dict[str, Any] | RedirectResponse:
     user = current_user(request)
     if not user:
@@ -419,7 +440,7 @@ def load_permission_matrix(cur: Any) -> dict[str, Any]:
         FROM app_permissions
         WHERE is_active = 1
         ORDER BY
-          FIELD(permission_group, 'users', 'health_exam', 'xml_export', 'hia', 'audit'),
+          FIELD(permission_group, 'users', 'business', 'health_exam', 'xml_export', 'hia', 'audit'),
           permission_group,
           app_permission_id
         """
@@ -3976,7 +3997,7 @@ def admin_events(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -4004,7 +4025,7 @@ async def create_admin_event(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await read_form(request)
     params = load_mysql_base_params(db_prefix())
@@ -4062,7 +4083,7 @@ async def update_admin_event(request: Request, event_id: int) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await read_form(request)
     params = load_mysql_base_params(db_prefix())
@@ -4121,7 +4142,7 @@ def admin_folder_aliases(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -4161,7 +4182,7 @@ def admin_facility_master(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -4189,7 +4210,7 @@ def new_admin_facility_form(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     return templates.TemplateResponse(
         "admin_facility_new.html",
@@ -4207,7 +4228,7 @@ async def create_admin_facility(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await read_form(request)
     params = load_mysql_base_params(db_prefix())
@@ -4271,7 +4292,7 @@ async def update_admin_facility(request: Request, exam_facility_id: int) -> Resp
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await read_form(request)
     params = load_mysql_base_params(db_prefix())
@@ -4335,7 +4356,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
@@ -4362,7 +4383,7 @@ async def create_admin_folder_alias(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await read_form(request)
     params = load_mysql_base_params(db_prefix())
@@ -4422,7 +4443,7 @@ async def update_admin_folder_alias(request: Request, alias_id: int) -> Response
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, "users.manage"):
+    if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await read_form(request)
     params = load_mysql_base_params(db_prefix())
