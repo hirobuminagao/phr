@@ -27,13 +27,17 @@
         {% endif %}
       </div>
     </div>
-    <form method="get" action="/exam-ledgers" class="filter-form filter-form-wide">
+    <form method="get" action="/exam-ledgers" class="filter-form filter-form-wide ledger-filter-form">
       {% if filters.file_receipt_id %}
       <input type="hidden" name="file_receipt_id" value="{{ filters.file_receipt_id }}">
       {% endif %}
       <label>
         <span>キーワード</span>
-        <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 施設 / XML名" data-live-filter-input="#exam-ledger-table">
+        <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / XML名" data-live-filter-input="#exam-ledger-table">
+      </label>
+      <label>
+        <span>健診機関</span>
+        <input name="facility_q" value="{{ filters.facility_q or '' }}" autocomplete="off" placeholder="健診機関名 / コード" data-live-filter-input="#exam-ledger-table">
       </label>
       <label>
         <span>イベント</span>
@@ -87,7 +91,8 @@
             <th>ID</th>
             <th>source</th>
             <th>受診者</th>
-            <th>健診機関 / 受診日</th>
+            <th>健診機関</th>
+            <th>受診日</th>
             <th class="help-cell">
               <span class="table-help-heading">
                 取込項目
@@ -119,7 +124,10 @@
             </td>
             <td>
               <strong>{{ row.facility_name or "未設定" }}</strong>
-              <small>{{ row.facility_code or "" }} / {{ row.exam_date or "受診日なし" }}</small>
+              <small>{{ row.facility_code or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ row.exam_date or "受診日なし" }}</strong>
             </td>
             <td>
               <strong>{{ row.exam_item_count or 0 }}件</strong>
@@ -137,7 +145,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="7">対象ledgerはありません。</td>
+            <td colspan="8">対象ledgerはありません。</td>
           </tr>
           {% endfor %}
         </tbody>

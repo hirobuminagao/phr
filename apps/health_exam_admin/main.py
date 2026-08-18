@@ -2622,6 +2622,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     check_status = filters.get("check_status", "").strip()
     file_receipt_id = filters.get("file_receipt_id", "").strip()
     query = filters.get("q", "").strip()
+    facility_query = filters.get("facility_q", "").strip()
     if event_id:
         where_parts.append("event_id = %s")
         params.append(event_id)
@@ -2643,12 +2644,15 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
               OR person_id_custom LIKE %s
               OR name_full_raw LIKE %s
               OR name_kana_raw LIKE %s
-              OR facility_name LIKE %s
               OR xml_file_name LIKE %s
             )
             """
         )
-        params.extend([like, like, like, like, like, like])
+        params.extend([like, like, like, like, like])
+    if facility_query:
+        like = f"%{facility_query}%"
+        where_parts.append("(facility_code LIKE %s OR facility_name LIKE %s)")
+        params.extend([like, like])
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur.execute(
         f"""
@@ -5097,6 +5101,7 @@ def exam_ledgers(request: Request) -> Response:
         "source_type": request.query_params.get("source_type", ""),
         "check_status": request.query_params.get("check_status", ""),
         "q": request.query_params.get("q", ""),
+        "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "2000"),
     }
     limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)

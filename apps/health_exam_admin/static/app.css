@@ -1167,6 +1167,10 @@ a.home-menu-card:hover {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.ledger-filter-form {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(220px, 1.3fr) minmax(180px, 1fr) minmax(220px, 1fr) minmax(260px, 1.2fr) minmax(100px, 0.45fr) auto;
+}
+
 .case-filter-form {
   display: grid;
   gap: 14px;
@@ -1179,11 +1183,11 @@ a.home-menu-card:hover {
 }
 
 .case-filter-row-primary {
-  grid-template-columns: minmax(260px, 1.5fr) minmax(220px, 1fr) minmax(140px, 0.7fr) minmax(220px, 0.95fr) minmax(360px, 1.5fr);
+  grid-template-columns: minmax(220px, 1.45fr) minmax(180px, 0.9fr) minmax(120px, 0.55fr) minmax(210px, 0.95fr) minmax(300px, 1.45fr);
 }
 
 .case-filter-row-secondary {
-  grid-template-columns: minmax(420px, 1.6fr) minmax(320px, 1.1fr) minmax(110px, 0.35fr) auto;
+  grid-template-columns: minmax(330px, 1.5fr) minmax(260px, 1fr) minmax(100px, 0.35fr) auto;
 }
 
 .filter-form label {
@@ -2618,6 +2622,30 @@ a.home-menu-card:hover {
   min-width: 0;
 }
 
+.exam-ledger-table {
+  min-width: 1180px;
+}
+
+.exam-ledger-table th:nth-child(1) {
+  width: 72px;
+}
+
+.exam-ledger-table th:nth-child(2) {
+  width: 130px;
+}
+
+.exam-ledger-table th:nth-child(5) {
+  width: 130px;
+}
+
+.exam-ledger-table th:nth-child(6) {
+  width: 130px;
+}
+
+.exam-ledger-table th:nth-child(7) {
+  width: 190px;
+}
+
 .data-table input:not([type="checkbox"]),
 .data-table select,
 .data-table textarea,
@@ -2805,9 +2833,12 @@ a.home-menu-card:hover {
     grid-template-columns: 1fr;
   }
 
-  .case-filter-row-primary,
+  .case-filter-row-primary {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+
   .case-filter-row-secondary {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .work-permission-list {
