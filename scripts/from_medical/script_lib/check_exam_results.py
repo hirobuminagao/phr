@@ -31,6 +31,7 @@ from scripts.from_medical.script_lib.article44_value_loader import load_article4
 from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
 from scripts.from_medical.script_lib.specific_health_checker import SPECIFIC_REQUIRED_NAMECODES
 from scripts.from_medical.script_lib.specific_health_checker import aggregate_specific_result
+from scripts.from_medical.script_lib.specific_health_required_namecodes import fetch_specific_health_required_namecodes
 from scripts.lib.db.lookup.event import get_event_year
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK
@@ -745,7 +746,11 @@ def process_ledgers(
     summary: CheckSummary,
 ) -> None:
     required_namecodes = fetch_article44_required_namecodes(dev_cur, dev_db=config.dev_db)
-    specific_required_namecodes = SPECIFIC_REQUIRED_NAMECODES
+    specific_required_namecodes = fetch_specific_health_required_namecodes(
+        dev_cur,
+        dev_db=config.dev_db,
+        fallback=SPECIFIC_REQUIRED_NAMECODES,
+    )
     event_year = get_event_year(dev_cur, event_id=config.event_id, dev_db=config.dev_db)
     fiscal_year_end = fiscal_year_end_date(event_year) if event_year is not None else None
 

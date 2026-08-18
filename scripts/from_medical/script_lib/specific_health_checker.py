@@ -46,7 +46,7 @@ SPECIFIC_REQUIRED_NAMECODES: tuple[RequiredNamecode, ...] = (
     RequiredNamecode("9N782000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N781000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N786000000000011", ExpectedValueType.CD),
-    RequiredNamecode("9N791000000000011", ExpectedValueType.CO),
+    RequiredNamecode("9N791000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N796000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N801000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N808000000000011", ExpectedValueType.CD),
