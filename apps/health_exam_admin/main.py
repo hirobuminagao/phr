@@ -951,8 +951,20 @@ def readiness_label(status: str | None) -> str:
     return labels.get(status or "", status or "")
 
 
+def check_result_label(status: str | None) -> str:
+    labels = {
+        "OK": "OK",
+        "NG": "NG",
+        "PENDING": "未判定",
+        "NOT_APPLICABLE": "対象外",
+        "UNDETERMINABLE": "判定不能",
+    }
+    return labels.get(status or "", status or "")
+
+
 templates.env.globals["list_status_label"] = list_status_label
 templates.env.globals["readiness_label"] = readiness_label
+templates.env.globals["check_result_label"] = check_result_label
 
 
 def fund_delivery_status_label(status: str | None) -> str:

@@ -58,6 +58,8 @@
         <div class="filter-toggle-group">
           <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="OK" class="{{ 'is-active' if filters.specific_check_result == 'OK' else '' }}">OK</button>
           <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="NG" class="{{ 'is-active' if filters.specific_check_result == 'NG' else '' }}">NG</button>
+          <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="NOT_APPLICABLE" class="{{ 'is-active' if filters.specific_check_result == 'NOT_APPLICABLE' else '' }}">対象外</button>
+          <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="UNDETERMINABLE" class="{{ 'is-active' if filters.specific_check_result == 'UNDETERMINABLE' else '' }}">判定不能</button>
           <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="PENDING" class="{{ 'is-active' if filters.specific_check_result == 'PENDING' else '' }}">未判定</button>
         </div>
         <input type="hidden" name="specific_check_result" value="{{ filters.specific_check_result }}" data-server-filter-value="specific_check_result">
@@ -173,7 +175,7 @@
               <small>{{ row.legal_reason_summary or row.check_reason or "" }}</small>
             </td>
             <td>
-              <span class="status-pill {{ 'status-ready' if row.specific_check_result == 'OK' else 'status-danger' if row.specific_check_result == 'NG' else 'status-pending' }}">{{ row.specific_check_result or "未判定" }}</span>
+              <span class="status-pill {{ 'status-ready' if row.specific_check_result == 'OK' else 'status-muted' if row.specific_check_result == 'NOT_APPLICABLE' else 'status-danger' if row.specific_check_result in ['NG', 'UNDETERMINABLE'] else 'status-pending' }}">{{ check_result_label(row.specific_check_result) or "未判定" }}</span>
               <small>{{ row.specific_reason_summary or "" }}</small>
             </td>
             <td>

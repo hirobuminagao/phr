@@ -352,7 +352,8 @@ XML出力条件を画面から指定できるようにする。
 - `03_04_check_exam_export_cases.py` で、出力case単位の特定健診チェックを `exam_check_results` に保存する。
 - 年齢判定はevent年度の年度末日を使う。event=2では `event_year = 2026` の年度末 `2027-03-31` 時点の満年齢で40-74歳を特定健診対象とする。
 - `dev_phr.event.age_reference_date` は予約/運用上の年齢換算日と混同しないため、特定健診チェックでは参照しない。
-- 対象外は `specific_check_result = OK` とし、summaryに対象外理由を残す。
+- 年齢対象外は `specific_check_result = NOT_APPLICABLE` とし、OKとは分けて表示する。summaryには対象外理由を残す。
+- 生年月日や年度末基準日が不足して特定健診対象判定ができない場合は `specific_check_result = UNDETERMINABLE` とし、画面では「判定不能」と表示する。
 - 法定健診チェックと重なる項目は、法定チェックがOKなら満たしているものとして扱い、特定健診側では重複チェックしない。
 - 法定側にない特定健診項目は、namecodeの存在、normalize後のCD/ST値としての妥当性を確認する。
 - 特定健診チェックも則44と同じく「制度detail code -> namecode候補 -> OK/MISSING/INVALID」の形へ寄せる。

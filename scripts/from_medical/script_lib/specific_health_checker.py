@@ -21,6 +21,8 @@ from scripts.lib.examination.report_classification import calculate_full_age
 
 SPECIFIC_TARGET_MIN_AGE = 40
 SPECIFIC_TARGET_MAX_AGE = 74
+RESULT_NOT_APPLICABLE = "NOT_APPLICABLE"
+RESULT_UNDETERMINABLE = "UNDETERMINABLE"
 
 SPECIFIC_REQUIRED_NAMECODES: tuple[RequiredNamecode, ...] = (
     RequiredNamecode("9N141000000000011", ExpectedValueType.CD),
@@ -99,9 +101,9 @@ def aggregate_specific_result(
 
     target = specific_target_state(birthdate=birthdate, age_reference_date=age_reference_date)
     if target.status != STATUS_OK:
-        return RESULT_NG, f"AGE:{target.reason or target.status}"
+        return RESULT_UNDETERMINABLE, f"判定不能:{target.reason or target.status}"
     if target.reason == "NOT_TARGET_AGE":
-        return RESULT_OK, "対象外:年度末年齢が40-74歳ではありません"
+        return RESULT_NOT_APPLICABLE, "対象外:年度末年齢が40-74歳ではありません"
     reasons: list[str] = []
     if legal_result != RESULT_OK:
         reasons.append("法定重複項目:LEGAL_CHECK_NOT_OK")
