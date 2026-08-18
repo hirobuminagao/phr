@@ -13,6 +13,12 @@
   for (const form of document.querySelectorAll("form")) {
     if ((form.getAttribute("method") || "get").toLowerCase() !== "post") continue;
     form.addEventListener("submit", (event) => {
+      const submitter = event.submitter;
+      const confirmMessage = submitter?.getAttribute("data-confirm-message");
+      if (confirmMessage && !window.confirm(confirmMessage)) {
+        event.preventDefault();
+        return;
+      }
       const token = cookieValue("phr_app_csrf");
       if (token && !form.querySelector("input[name='_csrf_token']")) {
         const input = document.createElement("input");
@@ -22,7 +28,6 @@
         form.appendChild(input);
       }
 
-      const submitter = event.submitter;
       form.querySelectorAll("input[data-submit-shadow='true']").forEach((node) => node.remove());
       if (!submitter || !submitter.name) return;
       const shadow = document.createElement("input");
@@ -196,6 +201,42 @@
     };
     input.addEventListener("change", update);
     update();
+  }
+
+  const selectAllStepsButton = document.querySelector("[data-select-all-steps]");
+  const processingStepCheckboxes = Array.from(document.querySelectorAll("[data-processing-step-checkbox]"));
+  const selectedRunButton = document.querySelector("[data-run-selected-steps]");
+  if (processingStepCheckboxes.length) {
+    const updateProcessingStepControls = () => {
+      const checkedCount = processingStepCheckboxes.filter((input) => input.checked).length;
+      const allChecked = checkedCount === processingStepCheckboxes.length;
+      if (selectAllStepsButton) {
+        selectAllStepsButton.textContent = allChecked ? "すべて解除" : "すべて選択";
+      }
+      if (selectedRunButton) {
+        selectedRunButton.disabled = checkedCount === 0;
+      }
+      for (const input of processingStepCheckboxes) {
+        const label = input.closest(".processing-step-toggle");
+        if (!label) continue;
+        label.classList.toggle("is-on", input.checked);
+        label.classList.toggle("is-off", !input.checked);
+      }
+    };
+    if (selectAllStepsButton) {
+      selectAllStepsButton.addEventListener("click", () => {
+        const allChecked = processingStepCheckboxes.every((input) => input.checked);
+        for (const input of processingStepCheckboxes) {
+          input.checked = !allChecked;
+          input.dispatchEvent(new Event("change"));
+        }
+        updateProcessingStepControls();
+      });
+    }
+    for (const input of processingStepCheckboxes) {
+      input.addEventListener("change", updateProcessingStepControls);
+    }
+    updateProcessingStepControls();
   }
 
   const modeFromSourceKinds = (selected) => {

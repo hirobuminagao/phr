@@ -207,6 +207,11 @@ button[type="submit"]:disabled {
   font-weight: 700;
 }
 
+.alert-warning {
+  background: #fff7d6;
+  color: #7a5200;
+}
+
 .topbar {
   min-height: 76px;
   display: flex;
@@ -502,9 +507,42 @@ button[type="submit"]:disabled {
   background: #fff;
 }
 
-.processing-step-card h3 {
+.processing-step-toggle {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   margin: 12px 0 8px;
-  font-size: 18px;
+  padding: 0 14px;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.processing-step-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.processing-step-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.processing-step-toggle.is-on {
+  border-color: #9dd5c6;
+  background: #eef8f5;
+  color: var(--accent-dark);
+}
+
+.processing-step-toggle.is-off {
+  background: #f8fafc;
+  color: var(--muted);
 }
 
 .processing-step-card p {
@@ -515,6 +553,13 @@ button[type="submit"]:disabled {
 
 .processing-step-card button {
   width: 100%;
+}
+
+.processing-step-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-items: center;
 }
 
 .run-result-list {
@@ -1551,7 +1596,7 @@ a.home-menu-card:hover {
 }
 
 .processing-dialog {
-  width: min(420px, 100%);
+  width: min(560px, 100%);
   display: grid;
   grid-template-columns: 44px 1fr;
   gap: 16px;
@@ -1561,6 +1606,10 @@ a.home-menu-card:hover {
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.22);
+}
+
+.processing-dialog > div:not(.processing-spinner) {
+  min-width: 0;
 }
 
 .processing-dialog strong,
@@ -1577,6 +1626,8 @@ a.home-menu-card:hover {
   margin-top: 4px;
   color: var(--muted);
   font-size: 14px;
+  overflow-wrap: normal;
+  word-break: keep-all;
 }
 
 .processing-spinner {
@@ -2451,6 +2502,19 @@ a.home-menu-card:hover {
 
 .ghost-submit:hover {
   background: #f7fafc !important;
+}
+
+.inline-stop-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 360px;
+}
+
+.inline-stop-form input {
+  width: 100%;
+  min-width: 0;
 }
 
 @media (max-width: 760px) {

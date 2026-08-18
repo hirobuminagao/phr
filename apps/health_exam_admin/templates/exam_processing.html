@@ -12,6 +12,9 @@
     <a class="ghost-button" href="/file-receipts">受領ファイル</a>
     <a class="ghost-button" href="/exam-ledgers">健診結果一覧</a>
     <a class="ghost-button" href="/export-lists">出力リスト</a>
+    {% if "users.manage" in user.permissions %}
+    <a class="ghost-button" href="/admin/etl-runs">実行中処理</a>
+    {% endif %}
   </nav>
 </header>
 
@@ -21,6 +24,14 @@
   {% endif %}
   {% if error %}
   <div class="alert">{{ error }}</div>
+  {% endif %}
+  {% if running_runs %}
+  <div class="alert alert-warning">
+    このeventで健診結果処理が実行中です。二重実行を防ぐため、新しい実行は止めています。
+    {% if "users.manage" in user.permissions %}
+    <a href="/admin/etl-runs">実行中処理を確認</a>
+    {% endif %}
+  </div>
   {% endif %}
 
   <section class="panel">
@@ -62,7 +73,7 @@
           <small>※同じファイルとして再取込できるのは中身が完全に同じ場合です。1文字でも違う場合は別ファイル扱いになります。</small>
         </label>
         <div class="form-actions align-end">
-          <button type="submit" name="action" value="run_all">まとめて実行</button>
+          <button type="submit" name="action" value="run_selected" data-run-selected-steps {% if running_runs %}disabled{% endif %}>選択した処理をまとめて実行</button>
         </div>
       </div>
     </form>
@@ -71,24 +82,67 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>個別実行</h2>
-        <p class="subtle">途中だけやり直す時は、必要な処理だけ押します。</p>
+        <h2>実行ステップ</h2>
+        <p class="subtle">ONの処理だけを上から順番にまとめて実行します。途中だけやり直す時は、各ステップの個別実行も使えます。</p>
       </div>
+      <button type="button" class="ghost-button" data-select-all-steps>すべて選択</button>
     </div>
     <div class="processing-step-grid">
       {% for step in steps %}
       <article class="processing-step-card">
         <div>
           <span class="status-pill status-neutral">STEP {{ loop.index }}</span>
-          <h3>{{ step.label }}</h3>
+          <label class="processing-step-toggle is-on">
+            <input type="checkbox" name="step_keys" value="{{ step.key }}" form="exam-processing-form" checked data-processing-step-checkbox>
+            <span>{{ step.label }}</span>
+          </label>
           <p>{{ step.description }}</p>
           <small>{{ step.script }}</small>
         </div>
-        <button type="submit" name="action" value="{{ step.key }}" form="exam-processing-form">実行</button>
+        <div class="processing-step-actions">
+          <button type="submit" name="action" value="{{ step.key }}" form="exam-processing-form" {% if running_runs %}disabled{% endif %}>個別実行</button>
+        </div>
       </article>
       {% endfor %}
     </div>
   </section>
+
+  {% if running_runs %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>実行中</h2>
+        <p class="subtle">このeventでrunningになっている処理です。長期化したものは管理者画面で停止扱いにできます。</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>run</th>
+            <th>処理</th>
+            <th>開始</th>
+            <th>経過</th>
+            <th>件数</th>
+            <th>メモ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for run in running_runs %}
+          <tr>
+            <td>{{ run.run_id }}</td>
+            <td><strong>{{ run.phase }}</strong><small>{{ "dry-run" if run.dry_run else "本実行" }}</small></td>
+            <td>{{ run.started_at }}</td>
+            <td>{{ run.running_minutes or 0 }}分</td>
+            <td>{{ run.rows_seen }} / 更新{{ run.rows_updated }} / 追加{{ run.rows_inserted }} / skip{{ run.rows_skipped }}</td>
+            <td><small>{{ run.notes or "" }}</small></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
 
   {% if results %}
   <section class="panel">
@@ -157,8 +211,10 @@
 <div class="processing-overlay" data-processing-overlay hidden>
   <div class="processing-dialog">
     <div class="processing-spinner" aria-hidden="true"></div>
-    <strong data-processing-overlay-title>処理しています</strong>
-    <p data-processing-overlay-message>しばらくお待ちください。</p>
+    <div>
+      <strong data-processing-overlay-title>処理しています</strong>
+      <span data-processing-overlay-message>しばらくお待ちください。</span>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set title = "実行中処理" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">System Admin</p>
+    <h1>実行中処理</h1>
+    <p class="subtle">現在runningになっている処理を確認します。長期化したものは停止扱いにできます。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">HOME</a>
+    <a class="ghost-button" href="/exam-processing">健診結果処理</a>
+    <form method="post" action="/logout">
+      <button type="submit" class="ghost-button">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>running一覧</h2>
+        <p class="subtle">停止扱いはDB上の状態を閉じる操作です。OS上のプロセスを強制終了するものではありません。</p>
+      </div>
+      <a class="ghost-button" href="/admin/etl-runs">更新</a>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>run</th>
+            <th>処理</th>
+            <th>DB</th>
+            <th>開始</th>
+            <th>経過</th>
+            <th>件数</th>
+            <th>入力</th>
+            <th>メモ</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for run in running_runs %}
+          <tr>
+            <td>{{ run.run_id }}</td>
+            <td>
+              <strong>{{ run.phase }}</strong>
+              <small>{{ run.source or "-" }} / {{ "dry-run" if run.dry_run else "本実行" }}</small>
+            </td>
+            <td>{{ run.db_schema or "-" }}</td>
+            <td>{{ run.started_at }}</td>
+            <td>
+              <span class="status-pill {{ 'status-danger' if (run.running_minutes or 0) >= 60 else 'status-pending' }}">
+                {{ run.running_minutes or 0 }}分
+              </span>
+            </td>
+            <td>{{ run.rows_seen }} / 更新{{ run.rows_updated }} / 追加{{ run.rows_inserted }} / skip{{ run.rows_skipped }} / err{{ run.errors }}</td>
+            <td><small>{{ run.input_base or run.input_file or "-" }}</small></td>
+            <td><small>{{ run.notes or run.admin_note or "" }}</small></td>
+            <td>
+              <form method="post" action="/admin/etl-runs/{{ run.run_id }}/stop" class="inline-stop-form">
+                <input name="reason" value="長期runningのため管理者が停止扱い" aria-label="停止理由">
+                <button type="submit" class="danger-button" data-confirm-message="このrunを停止扱いにします。実際のOSプロセスは終了しません。よろしいですか？">停止扱い</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="9" class="empty-state">実行中の処理はありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

@@ -66,10 +66,10 @@
     <a href="#home-section-main">よく使う作業</a>
     {% endif %}
     <a href="#home-section-import">取込・チェック</a>
+    <a href="#home-section-correction">補正・加入者</a>
     {% if "hia_upload.perform" in user.permissions or "hia_upload_status.edit" in user.permissions or "users.manage" in user.permissions %}
     <a href="#home-section-fund">健保納品</a>
     {% endif %}
-    <a href="#home-section-correction">補正・加入者</a>
     {% if "business_settings.view" in user.permissions or "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
     <a href="#home-section-admin">管理</a>
     {% endif %}
@@ -117,9 +117,24 @@
     <div class="home-menu-grid">
       <a class="home-menu-card" href="/file-receipts"><span class="status-pill status-ready">利用可</span><div><strong>受領ファイル一覧</strong><small>scan/import対象のCSV/XML、未設定施設、再取込対象を見る</small></div></a>
       <a class="home-menu-card" href="/exam-processing"><span class="status-pill status-ready">利用可</span><div><strong>健診結果処理実行</strong><small>受領単位チェック、case更新、case値更新、case単位チェックを実行する</small></div></a>
-      <a class="home-menu-card" href="/exam-ledgers"><span class="status-pill status-ready">利用可</span><div><strong>exam ledgers</strong><small>取込済みsource単位のOK、NG、加入者突合、出力状態を確認する</small></div></a>
+      <a class="home-menu-card" href="/exam-ledgers"><span class="status-pill status-ready">利用可</span><div><strong>健診結果一覧（受領）</strong><small>取込済みsource単位のOK、NG、加入者突合、出力状態を確認する</small></div></a>
       <a class="home-menu-card" href="/exam-ledgers/search"><span class="status-pill status-ready">利用可</span><div><strong>健診結果詳細検索</strong><small>氏名カナ、HIA subscriber IDから受領結果と検査値を直接確認する</small></div></a>
       <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>normalizeエラー確認</strong><small>変換できないraw値を辞書追加、除外、確認事項へ振り分ける</small></div><span class="status-pill status-muted">未実装</span></div>
+    </div>
+  </section>
+
+  <section id="home-section-correction" class="home-menu-section">
+    <div class="section-heading">
+      <div>
+        <h2>補正・加入者・紙健診</h2>
+        <p class="subtle">人単位の不足情報、加入者突合、紙健診入力を扱います。</p>
+      </div>
+    </div>
+    <div class="home-menu-grid">
+      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>基本情報補正</strong><small>氏名カナ、郵便番号、住所、記号番号などを補正する</small></div><span class="status-pill status-muted">未実装</span></div>
+      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>加入者突合NG修正</strong><small>候補検索、比較、手動確定で正しい加入者へ紐付ける</small></div><span class="status-pill status-muted">未実装</span></div>
+      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>HIAダッシュボードCSV</strong><small>HIA管理画面から取得したCSVを取り込み、状態へ反映する</small></div><span class="status-pill status-muted">未実装</span></div>
+      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>紙健診入力</strong><small>紙から起こした基本情報と検査値をテンプレートに沿って登録する</small></div><span class="status-pill status-muted">未実装</span></div>
     </div>
   </section>
 
@@ -148,21 +163,6 @@
     </div>
   </section>
   {% endif %}
-
-  <section id="home-section-correction" class="home-menu-section">
-    <div class="section-heading">
-      <div>
-        <h2>補正・加入者・紙健診</h2>
-        <p class="subtle">人単位の不足情報、加入者突合、紙健診入力を扱います。</p>
-      </div>
-    </div>
-    <div class="home-menu-grid">
-      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>基本情報補正</strong><small>氏名カナ、郵便番号、住所、記号番号などを補正する</small></div><span class="status-pill status-muted">未実装</span></div>
-      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>加入者突合NG修正</strong><small>候補検索、比較、手動確定で正しい加入者へ紐付ける</small></div><span class="status-pill status-muted">未実装</span></div>
-      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>HIAダッシュボードCSV</strong><small>HIA管理画面から取得したCSVを取り込み、状態へ反映する</small></div><span class="status-pill status-muted">未実装</span></div>
-      <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>紙健診入力</strong><small>紙から起こした基本情報と検査値をテンプレートに沿って登録する</small></div><span class="status-pill status-muted">未実装</span></div>
-    </div>
-  </section>
 
   {% if "business_settings.view" in user.permissions or "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
   <section id="home-section-admin" class="home-menu-section">
@@ -194,6 +194,7 @@
       <a class="home-menu-card" href="/admin/permissions"><span class="status-pill status-ready">利用可</span><div><strong>権限設定</strong><small>ロールごとの権限を設定する</small></div></a>
       <a class="home-menu-card" href="/admin/security"><span class="status-pill status-ready">利用可</span><div><strong>セキュリティ</strong><small>自動ログアウト、個人情報監査ログ設定を管理する</small></div></a>
       <a class="home-menu-card" href="/admin/audit-logs"><span class="status-pill status-ready">利用可</span><div><strong>監査ログ</strong><small>個人情報閲覧、設定変更などの操作履歴を確認する</small></div></a>
+      <a class="home-menu-card" href="/admin/etl-runs"><span class="status-pill status-ready">利用可</span><div><strong>実行中処理</strong><small>running中の処理確認、長期化したrunの停止扱い</small></div></a>
     </div>
   </section>
   {% endif %}

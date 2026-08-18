@@ -3215,6 +3215,91 @@ def load_recent_exam_processing_runs(cur: Any, *, event_id: int, limit: int = 20
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_running_exam_processing_runs(cur: Any, *, event_id: int, limit: int = 20) -> list[dict[str, Any]]:
+    phases = tuple(dict.fromkeys(step["phase"] for step in EXAM_PROCESSING_STEPS))
+    placeholders = ", ".join(["%s"] * len(phases))
+    cur.execute(
+        f"""
+        SELECT
+          run_id,
+          phase,
+          source,
+          db_schema,
+          status,
+          started_at,
+          dry_run,
+          limit_rows,
+          rows_seen,
+          rows_inserted,
+          rows_updated,
+          rows_skipped,
+          errors,
+          notes,
+          TIMESTAMPDIFF(MINUTE, started_at, CURRENT_TIMESTAMP(3)) AS running_minutes
+        FROM {qname(health_db())}.etl_runs
+        WHERE status = 'running'
+          AND phase IN ({placeholders})
+          AND (input_base = %s OR notes LIKE %s)
+        ORDER BY started_at DESC, run_id DESC
+        LIMIT %s
+        """,
+        (*phases, f"event_id={event_id}", f"%event_id={event_id}%", limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_running_etl_runs(cur: Any, *, limit: int = 100) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          run_id,
+          phase,
+          source,
+          db_schema,
+          status,
+          started_at,
+          dry_run,
+          limit_rows,
+          files,
+          rows_seen,
+          rows_inserted,
+          rows_updated,
+          rows_skipped,
+          errors,
+          input_base,
+          input_file,
+          notes,
+          admin_note,
+          TIMESTAMPDIFF(MINUTE, started_at, CURRENT_TIMESTAMP(3)) AS running_minutes
+        FROM {qname(health_db())}.etl_runs
+        WHERE status = 'running'
+        ORDER BY started_at DESC, run_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def mark_etl_run_stopped(cur: Any, *, run_id: int, operator: str, reason: str) -> int:
+    note = f"[admin_stop] {datetime.now().isoformat(timespec='seconds')} {operator}: {reason or 'reason not specified'}"
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.etl_runs
+        SET
+          status = 'failed',
+          finished_at = CURRENT_TIMESTAMP(3),
+          errors = COALESCE(errors, 0) + 1,
+          notes = CONCAT_WS('\n', NULLIF(notes, ''), %s),
+          admin_note = CONCAT_WS('\n', NULLIF(admin_note, ''), %s)
+        WHERE run_id = %s
+          AND status = 'running'
+        """,
+        (note, note, run_id),
+    )
+    return int(cur.rowcount or 0)
+
+
 def review_export_event_root(event_id: int) -> Path:
     return HIA_XML_REVIEW_EXPORT_ROOT_DIR / f"event_{event_id}"
 
@@ -3672,6 +3757,7 @@ def exam_processing(request: Request) -> Response:
         try:
             events = load_event_options(cur)
             recent_runs = load_recent_exam_processing_runs(cur, event_id=selected_event_id)
+            running_runs = load_running_exam_processing_runs(cur, event_id=selected_event_id)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -3685,6 +3771,7 @@ def exam_processing(request: Request) -> Response:
             "selected_event_id": selected_event_id,
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
+            "running_runs": running_runs,
             "results": [],
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
@@ -3699,13 +3786,39 @@ async def run_exam_processing(request: Request) -> Response:
         return user
     if not can_run_exam_processing(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
-    form = await read_form(request)
-    event_id = parse_positive_int(form.get("event_id"), default=2, maximum=999999)
-    dry_run = form.get("dry_run") == "1"
-    include_imported = form.get("include_imported") == "1"
-    limit = parse_positive_int(form.get("limit"), default=0, maximum=100000)
-    action = (form.get("action") or "").strip()
-    step_keys = [step["key"] for step in EXAM_PROCESSING_STEPS] if action == "run_all" else [action]
+    form = await request.form()
+    event_id = parse_positive_int(str(form.get("event_id") or ""), default=2, maximum=999999)
+    dry_run = str(form.get("dry_run") or "") == "1"
+    include_imported = str(form.get("include_imported") or "") == "1"
+    limit = parse_positive_int(str(form.get("limit") or ""), default=0, maximum=100000)
+    action = str(form.get("action") or "").strip()
+    selected_step_keys = [str(value) for value in form.getlist("step_keys")]
+    if action == "run_selected":
+        valid_step_keys = {step["key"] for step in EXAM_PROCESSING_STEPS}
+        step_keys = [step["key"] for step in EXAM_PROCESSING_STEPS if step["key"] in selected_step_keys and step["key"] in valid_step_keys]
+        if not step_keys:
+            return RedirectResponse(
+                f"/exam-processing?event_id={event_id}&error={quote('実行する処理を1つ以上選択してください。')}",
+                status_code=303,
+            )
+    elif action == "run_all":
+        step_keys = [step["key"] for step in EXAM_PROCESSING_STEPS]
+    else:
+        step_keys = [action]
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if running_runs:
+        return RedirectResponse(
+            f"/exam-processing?event_id={event_id}&error={quote('このeventで別の健診結果処理が実行中です。管理者の実行中処理画面で確認してください。')}",
+            status_code=303,
+        )
     results: list[dict[str, Any]] = []
     for step_key in step_keys:
         result = run_exam_processing_step(
@@ -3724,6 +3837,7 @@ async def run_exam_processing(request: Request) -> Response:
         try:
             events = load_event_options(cur)
             recent_runs = load_recent_exam_processing_runs(cur, event_id=event_id)
+            running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -3739,11 +3853,68 @@ async def run_exam_processing(request: Request) -> Response:
             "selected_event_id": event_id,
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
+            "running_runs": running_runs,
             "results": results,
             "message": f"{ok_count}件の処理が完了しました。",
             "error": f"{failed[0]['label']}で停止しました。" if failed else None,
         },
         status_code=500 if failed else 200,
+    )
+
+
+@app.get("/admin/etl-runs", response_class=HTMLResponse)
+def admin_etl_runs(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            running_runs = load_running_etl_runs(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_etl_runs.html",
+        {
+            "request": request,
+            "user": user,
+            "running_runs": running_runs,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/etl-runs/{run_id}/stop")
+async def admin_stop_etl_run(request: Request, run_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    reason = str(form.get("reason") or "").strip()
+    operator = f"{user.employee_no}:{user.display_name}"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            updated = mark_etl_run_stopped(cur, run_id=run_id, operator=operator, reason=reason)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if updated:
+        message = f"run_id={run_id} を停止扱いにしました。"
+        return RedirectResponse(f"/admin/etl-runs?message={quote(message)}", status_code=303)
+    return RedirectResponse(
+        f"/admin/etl-runs?error={quote('対象runはrunningではありません。最新状態を確認してください。')}",
+        status_code=303,
     )
 
 
