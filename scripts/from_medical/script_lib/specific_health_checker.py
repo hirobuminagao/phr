@@ -40,9 +40,15 @@ SPECIFIC_REQUIRED_NAMECODES: tuple[RequiredNamecode, ...] = (
     RequiredNamecode("9N746000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N751000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N756000000000011", ExpectedValueType.CD),
+    RequiredNamecode("9N872000000000011", ExpectedValueType.CD),
+    RequiredNamecode("9N766000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N771000000000011", ExpectedValueType.CD),
+    RequiredNamecode("9N782000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N781000000000011", ExpectedValueType.CD),
+    RequiredNamecode("9N786000000000011", ExpectedValueType.CD),
+    RequiredNamecode("9N791000000000011", ExpectedValueType.CO),
     RequiredNamecode("9N796000000000011", ExpectedValueType.CD),
+    RequiredNamecode("9N801000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N808000000000011", ExpectedValueType.CD),
 )
 
@@ -64,9 +70,15 @@ SPECIFIC_ITEM_NAMES: dict[str, str] = {
     "9N746000000000011": "30分以上の運動習慣",
     "9N751000000000011": "歩行又は身体活動",
     "9N756000000000011": "歩行速度",
+    "9N872000000000011": "咀嚼",
+    "9N766000000000011": "食べ方1（早食い等）",
     "9N771000000000011": "食べ方2（就寝前）",
+    "9N782000000000011": "食べ方3（間食）",
     "9N781000000000011": "食習慣",
+    "9N786000000000011": "飲酒",
+    "9N791000000000011": "飲酒量",
     "9N796000000000011": "睡眠",
+    "9N801000000000011": "生活習慣の改善",
     "9N808000000000011": "特定保健指導の受診歴",
 }
 
