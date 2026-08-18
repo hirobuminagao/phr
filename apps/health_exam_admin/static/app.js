@@ -203,15 +203,34 @@
     update();
   }
 
-  const selectAllStepsButton = document.querySelector("[data-select-all-steps]");
+  const floatingCategoryNav = document.querySelector("[data-floating-category-nav]");
+  const floatingCategoryToggle = document.querySelector("[data-floating-category-toggle]");
+  if (floatingCategoryNav && floatingCategoryToggle) {
+    const storageKey = "phrAdminFloatingCategoryCollapsed";
+    const setCollapsed = (collapsed) => {
+      floatingCategoryNav.classList.toggle("is-collapsed", collapsed);
+      floatingCategoryToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      floatingCategoryToggle.setAttribute("aria-label", collapsed ? "カテゴリメニューを開く" : "カテゴリメニューを閉じる");
+    };
+    setCollapsed(localStorage.getItem(storageKey) === "1");
+    floatingCategoryToggle.addEventListener("click", () => {
+      const collapsed = !floatingCategoryNav.classList.contains("is-collapsed");
+      setCollapsed(collapsed);
+      localStorage.setItem(storageKey, collapsed ? "1" : "0");
+    });
+  }
+
+  const setAllStepsButtons = Array.from(document.querySelectorAll("[data-set-all-steps]"));
   const processingStepCheckboxes = Array.from(document.querySelectorAll("[data-processing-step-checkbox]"));
   const selectedRunButton = document.querySelector("[data-run-selected-steps]");
   if (processingStepCheckboxes.length) {
     const updateProcessingStepControls = () => {
       const checkedCount = processingStepCheckboxes.filter((input) => input.checked).length;
       const allChecked = checkedCount === processingStepCheckboxes.length;
-      if (selectAllStepsButton) {
-        selectAllStepsButton.textContent = allChecked ? "すべて解除" : "すべて選択";
+      const noneChecked = checkedCount === 0;
+      for (const button of setAllStepsButtons) {
+        const mode = button.getAttribute("data-set-all-steps");
+        button.hidden = (mode === "on" && allChecked) || (mode === "off" && noneChecked);
       }
       if (selectedRunButton) {
         selectedRunButton.disabled = checkedCount === 0;
@@ -221,13 +240,15 @@
         if (!label) continue;
         label.classList.toggle("is-on", input.checked);
         label.classList.toggle("is-off", !input.checked);
+        const actionLabel = label.querySelector("[data-processing-step-toggle-label]");
+        if (actionLabel) actionLabel.textContent = input.checked ? "外す" : "選択";
       }
     };
-    if (selectAllStepsButton) {
-      selectAllStepsButton.addEventListener("click", () => {
-        const allChecked = processingStepCheckboxes.every((input) => input.checked);
+    for (const button of setAllStepsButtons) {
+      button.addEventListener("click", () => {
+        const checked = button.getAttribute("data-set-all-steps") === "on";
         for (const input of processingStepCheckboxes) {
-          input.checked = !allChecked;
+          input.checked = checked;
           input.dispatchEvent(new Event("change"));
         }
         updateProcessingStepControls();

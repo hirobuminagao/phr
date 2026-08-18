@@ -85,7 +85,10 @@
         <h2>実行ステップ</h2>
         <p class="subtle">ONの処理だけを上から順番にまとめて実行します。途中だけやり直す時は、各ステップの個別実行も使えます。</p>
       </div>
-      <button type="button" class="ghost-button" data-select-all-steps>すべて選択</button>
+      <div class="processing-step-bulk-actions">
+        <button type="button" class="ghost-button" data-set-all-steps="on">すべて選択</button>
+        <button type="button" class="ghost-button" data-set-all-steps="off">すべて解除</button>
+      </div>
     </div>
     <div class="processing-step-grid">
       {% for step in steps %}
@@ -95,6 +98,7 @@
           <label class="processing-step-toggle is-on">
             <input type="checkbox" name="step_keys" value="{{ step.key }}" form="exam-processing-form" checked data-processing-step-checkbox>
             <span>{{ step.label }}</span>
+            <b data-processing-step-toggle-label>外す</b>
           </label>
           <p>{{ step.description }}</p>
           <small>{{ step.script }}</small>

@@ -57,28 +57,33 @@
   </section>
   {% endif %}
 
-  <nav class="floating-category-nav" aria-label="カテゴリ移動">
-    <strong>カテゴリ</strong>
-    <a href="#home-top">TOP</a>
-    <a href="#home-section-import">取込・チェック</a>
-    <a href="#home-section-correction">補正・加入者</a>
+  <nav class="floating-category-nav" aria-label="カテゴリ移動" data-floating-category-nav>
+    <div class="floating-category-head">
+      <strong>カテゴリ</strong>
+      <button type="button" aria-label="カテゴリメニューを閉じる" aria-expanded="true" data-floating-category-toggle>...</button>
+    </div>
+    <div class="floating-category-links" data-floating-category-links>
+      <a href="#home-top">TOP</a>
+      <a href="#home-section-import">取込・チェック</a>
+      <a href="#home-section-correction">補正・加入者</a>
     {% if "export_lists.view" in user.permissions
       or "export_lists.edit" in user.permissions
       or "xml_export.official" in user.permissions
       or "hia_upload.perform" in user.permissions
       or "hia_upload_status.edit" in user.permissions
       or "users.manage" in user.permissions %}
-    <a href="#home-section-hia-upload">HIAアップロード</a>
+      <a href="#home-section-hia-upload">HIAアップロード</a>
     {% endif %}
     {% if "hia_upload.perform" in user.permissions or "hia_upload_status.edit" in user.permissions or "users.manage" in user.permissions %}
-    <a href="#home-section-fund">健保納品</a>
+      <a href="#home-section-fund">健保納品</a>
     {% endif %}
     {% if "business_settings.view" in user.permissions or "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
-    <a href="#home-section-admin">管理</a>
+      <a href="#home-section-admin">管理</a>
     {% endif %}
     {% if "users.manage" in user.permissions %}
-    <a href="#home-section-system">システム管理</a>
+      <a href="#home-section-system">システム管理</a>
     {% endif %}
+    </div>
   </nav>
 
   <section id="home-section-import" class="home-menu-section">
