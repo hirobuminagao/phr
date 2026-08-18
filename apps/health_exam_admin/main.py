@@ -2806,6 +2806,7 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     legal_check_result = filters.get("legal_check_result", "").strip()
     specific_check_result = filters.get("specific_check_result", "").strip()
     export_readiness_status = filters.get("export_readiness_status", "").strip()
+    source_mode = filters.get("source_mode", "").strip()
     query = filters.get("q", "").strip()
     if event_id:
         where_parts.append("eec.event_id = %s")
@@ -2819,6 +2820,9 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     if export_readiness_status:
         where_parts.append("eec.export_readiness_status = %s")
         params.append(export_readiness_status)
+    if source_mode:
+        where_parts.append("eec.source_mode = %s")
+        params.append(source_mode)
     if query:
         like = f"%{query}%"
         where_parts.append(
@@ -2916,6 +2920,39 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
         (*params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {
+        "total": len(rows),
+        "ready": 0,
+        "approved_with_reason": 0,
+        "blocked": 0,
+        "waiting": 0,
+        "exported": 0,
+        "legal_ng": 0,
+        "specific_ng": 0,
+        "multi_source": 0,
+    }
+    for row in rows:
+        readiness = str(row.get("export_readiness_status") or "")
+        if readiness == "EXPORT_READY":
+            summary["ready"] += 1
+        elif readiness == "APPROVED_WITH_REASON":
+            summary["approved_with_reason"] += 1
+        elif readiness == "BLOCKED":
+            summary["blocked"] += 1
+        elif readiness:
+            summary["waiting"] += 1
+        if str(row.get("xml_export_status") or "") == "EXPORTED":
+            summary["exported"] += 1
+        if str(row.get("legal_check_result") or "") == "NG":
+            summary["legal_ng"] += 1
+        if str(row.get("specific_check_result") or "") == "NG":
+            summary["specific_ng"] += 1
+        if int(row.get("source_count") or 0) >= 2:
+            summary["multi_source"] += 1
+    return summary
 
 
 def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[str, Any] | None:
@@ -5144,6 +5181,7 @@ def exam_export_cases(request: Request) -> Response:
         "legal_check_result": request.query_params.get("legal_check_result", ""),
         "specific_check_result": request.query_params.get("specific_check_result", ""),
         "export_readiness_status": request.query_params.get("export_readiness_status", ""),
+        "source_mode": request.query_params.get("source_mode", ""),
         "q": request.query_params.get("q", ""),
         "limit": request.query_params.get("limit", "2000"),
     }
@@ -5154,6 +5192,7 @@ def exam_export_cases(request: Request) -> Response:
         try:
             event_options = load_event_options(cur)
             rows = load_exam_export_case_rows(cur, filters=filters, limit=limit)
+            summary = summarize_exam_export_cases(rows)
             if audit_enabled(cur):
                 for row in rows:
                     log_audit(
@@ -5183,6 +5222,7 @@ def exam_export_cases(request: Request) -> Response:
             "event_options": event_options,
             "filters": filters,
             "rows": rows,
+            "summary": summary,
             "limit": limit,
         },
     )

@@ -271,6 +271,11 @@ button[type="submit"]:disabled {
   gap: 16px;
 }
 
+.case-summary-grid {
+  grid-template-columns: repeat(6, minmax(140px, 1fr));
+  margin-bottom: 16px;
+}
+
 .summary-card,
 .permission-panel,
 .empty-state,

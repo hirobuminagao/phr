@@ -197,6 +197,8 @@ Current as of 2026-08-05.
 - XML出力時は採用済み整値 + `exam_item_master` でentryを構成する。型、単位、OID、section、methodCode、順番、一連検査グループは原則として `exam_item_master` から参照し、整値テーブルへ複製しない。
 - 採用済み整値には採用元 `exam_item_values.id` を必須候補として持たせ、raw証跡へ戻れるようにする。手修正値の場合は補正履歴IDを持たせる。
 - XML/CSVの両方に同じ `namecode + occurrence_no` が存在する場合、原則はXML優位とする。
+- XML側に存在しない `namecode + occurrence_no` がCSV側に存在する場合は、CSVを不足補完として採用する。つまり採用済み整値の基本順序は「XMLで取れるものはXML、XMLにないものはCSV、必要に応じて紙/手修正」である。
+- CSVはXMLの置き換えではなく補完sourceとして扱う。XMLとCSVの値が競合する場合はXMLを正とし、CSVを優先したい項目だけ `exam_item_value_precedence_rules` の例外ルールで制御する。
 - ただし健診機関XMLの `9N511 医師の診断(判定)` に「メタボリックシンドローム判定にて非該当です。」のような制度判定の口語説明だけが入るケースがあるため、全項目フラグではなく `exam_item_value_precedence_rules` によるnamecode単位の例外ルールで制御する。
 - 採用例外ルールは、`CSV_FIRST` / `CSV_IF_XML_MATCHES_PATTERN` / `JOIN_XML_CSV` / `MANUAL_REVIEW` を表現できるようにする。取り込み時のsource値は改変せず、結合出力用caseの採用済み整値を作る時だけ適用する。
 - 初期ルールとして、XML側の `9N511` がメタボリックシンドローム判定の口語説明のみで、CSV側の `9N511` が存在する場合はCSV側を採用する。

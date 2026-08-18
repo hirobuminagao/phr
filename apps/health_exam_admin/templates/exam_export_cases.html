@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">EXPORT CASE</p>
     <h1>個人case一覧</h1>
-    <p class="subtle">人単位にまとめた出力候補caseを確認します。法定項目と特定健診のOK/NGを分けて表示します。</p>
+    <p class="subtle">人単位にまとめた出力候補caseを確認します。採用値はXMLを優先し、不足分をCSV/紙で補完します。</p>
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/export-lists">出力リスト</a>
@@ -68,6 +68,16 @@
         </div>
         <input type="hidden" name="export_readiness_status" value="{{ filters.export_readiness_status }}" data-server-filter-value="export_readiness_status">
       </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>source</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="XML_ONLY" class="{{ 'is-active' if filters.source_mode == 'XML_ONLY' else '' }}">XMLのみ</button>
+          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="CSV_ONLY" class="{{ 'is-active' if filters.source_mode == 'CSV_ONLY' else '' }}">CSVのみ</button>
+          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="XML_CSV" class="{{ 'is-active' if filters.source_mode == 'XML_CSV' else '' }}">XML+CSV</button>
+          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="MULTI_SOURCE" class="{{ 'is-active' if filters.source_mode == 'MULTI_SOURCE' else '' }}">複数</button>
+        </div>
+        <input type="hidden" name="source_mode" value="{{ filters.source_mode }}" data-server-filter-value="source_mode">
+      </fieldset>
       <label>
         <span>表示件数</span>
         <input name="limit" value="{{ limit }}">
@@ -79,11 +89,44 @@
     </form>
   </section>
 
+  <section class="summary-grid case-summary-grid">
+    <div class="summary-card">
+      <span>表示中case</span>
+      <strong>{{ summary.total }}</strong>
+      <small>検索条件に一致</small>
+    </div>
+    <div class="summary-card">
+      <span>出力可能</span>
+      <strong>{{ summary.ready }}</strong>
+      <small>READY</small>
+    </div>
+    <div class="summary-card">
+      <span>理由ありOK</span>
+      <strong>{{ summary.approved_with_reason }}</strong>
+      <small>人手判断済み</small>
+    </div>
+    <div class="summary-card">
+      <span>BLOCKED</span>
+      <strong>{{ summary.blocked }}</strong>
+      <small>出力前確認</small>
+    </div>
+    <div class="summary-card">
+      <span>出力済み</span>
+      <strong>{{ summary.exported }}</strong>
+      <small>XML作成済み</small>
+    </div>
+    <div class="summary-card">
+      <span>XML+CSV</span>
+      <strong>{{ summary.multi_source }}</strong>
+      <small>複数source</small>
+    </div>
+  </section>
+
   <section class="panel">
     <div class="section-heading">
       <div>
         <h2>case一覧</h2>
-        <p class="subtle">最新 {{ rows|length }} 件を表示しています。</p>
+        <p class="subtle">最新 {{ rows|length }} 件を表示しています。source欄は採用値の構成元で、基本はXML優先、CSVは不足補完です。</p>
       </div>
     </div>
     <div class="table-panel">
