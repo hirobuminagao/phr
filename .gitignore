@@ -12,6 +12,9 @@ scripts/kenshin_list_pydir/.env.trans_*
 **/*.xml
 **/*.csv
 **/*.xlsx
+# allow rule/check criteria workbooks (non-runtime, non-PII documentation assets)
+!docs/refactor/health_exam_result/労安法_一般健康診断_項目対応表.xlsx
+!docs/refactor/health_exam_result/特定健診_項目対応表.xlsx
 !scripts/work_folder/mat/*.csv
 
 # re-allow XML/CSV under spec explicitly
