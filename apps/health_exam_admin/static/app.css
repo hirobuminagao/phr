@@ -472,12 +472,13 @@ button[type="submit"]:disabled {
 
 .home-menu-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 14px;
 }
 
 .home-menu-grid.is-compact {
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .exam-processing-form {
@@ -593,7 +594,8 @@ button[type="submit"]:disabled {
 }
 
 .home-menu-card {
-  min-height: 142px;
+  min-height: 150px;
+  height: 100%;
   display: grid;
   align-content: start;
   gap: 8px;
@@ -625,6 +627,7 @@ a.home-menu-card:hover {
   color: var(--muted);
   font-weight: 700;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .home-menu-card .status-pill {
@@ -2551,6 +2554,20 @@ a.home-menu-card:hover {
   width: 190px;
 }
 
+@media (max-width: 1560px) {
+  .home-menu-grid,
+  .home-menu-grid.is-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  .home-menu-grid,
+  .home-menu-grid.is-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 760px) {
   .topbar {
     align-items: flex-start;
@@ -2609,6 +2626,11 @@ a.home-menu-card:hover {
   }
 
   .work-permission-list {
+    grid-template-columns: 1fr;
+  }
+
+  .home-menu-grid,
+  .home-menu-grid.is-compact {
     grid-template-columns: 1fr;
   }
 

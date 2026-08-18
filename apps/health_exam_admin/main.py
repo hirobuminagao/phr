@@ -3899,7 +3899,7 @@ async def admin_stop_etl_run(request: Request, run_id: int) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await request.form()
     reason = str(form.get("reason") or "").strip()
-    operator = f"{user.employee_no}:{user.display_name}"
+    operator = f"{user.get('employee_no') or '-'}:{user.get('display_name') or '-'}"
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
