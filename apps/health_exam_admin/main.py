@@ -2807,6 +2807,7 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     specific_check_result = filters.get("specific_check_result", "").strip()
     export_readiness_status = filters.get("export_readiness_status", "").strip()
     source_mode = filters.get("source_mode", "").strip()
+    exam_month = filters.get("exam_month", "").strip()
     query = filters.get("q", "").strip()
     if event_id:
         where_parts.append("eec.event_id = %s")
@@ -2823,6 +2824,9 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     if source_mode:
         where_parts.append("eec.source_mode = %s")
         params.append(source_mode)
+    if exam_month:
+        where_parts.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
+        params.append(exam_month)
     if query:
         like = f"%{query}%"
         where_parts.append(
@@ -2835,12 +2839,13 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
               OR eec.name_kana_raw LIKE %s
               OR eec.facility_name LIKE %s
               OR eec.facility_code LIKE %s
+              OR mfa.expected_source_mode LIKE %s
               OR eec.insurance_number_raw LIKE %s
               OR eec.insurance_number_export_value LIKE %s
             )
             """
         )
-        params.extend([query, like, like, like, like, like, like, like, like])
+        params.extend([query, like, like, like, like, like, like, like, like, like])
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur.execute(
         f"""
@@ -2855,6 +2860,7 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
           eec.exam_facility_id,
           eec.facility_code,
           eec.facility_name,
+          mfa.expected_source_mode,
           eec.exam_date,
           eec.health_exam_report_category,
           eec.program_code,
@@ -2913,13 +2919,27 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
           GROUP BY exam_export_case_id
         ) AS src
           ON src.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            MAX(expected_source_mode) AS expected_source_mode
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE is_active = 1
+          GROUP BY event_id, exam_facility_id
+        ) AS mfa
+          ON mfa.event_id = eec.event_id
+         AND mfa.exam_facility_id = eec.exam_facility_id
         {where_sql}
         ORDER BY eec.updated_at DESC, eec.exam_export_case_id DESC
         LIMIT %s
         """,
         (*params, limit),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+    return rows
 
 
 def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -5182,6 +5202,7 @@ def exam_export_cases(request: Request) -> Response:
         "specific_check_result": request.query_params.get("specific_check_result", ""),
         "export_readiness_status": request.query_params.get("export_readiness_status", ""),
         "source_mode": request.query_params.get("source_mode", ""),
+        "exam_month": request.query_params.get("exam_month", ""),
         "q": request.query_params.get("q", ""),
         "limit": request.query_params.get("limit", "2000"),
     }

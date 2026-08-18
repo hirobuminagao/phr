@@ -1164,7 +1164,7 @@ a.home-menu-card:hover {
 }
 
 .filter-form-wide {
-  grid-template-columns: minmax(260px, 1.3fr) minmax(280px, 1fr) minmax(220px, 0.9fr) minmax(300px, 1.2fr) minmax(90px, 0.45fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
 .filter-form label {
@@ -2682,6 +2682,10 @@ a.home-menu-card:hover {
 
 .exam-export-case-table th:nth-child(1) {
   width: 84px;
+}
+
+.exam-export-case-table th:nth-child(2) {
+  width: 170px;
 }
 
 .exam-export-case-table th:nth-child(4),

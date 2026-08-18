@@ -40,6 +40,10 @@
           {% endfor %}
         </select>
       </label>
+      <label>
+        <span>受診月</span>
+        <input name="exam_month" value="{{ filters.exam_month or '' }}" autocomplete="off" placeholder="2026-05">
+      </label>
       <fieldset class="filter-condition-block">
         <legend>法定</legend>
         <div class="filter-toggle-group">
@@ -144,7 +148,7 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr data-filter-text="{{ row.exam_export_case_id }} {{ row.event_id }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.exam_date or '' }} {{ row.subscriber_match_status }} {{ row.legal_check_result }} {{ row.legal_reason_summary or '' }} {{ row.specific_check_result }} {{ row.specific_reason_summary or '' }} {{ row.export_readiness_status }} {{ row.export_readiness_reason or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }} {{ row.output_zip_file_name or '' }}">
+          <tr data-filter-text="{{ row.exam_export_case_id }} {{ row.event_id }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }} {{ row.exam_date or '' }} {{ row.subscriber_match_status }} {{ row.legal_check_result }} {{ row.legal_reason_summary or '' }} {{ row.specific_check_result }} {{ row.specific_reason_summary or '' }} {{ row.export_readiness_status }} {{ row.export_readiness_reason or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }} {{ row.output_zip_file_name or '' }}">
             <td>
               <strong>{{ row.exam_export_case_id }}</strong>
               <small>event {{ row.event_id }}</small>
@@ -157,6 +161,7 @@
             <td>
               <strong title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
               <small>{{ row.facility_code or "" }} / {{ row.exam_date or "受診日なし" }}</small>
+              <small>想定受領: {{ row.expected_source_mode_label or "未設定" }}</small>
             </td>
             <td>
               <span class="status-pill status-muted">{{ row.source_mode or "-" }}</span>
