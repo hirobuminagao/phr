@@ -25,72 +25,77 @@
         <p class="subtle">氏名カナ、HIA ID、記号番号、健診機関名などで絞り込めます。</p>
       </div>
     </div>
-    <form method="get" action="/exam-export-cases" class="filter-form filter-form-wide">
-      <label>
-        <span>キーワード</span>
-        <input id="case-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / カナ / 記号番号 / 施設" data-live-filter-input="#exam-export-case-table">
-      </label>
-      <label>
-        <span>イベント</span>
-        <select name="event_id">
-          {% for event in event_options %}
-            <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
-              {{ event.event_name or ("event " ~ event.event_id) }}
-            </option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        <span>受診月</span>
-        <input name="exam_month" value="{{ filters.exam_month or '' }}" autocomplete="off" placeholder="2026-05">
-      </label>
-      <fieldset class="filter-condition-block">
-        <legend>法定</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="legal_check_result" data-filter-value="OK" class="{{ 'is-active' if filters.legal_check_result == 'OK' else '' }}">OK</button>
-          <button type="button" data-server-filter-toggle="legal_check_result" data-filter-value="NG" class="{{ 'is-active' if filters.legal_check_result == 'NG' else '' }}">NG</button>
-          <button type="button" data-server-filter-toggle="legal_check_result" data-filter-value="PENDING" class="{{ 'is-active' if filters.legal_check_result == 'PENDING' else '' }}">未判定</button>
+    <form method="get" action="/exam-export-cases" class="case-filter-form">
+      <div class="case-filter-row case-filter-row-primary">
+        <label>
+          <span>キーワード</span>
+          <input id="case-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / カナ / 記号番号 / 施設" data-live-filter-input="#exam-export-case-table">
+        </label>
+        <label>
+          <span>イベント</span>
+          <select name="event_id">
+            {% for event in event_options %}
+              <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+                {{ event.event_name or ("event " ~ event.event_id) }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>受診月</span>
+          <input name="exam_month" value="{{ filters.exam_month or '' }}" autocomplete="off" placeholder="2026-05">
+        </label>
+        <fieldset class="filter-condition-block">
+          <legend>法定</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="legal_check_result" data-filter-value="OK" class="{{ 'is-active' if filters.legal_check_result == 'OK' else '' }}">OK</button>
+            <button type="button" data-server-filter-toggle="legal_check_result" data-filter-value="NG" class="{{ 'is-active' if filters.legal_check_result == 'NG' else '' }}">NG</button>
+            <button type="button" data-server-filter-toggle="legal_check_result" data-filter-value="PENDING" class="{{ 'is-active' if filters.legal_check_result == 'PENDING' else '' }}">未判定</button>
+          </div>
+          <input type="hidden" name="legal_check_result" value="{{ filters.legal_check_result }}" data-server-filter-value="legal_check_result">
+        </fieldset>
+        <fieldset class="filter-condition-block">
+          <legend>特定健診</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="OK" class="{{ 'is-active' if filters.specific_check_result == 'OK' else '' }}">OK</button>
+            <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="NG" class="{{ 'is-active' if filters.specific_check_result == 'NG' else '' }}">NG</button>
+            <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="NOT_APPLICABLE" class="{{ 'is-active' if filters.specific_check_result == 'NOT_APPLICABLE' else '' }}">対象外</button>
+            <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="UNDETERMINABLE" class="{{ 'is-active' if filters.specific_check_result == 'UNDETERMINABLE' else '' }}">判定不能</button>
+            <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="PENDING" class="{{ 'is-active' if filters.specific_check_result == 'PENDING' else '' }}">未判定</button>
+          </div>
+          <input type="hidden" name="specific_check_result" value="{{ filters.specific_check_result }}" data-server-filter-value="specific_check_result">
+        </fieldset>
+      </div>
+      <div class="case-filter-row case-filter-row-secondary">
+        <fieldset class="filter-condition-block">
+          <legend>出力</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="EXPORT_READY" class="{{ 'is-active' if filters.export_readiness_status == 'EXPORT_READY' else '' }}">READY</button>
+            <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="APPROVED_WITH_REASON" class="{{ 'is-active' if filters.export_readiness_status == 'APPROVED_WITH_REASON' else '' }}">理由ありOK</button>
+            <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="BLOCKED" class="{{ 'is-active' if filters.export_readiness_status == 'BLOCKED' else '' }}">BLOCKED</button>
+            <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="WAITING_CHECK" class="{{ 'is-active' if filters.export_readiness_status == 'WAITING_CHECK' else '' }}">確認待ち</button>
+            <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="EXPORTED" class="{{ 'is-active' if filters.export_readiness_status == 'EXPORTED' else '' }}">出力済み</button>
+          </div>
+          <input type="hidden" name="export_readiness_status" value="{{ filters.export_readiness_status }}" data-server-filter-value="export_readiness_status">
+        </fieldset>
+        <fieldset class="filter-condition-block">
+          <legend>source</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="source_mode" data-filter-value="XML_ONLY" class="{{ 'is-active' if filters.source_mode == 'XML_ONLY' else '' }}">XMLのみ</button>
+            <button type="button" data-server-filter-toggle="source_mode" data-filter-value="CSV_ONLY" class="{{ 'is-active' if filters.source_mode == 'CSV_ONLY' else '' }}">CSVのみ</button>
+            <button type="button" data-server-filter-toggle="source_mode" data-filter-value="XML_CSV" class="{{ 'is-active' if filters.source_mode == 'XML_CSV' else '' }}">XML+CSV</button>
+            <button type="button" data-server-filter-toggle="source_mode" data-filter-value="MULTI_SOURCE" class="{{ 'is-active' if filters.source_mode == 'MULTI_SOURCE' else '' }}">複数</button>
+          </div>
+          <input type="hidden" name="source_mode" value="{{ filters.source_mode }}" data-server-filter-value="source_mode">
+        </fieldset>
+        <label>
+          <span>表示件数</span>
+          <input name="limit" value="{{ limit }}">
+        </label>
+        <div class="filter-actions">
+          <button type="submit">検索</button>
+          <a class="ghost-button" href="/exam-export-cases">クリア</a>
         </div>
-        <input type="hidden" name="legal_check_result" value="{{ filters.legal_check_result }}" data-server-filter-value="legal_check_result">
-      </fieldset>
-      <fieldset class="filter-condition-block">
-        <legend>特定健診</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="OK" class="{{ 'is-active' if filters.specific_check_result == 'OK' else '' }}">OK</button>
-          <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="NG" class="{{ 'is-active' if filters.specific_check_result == 'NG' else '' }}">NG</button>
-          <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="NOT_APPLICABLE" class="{{ 'is-active' if filters.specific_check_result == 'NOT_APPLICABLE' else '' }}">対象外</button>
-          <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="UNDETERMINABLE" class="{{ 'is-active' if filters.specific_check_result == 'UNDETERMINABLE' else '' }}">判定不能</button>
-          <button type="button" data-server-filter-toggle="specific_check_result" data-filter-value="PENDING" class="{{ 'is-active' if filters.specific_check_result == 'PENDING' else '' }}">未判定</button>
-        </div>
-        <input type="hidden" name="specific_check_result" value="{{ filters.specific_check_result }}" data-server-filter-value="specific_check_result">
-      </fieldset>
-      <fieldset class="filter-condition-block">
-        <legend>出力</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="EXPORT_READY" class="{{ 'is-active' if filters.export_readiness_status == 'EXPORT_READY' else '' }}">READY</button>
-          <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="APPROVED_WITH_REASON" class="{{ 'is-active' if filters.export_readiness_status == 'APPROVED_WITH_REASON' else '' }}">理由ありOK</button>
-          <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="BLOCKED" class="{{ 'is-active' if filters.export_readiness_status == 'BLOCKED' else '' }}">BLOCKED</button>
-          <button type="button" data-server-filter-toggle="export_readiness_status" data-filter-value="WAITING_CHECK" class="{{ 'is-active' if filters.export_readiness_status == 'WAITING_CHECK' else '' }}">確認待ち</button>
-        </div>
-        <input type="hidden" name="export_readiness_status" value="{{ filters.export_readiness_status }}" data-server-filter-value="export_readiness_status">
-      </fieldset>
-      <fieldset class="filter-condition-block">
-        <legend>source</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="XML_ONLY" class="{{ 'is-active' if filters.source_mode == 'XML_ONLY' else '' }}">XMLのみ</button>
-          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="CSV_ONLY" class="{{ 'is-active' if filters.source_mode == 'CSV_ONLY' else '' }}">CSVのみ</button>
-          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="XML_CSV" class="{{ 'is-active' if filters.source_mode == 'XML_CSV' else '' }}">XML+CSV</button>
-          <button type="button" data-server-filter-toggle="source_mode" data-filter-value="MULTI_SOURCE" class="{{ 'is-active' if filters.source_mode == 'MULTI_SOURCE' else '' }}">複数</button>
-        </div>
-        <input type="hidden" name="source_mode" value="{{ filters.source_mode }}" data-server-filter-value="source_mode">
-      </fieldset>
-      <label>
-        <span>表示件数</span>
-        <input name="limit" value="{{ limit }}">
-      </label>
-      <div class="filter-actions">
-        <button type="submit">検索</button>
-        <a class="ghost-button" href="/exam-export-cases">クリア</a>
       </div>
     </form>
   </section>

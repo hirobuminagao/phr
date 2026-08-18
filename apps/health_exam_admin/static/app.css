@@ -1167,7 +1167,33 @@ a.home-menu-card:hover {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.case-filter-form {
+  display: grid;
+  gap: 14px;
+}
+
+.case-filter-row {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+}
+
+.case-filter-row-primary {
+  grid-template-columns: minmax(260px, 1.5fr) minmax(220px, 1fr) minmax(140px, 0.7fr) minmax(220px, 0.95fr) minmax(360px, 1.5fr);
+}
+
+.case-filter-row-secondary {
+  grid-template-columns: minmax(420px, 1.6fr) minmax(320px, 1.1fr) minmax(110px, 0.35fr) auto;
+}
+
 .filter-form label {
+  display: grid;
+  grid-template-rows: 24px var(--control-height);
+  gap: 7px;
+  align-self: start;
+}
+
+.case-filter-form label {
   display: grid;
   grid-template-rows: 24px var(--control-height);
   gap: 7px;
@@ -2776,6 +2802,11 @@ a.home-menu-card:hover {
 
   .filter-form,
   .filter-form-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .case-filter-row-primary,
+  .case-filter-row-secondary {
     grid-template-columns: 1fr;
   }
 
