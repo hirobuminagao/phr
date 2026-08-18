@@ -298,6 +298,10 @@ def can_view_business_settings(user: dict[str, Any]) -> bool:
     )
 
 
+def can_run_exam_processing(user: dict[str, Any]) -> bool:
+    return has_any_permission(user, ("export_lists.edit", SYSTEM_SETTINGS_PERMISSION))
+
+
 def require_user(request: Request) -> dict[str, Any] | RedirectResponse:
     user = current_user(request)
     if not user:
@@ -3077,6 +3081,140 @@ def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -
     return output or "XML出力が完了しました。"
 
 
+EXAM_PROCESSING_STEPS: tuple[dict[str, str], ...] = (
+    {
+        "key": "scan_files",
+        "label": "01 スキャン",
+        "script": "01_scan_files.py",
+        "description": "eventの受領ルートをスキャンし、CSV/XML/ZIPを受領ファイル一覧に登録します。",
+        "phase": "SCAN_FILES",
+    },
+    {
+        "key": "import_xml",
+        "label": "02 XML取り込み",
+        "script": "02_import_xml.py",
+        "description": "受領ファイル一覧のXML/ZIPを取り込み、source単位の健診結果を登録します。",
+        "phase": "IMPORT_XML",
+    },
+    {
+        "key": "import_csv",
+        "label": "02 CSV取り込み",
+        "script": "02_02_exam_result_csv_import.py",
+        "description": "受領ファイル一覧のCSVをmappingに沿って取り込み、source単位の健診結果を登録します。",
+        "phase": "IMPORT_CSV_EXAM_RESULTS",
+    },
+    {
+        "key": "check_sources",
+        "label": "03_00 受領単位チェック",
+        "script": "03_00_check_imported_exam_ledgers.py",
+        "description": "取り込み済みCSV/XMLのsource単位で法定チェックを更新します。",
+        "phase": "CHECK_EXAM_RESULTS",
+    },
+    {
+        "key": "build_cases",
+        "label": "03_01 case更新",
+        "script": "03_01_build_exam_export_cases.py",
+        "description": "source単位の台帳から人単位の出力caseとsource紐付けを更新します。",
+        "phase": "BUILD_EXAM_EXPORT_CASES",
+    },
+    {
+        "key": "build_values",
+        "label": "03_02 case値更新",
+        "script": "03_02_build_exam_export_case_values.py",
+        "description": "XML/CSVなど複数sourceから、出力用の採用値を作成します。",
+        "phase": "BUILD_EXAM_EXPORT_CASE_VALUES",
+    },
+    {
+        "key": "check_cases",
+        "label": "03_04 case単位チェック",
+        "script": "03_04_check_exam_export_cases.py",
+        "description": "人単位の採用値で法定チェックを行い、出力可否summaryを更新します。",
+        "phase": "CHECK_EXAM_RESULTS",
+    },
+)
+EXAM_PROCESSING_STEP_MAP = {step["key"]: step for step in EXAM_PROCESSING_STEPS}
+
+
+def run_exam_processing_step(
+    *,
+    step_key: str,
+    event_id: int,
+    dry_run: bool,
+    limit: int = 0,
+    include_imported: bool = False,
+) -> dict[str, Any]:
+    step = EXAM_PROCESSING_STEP_MAP.get(step_key)
+    if not step:
+        raise ValueError("処理ステップが不正です。")
+    script_path = REPO_ROOT / "scripts" / "from_medical" / step["script"]
+    cmd = [
+        sys.executable,
+        str(script_path),
+        "--event-id",
+        str(event_id),
+        "--db-prefix",
+        db_prefix(),
+        "--health-db",
+        health_db(),
+    ]
+    if step_key in {"scan_files", "import_xml", "import_csv", "check_sources", "check_cases"}:
+        cmd.extend(["--dev-db", dev_db()])
+    if step_key in {"scan_files", "import_xml", "import_csv", "build_values"}:
+        cmd.extend(["--master-db", master_db()])
+    if dry_run:
+        cmd.append("--dry-run")
+    if include_imported and step_key in {"import_xml", "import_csv"}:
+        cmd.append("--include-imported")
+    if limit > 0:
+        limit_arg = "--limit-cases" if step_key == "build_values" else "--limit-groups" if step_key == "build_cases" else "--limit"
+        cmd.extend([limit_arg, str(limit)])
+    completed = subprocess.run(
+        cmd,
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        timeout=60 * 30,
+        check=False,
+    )
+    output = "\n".join(part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip())
+    return {
+        "step_key": step_key,
+        "label": step["label"],
+        "returncode": completed.returncode,
+        "ok": completed.returncode == 0,
+        "output": output or "(出力なし)",
+    }
+
+
+def load_recent_exam_processing_runs(cur: Any, *, event_id: int, limit: int = 20) -> list[dict[str, Any]]:
+    phases = tuple(dict.fromkeys(step["phase"] for step in EXAM_PROCESSING_STEPS))
+    placeholders = ", ".join(["%s"] * len(phases))
+    cur.execute(
+        f"""
+        SELECT
+          run_id,
+          phase,
+          status,
+          started_at,
+          finished_at,
+          dry_run,
+          rows_seen,
+          rows_inserted,
+          rows_updated,
+          rows_skipped,
+          errors,
+          notes
+        FROM {qname(health_db())}.etl_runs
+        WHERE phase IN ({placeholders})
+          AND (input_base = %s OR notes LIKE %s)
+        ORDER BY started_at DESC, run_id DESC
+        LIMIT %s
+        """,
+        (*phases, f"event_id={event_id}", f"%event_id={event_id}%", limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def review_export_event_root(event_id: int) -> Path:
     return HIA_XML_REVIEW_EXPORT_ROOT_DIR / f"event_{event_id}"
 
@@ -3518,6 +3656,95 @@ def logout(request: Request) -> RedirectResponse:
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
+
+
+@app.get("/exam-processing", response_class=HTMLResponse)
+def exam_processing(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_run_exam_processing(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    selected_event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            events = load_event_options(cur)
+            recent_runs = load_recent_exam_processing_runs(cur, event_id=selected_event_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_processing.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "selected_event_id": selected_event_id,
+            "steps": EXAM_PROCESSING_STEPS,
+            "recent_runs": recent_runs,
+            "results": [],
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/exam-processing/run", response_class=HTMLResponse)
+async def run_exam_processing(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_run_exam_processing(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    event_id = parse_positive_int(form.get("event_id"), default=2, maximum=999999)
+    dry_run = form.get("dry_run") == "1"
+    include_imported = form.get("include_imported") == "1"
+    limit = parse_positive_int(form.get("limit"), default=0, maximum=100000)
+    action = (form.get("action") or "").strip()
+    step_keys = [step["key"] for step in EXAM_PROCESSING_STEPS] if action == "run_all" else [action]
+    results: list[dict[str, Any]] = []
+    for step_key in step_keys:
+        result = run_exam_processing_step(
+            step_key=step_key,
+            event_id=event_id,
+            dry_run=dry_run,
+            limit=limit,
+            include_imported=include_imported,
+        )
+        results.append(result)
+        if not result["ok"]:
+            break
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            events = load_event_options(cur)
+            recent_runs = load_recent_exam_processing_runs(cur, event_id=event_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    ok_count = sum(1 for result in results if result["ok"])
+    failed = [result for result in results if not result["ok"]]
+    return templates.TemplateResponse(
+        "exam_processing.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "selected_event_id": event_id,
+            "steps": EXAM_PROCESSING_STEPS,
+            "recent_runs": recent_runs,
+            "results": results,
+            "message": f"{ok_count}件の処理が完了しました。",
+            "error": f"{failed[0]['label']}で停止しました。" if failed else None,
+        },
+        status_code=500 if failed else 200,
+    )
 
 
 @app.get("/file-receipts", response_class=HTMLResponse)

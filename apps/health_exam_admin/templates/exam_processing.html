@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% set title = "健診結果 処理実行" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Exam Processing</p>
+    <h1>健診結果 処理実行</h1>
+    <p class="subtle">受領単位チェックからcase単位チェックまで、出力前の処理を順番に実行します。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">HOME</a>
+    <a class="ghost-button" href="/file-receipts">受領ファイル</a>
+    <a class="ghost-button" href="/exam-ledgers">健診結果一覧</a>
+    <a class="ghost-button" href="/export-lists">出力リスト</a>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>実行条件</h2>
+        <p class="subtle">通常はeventだけ確認し、制限なしで実行します。試す時だけdry-runや件数制限を使います。</p>
+      </div>
+    </div>
+    <form id="exam-processing-form" method="post" action="/exam-processing/run" class="exam-processing-form" data-processing-form data-processing-message="健診結果処理を実行しています">
+      <div class="form-grid four-columns">
+        <label>
+          対象event
+          <select name="event_id">
+            {% for event in events %}
+            <option value="{{ event.event_id }}" {% if event.event_id == selected_event_id %}selected{% endif %}>
+              {{ event.event_name or ("event " ~ event.event_id) }} / {{ event.insurer_number or "-" }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          実行モード
+          <select name="dry_run">
+            <option value="0">本実行</option>
+            <option value="1">dry-run</option>
+          </select>
+        </label>
+        <label>
+          件数制限
+          <input name="limit" value="" inputmode="numeric" placeholder="空欄で全件">
+        </label>
+        <label>
+          再取込
+          <select name="include_imported">
+            <option value="0">未取込だけ</option>
+            <option value="1">取り込み済みも対象</option>
+          </select>
+          <small>※同じファイルとして再取込できるのは中身が完全に同じ場合です。1文字でも違う場合は別ファイル扱いになります。</small>
+        </label>
+        <div class="form-actions align-end">
+          <button type="submit" name="action" value="run_all">まとめて実行</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>個別実行</h2>
+        <p class="subtle">途中だけやり直す時は、必要な処理だけ押します。</p>
+      </div>
+    </div>
+    <div class="processing-step-grid">
+      {% for step in steps %}
+      <article class="processing-step-card">
+        <div>
+          <span class="status-pill status-neutral">STEP {{ loop.index }}</span>
+          <h3>{{ step.label }}</h3>
+          <p>{{ step.description }}</p>
+          <small>{{ step.script }}</small>
+        </div>
+        <button type="submit" name="action" value="{{ step.key }}" form="exam-processing-form">実行</button>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if results %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>今回の実行結果</h2>
+        <p class="subtle">画面から実行した処理の出力です。失敗した場合はここに理由が出ます。</p>
+      </div>
+    </div>
+    <div class="run-result-list">
+      {% for result in results %}
+      <details class="run-result-card" open>
+        <summary>
+          <span class="status-pill {{ 'status-ready' if result.ok else 'status-danger' }}">{{ 'OK' if result.ok else 'ERROR' }}</span>
+          <strong>{{ result.label }}</strong>
+          <small>returncode={{ result.returncode }}</small>
+        </summary>
+        <pre>{{ result.output }}</pre>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>直近の実行履歴</h2>
+        <p class="subtle">各スクリプトが記録した `etl_runs` の履歴です。</p>
+      </div>
+      <a class="ghost-button" href="/exam-processing?event_id={{ selected_event_id }}">更新</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>run</th>
+            <th>処理</th>
+            <th>状態</th>
+            <th>開始</th>
+            <th>件数</th>
+            <th>エラー</th>
+            <th>メモ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for run in recent_runs %}
+          <tr>
+            <td>{{ run.run_id }}</td>
+            <td><strong>{{ run.phase }}</strong><small>{{ "dry-run" if run.dry_run else "本実行" }}</small></td>
+            <td><span class="status-pill {{ 'status-ready' if run.status == 'success' else 'status-danger' if run.status == 'failed' else 'status-pending' }}">{{ run.status }}</span></td>
+            <td>{{ run.started_at }}</td>
+            <td>{{ run.rows_seen }} / 更新{{ run.rows_updated }} / 追加{{ run.rows_inserted }} / skip{{ run.rows_skipped }}</td>
+            <td>{{ run.errors }}</td>
+            <td><small>{{ run.notes or "" }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty-state">実行履歴はまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div class="processing-overlay" data-processing-overlay hidden>
+  <div class="processing-dialog">
+    <div class="processing-spinner" aria-hidden="true"></div>
+    <strong data-processing-overlay-title>処理しています</strong>
+    <p data-processing-overlay-message>しばらくお待ちください。</p>
+  </div>
+</div>
+{% endblock %}
