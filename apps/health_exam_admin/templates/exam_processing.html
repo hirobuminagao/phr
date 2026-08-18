@@ -64,16 +64,14 @@
           件数制限
           <input name="limit" value="" inputmode="numeric" placeholder="空欄で全件">
         </label>
-        <label>
-          再取込
-          <select name="include_imported">
-            <option value="0">未取込だけ</option>
-            <option value="1">取り込み済みも対象</option>
-          </select>
+        <div class="form-field">
+          <span class="form-field-label">再取込</span>
+          <label class="binary-switch binary-switch-reversed switch-off">
+            <input type="checkbox" name="include_imported" value="1">
+            <span>未取込だけ</span>
+            <span>取り込み済みも対象</span>
+          </label>
           <small>※同じファイルとして再取込できるのは中身が完全に同じ場合です。1文字でも違う場合は別ファイル扱いになります。</small>
-        </label>
-        <div class="form-actions align-end">
-          <button type="submit" name="action" value="run_selected" data-run-selected-steps {% if running_runs %}disabled{% endif %}>選択した処理をまとめて実行</button>
         </div>
       </div>
     </form>
@@ -88,6 +86,7 @@
       <div class="processing-step-bulk-actions">
         <button type="button" class="ghost-button" data-set-all-steps="on">すべて選択</button>
         <button type="button" class="ghost-button" data-set-all-steps="off">すべて解除</button>
+        <button type="submit" name="action" value="run_selected" form="exam-processing-form" data-run-selected-steps {% if running_runs %}disabled{% endif %}>選択した処理をまとめて実行</button>
       </div>
     </div>
     <div class="processing-step-grid">
