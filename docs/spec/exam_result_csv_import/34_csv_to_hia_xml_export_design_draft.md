@@ -69,6 +69,10 @@ scripts/kenshin_list_pydir/scripts/medi_export_xml.py
 `exam_check_results` とcase側 `check_status` は書き換えず、XML出力用の架空entryを作らない。MISSINGの該当entryはXMLへ出力しない。
 `INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致は手動許可の対象外とする。
 手動許可の現在状態は `exam_item_values.review_status`、理由や変更前後は `exam_item_value_audit_logs` に持たせる。手動許可時は理由、承認者、承認日時を必須とする。
+理由ありOKはcase全体のフラグではない。
+case内のMISSING detailに対応する `MISSING_PLACEHOLDER` 全件が、item_value単位で `APPROVED_WITH_REASON` になっている場合だけ出力候補にする。
+同じ理由を複数項目へ一括入力するUIは作ってよいが、内部的には各placeholderを個別更新し、それぞれにaudit rowを作る。
+1件でも `review_status`、`reviewed_at`、`reviewed_by_app_user_id`、空でないaudit `note` が欠ける場合は、caseを `APPROVED_WITH_REASON` とみなさない。
 
 上記4条件は業務上の出力候補条件とする。
 XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致などが発生した場合は、出力候補であっても生成エラーとして扱う。
@@ -170,6 +174,11 @@ exam_item_values
 `MISSING_PLACEHOLDER` はXML出力用の値ではなく、不足項目への人手判断を記録するための行である。
 `APPROVED_WITH_REASON` になってもXML entryは作らない。
 不足が再取込、CSV補完、再提出などで解消した場合もplaceholderは削除せず、`RESOLVED_BY_SOURCE_VALUE` へ状態変更して残す。
+
+case再チェックでは、check detailのMISSING項目とplaceholderを照合する。
+不足項目ごとにplaceholderがない場合は未承認扱いとし、作成対象にする。
+兄弟項目、同じnamecodeの別occurrence、同じcase内の別MISSINGへ承認を自動流用しない。
+すべての不足placeholderに理由が揃って初めて、caseの出力可否summaryを理由ありOKとして扱う。
 
 `exam_item_values` に直持ちする現在状態は、軽快さを優先して `review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成にする。
 変更履歴は `subscriber_audit` と同じく、値に変化があったfieldだけを `exam_item_value_audit_logs` へ記録する。

@@ -83,6 +83,8 @@ XMLとCSVの両方がある健診機関では、取込sourceの値とXML出力�
 - case作成またはcase再チェック時に、`ledger_type = EXPORT_CASE` / `ledger_id = exam_export_cases.exam_export_case_id` / `value_source_role = MISSING_PLACEHOLDER` の `exam_item_values` として作成する。
 - `MISSING_PLACEHOLDER` は「このcaseでこの項目が不足している」という判断対象であり、XML出力用entryではない。
 - `MISSING_PLACEHOLDER` は削除せず、不足解消時は `RESOLVED_BY_SOURCE_VALUE` などへ状態変更して残す。
+- 理由ありOKはcase単位ではなくitem_value単位で管理する。case内のMISSING placeholderが全件 `APPROVED_WITH_REASON` になり、承認者、承認日時、理由auditが揃った場合だけ、そのcaseを理由ありOKとして出力候補にする。
+- 同じ理由を複数placeholderへ一括入力する作業は許可するが、DB上は各 `exam_item_values` と各audit rowへ個別に記録する。理由がないplaceholderが1件でも残る場合は出力不可のままにする。
 
 `exam_item_values` は件数が多いため、現在状態は最小限にする。
 
@@ -103,6 +105,42 @@ XMLとCSVの両方がある健診機関では、取込sourceの値とXML出力�
 想定テーブルは `exam_item_value_audit_logs` とし、`exam_item_value_id`、`field`、`old_value`、`new_value`、`changed_at`、`source`、`note`、`changed_by_app_user_id`、`change_run_id` を持つ。
 batchテーブルやoperation_idは初期実装では作らない。
 まとめ作業で複数item_valueを更新した場合は、各item_valueに同じnoteのaudit rowが並ぶことで同時処理だったことを読み取る。
+
+初期実装の設計:
+
+| layer | role |
+| --- | --- |
+| `exam_item_values` | source値、placeholder、除外、確認待ち、理由ありOKの現在状態を持つ |
+| `exam_item_value_audit_logs` | `review_status` など値に変化があったfieldの履歴、理由、作業者を持つ |
+| `exam_export_cases` | 人単位の出力候補、出力可否summary、出力履歴への参照を持つ |
+| `exam_export_case_values` | XMLに出す採用済み整値だけを持つ。placeholderはここに入れない |
+| `exam_check_results` | source単位、case単位の機械チェック結果を持つ。理由ありOKで機械チェック結果自体は書き換えない |
+
+case再チェック時の処理:
+
+1. `exam_export_case_values` とcheck ruleからcase単位の不足、INVALID、PARSE_ERRORを算出する。
+2. MISSING detailごとに `MISSING_PLACEHOLDER` を作成または更新候補にする。
+3. 既存placeholderの `review_status` は同一case内では保持する。
+4. source値で不足が解消したplaceholderは `RESOLVED_BY_SOURCE_VALUE` へ状態変更する。
+5. caseの出力可否summaryは、機械check OK、またはMISSING-onlyかつ全placeholder承認済みの場合だけ通過にする。
+6. `INVALID`、`PARSE_ERROR`、加入者不一致、基本情報不足、XML生成/XSD検証エラーは、理由ありOKの対象外として必ず止める。
+
+画面での作業:
+
+- 健診機関サマリーからcase一覧へ進み、case詳細で不足placeholderを確認する。
+- 同じ健診機関回答を複数placeholderへ一括適用できるUIを用意する。
+- 保存時は一括操作でも各item_valueを個別更新し、各item_valueにauditを残す。
+- 変更後は「健診結果処理実行」の step5〜7 を再実行し、case、採用値、case check、出力可否summaryへ反映する。
+
+実装対象:
+
+- migration: `sql/migrations/health_exam_result/20260819_001_health_exam_result_add_exam_item_value_review_audit.sql`
+- DDL: `sql/ddl/health_exam_result/0070_health_exam_result__exam_item_values.sql`
+- DDL: `sql/ddl/health_exam_result/0190_health_exam_result__exam_item_value_audit_logs.sql`
+
+事業主、健保、HIA等から返ってきたcase単位の外部指摘は、このitem_value reviewとは分ける。
+外部指摘は、次段で `exam_case_external_issues` のようなcase単位台帳として設計する。
+今回の対象は、出力前に健診機関へ確認し、MISSING、独自コード、除外、再提出待ち、理由ありOKをitem_value単位で扱うための器とする。
 
 ### HIA Dashboard Side
 

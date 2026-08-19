@@ -36,6 +36,9 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   `source_ledger_id` bigint unsigned DEFAULT NULL COMMENT '清書値の採用元ledger_id',
   `source_exam_item_value_id` bigint unsigned DEFAULT NULL COMMENT '清書値の採用元exam_item_values.id',
   `value_source_role` varchar(32) DEFAULT NULL COMMENT 'PRIMARY/SUPPLEMENT等',
+  `review_status` varchar(32) NOT NULL DEFAULT 'NONE' COMMENT 'NONE/NEEDS_CONFIRMATION/APPROVED_WITH_REASON/EXCLUDED/WAITING_RESUBMISSION/RESOLVED_BY_SOURCE_VALUE',
+  `reviewed_at` datetime(3) DEFAULT NULL,
+  `reviewed_by_app_user_id` bigint unsigned DEFAULT NULL,
   `extracted_run_id` bigint unsigned DEFAULT NULL,
   `extracted_at` datetime(3) DEFAULT NULL,
   `normalized_at` datetime(3) DEFAULT NULL,
@@ -56,6 +59,9 @@ CREATE TABLE `health_exam_result`.`exam_item_values` (
   KEY `idx_exam_item_values_normalize_status` (`normalize_status`),
   KEY `idx_exam_item_values_validation_status` (`validation_status`),
   KEY `idx_exam_item_values_source_value` (`source_ledger_type`, `source_ledger_id`, `source_exam_item_value_id`),
+  KEY `idx_exam_item_values_review_status` (`review_status`),
+  KEY `idx_exam_item_values_reviewed_by` (`reviewed_by_app_user_id`),
+  KEY `idx_exam_item_values_case_review` (`ledger_type`, `ledger_id`, `value_source_role`, `review_status`),
   KEY `idx_exam_item_values_extracted_run` (`extracted_run_id`),
   KEY `idx_exam_item_values_extracted_at` (`extracted_at`)
 )

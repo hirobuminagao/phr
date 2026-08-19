@@ -279,6 +279,11 @@ reviewed_by_app_user_id
 初期実装ではbatchテーブルやoperation IDを持たせない。
 まとめ操作で同じ判断を複数item valueへ当てた場合は、同じnoteのaudit rowが並ぶことで同時処理だったことを読み取る。
 
+理由ありOKはcase単位でまとめて通すものではない。
+不足している `MISSING_PLACEHOLDER` ごとに `APPROVED_WITH_REASON`、承認者、承認日時、理由auditを持つ。
+画面で同じ理由をまとめて入力する場合も、保存時は対象item valueを個別に更新し、audit rowも個別に作成する。
+case内に1件でも理由未記帳のplaceholderが残る場合、そのcaseは出力不可として扱う。
+
 ### Source Precedence Exceptions
 
 複数sourceを1つの清書ledgerへ結合する場合、同じ `namecode + occurrence_no` の値は原則XML優位で採用する。
@@ -445,6 +450,7 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
    - 妊娠中、医師判断、施設回答等により、法定項目が実施不能・対象外・未提出であることを業務確認済みの状態。
    - XML出力用の架空entryは作らない。
    - `check_status = NG` と `check_reason` は残したまま、該当不足項目の `MISSING_PLACEHOLDER.review_status = APPROVED_WITH_REASON` と承認理由、承認者、承認日時で出力を許可する。
+   - 該当不足項目は全件承認が必要である。MISSINGが複数ある場合、一部だけ理由ありOKでもcase全体は通過させない。
    - 対象は `check_reason` が `MISSING` のみの場合に限定する。
    - `INVALID`、`PARSE_ERROR`、加入者不一致、基本情報不足、健診機関不一致、XML生成/XSD検証エラーは条件付き出力OKで通過させない。
 
