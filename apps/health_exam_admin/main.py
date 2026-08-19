@@ -2619,6 +2619,9 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     params: list[Any] = []
     event_id = filters.get("event_id", "").strip()
     source_type = filters.get("source_type", "").strip()
+    subscriber_match_status = filters.get("subscriber_match_status", "").strip()
+    subscriber_match_method = filters.get("subscriber_match_method", "").strip()
+    subscriber_match_review = filters.get("subscriber_match_review", "").strip()
     check_status = filters.get("check_status", "").strip()
     file_receipt_id = filters.get("file_receipt_id", "").strip()
     query = filters.get("q", "").strip()
@@ -2632,6 +2635,27 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     if source_type:
         where_parts.append("source_type = %s")
         params.append(source_type)
+    if subscriber_match_status:
+        if subscriber_match_status == "UNMATCHED":
+            where_parts.append("subscriber_match_status IN ('NOT_FOUND', 'CANDIDATE', 'MULTIPLE_MATCH')")
+        elif subscriber_match_status == "MISSING":
+            where_parts.append("(subscriber_match_status IS NULL OR subscriber_match_status IN ('IDENTITY_ERROR', 'NOT_EXECUTED'))")
+        else:
+            where_parts.append("subscriber_match_status = %s")
+            params.append(subscriber_match_status)
+    if subscriber_match_method:
+        where_parts.append("subscriber_match_method = %s")
+        params.append(subscriber_match_method)
+    if subscriber_match_review == "NEEDS_REVIEW":
+        where_parts.append(
+            """
+            (
+              subscriber_match_status <> 'MATCHED'
+              OR subscriber_match_method IS NULL
+              OR subscriber_match_method <> 'identity_hash'
+            )
+            """
+        )
     if check_status:
         where_parts.append("check_status = %s")
         params.append(check_status)
@@ -2665,6 +2689,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
           hia_subscriber_id,
           person_id_custom,
           subscriber_match_status,
+          subscriber_match_method,
           facility_code,
           facility_name,
           exam_date,
@@ -5099,6 +5124,9 @@ def exam_ledgers(request: Request) -> Response:
         "event_id": request.query_params.get("event_id", "2"),
         "file_receipt_id": request.query_params.get("file_receipt_id", ""),
         "source_type": request.query_params.get("source_type", ""),
+        "subscriber_match_status": request.query_params.get("subscriber_match_status", ""),
+        "subscriber_match_method": request.query_params.get("subscriber_match_method", ""),
+        "subscriber_match_review": request.query_params.get("subscriber_match_review", ""),
         "check_status": request.query_params.get("check_status", ""),
         "q": request.query_params.get("q", ""),
         "facility_q": request.query_params.get("facility_q", ""),

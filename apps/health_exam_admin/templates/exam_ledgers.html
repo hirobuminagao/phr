@@ -52,19 +52,39 @@
       <fieldset class="filter-condition-block">
         <legend>source</legend>
         <div class="filter-toggle-group">
-          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="CSV">CSV</button>
-          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="XML">XML</button>
-          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="sourceType" data-filter-value="PAPER">PAPER</button>
+          <button type="button" data-server-filter-toggle="source_type" data-filter-value="CSV" class="{{ 'is-active' if filters.source_type == 'CSV' else '' }}">CSV</button>
+          <button type="button" data-server-filter-toggle="source_type" data-filter-value="XML" class="{{ 'is-active' if filters.source_type == 'XML' else '' }}">XML</button>
+          <button type="button" data-server-filter-toggle="source_type" data-filter-value="PAPER" class="{{ 'is-active' if filters.source_type == 'PAPER' else '' }}">PAPER</button>
         </div>
+        <input type="hidden" name="source_type" value="{{ filters.source_type }}" data-server-filter-value="source_type">
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>加入者突合</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-server-filter-toggle="subscriber_match_status" data-filter-value="MATCHED" class="{{ 'is-active' if filters.subscriber_match_status == 'MATCHED' else '' }}">MATCHED</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_status" data-filter-value="UNMATCHED" class="{{ 'is-active' if filters.subscriber_match_status == 'UNMATCHED' else '' }}">UNMATCHED</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_status" data-filter-value="MISSING" class="{{ 'is-active' if filters.subscriber_match_status == 'MISSING' else '' }}">MISSING</button>
+        </div>
+        <input type="hidden" name="subscriber_match_status" value="{{ filters.subscriber_match_status }}" data-server-filter-value="subscriber_match_status">
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>照合確認</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-server-filter-toggle="subscriber_match_method" data-filter-value="identity_hash" class="{{ 'is-active' if filters.subscriber_match_method == 'identity_hash' else '' }}">canonical</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_review" data-filter-value="NEEDS_REVIEW" class="{{ 'is-active' if filters.subscriber_match_review == 'NEEDS_REVIEW' else '' }}">要確認</button>
+        </div>
+        <input type="hidden" name="subscriber_match_method" value="{{ filters.subscriber_match_method }}" data-server-filter-value="subscriber_match_method">
+        <input type="hidden" name="subscriber_match_review" value="{{ filters.subscriber_match_review }}" data-server-filter-value="subscriber_match_review">
       </fieldset>
       <fieldset class="filter-condition-block">
         <legend>法定チェック</legend>
         <div class="filter-toggle-group">
-          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="OK">OK</button>
-          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="NG">NG</button>
-          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="WARNING">WARNING</button>
-          <button type="button" data-live-filter-toggle="#exam-ledger-table" data-filter-field="checkStatus" data-filter-value="PENDING">PENDING</button>
+          <button type="button" data-server-filter-toggle="check_status" data-filter-value="OK" class="{{ 'is-active' if filters.check_status == 'OK' else '' }}">OK</button>
+          <button type="button" data-server-filter-toggle="check_status" data-filter-value="NG" class="{{ 'is-active' if filters.check_status == 'NG' else '' }}">NG</button>
+          <button type="button" data-server-filter-toggle="check_status" data-filter-value="WARNING" class="{{ 'is-active' if filters.check_status == 'WARNING' else '' }}">WARNING</button>
+          <button type="button" data-server-filter-toggle="check_status" data-filter-value="PENDING" class="{{ 'is-active' if filters.check_status == 'PENDING' else '' }}">PENDING</button>
         </div>
+        <input type="hidden" name="check_status" value="{{ filters.check_status }}" data-server-filter-value="check_status">
       </fieldset>
       <label>
         <span>表示件数</span>
@@ -111,7 +131,7 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr data-filter-text="{{ row.exam_ledger_id }} {{ row.event_id }} {{ row.source_type }} {{ row.file_receipt_id or '' }} {{ row.src_row_no or '' }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.subscriber_match_status or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.exam_date or '' }} {{ row.check_status }} {{ row.check_reason or '' }} {{ row.xml_export_status }} {{ row.merge_status }} {{ row.xml_file_name or '' }} {{ row.mapping_version or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }}" data-source-type="{{ row.source_type }}" data-check-status="{{ row.check_status }}">
+          <tr data-filter-text="{{ row.exam_ledger_id }} {{ row.event_id }} {{ row.source_type }} {{ row.file_receipt_id or '' }} {{ row.src_row_no or '' }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.subscriber_match_status or '' }} {{ row.subscriber_match_method or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.exam_date or '' }} {{ row.check_status }} {{ row.check_reason or '' }} {{ row.xml_export_status }} {{ row.merge_status }} {{ row.xml_file_name or '' }} {{ row.mapping_version or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }}" data-source-type="{{ row.source_type }}" data-check-status="{{ row.check_status }}">
             <td><a class="inline-link" href="/exam-ledgers/{{ row.exam_ledger_id }}">{{ row.exam_ledger_id }}</a></td>
             <td>
               <span class="status-pill status-muted">{{ row.source_type }}</span>
@@ -120,7 +140,7 @@
             <td>
               <strong><a class="inline-link" href="/exam-ledgers/{{ row.exam_ledger_id }}">{{ row.name_kana_raw or "カナなし" }}</a></strong>
               <small>{{ row.name_full_raw or "氏名なし" }}</small>
-              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
+              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}{% if row.subscriber_match_method %} / {{ row.subscriber_match_method }}{% endif %}</small>
             </td>
             <td>
               <strong>{{ row.facility_name or "未設定" }}</strong>
