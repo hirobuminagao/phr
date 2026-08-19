@@ -1135,7 +1135,7 @@ a.home-menu-card:hover {
 
 .month-picker-option {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 7px;
   min-height: 36px;
@@ -1144,17 +1144,38 @@ a.home-menu-card:hover {
   border-radius: 6px;
   background: #f8fafc;
   color: var(--text);
+  cursor: pointer;
   font-weight: 800;
 }
 
+.month-picker-option:has(input:checked) {
+  border-color: var(--accent);
+  background: #e9f7f3;
+  color: var(--accent-dark);
+  box-shadow: inset 0 0 0 1px rgba(13, 126, 94, 0.18);
+}
+
+.month-picker-option span {
+  white-space: nowrap;
+}
+
 .month-picker-option input {
-  width: 16px;
-  height: 16px;
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .month-picker-option small {
   color: var(--muted);
   font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.month-picker-option:has(input:checked) small {
+  color: #16664f;
 }
 
 .export-facility-modal {
