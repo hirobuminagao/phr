@@ -985,6 +985,18 @@ def check_result_status_class(status: str | None) -> str:
     return classes.get(status or "", "status-pending")
 
 
+def split_filter_values(value: str | None) -> list[str]:
+    seen: set[str] = set()
+    values: list[str] = []
+    for item in re.split(r"[\s,，、]+", str(value or "")):
+        text = item.strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        values.append(text)
+    return values
+
+
 templates.env.globals["list_status_label"] = list_status_label
 templates.env.globals["readiness_label"] = readiness_label
 templates.env.globals["check_result_label"] = check_result_label
@@ -2876,7 +2888,7 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     specific_check_result = filters.get("specific_check_result", "").strip()
     export_readiness_status = filters.get("export_readiness_status", "").strip()
     source_mode = filters.get("source_mode", "").strip()
-    exam_month = filters.get("exam_month", "").strip()
+    exam_months = split_filter_values(filters.get("exam_month", ""))
     query = filters.get("q", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     if event_id:
@@ -2922,9 +2934,9 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     if source_mode:
         where_parts.append("eec.source_mode = %s")
         params.append(source_mode)
-    if exam_month:
-        where_parts.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
-        params.append(exam_month)
+    if exam_months:
+        where_parts.append(f"DATE_FORMAT(eec.exam_date, '%Y-%m') IN ({', '.join(['%s'] * len(exam_months))})")
+        params.extend(exam_months)
     if query:
         like = f"%{query}%"
         where_parts.append(
@@ -3051,6 +3063,30 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
             row.get("specific_reason_summary"),
         )
     return rows
+
+
+def load_exam_export_case_month_options(cur: Any, *, event_id: str | None = None, limit: int = 36) -> list[dict[str, Any]]:
+    where_parts = ["exam_date IS NOT NULL"]
+    params: list[Any] = []
+    event_text = str(event_id or "").strip()
+    if event_text:
+        where_parts.append("event_id = %s")
+        params.append(event_text)
+    where_sql = " AND ".join(where_parts)
+    cur.execute(
+        f"""
+        SELECT
+          DATE_FORMAT(exam_date, '%Y-%m') AS exam_month,
+          COUNT(*) AS case_count
+        FROM {qname(health_db())}.exam_export_cases
+        WHERE {where_sql}
+        GROUP BY DATE_FORMAT(exam_date, '%Y-%m')
+        ORDER BY exam_month DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
 
 
 def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -5329,6 +5365,7 @@ def exam_export_cases(request: Request) -> Response:
         try:
             event_options = load_event_options(cur)
             folder_aliases = load_received_folder_alias_rows(cur)
+            exam_month_options = load_exam_export_case_month_options(cur, event_id=filters["event_id"])
             rows = load_exam_export_case_rows(cur, filters=filters, limit=limit)
             summary = summarize_exam_export_cases(rows)
             if audit_enabled(cur):
@@ -5363,6 +5400,8 @@ def exam_export_cases(request: Request) -> Response:
             "summary": summary,
             "limit": limit,
             "folder_aliases": folder_aliases,
+            "exam_month_options": exam_month_options,
+            "selected_exam_months": split_filter_values(filters.get("exam_month")),
         },
     )
 

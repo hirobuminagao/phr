@@ -1057,6 +1057,65 @@ a.home-menu-card:hover {
   padding-inline: 12px;
 }
 
+.month-picker-field {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.month-picker-popover {
+  position: absolute;
+  z-index: 28;
+  inset-inline-start: 0;
+  top: calc(100% + 8px);
+  width: min(360px, calc(100vw - 40px));
+  padding: 12px;
+  border: 1px solid #b9c5d2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 32px rgba(27, 40, 54, 0.18);
+}
+
+.month-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.month-picker-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.month-picker-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.month-picker-option input {
+  width: 16px;
+  height: 16px;
+}
+
+.month-picker-option small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .export-facility-modal {
   width: min(1180px, calc(100vw - 32px));
 }
@@ -1228,8 +1287,8 @@ a.home-menu-card:hover {
   align-self: start;
 }
 
-.ledger-filter-form label,
-.case-filter-form label {
+.ledger-filter-form > .ledger-filter-row > label,
+.case-filter-form > .case-filter-row > label {
   display: grid;
   grid-template-rows: 24px var(--control-height);
   gap: 7px;

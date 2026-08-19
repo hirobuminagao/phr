@@ -457,10 +457,55 @@
     });
   }
 
+  const closeMonthPickers = (except = null) => {
+    for (const popover of document.querySelectorAll("[data-month-picker-popover]")) {
+      if (except && popover === except) continue;
+      popover.hidden = true;
+    }
+  };
+  for (const picker of document.querySelectorAll("[data-month-picker]")) {
+    const input = picker.querySelector("[data-month-picker-input]");
+    const popover = picker.querySelector("[data-month-picker-popover]");
+    const options = Array.from(picker.querySelectorAll("[data-month-picker-option]"));
+    const clearButton = picker.querySelector("[data-month-picker-clear]");
+    if (!input || !popover) continue;
+
+    const selectedMonths = () => options.filter((option) => option.checked).map((option) => option.value);
+    const updateInput = () => {
+      input.value = selectedMonths().join(", ");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const openPopover = () => {
+      closeMonthPickers(popover);
+      popover.hidden = false;
+    };
+
+    input.addEventListener("focus", openPopover);
+    input.addEventListener("click", openPopover);
+    popover.addEventListener("mousedown", (event) => event.stopPropagation());
+    popover.addEventListener("click", (event) => event.stopPropagation());
+    for (const option of options) {
+      option.addEventListener("change", updateInput);
+    }
+    if (clearButton) {
+      clearButton.addEventListener("click", () => {
+        for (const option of options) option.checked = false;
+        updateInput();
+      });
+    }
+  }
+
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    closeMonthPickers();
     closeHelpPopovers();
     closeModal(document.querySelector(".edit-modal:not([hidden])"));
+  });
+
+  document.addEventListener("mousedown", (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest("[data-month-picker]")) return;
+    closeMonthPickers();
   });
 
   for (const zone of document.querySelectorAll("[data-file-drop-zone]")) {
