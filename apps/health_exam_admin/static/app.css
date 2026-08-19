@@ -1639,24 +1639,38 @@ a.home-menu-card:hover {
 }
 
 .facility-summary-table thead tr:first-child th {
-  border-right: 2px solid var(--line-strong, #c9d5e2);
-  border-bottom: 2px solid var(--line-strong, #c9d5e2);
+  background: #f4f8fb;
+  border-bottom: 1px solid var(--line-strong, #c9d5e2);
+  color: #425469;
+  font-weight: 900;
 }
 
-.facility-summary-table thead tr:first-child th:last-child {
-  border-right: 0;
+.facility-summary-table thead tr:nth-child(2) th {
+  background: #fbfdff;
+  border-bottom: 2px solid var(--line-strong, #c9d5e2);
+  font-size: 12px;
+}
+
+.facility-summary-table thead tr:first-child th:nth-child(n+2),
+.facility-summary-table thead tr:nth-child(2) th:nth-child(5),
+.facility-summary-table thead tr:nth-child(2) th:nth-child(8),
+.facility-summary-table thead tr:nth-child(2) th:nth-child(14),
+.facility-summary-table tbody td:nth-child(6),
+.facility-summary-table tbody td:nth-child(9),
+.facility-summary-table tbody td:nth-child(15) {
+  border-left: 2px solid var(--line-strong, #c9d5e2);
 }
 
 .facility-summary-table thead tr:nth-child(2) th:nth-child(4),
 .facility-summary-table thead tr:nth-child(2) th:nth-child(7),
 .facility-summary-table thead tr:nth-child(2) th:nth-child(13) {
-  border-right: 2px solid var(--line-strong, #c9d5e2);
+  border-right: 0;
 }
 
 .facility-summary-table tbody td:nth-child(5),
 .facility-summary-table tbody td:nth-child(8),
 .facility-summary-table tbody td:nth-child(14) {
-  border-right: 2px solid var(--line-strong, #c9d5e2);
+  border-right: 0;
 }
 
 .facility-summary-table th:first-child,
