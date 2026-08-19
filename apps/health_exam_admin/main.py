@@ -962,6 +962,28 @@ def check_result_label(status: str | None) -> str:
     return labels.get(status or "", status or "")
 
 
+def case_review_status_label(status: str | None) -> str:
+    labels = {
+        "NONE": "未処理",
+        "NEEDS_CONFIRMATION": "確認待ち",
+        "APPROVED_WITH_REASON": "理由ありOK",
+        "WAITING_RESUBMISSION": "再提出待ち",
+        "EXCLUDED": "除外",
+        "RESOLVED_BY_SOURCE_VALUE": "受領値で解決",
+    }
+    return labels.get(status or "", status or "")
+
+
+def case_check_scope_label(scope: str | None) -> str:
+    labels = {
+        "ARTICLE44": "法定チェック",
+        "SPECIFIC_HEALTH_CHECKUP": "特定健診チェック",
+        "FUND_DELIVERY": "健保納品チェック",
+        "HIA_UPLOAD": "HIAアップロード確認",
+    }
+    return labels.get(scope or "", scope or "")
+
+
 def normalize_specific_check_result(status: str | None, reason: str | None = None) -> str:
     raw_status = str(status or "").strip()
     reason_text = str(reason or "")
@@ -1000,6 +1022,8 @@ def split_filter_values(value: str | None) -> list[str]:
 templates.env.globals["list_status_label"] = list_status_label
 templates.env.globals["readiness_label"] = readiness_label
 templates.env.globals["check_result_label"] = check_result_label
+templates.env.globals["case_review_status_label"] = case_review_status_label
+templates.env.globals["case_check_scope_label"] = case_check_scope_label
 templates.env.globals["check_result_status_class"] = check_result_status_class
 templates.env.globals["normalize_specific_check_result"] = normalize_specific_check_result
 

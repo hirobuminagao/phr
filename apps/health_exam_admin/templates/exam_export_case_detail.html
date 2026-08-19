@@ -85,16 +85,16 @@
     <div class="section-heading">
       <div>
         <h2>確認対象</h2>
-        <p class="subtle">MISSINGのまま理由ありOKにする場合は、確認項目ごとに理由が必要です。一括作業でも保存は確認項目ごとに行います。</p>
+        <p class="subtle">この個人caseで不足・確認が必要な業務チェック項目です。健診機関への連絡は健診機関サマリーで整理し、ここでは個人caseごとの出力判断を記録します。</p>
       </div>
     </div>
     {% if placeholders %}
     <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/item-review-bulk" class="case-review-bulk-form">
       <label>
-        <span>一括対象</span>
+        <span>この個人case内の一括対象</span>
         <select name="target_scope">
           <option value="unresolved">未処理・確認待ち・再提出待ち</option>
-          <option value="all">全確認対象</option>
+          <option value="all">表示中の全確認項目</option>
         </select>
       </label>
       <label>
@@ -110,7 +110,7 @@
       </label>
       <label class="case-review-bulk-note">
         <span>理由・確認内容</span>
-        <textarea name="note" rows="2" placeholder="同じ理由を対象項目へまとめて保存します。理由ありOKは必須"></textarea>
+        <textarea name="note" rows="2" placeholder="例: 健診機関確認済み。妊娠中のため未実施。理由ありOKは必須"></textarea>
       </label>
       <button type="submit">まとめて保存</button>
     </form>
@@ -129,12 +129,12 @@
           {% for item in placeholders %}
           <tr class="{{ 'is-error-row' if item.review_status in ['NONE', 'NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION'] else '' }}">
             <td>
-              <span class="status-pill {{ 'status-ready' if item.review_status == 'APPROVED_WITH_REASON' or item.review_status == 'RESOLVED_BY_SOURCE_VALUE' else 'status-pending' if item.review_status in ['NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION'] else 'status-muted' }}">{{ item.review_status }}</span>
-              <small>review id {{ item.id }} / {{ item.check_scope }}</small>
+              <span class="status-pill {{ 'status-ready' if item.review_status == 'APPROVED_WITH_REASON' or item.review_status == 'RESOLVED_BY_SOURCE_VALUE' else 'status-pending' if item.review_status in ['NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION'] else 'status-muted' }}">{{ case_review_status_label(item.review_status) }}</span>
+              <small>確認ID {{ item.id }} / {{ case_check_scope_label(item.check_scope) }}</small>
             </td>
             <td>
               <strong>{{ item.item_name or "項目名なし" }}</strong>
-              <small>{{ item.namecode or "-" }}</small>
+              <small>業務チェックID {{ item.namecode or "-" }}</small>
               <small>{{ item.validation_reason or item.normalize_reason or "" }}</small>
               {% if item.related_namecodes %}
               <div class="related-namecodes">
@@ -166,7 +166,7 @@
                 <input type="hidden" name="review_item_id" value="{{ item.id }}">
                 <select name="review_status">
                   {% for status in ["NEEDS_CONFIRMATION", "APPROVED_WITH_REASON", "WAITING_RESUBMISSION", "EXCLUDED", "RESOLVED_BY_SOURCE_VALUE", "NONE"] %}
-                  <option value="{{ status }}" {% if item.review_status == status %}selected{% endif %}>{{ status }}</option>
+                  <option value="{{ status }}" {% if item.review_status == status %}selected{% endif %}>{{ case_review_status_label(status) }}</option>
                   {% endfor %}
                 </select>
                 <textarea name="note" rows="2" placeholder="理由・確認内容。理由ありOKは必須">{{ item.latest_note or "" }}</textarea>
