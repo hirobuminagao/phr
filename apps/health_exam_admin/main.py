@@ -3401,6 +3401,10 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
         row["specific_ng_rate"] = pct_label(row.get("specific_ng_count"), row.get("case_count"))
         row["source_ng_rate"] = pct_label(row.get("source_ng_count"), row.get("source_count"))
         row["case_ng_rate"] = pct_label(row.get("case_blocked_count"), row.get("case_count"))
+        row["specific_subject_count"] = max(
+            int(row.get("case_count") or 0) - int(row.get("specific_not_applicable_count") or 0),
+            0,
+        )
         row["facility_filter_value"] = row.get("facility_code") or row.get("facility_name") or ""
         row["risk_score"] = (
             int(row.get("legal_ng_count") or 0) * 5

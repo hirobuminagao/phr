@@ -1617,12 +1617,42 @@ a.home-menu-card:hover {
   display: block;
 }
 
-.facility-summary-table th:nth-child(1) { width: 22%; }
-.facility-summary-table th:nth-child(2) { width: 14%; }
-.facility-summary-table th:nth-child(3) { width: 15%; }
-.facility-summary-table th:nth-child(4) { width: 20%; }
-.facility-summary-table th:nth-child(5) { width: 19%; }
-.facility-summary-table th:nth-child(6) { width: 10%; }
+.facility-summary-table {
+  min-width: 1320px;
+}
+
+.facility-summary-table th {
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.facility-summary-table th:first-child,
+.facility-summary-table td:first-child {
+  min-width: 220px;
+  text-align: left;
+}
+
+.facility-summary-table th:nth-last-child(2),
+.facility-summary-table td:nth-last-child(2) {
+  min-width: 190px;
+  text-align: left;
+}
+
+.facility-summary-table th:last-child,
+.facility-summary-table td:last-child {
+  min-width: 116px;
+}
+
+.numeric-cell {
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.numeric-cell strong {
+  display: inline;
+}
 
 .status-pill {
   display: inline-flex;
