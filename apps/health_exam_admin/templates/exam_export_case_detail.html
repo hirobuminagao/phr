@@ -137,7 +137,9 @@
               <small>業務チェックID {{ item.namecode or "-" }}</small>
               <small>{{ item.validation_reason or item.normalize_reason or "" }}</small>
               {% if item.related_namecodes %}
-              <div class="related-namecodes">
+              <details class="related-namecodes-accordion">
+                <summary>関連する受領項目 {{ item.related_namecodes|length }}件</summary>
+                <div class="related-namecodes">
                 {% for related in item.related_namecodes %}
                 <div class="related-namecode-row">
                   <span>
@@ -154,7 +156,8 @@
                   </span>
                 </div>
                 {% endfor %}
-              </div>
+                </div>
+              </details>
               {% endif %}
             </td>
             <td>

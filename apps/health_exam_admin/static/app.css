@@ -2778,6 +2778,29 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   min-width: 0;
 }
 
+.related-namecodes-accordion {
+  margin-top: 8px;
+}
+
+.related-namecodes-accordion summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #b9c9dc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.related-namecodes-accordion summary:hover {
+  border-color: #86a9cf;
+  background: #f3f8fc;
+}
+
 .related-namecodes {
   display: grid;
   gap: 6px;
