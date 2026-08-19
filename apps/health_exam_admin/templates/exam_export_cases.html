@@ -155,7 +155,7 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr data-filter-text="{{ row.exam_export_case_id }} {{ row.event_id }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }} {{ row.exam_date or '' }} {{ row.subscriber_match_status }} {{ row.legal_check_result }} {{ row.legal_reason_summary or '' }} {{ row.specific_check_result }} {{ row.specific_reason_summary or '' }} {{ row.export_readiness_status }} {{ row.export_readiness_reason or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }} {{ row.output_zip_file_name or '' }}">
+          <tr data-filter-text="{{ row.exam_export_case_id }} {{ row.event_id }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }} {{ row.exam_date or '' }} {{ row.subscriber_match_status }} {{ row.legal_check_result }} {{ row.legal_reason_summary or '' }} {{ row.specific_check_result_display }} {{ check_result_label(row.specific_check_result_display) }} {{ row.specific_reason_summary or '' }} {{ row.export_readiness_status }} {{ row.export_readiness_reason or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }} {{ row.output_zip_file_name or '' }}">
             <td>
               <strong>{{ row.exam_export_case_id }}</strong>
               <small>event {{ row.event_id }}</small>
@@ -180,7 +180,7 @@
               <small>{{ row.legal_reason_summary or row.check_reason or "" }}</small>
             </td>
             <td>
-              <span class="status-pill {{ 'status-ready' if row.specific_check_result == 'OK' else 'status-muted' if row.specific_check_result == 'NOT_APPLICABLE' else 'status-danger' if row.specific_check_result in ['NG', 'UNDETERMINABLE'] else 'status-pending' }}">{{ check_result_label(row.specific_check_result) or "未判定" }}</span>
+              <span class="status-pill {{ check_result_status_class(row.specific_check_result_display) }}">{{ check_result_label(row.specific_check_result_display) or "未判定" }}</span>
               <small>{{ row.specific_reason_summary or "" }}</small>
             </td>
             <td>

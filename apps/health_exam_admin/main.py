@@ -962,9 +962,33 @@ def check_result_label(status: str | None) -> str:
     return labels.get(status or "", status or "")
 
 
+def normalize_specific_check_result(status: str | None, reason: str | None = None) -> str:
+    raw_status = str(status or "").strip()
+    reason_text = str(reason or "")
+    if raw_status == "OK" and reason_text.startswith("対象外:"):
+        return "NOT_APPLICABLE"
+    if raw_status in {"OK", "NG", "NOT_APPLICABLE", "UNDETERMINABLE", "PENDING"}:
+        return raw_status
+    if not raw_status:
+        return "PENDING"
+    return "UNDETERMINABLE"
+
+
+def check_result_status_class(status: str | None) -> str:
+    classes = {
+        "OK": "status-ready",
+        "NG": "status-danger",
+        "NOT_APPLICABLE": "status-muted",
+        "UNDETERMINABLE": "status-danger",
+        "PENDING": "status-pending",
+    }
+    return classes.get(status or "", "status-pending")
+
+
 templates.env.globals["list_status_label"] = list_status_label
 templates.env.globals["readiness_label"] = readiness_label
 templates.env.globals["check_result_label"] = check_result_label
+templates.env.globals["check_result_status_class"] = check_result_status_class
 
 
 def fund_delivery_status_label(status: str | None) -> str:
@@ -2861,8 +2885,36 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
         where_parts.append("COALESCE(ecr.legal_check_result, 'PENDING') = %s")
         params.append(legal_check_result)
     if specific_check_result:
-        where_parts.append("COALESCE(ecr.specific_check_result, 'PENDING') = %s")
-        params.append(specific_check_result)
+        if specific_check_result == "PENDING":
+            where_parts.append("(ecr.specific_check_result IS NULL OR ecr.specific_check_result = 'PENDING')")
+        elif specific_check_result == "NOT_APPLICABLE":
+            where_parts.append(
+                """
+                (
+                  ecr.specific_check_result = 'NOT_APPLICABLE'
+                  OR (
+                    ecr.specific_check_result = 'OK'
+                    AND ecr.specific_reason_summary LIKE %s
+                  )
+                )
+                """
+            )
+            params.append("対象外:%")
+        elif specific_check_result == "UNDETERMINABLE":
+            where_parts.append(
+                """
+                (
+                  ecr.specific_check_result = 'UNDETERMINABLE'
+                  OR (
+                    ecr.specific_check_result IS NOT NULL
+                    AND ecr.specific_check_result NOT IN ('OK', 'NG', 'PENDING', 'NOT_APPLICABLE', 'UNDETERMINABLE')
+                  )
+                )
+                """
+            )
+        else:
+            where_parts.append("ecr.specific_check_result = %s")
+            params.append(specific_check_result)
     if export_readiness_status:
         where_parts.append("eec.export_readiness_status = %s")
         params.append(export_readiness_status)
@@ -2984,6 +3036,10 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
         row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+        row["specific_check_result_display"] = normalize_specific_check_result(
+            row.get("specific_check_result"),
+            row.get("specific_reason_summary"),
+        )
     return rows
 
 
@@ -3013,7 +3069,7 @@ def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
             summary["exported"] += 1
         if str(row.get("legal_check_result") or "") == "NG":
             summary["legal_ng"] += 1
-        if str(row.get("specific_check_result") or "") == "NG":
+        if normalize_specific_check_result(row.get("specific_check_result"), row.get("specific_reason_summary")) == "NG":
             summary["specific_ng"] += 1
         if int(row.get("source_count") or 0) >= 2:
             summary["multi_source"] += 1
