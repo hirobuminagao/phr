@@ -467,6 +467,7 @@ Current as of 2026-08-05.
 - `03_04_check_exam_export_cases.py` によるcase再チェックは、`exam_check_results` を再作成し、`exam_export_cases.check_status` / `check_reason` と出力可否summaryを再計算する。`manual_export_approved` / `manual_export_reason` / `manual_export_approved_by` / `manual_export_approved_at` は更新対象にしない。
 - `03_01_build_exam_export_cases.py` のcase再作成も、同じcaseキーで既存行を更新する場合は `manual_export_*` を更新対象にしない。そのため同一caseのままなら、全チェックを再実行しても理由ありOKは保持される。
 - ただし、加入者、健診日、健診機関、保険者番号などcase同一性キーが変わり、別caseとして新規作成された場合は、既存caseの `manual_export_*` は自動移行しない。理由ありOKは人が確認したcase単位の判断として扱う。
+- 健診機関確認事項、基本情報補正、加入者突合修正、理由ありOKなど、人が確認・記帳・変更を行った後は、case側へ反映するために管理画面の「健診結果処理実行」で step5〜7 を再実行する。step5はcase更新、step6は採用済み整値更新、step7はcase単位チェック更新を行う。
 - 初期のCSV補完診断対象は、視力 `4403004001`、聴力 `4403005001`、胸部X線 `4404001001`、心電図 `4411001001`、既往歴 `4401001001`、自覚症状 `4402001001`、他覚症状 `4402001002` の7分類とする。
 - ただしCSV取込自体は7分類へ絞らない。健診機関ごとの通常マッピングを作り、取込可能な検査値・基本情報は従来どおり全てsource値として取り込む。7分類は補完診断で重点的に見る分類であり、マッピング対象や取込対象を制限するものではない。
 - 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えず、架空の検査値を作らない。該当entryはXMLへ出力しない。

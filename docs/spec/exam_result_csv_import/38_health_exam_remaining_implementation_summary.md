@@ -246,6 +246,7 @@ XMLとCSV、または複数CSVで不足項目を補い、1つの論理健診結�
 - 旧COMBINED ledger方式の試作 `build_combined_exam_ledgers.py` は削除済み。本流にはしない。
 - 結合出力用case DDL、case作成、case value採用、case単位checkは `exam_ledgers + exam_item_values` 起点で整備済み。
 - case起点exportは `04_export_hia_xml.py` とFastAPI管理画面の出力リスト詳細から実行できる。
+- 健診機関確認事項、基本情報補正、加入者突合修正、理由ありOKなどを人が記帳・変更した後は、case側に反映するため、管理画面の「健診結果処理実行」で step5〜7 を再実行する。step5でcase、step6で採用済み整値、step7でcase単位チェックと出力可否summaryを更新する。
 
 ### 8. Export Control UI
 
