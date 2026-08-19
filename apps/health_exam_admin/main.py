@@ -5140,6 +5140,7 @@ def exam_ledgers(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
+            folder_aliases = load_received_folder_alias_rows(cur)
             rows = load_exam_ledger_rows(cur, filters=filters, limit=limit)
             if audit_enabled(cur):
                 for row in rows:
@@ -5172,6 +5173,7 @@ def exam_ledgers(request: Request) -> Response:
             "filters": filters,
             "limit": limit,
             "event_options": event_options,
+            "folder_aliases": folder_aliases,
         },
     )
 

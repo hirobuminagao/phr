@@ -1041,6 +1041,22 @@ a.home-menu-card:hover {
   gap: 7px;
 }
 
+.input-with-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.input-with-button input {
+  min-width: 0;
+}
+
+.compact-action-button {
+  min-width: 74px;
+  padding-inline: 12px;
+}
+
 .export-facility-modal {
   width: min(1180px, calc(100vw - 32px));
 }
@@ -1168,7 +1184,22 @@ a.home-menu-card:hover {
 }
 
 .ledger-filter-form {
-  grid-template-columns: minmax(220px, 1.35fr) minmax(220px, 1.25fr) minmax(180px, 0.9fr) minmax(210px, 0.95fr) minmax(340px, 1.55fr) minmax(100px, 0.4fr) auto;
+  display: grid;
+  gap: 14px;
+}
+
+.ledger-filter-row {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+}
+
+.ledger-filter-row-primary {
+  grid-template-columns: minmax(240px, 1.25fr) minmax(300px, 1.3fr) minmax(170px, 0.8fr) minmax(190px, 0.75fr);
+}
+
+.ledger-filter-row-secondary {
+  grid-template-columns: minmax(400px, 1.55fr) minmax(300px, 1.1fr) minmax(96px, 0.3fr) auto;
 }
 
 .case-filter-form {
@@ -1197,6 +1228,7 @@ a.home-menu-card:hover {
   align-self: start;
 }
 
+.ledger-filter-form label,
 .case-filter-form label {
   display: grid;
   grid-template-rows: 24px var(--control-height);
@@ -1307,6 +1339,8 @@ a.home-menu-card:hover {
 }
 
 .help-icon-button:hover,
+.help-cell:hover .help-icon-button,
+.help-cell:focus-within .help-icon-button,
 .help-icon-button[aria-expanded="true"] {
   border-color: var(--accent);
   background: #eef8f5;
@@ -1339,6 +1373,20 @@ a.home-menu-card:hover {
 
 .help-popover p {
   margin: 6px 0 0;
+}
+
+.help-popover p span {
+  color: var(--text);
+  font-weight: 900;
+}
+
+.hover-help-popover {
+  display: none;
+}
+
+.help-cell:hover .hover-help-popover,
+.help-cell:focus-within .hover-help-popover {
+  display: block;
 }
 
 .receipt-mode-field,
@@ -2774,6 +2822,11 @@ a.home-menu-card:hover {
   .processing-step-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .ledger-filter-row-primary,
+  .ledger-filter-row-secondary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 760px) {
@@ -2830,6 +2883,11 @@ a.home-menu-card:hover {
 
   .filter-form,
   .filter-form-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-filter-row-primary,
+  .ledger-filter-row-secondary {
     grid-template-columns: 1fr;
   }
 

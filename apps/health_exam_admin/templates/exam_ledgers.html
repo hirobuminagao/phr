@@ -27,68 +27,146 @@
         {% endif %}
       </div>
     </div>
-    <form method="get" action="/exam-ledgers" class="filter-form filter-form-wide ledger-filter-form">
+    <form method="get" action="/exam-ledgers" class="ledger-filter-form">
       {% if filters.file_receipt_id %}
       <input type="hidden" name="file_receipt_id" value="{{ filters.file_receipt_id }}">
       {% endif %}
-      <label>
-        <span>キーワード</span>
-        <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / XML名" data-live-filter-input="#exam-ledger-table">
-      </label>
-      <label>
-        <span>健診機関</span>
-        <input name="facility_q" value="{{ filters.facility_q or '' }}" autocomplete="off" placeholder="健診機関名 / コード" data-live-filter-input="#exam-ledger-table">
-      </label>
-      <label>
-        <span>イベント</span>
-        <select name="event_id">
-          {% for event in event_options %}
-            <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
-              {{ event.event_name or ("event " ~ event.event_id) }}
-            </option>
-          {% endfor %}
-        </select>
-      </label>
-      <fieldset class="filter-condition-block">
-        <legend>source</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="source_type" data-filter-value="CSV" class="{{ 'is-active' if filters.source_type == 'CSV' else '' }}">CSV</button>
-          <button type="button" data-server-filter-toggle="source_type" data-filter-value="XML" class="{{ 'is-active' if filters.source_type == 'XML' else '' }}">XML</button>
-          <button type="button" data-server-filter-toggle="source_type" data-filter-value="PAPER" class="{{ 'is-active' if filters.source_type == 'PAPER' else '' }}">PAPER</button>
+      <div class="ledger-filter-row ledger-filter-row-primary">
+        <label>
+          <span>キーワード</span>
+          <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / XML名" data-live-filter-input="#exam-ledger-table">
+        </label>
+        <label>
+          <span>健診機関</span>
+          <span class="input-with-button">
+            <input id="ledger-facility-filter-input" name="facility_q" value="{{ filters.facility_q or '' }}" autocomplete="off" placeholder="健診機関名 / コード" data-live-filter-input="#exam-ledger-table">
+            <button type="button" class="ghost-button compact-action-button" data-modal-open="ledger-facility-picker-modal">選択</button>
+          </span>
+        </label>
+        <label>
+          <span>イベント</span>
+          <select name="event_id">
+            {% for event in event_options %}
+              <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+                {{ event.event_name or ("event " ~ event.event_id) }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <fieldset class="filter-condition-block">
+          <legend>source</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="source_type" data-filter-value="CSV" class="{{ 'is-active' if filters.source_type == 'CSV' else '' }}">CSV</button>
+            <button type="button" data-server-filter-toggle="source_type" data-filter-value="XML" class="{{ 'is-active' if filters.source_type == 'XML' else '' }}">XML</button>
+            <button type="button" data-server-filter-toggle="source_type" data-filter-value="PAPER" class="{{ 'is-active' if filters.source_type == 'PAPER' else '' }}">PAPER</button>
+          </div>
+          <input type="hidden" name="source_type" value="{{ filters.source_type }}" data-server-filter-value="source_type">
+        </fieldset>
+      </div>
+      <div class="ledger-filter-row ledger-filter-row-secondary">
+        <fieldset class="filter-condition-block">
+          <legend>加入者突合</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="MATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'MATCHED' else '' }}">MATCHED</button>
+            <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="PARTIAL_MATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'PARTIAL_MATCHED' else '' }}">一部MATCHED</button>
+            <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="UNMATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'UNMATCHED' else '' }}">UNMATCHED</button>
+            <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="NEEDS_REVIEW" class="{{ 'is-active' if filters.subscriber_match_filter == 'NEEDS_REVIEW' else '' }}">要確認</button>
+            <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="MISSING" class="{{ 'is-active' if filters.subscriber_match_filter == 'MISSING' else '' }}">MISSING</button>
+          </div>
+          <input type="hidden" name="subscriber_match_filter" value="{{ filters.subscriber_match_filter }}" data-server-filter-value="subscriber_match_filter">
+        </fieldset>
+        <fieldset class="filter-condition-block">
+          <legend>法定チェック</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="check_status" data-filter-value="OK" class="{{ 'is-active' if filters.check_status == 'OK' else '' }}">OK</button>
+            <button type="button" data-server-filter-toggle="check_status" data-filter-value="NG" class="{{ 'is-active' if filters.check_status == 'NG' else '' }}">NG</button>
+            <button type="button" data-server-filter-toggle="check_status" data-filter-value="WARNING" class="{{ 'is-active' if filters.check_status == 'WARNING' else '' }}">WARNING</button>
+            <button type="button" data-server-filter-toggle="check_status" data-filter-value="PENDING" class="{{ 'is-active' if filters.check_status == 'PENDING' else '' }}">PENDING</button>
+          </div>
+          <input type="hidden" name="check_status" value="{{ filters.check_status }}" data-server-filter-value="check_status">
+        </fieldset>
+        <label>
+          <span>表示件数</span>
+          <input name="limit" value="{{ limit }}">
+        </label>
+        <div class="filter-actions">
+          <button type="submit">検索</button>
+          <a class="ghost-button" href="{{ '/exam-ledgers?event_id=' ~ filters.event_id if filters.file_receipt_id else '/exam-ledgers' }}">クリア</a>
         </div>
-        <input type="hidden" name="source_type" value="{{ filters.source_type }}" data-server-filter-value="source_type">
-      </fieldset>
-      <fieldset class="filter-condition-block">
-        <legend>加入者突合</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="MATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'MATCHED' else '' }}">MATCHED</button>
-          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="PARTIAL_MATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'PARTIAL_MATCHED' else '' }}">一部MATCHED</button>
-          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="UNMATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'UNMATCHED' else '' }}">UNMATCHED</button>
-          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="NEEDS_REVIEW" class="{{ 'is-active' if filters.subscriber_match_filter == 'NEEDS_REVIEW' else '' }}">要確認</button>
-          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="MISSING" class="{{ 'is-active' if filters.subscriber_match_filter == 'MISSING' else '' }}">MISSING</button>
-        </div>
-        <input type="hidden" name="subscriber_match_filter" value="{{ filters.subscriber_match_filter }}" data-server-filter-value="subscriber_match_filter">
-      </fieldset>
-      <fieldset class="filter-condition-block">
-        <legend>法定チェック</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="check_status" data-filter-value="OK" class="{{ 'is-active' if filters.check_status == 'OK' else '' }}">OK</button>
-          <button type="button" data-server-filter-toggle="check_status" data-filter-value="NG" class="{{ 'is-active' if filters.check_status == 'NG' else '' }}">NG</button>
-          <button type="button" data-server-filter-toggle="check_status" data-filter-value="WARNING" class="{{ 'is-active' if filters.check_status == 'WARNING' else '' }}">WARNING</button>
-          <button type="button" data-server-filter-toggle="check_status" data-filter-value="PENDING" class="{{ 'is-active' if filters.check_status == 'PENDING' else '' }}">PENDING</button>
-        </div>
-        <input type="hidden" name="check_status" value="{{ filters.check_status }}" data-server-filter-value="check_status">
-      </fieldset>
-      <label>
-        <span>表示件数</span>
-        <input name="limit" value="{{ limit }}">
-      </label>
-      <div class="filter-actions">
-        <button type="submit">検索</button>
-        <a class="ghost-button" href="{{ '/exam-ledgers?event_id=' ~ filters.event_id if filters.file_receipt_id else '/exam-ledgers' }}">クリア</a>
       </div>
     </form>
   </section>
+
+  <div id="ledger-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="ledger-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">受領フォルダ alias</p>
+          <h2 id="ledger-facility-picker-title">健診機関で絞り込む</h2>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          検索
+          <input data-live-filter-input="#ledger-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="ledger-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>受領フォルダ</th>
+              <th>実績</th>
+              <th>選択</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alias in folder_aliases %}
+            {% set code = alias.exam_facility_code or "" %}
+            {% set facility_text = code or alias.exam_facility_name or alias.exam_facility_display_name or alias.src_folder_raw or "" %}
+            <tr data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}">
+              <td>
+                <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
+                <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode or "未設定" }}</small>
+              </td>
+              <td>
+                <strong title="{{ alias.src_folder_raw or '' }}">{{ alias.src_folder_raw or "" }}</strong>
+                <small>{{ alias.csv_mapping_version or "CSVテンプレートなし" }}</small>
+              </td>
+              <td>
+                <strong>XML {{ alias.xml_file_count or 0 }} / CSV {{ alias.csv_file_count or 0 }}</strong>
+                <small>受領実績</small>
+              </td>
+              <td>
+                {% if facility_text %}
+                <button
+                  type="button"
+                  class="ghost-button"
+                  data-ledger-facility-select
+                  data-facility-query="{{ facility_text }}"
+                >選択</button>
+                {% else %}
+                <span class="status-pill status-muted">不可</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4">受領フォルダaliasがありません。</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-ledger-facility-clear>絞り込みを空にする</button>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+    </section>
+  </div>
 
   <section class="panel">
     <div class="section-heading">
@@ -109,12 +187,12 @@
             <th class="help-cell">
               <span class="table-help-heading">
                 取込項目
-                <button type="button" class="help-icon-button" data-help-toggle="exam-item-help" aria-expanded="false" aria-label="取込項目と値エラーの説明">?</button>
+                <span class="help-icon-button" aria-label="取込項目と値エラーの説明">?</span>
               </span>
-              <div id="exam-item-help" class="help-popover" hidden>
+              <div id="exam-item-help" class="help-popover hover-help-popover">
                 <strong>取込項目と値エラー</strong>
-                <p>受領したCSV/XMLから、検査結果の値として取り込めた件数です。</p>
-                <p>値エラーは、法定チェックの不足ではありません。値の表記やコードが辞書にない、検査項目マスタにない、コード体系が合わないなど、XML出力に使う前に確認が必要な値の件数です。</p>
+                <p><span>取込項目:</span> 受領したCSV/XMLから、検査結果の値として取り込めた件数です。</p>
+                <p><span>値エラー:</span> 法定チェックの不足ではありません。値の表記やコードが辞書にない、検査項目マスタにない、コード体系が合わないなど、XML出力に使う前に確認が必要な値の件数です。</p>
                 <p>法定健診項目の不足は、右側の「状態」と理由に表示されます。</p>
               </div>
             </th>

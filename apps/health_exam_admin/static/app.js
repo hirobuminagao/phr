@@ -166,6 +166,7 @@
 
   const closeHelpPopovers = (exceptId = "") => {
     for (const popover of document.querySelectorAll(".help-popover")) {
+      if (popover.classList.contains("hover-help-popover")) continue;
       if (exceptId && popover.id === exceptId) continue;
       popover.hidden = true;
       const toggle = document.querySelector(`[data-help-toggle="${popover.id}"]`);
@@ -206,17 +207,15 @@
   const floatingCategoryNav = document.querySelector("[data-floating-category-nav]");
   const floatingCategoryToggle = document.querySelector("[data-floating-category-toggle]");
   if (floatingCategoryNav && floatingCategoryToggle) {
-    const storageKey = "phrAdminFloatingCategoryCollapsed";
     const setCollapsed = (collapsed) => {
       floatingCategoryNav.classList.toggle("is-collapsed", collapsed);
       floatingCategoryToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
       floatingCategoryToggle.setAttribute("aria-label", collapsed ? "カテゴリメニューを開く" : "カテゴリメニューを閉じる");
     };
-    setCollapsed(localStorage.getItem(storageKey) === "1");
+    setCollapsed(false);
     floatingCategoryToggle.addEventListener("click", () => {
       const collapsed = !floatingCategoryNav.classList.contains("is-collapsed");
       setCollapsed(collapsed);
-      localStorage.setItem(storageKey, collapsed ? "1" : "0");
     });
   }
 
@@ -385,6 +384,41 @@
         facilityCodesInput.value = values.join("\n");
       }
       updateFacilityPickerState();
+    });
+  }
+
+  const ledgerFacilityInput = document.getElementById("ledger-facility-filter-input");
+  const ledgerFacilityForm = ledgerFacilityInput ? ledgerFacilityInput.closest("form") : null;
+  for (const button of document.querySelectorAll("[data-ledger-facility-select]")) {
+    button.addEventListener("click", () => {
+      if (!ledgerFacilityInput) return;
+      const query = String(button.getAttribute("data-facility-query") || "").trim();
+      if (!query) return;
+      ledgerFacilityInput.value = query;
+      ledgerFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      closeModal(button.closest(".edit-modal"));
+      if (ledgerFacilityForm) {
+        if (typeof ledgerFacilityForm.requestSubmit === "function") {
+          ledgerFacilityForm.requestSubmit();
+        } else {
+          ledgerFacilityForm.submit();
+        }
+      }
+    });
+  }
+  for (const button of document.querySelectorAll("[data-ledger-facility-clear]")) {
+    button.addEventListener("click", () => {
+      if (!ledgerFacilityInput) return;
+      ledgerFacilityInput.value = "";
+      ledgerFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      closeModal(button.closest(".edit-modal"));
+      if (ledgerFacilityForm) {
+        if (typeof ledgerFacilityForm.requestSubmit === "function") {
+          ledgerFacilityForm.requestSubmit();
+        } else {
+          ledgerFacilityForm.submit();
+        }
+      }
     });
   }
 
