@@ -1644,10 +1644,15 @@ a.home-menu-card:hover {
   background: transparent;
   color: inherit;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   font-weight: inherit;
-  padding: 0 12px 0 0;
+  min-height: 32px;
+  padding: 6px 16px 6px 6px;
   position: relative;
+  width: 100%;
 }
 
 .table-sort-button::after {
@@ -1685,7 +1690,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   border-left: 1px dotted #d6e0eb;
 }
 
-.facility-summary-table tbody td:nth-child(n+3):nth-child(-n+14) {
+.facility-summary-table tbody td:nth-child(n+3):nth-child(-n+13) {
   border-left: 1px dotted #e3ebf3;
 }
 
@@ -1694,27 +1699,24 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   border-right: 2px solid var(--line-strong, #c9d5e2);
 }
 
-.facility-summary-table thead tr:first-child th:nth-child(n+2),
-.facility-summary-table thead tr:nth-child(2) th:nth-child(5),
-.facility-summary-table thead tr:nth-child(2) th:nth-child(8),
-.facility-summary-table thead tr:nth-child(2) th:nth-child(14),
-.facility-summary-table tbody td:nth-child(6),
-.facility-summary-table tbody td:nth-child(9),
-.facility-summary-table tbody td:nth-child(15),
-.facility-summary-table tbody td:nth-child(16) {
+.facility-summary-table thead tr:first-child th:nth-child(n+2) {
   border-left: 2px solid var(--line-strong, #c9d5e2);
 }
 
 .facility-summary-table thead tr:nth-child(2) th:nth-child(4),
 .facility-summary-table thead tr:nth-child(2) th:nth-child(7),
-.facility-summary-table thead tr:nth-child(2) th:nth-child(13) {
-  border-right: 0;
-}
-
+.facility-summary-table thead tr:nth-child(2) th:nth-child(13),
 .facility-summary-table tbody td:nth-child(5),
 .facility-summary-table tbody td:nth-child(8),
-.facility-summary-table tbody td:nth-child(14) {
-  border-right: 0;
+.facility-summary-table tbody td:nth-child(14),
+.facility-summary-table tbody td:nth-child(15) {
+  border-right: 2px solid var(--line-strong, #c9d5e2);
+}
+
+.facility-summary-table thead tr:nth-child(2) th:nth-child(4),
+.facility-summary-table thead tr:nth-child(2) th:nth-child(7),
+.facility-summary-table thead tr:nth-child(2) th:nth-child(13) {
+  border-left: 1px dotted #d6e0eb;
 }
 
 .facility-summary-table th:first-child,
