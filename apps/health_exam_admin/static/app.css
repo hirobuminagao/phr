@@ -1677,9 +1677,18 @@ a.home-menu-card:hover {
 }
 
 .table-sort-button::after {
-  color: #8da0b5;
-  content: "↕";
-  font-size: 10px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #c5d2df;
+  border-radius: 4px;
+  color: #687b90;
+  content: "-";
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 900;
+  block-size: 16px;
+  justify-content: center;
+  min-inline-size: 16px;
   position: absolute;
   right: 0;
   top: 50%;
@@ -1687,11 +1696,17 @@ a.home-menu-card:hover {
 }
 
 th[data-sort-direction="asc"] .table-sort-button::after {
-  content: "↑";
+  background: #e9f7f3;
+  border-color: var(--accent);
+  color: var(--accent-dark);
+  content: "▲";
 }
 
 th[data-sort-direction="desc"] .table-sort-button::after {
-  content: "↓";
+  background: #e9f7f3;
+  border-color: var(--accent);
+  color: var(--accent-dark);
+  content: "▼";
 }
 
 .facility-summary-table thead tr:first-child th {
