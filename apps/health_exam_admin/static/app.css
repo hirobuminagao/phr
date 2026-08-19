@@ -2755,6 +2755,33 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   min-width: 82px;
 }
 
+.case-value-compare-table th:nth-child(1),
+.case-value-compare-table td:nth-child(1) {
+  width: 24%;
+}
+
+.case-value-compare-table th:nth-child(2),
+.case-value-compare-table td:nth-child(2),
+.case-value-compare-table th:nth-child(3),
+.case-value-compare-table td:nth-child(3) {
+  width: 24%;
+}
+
+.case-value-compare-table th:nth-child(4),
+.case-value-compare-table td:nth-child(4) {
+  width: 18%;
+}
+
+.case-value-compare-table th:nth-child(5),
+.case-value-compare-table td:nth-child(5) {
+  width: 10%;
+}
+
+.adopted-source-cell {
+  background: #ecfdf5;
+  box-shadow: inset 4px 0 0 #16845f;
+}
+
 .exam-item-filter-bar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(260px, auto) minmax(260px, auto);

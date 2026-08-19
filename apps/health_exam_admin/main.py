@@ -3275,15 +3275,15 @@ def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[
         f"""
         SELECT
           eecv.*,
-          eiv.raw_value AS source_raw_value,
-          eiv.raw_value_type AS source_raw_value_type,
-          eiv.raw_unit AS source_raw_unit,
-          eiv.normalize_status AS source_normalize_status,
-          eiv.validation_status AS source_validation_status,
-          eiv.review_status AS source_review_status,
           COALESCE(eiv.namecode_display_name, eim.item_name, eecv.namecode) AS item_name,
-          el.source_type AS source_type,
-          el.facility_name AS source_facility_name
+          eiv.raw_value AS adopted_raw_value,
+          eiv.raw_value_type AS adopted_raw_value_type,
+          eiv.raw_unit AS adopted_raw_unit,
+          eiv.normalize_status AS adopted_normalize_status,
+          eiv.validation_status AS adopted_validation_status,
+          eiv.review_status AS adopted_review_status,
+          el.source_type AS adopted_source_type,
+          el.facility_name AS adopted_source_facility_name
         FROM {qname(health_db())}.exam_export_case_values AS eecv
         LEFT JOIN {qname(health_db())}.exam_item_values AS eiv
           ON eiv.id = eecv.source_exam_item_value_id
@@ -3296,7 +3296,89 @@ def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[
         """,
         (exam_export_case_id,),
     )
-    return [dict(row) for row in cur.fetchall()]
+    adopted_rows = [dict(row) for row in cur.fetchall()]
+    if not adopted_rows:
+        return []
+
+    cur.execute(
+        f"""
+        SELECT
+          eiv.id AS source_exam_item_value_id,
+          eiv.namecode,
+          eiv.occurrence_no,
+          eiv.raw_value,
+          eiv.raw_value_type,
+          eiv.raw_unit,
+          eiv.normalized_value,
+          eiv.normalized_unit,
+          eiv.nullflavor,
+          eiv.code_value,
+          eiv.code_display,
+          eiv.interpretation_code,
+          eiv.interpretation_name,
+          eiv.normalize_status,
+          eiv.validation_status,
+          eiv.review_status,
+          src.source_role,
+          src.source_type,
+          src.source_priority,
+          src.source_exam_ledger_id,
+          el.facility_name AS source_facility_name,
+          COALESCE(eiv.namecode_display_name, eim.item_name, eiv.namecode) AS item_name
+        FROM {qname(health_db())}.exam_export_case_sources AS src
+        INNER JOIN {qname(health_db())}.exam_item_values AS eiv
+          ON eiv.ledger_type = 'EXAM'
+         AND eiv.ledger_id = src.source_exam_ledger_id
+        LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
+          ON eim.namecode = eiv.namecode
+        LEFT JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.exam_ledger_id = src.source_exam_ledger_id
+        WHERE src.exam_export_case_id = %s
+          AND src.source_status = 'ACTIVE'
+          AND eiv.namecode IS NOT NULL
+        ORDER BY eiv.namecode, eiv.occurrence_no, src.source_priority, eiv.id
+        """,
+        (exam_export_case_id,),
+    )
+    candidates_by_item: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for row in cur.fetchall():
+        item = dict(row)
+        key = (str(item.get("namecode") or ""), int(item.get("occurrence_no") or 1))
+        candidates_by_item.setdefault(key, []).append(item)
+
+    def pick_candidate(candidates: list[dict[str, Any]], role: str) -> dict[str, Any] | None:
+        role_upper = role.upper()
+        for candidate in candidates:
+            if str(candidate.get("source_role") or "").upper() == role_upper:
+                return candidate
+        return None
+
+    def compact_value(row: Mapping[str, Any] | None) -> str:
+        if not row:
+            return "-"
+        for key in ("normalized_value", "code_display", "code_value", "nullflavor"):
+            value = row.get(key)
+            if value not in (None, ""):
+                return str(value)
+        return "-"
+
+    values: list[dict[str, Any]] = []
+    for adopted in adopted_rows:
+        key = (str(adopted.get("namecode") or ""), int(adopted.get("occurrence_no") or 1))
+        candidates = candidates_by_item.get(key, [])
+        primary = pick_candidate(candidates, "PRIMARY")
+        supplement = pick_candidate(candidates, "SUPPLEMENT")
+        if primary is None and str(adopted.get("adopted_source_role") or "").upper() == "PRIMARY":
+            primary = adopted
+        if supplement is None and str(adopted.get("adopted_source_role") or "").upper() == "SUPPLEMENT":
+            supplement = adopted
+        adopted["primary_candidate"] = primary
+        adopted["supplement_candidate"] = supplement
+        adopted["primary_value_text"] = compact_value(primary)
+        adopted["supplement_value_text"] = compact_value(supplement)
+        adopted["adopted_value_text"] = compact_value(adopted)
+        values.append(adopted)
+    return values
 
 
 def load_exam_export_case_placeholders(cur: Any, *, exam_export_case_id: int) -> list[dict[str, Any]]:

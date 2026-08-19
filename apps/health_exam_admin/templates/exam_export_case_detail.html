@@ -196,36 +196,42 @@
       </label>
     </div>
     <div class="table-panel">
-      <table id="case-value-table" class="data-table exam-item-detail-table" data-empty-message="一致する採用値はありません。">
+      <table id="case-value-table" class="data-table exam-item-detail-table case-value-compare-table" data-empty-message="一致する採用値はありません。">
         <thead>
           <tr>
             <th>項目</th>
-            <th>採用値</th>
-            <th>コード・単位</th>
-            <th>採用元</th>
+            <th>PRIMARY</th>
+            <th>SUPPLEMENT</th>
+            <th>採用</th>
             <th>理由</th>
           </tr>
         </thead>
         <tbody>
           {% for value in values %}
-          <tr data-filter-text="{{ value.item_name or '' }} {{ value.namecode or '' }} {{ value.code_value or '' }} {{ value.code_display or '' }}">
+          {% set primary = value.primary_candidate %}
+          {% set supplement = value.supplement_candidate %}
+          {% set adopted_role = (value.adopted_source_role or '')|upper %}
+          <tr data-filter-text="{{ value.item_name or '' }} {{ value.namecode or '' }} {{ value.code_value or '' }} {{ value.code_display or '' }} {{ value.primary_value_text or '' }} {{ value.supplement_value_text or '' }}">
             <td>
               <strong>{{ value.item_name or "項目名なし" }}</strong>
               <small>{{ value.namecode }} / occurrence {{ value.occurrence_no }}</small>
             </td>
-            <td>
-              <strong>{{ value.normalized_value if value.normalized_value is not none else value.nullflavor or value.code_value or "-" }}</strong>
-              <small>raw {{ value.source_raw_value if value.source_raw_value is not none else "-" }}</small>
+            <td class="{{ 'adopted-source-cell' if adopted_role == 'PRIMARY' else '' }}">
+              <strong>{{ value.primary_value_text }}</strong>
+              <small>raw {{ primary.raw_value if primary and primary.raw_value is not none else "-" }}</small>
+              <small>{{ primary.source_type if primary else "-" }} / ledger {{ primary.source_exam_ledger_id if primary else "-" }} / item {{ primary.source_exam_item_value_id if primary else "-" }}</small>
+              <small>{{ primary.validation_status if primary else "" }} {{ primary.review_status if primary else "" }}</small>
+            </td>
+            <td class="{{ 'adopted-source-cell' if adopted_role == 'SUPPLEMENT' else '' }}">
+              <strong>{{ value.supplement_value_text }}</strong>
+              <small>raw {{ supplement.raw_value if supplement and supplement.raw_value is not none else "-" }}</small>
+              <small>{{ supplement.source_type if supplement else "-" }} / ledger {{ supplement.source_exam_ledger_id if supplement else "-" }} / item {{ supplement.source_exam_item_value_id if supplement else "-" }}</small>
+              <small>{{ supplement.validation_status if supplement else "" }} {{ supplement.review_status if supplement else "" }}</small>
             </td>
             <td>
-              <strong>{{ value.code_value or value.normalized_unit or "-" }}</strong>
-              <small>{{ value.code_display or "" }} {{ value.normalized_unit or "" }}</small>
+              <strong>{{ value.adopted_value_text }}</strong>
+              <small>{{ value.code_value or value.normalized_unit or "-" }} {{ value.code_display or "" }} {{ value.normalized_unit or "" }}</small>
               <small>判定 {{ value.interpretation_code or "" }} {{ value.interpretation_name or "" }}</small>
-            </td>
-            <td>
-              <strong>{{ value.source_type or "-" }} / item {{ value.source_exam_item_value_id or "-" }}</strong>
-              <small>ledger {{ value.source_exam_ledger_id or "-" }}</small>
-              <small>{{ value.source_validation_status or "" }} {{ value.source_review_status or "" }}</small>
             </td>
             <td>
               <strong>{{ value.adopted_source_role or "-" }}</strong>
