@@ -1075,7 +1075,8 @@ a.home-menu-card:hover {
 
 .facility-summary-actions .compact-action-button {
   min-width: 0;
-  padding-inline: 6px;
+  min-height: 34px;
+  padding-inline: 4px;
   font-size: 12px;
 }
 
@@ -1671,7 +1672,7 @@ a.home-menu-card:hover {
   font: inherit;
   font-weight: inherit;
   min-height: 32px;
-  padding: 6px 16px 6px 6px;
+  padding: 6px 24px 6px 4px;
   position: relative;
   width: 100%;
 }
@@ -1690,7 +1691,7 @@ a.home-menu-card:hover {
   justify-content: center;
   min-inline-size: 16px;
   position: absolute;
-  right: 0;
+  right: 3px;
   top: 50%;
   transform: translateY(-50%);
 }
@@ -1764,15 +1765,15 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .facility-summary-table th:nth-last-child(2),
 .facility-summary-table td:nth-last-child(2) {
-  width: 11%;
-  min-width: 150px;
+  width: 9%;
+  min-width: 128px;
   text-align: left;
 }
 
 .facility-summary-table th:last-child,
 .facility-summary-table td:last-child {
-  width: 10%;
-  min-width: 150px;
+  width: 8%;
+  min-width: 124px;
 }
 
 .facility-summary-name-cell strong {
