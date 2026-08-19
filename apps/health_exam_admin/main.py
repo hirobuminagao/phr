@@ -3209,6 +3209,7 @@ def _ensure_facility_summary_row(rows: dict[str, dict[str, Any]], source: Mappin
             "source_ng_count": 0,
             "source_pending_count": 0,
             "source_error_count": 0,
+            "subscriber_match_issue_count": 0,
             "case_count": 0,
             "case_ready_count": 0,
             "case_blocked_count": 0,
@@ -3339,7 +3340,15 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           SUM(CASE WHEN el.check_status = 'OK' THEN 1 ELSE 0 END) AS source_ok_count,
           SUM(CASE WHEN el.check_status = 'NG' THEN 1 ELSE 0 END) AS source_ng_count,
           SUM(CASE WHEN el.check_status NOT IN ('OK', 'NG') OR el.check_status IS NULL THEN 1 ELSE 0 END) AS source_pending_count,
-          SUM(COALESCE(el.exam_item_error_count, 0)) AS source_error_count
+          SUM(COALESCE(el.exam_item_error_count, 0)) AS source_error_count,
+          SUM(
+            CASE
+              WHEN el.subscriber_match_status = 'MATCHED'
+               AND el.subscriber_match_method = 'identity_hash'
+                THEN 0
+              ELSE 1
+            END
+          ) AS subscriber_match_issue_count
         FROM {qname(health_db())}.exam_ledgers AS el
         {el_event_clause}
         GROUP BY el.event_id, el.exam_facility_id, el.facility_code, el.facility_name
@@ -3356,6 +3365,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
             "source_ng_count",
             "source_pending_count",
             "source_error_count",
+            "subscriber_match_issue_count",
         ):
             item[field] = int(source.get(field) or 0)
 
