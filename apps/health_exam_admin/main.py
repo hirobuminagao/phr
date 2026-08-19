@@ -2383,11 +2383,63 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
 
 
 def load_received_folder_alias_rows(cur: Any, *, limit: int = 400) -> list[dict[str, Any]]:
-    return [
-        row
-        for row in load_folder_alias_admin_rows(cur, limit=limit)
-        if int(row.get("xml_file_count") or 0) > 0 or int(row.get("csv_file_count") or 0) > 0
-    ]
+    cur.execute(
+        f"""
+        SELECT
+          mfa.alias_id,
+          mfa.event_id,
+          ev.event_name,
+          ev.event_year,
+          mfa.src_folder_raw,
+          mfa.dst_folder_norm,
+          mfa.exam_facility_id,
+          mfa.expected_source_mode,
+          mfa.csv_format_version_id,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          ef.exam_facility_display_name,
+          cfv.mapping_version AS csv_mapping_version,
+          cfv.format_name AS csv_format_name,
+          cfv.is_active AS csv_format_is_active,
+          receipt_counts.xml_file_count,
+          receipt_counts.csv_file_count,
+          mfa.manual_judgement,
+          mfa.note,
+          mfa.is_active,
+          mfa.updated_at
+        FROM {qname(master_db())}.medical_folder_aliases mfa
+        INNER JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            SUM(CASE WHEN file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
+            SUM(CASE WHEN file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count
+          FROM {qname(health_db())}.file_receipts
+          WHERE exam_facility_id IS NOT NULL
+          GROUP BY event_id, exam_facility_id
+        ) receipt_counts
+          ON receipt_counts.event_id = mfa.event_id
+         AND receipt_counts.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN {qname(master_db())}.csv_format_versions cfv
+          ON cfv.csv_format_version_id = mfa.csv_format_version_id
+        LEFT JOIN {qname(dev_db())}.event ev
+          ON ev.event_id = mfa.event_id
+        ORDER BY mfa.is_active DESC, mfa.event_id DESC, mfa.src_folder_raw
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+        row["source_mode_filter_tokens"] = source_mode_filter_tokens(row.get("expected_source_mode"))
+        row["receipt_source_mode_label"] = receipt_source_mode_label(
+            row.get("xml_file_count"),
+            row.get("csv_file_count"),
+        )
+    return rows
 
 
 def load_csv_format_options(cur: Any, *, limit: int = 500) -> list[dict[str, Any]]:
