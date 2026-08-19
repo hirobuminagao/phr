@@ -3592,6 +3592,33 @@ def update_exam_case_check_review(
     return item
 
 
+def load_exam_case_check_review_item_ids(
+    cur: Any,
+    *,
+    exam_export_case_id: int,
+    target_scope: str,
+) -> list[int]:
+    if target_scope == "all":
+        status_clause = ""
+        params: tuple[Any, ...] = (exam_export_case_id,)
+    else:
+        status_clause = """
+          AND review_status IN ('NONE', 'NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION')
+        """
+        params = (exam_export_case_id,)
+    cur.execute(
+        f"""
+        SELECT exam_case_check_review_item_id
+        FROM {qname(health_db())}.exam_case_check_review_items
+        WHERE exam_export_case_id = %s
+        {status_clause}
+        ORDER BY exam_case_check_review_item_id
+        """,
+        params,
+    )
+    return [int(row["exam_case_check_review_item_id"]) for row in cur.fetchall()]
+
+
 def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
     summary = {
         "total": len(rows),
@@ -6425,6 +6452,81 @@ async def exam_export_case_item_review(request: Request, exam_export_case_id: in
             raise
     return RedirectResponse(
         f"/exam-export-cases/{exam_export_case_id}?message=確認状態を保存しました。step5〜7を再実行するとcaseへ反映されます。",
+        status_code=303,
+    )
+
+
+@app.post("/exam-export-cases/{exam_export_case_id}/item-review-bulk")
+async def exam_export_case_item_review_bulk(request: Request, exam_export_case_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    review_status = str(form.get("review_status") or "").strip()
+    note = str(form.get("note") or "").strip()
+    target_scope = str(form.get("target_scope") or "unresolved").strip()
+    allowed_statuses = {
+        "NEEDS_CONFIRMATION",
+        "APPROVED_WITH_REASON",
+        "EXCLUDED",
+        "WAITING_RESUBMISSION",
+        "RESOLVED_BY_SOURCE_VALUE",
+        "NONE",
+    }
+    allowed_scopes = {"unresolved", "all"}
+    if review_status not in allowed_statuses:
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=状態が不正です。", status_code=303)
+    if target_scope not in allowed_scopes:
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=一括対象が不正です。", status_code=303)
+    if review_status == "APPROVED_WITH_REASON" and not note:
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=理由ありOKには理由が必須です。", status_code=303)
+
+    params = load_mysql_base_params(db_prefix())
+    updated = 0
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            review_item_ids = load_exam_case_check_review_item_ids(
+                cur,
+                exam_export_case_id=exam_export_case_id,
+                target_scope=target_scope,
+            )
+            for review_item_id in review_item_ids:
+                item = update_exam_case_check_review(
+                    cur,
+                    review_item_id=review_item_id,
+                    review_status=review_status,
+                    note=note,
+                    app_user_id=int(user["app_user_id"]),
+                )
+                if item is None or int(item.get("exam_export_case_id") or 0) != exam_export_case_id:
+                    conn.rollback()
+                    return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=一括更新対象に不正な確認項目があります。", status_code=303)
+                updated += 1
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="EXAM_CASE_CHECK_REVIEW_BULK_UPDATE",
+                    target_schema=health_db(),
+                    target_table="exam_case_check_review_items",
+                    target_id=str(exam_export_case_id),
+                    after={
+                        "exam_export_case_id": exam_export_case_id,
+                        "target_scope": target_scope,
+                        "review_status": review_status,
+                        "updated": updated,
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse(
+        f"/exam-export-cases/{exam_export_case_id}?message=確認状態を{updated}件まとめて保存しました。step5〜7を再実行するとcaseへ反映されます。",
         status_code=303,
     )
 

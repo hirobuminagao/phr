@@ -2736,6 +2736,48 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   width: 360px;
 }
 
+.case-review-bulk-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(180px, 0.8fr) minmax(260px, 2fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #d8e2ee;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.case-review-bulk-form label,
+.case-review-bulk-form label > span {
+  display: block;
+}
+
+.case-review-bulk-form label > span {
+  margin-bottom: 6px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.case-review-bulk-form select,
+.case-review-bulk-form textarea,
+.case-review-bulk-form button {
+  width: 100%;
+}
+
+.case-review-bulk-form textarea {
+  min-height: 48px;
+}
+
+.case-review-bulk-form button {
+  min-width: 132px;
+}
+
+.case-review-bulk-note {
+  min-width: 0;
+}
+
 .related-namecodes {
   display: grid;
   gap: 6px;

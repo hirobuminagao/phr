@@ -88,6 +88,33 @@
         <p class="subtle">MISSINGのまま理由ありOKにする場合は、確認項目ごとに理由が必要です。一括作業でも保存は確認項目ごとに行います。</p>
       </div>
     </div>
+    {% if placeholders %}
+    <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/item-review-bulk" class="case-review-bulk-form">
+      <label>
+        <span>一括対象</span>
+        <select name="target_scope">
+          <option value="unresolved">未処理・確認待ち・再提出待ち</option>
+          <option value="all">全確認対象</option>
+        </select>
+      </label>
+      <label>
+        <span>状態</span>
+        <select name="review_status">
+          <option value="APPROVED_WITH_REASON">理由ありOK</option>
+          <option value="NEEDS_CONFIRMATION">確認待ち</option>
+          <option value="WAITING_RESUBMISSION">再提出待ち</option>
+          <option value="EXCLUDED">除外</option>
+          <option value="RESOLVED_BY_SOURCE_VALUE">受領値で解決</option>
+          <option value="NONE">未処理</option>
+        </select>
+      </label>
+      <label class="case-review-bulk-note">
+        <span>理由・確認内容</span>
+        <textarea name="note" rows="2" placeholder="同じ理由を対象項目へまとめて保存します。理由ありOKは必須"></textarea>
+      </label>
+      <button type="submit">まとめて保存</button>
+    </form>
+    {% endif %}
     <div class="table-panel">
       <table class="data-table case-placeholder-table">
         <thead>
