@@ -32,6 +32,35 @@
         <input name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="健診機関名 / コード / 受領モード" data-live-filter-input="#facility-summary-table">
       </label>
       <label>
+        <span>受診月</span>
+        <span class="month-picker-field" data-month-picker>
+          <input
+            name="exam_month"
+            value="{{ filters.exam_month or '' }}"
+            autocomplete="off"
+            placeholder="YYYY-MM"
+            data-month-picker-input
+          >
+          <div class="month-picker-popover" data-month-picker-popover hidden>
+            <div class="month-picker-head">
+              <strong>受診月を選択</strong>
+              <button type="button" class="ghost-button compact-action-button" data-month-picker-clear>クリア</button>
+            </div>
+            <div class="month-picker-options">
+              {% for option in exam_month_options %}
+              <label class="month-picker-option">
+                <input type="checkbox" value="{{ option.exam_month }}" {% if option.exam_month in selected_exam_months %}checked{% endif %} data-month-picker-option>
+                <span>{{ option.exam_month }}</span>
+                <small>source {{ option.source_count }} / case {{ option.case_count }}</small>
+              </label>
+              {% else %}
+              <p class="subtle">選択できる受診月がありません。</p>
+              {% endfor %}
+            </div>
+          </div>
+        </span>
+      </label>
+      <label>
         <span>イベント</span>
         <select name="event_id">
           {% for event in event_options %}
@@ -98,54 +127,54 @@
       </div>
     </div>
     <div class="table-panel">
-      <table id="facility-summary-table" class="data-table facility-summary-table" data-empty-message="一致する健診機関はありません。">
+      <table id="facility-summary-table" class="data-table facility-summary-table" data-empty-message="一致する健診機関はありません。" data-sortable-table>
         <thead>
           <tr>
-            <th rowspan="2">健診機関</th>
+            <th rowspan="2" data-sort-index="0" data-sort-type="text"><button type="button" class="table-sort-button">健診機関</button></th>
             <th colspan="4">受領ファイル</th>
             <th colspan="3">取込チェック</th>
             <th colspan="6">人単位チェック</th>
-            <th rowspan="2">値エラー / 上位項目</th>
+            <th rowspan="2" data-sort-index="14" data-sort-type="number"><button type="button" class="table-sort-button">値エラー / 上位項目</button></th>
             <th rowspan="2">遷移</th>
           </tr>
           <tr>
-            <th>XML</th>
-            <th>CSV</th>
-            <th>ZIP</th>
-            <th>ALL</th>
-            <th>OK</th>
-            <th>NG</th>
-            <th>ALL</th>
-            <th>法定NG数</th>
-            <th>法定NG率</th>
-            <th>ALL</th>
-            <th>特定NG数</th>
-            <th>特定NG率</th>
-            <th>特定対象数</th>
+            <th data-sort-index="1" data-sort-type="number"><button type="button" class="table-sort-button">XML</button></th>
+            <th data-sort-index="2" data-sort-type="number"><button type="button" class="table-sort-button">CSV</button></th>
+            <th data-sort-index="3" data-sort-type="number"><button type="button" class="table-sort-button">ZIP</button></th>
+            <th data-sort-index="4" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
+            <th data-sort-index="5" data-sort-type="number"><button type="button" class="table-sort-button">OK</button></th>
+            <th data-sort-index="6" data-sort-type="number"><button type="button" class="table-sort-button">NG</button></th>
+            <th data-sort-index="7" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
+            <th data-sort-index="8" data-sort-type="number"><button type="button" class="table-sort-button">法定NG数</button></th>
+            <th data-sort-index="9" data-sort-type="percent"><button type="button" class="table-sort-button">法定NG率</button></th>
+            <th data-sort-index="10" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
+            <th data-sort-index="11" data-sort-type="number"><button type="button" class="table-sort-button">特定NG数</button></th>
+            <th data-sort-index="12" data-sort-type="percent"><button type="button" class="table-sort-button">特定NG率</button></th>
+            <th data-sort-index="13" data-sort-type="number"><button type="button" class="table-sort-button">特定対象数</button></th>
           </tr>
         </thead>
         <tbody>
           {% for row in rows %}
           {% set facility_q = row.facility_filter_value or row.facility_name or row.facility_code or '' %}
           <tr data-filter-text="{{ row.facility_code or '' }} {{ row.facility_name or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }}">
-            <td class="facility-summary-name-cell">
+            <td class="facility-summary-name-cell" data-sort-value="{{ row.facility_name or '' }}">
               <strong class="line-clamp-2" title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
               <small>{{ row.facility_code or "コードなし" }} / {{ row.expected_source_mode_label or "受領設定なし" }}</small>
             </td>
-            <td class="numeric-cell">{{ row.xml_file_count }}</td>
-            <td class="numeric-cell">{{ row.csv_file_count }}</td>
-            <td class="numeric-cell">{{ row.zip_file_count }}</td>
-            <td class="numeric-cell"><strong>{{ row.file_total }}</strong></td>
-            <td class="numeric-cell">{{ row.source_ok_count }}</td>
-            <td class="numeric-cell">{{ row.source_ng_count }}</td>
-            <td class="numeric-cell"><strong>{{ row.source_count }}</strong></td>
-            <td class="numeric-cell">{{ row.legal_ng_count }}</td>
-            <td class="numeric-cell">{{ row.legal_ng_rate }}</td>
-            <td class="numeric-cell"><strong>{{ row.case_count }}</strong></td>
-            <td class="numeric-cell">{{ row.specific_ng_count }}</td>
-            <td class="numeric-cell">{{ row.specific_ng_rate }}</td>
-            <td class="numeric-cell">{{ row.specific_subject_count }}</td>
-            <td class="facility-summary-error-cell">
+            <td class="numeric-cell" data-sort-value="{{ row.xml_file_count }}">{{ row.xml_file_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.csv_file_count }}">{{ row.csv_file_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.zip_file_count }}">{{ row.zip_file_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.file_total }}"><strong>{{ row.file_total }}</strong></td>
+            <td class="numeric-cell" data-sort-value="{{ row.source_ok_count }}">{{ row.source_ok_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.source_ng_count }}">{{ row.source_ng_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.source_count }}"><strong>{{ row.source_count }}</strong></td>
+            <td class="numeric-cell" data-sort-value="{{ row.legal_ng_count }}">{{ row.legal_ng_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.legal_ng_rate }}">{{ row.legal_ng_rate }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.case_count }}"><strong>{{ row.case_count }}</strong></td>
+            <td class="numeric-cell" data-sort-value="{{ row.specific_ng_count }}">{{ row.specific_ng_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.specific_ng_rate }}">{{ row.specific_ng_rate }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.specific_subject_count }}">{{ row.specific_subject_count }}</td>
+            <td class="facility-summary-error-cell" data-sort-value="{{ row.item_error_count }}">
               <strong>{{ row.item_error_count }}</strong>
               {% if row.top_error_items %}
               <ul class="compact-list">

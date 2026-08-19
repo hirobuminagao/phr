@@ -164,6 +164,55 @@
     });
   }
 
+  const parseSortValue = (cell, type) => {
+    const raw = String(cell?.dataset.sortValue ?? cell?.textContent ?? "").trim();
+    if (type === "number" || type === "percent") {
+      if (!raw || raw === "-") return Number.NEGATIVE_INFINITY;
+      const value = Number(raw.replace("%", "").replace(/,/g, ""));
+      return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+    }
+    return normalize(raw);
+  };
+
+  for (const table of document.querySelectorAll("[data-sortable-table]")) {
+    const tbody = table.querySelector("tbody");
+    if (!tbody) continue;
+    const headers = Array.from(table.querySelectorAll("th[data-sort-index]"));
+    const sortableRows = () => Array.from(tbody.querySelectorAll("tr[data-filter-text]"));
+    for (const header of headers) {
+      const button = header.querySelector("button");
+      if (!button) continue;
+      button.addEventListener("click", () => {
+        const index = Number(header.dataset.sortIndex || "0");
+        const type = header.dataset.sortType || "text";
+        const currentDirection = header.dataset.sortDirection === "asc" ? "asc" : "desc";
+        const nextDirection = currentDirection === "asc" ? "desc" : "asc";
+        for (const other of headers) {
+          other.dataset.sortDirection = "";
+          other.removeAttribute("aria-sort");
+        }
+        header.dataset.sortDirection = nextDirection;
+        header.setAttribute("aria-sort", nextDirection === "asc" ? "ascending" : "descending");
+        const rows = sortableRows().map((row, originalIndex) => ({ row, originalIndex }));
+        rows.sort((left, right) => {
+          const leftValue = parseSortValue(left.row.children[index], type);
+          const rightValue = parseSortValue(right.row.children[index], type);
+          let compared = 0;
+          if (typeof leftValue === "number" && typeof rightValue === "number") {
+            compared = leftValue - rightValue;
+          } else {
+            compared = String(leftValue).localeCompare(String(rightValue), "ja");
+          }
+          if (compared === 0) compared = left.originalIndex - right.originalIndex;
+          return nextDirection === "asc" ? compared : -compared;
+        });
+        for (const item of rows) {
+          tbody.appendChild(item.row);
+        }
+      });
+    }
+  }
+
   const closeHelpPopovers = (exceptId = "") => {
     for (const popover of document.querySelectorAll(".help-popover")) {
       if (popover.classList.contains("hover-help-popover")) continue;

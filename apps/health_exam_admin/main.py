@@ -3089,6 +3089,49 @@ def load_exam_export_case_month_options(cur: Any, *, event_id: str | None = None
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_facility_summary_month_options(cur: Any, *, event_id: str | None = None, limit: int = 36) -> list[dict[str, Any]]:
+    params: list[Any] = []
+    event_text = str(event_id or "").strip()
+    ledger_event_clause = ""
+    case_event_clause = ""
+    if event_text:
+        ledger_event_clause = "AND event_id = %s"
+        case_event_clause = "AND event_id = %s"
+        params.extend([event_text, event_text])
+    cur.execute(
+        f"""
+        SELECT
+          exam_month,
+          SUM(source_count) AS source_count,
+          SUM(case_count) AS case_count
+        FROM (
+          SELECT
+            DATE_FORMAT(exam_date, '%Y-%m') AS exam_month,
+            COUNT(*) AS source_count,
+            0 AS case_count
+          FROM {qname(health_db())}.exam_ledgers
+          WHERE exam_date IS NOT NULL
+            {ledger_event_clause}
+          GROUP BY DATE_FORMAT(exam_date, '%Y-%m')
+          UNION ALL
+          SELECT
+            DATE_FORMAT(exam_date, '%Y-%m') AS exam_month,
+            0 AS source_count,
+            COUNT(*) AS case_count
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE exam_date IS NOT NULL
+            {case_event_clause}
+          GROUP BY DATE_FORMAT(exam_date, '%Y-%m')
+        ) AS months
+        GROUP BY exam_month
+        ORDER BY exam_month DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
     summary = {
         "total": len(rows),
@@ -3192,10 +3235,47 @@ def _ensure_facility_summary_row(rows: dict[str, dict[str, Any]], source: Mappin
 def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
     event_id = str(filters.get("event_id") or "").strip()
     query = str(filters.get("q") or "").strip()
-    fr_event_clause = "WHERE fr.event_id = %s" if event_id else ""
-    el_event_clause = "WHERE el.event_id = %s" if event_id else ""
-    eec_event_clause = "WHERE eec.event_id = %s" if event_id else ""
-    event_params: tuple[Any, ...] = (event_id,) if event_id else ()
+    exam_months = split_filter_values(filters.get("exam_month", ""))
+    fr_where_parts: list[str] = []
+    fr_params: list[Any] = []
+    el_where_parts: list[str] = []
+    el_params: list[Any] = []
+    eec_where_parts: list[str] = []
+    eec_params: list[Any] = []
+    eiv_where_parts = ["(eiv.normalize_status = 'ERROR' OR eiv.validation_status = 'INVALID')"]
+    eiv_params: list[Any] = []
+    if event_id:
+        fr_where_parts.append("fr.event_id = %s")
+        fr_params.append(event_id)
+        el_where_parts.append("el.event_id = %s")
+        el_params.append(event_id)
+        eec_where_parts.append("eec.event_id = %s")
+        eec_params.append(event_id)
+        eiv_where_parts.append("el.event_id = %s")
+        eiv_params.append(event_id)
+    if exam_months:
+        month_placeholders = ", ".join(["%s"] * len(exam_months))
+        fr_where_parts.append(
+            f"""
+            EXISTS (
+              SELECT 1
+              FROM {qname(health_db())}.exam_ledgers AS fr_el
+              WHERE fr_el.file_receipt_id = fr.id
+                AND DATE_FORMAT(fr_el.exam_date, '%Y-%m') IN ({month_placeholders})
+            )
+            """
+        )
+        fr_params.extend(exam_months)
+        el_where_parts.append(f"DATE_FORMAT(el.exam_date, '%Y-%m') IN ({month_placeholders})")
+        el_params.extend(exam_months)
+        eec_where_parts.append(f"DATE_FORMAT(eec.exam_date, '%Y-%m') IN ({month_placeholders})")
+        eec_params.extend(exam_months)
+        eiv_where_parts.append(f"DATE_FORMAT(el.exam_date, '%Y-%m') IN ({month_placeholders})")
+        eiv_params.extend(exam_months)
+    fr_event_clause = f"WHERE {' AND '.join(fr_where_parts)}" if fr_where_parts else ""
+    el_event_clause = f"WHERE {' AND '.join(el_where_parts)}" if el_where_parts else ""
+    eec_event_clause = f"WHERE {' AND '.join(eec_where_parts)}" if eec_where_parts else ""
+    eiv_where_clause = f"WHERE {' AND '.join(eiv_where_parts)}"
     rows: dict[str, dict[str, Any]] = {}
 
     cur.execute(
@@ -3232,7 +3312,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           fr.facility_name,
           mfa.expected_source_mode
         """,
-        event_params,
+        tuple(fr_params),
     )
     for source in (dict(row) for row in cur.fetchall()):
         item = _ensure_facility_summary_row(rows, source)
@@ -3264,7 +3344,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
         {el_event_clause}
         GROUP BY el.event_id, el.exam_facility_id, el.facility_code, el.facility_name
         """,
-        event_params,
+        tuple(el_params),
     )
     for source in (dict(row) for row in cur.fetchall()):
         item = _ensure_facility_summary_row(rows, source)
@@ -3315,7 +3395,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
         {eec_event_clause}
         GROUP BY eec.event_id, eec.exam_facility_id, eec.facility_code, eec.facility_name
         """,
-        event_params,
+        tuple(eec_params),
     )
     for source in (dict(row) for row in cur.fetchall()):
         item = _ensure_facility_summary_row(rows, source)
@@ -3351,8 +3431,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
         INNER JOIN {qname(health_db())}.exam_ledgers AS el
           ON el.exam_ledger_id = eiv.ledger_id
          AND eiv.ledger_type = 'EXAM'
-        WHERE (eiv.normalize_status = 'ERROR' OR eiv.validation_status = 'INVALID')
-          {"AND el.event_id = %s" if event_id else ""}
+        {eiv_where_clause}
         GROUP BY
           el.event_id,
           el.exam_facility_id,
@@ -3362,7 +3441,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           COALESCE(eiv.namecode_display_name, eiv.namecode)
         ORDER BY error_count DESC, eiv.namecode
         """,
-        event_params,
+        tuple(eiv_params),
     )
     error_total_by_key: dict[str, int] = {}
     for source in (dict(row) for row in cur.fetchall()):
@@ -5589,6 +5668,7 @@ def facility_summary(request: Request) -> Response:
     filters = {
         "event_id": request.query_params.get("event_id", "2"),
         "q": request.query_params.get("q", ""),
+        "exam_month": request.query_params.get("exam_month", ""),
         "limit": request.query_params.get("limit", "200"),
     }
     limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
@@ -5597,6 +5677,7 @@ def facility_summary(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
+            exam_month_options = load_facility_summary_month_options(cur, event_id=filters["event_id"])
             rows = load_facility_summary_rows(cur, filters=filters, limit=limit)
             conn.commit()
         except Exception:
@@ -5617,6 +5698,8 @@ def facility_summary(request: Request) -> Response:
             "request": request,
             "user": user,
             "event_options": event_options,
+            "exam_month_options": exam_month_options,
+            "selected_exam_months": split_filter_values(filters.get("exam_month")),
             "filters": filters,
             "rows": rows,
             "summary": summary,

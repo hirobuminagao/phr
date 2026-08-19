@@ -1638,6 +1638,36 @@ a.home-menu-card:hover {
   white-space: nowrap;
 }
 
+.table-sort-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: inherit;
+  padding: 0 12px 0 0;
+  position: relative;
+}
+
+.table-sort-button::after {
+  color: #8da0b5;
+  content: "↕";
+  font-size: 10px;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+th[data-sort-direction="asc"] .table-sort-button::after {
+  content: "↑";
+}
+
+th[data-sort-direction="desc"] .table-sort-button::after {
+  content: "↓";
+}
+
 .facility-summary-table thead tr:first-child th {
   background: #f4f8fb;
   border-bottom: 1px solid var(--line-strong, #c9d5e2);
@@ -1651,13 +1681,27 @@ a.home-menu-card:hover {
   font-size: 12px;
 }
 
+.facility-summary-table thead tr:nth-child(2) th + th {
+  border-left: 1px dotted #d6e0eb;
+}
+
+.facility-summary-table tbody td:nth-child(n+3):nth-child(-n+14) {
+  border-left: 1px dotted #e3ebf3;
+}
+
+.facility-summary-table thead tr:first-child th:first-child,
+.facility-summary-table tbody td:first-child {
+  border-right: 2px solid var(--line-strong, #c9d5e2);
+}
+
 .facility-summary-table thead tr:first-child th:nth-child(n+2),
 .facility-summary-table thead tr:nth-child(2) th:nth-child(5),
 .facility-summary-table thead tr:nth-child(2) th:nth-child(8),
 .facility-summary-table thead tr:nth-child(2) th:nth-child(14),
 .facility-summary-table tbody td:nth-child(6),
 .facility-summary-table tbody td:nth-child(9),
-.facility-summary-table tbody td:nth-child(15) {
+.facility-summary-table tbody td:nth-child(15),
+.facility-summary-table tbody td:nth-child(16) {
   border-left: 2px solid var(--line-strong, #c9d5e2);
 }
 
