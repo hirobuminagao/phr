@@ -26,7 +26,8 @@ from scripts.lib.etl import log_error as etl_log_error
 from scripts.lib.etl import start_run as etl_start_run
 from scripts.from_medical.script_lib.article44_checker import ARTICLE44_CHECKERS
 from scripts.from_medical.script_lib.article44_checker import check_article44
-from scripts.from_medical.script_lib.article44_models import Article44Result, CheckResult, RequiredNamecode
+from scripts.from_medical.script_lib.article44_models import Article44Result, CheckResult, ExpectedValueType, RequiredNamecode
+from scripts.from_medical.script_lib.article44_required_namecodes import ARTICLE44_GROUP_CODE
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
 from scripts.from_medical.script_lib.article44_value_loader import load_article44_value_map
 from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
@@ -321,8 +322,92 @@ class MissingPlaceholderItem:
     check_scope: str
 
 
+ARTICLE44_MISSING_PLACEHOLDER_REASONS = {
+    "MISSING",
+    "NOT_FOUND",
+    "NULL",
+    "EMPTY",
+    "CODE_VALUE_MISSING",
+    "TEXT_VALUE_MISSING",
+}
+
+
 def expected_value_type_text(required: RequiredNamecode) -> str:
     return str(required.expected_value_type.value)
+
+
+def fetch_article44_required_namecodes_by_detail(
+    cursor: Any,
+    *,
+    dev_db: str,
+) -> dict[str, tuple[RequiredNamecode, ...]]:
+    """Fetch Article 44 required namecodes grouped by legal detail number."""
+
+    cursor.execute(
+        f"""
+        SELECT
+          namecode,
+          value_type,
+          notes
+        FROM {qname(dev_db)}.exam_item_group_members
+        WHERE group_code = %s
+        ORDER BY priority, namecode
+        """,
+        (ARTICLE44_GROUP_CODE,),
+    )
+    grouped: dict[str, list[RequiredNamecode]] = {}
+    for row in cursor.fetchall():
+        notes = str(row.get("notes") or "")
+        match = re.search(r"Article44\s+(?P<detail_no>44\d{8})\s*:", notes)
+        if not match:
+            continue
+        detail_no = match.group("detail_no")
+        if detail_no not in ARTICLE44_DETAIL_NAMES:
+            continue
+        namecode = str(row.get("namecode") or "").strip()
+        value_type = str(row.get("value_type") or "").strip().upper()
+        if not namecode or value_type not in {"PQ", "CD", "CO", "ST"}:
+            continue
+        expected_value_type = ExpectedValueType.CD if value_type == "CO" else ExpectedValueType(value_type)
+        grouped.setdefault(detail_no, []).append(
+            RequiredNamecode(
+                namecode=namecode,
+                expected_value_type=expected_value_type,
+            )
+        )
+    return {detail_no: tuple(items) for detail_no, items in grouped.items()}
+
+
+def parse_article44_missing_placeholder_items(
+    article44_result: Article44Result,
+    required_namecodes_by_detail: Mapping[str, tuple[RequiredNamecode, ...]],
+) -> list[MissingPlaceholderItem]:
+    """Build review placeholder targets from Article 44 MISSING results."""
+
+    validate_article44_result(article44_result)
+    results: list[MissingPlaceholderItem] = []
+    seen: set[str] = set()
+    for detail_no, check_result in article44_result.items():
+        if check_result.status != STATUS_MISSING:
+            continue
+        reason = (check_result.reason or check_result.status).strip()
+        if reason not in ARTICLE44_MISSING_PLACEHOLDER_REASONS:
+            continue
+        detail_name = ARTICLE44_DETAIL_NAMES[detail_no]
+        for required in required_namecodes_by_detail.get(detail_no, ()):
+            if required.namecode in seen:
+                continue
+            seen.add(required.namecode)
+            results.append(
+                MissingPlaceholderItem(
+                    namecode=required.namecode,
+                    item_name=detail_name,
+                    raw_value_type=expected_value_type_text(required),
+                    validation_reason=f"ARTICLE44:{detail_no}:{reason}",
+                    check_scope="ARTICLE44",
+                )
+            )
+    return results
 
 
 def parse_specific_missing_placeholder_items(
@@ -368,6 +453,8 @@ def sync_export_case_missing_placeholders(
     *,
     health_db: str,
     ledger: Mapping[str, Any],
+    article44_result: Article44Result,
+    article44_required_namecodes_by_detail: Mapping[str, tuple[RequiredNamecode, ...]],
     specific_summary: str | None,
     specific_required_namecodes: tuple[RequiredNamecode, ...],
 ) -> int:
@@ -376,7 +463,10 @@ def sync_export_case_missing_placeholders(
     if ledger.get("ledger_type") != LEDGER_TYPE_EXPORT_CASE:
         return 0
     case_id = int(ledger["id"])
-    items = parse_specific_missing_placeholder_items(specific_summary, specific_required_namecodes)
+    items = [
+        *parse_article44_missing_placeholder_items(article44_result, article44_required_namecodes_by_detail),
+        *parse_specific_missing_placeholder_items(specific_summary, specific_required_namecodes),
+    ]
     active_keys = {(item.namecode, 1) for item in items}
     changed = 0
 
@@ -460,7 +550,10 @@ def sync_export_case_missing_placeholders(
         WHERE ledger_type = %s
           AND ledger_id = %s
           AND value_source_role = 'MISSING_PLACEHOLDER'
-          AND normalize_reason = 'SPECIFIC_HEALTH_MISSING_PLACEHOLDER'
+          AND normalize_reason IN (
+            'ARTICLE44_MISSING_PLACEHOLDER',
+            'SPECIFIC_HEALTH_MISSING_PLACEHOLDER'
+          )
         """,
         (LEDGER_TYPE_EXPORT_CASE, case_id),
     )
@@ -927,6 +1020,10 @@ def process_ledgers(
     summary: CheckSummary,
 ) -> None:
     required_namecodes = fetch_article44_required_namecodes(dev_cur, dev_db=config.dev_db)
+    article44_required_namecodes_by_detail = fetch_article44_required_namecodes_by_detail(
+        dev_cur,
+        dev_db=config.dev_db,
+    )
     specific_required_namecodes = fetch_specific_health_required_namecodes(
         dev_cur,
         dev_db=config.dev_db,
@@ -1008,6 +1105,8 @@ def process_ledgers(
                 health_cur,
                 health_db=config.health_db,
                 ledger=ledger,
+                article44_result=article44_result,
+                article44_required_namecodes_by_detail=article44_required_namecodes_by_detail,
                 specific_summary=specific_summary,
                 specific_required_namecodes=specific_required_namecodes,
             )

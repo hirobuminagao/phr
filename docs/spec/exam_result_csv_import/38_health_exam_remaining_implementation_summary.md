@@ -80,7 +80,8 @@ XMLとCSVの両方がある健診機関では、取込sourceの値とXML出力�
 存在しない値:
 
 - 法定チェック、特定健診チェックで `MISSING` になった項目。
-- case作成またはcase再チェック時に、`ledger_type = EXPORT_CASE` / `ledger_id = exam_export_cases.exam_export_case_id` / `value_source_role = MISSING_PLACEHOLDER` の `exam_item_values` として作成する。
+- case再チェック時に、`ledger_type = EXPORT_CASE` / `ledger_id = exam_export_cases.exam_export_case_id` / `value_source_role = MISSING_PLACEHOLDER` の `exam_item_values` として作成する。
+- 法定チェック由来の不足は、`dev_phr.exam_item_group_members` の `v2_2026_ARTICLE44_CHECK_ITEMS` から法定detail番号に紐づくnamecodeを引き、`normalize_reason = ARTICLE44_MISSING_PLACEHOLDER` として作る。
 - `MISSING_PLACEHOLDER` は「このcaseでこの項目が不足している」という判断対象であり、XML出力用entryではない。
 - `MISSING_PLACEHOLDER` は削除せず、不足解消時は `RESOLVED_BY_SOURCE_VALUE` などへ状態変更して残す。
 - 理由ありOKはcase単位ではなくitem_value単位で管理する。case内のMISSING placeholderが全件 `APPROVED_WITH_REASON` になり、承認者、承認日時、理由auditが揃った場合だけ、そのcaseを理由ありOKとして出力候補にする。
@@ -508,7 +509,8 @@ XML出力条件を画面から指定できるようにする。
 
 実装メモ:
 
-- `03_04_check_exam_export_cases.py` 実行時に、特定健診の `specific_reason_summary` から `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` を抽出し、case側の `MISSING_PLACEHOLDER` を作成・更新する。
+- `03_04_check_exam_export_cases.py` 実行時に、法定チェックの `MISSING` と、特定健診の `specific_reason_summary` に含まれる `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` を抽出し、case側の `MISSING_PLACEHOLDER` を作成・更新する。
+- 法定チェック由来のplaceholderは `normalize_reason = ARTICLE44_MISSING_PLACEHOLDER` とし、値そのものではなく確認・理由ありOKの作業対象として扱う。
 - 特定健診由来のplaceholderは `normalize_reason = SPECIFIC_HEALTH_MISSING_PLACEHOLDER` とし、値そのものではなく確認・理由ありOKの作業対象として扱う。再チェックで不足が解消した場合は、未処理状態のplaceholderを `RESOLVED_BY_SOURCE_VALUE` に変更して経緯を残す。
 - `PRIMARY` / `SUPPLEMENT` の両方にVALID値があり、採用値だけが業務的に怪しい場合は、MISSING placeholderではなく採用優先ルールまたは確認ルールで扱う。case詳細画面では両候補を横並びで確認し、健診機関確認や precedence rule 追加判断につなげる。
 

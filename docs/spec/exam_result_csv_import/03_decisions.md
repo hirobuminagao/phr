@@ -474,7 +474,8 @@ Current as of 2026-08-05.
 - 健診機関への連絡管理は、初期実装では専用の連絡台帳から始めず、健診機関サマリーで問題の塊を見える化し、健診機関単位で絞ったcase一覧へ遷移して個別確認する導線を優先する。
 - 健診機関サマリーでは、受領ファイル数、取込人数、source単位/case単位のOK/NG率、法定NG率、特定健診NG率、normalizeエラー件数、NG検査項目topを見せる。100%近い同一NGはフォーマット、マッピング、健診機関仕様の問題候補として扱い、一部だけのNGは個別事情・未実施・CSV欠損候補として扱う。
 - 確認事項の画面入口はcaseまたはledgerとするが、記帳の物理単位は `exam_item_values` とする。存在する値の扱いも、存在しないMISSING項目の扱いも、item_valueを作業単位として統一する。
-- 存在するsource値は `ledger_type = 'EXAM'` の `exam_item_values` に保持する。存在しない不足項目は、case作成またはcase再チェック時に `ledger_type = 'EXPORT_CASE'` / `value_source_role = 'MISSING_PLACEHOLDER'` の `exam_item_values` として作成する。
+- 存在するsource値は `ledger_type = 'EXAM'` の `exam_item_values` に保持する。存在しない不足項目は、case再チェック時に `ledger_type = 'EXPORT_CASE'` / `value_source_role = 'MISSING_PLACEHOLDER'` の `exam_item_values` として作成する。
+- 法定チェックの `MISSING` は、`dev_phr.exam_item_group_members` の `v2_2026_ARTICLE44_CHECK_ITEMS` にある `notes` の法定detail番号から対象namecodeを引き、`normalize_reason = ARTICLE44_MISSING_PLACEHOLDER` として作成する。
 - 特定健診チェックで `specific_reason_summary` に出た `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` も `MISSING_PLACEHOLDER` として作成する。特定健診項目は法定健診より理由ありOKが多くなる可能性があるが、HIA/XML受付上の不足確認対象として同じ記帳導線に載せる。
 - `MISSING_PLACEHOLDER` は削除しない。不足が解消した場合は `review_status = 'RESOLVED_BY_SOURCE_VALUE'` のように状態変更して残す。これにより、一度不足だった項目がCSV補完、再提出、再取込で解消した経緯を追える。
 - `MISSING_PLACEHOLDER` は不足判断の作業行であり、解消済みになってもXML出力値ではない。したがって `validation_status` は値としてのVALIDにはせず、`review_status` と `validation_reason` で解消状態を表す。
