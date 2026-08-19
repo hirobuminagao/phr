@@ -1618,7 +1618,7 @@ a.home-menu-card:hover {
 }
 
 .facility-summary-table {
-  min-width: 1320px;
+  min-width: 1360px;
 }
 
 .facility-summary-table th {
@@ -1627,9 +1627,30 @@ a.home-menu-card:hover {
   white-space: nowrap;
 }
 
+.facility-summary-table thead tr:first-child th {
+  border-right: 2px solid var(--line-strong, #c9d5e2);
+  border-bottom: 2px solid var(--line-strong, #c9d5e2);
+}
+
+.facility-summary-table thead tr:first-child th:last-child {
+  border-right: 0;
+}
+
+.facility-summary-table thead tr:nth-child(2) th:nth-child(4),
+.facility-summary-table thead tr:nth-child(2) th:nth-child(7),
+.facility-summary-table thead tr:nth-child(2) th:nth-child(13) {
+  border-right: 2px solid var(--line-strong, #c9d5e2);
+}
+
+.facility-summary-table tbody td:nth-child(5),
+.facility-summary-table tbody td:nth-child(8),
+.facility-summary-table tbody td:nth-child(14) {
+  border-right: 2px solid var(--line-strong, #c9d5e2);
+}
+
 .facility-summary-table th:first-child,
 .facility-summary-table td:first-child {
-  min-width: 220px;
+  min-width: 280px;
   text-align: left;
 }
 
@@ -1648,6 +1669,9 @@ a.home-menu-card:hover {
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  padding-left: 7px;
+  padding-right: 7px;
 }
 
 .numeric-cell strong {

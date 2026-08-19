@@ -3294,7 +3294,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') = 'OK' THEN 1 ELSE 0 END) AS legal_ok_count,
           SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') = 'NG' THEN 1 ELSE 0 END) AS legal_ng_count,
           SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') NOT IN ('OK', 'NG') THEN 1 ELSE 0 END) AS legal_pending_count,
-          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'OK' AND COALESCE(ecr.specific_reason_summary, '') NOT LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_ok_count,
+          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'OK' AND COALESCE(ecr.specific_reason_summary, '') = '' THEN 1 ELSE 0 END) AS specific_ok_count,
           SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'NG' THEN 1 ELSE 0 END) AS specific_ng_count,
           SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'NOT_APPLICABLE' OR COALESCE(ecr.specific_reason_summary, '') LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_not_applicable_count,
           SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') NOT IN ('OK', 'NG', 'NOT_APPLICABLE') AND COALESCE(ecr.specific_reason_summary, '') NOT LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_pending_count
@@ -3398,13 +3398,10 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
         ]
     for row in result:
         row["legal_ng_rate"] = pct_label(row.get("legal_ng_count"), row.get("case_count"))
-        row["specific_ng_rate"] = pct_label(row.get("specific_ng_count"), row.get("case_count"))
+        row["specific_subject_count"] = int(row.get("specific_ok_count") or 0) + int(row.get("specific_ng_count") or 0)
+        row["specific_ng_rate"] = pct_label(row.get("specific_ng_count"), row.get("specific_subject_count"))
         row["source_ng_rate"] = pct_label(row.get("source_ng_count"), row.get("source_count"))
         row["case_ng_rate"] = pct_label(row.get("case_blocked_count"), row.get("case_count"))
-        row["specific_subject_count"] = max(
-            int(row.get("case_count") or 0) - int(row.get("specific_not_applicable_count") or 0),
-            0,
-        )
         row["facility_filter_value"] = row.get("facility_code") or row.get("facility_name") or ""
         row["risk_score"] = (
             int(row.get("legal_ng_count") or 0) * 5
