@@ -2,7 +2,7 @@
 
 ## Status
 
-Current as of 2026-08-10.
+Current as of 2026-08-19.
 
 CSV健診結果取込、法定チェック、CSVからHIA向けXML出力までは一通り動作確認済みである。
 次の実装は、取込そのものを増やす段階ではなく、運用で人ごとに管理するための台帳、補正、結合、HIA状態連携を整える段階である。
@@ -32,11 +32,39 @@ FastAPI管理画面は、スクリプト運用を置き換える完成版では�
 - `exam_export_cases` を対象にした清書後法定チェック。
 - `exam_export_cases.export_readiness_status` / `export_readiness_reason` に、人が見る出力可否summaryを反映。
 - `exam_export_cases` に出力ZIPパス、ZIP名、個人XML名、出力日時、XML出力のETL実行IDを保持する器を追加。
-- CSV由来結果からHIAアップロード用XML/ZIP出力。これは旧CSV行台帳起点の経路が残っており、次段階でcase起点へ切り替える。
+- `exam_export_cases` / `exam_export_case_values` 起点のHIAアップロード用XML/ZIP出力。
 - XSD検証。
 - XML出力履歴 `xml_export_zips` / `xml_export_members`。
 - 既存個別ledgerから統合ledger `exam_ledgers` へのbackfill。
 - `exam_ledgers` 起点の報告用 `exam_result_ledger_report` 更新。
+
+### XML/CSV Value Adoption
+
+XMLとCSVの両方がある健診機関では、取込sourceの値とXML出力用の清書値を分ける。
+
+- source値は `exam_item_values` に保持する。raw、normalize、validation、由来、エラー、採用元追跡のための証跡層である。
+- 清書値は `exam_export_case_values` に保持する。rawは持たず、XML出力に必要な最小限の採用済み値、採用元 `exam_item_values`、採用理由を持つ。
+- XML/CSV/紙の構成元sourceは `exam_export_case_sources` に保持する。
+- XML出力時は `exam_export_case_values + exam_item_master` でentryを作る。型、単位、OID、section、methodCode、順番、一連検査グループは原則 `exam_item_master` から参照する。
+
+採用順の基本は以下とする。
+
+1. 同じ `namecode + occurrence_no` がXMLとCSVの両方にある場合は、XMLを採用する。
+2. XMLにない `namecode + occurrence_no` がCSVにある場合は、CSVを不足補完として採用する。
+3. 紙入力や手修正値は後続sourceとして扱い、同じ清書値レイヤーへ合流させる。
+4. CSVはXMLの全面置換ではなく、XML不足項目を補うsourceである。
+5. 原本sourceは改変しない。採用し直したい場合はcase値を再構築する。
+
+例外は全項目フラグではなく、`exam_item_value_precedence_rules` で扱う。
+
+- `XML_FIRST`: 条件一致時もXMLを採用する。
+- `CSV_FIRST`: CSV値があればCSVを採用する。
+- `CSV_IF_XML_MATCHES_PATTERN`: XML値が指定パターンに一致し、CSV値が条件を満たす場合にCSVを採用する。
+- `JOIN_XML_CSV`: XML値とCSV値を重複除去して結合する。
+- `MANUAL_REVIEW`: 自動採用せず、人の確認対象として残す。
+
+代表例として、XMLの `9N511 医師の診断(判定)` にメタボリックシンドローム判定の口語説明だけが入り、CSV側の指導コメントに医師の診断・再検査指示として有用な文章がある場合は、namecode単位の例外ルールでCSV側を採用できる。
+この判断は取込時ではなく、`03_02_build_exam_export_case_values.py` で清書値を作る時に適用する。
 
 ### HIA Dashboard Side
 
@@ -52,10 +80,13 @@ FastAPI管理画面は、スクリプト運用を置き換える完成版では�
 - セキュリティ設定、自動ログアウト、IP制限、個人情報監査ログの設定/参照入口は実装済み。
 - HOMEには、今すぐ使える作業と準備中の作業を分けて表示する。
 - 受領ファイル一覧、統合ledger一覧、出力リスト一覧/詳細は実装済み。
+- 健診機関サマリーは実装済み。健診機関ごとに受領ファイル数、source取込チェック、加入者突合課題、人単位チェック、normalize/validationエラーを確認できる。
+- 個人case一覧は実装済み。法定チェック、特定健診チェック、出力状態、source構成、受診月、健診機関で確認・絞り込みできる。
 - イベント設定画面は実装済み。`dev_phr.event` のevent名、年度、保険者番号、年齢基準日、結果ルート等を管理する。
 - 健診機関・alias管理画面は実装済み。`phr_master.exam_facilities` と `phr_master.medical_folder_aliases` を作成・更新できる。
 - 健診機関・alias管理では、5万件超の健診機関マスタを巨大プルダウンにせず、aliasの紐づけ先は健診機関IDまたは健診機関コード入力で解決する。
-- 出力実行、HIAアップロード記帳、個人case詳細、基本情報補正、加入者突合NG修正、CSVマッピング管理、紙健診入力は後続。
+- 出力実行は、出力リスト詳細から `review` / `official` を選んで実行できる。
+- HIAアップロード記帳、個人case詳細、基本情報補正、加入者突合NG修正、CSVマッピング管理、紙健診入力は後続。
 
 ## Main Remaining Implementations
 

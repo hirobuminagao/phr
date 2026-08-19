@@ -919,7 +919,7 @@ scripts/from_medical/config/export_hia_xml.yml
 - `facility_codes`: 複数の健診機関コードを指定する。手動運用では原則こちらを使用する。
 - `facility_ids`: `exam_facilities.exam_facility_id` の内部IDを指定する。
 - `file_receipt_ids`: 受領ファイル単位で指定する。
-- `ledger_ids`: CSV行台帳単位で個人を指定する。
+- `ledger_ids`: `exam_ledgers.exam_ledger_id` 単位でsourceを指定する。通常の画面運用ではcaseまたは出力リストを指定する。
 - `exam_month`: `YYYY-MM` で受診月を指定する。全施設月指定を行う場合は `all_facilities: true` も明示する。
 - `output_mode`: `official` または `review`。`official` はHIAアップロード対象の正式出力、`review` はプロジェクト `data` 配下への確認用出力。
 - `review_output_root`: `output_mode = review` の基点。未指定時は `<repo>/data/hia_xml_review_exports`。
@@ -939,8 +939,8 @@ scripts/lib/identity/export_fields.py
   既存identity field関数を組み合わせたXML出力用基本情報projection。独自の正規化規則は持たない
 ```
 
-2026-08-05時点では、`04_export_hia_xml.py` と `hia_xml_export_loader.py` に旧CSV行台帳起点の経路が残っている。
-今後の実装正はこの文書のとおりcase起点であり、exporterは `exam_export_cases` / `exam_export_case_values` から個人XMLを作成する方向へ切り替える。
+2026-08-19時点では、`04_export_hia_xml.py` と `hia_xml_export_loader.py` はcase起点へ切り替え済みである。
+exporterは `exam_export_cases` / `exam_export_case_values` を正として個人XMLを作成し、CSV行台帳や旧個別ledgerを出力正本にはしない。
 
 旧 `medi_export_xml.py` は変更しない。
 新処理から旧スクリプトをimportするのではなく、確認済みのXML生成部分を共通moduleとして新設し、テストで旧出力構造との差分を管理する。
