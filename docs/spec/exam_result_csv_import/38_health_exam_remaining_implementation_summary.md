@@ -505,6 +505,12 @@ XML出力条件を画面から指定できるようにする。
 - 特定健診の問診項目をどこまで必須チェックに含めるかは、健保/HIAエラー実績を見ながら追加する。
 - 理由ありOKや妊娠等の条件付き不足許可は、既存の理由ありOK枠へ統合する。
 
+実装メモ:
+
+- `03_04_check_exam_export_cases.py` 実行時に、特定健診の `specific_reason_summary` から `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` を抽出し、case側の `MISSING_PLACEHOLDER` を作成・更新する。
+- 特定健診由来のplaceholderは `normalize_reason = SPECIFIC_HEALTH_MISSING_PLACEHOLDER` とし、値そのものではなく確認・理由ありOKの作業対象として扱う。再チェックで不足が解消した場合は、未処理状態のplaceholderを `RESOLVED_BY_SOURCE_VALUE` に変更して経緯を残す。
+- `PRIMARY` / `SUPPLEMENT` の両方にVALID値があり、採用値だけが業務的に怪しい場合は、MISSING placeholderではなく採用優先ルールまたは確認ルールで扱う。case詳細画面では両候補を横並びで確認し、健診機関確認や precedence rule 追加判断につなげる。
+
 ### 9. Master and Facility Admin UI
 
 健診機関、フォルダalias、eventなど、取込・出力・画面絞り込みに必要な運用マスタを画面から扱う。

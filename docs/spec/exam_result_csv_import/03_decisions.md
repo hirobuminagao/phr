@@ -475,7 +475,9 @@ Current as of 2026-08-05.
 - 健診機関サマリーでは、受領ファイル数、取込人数、source単位/case単位のOK/NG率、法定NG率、特定健診NG率、normalizeエラー件数、NG検査項目topを見せる。100%近い同一NGはフォーマット、マッピング、健診機関仕様の問題候補として扱い、一部だけのNGは個別事情・未実施・CSV欠損候補として扱う。
 - 確認事項の画面入口はcaseまたはledgerとするが、記帳の物理単位は `exam_item_values` とする。存在する値の扱いも、存在しないMISSING項目の扱いも、item_valueを作業単位として統一する。
 - 存在するsource値は `ledger_type = 'EXAM'` の `exam_item_values` に保持する。存在しない不足項目は、case作成またはcase再チェック時に `ledger_type = 'EXPORT_CASE'` / `value_source_role = 'MISSING_PLACEHOLDER'` の `exam_item_values` として作成する。
+- 特定健診チェックで `specific_reason_summary` に出た `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` も `MISSING_PLACEHOLDER` として作成する。特定健診項目は法定健診より理由ありOKが多くなる可能性があるが、HIA/XML受付上の不足確認対象として同じ記帳導線に載せる。
 - `MISSING_PLACEHOLDER` は削除しない。不足が解消した場合は `review_status = 'RESOLVED_BY_SOURCE_VALUE'` のように状態変更して残す。これにより、一度不足だった項目がCSV補完、再提出、再取込で解消した経緯を追える。
+- `MISSING_PLACEHOLDER` は不足判断の作業行であり、解消済みになってもXML出力値ではない。したがって `validation_status` は値としてのVALIDにはせず、`review_status` と `validation_reason` で解消状態を表す。
 - `exam_item_values` は件数が多いため、人手判断の現在状態だけを最小限持つ。長文理由や変更前後は別のauditテーブルへ寄せる。
 - `exam_item_values` に持つ現在状態候補は、`review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成を基本とする。
 - `review_status` の候補は `NONE`、`NEEDS_CONFIRMATION`、`APPROVED_WITH_REASON`、`EXCLUDED`、`WAITING_RESUBMISSION`、`RESOLVED_BY_SOURCE_VALUE` とする。
@@ -487,6 +489,7 @@ Current as of 2026-08-05.
 - 初期のCSV補完診断対象は、視力 `4403004001`、聴力 `4403005001`、胸部X線 `4404001001`、心電図 `4411001001`、既往歴 `4401001001`、自覚症状 `4402001001`、他覚症状 `4402001002` の7分類とする。
 - ただしCSV取込自体は7分類へ絞らない。健診機関ごとの通常マッピングを作り、取込可能な検査値・基本情報は従来どおり全てsource値として取り込む。7分類は補完診断で重点的に見る分類であり、マッピング対象や取込対象を制限するものではない。
 - 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えない。`MISSING_PLACEHOLDER` は該当entryとしてXMLへ出力しない。
+- `PRIMARY` と `SUPPLEMENT` の両方に同一namecodeが存在し、どちらもVALIDだが意味が異なる場合は、MISSINGではなく採用優先ルールまたは健診機関確認対象として扱う。例として、XML側の医師の診断（判定）にメタボリックシンドローム判定の口語文が入り、CSV側に医師コメントらしい長文があるケースは、placeholderではなく precedence rule / 確認ルールで採用元を制御する。
 - 同日分割送信回数は既存ZIPからの自動採番を既定とし、`0`から`9`の明示指定も可能にする。既存ZIPと衝突する番号では上書きしない。
 - 個人XMLファイル名21桁目の種別は、特定健診情報を表す実施区分コード `1` 固定とする。
 - XML出力の原子単位はZIPとする。同じ健診機関・保険者・作成日・同日分割送信回数の対象者に1人でも生成またはXSD検証失敗があれば、そのZIP全体を出力しない。

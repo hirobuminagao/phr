@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +26,7 @@ from scripts.lib.etl import log_error as etl_log_error
 from scripts.lib.etl import start_run as etl_start_run
 from scripts.from_medical.script_lib.article44_checker import ARTICLE44_CHECKERS
 from scripts.from_medical.script_lib.article44_checker import check_article44
-from scripts.from_medical.script_lib.article44_models import Article44Result, CheckResult
+from scripts.from_medical.script_lib.article44_models import Article44Result, CheckResult, RequiredNamecode
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
 from scripts.from_medical.script_lib.article44_value_loader import load_article44_value_map
 from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
@@ -59,6 +60,11 @@ LEDGER_TYPES = {LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM, LEDGER_TYPE_
 ARTICLE44_OK_STATUSES = {STATUS_OK, STATUS_CALCULATED, STATUS_ALTERNATIVE}
 ARTICLE44_PROBLEM_STATUSES = {STATUS_MISSING, STATUS_INVALID}
 ARTICLE44_ALLOWED_STATUSES = ARTICLE44_OK_STATUSES | ARTICLE44_PROBLEM_STATUSES
+PLACEHOLDER_REVIEW_OPEN_STATUSES = {
+    "NONE",
+    "NEEDS_CONFIRMATION",
+    "WAITING_RESUBMISSION",
+}
 ARTICLE44_DETAIL_NAMES: dict[str, str] = {
     "4401001001": "既往歴",
     "4402001001": "自覚症状",
@@ -304,6 +310,181 @@ def article44_problem_results(article44_result: Article44Result) -> list[tuple[s
         for detail_no, result in article44_result.items()
         if result.status in ARTICLE44_PROBLEM_STATUSES or (result.status == STATUS_ALTERNATIVE and result.reason)
     ]
+
+
+@dataclass(frozen=True)
+class MissingPlaceholderItem:
+    namecode: str
+    item_name: str
+    raw_value_type: str
+    validation_reason: str
+    check_scope: str
+
+
+def expected_value_type_text(required: RequiredNamecode) -> str:
+    return str(required.expected_value_type.value)
+
+
+def parse_specific_missing_placeholder_items(
+    specific_summary: str | None,
+    required_namecodes: tuple[RequiredNamecode, ...],
+) -> list[MissingPlaceholderItem]:
+    """Build review placeholder targets from specific-health NG reason text."""
+
+    if not specific_summary:
+        return []
+    required_by_namecode = {required.namecode: required for required in required_namecodes}
+    results: list[MissingPlaceholderItem] = []
+    seen: set[str] = set()
+    for part in specific_summary.split("|"):
+        text = part.strip()
+        match = re.match(r"^(?P<namecode>[A-Za-z0-9]{17}):(?P<item_name>[^:]+):(?P<reason>.+)$", text)
+        if not match:
+            continue
+        namecode = match.group("namecode")
+        required = required_by_namecode.get(namecode)
+        if required is None or namecode in seen:
+            continue
+        reason = match.group("reason").strip()
+        if not reason:
+            continue
+        if reason not in {"NOT_FOUND", "NULL", "EMPTY", "CODE_VALUE_MISSING", "TEXT_VALUE_MISSING"}:
+            continue
+        seen.add(namecode)
+        results.append(
+            MissingPlaceholderItem(
+                namecode=namecode,
+                item_name=match.group("item_name").strip(),
+                raw_value_type=expected_value_type_text(required),
+                validation_reason=f"SPECIFIC_HEALTH:{reason}",
+                check_scope="SPECIFIC_HEALTH",
+            )
+        )
+    return results
+
+
+def sync_export_case_missing_placeholders(
+    cur: Any,
+    *,
+    health_db: str,
+    ledger: Mapping[str, Any],
+    specific_summary: str | None,
+    specific_required_namecodes: tuple[RequiredNamecode, ...],
+) -> int:
+    """Upsert case-level MISSING_PLACEHOLDER rows for reviewable missing items."""
+
+    if ledger.get("ledger_type") != LEDGER_TYPE_EXPORT_CASE:
+        return 0
+    case_id = int(ledger["id"])
+    items = parse_specific_missing_placeholder_items(specific_summary, specific_required_namecodes)
+    active_keys = {(item.namecode, 1) for item in items}
+    changed = 0
+
+    for item in items:
+        cur.execute(
+            f"""
+            SELECT id, review_status
+            FROM {qname(health_db)}.exam_item_values
+            WHERE ledger_type = %s
+              AND ledger_id = %s
+              AND value_source_role = 'MISSING_PLACEHOLDER'
+              AND namecode = %s
+              AND occurrence_no = 1
+            LIMIT 1
+            """,
+            (LEDGER_TYPE_EXPORT_CASE, case_id, item.namecode),
+        )
+        existing = cur.fetchone()
+        if existing:
+            current_status = str(existing.get("review_status") or "NONE")
+            next_status = "NEEDS_CONFIRMATION" if current_status == "RESOLVED_BY_SOURCE_VALUE" else current_status
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db)}.exam_item_values
+                SET namecode_display_name = %s,
+                    raw_value_type = %s,
+                    normalize_status = 'SKIPPED',
+                    normalize_reason = %s,
+                    validation_status = 'INVALID',
+                    validation_reason = %s,
+                    review_status = %s,
+                    updated_at = CURRENT_TIMESTAMP(3)
+                WHERE id = %s
+                """,
+                (
+                    item.item_name,
+                    item.raw_value_type,
+                    f"{item.check_scope}_MISSING_PLACEHOLDER",
+                    item.validation_reason,
+                    next_status,
+                    existing["id"],
+                ),
+            )
+            changed += int(cur.rowcount or 0)
+            continue
+
+        cur.execute(
+            f"""
+            INSERT INTO {qname(health_db)}.exam_item_values (
+              event_id, ledger_type, ledger_id, subscriber_id, hia_subscriber_id,
+              namecode, occurrence_no, raw_value_type, namecode_display_name,
+              normalize_status, normalize_reason, validation_status, validation_reason,
+              value_source_role, review_status, extracted_at, normalized_at
+            )
+            VALUES (
+              %s, %s, %s, %s, %s,
+              %s, 1, %s, %s,
+              'SKIPPED', %s, 'INVALID', %s,
+              'MISSING_PLACEHOLDER', 'NEEDS_CONFIRMATION', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+            )
+            """,
+            (
+                ledger.get("event_id"),
+                LEDGER_TYPE_EXPORT_CASE,
+                case_id,
+                ledger.get("subscriber_id"),
+                ledger.get("hia_subscriber_id"),
+                item.namecode,
+                item.raw_value_type,
+                item.item_name,
+                f"{item.check_scope}_MISSING_PLACEHOLDER",
+                item.validation_reason,
+            ),
+        )
+        changed += int(cur.rowcount or 0)
+
+    cur.execute(
+        f"""
+        SELECT id, namecode, occurrence_no, review_status
+        FROM {qname(health_db)}.exam_item_values
+        WHERE ledger_type = %s
+          AND ledger_id = %s
+          AND value_source_role = 'MISSING_PLACEHOLDER'
+          AND normalize_reason = 'SPECIFIC_HEALTH_MISSING_PLACEHOLDER'
+        """,
+        (LEDGER_TYPE_EXPORT_CASE, case_id),
+    )
+    for row in cur.fetchall():
+        key = (str(row.get("namecode") or ""), int(row.get("occurrence_no") or 1))
+        if key in active_keys:
+            continue
+        if str(row.get("review_status") or "") not in PLACEHOLDER_REVIEW_OPEN_STATUSES:
+            continue
+        cur.execute(
+            f"""
+            UPDATE {qname(health_db)}.exam_item_values
+            SET review_status = 'RESOLVED_BY_SOURCE_VALUE',
+                validation_status = 'INVALID',
+                validation_reason = 'RESOLVED_BY_SOURCE_VALUE',
+                reviewed_at = CURRENT_TIMESTAMP(3),
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE id = %s
+            """,
+            (row["id"],),
+        )
+        changed += int(cur.rowcount or 0)
+
+    return changed
 
 
 def print_dry_run_detail(
@@ -821,6 +1002,14 @@ def process_ledgers(
             specific_summary=specific_summary,
         )
         summary.rows_inserted += 1
+        if ledger["ledger_type"] == LEDGER_TYPE_EXPORT_CASE:
+            sync_export_case_missing_placeholders(
+                health_cur,
+                health_db=config.health_db,
+                ledger=ledger,
+                specific_summary=specific_summary,
+                specific_required_namecodes=specific_required_namecodes,
+            )
         if ledger["ledger_type"] == LEDGER_TYPE_EXAM:
             update_exam_ledger_check(
                 health_cur,
