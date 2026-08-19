@@ -85,7 +85,7 @@
     <div class="section-heading">
       <div>
         <h2>確認対象</h2>
-        <p class="subtle">MISSINGのまま理由ありOKにする場合は、項目ごとに理由が必要です。一括作業でも保存はitem_valueごとに行います。</p>
+        <p class="subtle">MISSINGのまま理由ありOKにする場合は、確認項目ごとに理由が必要です。一括作業でも保存は確認項目ごとに行います。</p>
       </div>
     </div>
     <div class="table-panel">
@@ -103,12 +103,32 @@
           <tr class="{{ 'is-error-row' if item.review_status in ['NONE', 'NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION'] else '' }}">
             <td>
               <span class="status-pill {{ 'status-ready' if item.review_status == 'APPROVED_WITH_REASON' or item.review_status == 'RESOLVED_BY_SOURCE_VALUE' else 'status-pending' if item.review_status in ['NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION'] else 'status-muted' }}">{{ item.review_status }}</span>
-              <small>value id {{ item.id }} / occurrence {{ item.occurrence_no }}</small>
+              <small>review id {{ item.id }} / {{ item.check_scope }}</small>
             </td>
             <td>
               <strong>{{ item.item_name or "項目名なし" }}</strong>
               <small>{{ item.namecode or "-" }}</small>
               <small>{{ item.validation_reason or item.normalize_reason or "" }}</small>
+              {% if item.related_namecodes %}
+              <div class="related-namecodes">
+                {% for related in item.related_namecodes %}
+                <div class="related-namecode-row">
+                  <span>
+                    <strong>{{ related.item_name }}</strong>
+                    <small>{{ related.namecode }} / {{ related.value_type }}</small>
+                  </span>
+                  <span class="related-state">
+                    {% if related.exam_export_case_value_id %}
+                    採用済み {{ related.adopted_source_role or "" }}
+                    {% else %}
+                    採用なし
+                    {% endif %}
+                    <small>{{ related.source_states or "sourceなし" }}</small>
+                  </span>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
             </td>
             <td>
               <strong>{{ item.latest_note or "理由なし" }}</strong>
@@ -116,7 +136,7 @@
             </td>
             <td>
               <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/item-review" class="case-review-form">
-                <input type="hidden" name="exam_item_value_id" value="{{ item.id }}">
+                <input type="hidden" name="review_item_id" value="{{ item.id }}">
                 <select name="review_status">
                   {% for status in ["NEEDS_CONFIRMATION", "APPROVED_WITH_REASON", "WAITING_RESUBMISSION", "EXCLUDED", "RESOLVED_BY_SOURCE_VALUE", "NONE"] %}
                   <option value="{{ status }}" {% if item.review_status == status %}selected{% endif %}>{{ status }}</option>

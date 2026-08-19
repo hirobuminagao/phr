@@ -3385,55 +3385,122 @@ def load_exam_export_case_placeholders(cur: Any, *, exam_export_case_id: int) ->
     cur.execute(
         f"""
         SELECT
-          eiv.id,
-          eiv.event_id,
-          eiv.ledger_type,
-          eiv.ledger_id,
-          eiv.namecode,
-          eiv.namecode_display_name,
-          COALESCE(eiv.namecode_display_name, eim.item_name, eiv.namecode) AS item_name,
-          eiv.occurrence_no,
-          eiv.raw_value_type,
-          eiv.normalize_status,
-          eiv.normalize_reason,
-          eiv.validation_status,
-          eiv.validation_reason,
-          eiv.value_source_role,
-          eiv.review_status,
-          eiv.reviewed_at,
-          eiv.reviewed_by_app_user_id,
+          cri.exam_case_check_review_item_id AS id,
+          cri.event_id,
+          'EXPORT_CASE' AS ledger_type,
+          cri.exam_export_case_id AS ledger_id,
+          cri.check_scope,
+          cri.check_item_code AS namecode,
+          cri.check_item_name AS namecode_display_name,
+          COALESCE(cri.check_item_name, cri.check_item_code) AS item_name,
+          1 AS occurrence_no,
+          cri.raw_value_type,
+          NULL AS normalize_status,
+          CONCAT(cri.check_scope, '_MISSING_PLACEHOLDER') AS normalize_reason,
+          'INVALID' AS validation_status,
+          cri.validation_reason,
+          'MISSING_PLACEHOLDER' AS value_source_role,
+          cri.review_status,
+          cri.reviewed_at,
+          cri.reviewed_by_app_user_id,
           latest_audit.note AS latest_note,
           latest_audit.changed_at AS latest_note_at
-        FROM {qname(health_db())}.exam_item_values AS eiv
-        LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
-          ON eim.namecode = eiv.namecode
+        FROM {qname(health_db())}.exam_case_check_review_items AS cri
         LEFT JOIN (
           SELECT a1.*
-          FROM {qname(health_db())}.exam_item_value_audit_logs AS a1
+          FROM {qname(health_db())}.exam_case_check_review_item_audit_logs AS a1
           INNER JOIN (
-            SELECT exam_item_value_id, MAX(exam_item_value_audit_log_id) AS max_id
-            FROM {qname(health_db())}.exam_item_value_audit_logs
-            GROUP BY exam_item_value_id
+            SELECT
+              exam_case_check_review_item_id,
+              MAX(exam_case_check_review_item_audit_log_id) AS max_id
+            FROM {qname(health_db())}.exam_case_check_review_item_audit_logs
+            GROUP BY exam_case_check_review_item_id
           ) AS latest
-            ON latest.max_id = a1.exam_item_value_audit_log_id
+            ON latest.max_id = a1.exam_case_check_review_item_audit_log_id
         ) AS latest_audit
-          ON latest_audit.exam_item_value_id = eiv.id
-        WHERE eiv.ledger_type = 'EXPORT_CASE'
-          AND eiv.ledger_id = %s
-          AND eiv.value_source_role = 'MISSING_PLACEHOLDER'
+          ON latest_audit.exam_case_check_review_item_id = cri.exam_case_check_review_item_id
+        WHERE cri.exam_export_case_id = %s
         ORDER BY
-          CASE eiv.review_status
+          CASE cri.review_status
             WHEN 'NEEDS_CONFIRMATION' THEN 0
             WHEN 'WAITING_RESUBMISSION' THEN 1
             WHEN 'NONE' THEN 2
             WHEN 'APPROVED_WITH_REASON' THEN 3
             ELSE 4
           END,
-          eiv.namecode,
-          eiv.occurrence_no,
-          eiv.id
+          cri.check_scope,
+          cri.check_item_code,
+          cri.exam_case_check_review_item_id
         """,
         (exam_export_case_id,),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["related_namecodes"] = load_placeholder_related_namecodes(
+            cur,
+            exam_export_case_id=exam_export_case_id,
+            placeholder=row,
+        )
+    return rows
+
+
+def load_placeholder_related_namecodes(
+    cur: Any,
+    *,
+    exam_export_case_id: int,
+    placeholder: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    validation_reason = str(placeholder.get("validation_reason") or "")
+    match = re.match(r"^ARTICLE44:(?P<detail_no>44\d{8}):", validation_reason)
+    if not match:
+        return []
+    detail_no = match.group("detail_no")
+    cur.execute(
+        f"""
+        SELECT
+          gm.namecode,
+          COALESCE(eim.item_name, gm.namecode) AS item_name,
+          gm.value_type,
+          ecv.exam_export_case_value_id,
+          ecv.adopted_source_role,
+          ecv.source_exam_item_value_id,
+          GROUP_CONCAT(
+            DISTINCT CONCAT(
+              ecs.source_role,
+              '/',
+              ecs.source_type,
+              ':',
+              COALESCE(eiv.normalize_status, '-'),
+              '/',
+              COALESCE(eiv.validation_status, '-')
+            )
+            ORDER BY ecs.source_priority, ecs.source_type
+            SEPARATOR ', '
+          ) AS source_states
+        FROM {qname(dev_db())}.exam_item_group_members AS gm
+        LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
+          ON eim.namecode = gm.namecode
+        LEFT JOIN {qname(health_db())}.exam_export_case_values AS ecv
+          ON ecv.exam_export_case_id = %s
+         AND ecv.namecode = gm.namecode
+        LEFT JOIN {qname(health_db())}.exam_export_case_sources AS ecs
+          ON ecs.exam_export_case_id = %s
+        LEFT JOIN {qname(health_db())}.exam_item_values AS eiv
+          ON eiv.ledger_type = 'EXAM'
+         AND eiv.ledger_id = ecs.source_exam_ledger_id
+         AND eiv.namecode = gm.namecode
+        WHERE gm.group_code = 'v2_2026_ARTICLE44_CHECK_ITEMS'
+          AND gm.notes LIKE %s
+        GROUP BY
+          gm.namecode,
+          eim.item_name,
+          gm.value_type,
+          ecv.exam_export_case_value_id,
+          ecv.adopted_source_role,
+          ecv.source_exam_item_value_id
+        ORDER BY gm.priority, gm.namecode
+        """,
+        (exam_export_case_id, exam_export_case_id, f"%Article44 {detail_no}:%"),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -3453,22 +3520,28 @@ def load_exam_export_case_check_rows(cur: Any, *, exam_export_case_id: int, limi
     return [dict(row) for row in cur.fetchall()]
 
 
-def update_exam_item_value_review(
+def update_exam_case_check_review(
     cur: Any,
     *,
-    exam_item_value_id: int,
+    review_item_id: int,
     review_status: str,
     note: str,
     app_user_id: int,
 ) -> dict[str, Any] | None:
     cur.execute(
         f"""
-        SELECT id, event_id, ledger_type, ledger_id, review_status
-        FROM {qname(health_db())}.exam_item_values
-        WHERE id = %s
+        SELECT
+          exam_case_check_review_item_id,
+          event_id,
+          exam_export_case_id,
+          check_scope,
+          check_item_code,
+          review_status
+        FROM {qname(health_db())}.exam_case_check_review_items
+        WHERE exam_case_check_review_item_id = %s
         LIMIT 1
         """,
-        (exam_item_value_id,),
+        (review_item_id,),
     )
     row = cur.fetchone()
     if not row:
@@ -3477,21 +3550,22 @@ def update_exam_item_value_review(
     old_status = str(item.get("review_status") or "NONE")
     cur.execute(
         f"""
-        UPDATE {qname(health_db())}.exam_item_values
+        UPDATE {qname(health_db())}.exam_case_check_review_items
         SET review_status = %s,
             reviewed_at = CURRENT_TIMESTAMP(3),
             reviewed_by_app_user_id = %s
-        WHERE id = %s
+        WHERE exam_case_check_review_item_id = %s
         """,
-        (review_status, app_user_id, exam_item_value_id),
+        (review_status, app_user_id, review_item_id),
     )
     cur.execute(
         f"""
-        INSERT INTO {qname(health_db())}.exam_item_value_audit_logs (
-          exam_item_value_id,
+        INSERT INTO {qname(health_db())}.exam_case_check_review_item_audit_logs (
+          exam_case_check_review_item_id,
           event_id,
-          ledger_type,
-          ledger_id,
+          exam_export_case_id,
+          check_scope,
+          check_item_code,
           field_name,
           old_value,
           new_value,
@@ -3499,13 +3573,14 @@ def update_exam_item_value_review(
           note,
           changed_by_app_user_id
         )
-        VALUES (%s, %s, %s, %s, 'review_status', %s, %s, 'ADMIN_UI', %s, %s)
+        VALUES (%s, %s, %s, %s, %s, 'review_status', %s, %s, 'ADMIN_UI', %s, %s)
         """,
         (
-            exam_item_value_id,
+            review_item_id,
             item.get("event_id"),
-            item.get("ledger_type"),
-            item.get("ledger_id"),
+            item.get("exam_export_case_id"),
+            item.get("check_scope"),
+            item.get("check_item_code"),
             old_status,
             review_status,
             note,
@@ -6294,9 +6369,9 @@ async def exam_export_case_item_review(request: Request, exam_export_case_id: in
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await request.form()
     try:
-        exam_item_value_id = int(str(form.get("exam_item_value_id") or "").strip())
+        review_item_id = int(str(form.get("review_item_id") or "").strip())
     except ValueError:
-        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=対象item_valueが不正です。", status_code=303)
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=対象確認項目が不正です。", status_code=303)
     review_status = str(form.get("review_status") or "").strip()
     note = str(form.get("note") or "").strip()
     allowed_statuses = {
@@ -6316,28 +6391,30 @@ async def exam_export_case_item_review(request: Request, exam_export_case_id: in
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            item = update_exam_item_value_review(
+            item = update_exam_case_check_review(
                 cur,
-                exam_item_value_id=exam_item_value_id,
+                review_item_id=review_item_id,
                 review_status=review_status,
                 note=note,
                 app_user_id=int(user["app_user_id"]),
             )
-            if item is None or str(item.get("ledger_type") or "") != "EXPORT_CASE" or int(item.get("ledger_id") or 0) != exam_export_case_id:
+            if item is None or int(item.get("exam_export_case_id") or 0) != exam_export_case_id:
                 conn.rollback()
-                return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=対象item_valueがcaseに紐づいていません。", status_code=303)
+                return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=対象確認項目がcaseに紐づいていません。", status_code=303)
             if audit_enabled(cur):
                 log_audit(
                     cur,
                     request=request,
                     user=user,
-                    action_code="EXAM_ITEM_VALUE_REVIEW_UPDATE",
+                    action_code="EXAM_CASE_CHECK_REVIEW_UPDATE",
                     target_schema=health_db(),
-                    target_table="exam_item_values",
-                    target_id=str(exam_item_value_id),
+                    target_table="exam_case_check_review_items",
+                    target_id=str(review_item_id),
                     after={
                         "exam_export_case_id": exam_export_case_id,
-                        "exam_item_value_id": exam_item_value_id,
+                        "exam_case_check_review_item_id": review_item_id,
+                        "check_scope": item.get("check_scope"),
+                        "check_item_code": item.get("check_item_code"),
                         "old_review_status": item.get("old_review_status"),
                         "new_review_status": review_status,
                     },

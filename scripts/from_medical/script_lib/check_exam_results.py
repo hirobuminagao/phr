@@ -382,7 +382,12 @@ def parse_article44_missing_placeholder_items(
     article44_result: Article44Result,
     required_namecodes_by_detail: Mapping[str, tuple[RequiredNamecode, ...]],
 ) -> list[MissingPlaceholderItem]:
-    """Build review placeholder targets from Article 44 MISSING results."""
+    """Build review placeholder targets from Article 44 MISSING results.
+
+    Article 44 checks are business requirement items. Some details are backed
+    by several namecodes, so the review placeholder is kept at the detail level
+    instead of expanding every candidate namecode into a separate approval task.
+    """
 
     validate_article44_result(article44_result)
     results: list[MissingPlaceholderItem] = []
@@ -394,19 +399,21 @@ def parse_article44_missing_placeholder_items(
         if reason not in ARTICLE44_MISSING_PLACEHOLDER_REASONS:
             continue
         detail_name = ARTICLE44_DETAIL_NAMES[detail_no]
-        for required in required_namecodes_by_detail.get(detail_no, ()):
-            if required.namecode in seen:
-                continue
-            seen.add(required.namecode)
-            results.append(
-                MissingPlaceholderItem(
-                    namecode=required.namecode,
-                    item_name=detail_name,
-                    raw_value_type=expected_value_type_text(required),
-                    validation_reason=f"ARTICLE44:{detail_no}:{reason}",
-                    check_scope="ARTICLE44",
-                )
+        if detail_no in seen:
+            continue
+        seen.add(detail_no)
+        related_value_types = sorted(
+            {expected_value_type_text(required) for required in required_namecodes_by_detail.get(detail_no, ())}
+        )
+        results.append(
+            MissingPlaceholderItem(
+                namecode=detail_no,
+                item_name=f"法定チェック: {detail_name}",
+                raw_value_type="+".join(related_value_types) if related_value_types else "CHECK",
+                validation_reason=f"ARTICLE44:{detail_no}:{reason}",
+                check_scope="ARTICLE44",
             )
+        )
     return results
 
 
@@ -458,7 +465,7 @@ def sync_export_case_missing_placeholders(
     specific_summary: str | None,
     specific_required_namecodes: tuple[RequiredNamecode, ...],
 ) -> int:
-    """Upsert case-level MISSING_PLACEHOLDER rows for reviewable missing items."""
+    """Upsert case-level check review rows for reviewable missing items."""
 
     if ledger.get("ledger_type") != LEDGER_TYPE_EXPORT_CASE:
         return 0
@@ -467,22 +474,20 @@ def sync_export_case_missing_placeholders(
         *parse_article44_missing_placeholder_items(article44_result, article44_required_namecodes_by_detail),
         *parse_specific_missing_placeholder_items(specific_summary, specific_required_namecodes),
     ]
-    active_keys = {(item.namecode, 1) for item in items}
+    active_keys = {(item.check_scope, item.namecode) for item in items}
     changed = 0
 
     for item in items:
         cur.execute(
             f"""
-            SELECT id, review_status
-            FROM {qname(health_db)}.exam_item_values
-            WHERE ledger_type = %s
-              AND ledger_id = %s
-              AND value_source_role = 'MISSING_PLACEHOLDER'
-              AND namecode = %s
-              AND occurrence_no = 1
+            SELECT exam_case_check_review_item_id, review_status
+            FROM {qname(health_db)}.exam_case_check_review_items
+            WHERE exam_export_case_id = %s
+              AND check_scope = %s
+              AND check_item_code = %s
             LIMIT 1
             """,
-            (LEDGER_TYPE_EXPORT_CASE, case_id, item.namecode),
+            (case_id, item.check_scope, item.namecode),
         )
         existing = cur.fetchone()
         if existing:
@@ -490,24 +495,20 @@ def sync_export_case_missing_placeholders(
             next_status = "NEEDS_CONFIRMATION" if current_status == "RESOLVED_BY_SOURCE_VALUE" else current_status
             cur.execute(
                 f"""
-                UPDATE {qname(health_db)}.exam_item_values
-                SET namecode_display_name = %s,
+                UPDATE {qname(health_db)}.exam_case_check_review_items
+                SET check_item_name = %s,
                     raw_value_type = %s,
-                    normalize_status = 'SKIPPED',
-                    normalize_reason = %s,
-                    validation_status = 'INVALID',
                     validation_reason = %s,
                     review_status = %s,
                     updated_at = CURRENT_TIMESTAMP(3)
-                WHERE id = %s
+                WHERE exam_case_check_review_item_id = %s
                 """,
                 (
                     item.item_name,
                     item.raw_value_type,
-                    f"{item.check_scope}_MISSING_PLACEHOLDER",
                     item.validation_reason,
                     next_status,
-                    existing["id"],
+                    existing["exam_case_check_review_item_id"],
                 ),
             )
             changed += int(cur.rowcount or 0)
@@ -515,29 +516,22 @@ def sync_export_case_missing_placeholders(
 
         cur.execute(
             f"""
-            INSERT INTO {qname(health_db)}.exam_item_values (
-              event_id, ledger_type, ledger_id, subscriber_id, hia_subscriber_id,
-              namecode, occurrence_no, raw_value_type, namecode_display_name,
-              normalize_status, normalize_reason, validation_status, validation_reason,
-              value_source_role, review_status, extracted_at, normalized_at
+            INSERT INTO {qname(health_db)}.exam_case_check_review_items (
+              event_id, exam_export_case_id, check_scope, check_item_code,
+              check_item_name, raw_value_type, validation_reason, review_status
             )
             VALUES (
-              %s, %s, %s, %s, %s,
-              %s, 1, %s, %s,
-              'SKIPPED', %s, 'INVALID', %s,
-              'MISSING_PLACEHOLDER', 'NEEDS_CONFIRMATION', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+              %s, %s, %s, %s,
+              %s, %s, %s, 'NEEDS_CONFIRMATION'
             )
             """,
             (
                 ledger.get("event_id"),
-                LEDGER_TYPE_EXPORT_CASE,
                 case_id,
-                ledger.get("subscriber_id"),
-                ledger.get("hia_subscriber_id"),
+                item.check_scope,
                 item.namecode,
-                item.raw_value_type,
                 item.item_name,
-                f"{item.check_scope}_MISSING_PLACEHOLDER",
+                item.raw_value_type,
                 item.validation_reason,
             ),
         )
@@ -545,35 +539,29 @@ def sync_export_case_missing_placeholders(
 
     cur.execute(
         f"""
-        SELECT id, namecode, occurrence_no, review_status
-        FROM {qname(health_db)}.exam_item_values
-        WHERE ledger_type = %s
-          AND ledger_id = %s
-          AND value_source_role = 'MISSING_PLACEHOLDER'
-          AND normalize_reason IN (
-            'ARTICLE44_MISSING_PLACEHOLDER',
-            'SPECIFIC_HEALTH_MISSING_PLACEHOLDER'
-          )
+        SELECT exam_case_check_review_item_id, check_scope, check_item_code, review_status
+        FROM {qname(health_db)}.exam_case_check_review_items
+        WHERE exam_export_case_id = %s
+          AND check_scope IN ('ARTICLE44', 'SPECIFIC_HEALTH')
         """,
-        (LEDGER_TYPE_EXPORT_CASE, case_id),
+        (case_id,),
     )
     for row in cur.fetchall():
-        key = (str(row.get("namecode") or ""), int(row.get("occurrence_no") or 1))
+        key = (str(row.get("check_scope") or ""), str(row.get("check_item_code") or ""))
         if key in active_keys:
             continue
         if str(row.get("review_status") or "") not in PLACEHOLDER_REVIEW_OPEN_STATUSES:
             continue
         cur.execute(
             f"""
-            UPDATE {qname(health_db)}.exam_item_values
+            UPDATE {qname(health_db)}.exam_case_check_review_items
             SET review_status = 'RESOLVED_BY_SOURCE_VALUE',
-                validation_status = 'INVALID',
                 validation_reason = 'RESOLVED_BY_SOURCE_VALUE',
                 reviewed_at = CURRENT_TIMESTAMP(3),
                 updated_at = CURRENT_TIMESTAMP(3)
-            WHERE id = %s
+            WHERE exam_case_check_review_item_id = %s
             """,
-            (row["id"],),
+            (row["exam_case_check_review_item_id"],),
         )
         changed += int(cur.rowcount or 0)
 

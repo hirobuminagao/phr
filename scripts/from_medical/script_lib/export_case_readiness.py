@@ -15,6 +15,122 @@ def refresh_export_case_readiness(
 ) -> int:
     cur.execute(
         f"""
+        UPDATE {qname(health_db)}.`exam_export_cases` AS eec
+        SET
+          `manual_export_approved` = CASE
+            WHEN `check_status` = 'NG'
+             AND EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND (
+                   cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR cri.`reviewed_at` IS NULL
+                   OR cri.`reviewed_by_app_user_id` IS NULL
+                 )
+             )
+            THEN 1
+            ELSE 0
+          END,
+          `manual_export_reason` = CASE
+            WHEN `check_status` = 'NG'
+             AND EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND (
+                   cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR cri.`reviewed_at` IS NULL
+                   OR cri.`reviewed_by_app_user_id` IS NULL
+                 )
+             )
+            THEN (
+              SELECT GROUP_CONCAT(
+                CONCAT(cri.`check_item_code`, ':', COALESCE(cri.`check_item_name`, ''), ':', COALESCE(cri.`validation_reason`, ''))
+                ORDER BY cri.`check_scope`, cri.`check_item_code`
+                SEPARATOR ' | '
+              )
+              FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+              WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+            )
+            ELSE NULL
+          END,
+          `manual_export_approved_at` = CASE
+            WHEN `check_status` = 'NG'
+             AND EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND (
+                   cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR cri.`reviewed_at` IS NULL
+                   OR cri.`reviewed_by_app_user_id` IS NULL
+                 )
+             )
+            THEN (
+              SELECT MAX(cri.`reviewed_at`)
+              FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+              WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+            )
+            ELSE NULL
+          END,
+          `manual_export_approved_by` = CASE
+            WHEN `check_status` = 'NG'
+             AND EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND (
+                   cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR cri.`reviewed_at` IS NULL
+                   OR cri.`reviewed_by_app_user_id` IS NULL
+                 )
+             )
+            THEN (
+              SELECT GROUP_CONCAT(DISTINCT CAST(cri.`reviewed_by_app_user_id` AS CHAR) ORDER BY cri.`reviewed_by_app_user_id` SEPARATOR ',')
+              FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
+              WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
+                AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+            )
+            ELSE NULL
+          END,
+          `updated_at` = CURRENT_TIMESTAMP(3)
+        WHERE eec.`event_id` = %s
+        """,
+        (event_id,),
+    )
+    cur.execute(
+        f"""
         UPDATE {qname(health_db)}.`exam_export_cases`
         SET
           `export_readiness_status` = CASE

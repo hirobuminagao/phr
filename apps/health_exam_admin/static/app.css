@@ -2736,6 +2736,33 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   width: 360px;
 }
 
+.related-namecodes {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.related-namecode-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.7fr);
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #d8e2ee;
+  border-radius: 6px;
+  background: #f8fbfd;
+}
+
+.related-namecode-row strong,
+.related-namecode-row small,
+.related-state {
+  display: block;
+}
+
+.related-state {
+  color: #334155;
+  font-weight: 700;
+}
+
 .case-review-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

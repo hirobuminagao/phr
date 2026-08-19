@@ -460,25 +460,25 @@ Current as of 2026-08-05.
 - XML由来コードは元XMLの明示値を正とし、event年齢規則による上書きや補完は行わない。
 - 既存XMLは `02_import_xml.py --include-imported` で再取込し、新カラムをbackfillできるようにする。
 - XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
-- 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、不足項目を `exam_item_values` のcase用placeholderとして作成し、そのplaceholderへ確認状態を記録してXML出力を許可できる。
+- 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、不足項目を `exam_case_check_review_items` のcase用確認項目として作成し、その確認状態を記録してXML出力を許可できる。
 - 手動出力許可は法定チェックNGの原因が `MISSING` のみの場合に限定し、`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致、XML生成・XSD検証エラーは通過させない。
 - XML不足をCSVで実値補完して法定OKにする処理と、妊娠中等の業務確認によりMISSINGのまま条件付き出力OKにする処理は別レーンとして扱う。
-- 条件付き出力OKではXML出力用の架空entryは作らない。一方で、画面上の記帳単位を統一するため、不足そのものは `exam_item_values` に `ledger_type = 'EXPORT_CASE'` / `value_source_role = 'MISSING_PLACEHOLDER'` のplaceholderとして作成する。
-- `MISSING_PLACEHOLDER` は値の存在ではなく「このcaseでこの項目が不足している」という判断対象を表す。XML出力時はentry化しない。
-- 理由ありOKはcase単位の一括許可ではなく、不足しているitem_value単位の許可とする。case内にMISSINGが3項目ある場合は、3つの `MISSING_PLACEHOLDER` 全てに `APPROVED_WITH_REASON`、承認者、承認日時、理由auditが必要であり、1項目でも未記帳ならcaseは出力不可のままとする。
-- 同じ理由を複数項目へ一括適用する画面操作は許可する。ただしDB上は対象の `exam_item_values` を1行ずつ更新し、`exam_item_value_audit_logs` も1行ずつ作成する。まとめ操作の便利さと、項目ごとの通過責任は分けて扱う。
+- 条件付き出力OKではXML出力用の架空entryは作らない。一方で、画面上の記帳単位を統一するため、不足そのものは `exam_case_check_review_items` にcase用確認項目として作成する。
+- `exam_case_check_review_items` は値の存在ではなく「このcaseでこの業務チェック項目が不足している」という判断対象を表す。XML出力時はentry化しない。
+- 理由ありOKはcase単位の一括許可ではなく、不足しているcaseチェック確認項目単位の許可とする。case内にMISSINGが3項目ある場合は、3つの `exam_case_check_review_items` 全てに `APPROVED_WITH_REASON`、承認者、承認日時、理由auditが必要であり、1項目でも未記帳ならcaseは出力不可のままとする。
+- 同じ理由を複数項目へ一括適用する画面操作は許可する。ただしDB上は対象の `exam_case_check_review_items` を1行ずつ更新し、`exam_case_check_review_item_audit_logs` も1行ずつ作成する。まとめ操作の便利さと、項目ごとの通過責任は分けて扱う。
 - `APPROVED_WITH_REASON` 判定では、`review_status` だけでなく、`reviewed_at`、`reviewed_by_app_user_id`、最新auditの空でない `note` を必須とする。状態だけ立っていて理由がないものは未承認として扱う。
-- `03_04_check_exam_export_cases.py` によるcase再チェックは、`exam_check_results` を再作成し、`exam_export_cases.check_status` / `check_reason` と出力可否summaryを再計算する。人手判断の正はcase直持ちではなく、`ledger_type = 'EXPORT_CASE'` の `exam_item_values` に置く。
+- `03_04_check_exam_export_cases.py` によるcase再チェックは、`exam_check_results` を再作成し、`exam_export_cases.check_status` / `check_reason` と出力可否summaryを再計算する。人手判断の正はcase直持ちではなく、`exam_case_check_review_items` に置く。
 - `03_01_build_exam_export_cases.py` のcase再作成も、同じcaseキーで既存行を更新する場合は既存placeholderの `review_status` を保持する。そのため同一caseのままなら、全チェックを再実行しても理由ありOKや確認待ちは保持される。
 - ただし、加入者、健診日、健診機関、保険者番号などcase同一性キーが変わり、別caseとして新規作成された場合は、既存placeholderの人手判断は自動移行しない。理由ありOKは人が確認したcase内item_value単位の判断として扱う。
 - 健診機関への連絡管理は、初期実装では専用の連絡台帳から始めず、健診機関サマリーで問題の塊を見える化し、健診機関単位で絞ったcase一覧へ遷移して個別確認する導線を優先する。
 - 健診機関サマリーでは、受領ファイル数、取込人数、source単位/case単位のOK/NG率、法定NG率、特定健診NG率、normalizeエラー件数、NG検査項目topを見せる。100%近い同一NGはフォーマット、マッピング、健診機関仕様の問題候補として扱い、一部だけのNGは個別事情・未実施・CSV欠損候補として扱う。
-- 確認事項の画面入口はcaseまたはledgerとするが、記帳の物理単位は `exam_item_values` とする。存在する値の扱いも、存在しないMISSING項目の扱いも、item_valueを作業単位として統一する。
-- 存在するsource値は `ledger_type = 'EXAM'` の `exam_item_values` に保持する。存在しない不足項目は、case再チェック時に `ledger_type = 'EXPORT_CASE'` / `value_source_role = 'MISSING_PLACEHOLDER'` の `exam_item_values` として作成する。
-- 法定チェックの `MISSING` は、`dev_phr.exam_item_group_members` の `v2_2026_ARTICLE44_CHECK_ITEMS` にある `notes` の法定detail番号から対象namecodeを引き、`normalize_reason = ARTICLE44_MISSING_PLACEHOLDER` として作成する。
-- 特定健診チェックで `specific_reason_summary` に出た `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` も `MISSING_PLACEHOLDER` として作成する。特定健診項目は法定健診より理由ありOKが多くなる可能性があるが、HIA/XML受付上の不足確認対象として同じ記帳導線に載せる。
-- `MISSING_PLACEHOLDER` は削除しない。不足が解消した場合は `review_status = 'RESOLVED_BY_SOURCE_VALUE'` のように状態変更して残す。これにより、一度不足だった項目がCSV補完、再提出、再取込で解消した経緯を追える。
-- `MISSING_PLACEHOLDER` は不足判断の作業行であり、解消済みになってもXML出力値ではない。したがって `validation_status` は値としてのVALIDにはせず、`review_status` と `validation_reason` で解消状態を表す。
+- 確認事項の画面入口はcaseまたはledgerとする。存在するsource値や健保/HIAからnamecode指定で来る個別指摘は `exam_item_values`、存在しない法定/特定健診の不足は `exam_case_check_review_items` を物理単位にする。
+- 存在するsource値は `ledger_type = 'EXAM'` の `exam_item_values` に保持する。存在しない不足項目は、case再チェック時に `exam_case_check_review_items` として作成する。
+- 法定チェックの `MISSING` は、`440...` の業務チェックID単位で `check_scope = ARTICLE44` として作成する。視力、聴力、血糖など複数namecodeで成立する項目をnamecode単位へ展開すると、理由ありOKの記帳対象が過剰になるため、出力前の不足管理は業務チェックID単位を正とする。
+- 法定確認項目に含まれる候補namecodeは画面上で確認できるようにする。健保/HIAからnamecode指定で指摘が来る場合は、`exam_item_values` の器を使いつつ、namecode単位の確認事項として扱う。
+- 特定健診チェックで `specific_reason_summary` に出た `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` も `exam_case_check_review_items` として作成する。特定健診項目は法定健診より理由ありOKが多くなる可能性があるが、HIA/XML受付上の不足確認対象として同じ記帳導線に載せる。
+- caseチェック確認項目は削除しない。不足が解消した場合は `review_status = 'RESOLVED_BY_SOURCE_VALUE'` のように状態変更して残す。これにより、一度不足だった項目がCSV補完、再提出、再取込で解消した経緯を追える。
 - `exam_item_values` は件数が多いため、人手判断の現在状態だけを最小限持つ。長文理由や変更前後は別のauditテーブルへ寄せる。
 - `exam_item_values` に持つ現在状態候補は、`review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成を基本とする。
 - `review_status` の候補は `NONE`、`NEEDS_CONFIRMATION`、`APPROVED_WITH_REASON`、`EXCLUDED`、`WAITING_RESUBMISSION`、`RESOLVED_BY_SOURCE_VALUE` とする。
