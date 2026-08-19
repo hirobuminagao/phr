@@ -61,20 +61,13 @@
       <fieldset class="filter-condition-block">
         <legend>加入者突合</legend>
         <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="subscriber_match_status" data-filter-value="MATCHED" class="{{ 'is-active' if filters.subscriber_match_status == 'MATCHED' else '' }}">MATCHED</button>
-          <button type="button" data-server-filter-toggle="subscriber_match_status" data-filter-value="UNMATCHED" class="{{ 'is-active' if filters.subscriber_match_status == 'UNMATCHED' else '' }}">UNMATCHED</button>
-          <button type="button" data-server-filter-toggle="subscriber_match_status" data-filter-value="MISSING" class="{{ 'is-active' if filters.subscriber_match_status == 'MISSING' else '' }}">MISSING</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="MATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'MATCHED' else '' }}">MATCHED</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="PARTIAL_MATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'PARTIAL_MATCHED' else '' }}">一部MATCHED</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="UNMATCHED" class="{{ 'is-active' if filters.subscriber_match_filter == 'UNMATCHED' else '' }}">UNMATCHED</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="NEEDS_REVIEW" class="{{ 'is-active' if filters.subscriber_match_filter == 'NEEDS_REVIEW' else '' }}">要確認</button>
+          <button type="button" data-server-filter-toggle="subscriber_match_filter" data-filter-value="MISSING" class="{{ 'is-active' if filters.subscriber_match_filter == 'MISSING' else '' }}">MISSING</button>
         </div>
-        <input type="hidden" name="subscriber_match_status" value="{{ filters.subscriber_match_status }}" data-server-filter-value="subscriber_match_status">
-      </fieldset>
-      <fieldset class="filter-condition-block">
-        <legend>照合確認</legend>
-        <div class="filter-toggle-group">
-          <button type="button" data-server-filter-toggle="subscriber_match_method" data-filter-value="identity_hash" class="{{ 'is-active' if filters.subscriber_match_method == 'identity_hash' else '' }}">canonical</button>
-          <button type="button" data-server-filter-toggle="subscriber_match_review" data-filter-value="NEEDS_REVIEW" class="{{ 'is-active' if filters.subscriber_match_review == 'NEEDS_REVIEW' else '' }}">要確認</button>
-        </div>
-        <input type="hidden" name="subscriber_match_method" value="{{ filters.subscriber_match_method }}" data-server-filter-value="subscriber_match_method">
-        <input type="hidden" name="subscriber_match_review" value="{{ filters.subscriber_match_review }}" data-server-filter-value="subscriber_match_review">
+        <input type="hidden" name="subscriber_match_filter" value="{{ filters.subscriber_match_filter }}" data-server-filter-value="subscriber_match_filter">
       </fieldset>
       <fieldset class="filter-condition-block">
         <legend>法定チェック</legend>

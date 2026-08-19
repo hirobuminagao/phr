@@ -2619,9 +2619,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     params: list[Any] = []
     event_id = filters.get("event_id", "").strip()
     source_type = filters.get("source_type", "").strip()
-    subscriber_match_status = filters.get("subscriber_match_status", "").strip()
-    subscriber_match_method = filters.get("subscriber_match_method", "").strip()
-    subscriber_match_review = filters.get("subscriber_match_review", "").strip()
+    subscriber_match_filter = filters.get("subscriber_match_filter", "").strip()
     check_status = filters.get("check_status", "").strip()
     file_receipt_id = filters.get("file_receipt_id", "").strip()
     query = filters.get("q", "").strip()
@@ -2635,24 +2633,30 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     if source_type:
         where_parts.append("source_type = %s")
         params.append(source_type)
-    if subscriber_match_status:
-        if subscriber_match_status == "UNMATCHED":
-            where_parts.append("subscriber_match_status IN ('NOT_FOUND', 'CANDIDATE', 'MULTIPLE_MATCH')")
-        elif subscriber_match_status == "MISSING":
-            where_parts.append("(subscriber_match_status IS NULL OR subscriber_match_status IN ('IDENTITY_ERROR', 'NOT_EXECUTED'))")
-        else:
-            where_parts.append("subscriber_match_status = %s")
-            params.append(subscriber_match_status)
-    if subscriber_match_method:
-        where_parts.append("subscriber_match_method = %s")
-        params.append(subscriber_match_method)
-    if subscriber_match_review == "NEEDS_REVIEW":
+    if subscriber_match_filter == "MATCHED":
+        where_parts.append("subscriber_match_status = 'MATCHED' AND subscriber_match_method = 'identity_hash'")
+    elif subscriber_match_filter == "PARTIAL_MATCHED":
         where_parts.append(
             """
             (
-              subscriber_match_status <> 'MATCHED'
-              OR subscriber_match_method IS NULL
-              OR subscriber_match_method <> 'identity_hash'
+              subscriber_match_status IN ('CANDIDATE', 'MULTIPLE_MATCH')
+              OR (
+                subscriber_match_status = 'MATCHED'
+                AND (subscriber_match_method IS NULL OR subscriber_match_method <> 'identity_hash')
+              )
+            )
+            """
+        )
+    elif subscriber_match_filter == "UNMATCHED":
+        where_parts.append("subscriber_match_status = 'NOT_FOUND'")
+    elif subscriber_match_filter == "NEEDS_REVIEW":
+        where_parts.append("subscriber_match_status = 'IDENTITY_ERROR'")
+    elif subscriber_match_filter == "MISSING":
+        where_parts.append(
+            """
+            (
+              subscriber_match_status IS NULL
+              OR subscriber_match_status = 'NOT_EXECUTED'
             )
             """
         )
@@ -5124,9 +5128,7 @@ def exam_ledgers(request: Request) -> Response:
         "event_id": request.query_params.get("event_id", "2"),
         "file_receipt_id": request.query_params.get("file_receipt_id", ""),
         "source_type": request.query_params.get("source_type", ""),
-        "subscriber_match_status": request.query_params.get("subscriber_match_status", ""),
-        "subscriber_match_method": request.query_params.get("subscriber_match_method", ""),
-        "subscriber_match_review": request.query_params.get("subscriber_match_review", ""),
+        "subscriber_match_filter": request.query_params.get("subscriber_match_filter", ""),
         "check_status": request.query_params.get("check_status", ""),
         "q": request.query_params.get("q", ""),
         "facility_q": request.query_params.get("facility_q", ""),

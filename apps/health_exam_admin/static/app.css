@@ -1168,7 +1168,7 @@ a.home-menu-card:hover {
 }
 
 .ledger-filter-form {
-  grid-template-columns: minmax(220px, 1.4fr) minmax(220px, 1.3fr) minmax(180px, 1fr) minmax(220px, 1fr) minmax(260px, 1.2fr) minmax(100px, 0.45fr) auto;
+  grid-template-columns: minmax(220px, 1.35fr) minmax(220px, 1.25fr) minmax(180px, 0.9fr) minmax(210px, 0.95fr) minmax(340px, 1.55fr) minmax(100px, 0.4fr) auto;
 }
 
 .case-filter-form {
