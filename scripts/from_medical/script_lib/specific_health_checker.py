@@ -88,6 +88,7 @@ SPECIFIC_ITEM_NAMES: dict[str, str] = {
 def aggregate_specific_result(
     *,
     value_map: ValueMap,
+    required_namecodes: tuple[RequiredNamecode, ...] = SPECIFIC_REQUIRED_NAMECODES,
     birthdate: Any,
     age_reference_date: date | None,
     legal_result: str,
@@ -107,7 +108,7 @@ def aggregate_specific_result(
     reasons: list[str] = []
     if legal_result != RESULT_OK:
         reasons.append("法定重複項目:LEGAL_CHECK_NOT_OK")
-    for required in SPECIFIC_REQUIRED_NAMECODES:
+    for required in required_namecodes:
         result = check_required_specific_value(value_map, required.namecode)
         if result.status == STATUS_OK:
             continue

@@ -473,6 +473,7 @@ XML出力条件を画面から指定できるようにする。
 - 特定健診用detail codeは、則44の `4401001001` などと衝突しないよう先頭を `10` とする。
 - 特定健診用detail codeは `10` + チェックカテゴリ + 項番の体系で採番する。具体的な桁配分は初期seed作成時に確定するが、カテゴリ単位で一覧・集計・追加ができる形を優先する。
 - 必要namecode群は `dev_phr.exam_item_group_members` 等のルールマスタで管理する。
+- 実行時の特定健診チェックは `dev_phr.exam_item_group_members` の `v2_2026_SPECIFIC_HEALTH_CHECK_ITEMS` を正とする。固定リストはseed未適用環境のfallbackに限定し、チェック結果とplaceholder作成対象がズレないよう同じ必須リストを使う。
 
 初版で確認する特定健診側の主なnamecode:
 

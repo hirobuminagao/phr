@@ -966,6 +966,7 @@ def process_ledgers(
         )
         specific_result, specific_summary = aggregate_specific_result(
             value_map=specific_value_map,
+            required_namecodes=specific_required_namecodes,
             birthdate=ledger.get("birthdate"),
             age_reference_date=fiscal_year_end,
             legal_result=legal_result,
