@@ -2878,6 +2878,7 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     source_mode = filters.get("source_mode", "").strip()
     exam_month = filters.get("exam_month", "").strip()
     query = filters.get("q", "").strip()
+    facility_query = filters.get("facility_q", "").strip()
     if event_id:
         where_parts.append("eec.event_id = %s")
         params.append(event_id)
@@ -2934,15 +2935,24 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
               OR eec.person_id_custom LIKE %s
               OR eec.name_full_raw LIKE %s
               OR eec.name_kana_raw LIKE %s
-              OR eec.facility_name LIKE %s
-              OR eec.facility_code LIKE %s
-              OR mfa.expected_source_mode LIKE %s
               OR eec.insurance_number_raw LIKE %s
               OR eec.insurance_number_export_value LIKE %s
             )
             """
         )
-        params.extend([query, like, like, like, like, like, like, like, like, like])
+        params.extend([query, like, like, like, like, like, like])
+    if facility_query:
+        like = f"%{facility_query}%"
+        where_parts.append(
+            """
+            (
+              eec.facility_name LIKE %s
+              OR eec.facility_code LIKE %s
+              OR mfa.expected_source_mode LIKE %s
+            )
+            """
+        )
+        params.extend([like, like, like])
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur.execute(
         f"""
@@ -5309,6 +5319,7 @@ def exam_export_cases(request: Request) -> Response:
         "source_mode": request.query_params.get("source_mode", ""),
         "exam_month": request.query_params.get("exam_month", ""),
         "q": request.query_params.get("q", ""),
+        "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "2000"),
     }
     limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
@@ -5317,6 +5328,7 @@ def exam_export_cases(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
+            folder_aliases = load_received_folder_alias_rows(cur)
             rows = load_exam_export_case_rows(cur, filters=filters, limit=limit)
             summary = summarize_exam_export_cases(rows)
             if audit_enabled(cur):
@@ -5350,6 +5362,7 @@ def exam_export_cases(request: Request) -> Response:
             "rows": rows,
             "summary": summary,
             "limit": limit,
+            "folder_aliases": folder_aliases,
         },
     )
 

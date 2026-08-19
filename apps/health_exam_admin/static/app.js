@@ -422,6 +422,41 @@
     });
   }
 
+  const caseFacilityInput = document.getElementById("case-facility-filter-input");
+  const caseFacilityForm = caseFacilityInput ? caseFacilityInput.closest("form") : null;
+  for (const button of document.querySelectorAll("[data-case-facility-select]")) {
+    button.addEventListener("click", () => {
+      if (!caseFacilityInput) return;
+      const query = String(button.getAttribute("data-facility-query") || "").trim();
+      if (!query) return;
+      caseFacilityInput.value = query;
+      caseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      closeModal(button.closest(".edit-modal"));
+      if (caseFacilityForm) {
+        if (typeof caseFacilityForm.requestSubmit === "function") {
+          caseFacilityForm.requestSubmit();
+        } else {
+          caseFacilityForm.submit();
+        }
+      }
+    });
+  }
+  for (const button of document.querySelectorAll("[data-case-facility-clear]")) {
+    button.addEventListener("click", () => {
+      if (!caseFacilityInput) return;
+      caseFacilityInput.value = "";
+      caseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      closeModal(button.closest(".edit-modal"));
+      if (caseFacilityForm) {
+        if (typeof caseFacilityForm.requestSubmit === "function") {
+          caseFacilityForm.requestSubmit();
+        } else {
+          caseFacilityForm.submit();
+        }
+      }
+    });
+  }
+
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     closeHelpPopovers();
