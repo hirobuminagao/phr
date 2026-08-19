@@ -1001,6 +1001,7 @@ templates.env.globals["list_status_label"] = list_status_label
 templates.env.globals["readiness_label"] = readiness_label
 templates.env.globals["check_result_label"] = check_result_label
 templates.env.globals["check_result_status_class"] = check_result_status_class
+templates.env.globals["normalize_specific_check_result"] = normalize_specific_check_result
 
 
 def fund_delivery_status_label(status: str | None) -> str:
@@ -3130,6 +3131,256 @@ def load_facility_summary_month_options(cur: Any, *, event_id: str | None = None
         (*params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def load_exam_export_case_detail(cur: Any, *, exam_export_case_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          eec.*,
+          mfa.expected_source_mode,
+          COALESCE(ecr.legal_check_result, 'PENDING') AS legal_check_result,
+          ecr.legal_reason_summary,
+          COALESCE(ecr.specific_check_result, 'PENDING') AS specific_check_result,
+          ecr.specific_reason_summary
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest
+            ON latest.max_id = r1.id
+        ) AS ecr
+          ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            MAX(expected_source_mode) AS expected_source_mode
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE is_active = 1
+          GROUP BY event_id, exam_facility_id
+        ) AS mfa
+          ON mfa.event_id = eec.event_id
+         AND mfa.exam_facility_id = eec.exam_facility_id
+        WHERE eec.exam_export_case_id = %s
+        LIMIT 1
+        """,
+        (exam_export_case_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    result = dict(row)
+    result["expected_source_mode_label"] = source_mode_label(result.get("expected_source_mode"))
+    result["specific_check_result_display"] = normalize_specific_check_result(
+        result.get("specific_check_result"),
+        result.get("specific_reason_summary"),
+    )
+    return result
+
+
+def load_exam_export_case_sources(cur: Any, *, exam_export_case_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          eecs.*,
+          el.facility_name,
+          el.facility_code,
+          el.exam_date,
+          el.name_kana_raw,
+          el.hia_subscriber_id,
+          el.subscriber_match_status,
+          el.check_status,
+          el.check_reason,
+          el.exam_item_count,
+          el.exam_item_error_count,
+          el.xml_file_name,
+          el.mapping_version,
+          fr.file_name,
+          fr.relative_path,
+          fr.status AS file_receipt_status
+        FROM {qname(health_db())}.exam_export_case_sources AS eecs
+        INNER JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.exam_ledger_id = eecs.source_exam_ledger_id
+        LEFT JOIN {qname(health_db())}.file_receipts AS fr
+          ON fr.id = eecs.file_receipt_id
+        WHERE eecs.exam_export_case_id = %s
+        ORDER BY eecs.source_priority, eecs.source_type, eecs.source_exam_ledger_id
+        """,
+        (exam_export_case_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          eecv.*,
+          eiv.raw_value AS source_raw_value,
+          eiv.raw_value_type AS source_raw_value_type,
+          eiv.raw_unit AS source_raw_unit,
+          eiv.normalize_status AS source_normalize_status,
+          eiv.validation_status AS source_validation_status,
+          eiv.review_status AS source_review_status,
+          COALESCE(eiv.namecode_display_name, eim.item_name, eecv.namecode) AS item_name,
+          el.source_type AS source_type,
+          el.facility_name AS source_facility_name
+        FROM {qname(health_db())}.exam_export_case_values AS eecv
+        LEFT JOIN {qname(health_db())}.exam_item_values AS eiv
+          ON eiv.id = eecv.source_exam_item_value_id
+        LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
+          ON eim.namecode = eecv.namecode
+        LEFT JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.exam_ledger_id = eecv.source_exam_ledger_id
+        WHERE eecv.exam_export_case_id = %s
+        ORDER BY eecv.namecode, eecv.occurrence_no, eecv.exam_export_case_value_id
+        """,
+        (exam_export_case_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_exam_export_case_placeholders(cur: Any, *, exam_export_case_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          eiv.id,
+          eiv.event_id,
+          eiv.ledger_type,
+          eiv.ledger_id,
+          eiv.namecode,
+          eiv.namecode_display_name,
+          COALESCE(eiv.namecode_display_name, eim.item_name, eiv.namecode) AS item_name,
+          eiv.occurrence_no,
+          eiv.raw_value_type,
+          eiv.normalize_status,
+          eiv.normalize_reason,
+          eiv.validation_status,
+          eiv.validation_reason,
+          eiv.value_source_role,
+          eiv.review_status,
+          eiv.reviewed_at,
+          eiv.reviewed_by_app_user_id,
+          latest_audit.note AS latest_note,
+          latest_audit.changed_at AS latest_note_at
+        FROM {qname(health_db())}.exam_item_values AS eiv
+        LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
+          ON eim.namecode = eiv.namecode
+        LEFT JOIN (
+          SELECT a1.*
+          FROM {qname(health_db())}.exam_item_value_audit_logs AS a1
+          INNER JOIN (
+            SELECT exam_item_value_id, MAX(exam_item_value_audit_log_id) AS max_id
+            FROM {qname(health_db())}.exam_item_value_audit_logs
+            GROUP BY exam_item_value_id
+          ) AS latest
+            ON latest.max_id = a1.exam_item_value_audit_log_id
+        ) AS latest_audit
+          ON latest_audit.exam_item_value_id = eiv.id
+        WHERE eiv.ledger_type = 'EXPORT_CASE'
+          AND eiv.ledger_id = %s
+          AND eiv.value_source_role = 'MISSING_PLACEHOLDER'
+        ORDER BY
+          CASE eiv.review_status
+            WHEN 'NEEDS_CONFIRMATION' THEN 0
+            WHEN 'WAITING_RESUBMISSION' THEN 1
+            WHEN 'NONE' THEN 2
+            WHEN 'APPROVED_WITH_REASON' THEN 3
+            ELSE 4
+          END,
+          eiv.namecode,
+          eiv.occurrence_no,
+          eiv.id
+        """,
+        (exam_export_case_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_exam_export_case_check_rows(cur: Any, *, exam_export_case_id: int, limit: int = 10) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {qname(health_db())}.exam_check_results
+        WHERE ledger_type = 'EXPORT_CASE'
+          AND exam_export_case_id = %s
+        ORDER BY id DESC
+        LIMIT %s
+        """,
+        (exam_export_case_id, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def update_exam_item_value_review(
+    cur: Any,
+    *,
+    exam_item_value_id: int,
+    review_status: str,
+    note: str,
+    app_user_id: int,
+) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT id, event_id, ledger_type, ledger_id, review_status
+        FROM {qname(health_db())}.exam_item_values
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (exam_item_value_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    item = dict(row)
+    old_status = str(item.get("review_status") or "NONE")
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_item_values
+        SET review_status = %s,
+            reviewed_at = CURRENT_TIMESTAMP(3),
+            reviewed_by_app_user_id = %s
+        WHERE id = %s
+        """,
+        (review_status, app_user_id, exam_item_value_id),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_item_value_audit_logs (
+          exam_item_value_id,
+          event_id,
+          ledger_type,
+          ledger_id,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          note,
+          changed_by_app_user_id
+        )
+        VALUES (%s, %s, %s, %s, 'review_status', %s, %s, 'ADMIN_UI', %s, %s)
+        """,
+        (
+            exam_item_value_id,
+            item.get("event_id"),
+            item.get("ledger_type"),
+            item.get("ledger_id"),
+            old_status,
+            review_status,
+            note,
+            app_user_id,
+        ),
+    )
+    item["old_review_status"] = old_status
+    item["new_review_status"] = review_status
+    return item
 
 
 def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -5841,6 +6092,129 @@ def exam_export_cases(request: Request) -> Response:
             "exam_month_options": exam_month_options,
             "selected_exam_months": split_filter_values(filters.get("exam_month")),
         },
+    )
+
+
+@app.get("/exam-export-cases/{exam_export_case_id}", response_class=HTMLResponse)
+def exam_export_case_detail(request: Request, exam_export_case_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            case = load_exam_export_case_detail(cur, exam_export_case_id=exam_export_case_id)
+            if case is None:
+                conn.commit()
+                return RedirectResponse("/exam-export-cases?error=caseが見つかりません。", status_code=303)
+            sources = load_exam_export_case_sources(cur, exam_export_case_id=exam_export_case_id)
+            values = load_exam_export_case_values(cur, exam_export_case_id=exam_export_case_id)
+            placeholders = load_exam_export_case_placeholders(cur, exam_export_case_id=exam_export_case_id)
+            check_rows = load_exam_export_case_check_rows(cur, exam_export_case_id=exam_export_case_id)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="PERSONAL_INFO_VIEW_EXAM_EXPORT_CASE_DETAIL",
+                    target_schema=health_db(),
+                    target_table="exam_export_cases",
+                    target_id=str(exam_export_case_id),
+                    after={
+                        "exam_export_case_id": exam_export_case_id,
+                        "hia_subscriber_id": case.get("hia_subscriber_id"),
+                        "subscriber_id": case.get("subscriber_id"),
+                        "exam_date": str(case.get("exam_date") or ""),
+                        "facility_code": case.get("facility_code"),
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_export_case_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "case": case,
+            "sources": sources,
+            "values": values,
+            "placeholders": placeholders,
+            "check_rows": check_rows,
+            "message": request.query_params.get("message", ""),
+            "error": request.query_params.get("error", ""),
+        },
+    )
+
+
+@app.post("/exam-export-cases/{exam_export_case_id}/item-review")
+async def exam_export_case_item_review(request: Request, exam_export_case_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    try:
+        exam_item_value_id = int(str(form.get("exam_item_value_id") or "").strip())
+    except ValueError:
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=対象item_valueが不正です。", status_code=303)
+    review_status = str(form.get("review_status") or "").strip()
+    note = str(form.get("note") or "").strip()
+    allowed_statuses = {
+        "NEEDS_CONFIRMATION",
+        "APPROVED_WITH_REASON",
+        "EXCLUDED",
+        "WAITING_RESUBMISSION",
+        "RESOLVED_BY_SOURCE_VALUE",
+        "NONE",
+    }
+    if review_status not in allowed_statuses:
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=状態が不正です。", status_code=303)
+    if review_status == "APPROVED_WITH_REASON" and not note:
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=理由ありOKには理由が必須です。", status_code=303)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            item = update_exam_item_value_review(
+                cur,
+                exam_item_value_id=exam_item_value_id,
+                review_status=review_status,
+                note=note,
+                app_user_id=int(user["app_user_id"]),
+            )
+            if item is None or str(item.get("ledger_type") or "") != "EXPORT_CASE" or int(item.get("ledger_id") or 0) != exam_export_case_id:
+                conn.rollback()
+                return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=対象item_valueがcaseに紐づいていません。", status_code=303)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="EXAM_ITEM_VALUE_REVIEW_UPDATE",
+                    target_schema=health_db(),
+                    target_table="exam_item_values",
+                    target_id=str(exam_item_value_id),
+                    after={
+                        "exam_export_case_id": exam_export_case_id,
+                        "exam_item_value_id": exam_item_value_id,
+                        "old_review_status": item.get("old_review_status"),
+                        "new_review_status": review_status,
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse(
+        f"/exam-export-cases/{exam_export_case_id}?message=確認状態を保存しました。step5〜7を再実行するとcaseへ反映されます。",
+        status_code=303,
     )
 
 

@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+{% set title = "個人case詳細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">EXPORT CASE DETAIL</p>
+    <h1>個人case詳細</h1>
+    <p class="subtle">source、採用値、機械チェック、健診機関確認が必要な不足項目を確認します。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/exam-export-cases?event_id={{ case.event_id }}&facility_q={{ case.facility_name|url_quote }}&limit=2000">case一覧へ戻る</a>
+    <a class="ghost-button" href="/facility-summary?event_id={{ case.event_id }}">健診機関サマリー</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="panel ledger-detail-head">
+    <div>
+      <p class="eyebrow">case {{ case.exam_export_case_id }} / event {{ case.event_id }}</p>
+      <h2>{{ case.name_kana_raw or "カナなし" }}</h2>
+      <p class="subtle">{{ case.name_full_raw or "氏名なし" }} / HIA {{ case.hia_subscriber_id or "-" }} / {{ case.subscriber_match_status or "突合状態なし" }}</p>
+    </div>
+    <div class="detail-status-stack">
+      <span class="status-pill {{ 'status-ready' if case.export_readiness_status == 'EXPORT_READY' else 'status-pending' if case.export_readiness_status == 'APPROVED_WITH_REASON' else 'status-danger' if case.export_readiness_status == 'BLOCKED' else 'status-muted' }}">{{ case.export_readiness_status }}</span>
+      <span class="status-pill {{ 'status-ready' if case.legal_check_result == 'OK' else 'status-danger' if case.legal_check_result == 'NG' else 'status-pending' }}">法定 {{ case.legal_check_result or "未判定" }}</span>
+      <span class="status-pill {{ check_result_status_class(case.specific_check_result_display) }}">特定 {{ check_result_label(case.specific_check_result_display) or "未判定" }}</span>
+    </div>
+  </section>
+
+  <section class="summary-grid ledger-summary-grid">
+    <div class="summary-card">
+      <span>健診機関</span>
+      <strong>{{ case.facility_name or "未設定" }}</strong>
+      <small>{{ case.facility_code or "-" }} / 想定 {{ case.expected_source_mode_label or "未設定" }}</small>
+    </div>
+    <div class="summary-card">
+      <span>受診日</span>
+      <strong>{{ case.exam_date or "未設定" }}</strong>
+      <small>報告 {{ case.health_exam_report_category or "-" }} / program {{ case.program_code or "-" }}</small>
+    </div>
+    <div class="summary-card">
+      <span>source</span>
+      <strong>{{ case.source_mode or "-" }}</strong>
+      <small>{{ sources|length }}件 / 採用値 {{ values|length }}件</small>
+    </div>
+    <div class="summary-card">
+      <span>確認対象</span>
+      <strong>{{ placeholders|length }}件</strong>
+      <small>MISSING placeholder</small>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>基本情報・出力状態</h2>
+        <p class="subtle">出力XMLの基本情報として使う値と、case全体の状態です。</p>
+      </div>
+    </div>
+    <div class="detail-grid">
+      <div><span>氏名カナ export</span><strong>{{ case.name_kana_export_value or "-" }}</strong><small>{{ case.name_kana_export_source or "" }} {{ case.name_kana_export_reason or "" }}</small></div>
+      <div><span>記号 export</span><strong>{{ case.insurance_symbol_export_value or "-" }}</strong><small>{{ case.insurance_symbol_export_source or "" }} {{ case.insurance_symbol_export_reason or "" }}</small></div>
+      <div><span>番号 export</span><strong>{{ case.insurance_number_export_value or "-" }}</strong><small>{{ case.insurance_number_export_source or "" }} {{ case.insurance_number_export_reason or "" }}</small></div>
+      <div><span>保険者番号</span><strong>{{ case.insurer_number_export_value or case.insurer_number or "-" }}</strong><small>case insurer</small></div>
+      <div><span>郵便番号</span><strong>{{ case.postal_code_completed_value or case.postal_code or "-" }}</strong><small>{{ case.address_completion_status or "" }}</small></div>
+      <div><span>住所</span><strong>{{ case.address_completed_value or case.address or "-" }}</strong><small>{{ case.address_source or "" }} {{ case.address_completion_reason or "" }}</small></div>
+      <div><span>merge</span><strong>{{ case.merge_status }}</strong><small>{{ case.merge_reason or "" }}</small></div>
+      <div><span>value build</span><strong>{{ case.value_build_status }}</strong><small>{{ case.value_build_reason or "" }}</small></div>
+      <div class="detail-grid-wide"><span>出力可否理由</span><strong>{{ case.export_readiness_reason or "-" }}</strong><small>変更後は健診結果処理の step5〜7 を再実行してください。</small></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>確認対象</h2>
+        <p class="subtle">MISSINGのまま理由ありOKにする場合は、項目ごとに理由が必要です。一括作業でも保存はitem_valueごとに行います。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table case-placeholder-table">
+        <thead>
+          <tr>
+            <th>状態</th>
+            <th>項目</th>
+            <th>最新理由</th>
+            <th>変更</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in placeholders %}
+          <tr class="{{ 'is-error-row' if item.review_status in ['NONE', 'NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION'] else '' }}">
+            <td>
+              <span class="status-pill {{ 'status-ready' if item.review_status == 'APPROVED_WITH_REASON' or item.review_status == 'RESOLVED_BY_SOURCE_VALUE' else 'status-pending' if item.review_status in ['NEEDS_CONFIRMATION', 'WAITING_RESUBMISSION'] else 'status-muted' }}">{{ item.review_status }}</span>
+              <small>value id {{ item.id }} / occurrence {{ item.occurrence_no }}</small>
+            </td>
+            <td>
+              <strong>{{ item.item_name or "項目名なし" }}</strong>
+              <small>{{ item.namecode or "-" }}</small>
+              <small>{{ item.validation_reason or item.normalize_reason or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.latest_note or "理由なし" }}</strong>
+              <small>{{ item.reviewed_at or "" }} / user {{ item.reviewed_by_app_user_id or "-" }}</small>
+            </td>
+            <td>
+              <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/item-review" class="case-review-form">
+                <input type="hidden" name="exam_item_value_id" value="{{ item.id }}">
+                <select name="review_status">
+                  {% for status in ["NEEDS_CONFIRMATION", "APPROVED_WITH_REASON", "WAITING_RESUBMISSION", "EXCLUDED", "RESOLVED_BY_SOURCE_VALUE", "NONE"] %}
+                  <option value="{{ status }}" {% if item.review_status == status %}selected{% endif %}>{{ status }}</option>
+                  {% endfor %}
+                </select>
+                <textarea name="note" rows="2" placeholder="理由・確認内容。理由ありOKは必須">{{ item.latest_note or "" }}</textarea>
+                <button type="submit">保存</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4">MISSING placeholderはありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>構成source</h2>
+        <p class="subtle">このcaseを構成している受領ledgerです。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>source</th>
+            <th>受領ファイル</th>
+            <th>状態</th>
+            <th>確認</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for source in sources %}
+          <tr>
+            <td>
+              <strong>{{ source.source_type }} / ledger {{ source.source_exam_ledger_id }}</strong>
+              <small>{{ source.source_role }} / priority {{ source.source_priority }}</small>
+            </td>
+            <td>
+              <strong>{{ source.file_name or source.xml_file_name or source.mapping_version or "-" }}</strong>
+              <small>{{ source.relative_path or "" }}</small>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if source.check_status == 'OK' else 'status-danger' if source.check_status == 'NG' else 'status-pending' }}">{{ source.check_status or "-" }}</span>
+              <small>項目 {{ source.exam_item_count or 0 }} / 値エラー {{ source.exam_item_error_count or 0 }}</small>
+              <small>{{ source.check_reason or "" }}</small>
+            </td>
+            <td><a class="ghost-button compact-action-button" href="/exam-ledgers/{{ source.source_exam_ledger_id }}">受領詳細</a></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4">sourceはありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>採用値</h2>
+        <p class="subtle">XML出力に使う整値です。placeholderはここには入りません。</p>
+      </div>
+    </div>
+    <div class="exam-item-filter-bar">
+      <label>
+        <span>検査項目名 / namecode</span>
+        <input data-live-filter-input="#case-value-table" autocomplete="off" placeholder="項目名 / namecode">
+      </label>
+    </div>
+    <div class="table-panel">
+      <table id="case-value-table" class="data-table exam-item-detail-table" data-empty-message="一致する採用値はありません。">
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>採用値</th>
+            <th>コード・単位</th>
+            <th>採用元</th>
+            <th>理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for value in values %}
+          <tr data-filter-text="{{ value.item_name or '' }} {{ value.namecode or '' }} {{ value.code_value or '' }} {{ value.code_display or '' }}">
+            <td>
+              <strong>{{ value.item_name or "項目名なし" }}</strong>
+              <small>{{ value.namecode }} / occurrence {{ value.occurrence_no }}</small>
+            </td>
+            <td>
+              <strong>{{ value.normalized_value if value.normalized_value is not none else value.nullflavor or value.code_value or "-" }}</strong>
+              <small>raw {{ value.source_raw_value if value.source_raw_value is not none else "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ value.code_value or value.normalized_unit or "-" }}</strong>
+              <small>{{ value.code_display or "" }} {{ value.normalized_unit or "" }}</small>
+              <small>判定 {{ value.interpretation_code or "" }} {{ value.interpretation_name or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ value.source_type or "-" }} / item {{ value.source_exam_item_value_id or "-" }}</strong>
+              <small>ledger {{ value.source_exam_ledger_id or "-" }}</small>
+              <small>{{ value.source_validation_status or "" }} {{ value.source_review_status or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ value.adopted_source_role or "-" }}</strong>
+              <small>{{ value.adopted_reason or "" }}</small>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5">採用値はありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>機械チェック履歴</h2>
+        <p class="subtle">理由ありOKでcheck結果自体は書き換えません。出力可否summaryだけが後続で再計算されます。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>日時</th>
+            <th>法定</th>
+            <th>特定健診</th>
+            <th>理由</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for check in check_rows %}
+          <tr>
+            <td><strong>{{ check.created_at }}</strong><small>check {{ check.id }}</small></td>
+            <td><span class="status-pill {{ 'status-ready' if check.legal_check_result == 'OK' else 'status-danger' if check.legal_check_result == 'NG' else 'status-pending' }}">{{ check.legal_check_result or "-" }}</span></td>
+            <td><span class="status-pill {{ check_result_status_class(normalize_specific_check_result(check.specific_check_result, check.specific_reason_summary)) }}">{{ check_result_label(normalize_specific_check_result(check.specific_check_result, check.specific_reason_summary)) or "-" }}</span></td>
+            <td><strong>{{ check.legal_reason_summary or "-" }}</strong><small>{{ check.specific_reason_summary or "" }}</small></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4">case単位チェック履歴はありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

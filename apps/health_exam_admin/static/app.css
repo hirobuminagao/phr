@@ -2726,6 +2726,35 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #fff6f6;
 }
 
+.case-placeholder-table th:nth-child(1),
+.case-placeholder-table td:nth-child(1) {
+  width: 180px;
+}
+
+.case-placeholder-table th:nth-child(4),
+.case-placeholder-table td:nth-child(4) {
+  width: 360px;
+}
+
+.case-review-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.case-review-form select {
+  grid-column: 1 / -1;
+}
+
+.case-review-form textarea {
+  min-height: 70px;
+}
+
+.case-review-form button {
+  min-width: 82px;
+}
+
 .exam-item-filter-bar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(260px, auto) minmax(260px, auto);
