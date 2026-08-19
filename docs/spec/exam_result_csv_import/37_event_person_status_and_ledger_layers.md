@@ -241,6 +241,44 @@ source値:
 `exam_export_case_values` はrawを持たず、XML出力に必要な最小限の採用済み値と採用元参照を持つ。
 これにより、XML/CSV/紙入力のsource証跡を壊さず、人単位のXML出力用に清書値を再生成できる。
 
+### Item Value Review Layer
+
+確認事項の正本は、値が存在する場合も存在しない場合も `exam_item_values` に寄せる。
+これは、画面上でcaseやledgerから辿ったあと、最終的には検査項目単位で扱いを決めるためである。
+
+存在する値は、従来どおり `ledger_type = EXAM` / `ledger_id = exam_ledgers.exam_ledger_id` のsource item valueで扱う。
+存在しない値は、case作成またはcase再チェック時に不足placeholderとして作る。
+
+```text
+MISSING placeholder:
+  exam_item_values
+  ledger_type = EXPORT_CASE
+  ledger_id = exam_export_cases.exam_export_case_id
+  value_source_role = MISSING_PLACEHOLDER
+  namecode = 不足している項目
+```
+
+`MISSING_PLACEHOLDER` はXML出力値ではない。
+「このcaseでこの項目が不足している」「確認待ち」「理由ありOK」「再提出待ち」を記帳するための作業対象である。
+出力XMLは引き続き `exam_export_case_values` を正とし、placeholderをentry化しない。
+
+placeholderは削除しない。
+後からCSV補完、再提出、再取込でsource値が入り不足が解消した場合は、`review_status = RESOLVED_BY_SOURCE_VALUE` のように状態変更して残す。
+これにより、一度不足だったものがどう解消したかを追える。
+
+`exam_item_values` は大量になるため、現在状態は最小限だけ持つ。
+
+```text
+review_status
+reviewed_at
+reviewed_by_app_user_id
+```
+
+`review_status` は `NONE`、`NEEDS_CONFIRMATION`、`APPROVED_WITH_REASON`、`EXCLUDED`、`WAITING_RESUBMISSION`、`RESOLVED_BY_SOURCE_VALUE` を初期候補とする。
+長文理由、変更前後、作業者メモは `subscriber_audit` と同じ考え方の `exam_item_value_audit_logs` へ記録する。
+初期実装ではbatchテーブルやoperation IDを持たせない。
+まとめ操作で同じ判断を複数item valueへ当てた場合は、同じnoteのaudit rowが並ぶことで同時処理だったことを読み取る。
+
 ### Source Precedence Exceptions
 
 複数sourceを1つの清書ledgerへ結合する場合、同じ `namecode + occurrence_no` の値は原則XML優位で採用する。
@@ -405,25 +443,25 @@ HIAダッシュボードCSV取込側は既存実装があるが、新フォー�
    - `check_status = OK` を基本とする。
 2. 条件付き出力OK
    - 妊娠中、医師判断、施設回答等により、法定項目が実施不能・対象外・未提出であることを業務確認済みの状態。
-   - 架空の検査値は作らない。
-   - `check_status = NG` と `check_reason` は残したまま、`manual_export_approved = 1` と承認理由、承認者、承認日時で出力を許可する。
+   - XML出力用の架空entryは作らない。
+   - `check_status = NG` と `check_reason` は残したまま、該当不足項目の `MISSING_PLACEHOLDER.review_status = APPROVED_WITH_REASON` と承認理由、承認者、承認日時で出力を許可する。
    - 対象は `check_reason` が `MISSING` のみの場合に限定する。
    - `INVALID`、`PARSE_ERROR`、加入者不一致、基本情報不足、健診機関不一致、XML生成/XSD検証エラーは条件付き出力OKで通過させない。
 
-条件付き出力OKの入力欄は、初期実装では既存 `manual_export_*` を使う。
+条件付き出力OKの入力欄は、`ledger_type = EXPORT_CASE` / `value_source_role = MISSING_PLACEHOLDER` の `exam_item_values` を対象にする。
 画面化時には少なくとも以下を入力できるようにする。
 
 | 項目 | 内容 |
 |---|---|
-| `manual_export_approved` | 出力許可フラグ |
-| `manual_export_reason` | 業務理由。例: `妊娠中のため胸部X線未実施。健診機関確認済み。` |
-| `manual_export_approved_by` | 承認者または入力者 |
-| `manual_export_approved_at` | 承認日時 |
-| 確認先 | 健診機関、担当者、メール、電話など。初期は `manual_export_reason` に含める |
-| 確認対象項目 | MISSINGの分類。初期は `check_reason` から読めるため別カラム化しない |
+| `review_status` | `APPROVED_WITH_REASON` / `NEEDS_CONFIRMATION` / `WAITING_RESUBMISSION` など |
+| `note` | 業務理由。例: `妊娠中のため胸部X線未実施。健診機関確認済み。` |
+| `changed_by_app_user_id` | 承認者または入力者 |
+| `changed_at` | 承認日時 |
+| 確認先 | 健診機関、担当者、メール、電話など。初期はaudit `note` に含める |
+| 確認対象項目 | placeholderの `namecode` またはcheck detail code |
 
-後続で履歴性が必要になった場合は、`manual_export_approval_history` 等の専用履歴テーブルを追加する。
-初期はXML出力履歴 `xml_export_members` に出力時点の `manual_export_*` snapshotを保存することで、出力事実との紐付けを担保する。
+履歴性は初期から `exam_item_value_audit_logs` に持つ。
+XML出力履歴 `xml_export_members` には、出力時点の理由ありOK状態を参照できるよう、必要に応じて対象placeholderまたはauditへの参照/snapshotを保存する。
 
 ### 出力後の業務状態
 

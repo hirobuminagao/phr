@@ -60,15 +60,15 @@ scripts/kenshin_list_pydir/scripts/medi_export_xml.py
 3. 加入者突合が `MATCHED`。
 4. 次のいずれかを満たす。
    - case単位の法定checkが `OK`。
-   - 法定チェックNGの原因が `MISSING` のみで、`manual_export_approved = 1`、理由、承認者、承認日時が設定されている。
+   - 法定チェックNGの原因が `MISSING` のみで、該当不足項目の `MISSING_PLACEHOLDER` に `APPROVED_WITH_REASON`、理由、承認者、承認日時が記録されている。
 
 `03_04_check_exam_export_cases.py` の `check_status` は現状、法定チェック結果を基準に `OK` / `NG` を設定している。
 したがって4は、法定チェックOKまたはMISSINGだけを理由として明示的に手動許可された状態を意味する。
 
 手動出力許可は、妊娠中等の確認済み理由により法定検査値がMISSINGとなる場合の例外とする。
-`exam_check_results` とcase側 `check_status` は書き換えず、架空の検査値を作らない。MISSINGの該当entryはXMLへ出力しない。
+`exam_check_results` とcase側 `check_status` は書き換えず、XML出力用の架空entryを作らない。MISSINGの該当entryはXMLへ出力しない。
 `INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致は手動許可の対象外とする。
-`manual_export_approved` / `manual_export_reason` / `manual_export_approved_at` / `manual_export_approved_by` は結合出力用caseへ持たせる。手動許可時は理由、承認者、承認日時を必須とする。
+手動許可の現在状態は `exam_item_values.review_status`、理由や変更前後は `exam_item_value_audit_logs` に持たせる。手動許可時は理由、承認者、承認日時を必須とする。
 
 上記4条件は業務上の出力候補条件とする。
 XML生成時に必須値のnorm失敗、健診機関番号不正、XSD不一致などが発生した場合は、出力候補であっても生成エラーとして扱う。
@@ -154,6 +154,27 @@ XML exporterは case checkがOK、または理由ありOKのcaseだけを読み�
 case単位の法定チェック結果は、source単位checkとは分けて保持する。
 実装入口は `03_04_check_exam_export_cases.py` とし、保存先は結合出力用caseを参照する。
 
+### Missing Placeholder and Item Value Review
+
+値の確認、除外、理由ありOK、再提出待ちは、case直持ちではなく `exam_item_values` を基本単位にする。
+存在する値は `ledger_type = EXAM` のsource item valueとして扱う。
+存在しないMISSING項目は、case作成またはcase再チェック時に以下のplaceholderとして扱う。
+
+```text
+exam_item_values
+  ledger_type = EXPORT_CASE
+  ledger_id = exam_export_cases.exam_export_case_id
+  value_source_role = MISSING_PLACEHOLDER
+```
+
+`MISSING_PLACEHOLDER` はXML出力用の値ではなく、不足項目への人手判断を記録するための行である。
+`APPROVED_WITH_REASON` になってもXML entryは作らない。
+不足が再取込、CSV補完、再提出などで解消した場合もplaceholderは削除せず、`RESOLVED_BY_SOURCE_VALUE` へ状態変更して残す。
+
+`exam_item_values` に直持ちする現在状態は、軽快さを優先して `review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成にする。
+変更履歴は `subscriber_audit` と同じく、値に変化があったfieldだけを `exam_item_value_audit_logs` へ記録する。
+まとめ作業のためのbatchテーブルやoperation IDは初期実装では持たない。
+
 ### Item Output Policy
 
 CSV/XMLから受け取った検査値は、標準コード不一致や施設独自項目であっても証跡として `exam_item_values` に残す。
@@ -176,12 +197,12 @@ CSV/XMLから受け取った検査値は、標準コード不一致や施設独�
 ### Export Readiness Status
 
 人が「この人は出力してよいか」を見る列は、`exam_export_cases.export_readiness_status` / `export_readiness_reason` とする。
-これは後続処理や画面向けのsummaryであり、個別の原因は `subscriber_match_status`, `merge_status`, `case_status`, `value_build_status`, `check_status`, `manual_export_approved`, `xml_export_status` に残す。
+これは後続処理や画面向けのsummaryであり、個別の原因は `subscriber_match_status`, `merge_status`, `case_status`, `value_build_status`, `check_status`, item valueの `review_status`, `xml_export_status` に残す。
 
 | status | meaning |
 | --- | --- |
 | `EXPORT_READY` | case値作成済み、case check OK、未出力 |
-| `APPROVED_WITH_REASON` | MISSING等を理由に手動出力許可済み、未出力 |
+| `APPROVED_WITH_REASON` | MISSING等についてitem value側に理由ありOKが記帳され、未出力 |
 | `BLOCKED` | 加入者不一致、結合停止、case不備、法定check NGなどで出力不可 |
 | `WAITING_VALUES` | caseはあるが採用済み整値が未作成 |
 | `WAITING_CHECK` | 採用済み整値はあるがcase単位checkが未実行 |
@@ -1017,7 +1038,7 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
 - 結合出力用caseの `xml_export_status` は既出力判定用の技術状態として使用できるが、出力履歴の正本にはしない。
 - 再scan/importや統合ledger同期で構成元 `exam_ledgers` 側の `xml_export_status` が未出力へ戻っても、`xml_export_members` に出力事実がある場合は `exam_ledgers.xml_export_status = 'EXPORTED'` として復元する。
 - 正式出力済みXML/ZIPは再出力しないことを基本とし、再出力が必要な場合は別途再出力理由と履歴管理を決める。
-- `xml_export_members` には、出力時点の `manual_export_approved`、理由、承認者、承認日時をsnapshotとして保存する。
+- `xml_export_members` には、出力時点の理由ありOK、理由、承認者、承認日時をsnapshotとして保存できるようにする。正本は `exam_item_values` と `exam_item_value_audit_logs` とする。
 - 初回出力日時や出力回数は、専用履歴から取得する。
 - 履歴テーブルの責務は、誰を、いつ、どのRun・ZIP・個人XMLとして出力したかという事実の保存までとする。
 - 項目不足や誤りを修正して再出力した場合も、旧履歴は証跡として残す。どの出力を正本とするか、旧出力を無効化するかは初期版では判定しない。
@@ -1030,7 +1051,7 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
    - 人が確認しやすい不足情報CSVを、送付用ZIPの外側へ併せて出すか。
    - ここでいう不足情報CSVは、確定済みの `健診結果XML出力履歴.csv` とは別物とする。
    - 不足情報CSVの追加は初期XML実装を止めず、後続で決める。
-   - `manual_export_approved` / `manual_export_reason` は確認後の手動Goを表す列であり、不足情報CSVとは別概念である。
+   - item valueの `APPROVED_WITH_REASON` とaudit `note` は確認後の手動Goを表す情報であり、不足情報CSVとは別概念である。
 
 ## Initial Recommendation
 

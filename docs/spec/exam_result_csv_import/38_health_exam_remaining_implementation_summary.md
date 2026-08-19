@@ -66,6 +66,44 @@ XMLとCSVの両方がある健診機関では、取込sourceの値とXML出力�
 代表例として、XMLの `9N511 医師の診断(判定)` にメタボリックシンドローム判定の口語説明だけが入り、CSV側の指導コメントに医師の診断・再検査指示として有用な文章がある場合は、namecode単位の例外ルールでCSV側を採用できる。
 この判断は取込時ではなく、`03_02_build_exam_export_case_values.py` で清書値を作る時に適用する。
 
+### Item Value Review and Missing Placeholder
+
+人が判断したい対象は「今ある値をどう扱うか」と「本来あるべき値がないことをどう扱うか」に分かれる。
+画面と運用を単純にするため、どちらも `exam_item_values` を記帳単位に統一する。
+
+存在する値:
+
+- CSV/XML/紙から取り込んだsource値。
+- `ledger_type = EXAM` / `ledger_id = exam_ledgers.exam_ledger_id`。
+- normalizeエラー、validationエラー、独自項目、出力除外、健診機関確認待ちなどの人手判断対象になる。
+
+存在しない値:
+
+- 法定チェック、特定健診チェックで `MISSING` になった項目。
+- case作成またはcase再チェック時に、`ledger_type = EXPORT_CASE` / `ledger_id = exam_export_cases.exam_export_case_id` / `value_source_role = MISSING_PLACEHOLDER` の `exam_item_values` として作成する。
+- `MISSING_PLACEHOLDER` は「このcaseでこの項目が不足している」という判断対象であり、XML出力用entryではない。
+- `MISSING_PLACEHOLDER` は削除せず、不足解消時は `RESOLVED_BY_SOURCE_VALUE` などへ状態変更して残す。
+
+`exam_item_values` は件数が多いため、現在状態は最小限にする。
+
+- `review_status`
+- `reviewed_at`
+- `reviewed_by_app_user_id`
+
+`review_status` 候補:
+
+- `NONE`: 人手判断なし。
+- `NEEDS_CONFIRMATION`: 健診機関または運用確認待ち。
+- `APPROVED_WITH_REASON`: 値はない、または不完全だが理由ありで出力許可。
+- `EXCLUDED`: 存在する値をXML出力採用対象から除外。
+- `WAITING_RESUBMISSION`: 健診機関からの再提出待ち。
+- `RESOLVED_BY_SOURCE_VALUE`: 以前は不足だったが、再取込、CSV補完、再提出などでsource値が入り解消済み。
+
+変更履歴は `subscriber_audit` に近い考え方で、値に変化があったfieldだけを別テーブルへ残す。
+想定テーブルは `exam_item_value_audit_logs` とし、`exam_item_value_id`、`field`、`old_value`、`new_value`、`changed_at`、`source`、`note`、`changed_by_app_user_id`、`change_run_id` を持つ。
+batchテーブルやoperation_idは初期実装では作らない。
+まとめ作業で複数item_valueを更新した場合は、各item_valueに同じnoteのaudit rowが並ぶことで同時処理だったことを読み取る。
+
 ### HIA Dashboard Side
 
 - HIAダッシュボードCSV取込系の既存スクリプトは存在する。
@@ -310,7 +348,7 @@ XML出力条件を画面から指定できるようにする。
 - 出力結果のHIAアップロード作業記帳、個人case詳細からの理由ありOK操作は未実装。
 - 健診機関確認事項の専用連絡管理は、初期実装では後回しにする。先に健診機関サマリーを追加し、健診機関単位で受領数、source/caseチェックOK/NG率、normalizeエラー、NG項目topを見て、フォーマット/マッピング/健診機関仕様の問題か個別事情かを切り分ける。
 - 健診機関サマリーからは、該当健診機関で絞ったcase一覧へ遷移する。case一覧で対象者を並べ、個人case詳細でsource、採用値、check、確認事項、理由ありOKを確認・記帳する。
-- 確認事項の物理記帳は `exam_item_values` を基本単位とする。ただし画面操作はcaseまたはledgerから入り、作業者にはなるべく `namecode` 単位で記帳させる。同じ人・同じ理由・同じ項目の入力はシステム側で束ね、関連するitem_valueへ展開する。
+- 確認事項の物理記帳は `exam_item_values` を基本単位とする。ただし画面操作はcaseまたはledgerから入り、作業者にはなるべく `namecode` 単位で記帳させる。同じ人・同じ理由・同じ項目の入力はシステム側で対象item_valueへ展開する。
 
 #### 8.1 HIA XML出力リスト画面モック確定メモ
 

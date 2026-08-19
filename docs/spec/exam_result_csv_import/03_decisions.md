@@ -187,7 +187,7 @@ Current as of 2026-08-05.
 - XML出力候補判定は結合出力用case、出力後の業務状態管理とHIAアップロード状態は `person_event` / `person_event_status_items` の責務とする。
 - 結合出力用caseの人が見る総合状態は `exam_export_cases.export_readiness_status` / `export_readiness_reason` に持つ。
 - `export_readiness_status` は少なくとも `EXPORT_READY`, `APPROVED_WITH_REASON`, `BLOCKED`, `WAITING_VALUES`, `WAITING_CHECK`, `EXPORTED`, `EXPORT_ERROR` を扱う。
-- `export_readiness_status` は `03_01_build_exam_export_cases.py`, `03_02_build_exam_export_case_values.py`, `03_04_check_exam_export_cases.py` の後で再計算し、caseの `subscriber_match_status`, `merge_status`, `case_status`, `value_build_status`, `check_status`, `manual_export_approved`, `xml_export_status` から導く。
+- `export_readiness_status` は `03_01_build_exam_export_cases.py`, `03_02_build_exam_export_case_values.py`, `03_04_check_exam_export_cases.py` の後で再計算し、caseの `subscriber_match_status`, `merge_status`, `case_status`, `value_build_status`, `check_status`, item valueの `review_status`, `xml_export_status` から導く。
 - XML出力済みのcaseには、`output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を保持する。これは後続の出力画面、HIAアップロード依頼、再出力判断のための証跡である。
 - CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
 - 結合出力用caseの `xml_export_status` は、構成元 `exam_ledgers` の技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。
@@ -460,22 +460,29 @@ Current as of 2026-08-05.
 - XML由来コードは元XMLの明示値を正とし、event年齢規則による上書きや補完は行わない。
 - 既存XMLは `02_import_xml.py --include-imported` で再取込し、新カラムをbackfillできるようにする。
 - XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
-- 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、結合出力用case側の `manual_export_approved` と必須の理由、承認者、承認日時を記録してXML出力を許可できる。
+- 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、不足項目を `exam_item_values` のcase用placeholderとして作成し、そのplaceholderへ確認状態を記録してXML出力を許可できる。
 - 手動出力許可は法定チェックNGの原因が `MISSING` のみの場合に限定し、`INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致、XML生成・XSD検証エラーは通過させない。
 - XML不足をCSVで実値補完して法定OKにする処理と、妊娠中等の業務確認によりMISSINGのまま条件付き出力OKにする処理は別レーンとして扱う。
-- 条件付き出力OKでは架空の検査値を作らず、`check_status = NG` / `check_reason` を維持したまま `manual_export_approved` / `manual_export_reason` / `manual_export_approved_by` / `manual_export_approved_at` を記録する。
-- `03_04_check_exam_export_cases.py` によるcase再チェックは、`exam_check_results` を再作成し、`exam_export_cases.check_status` / `check_reason` と出力可否summaryを再計算する。`manual_export_approved` / `manual_export_reason` / `manual_export_approved_by` / `manual_export_approved_at` は更新対象にしない。
-- `03_01_build_exam_export_cases.py` のcase再作成も、同じcaseキーで既存行を更新する場合は `manual_export_*` を更新対象にしない。そのため同一caseのままなら、全チェックを再実行しても理由ありOKは保持される。
-- ただし、加入者、健診日、健診機関、保険者番号などcase同一性キーが変わり、別caseとして新規作成された場合は、既存caseの `manual_export_*` は自動移行しない。理由ありOKは人が確認したcase単位の判断として扱う。
+- 条件付き出力OKではXML出力用の架空entryは作らない。一方で、画面上の記帳単位を統一するため、不足そのものは `exam_item_values` に `ledger_type = 'EXPORT_CASE'` / `value_source_role = 'MISSING_PLACEHOLDER'` のplaceholderとして作成する。
+- `MISSING_PLACEHOLDER` は値の存在ではなく「このcaseでこの項目が不足している」という判断対象を表す。XML出力時はentry化しない。
+- `03_04_check_exam_export_cases.py` によるcase再チェックは、`exam_check_results` を再作成し、`exam_export_cases.check_status` / `check_reason` と出力可否summaryを再計算する。人手判断の正はcase直持ちではなく、`ledger_type = 'EXPORT_CASE'` の `exam_item_values` に置く。
+- `03_01_build_exam_export_cases.py` のcase再作成も、同じcaseキーで既存行を更新する場合は既存placeholderの `review_status` を保持する。そのため同一caseのままなら、全チェックを再実行しても理由ありOKや確認待ちは保持される。
+- ただし、加入者、健診日、健診機関、保険者番号などcase同一性キーが変わり、別caseとして新規作成された場合は、既存placeholderの人手判断は自動移行しない。理由ありOKは人が確認したcase内item_value単位の判断として扱う。
 - 健診機関への連絡管理は、初期実装では専用の連絡台帳から始めず、健診機関サマリーで問題の塊を見える化し、健診機関単位で絞ったcase一覧へ遷移して個別確認する導線を優先する。
 - 健診機関サマリーでは、受領ファイル数、取込人数、source単位/case単位のOK/NG率、法定NG率、特定健診NG率、normalizeエラー件数、NG検査項目topを見せる。100%近い同一NGはフォーマット、マッピング、健診機関仕様の問題候補として扱い、一部だけのNGは個別事情・未実施・CSV欠損候補として扱う。
-- 確認事項の画面入口はcaseまたはledgerとするが、記帳の物理単位は `exam_item_values` とする。作業者にはなるべく検査単位、つまり `namecode` 単位で確認・記帳させ、同じ人・同じ理由・同じ項目を何度も入力させない。
-- 同じ判断を複数の `exam_item_values` へ反映する場合は、システム側で関連item_valueへ展開し、同一操作を束ねるaction/group IDを持たせる方針とする。これにより、case/ledgerから作業しつつ、item_value単位の証跡とraw追跡を保持する。
-- 健診機関への問い合わせは健診機関単位に束ねて行う可能性が高いが、初期実装ではサマリーとcase詳細から「何を聞くべきか」を切り分けることを優先し、問い合わせbatch管理は後続で追加する。
+- 確認事項の画面入口はcaseまたはledgerとするが、記帳の物理単位は `exam_item_values` とする。存在する値の扱いも、存在しないMISSING項目の扱いも、item_valueを作業単位として統一する。
+- 存在するsource値は `ledger_type = 'EXAM'` の `exam_item_values` に保持する。存在しない不足項目は、case作成またはcase再チェック時に `ledger_type = 'EXPORT_CASE'` / `value_source_role = 'MISSING_PLACEHOLDER'` の `exam_item_values` として作成する。
+- `MISSING_PLACEHOLDER` は削除しない。不足が解消した場合は `review_status = 'RESOLVED_BY_SOURCE_VALUE'` のように状態変更して残す。これにより、一度不足だった項目がCSV補完、再提出、再取込で解消した経緯を追える。
+- `exam_item_values` は件数が多いため、人手判断の現在状態だけを最小限持つ。長文理由や変更前後は別のauditテーブルへ寄せる。
+- `exam_item_values` に持つ現在状態候補は、`review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成を基本とする。
+- `review_status` の候補は `NONE`、`NEEDS_CONFIRMATION`、`APPROVED_WITH_REASON`、`EXCLUDED`、`WAITING_RESUBMISSION`、`RESOLVED_BY_SOURCE_VALUE` とする。
+- 変更履歴は `subscriber_audit` と同じく、値に変化があったfieldだけを別テーブルへ記録する。想定テーブルは `exam_item_value_audit_logs` とし、`exam_item_value_id`、`field`、`old_value`、`new_value`、`changed_at`、`source`、`note`、`changed_by_app_user_id`、`change_run_id` を持つ。
+- batchテーブルやoperation_idは初期実装では作らない。まとめ作業で複数item_valueを更新した場合は、各item_valueに同じnoteのaudit rowが並ぶことで同時処理だったことを読み取る。
+- 健診機関への問い合わせは健診機関単位に束ねて行う可能性が高いが、初期実装ではサマリーとcase詳細から「何を聞くべきか」を切り分けることを優先し、問い合わせ管理テーブルは後続で追加する。
 - 健診機関確認事項、基本情報補正、加入者突合修正、理由ありOKなど、人が確認・記帳・変更を行った後は、case側へ反映するために管理画面の「健診結果処理実行」で step5〜7 を再実行する。step5はcase更新、step6は採用済み整値更新、step7はcase単位チェック更新を行う。
 - 初期のCSV補完診断対象は、視力 `4403004001`、聴力 `4403005001`、胸部X線 `4404001001`、心電図 `4411001001`、既往歴 `4401001001`、自覚症状 `4402001001`、他覚症状 `4402001002` の7分類とする。
 - ただしCSV取込自体は7分類へ絞らない。健診機関ごとの通常マッピングを作り、取込可能な検査値・基本情報は従来どおり全てsource値として取り込む。7分類は補完診断で重点的に見る分類であり、マッピング対象や取込対象を制限するものではない。
-- 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えず、架空の検査値を作らない。該当entryはXMLへ出力しない。
+- 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えない。`MISSING_PLACEHOLDER` は該当entryとしてXMLへ出力しない。
 - 同日分割送信回数は既存ZIPからの自動採番を既定とし、`0`から`9`の明示指定も可能にする。既存ZIPと衝突する番号では上書きしない。
 - 個人XMLファイル名21桁目の種別は、特定健診情報を表す実施区分コード `1` 固定とする。
 - XML出力の原子単位はZIPとする。同じ健診機関・保険者・作成日・同日分割送信回数の対象者に1人でも生成またはXSD検証失敗があれば、そのZIP全体を出力しない。
@@ -507,7 +514,7 @@ Current as of 2026-08-05.
 - 初期の補正対象は `insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branch_number`, `exam_ticket_number`, `exam_ticket_expires_on`, `name_kana`, `postal_code`, `address` とする。
 - 補正履歴は `field_name`, `before_value`, `after_value`, `correction_source`, `correction_reason`, `previous_correction_history_id`, `etl_run_id`, `corrected_by`, `corrected_at` を持つ。`active` flagではなく、ledger側の最新履歴IDで現在値を示す。
 - 基本情報修正画面では、加入者突合済みの行に対して `subscribers` の保険証記号、保険証番号、枝番、氏名カナ、郵便番号、住所を補正候補として表示する。採用時は `correction_source = 'SUBSCRIBER'` の補正履歴として記録し、原本値を上書きしない。
-- 人向けの不足情報CSVを追加するかは後続で決め、初期XML実装を止めない。`manual_export_approved` / `manual_export_reason` は不足情報CSVとは別概念とする。
+- 人向けの不足情報CSVを追加するかは後続で決め、初期XML実装を止めない。item valueの `APPROVED_WITH_REASON` とaudit `note` は不足情報CSVとは別概念とする。
 - `*_match` は照合・検索専用であり、HIA/XML出力値としては使用しない。
 - 保険証記号、保険証番号、氏名カナは、ledgerに `*_export_value` / `*_export_source` / `*_export_reason` を持たせる。
 - CSV/XML原本から作る場合は `*_export_source = SOURCE`、加入者突合済みの `subscribers` 登録値から作る場合は `*_export_source = SUBSCRIBER` とする。
