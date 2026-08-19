@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% set title = "健診機関サマリー" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">FACILITY SUMMARY</p>
+    <h1>健診機関サマリー</h1>
+    <p class="subtle">健診機関ごとの受領品質、チェックNG、値エラーの傾向を確認します。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/exam-export-cases">個人case一覧</a>
+    <a class="ghost-button" href="/exam-ledgers">健診結果一覧（受領）</a>
+    <a class="ghost-button" href="/file-receipts">受領ファイル</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">同じ項目が高い割合でNGなら、フォーマット・マッピング・健診機関仕様の問題候補です。</p>
+      </div>
+    </div>
+    <form method="get" action="/facility-summary" class="filter-form filter-form-wide">
+      <label>
+        <span>キーワード</span>
+        <input name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="健診機関名 / コード / 受領モード" data-live-filter-input="#facility-summary-table">
+      </label>
+      <label>
+        <span>イベント</span>
+        <select name="event_id">
+          {% for event in event_options %}
+            <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+              {{ event.event_name or ("event " ~ event.event_id) }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>表示件数</span>
+        <input name="limit" value="{{ limit }}">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/facility-summary">クリア</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="summary-grid facility-summary-grid">
+    <div class="summary-card">
+      <span>健診機関</span>
+      <strong>{{ summary.facility_count }}</strong>
+      <small>表示中</small>
+    </div>
+    <div class="summary-card">
+      <span>受領ファイル</span>
+      <strong>{{ summary.file_total }}</strong>
+      <small>XML/CSV/ZIP</small>
+    </div>
+    <div class="summary-card">
+      <span>source</span>
+      <strong>{{ summary.source_total }}</strong>
+      <small>取込済みledger</small>
+    </div>
+    <div class="summary-card">
+      <span>case</span>
+      <strong>{{ summary.case_total }}</strong>
+      <small>人単位</small>
+    </div>
+    <div class="summary-card">
+      <span>法定NG</span>
+      <strong>{{ summary.legal_ng_total }}</strong>
+      <small>case単位</small>
+    </div>
+    <div class="summary-card">
+      <span>特定NG</span>
+      <strong>{{ summary.specific_ng_total }}</strong>
+      <small>case単位</small>
+    </div>
+    <div class="summary-card">
+      <span>値エラー</span>
+      <strong>{{ summary.item_error_total }}</strong>
+      <small>normalize/validation</small>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>健診機関別の状況</h2>
+        <p class="subtle">件数の多いNGから並べています。caseを見ると、その健診機関で絞った個人case一覧へ移動します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table id="facility-summary-table" class="data-table facility-summary-table" data-empty-message="一致する健診機関はありません。">
+        <thead>
+          <tr>
+            <th>健診機関</th>
+            <th>受領</th>
+            <th>source check</th>
+            <th>case check</th>
+            <th>値エラー / 上位項目</th>
+            <th>遷移</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% set facility_q = row.facility_filter_value or row.facility_name or row.facility_code or '' %}
+          <tr data-filter-text="{{ row.facility_code or '' }} {{ row.facility_name or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }}">
+            <td>
+              <strong title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
+              <small>{{ row.facility_code or "コードなし" }} / {{ row.expected_source_mode_label or "受領設定なし" }}</small>
+            </td>
+            <td>
+              <strong>{{ row.file_total }}</strong>
+              <small>XML {{ row.xml_file_count }} / CSV {{ row.csv_file_count }} / ZIP {{ row.zip_file_count }}</small>
+              <small>IMPORTED {{ row.file_imported_count }} / WAITING {{ row.file_waiting_count }}</small>
+            </td>
+            <td>
+              <strong>OK {{ row.source_ok_count }} / NG {{ row.source_ng_count }} / 全 {{ row.source_count }}</strong>
+              <small>NG率 {{ row.source_ng_rate }} / 未判定 {{ row.source_pending_count }}</small>
+            </td>
+            <td>
+              <strong>法定NG {{ row.legal_ng_count }} / {{ row.case_count }}</strong>
+              <small>法定NG率 {{ row.legal_ng_rate }} / 特定NG率 {{ row.specific_ng_rate }}</small>
+              <small>READY {{ row.case_ready_count }} / 理由ありOK {{ row.case_approved_count }} / BLOCKED {{ row.case_blocked_count }} / 出力済み {{ row.case_exported_count }}</small>
+            </td>
+            <td>
+              <strong>{{ row.item_error_count }}</strong>
+              <small>normalize/validationエラー</small>
+              {% if row.top_error_items %}
+              <ul class="compact-list">
+                {% for item in row.top_error_items %}
+                <li title="{{ item.namecode or '' }}">{{ item.item_name or item.namecode }} <b>{{ item.error_count }}</b></li>
+                {% endfor %}
+              </ul>
+              {% else %}
+              <small>上位エラーなし</small>
+              {% endif %}
+            </td>
+            <td>
+              <div class="stacked-actions">
+                <a class="ghost-button compact-action-button" href="/exam-export-cases?event_id={{ row.event_id }}&facility_q={{ facility_q|url_quote }}&limit=2000">caseを見る</a>
+                <a class="ghost-button compact-action-button" href="/exam-ledgers?event_id={{ row.event_id }}&facility_q={{ facility_q|url_quote }}&limit=2000">受領結果</a>
+                <a class="ghost-button compact-action-button" href="/file-receipts?event_id={{ row.event_id }}&q={{ facility_q|url_quote }}&limit=1000">ファイル</a>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6">表示対象の健診機関はありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

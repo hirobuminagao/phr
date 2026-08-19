@@ -10,7 +10,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import parse_qs, quote
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -3122,6 +3122,304 @@ def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
     return summary
 
 
+def pct_label(part: Any, total: Any) -> str:
+    total_num = int(total or 0)
+    if total_num <= 0:
+        return "-"
+    return f"{(int(part or 0) / total_num) * 100:.1f}%"
+
+
+def _facility_key(row: Mapping[str, Any]) -> str | None:
+    facility_id = row.get("exam_facility_id")
+    if facility_id is not None:
+        return f"id:{facility_id}"
+    facility_code = str(row.get("facility_code") or "").strip()
+    if facility_code:
+        return f"code:{facility_code}"
+    facility_name = str(row.get("facility_name") or "").strip()
+    if facility_name:
+        return f"name:{facility_name}"
+    return None
+
+
+def _ensure_facility_summary_row(rows: dict[str, dict[str, Any]], source: Mapping[str, Any]) -> dict[str, Any] | None:
+    key = _facility_key(source)
+    if key is None:
+        return None
+    row = rows.setdefault(
+        key,
+        {
+            "event_id": source.get("event_id"),
+            "exam_facility_id": source.get("exam_facility_id"),
+            "facility_code": source.get("facility_code"),
+            "facility_name": source.get("facility_name"),
+            "expected_source_mode": source.get("expected_source_mode"),
+            "expected_source_mode_label": source_mode_label(source.get("expected_source_mode")),
+            "file_total": 0,
+            "xml_file_count": 0,
+            "csv_file_count": 0,
+            "zip_file_count": 0,
+            "file_imported_count": 0,
+            "file_waiting_count": 0,
+            "source_count": 0,
+            "source_ok_count": 0,
+            "source_ng_count": 0,
+            "source_pending_count": 0,
+            "source_error_count": 0,
+            "case_count": 0,
+            "case_ready_count": 0,
+            "case_blocked_count": 0,
+            "case_approved_count": 0,
+            "case_exported_count": 0,
+            "legal_ok_count": 0,
+            "legal_ng_count": 0,
+            "legal_pending_count": 0,
+            "specific_ok_count": 0,
+            "specific_ng_count": 0,
+            "specific_not_applicable_count": 0,
+            "specific_pending_count": 0,
+            "item_error_count": 0,
+            "top_error_items": [],
+        },
+    )
+    for field in ("event_id", "exam_facility_id", "facility_code", "facility_name", "expected_source_mode"):
+        if row.get(field) in (None, "") and source.get(field) not in (None, ""):
+            row[field] = source.get(field)
+    row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+    return row
+
+
+def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
+    event_id = str(filters.get("event_id") or "").strip()
+    query = str(filters.get("q") or "").strip()
+    fr_event_clause = "WHERE fr.event_id = %s" if event_id else ""
+    el_event_clause = "WHERE el.event_id = %s" if event_id else ""
+    eec_event_clause = "WHERE eec.event_id = %s" if event_id else ""
+    event_params: tuple[Any, ...] = (event_id,) if event_id else ()
+    rows: dict[str, dict[str, Any]] = {}
+
+    cur.execute(
+        f"""
+        SELECT
+          fr.event_id,
+          fr.exam_facility_id,
+          fr.facility_code,
+          fr.facility_name,
+          mfa.expected_source_mode,
+          COUNT(*) AS file_total,
+          SUM(CASE WHEN fr.file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
+          SUM(CASE WHEN fr.file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count,
+          SUM(CASE WHEN fr.file_type = 'ZIP' THEN 1 ELSE 0 END) AS zip_file_count,
+          SUM(CASE WHEN fr.status = 'IMPORTED' THEN 1 ELSE 0 END) AS file_imported_count,
+          SUM(CASE WHEN fr.status = 'WAITING_CONFIRM' THEN 1 ELSE 0 END) AS file_waiting_count
+        FROM {qname(health_db())}.file_receipts AS fr
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            MAX(expected_source_mode) AS expected_source_mode
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE is_active = 1
+          GROUP BY event_id, exam_facility_id
+        ) AS mfa
+          ON mfa.event_id = fr.event_id
+         AND mfa.exam_facility_id = fr.exam_facility_id
+        {fr_event_clause}
+        GROUP BY
+          fr.event_id,
+          fr.exam_facility_id,
+          fr.facility_code,
+          fr.facility_name,
+          mfa.expected_source_mode
+        """,
+        event_params,
+    )
+    for source in (dict(row) for row in cur.fetchall()):
+        item = _ensure_facility_summary_row(rows, source)
+        if item is None:
+            continue
+        for field in (
+            "file_total",
+            "xml_file_count",
+            "csv_file_count",
+            "zip_file_count",
+            "file_imported_count",
+            "file_waiting_count",
+        ):
+            item[field] = int(source.get(field) or 0)
+
+    cur.execute(
+        f"""
+        SELECT
+          el.event_id,
+          el.exam_facility_id,
+          el.facility_code,
+          el.facility_name,
+          COUNT(*) AS source_count,
+          SUM(CASE WHEN el.check_status = 'OK' THEN 1 ELSE 0 END) AS source_ok_count,
+          SUM(CASE WHEN el.check_status = 'NG' THEN 1 ELSE 0 END) AS source_ng_count,
+          SUM(CASE WHEN el.check_status NOT IN ('OK', 'NG') OR el.check_status IS NULL THEN 1 ELSE 0 END) AS source_pending_count,
+          SUM(COALESCE(el.exam_item_error_count, 0)) AS source_error_count
+        FROM {qname(health_db())}.exam_ledgers AS el
+        {el_event_clause}
+        GROUP BY el.event_id, el.exam_facility_id, el.facility_code, el.facility_name
+        """,
+        event_params,
+    )
+    for source in (dict(row) for row in cur.fetchall()):
+        item = _ensure_facility_summary_row(rows, source)
+        if item is None:
+            continue
+        for field in (
+            "source_count",
+            "source_ok_count",
+            "source_ng_count",
+            "source_pending_count",
+            "source_error_count",
+        ):
+            item[field] = int(source.get(field) or 0)
+
+    cur.execute(
+        f"""
+        SELECT
+          eec.event_id,
+          eec.exam_facility_id,
+          eec.facility_code,
+          eec.facility_name,
+          COUNT(*) AS case_count,
+          SUM(CASE WHEN eec.export_readiness_status = 'EXPORT_READY' THEN 1 ELSE 0 END) AS case_ready_count,
+          SUM(CASE WHEN eec.export_readiness_status = 'BLOCKED' THEN 1 ELSE 0 END) AS case_blocked_count,
+          SUM(CASE WHEN eec.export_readiness_status = 'APPROVED_WITH_REASON' THEN 1 ELSE 0 END) AS case_approved_count,
+          SUM(CASE WHEN eec.xml_export_status = 'EXPORTED' THEN 1 ELSE 0 END) AS case_exported_count,
+          SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') = 'OK' THEN 1 ELSE 0 END) AS legal_ok_count,
+          SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') = 'NG' THEN 1 ELSE 0 END) AS legal_ng_count,
+          SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') NOT IN ('OK', 'NG') THEN 1 ELSE 0 END) AS legal_pending_count,
+          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'OK' AND COALESCE(ecr.specific_reason_summary, '') NOT LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_ok_count,
+          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'NG' THEN 1 ELSE 0 END) AS specific_ng_count,
+          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'NOT_APPLICABLE' OR COALESCE(ecr.specific_reason_summary, '') LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_not_applicable_count,
+          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') NOT IN ('OK', 'NG', 'NOT_APPLICABLE') AND COALESCE(ecr.specific_reason_summary, '') NOT LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_pending_count
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest
+            ON latest.max_id = r1.id
+        ) AS ecr
+          ON ecr.exam_export_case_id = eec.exam_export_case_id
+        {eec_event_clause}
+        GROUP BY eec.event_id, eec.exam_facility_id, eec.facility_code, eec.facility_name
+        """,
+        event_params,
+    )
+    for source in (dict(row) for row in cur.fetchall()):
+        item = _ensure_facility_summary_row(rows, source)
+        if item is None:
+            continue
+        for field in (
+            "case_count",
+            "case_ready_count",
+            "case_blocked_count",
+            "case_approved_count",
+            "case_exported_count",
+            "legal_ok_count",
+            "legal_ng_count",
+            "legal_pending_count",
+            "specific_ok_count",
+            "specific_ng_count",
+            "specific_not_applicable_count",
+            "specific_pending_count",
+        ):
+            item[field] = int(source.get(field) or 0)
+
+    cur.execute(
+        f"""
+        SELECT
+          el.event_id,
+          el.exam_facility_id,
+          el.facility_code,
+          el.facility_name,
+          eiv.namecode,
+          COALESCE(eiv.namecode_display_name, eiv.namecode) AS item_name,
+          COUNT(*) AS error_count
+        FROM {qname(health_db())}.exam_item_values AS eiv
+        INNER JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.exam_ledger_id = eiv.ledger_id
+         AND eiv.ledger_type = 'EXAM'
+        WHERE (eiv.normalize_status = 'ERROR' OR eiv.validation_status = 'INVALID')
+          {"AND el.event_id = %s" if event_id else ""}
+        GROUP BY
+          el.event_id,
+          el.exam_facility_id,
+          el.facility_code,
+          el.facility_name,
+          eiv.namecode,
+          COALESCE(eiv.namecode_display_name, eiv.namecode)
+        ORDER BY error_count DESC, eiv.namecode
+        """,
+        event_params,
+    )
+    error_total_by_key: dict[str, int] = {}
+    for source in (dict(row) for row in cur.fetchall()):
+        item = _ensure_facility_summary_row(rows, source)
+        if item is None:
+            continue
+        key = _facility_key(item)
+        if key is None:
+            continue
+        count = int(source.get("error_count") or 0)
+        error_total_by_key[key] = error_total_by_key.get(key, 0) + count
+        if len(item["top_error_items"]) < 5:
+            item["top_error_items"].append(
+                {
+                    "namecode": source.get("namecode"),
+                    "item_name": source.get("item_name"),
+                    "error_count": count,
+                }
+            )
+    for key, count in error_total_by_key.items():
+        if key in rows:
+            rows[key]["item_error_count"] = count
+
+    result = list(rows.values())
+    if query:
+        q = query.lower()
+        result = [
+            row for row in result
+            if q in str(row.get("facility_code") or "").lower()
+            or q in str(row.get("facility_name") or "").lower()
+            or q in str(row.get("expected_source_mode") or "").lower()
+            or q in str(row.get("expected_source_mode_label") or "").lower()
+        ]
+    for row in result:
+        row["legal_ng_rate"] = pct_label(row.get("legal_ng_count"), row.get("case_count"))
+        row["specific_ng_rate"] = pct_label(row.get("specific_ng_count"), row.get("case_count"))
+        row["source_ng_rate"] = pct_label(row.get("source_ng_count"), row.get("source_count"))
+        row["case_ng_rate"] = pct_label(row.get("case_blocked_count"), row.get("case_count"))
+        row["facility_filter_value"] = row.get("facility_code") or row.get("facility_name") or ""
+        row["risk_score"] = (
+            int(row.get("legal_ng_count") or 0) * 5
+            + int(row.get("specific_ng_count") or 0) * 4
+            + int(row.get("source_ng_count") or 0) * 3
+            + int(row.get("item_error_count") or 0)
+        )
+    result.sort(
+        key=lambda row: (
+            int(row.get("risk_score") or 0),
+            int(row.get("case_count") or 0),
+            int(row.get("source_count") or 0),
+            int(row.get("file_total") or 0),
+        ),
+        reverse=True,
+    )
+    return result[:limit]
+
+
 def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[str, Any] | None:
     cur.execute(
         f"""
@@ -5276,6 +5574,52 @@ def exam_ledgers(request: Request) -> Response:
             "limit": limit,
             "event_options": event_options,
             "folder_aliases": folder_aliases,
+        },
+    )
+
+
+@app.get("/facility-summary", response_class=HTMLResponse)
+def facility_summary(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "q": request.query_params.get("q", ""),
+        "limit": request.query_params.get("limit", "200"),
+    }
+    limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            rows = load_facility_summary_rows(cur, filters=filters, limit=limit)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    summary = {
+        "facility_count": len(rows),
+        "file_total": sum(int(row.get("file_total") or 0) for row in rows),
+        "source_total": sum(int(row.get("source_count") or 0) for row in rows),
+        "case_total": sum(int(row.get("case_count") or 0) for row in rows),
+        "legal_ng_total": sum(int(row.get("legal_ng_count") or 0) for row in rows),
+        "specific_ng_total": sum(int(row.get("specific_ng_count") or 0) for row in rows),
+        "item_error_total": sum(int(row.get("item_error_count") or 0) for row in rows),
+    }
+    return templates.TemplateResponse(
+        "facility_summary.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "filters": filters,
+            "rows": rows,
+            "summary": summary,
+            "limit": limit,
         },
     )
 

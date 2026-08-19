@@ -276,6 +276,11 @@ button[type="submit"]:disabled {
   margin-bottom: 16px;
 }
 
+.facility-summary-grid {
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  margin-bottom: 16px;
+}
+
 .summary-card,
 .permission-panel,
 .empty-state,
@@ -1057,6 +1062,31 @@ a.home-menu-card:hover {
   padding-inline: 12px;
 }
 
+.stacked-actions {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.compact-list {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compact-list li {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.compact-list b {
+  color: var(--text);
+}
+
 .month-picker-field {
   position: relative;
   display: block;
@@ -1586,6 +1616,13 @@ a.home-menu-card:hover {
 .data-table td small {
   display: block;
 }
+
+.facility-summary-table th:nth-child(1) { width: 22%; }
+.facility-summary-table th:nth-child(2) { width: 14%; }
+.facility-summary-table th:nth-child(3) { width: 15%; }
+.facility-summary-table th:nth-child(4) { width: 20%; }
+.facility-summary-table th:nth-child(5) { width: 19%; }
+.facility-summary-table th:nth-child(6) { width: 10%; }
 
 .status-pill {
   display: inline-flex;
