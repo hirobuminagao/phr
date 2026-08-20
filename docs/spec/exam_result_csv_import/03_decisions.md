@@ -481,7 +481,7 @@ Current as of 2026-08-05.
 - caseチェック確認項目は削除しない。不足が解消した場合は `review_status = 'RESOLVED_BY_SOURCE_VALUE'` のように状態変更して残す。これにより、一度不足だった項目がCSV補完、再提出、再取込で解消した経緯を追える。
 - `exam_item_values` は件数が多いため、人手判断の現在状態だけを最小限持つ。長文理由や変更前後は別のauditテーブルへ寄せる。
 - `exam_item_values` に持つ現在状態候補は、`review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成を基本とする。
-- `review_status` の候補は `NONE`、`NEEDS_CONFIRMATION`、`APPROVED_WITH_REASON`、`EXCLUDED`、`WAITING_RESUBMISSION`、`RESOLVED_BY_SOURCE_VALUE` とする。
+- `review_status` の候補は `NONE`、`NEEDS_CONFIRMATION`、`APPROVED_WITH_REASON`、`EXCLUDED`、`WAITING_RESUBMISSION`、`RESUBMITTED`、`RESOLVED_BY_SOURCE_VALUE` とする。
 - 変更履歴は `subscriber_audit` と同じく、値に変化があったfieldだけを別テーブルへ記録する。想定テーブルは `exam_item_value_audit_logs` とし、`exam_item_value_id`、`field`、`old_value`、`new_value`、`changed_at`、`source`、`note`、`changed_by_app_user_id`、`change_run_id` を持つ。
 - batchテーブルやoperation_idは初期実装では作らない。まとめ作業で複数item_valueを更新した場合は、各item_valueに同じnoteのaudit rowが並ぶことで同時処理だったことを読み取る。
 - case出力可否の再計算では、`check_reason` のMISSING detailと `exam_case_check_review_items` を突合する。該当case確認項目が存在しない場合は未承認扱いとし、case再チェックで不足確認項目を作る。

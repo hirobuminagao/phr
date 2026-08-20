@@ -1039,6 +1039,7 @@ def case_review_status_label(status: str | None) -> str:
         "NEEDS_CONFIRMATION": "確認待ち",
         "APPROVED_WITH_REASON": "理由ありOK",
         "WAITING_RESUBMISSION": "再提出待ち",
+        "RESUBMITTED": "再提出済み",
         "EXCLUDED": "除外",
         "RESOLVED_BY_SOURCE_VALUE": "受領値で解決",
     }
@@ -2945,6 +2946,22 @@ def subscriber_match_status_label(status: str | None, method: str | None = None)
 templates.env.globals["subscriber_match_status_label"] = subscriber_match_status_label
 
 
+def gender_code_label(gender_code: Any) -> str:
+    code = str(gender_code or "").strip()
+    labels = {
+        "1": "男",
+        "2": "女",
+        "M": "男",
+        "F": "女",
+        "male": "男",
+        "female": "女",
+    }
+    return labels.get(code, code or "-")
+
+
+templates.env.globals["gender_code_label"] = gender_code_label
+
+
 def load_subscriber_match_issue_rows(
     cur: Any,
     *,
@@ -3054,6 +3071,7 @@ def load_subscriber_match_candidate_rows(
     cur: Any,
     *,
     ledger: Mapping[str, Any] | None,
+    event_id: Any | None = None,
     query: str = "",
     candidate_filters: Mapping[str, str] | None = None,
     limit: int = 50,
@@ -3134,6 +3152,7 @@ def load_subscriber_match_candidate_rows(
     if filter_parts:
         where_sql_parts.extend(f"({part})" for part in filter_parts)
     score_sql = " + ".join(score_parts) if score_parts else "0"
+    case_event_id = event_id or (ledger.get("event_id") if ledger else None)
     cur.execute(
         f"""
         SELECT
@@ -3159,16 +3178,78 @@ def load_subscriber_match_candidate_rows(
           a.postal_code AS subscriber_postal_code,
           a.address_line AS subscriber_address_line,
           a.building AS subscriber_building,
+          hds.status AS hia_dashboard_status,
+          hds.medical_institution AS hia_dashboard_medical_institution,
+          hds.reservation_date AS hia_dashboard_reservation_date,
+          hds.exam_date AS hia_dashboard_exam_date,
+          hds.course_name AS hia_dashboard_course_name,
+          case_summary.case_count AS candidate_case_count,
+          latest_case.exam_export_case_id AS candidate_latest_case_id,
+          latest_case.facility_name AS candidate_latest_case_facility_name,
+          latest_case.exam_date AS candidate_latest_case_exam_date,
+          latest_case.source_mode AS candidate_latest_case_source_mode,
+          latest_case.export_readiness_status AS candidate_latest_case_export_readiness_status,
+          latest_case.xml_export_status AS candidate_latest_case_xml_export_status,
+          latest_case.legal_check_result AS candidate_latest_case_legal_check_result,
+          latest_case.specific_check_result AS candidate_latest_case_specific_check_result,
           ({score_sql}) AS match_score
         FROM {qname(dev_db())}.subscribers AS s
         LEFT JOIN {qname(dev_db())}.subscriber_addresses AS a
           ON a.subscriber_id = s.id
          AND a.is_current = 1
+        LEFT JOIN {qname(work_db())}.hia_dashboard_status AS hds
+          ON hds.hia_subscriber_id = s.hia_subscriber_id
+         AND hds.is_active = 1
+        LEFT JOIN (
+          SELECT
+            subscriber_id,
+            COUNT(*) AS case_count
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE event_id = %s
+          GROUP BY subscriber_id
+        ) AS case_summary
+          ON case_summary.subscriber_id = s.id
+        LEFT JOIN (
+          SELECT *
+          FROM (
+            SELECT
+              eec.exam_export_case_id,
+              eec.subscriber_id,
+              eec.facility_name,
+              eec.exam_date,
+              eec.source_mode,
+              eec.export_readiness_status,
+              eec.xml_export_status,
+              COALESCE(ecr.legal_check_result, 'PENDING') AS legal_check_result,
+              COALESCE(ecr.specific_check_result, 'PENDING') AS specific_check_result,
+              ROW_NUMBER() OVER (
+                PARTITION BY eec.subscriber_id
+                ORDER BY eec.exam_date DESC, eec.exam_export_case_id DESC
+              ) AS row_num
+            FROM {qname(health_db())}.exam_export_cases AS eec
+            LEFT JOIN (
+              SELECT r1.*
+              FROM {qname(health_db())}.exam_check_results AS r1
+              INNER JOIN (
+                SELECT exam_export_case_id, MAX(id) AS max_id
+                FROM {qname(health_db())}.exam_check_results
+                WHERE ledger_type = 'EXPORT_CASE'
+                  AND exam_export_case_id IS NOT NULL
+                GROUP BY exam_export_case_id
+              ) AS latest_result
+                ON latest_result.max_id = r1.id
+            ) AS ecr
+              ON ecr.exam_export_case_id = eec.exam_export_case_id
+            WHERE eec.event_id = %s
+          ) AS ranked_cases
+          WHERE row_num = 1
+        ) AS latest_case
+          ON latest_case.subscriber_id = s.id
         WHERE {" AND ".join(where_sql_parts)}
-        ORDER BY match_score DESC, s.id, a.address_id DESC
+        ORDER BY match_score DESC, s.id, a.address_id DESC, hds.hia_dashboard_person_id DESC
         LIMIT %s
         """,
-        (*score_params, *params, *filter_params, limit),
+        (*score_params, case_event_id, case_event_id, *params, *filter_params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -3986,7 +4067,8 @@ def load_exam_export_case_placeholders(cur: Any, *, exam_export_case_id: int) ->
             WHEN 'WAITING_RESUBMISSION' THEN 1
             WHEN 'NONE' THEN 2
             WHEN 'APPROVED_WITH_REASON' THEN 3
-            ELSE 4
+            WHEN 'RESUBMITTED' THEN 4
+            ELSE 5
           END,
           cri.check_scope,
           cri.check_item_code,
@@ -7117,6 +7199,7 @@ def subscriber_match_review(request: Request) -> Response:
             candidate_rows = load_subscriber_match_candidate_rows(
                 cur,
                 ledger=selected_ledger,
+                event_id=filters["event_id"],
                 query=candidate_query,
                 candidate_filters=candidate_filters,
             )
@@ -7554,6 +7637,7 @@ async def exam_export_case_item_review(request: Request, exam_export_case_id: in
         "APPROVED_WITH_REASON",
         "EXCLUDED",
         "WAITING_RESUBMISSION",
+        "RESUBMITTED",
         "RESOLVED_BY_SOURCE_VALUE",
         "NONE",
     }
@@ -7620,6 +7704,7 @@ async def exam_export_case_item_review_bulk(request: Request, exam_export_case_i
         "APPROVED_WITH_REASON",
         "EXCLUDED",
         "WAITING_RESUBMISSION",
+        "RESUBMITTED",
         "RESOLVED_BY_SOURCE_VALUE",
         "NONE",
     }

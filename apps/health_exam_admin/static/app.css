@@ -1502,6 +1502,24 @@ a.home-menu-card:hover {
   font-weight: 900;
 }
 
+.help-popover-right {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+}
+
+.mini-status-box {
+  margin-block-start: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d8e3ee;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.mini-status-box strong,
+.mini-status-box small {
+  display: block;
+}
+
 .hover-help-popover {
   display: none;
 }

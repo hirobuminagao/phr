@@ -101,6 +101,7 @@ XMLとCSVの両方がある健診機関では、取込sourceの値とXML出力�
 - `APPROVED_WITH_REASON`: 値はない、または不完全だが理由ありで出力許可。
 - `EXCLUDED`: 存在する値をXML出力採用対象から除外。
 - `WAITING_RESUBMISSION`: 健診機関からの再提出待ち。
+- `RESUBMITTED`: 健診機関から再提出済み。再提出ファイルの取込、case再生成、再チェックで解消確認する。
 - `RESOLVED_BY_SOURCE_VALUE`: 以前は不足だったが、再取込、CSV補完、再提出などでsource値が入り解消済み。
 
 変更履歴は `subscriber_audit` に近い考え方で、値に変化があったfieldだけを別テーブルへ残す。

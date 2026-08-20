@@ -118,7 +118,7 @@
         <div>
           <span>受領側</span>
           <strong>{{ selected_ledger.name_kana_raw or "カナなし" }}</strong>
-          <small>{{ selected_ledger.name_full_raw or "氏名なし" }} / {{ selected_ledger.birthdate or "生年月日なし" }} / 性別 {{ selected_ledger.gender_code or "-" }}</small>
+          <small>{{ selected_ledger.name_full_raw or "氏名なし" }} / {{ selected_ledger.birthdate or "生年月日なし" }} / 性別 {{ gender_code_label(selected_ledger.gender_code) }}</small>
         </div>
         <div>
           <span>保険情報</span>
@@ -169,7 +169,18 @@
               <th>照合情報</th>
               <th>資格</th>
               <th>適用</th>
-              <th>確定</th>
+              <th class="help-cell">
+                <span class="table-help-heading">
+                  確定
+                  <span class="help-icon-button" aria-label="突合確定ボタンの説明">?</span>
+                </span>
+                <div class="help-popover hover-help-popover help-popover-right">
+                  <strong>確定ボタンの違い</strong>
+                  <p><span>突合だけ確定:</span> この受領ledgerを選択した加入者へ紐付けます。CSV/XML由来の出力用基本情報は変更しません。</p>
+                  <p><span>加入者情報も適用:</span> 突合確定に加えて、subscribers由来の氏名カナ、記号、番号、枝番、郵便番号、住所を出力用基本情報へ反映します。空値では上書きしません。</p>
+                  <p>再提出待ち、再提出済み、除外などの業務判断は個人case詳細の確認項目で管理します。</p>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -178,7 +189,7 @@
               <td>
                 <strong>{{ candidate.name_kana_full or "カナなし" }}</strong>
                 <small>{{ candidate.name_kanji_full or "氏名なし" }} / subscriber {{ candidate.subscriber_id }}</small>
-                <small>{{ candidate.birth or "-" }} / 性別 {{ candidate.gender_code or "-" }}</small>
+                <small>{{ candidate.birth or "-" }} / 性別 {{ gender_code_label(candidate.gender_code) }}</small>
               </td>
               <td>
                 <strong>score {{ candidate.match_score or 0 }}</strong>
@@ -188,6 +199,28 @@
               <td>
                 <strong>{{ candidate.relationship_name or "-" }}</strong>
                 <small>喪失 {{ candidate.qualification_lost_date or "-" }} / 社員 {{ candidate.employee_code or "-" }}</small>
+                <small>HIA状態 {{ candidate.hia_dashboard_status or "-" }}</small>
+                <small>{{ candidate.hia_dashboard_medical_institution or "医療機関なし" }}</small>
+                <small>予約 {{ candidate.hia_dashboard_reservation_date or "-" }} / 受診 {{ candidate.hia_dashboard_exam_date or "-" }}</small>
+                <small>{{ candidate.hia_dashboard_course_name or "コースなし" }}</small>
+                <div class="mini-status-box">
+                  <strong>既存case {{ candidate.candidate_case_count or 0 }}件</strong>
+                  {% if candidate.candidate_latest_case_id %}
+                  <small>
+                    最新 case {{ candidate.candidate_latest_case_id }}
+                    / {{ candidate.candidate_latest_case_exam_date or "-" }}
+                    / {{ candidate.candidate_latest_case_facility_name or "健診機関なし" }}
+                  </small>
+                  <small>
+                    出力 {{ candidate.candidate_latest_case_export_readiness_status or "-" }}
+                    / XML {{ candidate.candidate_latest_case_xml_export_status or "-" }}
+                    / 法定 {{ check_result_label(candidate.candidate_latest_case_legal_check_result) or "-" }}
+                    / 特定 {{ check_result_label(normalize_specific_check_result(candidate.candidate_latest_case_specific_check_result)) or "-" }}
+                  </small>
+                  {% else %}
+                  <small>同じeventのcaseはまだありません。</small>
+                  {% endif %}
+                </div>
               </td>
               <td>
                 <strong>加入者情報</strong>

@@ -7,7 +7,7 @@ CREATE TABLE `health_exam_result`.`exam_case_check_review_items` (
   `check_item_name` varchar(255) DEFAULT NULL,
   `raw_value_type` varchar(32) DEFAULT NULL,
   `validation_reason` text DEFAULT NULL,
-  `review_status` varchar(32) NOT NULL DEFAULT 'NEEDS_CONFIRMATION' COMMENT 'NEEDS_CONFIRMATION/APPROVED_WITH_REASON/EXCLUDED/WAITING_RESUBMISSION/RESOLVED_BY_SOURCE_VALUE/NONE',
+  `review_status` varchar(32) NOT NULL DEFAULT 'NEEDS_CONFIRMATION' COMMENT 'NEEDS_CONFIRMATION/APPROVED_WITH_REASON/EXCLUDED/WAITING_RESUBMISSION/RESUBMITTED/RESOLVED_BY_SOURCE_VALUE/NONE',
   `reviewed_at` datetime(3) DEFAULT NULL,
   `reviewed_by_app_user_id` bigint unsigned DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

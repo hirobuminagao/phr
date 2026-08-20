@@ -182,6 +182,7 @@
           <option value="APPROVED_WITH_REASON">理由ありOK</option>
           <option value="NEEDS_CONFIRMATION">確認待ち</option>
           <option value="WAITING_RESUBMISSION">再提出待ち</option>
+          <option value="RESUBMITTED">再提出済み</option>
           <option value="EXCLUDED">除外</option>
           <option value="RESOLVED_BY_SOURCE_VALUE">受領値で解決</option>
           <option value="NONE">未処理</option>
@@ -247,7 +248,7 @@
               <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/item-review" class="case-review-form">
                 <input type="hidden" name="review_item_id" value="{{ item.id }}">
                 <select name="review_status">
-                  {% for status in ["NEEDS_CONFIRMATION", "APPROVED_WITH_REASON", "WAITING_RESUBMISSION", "EXCLUDED", "RESOLVED_BY_SOURCE_VALUE", "NONE"] %}
+                  {% for status in ["NEEDS_CONFIRMATION", "APPROVED_WITH_REASON", "WAITING_RESUBMISSION", "RESUBMITTED", "EXCLUDED", "RESOLVED_BY_SOURCE_VALUE", "NONE"] %}
                   <option value="{{ status }}" {% if item.review_status == status %}selected{% endif %}>{{ case_review_status_label(status) }}</option>
                   {% endfor %}
                 </select>
