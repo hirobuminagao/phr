@@ -2482,6 +2482,17 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
     return rows
 
 
+def enrich_folder_alias_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for row in rows:
+        row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+        row["source_mode_filter_tokens"] = source_mode_filter_tokens(row.get("expected_source_mode"))
+        row["receipt_source_mode_label"] = receipt_source_mode_label(
+            row.get("xml_file_count"),
+            row.get("csv_file_count"),
+        )
+    return rows
+
+
 def load_received_folder_alias_rows(cur: Any, *, limit: int = 400) -> list[dict[str, Any]]:
     cur.execute(
         f"""
@@ -2531,15 +2542,101 @@ def load_received_folder_alias_rows(cur: Any, *, limit: int = 400) -> list[dict[
         """,
         (limit,),
     )
-    rows = [dict(row) for row in cur.fetchall()]
-    for row in rows:
-        row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
-        row["source_mode_filter_tokens"] = source_mode_filter_tokens(row.get("expected_source_mode"))
-        row["receipt_source_mode_label"] = receipt_source_mode_label(
-            row.get("xml_file_count"),
-            row.get("csv_file_count"),
-        )
-    return rows
+    return enrich_folder_alias_rows([dict(row) for row in cur.fetchall()])
+
+
+def load_subscriber_match_issue_folder_alias_rows(
+    cur: Any,
+    *,
+    filters: dict[str, str],
+    limit: int = 400,
+) -> list[dict[str, Any]]:
+    issue_parts, issue_params = subscriber_match_issue_where_parts(filters, include_facility=False)
+    issue_parts.append("el.exam_facility_id IS NOT NULL")
+    issue_where_sql = " AND ".join(issue_parts)
+    cur.execute(
+        f"""
+        SELECT
+          mfa.alias_id,
+          mfa.event_id,
+          ev.event_name,
+          ev.event_year,
+          mfa.src_folder_raw,
+          mfa.dst_folder_norm,
+          mfa.exam_facility_id,
+          mfa.expected_source_mode,
+          mfa.csv_format_version_id,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          ef.exam_facility_display_name,
+          cfv.mapping_version AS csv_mapping_version,
+          cfv.format_name AS csv_format_name,
+          cfv.is_active AS csv_format_is_active,
+          receipt_counts.xml_file_count,
+          receipt_counts.csv_file_count,
+          mfa.manual_judgement,
+          mfa.note,
+          mfa.is_active,
+          mfa.updated_at
+        FROM {qname(master_db())}.medical_folder_aliases mfa
+        INNER JOIN (
+          SELECT DISTINCT el.event_id, el.exam_facility_id
+          FROM {qname(health_db())}.exam_ledgers AS el
+          WHERE {issue_where_sql}
+        ) AS issue_facilities
+          ON issue_facilities.event_id = mfa.event_id
+         AND issue_facilities.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            SUM(CASE WHEN file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
+            SUM(CASE WHEN file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count
+          FROM {qname(health_db())}.file_receipts
+          WHERE exam_facility_id IS NOT NULL
+          GROUP BY event_id, exam_facility_id
+        ) receipt_counts
+          ON receipt_counts.event_id = mfa.event_id
+         AND receipt_counts.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN {qname(master_db())}.csv_format_versions cfv
+          ON cfv.csv_format_version_id = mfa.csv_format_version_id
+        LEFT JOIN {qname(dev_db())}.event ev
+          ON ev.event_id = mfa.event_id
+        ORDER BY mfa.is_active DESC, mfa.event_id DESC, mfa.src_folder_raw
+        LIMIT %s
+        """,
+        (*issue_params, limit),
+    )
+    return enrich_folder_alias_rows([dict(row) for row in cur.fetchall()])
+
+
+def load_subscriber_match_issue_month_options(
+    cur: Any,
+    *,
+    filters: dict[str, str],
+    limit: int = 36,
+) -> list[dict[str, Any]]:
+    where_parts, params = subscriber_match_issue_where_parts(filters, include_exam_month=False)
+    where_sql = " AND ".join(where_parts)
+    cur.execute(
+        f"""
+        SELECT
+          CASE WHEN el.exam_date IS NULL THEN '不明' ELSE DATE_FORMAT(el.exam_date, '%Y-%m') END AS exam_month,
+          CASE WHEN el.exam_date IS NULL THEN '不明' ELSE DATE_FORMAT(el.exam_date, '%Y-%m') END AS exam_month_label,
+          COUNT(*) AS ledger_count
+        FROM {qname(health_db())}.exam_ledgers AS el
+        WHERE {where_sql}
+        GROUP BY CASE WHEN el.exam_date IS NULL THEN '不明' ELSE DATE_FORMAT(el.exam_date, '%Y-%m') END
+        ORDER BY
+          CASE WHEN exam_month = '不明' THEN 1 ELSE 0 END,
+          exam_month DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
 
 
 def load_csv_format_options(cur: Any, *, limit: int = 500) -> list[dict[str, Any]]:
@@ -2980,48 +3077,7 @@ def load_subscriber_match_issue_rows(
     filters: dict[str, str],
     limit: int = 200,
 ) -> list[dict[str, Any]]:
-    where_parts: list[str] = []
-    params: list[Any] = []
-    event_id = filters.get("event_id", "").strip()
-    status_filter = filters.get("status_filter", "").strip()
-    query = filters.get("q", "").strip()
-    facility_query = filters.get("facility_q", "").strip()
-    if event_id:
-        where_parts.append("el.event_id = %s")
-        params.append(event_id)
-    if status_filter in SUBSCRIBER_MATCH_ISSUE_FILTERS:
-        where_parts.append(SUBSCRIBER_MATCH_ISSUE_FILTERS[status_filter])
-    else:
-        where_parts.append(
-            """
-            (
-              el.subscriber_match_status IS NULL
-              OR el.subscriber_match_status <> 'MATCHED'
-              OR el.subscriber_match_method IS NULL
-              OR el.subscriber_match_method NOT IN ('identity_hash', 'manual')
-            )
-            """
-        )
-    if query:
-        like = f"%{query}%"
-        where_parts.append(
-            """
-            (
-              el.hia_subscriber_id LIKE %s
-              OR el.person_id_custom LIKE %s
-              OR el.name_full_raw LIKE %s
-              OR el.name_kana_raw LIKE %s
-              OR el.insurance_symbol_raw LIKE %s
-              OR el.insurance_number_raw LIKE %s
-              OR el.xml_file_name LIKE %s
-            )
-            """
-        )
-        params.extend([like] * 7)
-    if facility_query:
-        like = f"%{facility_query}%"
-        where_parts.append("(el.facility_code LIKE %s OR el.facility_name LIKE %s)")
-        params.extend([like, like])
+    where_parts, params = subscriber_match_issue_where_parts(filters)
     where_sql = f"WHERE {' AND '.join(where_parts)}"
     cur.execute(
         f"""
@@ -3080,6 +3136,72 @@ def load_subscriber_match_issue_rows(
         (*params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def subscriber_match_issue_where_parts(
+    filters: dict[str, str],
+    *,
+    include_query: bool = True,
+    include_facility: bool = True,
+    include_exam_month: bool = True,
+) -> tuple[list[str], list[Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    event_id = filters.get("event_id", "").strip()
+    status_filter = filters.get("status_filter", "").strip()
+    query = filters.get("q", "").strip()
+    facility_query = filters.get("facility_q", "").strip()
+    exam_months = split_filter_values(filters.get("exam_month", ""))
+    if event_id:
+        where_parts.append("el.event_id = %s")
+        params.append(event_id)
+    if status_filter in SUBSCRIBER_MATCH_ISSUE_FILTERS:
+        where_parts.append(SUBSCRIBER_MATCH_ISSUE_FILTERS[status_filter])
+    else:
+        where_parts.append(
+            """
+            (
+              el.subscriber_match_status IS NULL
+              OR el.subscriber_match_status <> 'MATCHED'
+              OR el.subscriber_match_method IS NULL
+              OR el.subscriber_match_method NOT IN ('identity_hash', 'manual')
+            )
+            """
+        )
+    if include_query and query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              el.hia_subscriber_id LIKE %s
+              OR el.person_id_custom LIKE %s
+              OR el.name_full_raw LIKE %s
+              OR el.name_kana_raw LIKE %s
+              OR el.insurance_symbol_raw LIKE %s
+              OR el.insurance_number_raw LIKE %s
+              OR el.xml_file_name LIKE %s
+            )
+            """
+        )
+        params.extend([like] * 7)
+    if include_facility and facility_query:
+        like = f"%{facility_query}%"
+        where_parts.append("(el.facility_code LIKE %s OR el.facility_name LIKE %s)")
+        params.extend([like, like])
+    if include_exam_month and exam_months:
+        known_months = [
+            month for month in exam_months
+            if month.upper() != "UNKNOWN" and month != "不明"
+        ]
+        month_parts: list[str] = []
+        if known_months:
+            month_parts.append(f"DATE_FORMAT(el.exam_date, '%Y-%m') IN ({', '.join(['%s'] * len(known_months))})")
+            params.extend(known_months)
+        if any(month.upper() == "UNKNOWN" or month == "不明" for month in exam_months):
+            month_parts.append("el.exam_date IS NULL")
+        if month_parts:
+            where_parts.append("(" + " OR ".join(month_parts) + ")")
+    return where_parts, params
 
 
 def load_subscriber_match_candidate_rows(
@@ -7273,6 +7395,7 @@ def subscriber_match_review(request: Request) -> Response:
         "status_filter": request.query_params.get("status_filter", ""),
         "q": request.query_params.get("q", ""),
         "facility_q": request.query_params.get("facility_q", ""),
+        "exam_month": request.query_params.get("exam_month", ""),
         "limit": request.query_params.get("limit", "200"),
     }
     selected_ledger_id = parse_positive_int(request.query_params.get("ledger_id", ""), default=0, maximum=999999999999)
@@ -7289,7 +7412,8 @@ def subscriber_match_review(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
-            folder_aliases = load_received_folder_alias_rows(cur)
+            folder_aliases = load_subscriber_match_issue_folder_alias_rows(cur, filters=filters)
+            exam_month_options = load_subscriber_match_issue_month_options(cur, filters=filters)
             rows = load_subscriber_match_issue_rows(cur, filters=filters, limit=limit)
             selected_ledger = None
             if selected_ledger_id:
@@ -7333,6 +7457,8 @@ def subscriber_match_review(request: Request) -> Response:
             "filters": filters,
             "rows": rows,
             "folder_aliases": folder_aliases,
+            "exam_month_options": exam_month_options,
+            "selected_exam_months": split_filter_values(filters.get("exam_month")),
             "selected_ledger": selected_ledger,
             "candidate_rows": candidate_rows,
             "candidate_query": candidate_query,

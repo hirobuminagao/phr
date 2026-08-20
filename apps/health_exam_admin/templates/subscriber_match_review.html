@@ -45,6 +45,29 @@
           </span>
         </label>
         <label>
+          <span>受診月</span>
+          <span class="month-picker-field" data-month-picker>
+            <input name="exam_month" value="{{ filters.exam_month or '' }}" autocomplete="off" placeholder="YYYY-MM / 不明" data-month-picker-input>
+            <div class="month-picker-popover" data-month-picker-popover hidden>
+              <div class="month-picker-head">
+                <strong>受診月を選択</strong>
+                <button type="button" class="ghost-button compact-action-button" data-month-picker-clear>クリア</button>
+              </div>
+              <div class="month-picker-options">
+                {% for option in exam_month_options %}
+                <label class="month-picker-option {{ 'is-selected' if option.exam_month in selected_exam_months else '' }}">
+                  <input type="checkbox" value="{{ option.exam_month }}" {% if option.exam_month in selected_exam_months %}checked{% endif %} data-month-picker-option>
+                  <span>{{ option.exam_month_label or option.exam_month }}</span>
+                  <small>{{ option.ledger_count }}件</small>
+                </label>
+                {% else %}
+                <p class="subtle">選択できる受診月がありません。</p>
+                {% endfor %}
+              </div>
+            </div>
+          </span>
+        </label>
+        <label>
           <span>イベント</span>
           <select name="event_id">
             {% for event in event_options %}
@@ -162,7 +185,7 @@
       <div class="subscriber-match-list">
         {% for row in rows %}
         {% set selected = selected_ledger and selected_ledger.exam_ledger_id == row.exam_ledger_id %}
-        <a class="subscriber-match-ledger-card {{ 'is-selected' if selected else '' }}" href="/subscriber-match-review?event_id={{ filters.event_id|url_quote }}&status_filter={{ filters.status_filter|url_quote }}&q={{ filters.q|url_quote }}&facility_q={{ filters.facility_q|url_quote }}&limit={{ limit }}&ledger_id={{ row.exam_ledger_id }}">
+        <a class="subscriber-match-ledger-card {{ 'is-selected' if selected else '' }}" href="/subscriber-match-review?event_id={{ filters.event_id|url_quote }}&status_filter={{ filters.status_filter|url_quote }}&q={{ filters.q|url_quote }}&facility_q={{ filters.facility_q|url_quote }}&exam_month={{ filters.exam_month|url_quote }}&limit={{ limit }}&ledger_id={{ row.exam_ledger_id }}">
           <span class="status-pill {{ 'status-danger' if row.subscriber_match_status in ['NOT_FOUND', 'IDENTITY_ERROR'] else 'status-pending' }}">
             {{ subscriber_match_status_label(row.subscriber_match_status, row.subscriber_match_method) }}
           </span>
@@ -238,6 +261,7 @@
         <input type="hidden" name="status_filter" value="{{ filters.status_filter }}">
         <input type="hidden" name="q" value="{{ filters.q }}">
         <input type="hidden" name="facility_q" value="{{ filters.facility_q }}">
+        <input type="hidden" name="exam_month" value="{{ filters.exam_month }}">
         <input type="hidden" name="limit" value="{{ limit }}">
         <input type="hidden" name="ledger_id" value="{{ selected_ledger.exam_ledger_id }}">
         <label>
