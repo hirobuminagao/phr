@@ -307,6 +307,10 @@ def dev_db() -> str:
     return os.getenv("PHR_DEV_DB", "dev_phr")
 
 
+def work_other_db() -> str:
+    return os.getenv("PHR_WORK_OTHER_DB", "work_other")
+
+
 def db_prefix() -> str:
     return os.getenv("PHR_DB_PREFIX", "PHR_DB_")
 
@@ -3197,7 +3201,7 @@ def load_subscriber_match_candidate_rows(
         LEFT JOIN {qname(dev_db())}.subscriber_addresses AS a
           ON a.subscriber_id = s.id
          AND a.is_current = 1
-        LEFT JOIN {qname(work_db())}.hia_dashboard_status AS hds
+        LEFT JOIN {qname(work_other_db())}.hia_dashboard_status AS hds
           ON hds.hia_subscriber_id = s.hia_subscriber_id
          AND hds.is_active = 1
         LEFT JOIN (
