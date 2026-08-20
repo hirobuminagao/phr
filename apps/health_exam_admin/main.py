@@ -3055,12 +3055,16 @@ def load_subscriber_match_candidate_rows(
     *,
     ledger: Mapping[str, Any] | None,
     query: str = "",
+    candidate_filters: Mapping[str, str] | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
-    if ledger is None and not query.strip():
+    candidate_filters = candidate_filters or {}
+    if ledger is None and not query.strip() and not any(str(v or "").strip() for v in candidate_filters.values()):
         return []
     where_parts: list[str] = []
+    filter_parts: list[str] = []
     params: list[Any] = []
+    filter_params: list[Any] = []
     score_parts: list[str] = []
     score_params: list[Any] = []
     if ledger:
@@ -3097,19 +3101,38 @@ def load_subscriber_match_candidate_rows(
             (
               s.hia_subscriber_id LIKE %s
               OR s.person_id_custom LIKE %s
-              OR s.name_kana_full LIKE %s
-              OR s.name_kana_full_match LIKE %s
               OR s.name_kanji_full LIKE %s
-              OR s.insurance_symbol LIKE %s
-              OR s.insurance_number LIKE %s
-              OR s.insurance_number_match LIKE %s
-              OR s.employee_code LIKE %s
             )
             """
         )
-        params.extend([like] * 9)
-    if not where_parts:
+        params.extend([like] * 3)
+    candidate_kana = str(candidate_filters.get("name_kana") or "").strip()
+    if candidate_kana:
+        like = f"%{candidate_kana}%"
+        filter_parts.append("(s.name_kana_full LIKE %s OR s.name_kana_full_match LIKE %s)")
+        filter_params.extend([like, like])
+    candidate_symbol = str(candidate_filters.get("insurance_symbol") or "").strip()
+    if candidate_symbol:
+        like = f"%{candidate_symbol}%"
+        filter_parts.append("(s.insurance_symbol LIKE %s OR s.insurance_symbol_export LIKE %s OR s.insurance_symbol_match LIKE %s)")
+        filter_params.extend([like, like, like])
+    candidate_number = str(candidate_filters.get("insurance_number") or "").strip()
+    if candidate_number:
+        like = f"%{candidate_number}%"
+        filter_parts.append("(s.insurance_number LIKE %s OR s.insurance_number_match LIKE %s)")
+        filter_params.extend([like, like])
+    candidate_employee_code = str(candidate_filters.get("employee_code") or "").strip()
+    if candidate_employee_code:
+        like = f"%{candidate_employee_code}%"
+        filter_parts.append("s.employee_code LIKE %s")
+        filter_params.append(like)
+    if not where_parts and not filter_parts:
         return []
+    where_sql_parts: list[str] = []
+    if where_parts:
+        where_sql_parts.append("(" + " OR ".join(f"({part})" for part in where_parts) + ")")
+    if filter_parts:
+        where_sql_parts.extend(f"({part})" for part in filter_parts)
     score_sql = " + ".join(score_parts) if score_parts else "0"
     cur.execute(
         f"""
@@ -3141,11 +3164,11 @@ def load_subscriber_match_candidate_rows(
         LEFT JOIN {qname(dev_db())}.subscriber_addresses AS a
           ON a.subscriber_id = s.id
          AND a.is_current = 1
-        WHERE {" OR ".join(f"({part})" for part in where_parts)}
+        WHERE {" AND ".join(where_sql_parts)}
         ORDER BY match_score DESC, s.id, a.address_id DESC
         LIMIT %s
         """,
-        (*score_params, *params, limit),
+        (*score_params, *params, *filter_params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -7073,6 +7096,12 @@ def subscriber_match_review(request: Request) -> Response:
     }
     selected_ledger_id = parse_positive_int(request.query_params.get("ledger_id", ""), default=0, maximum=999999999999)
     candidate_query = request.query_params.get("candidate_q", "").strip()
+    candidate_filters = {
+        "name_kana": request.query_params.get("candidate_name_kana", "").strip(),
+        "insurance_symbol": request.query_params.get("candidate_insurance_symbol", "").strip(),
+        "insurance_number": request.query_params.get("candidate_insurance_number", "").strip(),
+        "employee_code": request.query_params.get("candidate_employee_code", "").strip(),
+    }
     limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -7089,6 +7118,7 @@ def subscriber_match_review(request: Request) -> Response:
                 cur,
                 ledger=selected_ledger,
                 query=candidate_query,
+                candidate_filters=candidate_filters,
             )
             if audit_enabled(cur):
                 for row in rows:
@@ -7122,6 +7152,7 @@ def subscriber_match_review(request: Request) -> Response:
             "selected_ledger": selected_ledger,
             "candidate_rows": candidate_rows,
             "candidate_query": candidate_query,
+            "candidate_filters": candidate_filters,
             "limit": limit,
             "message": request.query_params.get("message", ""),
             "error": request.query_params.get("error", ""),

@@ -87,7 +87,7 @@
           <div>
             <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
             <small>{{ row.name_full_raw or "氏名なし" }} / ledger {{ row.exam_ledger_id }}</small>
-            <small>HIA {{ row.hia_subscriber_id or "-" }} / PHR {{ row.person_id_custom or "-" }}</small>
+            <small>HIA {{ row.hia_subscriber_id or "-" }} / person_id_custom {{ row.person_id_custom or "-" }}</small>
             <small>記号 {{ row.insurance_symbol_raw or "-" }} / 番号 {{ row.insurance_number_raw or "-" }} / 生年月日 {{ row.birthdate or "-" }}</small>
             <small>{{ row.facility_name or "健診機関なし" }} / {{ row.exam_date or "受診日なし" }} / {{ row.source_type }}</small>
           </div>
@@ -123,7 +123,7 @@
         <div>
           <span>保険情報</span>
           <strong>{{ selected_ledger.insurer_number or "-" }} / {{ selected_ledger.insurance_symbol_raw or "-" }} / {{ selected_ledger.insurance_number_raw or "-" }}</strong>
-          <small>HIA {{ selected_ledger.hia_subscriber_id or "-" }} / PHR {{ selected_ledger.person_id_custom or "-" }}</small>
+          <small>HIA {{ selected_ledger.hia_subscriber_id or "-" }} / person_id_custom {{ selected_ledger.person_id_custom or "-" }}</small>
         </div>
         <div>
           <span>突合状態</span>
@@ -139,8 +139,24 @@
         <input type="hidden" name="limit" value="{{ limit }}">
         <input type="hidden" name="ledger_id" value="{{ selected_ledger.exam_ledger_id }}">
         <label>
-          <span>候補を追加検索</span>
-          <input name="candidate_q" value="{{ candidate_query or '' }}" autocomplete="off" placeholder="HIA ID / PHRキー / カナ / 記号 / 番号 / 社員番号">
+          <span>キーワード</span>
+          <input name="candidate_q" value="{{ candidate_query or '' }}" autocomplete="off" placeholder="HIA ID / person_id_custom / 氏名">
+        </label>
+        <label>
+          <span>カナ</span>
+          <input name="candidate_name_kana" value="{{ candidate_filters.name_kana or '' }}" autocomplete="off" placeholder="氏名カナ">
+        </label>
+        <label>
+          <span>記号</span>
+          <input name="candidate_insurance_symbol" value="{{ candidate_filters.insurance_symbol or '' }}" autocomplete="off" placeholder="保険証記号">
+        </label>
+        <label>
+          <span>番号</span>
+          <input name="candidate_insurance_number" value="{{ candidate_filters.insurance_number or '' }}" autocomplete="off" placeholder="保険証番号">
+        </label>
+        <label>
+          <span>社員番号</span>
+          <input name="candidate_employee_code" value="{{ candidate_filters.employee_code or '' }}" autocomplete="off" placeholder="社員番号">
         </label>
         <button type="submit">候補検索</button>
       </form>
@@ -166,7 +182,7 @@
               </td>
               <td>
                 <strong>score {{ candidate.match_score or 0 }}</strong>
-                <small>HIA {{ candidate.hia_subscriber_id or "-" }} / PHR {{ candidate.person_id_custom or "-" }}</small>
+                <small>HIA {{ candidate.hia_subscriber_id or "-" }} / person_id_custom {{ candidate.person_id_custom or "-" }}</small>
                 <small>{{ candidate.insurer_number or "-" }} / {{ candidate.insurance_symbol or "-" }} / {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
               </td>
               <td>

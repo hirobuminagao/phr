@@ -2779,7 +2779,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .subscriber-candidate-search {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(120px, 0.8fr)) auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 12px;
