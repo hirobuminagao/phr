@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% set title = "加入者突合NG修正" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">SUBSCRIBER MATCH REVIEW</p>
+    <h1>加入者突合NG修正</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/exam-ledgers?subscriber_match_filter=PARTIAL_MATCHED">健診結果一覧（受領）</a>
+    <a class="ghost-button" href="/exam-processing">健診結果処理</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">加入者突合がidentity_hashで確定していない受領ledgerを確認します。手動確定後は健診結果処理のstep5〜7を再実行してください。</p>
+      </div>
+    </div>
+    <form method="get" action="/subscriber-match-review" class="ledger-filter-form subscriber-match-filter-form">
+      <div class="ledger-filter-row ledger-filter-row-primary">
+        <label>
+          <span>キーワード</span>
+          <input name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 記号 / 番号 / 健診機関">
+        </label>
+        <label>
+          <span>イベント</span>
+          <select name="event_id">
+            {% for event in event_options %}
+              <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+                {{ event.event_name or ("event " ~ event.event_id) }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <fieldset class="filter-condition-block">
+          <legend>加入者突合</legend>
+          <div class="filter-toggle-group">
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="PARTIAL_MATCHED" class="{{ 'is-active' if filters.status_filter == 'PARTIAL_MATCHED' else '' }}">一部MATCHED</button>
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="UNMATCHED" class="{{ 'is-active' if filters.status_filter == 'UNMATCHED' else '' }}">UNMATCHED</button>
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="NEEDS_REVIEW" class="{{ 'is-active' if filters.status_filter == 'NEEDS_REVIEW' else '' }}">要確認</button>
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="MISSING" class="{{ 'is-active' if filters.status_filter == 'MISSING' else '' }}">MISSING</button>
+          </div>
+          <input type="hidden" name="status_filter" value="{{ filters.status_filter }}" data-server-filter-value="status_filter">
+        </fieldset>
+        <label>
+          <span>表示件数</span>
+          <input name="limit" value="{{ limit }}">
+        </label>
+        <div class="filter-actions">
+          <button type="submit">検索</button>
+          <a class="ghost-button" href="/subscriber-match-review">クリア</a>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <section class="subscriber-match-workspace">
+    <div class="panel subscriber-match-ledger-list">
+      <div class="section-heading">
+        <div>
+          <h2>確認対象</h2>
+          <p class="subtle">{{ rows|length }} 件を表示しています。</p>
+        </div>
+      </div>
+      <div class="subscriber-match-list">
+        {% for row in rows %}
+        {% set selected = selected_ledger and selected_ledger.exam_ledger_id == row.exam_ledger_id %}
+        <a class="subscriber-match-ledger-card {{ 'is-selected' if selected else '' }}" href="/subscriber-match-review?event_id={{ filters.event_id|url_quote }}&status_filter={{ filters.status_filter|url_quote }}&q={{ filters.q|url_quote }}&limit={{ limit }}&ledger_id={{ row.exam_ledger_id }}">
+          <span class="status-pill {{ 'status-danger' if row.subscriber_match_status in ['NOT_FOUND', 'IDENTITY_ERROR'] else 'status-pending' }}">
+            {{ subscriber_match_status_label(row.subscriber_match_status, row.subscriber_match_method) }}
+          </span>
+          <div>
+            <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
+            <small>{{ row.name_full_raw or "氏名なし" }} / ledger {{ row.exam_ledger_id }}</small>
+            <small>HIA {{ row.hia_subscriber_id or "-" }} / PHR {{ row.person_id_custom or "-" }}</small>
+            <small>記号 {{ row.insurance_symbol_raw or "-" }} / 番号 {{ row.insurance_number_raw or "-" }} / 生年月日 {{ row.birthdate or "-" }}</small>
+            <small>{{ row.facility_name or "健診機関なし" }} / {{ row.exam_date or "受診日なし" }} / {{ row.source_type }}</small>
+          </div>
+        </a>
+        {% else %}
+        <p class="empty-note">確認対象はありません。</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="panel subscriber-match-candidates">
+      <div class="section-heading">
+        <div>
+          <h2>加入者候補</h2>
+          {% if selected_ledger %}
+          <p class="subtle">ledger {{ selected_ledger.exam_ledger_id }} の情報から候補を表示しています。候補が足りない場合は追加検索してください。</p>
+          {% else %}
+          <p class="subtle">左の確認対象を選択してください。</p>
+          {% endif %}
+        </div>
+        {% if selected_ledger %}
+        <a class="ghost-button" href="/exam-ledgers/{{ selected_ledger.exam_ledger_id }}">受領詳細</a>
+        {% endif %}
+      </div>
+
+      {% if selected_ledger %}
+      <div class="subscriber-match-selected-ledger">
+        <div>
+          <span>受領側</span>
+          <strong>{{ selected_ledger.name_kana_raw or "カナなし" }}</strong>
+          <small>{{ selected_ledger.name_full_raw or "氏名なし" }} / {{ selected_ledger.birthdate or "生年月日なし" }} / 性別 {{ selected_ledger.gender_code or "-" }}</small>
+        </div>
+        <div>
+          <span>保険情報</span>
+          <strong>{{ selected_ledger.insurer_number or "-" }} / {{ selected_ledger.insurance_symbol_raw or "-" }} / {{ selected_ledger.insurance_number_raw or "-" }}</strong>
+          <small>HIA {{ selected_ledger.hia_subscriber_id or "-" }} / PHR {{ selected_ledger.person_id_custom or "-" }}</small>
+        </div>
+        <div>
+          <span>突合状態</span>
+          <strong>{{ subscriber_match_status_label(selected_ledger.subscriber_match_status, selected_ledger.subscriber_match_method) }}</strong>
+          <small>{{ selected_ledger.subscriber_match_reason or "" }}</small>
+        </div>
+      </div>
+
+      <form method="get" action="/subscriber-match-review" class="subscriber-candidate-search">
+        <input type="hidden" name="event_id" value="{{ filters.event_id }}">
+        <input type="hidden" name="status_filter" value="{{ filters.status_filter }}">
+        <input type="hidden" name="q" value="{{ filters.q }}">
+        <input type="hidden" name="limit" value="{{ limit }}">
+        <input type="hidden" name="ledger_id" value="{{ selected_ledger.exam_ledger_id }}">
+        <label>
+          <span>候補を追加検索</span>
+          <input name="candidate_q" value="{{ candidate_query or '' }}" autocomplete="off" placeholder="HIA ID / PHRキー / カナ / 記号 / 番号 / 社員番号">
+        </label>
+        <button type="submit">候補検索</button>
+      </form>
+
+      <div class="table-panel">
+        <table class="data-table subscriber-candidate-table">
+          <thead>
+            <tr>
+              <th>候補</th>
+              <th>照合情報</th>
+              <th>資格</th>
+              <th>適用</th>
+              <th>確定</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for candidate in candidate_rows %}
+            <tr>
+              <td>
+                <strong>{{ candidate.name_kana_full or "カナなし" }}</strong>
+                <small>{{ candidate.name_kanji_full or "氏名なし" }} / subscriber {{ candidate.subscriber_id }}</small>
+                <small>{{ candidate.birth or "-" }} / 性別 {{ candidate.gender_code or "-" }}</small>
+              </td>
+              <td>
+                <strong>score {{ candidate.match_score or 0 }}</strong>
+                <small>HIA {{ candidate.hia_subscriber_id or "-" }} / PHR {{ candidate.person_id_custom or "-" }}</small>
+                <small>{{ candidate.insurer_number or "-" }} / {{ candidate.insurance_symbol or "-" }} / {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
+              </td>
+              <td>
+                <strong>{{ candidate.relationship_name or "-" }}</strong>
+                <small>喪失 {{ candidate.qualification_lost_date or "-" }} / 社員 {{ candidate.employee_code or "-" }}</small>
+              </td>
+              <td>
+                <strong>加入者情報</strong>
+                <small>氏名カナ {{ candidate.name_kana_full or "-" }}</small>
+                <small>記号 {{ candidate.insurance_symbol_export or candidate.insurance_symbol or "-" }} / 番号 {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
+                <small>〒 {{ candidate.subscriber_postal_code or "-" }} / {{ candidate.subscriber_address_line or "-" }}{{ candidate.subscriber_building or "" }}</small>
+              </td>
+              <td>
+                <form method="post" action="/subscriber-match-review/{{ selected_ledger.exam_ledger_id }}/confirm" class="subscriber-match-confirm-form">
+                  <input type="hidden" name="subscriber_id" value="{{ candidate.subscriber_id }}">
+                  <input name="note" required placeholder="確定理由">
+                  <div class="subscriber-match-confirm-actions">
+                    <button class="ghost-button" type="submit" name="apply_subscriber_values" value="0" data-confirm-message="この加入者で突合だけ確定します。よろしいですか？">突合だけ確定</button>
+                    <button type="submit" name="apply_subscriber_values" value="1" data-confirm-message="この加入者で確定し、加入者情報を出力用基本情報へ適用します。よろしいですか？">加入者情報も適用</button>
+                  </div>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5">候補が見つかりません。検索語を追加してください。</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% endblock %}

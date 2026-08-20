@@ -2904,6 +2904,448 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     return [dict(row) for row in cur.fetchall()]
 
 
+SUBSCRIBER_MATCH_ISSUE_FILTERS = {
+    "PARTIAL_MATCHED": """
+        (
+          el.subscriber_match_status IN ('CANDIDATE', 'MULTIPLE_MATCH')
+          OR (
+            el.subscriber_match_status = 'MATCHED'
+            AND (
+              el.subscriber_match_method IS NULL
+              OR el.subscriber_match_method NOT IN ('identity_hash', 'manual')
+            )
+          )
+        )
+    """,
+    "UNMATCHED": "el.subscriber_match_status = 'NOT_FOUND'",
+    "NEEDS_REVIEW": "el.subscriber_match_status = 'IDENTITY_ERROR'",
+    "MISSING": "(el.subscriber_match_status IS NULL OR el.subscriber_match_status = 'NOT_EXECUTED')",
+}
+
+
+def subscriber_match_status_label(status: str | None, method: str | None = None) -> str:
+    if status == "MATCHED" and method == "identity_hash":
+        return "MATCHED"
+    if status == "MATCHED" and method == "manual":
+        return "手動確定"
+    if status == "MATCHED":
+        return "一部MATCHED"
+    labels = {
+        "CANDIDATE": "一部MATCHED",
+        "MULTIPLE_MATCH": "一部MATCHED",
+        "NOT_FOUND": "UNMATCHED",
+        "IDENTITY_ERROR": "要確認",
+        "NOT_EXECUTED": "MISSING",
+        None: "MISSING",
+        "": "MISSING",
+    }
+    return labels.get(status, status or "MISSING")
+
+
+templates.env.globals["subscriber_match_status_label"] = subscriber_match_status_label
+
+
+def load_subscriber_match_issue_rows(
+    cur: Any,
+    *,
+    filters: dict[str, str],
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    event_id = filters.get("event_id", "").strip()
+    status_filter = filters.get("status_filter", "").strip()
+    query = filters.get("q", "").strip()
+    if event_id:
+        where_parts.append("el.event_id = %s")
+        params.append(event_id)
+    if status_filter in SUBSCRIBER_MATCH_ISSUE_FILTERS:
+        where_parts.append(SUBSCRIBER_MATCH_ISSUE_FILTERS[status_filter])
+    else:
+        where_parts.append(
+            """
+            (
+              el.subscriber_match_status IS NULL
+              OR el.subscriber_match_status <> 'MATCHED'
+              OR el.subscriber_match_method IS NULL
+              OR el.subscriber_match_method NOT IN ('identity_hash', 'manual')
+            )
+            """
+        )
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              el.hia_subscriber_id LIKE %s
+              OR el.person_id_custom LIKE %s
+              OR el.name_full_raw LIKE %s
+              OR el.name_kana_raw LIKE %s
+              OR el.insurance_symbol_raw LIKE %s
+              OR el.insurance_number_raw LIKE %s
+              OR el.facility_name LIKE %s
+              OR el.facility_code LIKE %s
+              OR el.xml_file_name LIKE %s
+            )
+            """
+        )
+        params.extend([like] * 9)
+    where_sql = f"WHERE {' AND '.join(where_parts)}"
+    cur.execute(
+        f"""
+        SELECT
+          el.exam_ledger_id,
+          el.event_id,
+          el.source_type,
+          el.file_receipt_id,
+          el.src_row_no,
+          el.subscriber_id,
+          el.hia_subscriber_id,
+          el.person_id_custom,
+          el.identity_hash,
+          el.subscriber_match_status,
+          el.subscriber_match_method,
+          el.subscriber_match_reason,
+          el.facility_code,
+          el.facility_name,
+          el.exam_date,
+          el.name_full_raw,
+          el.name_kana_raw,
+          el.name_kana_match,
+          el.insurer_number,
+          el.insurance_symbol_raw,
+          el.insurance_symbol_match,
+          el.insurance_number_raw,
+          el.insurance_number_match,
+          el.insurance_branch_number_raw,
+          el.insurance_branch_number_match,
+          el.birthdate,
+          el.gender_code,
+          el.xml_file_name,
+          el.mapping_version,
+          el.updated_at,
+          latest.changed_at AS last_manual_matched_at,
+          latest.note AS last_manual_match_note
+        FROM {qname(health_db())}.exam_ledgers AS el
+        LEFT JOIN (
+          SELECT a1.*
+          FROM {qname(health_db())}.exam_ledger_subscriber_match_audit_logs AS a1
+          JOIN (
+            SELECT exam_ledger_id, MAX(exam_ledger_subscriber_match_audit_log_id) AS max_id
+            FROM {qname(health_db())}.exam_ledger_subscriber_match_audit_logs
+            GROUP BY exam_ledger_id
+          ) AS latest_ids
+            ON latest_ids.max_id = a1.exam_ledger_subscriber_match_audit_log_id
+        ) AS latest
+          ON latest.exam_ledger_id = el.exam_ledger_id
+        {where_sql}
+        ORDER BY
+          FIELD(el.subscriber_match_status, 'IDENTITY_ERROR', 'MULTIPLE_MATCH', 'CANDIDATE', 'NOT_FOUND', 'NOT_EXECUTED', 'MATCHED'),
+          el.updated_at DESC,
+          el.exam_ledger_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_subscriber_match_candidate_rows(
+    cur: Any,
+    *,
+    ledger: Mapping[str, Any] | None,
+    query: str = "",
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    if ledger is None and not query.strip():
+        return []
+    where_parts: list[str] = []
+    params: list[Any] = []
+    score_parts: list[str] = []
+    score_params: list[Any] = []
+    if ledger:
+        if ledger.get("hia_subscriber_id"):
+            where_parts.append("s.hia_subscriber_id = %s")
+            params.append(ledger.get("hia_subscriber_id"))
+            score_parts.append("CASE WHEN s.hia_subscriber_id = %s THEN 100 ELSE 0 END")
+            score_params.append(ledger.get("hia_subscriber_id"))
+        if ledger.get("identity_hash"):
+            where_parts.append("s.identity_hash = %s")
+            params.append(ledger.get("identity_hash"))
+            score_parts.append("CASE WHEN s.identity_hash = %s THEN 90 ELSE 0 END")
+            score_params.append(ledger.get("identity_hash"))
+        if ledger.get("person_id_custom"):
+            where_parts.append("s.person_id_custom = %s")
+            params.append(ledger.get("person_id_custom"))
+            score_parts.append("CASE WHEN s.person_id_custom = %s THEN 70 ELSE 0 END")
+            score_params.append(ledger.get("person_id_custom"))
+        if ledger.get("insurer_number") and ledger.get("insurance_number_match"):
+            where_parts.append("(s.insurer_number = %s AND s.insurance_number_match = %s)")
+            params.extend([ledger.get("insurer_number"), ledger.get("insurance_number_match")])
+            score_parts.append("CASE WHEN s.insurer_number = %s AND s.insurance_number_match = %s THEN 50 ELSE 0 END")
+            score_params.extend([ledger.get("insurer_number"), ledger.get("insurance_number_match")])
+        if ledger.get("birthdate") and ledger.get("name_kana_match"):
+            where_parts.append("(s.birth = %s AND s.name_kana_full_match = %s)")
+            params.extend([ledger.get("birthdate"), ledger.get("name_kana_match")])
+            score_parts.append("CASE WHEN s.birth = %s AND s.name_kana_full_match = %s THEN 40 ELSE 0 END")
+            score_params.extend([ledger.get("birthdate"), ledger.get("name_kana_match")])
+    query = query.strip()
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              s.hia_subscriber_id LIKE %s
+              OR s.person_id_custom LIKE %s
+              OR s.name_kana_full LIKE %s
+              OR s.name_kana_full_match LIKE %s
+              OR s.name_kanji_full LIKE %s
+              OR s.insurance_symbol LIKE %s
+              OR s.insurance_number LIKE %s
+              OR s.insurance_number_match LIKE %s
+              OR s.employee_code LIKE %s
+            )
+            """
+        )
+        params.extend([like] * 9)
+    if not where_parts:
+        return []
+    score_sql = " + ".join(score_parts) if score_parts else "0"
+    cur.execute(
+        f"""
+        SELECT
+          s.id AS subscriber_id,
+          s.hia_subscriber_id,
+          s.person_id_custom,
+          s.identity_hash,
+          s.insurer_number,
+          s.insurance_symbol,
+          s.insurance_symbol_export,
+          s.insurance_symbol_match,
+          s.insurance_number,
+          s.insurance_number_match,
+          s.insurance_branchnumber,
+          s.name_kana_full,
+          s.name_kana_full_match,
+          s.name_kanji_full,
+          s.birth,
+          s.gender_code,
+          s.relationship_name,
+          s.qualification_lost_date,
+          s.employee_code,
+          a.postal_code AS subscriber_postal_code,
+          a.address_line AS subscriber_address_line,
+          a.building AS subscriber_building,
+          ({score_sql}) AS match_score
+        FROM {qname(dev_db())}.subscribers AS s
+        LEFT JOIN {qname(dev_db())}.subscriber_addresses AS a
+          ON a.subscriber_id = s.id
+         AND a.is_current = 1
+        WHERE {" OR ".join(f"({part})" for part in where_parts)}
+        ORDER BY match_score DESC, s.id, a.address_id DESC
+        LIMIT %s
+        """,
+        (*score_params, *params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_subscriber_row(cur: Any, *, subscriber_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          s.id AS subscriber_id,
+          s.hia_subscriber_id,
+          s.person_id_custom,
+          s.identity_hash,
+          s.insurer_number,
+          s.insurance_symbol,
+          s.insurance_symbol_export,
+          s.insurance_symbol_match,
+          s.insurance_number,
+          s.insurance_number_match,
+          s.insurance_branchnumber,
+          s.name_kana_full,
+          s.name_kana_full_match,
+          a.postal_code AS subscriber_postal_code,
+          a.address_line AS subscriber_address_line,
+          a.building AS subscriber_building
+        FROM {qname(dev_db())}.subscribers AS s
+        LEFT JOIN {qname(dev_db())}.subscriber_addresses AS a
+          ON a.subscriber_id = s.id
+         AND a.is_current = 1
+        WHERE s.id = %s
+        ORDER BY a.address_id DESC
+        LIMIT 1
+        """,
+        (subscriber_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def _subscriber_export_update_values(subscriber: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    updates: dict[str, Any] = {}
+    applied_fields: list[str] = []
+
+    kana = normalize_name_kana_full(str(subscriber.get("name_kana_full") or "")) if subscriber.get("name_kana_full") else {}
+    if kana.get("ok") and kana.get("field_norm"):
+        updates["name_kana_export_value"] = kana.get("field_norm")
+        updates["name_kana_export_source"] = "SUBSCRIBER"
+        updates["name_kana_export_reason"] = "subscriber search apply"
+        applied_fields.append("name_kana")
+
+    symbol_raw = subscriber.get("insurance_symbol_export") or subscriber.get("insurance_symbol")
+    symbol = normalize_insurance_symbol(str(symbol_raw or "")) if symbol_raw else {}
+    if symbol.get("ok") and symbol.get("export"):
+        updates["insurance_symbol_export_value"] = symbol.get("export")
+        updates["insurance_symbol_export_source"] = "SUBSCRIBER"
+        updates["insurance_symbol_export_reason"] = "subscriber search apply"
+        applied_fields.append("insurance_symbol")
+
+    number = normalize_insurance_number(str(subscriber.get("insurance_number") or "")) if subscriber.get("insurance_number") else {}
+    if number.get("ok") and number.get("field_norm"):
+        updates["insurance_number_export_value"] = number.get("field_norm")
+        updates["insurance_number_export_source"] = "SUBSCRIBER"
+        updates["insurance_number_export_reason"] = "subscriber search apply"
+        applied_fields.append("insurance_number")
+
+    branch_number = str(subscriber.get("insurance_branchnumber") or "").strip()
+    if branch_number:
+        updates["insurance_branch_number_export_value"] = branch_number
+        updates["insurance_branch_number_export_source"] = "SUBSCRIBER"
+        updates["insurance_branch_number_export_reason"] = "subscriber search apply"
+        applied_fields.append("insurance_branch_number")
+
+    postal_code = normalize_postal_code_export(subscriber.get("subscriber_postal_code"))
+    address_parts = [
+        str(subscriber.get("subscriber_address_line") or "").strip(),
+        str(subscriber.get("subscriber_building") or "").strip(),
+    ]
+    address = normalize_address_export("".join(part for part in address_parts if part))
+    if postal_code:
+        updates["postal_code_completed_value"] = postal_code
+        applied_fields.append("postal_code")
+    if address:
+        updates["address_completed_value"] = address
+        updates["address_source"] = "SUBSCRIBER"
+        updates["address_completion_status"] = "SUBSCRIBER"
+        updates["address_completion_reason"] = "subscriber search apply"
+        applied_fields.append("address")
+
+    return updates, applied_fields
+
+
+def confirm_exam_ledger_subscriber_match(
+    cur: Any,
+    *,
+    exam_ledger_id: int,
+    subscriber_id: int,
+    note: str,
+    app_user_id: int,
+    apply_subscriber_values: bool = False,
+) -> dict[str, Any] | None:
+    ledger = load_exam_ledger_detail(cur, exam_ledger_id=exam_ledger_id)
+    subscriber = load_subscriber_row(cur, subscriber_id=subscriber_id)
+    if ledger is None or subscriber is None:
+        return None
+    new_reason = note or "手動で加入者を確定"
+    export_updates, applied_fields = (
+        _subscriber_export_update_values(subscriber) if apply_subscriber_values else ({}, [])
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_ledger_subscriber_match_audit_logs (
+          event_id,
+          exam_ledger_id,
+          old_subscriber_id,
+          new_subscriber_id,
+          old_hia_subscriber_id,
+          new_hia_subscriber_id,
+          old_person_id_custom,
+          new_person_id_custom,
+          old_identity_hash,
+          new_identity_hash,
+          old_subscriber_match_status,
+          new_subscriber_match_status,
+          old_subscriber_match_method,
+          new_subscriber_match_method,
+          old_subscriber_match_reason,
+          new_subscriber_match_reason,
+          applied_subscriber_export_values,
+          applied_fields_json,
+          note,
+          changed_by_app_user_id
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'MATCHED', %s, 'manual', %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            ledger.get("event_id"),
+            exam_ledger_id,
+            ledger.get("subscriber_id"),
+            subscriber_id,
+            ledger.get("hia_subscriber_id"),
+            subscriber.get("hia_subscriber_id"),
+            ledger.get("person_id_custom"),
+            subscriber.get("person_id_custom"),
+            ledger.get("identity_hash"),
+            subscriber.get("identity_hash"),
+            ledger.get("subscriber_match_status"),
+            ledger.get("subscriber_match_method"),
+            ledger.get("subscriber_match_reason"),
+            new_reason,
+            1 if apply_subscriber_values else 0,
+            json.dumps(applied_fields, ensure_ascii=False),
+            note,
+            app_user_id,
+        ),
+    )
+    update_columns = [
+        "subscriber_id = %s",
+        "hia_subscriber_id = COALESCE(%s, hia_subscriber_id)",
+        "identity_hash = COALESCE(%s, identity_hash)",
+        "person_id_custom = COALESCE(%s, person_id_custom)",
+        "name_kana_match = COALESCE(%s, name_kana_match)",
+        "insurance_symbol_match = COALESCE(%s, insurance_symbol_match)",
+        "insurance_number_match = COALESCE(%s, insurance_number_match)",
+        "insurance_branch_number_match = COALESCE(%s, insurance_branch_number_match)",
+        "subscriber_match_status = 'MATCHED'",
+        "subscriber_match_method = 'manual'",
+        "subscriber_match_reason = %s",
+    ]
+    update_params: list[Any] = [
+        subscriber_id,
+        subscriber.get("hia_subscriber_id"),
+        subscriber.get("identity_hash"),
+        subscriber.get("person_id_custom"),
+        subscriber.get("name_kana_full_match"),
+        subscriber.get("insurance_symbol_match"),
+        subscriber.get("insurance_number_match"),
+        subscriber.get("insurance_branchnumber"),
+        new_reason,
+    ]
+    for column, value in export_updates.items():
+        update_columns.append(f"{column} = %s")
+        update_params.append(value)
+    update_params.append(exam_ledger_id)
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_ledgers
+        SET {", ".join(update_columns)}
+        WHERE exam_ledger_id = %s
+        """,
+        tuple(update_params),
+    )
+    return {
+        "exam_ledger_id": exam_ledger_id,
+        "subscriber_id": subscriber_id,
+        "old_subscriber_id": ledger.get("subscriber_id"),
+        "new_hia_subscriber_id": subscriber.get("hia_subscriber_id"),
+        "applied_subscriber_export_values": bool(apply_subscriber_values),
+        "applied_fields": applied_fields,
+    }
+
+
 def load_exam_ledger_detail(cur: Any, *, exam_ledger_id: int) -> dict[str, Any] | None:
     cur.execute(
         f"""
@@ -6614,6 +7056,130 @@ def exam_ledgers(request: Request) -> Response:
             "folder_aliases": folder_aliases,
         },
     )
+
+
+@app.get("/subscriber-match-review", response_class=HTMLResponse)
+def subscriber_match_review(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "status_filter": request.query_params.get("status_filter", ""),
+        "q": request.query_params.get("q", ""),
+        "limit": request.query_params.get("limit", "200"),
+    }
+    selected_ledger_id = parse_positive_int(request.query_params.get("ledger_id", ""), default=0, maximum=999999999999)
+    candidate_query = request.query_params.get("candidate_q", "").strip()
+    limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            rows = load_subscriber_match_issue_rows(cur, filters=filters, limit=limit)
+            selected_ledger = None
+            if selected_ledger_id:
+                selected_ledger = load_exam_ledger_detail(cur, exam_ledger_id=selected_ledger_id)
+            elif rows:
+                selected_ledger = load_exam_ledger_detail(cur, exam_ledger_id=int(rows[0]["exam_ledger_id"]))
+            candidate_rows = load_subscriber_match_candidate_rows(
+                cur,
+                ledger=selected_ledger,
+                query=candidate_query,
+            )
+            if audit_enabled(cur):
+                for row in rows:
+                    log_audit(
+                        cur,
+                        request=request,
+                        user=user,
+                        action_code="PERSONAL_INFO_VIEW_SUBSCRIBER_MATCH_REVIEW",
+                        target_schema=health_db(),
+                        target_table="exam_ledgers",
+                        target_id=str(row.get("exam_ledger_id") or ""),
+                        after={
+                            "exam_ledger_id": row.get("exam_ledger_id"),
+                            "hia_subscriber_id": row.get("hia_subscriber_id"),
+                            "person_id_custom": row.get("person_id_custom"),
+                            "subscriber_match_status": row.get("subscriber_match_status"),
+                        },
+                    )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "subscriber_match_review.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "filters": filters,
+            "rows": rows,
+            "selected_ledger": selected_ledger,
+            "candidate_rows": candidate_rows,
+            "candidate_query": candidate_query,
+            "limit": limit,
+            "message": request.query_params.get("message", ""),
+            "error": request.query_params.get("error", ""),
+        },
+    )
+
+
+@app.post("/subscriber-match-review/{exam_ledger_id}/confirm")
+async def subscriber_match_confirm(request: Request, exam_ledger_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    try:
+        subscriber_id = int(str(form.get("subscriber_id") or "").strip())
+    except ValueError:
+        return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&error=加入者候補が不正です。", status_code=303)
+    note = str(form.get("note") or "").strip()
+    if not note:
+        return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&error=確定理由を入力してください。", status_code=303)
+    apply_subscriber_values = str(form.get("apply_subscriber_values") or "0").strip() == "1"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            result = confirm_exam_ledger_subscriber_match(
+                cur,
+                exam_ledger_id=exam_ledger_id,
+                subscriber_id=subscriber_id,
+                note=note,
+                app_user_id=int(user["app_user_id"]),
+                apply_subscriber_values=apply_subscriber_values,
+            )
+            if result is None:
+                conn.rollback()
+                return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&error=ledgerまたは加入者候補が見つかりません。", status_code=303)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="EXAM_LEDGER_SUBSCRIBER_MATCH_CONFIRM",
+                    target_schema=health_db(),
+                    target_table="exam_ledgers",
+                    target_id=str(exam_ledger_id),
+                    after=result,
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if apply_subscriber_values:
+        message = "加入者突合を確定し、加入者情報を出力用基本情報へ適用しました。case反映には健診結果処理のstep5〜7を再実行してください。"
+    else:
+        message = "加入者突合を手動確定しました。case反映には健診結果処理のstep5〜7を再実行してください。"
+    return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&message={quote(message, safe='')}", status_code=303)
 
 
 @app.get("/facility-summary", response_class=HTMLResponse)

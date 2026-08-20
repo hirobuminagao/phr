@@ -166,7 +166,8 @@ case再チェック時の処理:
 - 健診機関・alias管理画面は実装済み。`phr_master.exam_facilities` と `phr_master.medical_folder_aliases` を作成・更新できる。
 - 健診機関・alias管理では、5万件超の健診機関マスタを巨大プルダウンにせず、aliasの紐づけ先は健診機関IDまたは健診機関コード入力で解決する。
 - 出力実行は、出力リスト詳細から `review` / `official` を選んで実行できる。
-- HIAアップロード記帳、個人case詳細、基本情報補正、加入者突合NG修正、CSVマッピング管理、紙健診入力は後続。
+- HIAアップロード記帳、CSVマッピング管理、紙健診入力は後続。
+- 個人case詳細、基本情報補正、加入者突合NG修正は初期版実装済み。運用しながら候補表示、警告、再反映導線を調整する。
 
 ## Main Remaining Implementations
 
@@ -270,6 +271,8 @@ CSV/XML受領後、加入者情報が当たっていない、または一部項�
 - 未突合・要確認の `exam_ledgers` を検索できるようにする。
 - `subscribers` から候補者を検索し、候補の続柄、資格喪失日、HIA加入者ID、記号番号等を並べて比較できるようにする。
 - 正しい加入者を選択した場合、`exam_ledgers.subscriber_id`, `subscriber_match_status`, `subscriber_match_method`, `subscriber_match_reason` を更新する。
+- 正しい加入者を選択した場合、突合だけ確定するか、`subscribers` 由来の基本情報を出力用値へ適用するかを選択できるようにする。
+- 加入者情報を適用する場合は、取れる範囲で氏名カナ、保険証記号、保険証番号、枝番、郵便番号、住所を `SUBSCRIBER` 由来として `exam_ledgers` の出力用基本情報へ反映する。空値で原本値や既存補完値を壊さない。
 - 修正操作は履歴に残し、原本CSV/XML値は上書きしない。
 - 加入者修正後は、該当sourceの `person_event` 反映、`exam_export_cases` 再構築、`exam_export_case_values` 再構築、case単位checkを再実行できるようにする。
 - 一部合致のまま手動で紐付ける場合は、手動確定理由、確定者、確定日時を必須にする。
@@ -279,7 +282,12 @@ CSV/XML受領後、加入者情報が当たっていない、または一部項�
 
 - 取込時の自動加入者突合は実装済み。
 - HIA加入者IDを使う方向性は整理済み。
-- 人が未突合・一部合致を修正する画面/API/履歴テーブルは未実装。
+- 人が未突合・一部合致を修正する初期画面/API/履歴テーブルは実装済み。
+- HOMEの「加入者突合NG修正」から、突合落ちledger一覧、加入者候補検索、理由付き確定を行う。
+- 確定時は「突合だけ確定」と「加入者情報も適用」を選択できる。
+- 「加入者情報も適用」は、手入力補正ではなく `subscribers` 由来の値として `exam_ledgers` の出力用基本情報へ反映する。
+- 確定操作は `exam_ledgers` の現在突合値を更新し、`exam_ledger_subscriber_match_audit_logs` に変更前後、加入者情報適用有無、適用項目を残す。原本CSV/XML値は上書きしない。
+- 手動確定後は、case側へ反映するため管理画面の「健診結果処理実行」で step5〜7 を再実行する。
 
 ### 5. Basic Info Correction
 
