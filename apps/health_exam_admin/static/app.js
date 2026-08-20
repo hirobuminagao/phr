@@ -805,11 +805,13 @@
       }
       const row = document.createElement("tr");
       row.setAttribute("data-person-selection-item", subscriberId);
+      const eventId = document.querySelector("select[name='event_id']")?.value || "2";
+      const caseListUrl = `/exam-export-cases?event_id=${encodeURIComponent(eventId)}&subscriber_id=${encodeURIComponent(subscriberId)}&limit=2000`;
       row.innerHTML = `
         <td><strong>${escapeHtml(subscriberId)}</strong><small>HIA ${escapeHtml(choice.dataset.hiaSubscriberId || "-")}</small></td>
         <td><strong>${escapeHtml(choice.dataset.personName || "-")}</strong><small>${escapeHtml(choice.dataset.gender || "-")}</small></td>
         <td><strong>${escapeHtml(choice.dataset.insurance || "-")}</strong><small>${escapeHtml(choice.dataset.birthdate || "-")}</small></td>
-        <td><strong>${escapeHtml(choice.dataset.latestCaseId || "-")}</strong><small>${escapeHtml(choice.dataset.caseCount || "0")}件</small></td>
+        <td><strong>${escapeHtml(choice.dataset.latestCaseId || "-")}</strong><small>${escapeHtml(choice.dataset.caseCount || "0")}件</small><a class="small-inline-link" href="${caseListUrl}">case一覧</a></td>
         <td><button type="button" class="small-button" data-person-selection-remove>外す</button></td>
       `;
       personSelectionList.appendChild(row);

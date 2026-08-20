@@ -3910,6 +3910,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     insurance_symbol = filters.get("insurance_symbol", "").strip()
     insurance_number = filters.get("insurance_number", "").strip()
     hia_subscriber_id = filters.get("hia_subscriber_id", "").strip()
+    subscriber_id = filters.get("subscriber_id", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
     if event_id:
@@ -4894,6 +4895,9 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
         like = f"%{hia_subscriber_id}%"
         where_parts.append("eec.hia_subscriber_id LIKE %s")
         params.append(like)
+    if subscriber_id:
+        where_parts.append("CAST(eec.subscriber_id AS CHAR) = %s")
+        params.append(subscriber_id)
     if insurance_symbol:
         like = f"%{insurance_symbol}%"
         where_parts.append("(eec.insurance_symbol_raw LIKE %s OR eec.insurance_symbol_export_value LIKE %s)")
@@ -9210,6 +9214,7 @@ def exam_export_cases(request: Request) -> Response:
         "insurance_symbol": request.query_params.get("insurance_symbol", ""),
         "insurance_number": request.query_params.get("insurance_number", ""),
         "hia_subscriber_id": request.query_params.get("hia_subscriber_id", ""),
+        "subscriber_id": request.query_params.get("subscriber_id", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "2000"),
         "page": request.query_params.get("page", "1"),

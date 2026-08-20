@@ -1162,6 +1162,24 @@ a.home-menu-card:hover {
   font-weight: 800;
 }
 
+.small-inline-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  color: #0c5f4a;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.small-inline-link:hover {
+  border-color: var(--accent);
+  background: #e9f7f3;
+}
+
 .danger-outline {
   border: 1px solid #d64d4d;
   background: #fff;

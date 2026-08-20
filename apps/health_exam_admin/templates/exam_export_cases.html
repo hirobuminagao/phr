@@ -35,13 +35,14 @@
       {% if filters.insurance_symbol %}<span class="active-filter-chip">記号: {{ filters.insurance_symbol }}</span>{% endif %}
       {% if filters.insurance_number %}<span class="active-filter-chip">番号: {{ filters.insurance_number }}</span>{% endif %}
       {% if filters.hia_subscriber_id %}<span class="active-filter-chip">HIA ID: {{ filters.hia_subscriber_id }}</span>{% endif %}
+      {% if filters.subscriber_id %}<span class="active-filter-chip">subscriber: {{ filters.subscriber_id }}</span>{% endif %}
       {% if filters.facility_q %}<span class="active-filter-chip">健診機関: {{ filters.facility_q }}</span>{% endif %}
       {% if filters.exam_month %}<span class="active-filter-chip">受診月: {{ filters.exam_month }}</span>{% endif %}
       {% if filters.legal_check_result %}<span class="active-filter-chip">法定: {{ filters.legal_check_result }}</span>{% endif %}
       {% if filters.specific_check_result %}<span class="active-filter-chip">特定健診: {{ check_result_label(filters.specific_check_result) or filters.specific_check_result }}</span>{% endif %}
       {% if filters.export_readiness_status %}<span class="active-filter-chip">出力: {{ filters.export_readiness_status }}</span>{% endif %}
       {% if filters.source_mode %}<span class="active-filter-chip">source: {{ filters.source_mode }}</span>{% endif %}
-      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.facility_q and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
+      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.subscriber_id and not filters.facility_q and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
       <span class="active-filter-chip is-empty">条件なし</span>
       {% endif %}
     </div>
