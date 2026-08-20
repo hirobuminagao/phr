@@ -169,8 +169,13 @@
       if (!field || !form) return;
       const input = form.querySelector(`[data-server-filter-value="${field}"]`);
       if (!input) return;
-      input.value = input.value === value ? "" : value;
-      form.requestSubmit();
+      const isActive = input.value !== value;
+      input.value = isActive ? value : "";
+      for (const peer of form.querySelectorAll(`[data-server-filter-toggle="${field}"]`)) {
+        const peerActive = isActive && peer.dataset.filterValue === value;
+        peer.classList.toggle("is-active", peerActive);
+        peer.setAttribute("aria-pressed", peerActive ? "true" : "false");
+      }
     });
   }
 

@@ -384,11 +384,12 @@
               <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ row.exam_export_case_id }}">詳細</a>
             </td>
             <td>
-	              <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
-	              <small>{{ row.name_full_raw or "氏名なし" }}</small>
-	              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
-	              <small>資格 {{ "喪失 " ~ row.qualification_lost_date if row.qualification_lost_date else "有効" }}{% if row.relationship_name %} / {{ row.relationship_name }}{% endif %}</small>
-	            </td>
+              <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
+              <small>{{ row.name_full_raw or "氏名なし" }}</small>
+              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
+              <small>資格: {{ "喪失" if row.qualification_lost_date else "有効" }}{% if row.relationship_name %} / {{ row.relationship_name }}{% endif %}</small>
+              <small>資格喪失日: {{ row.qualification_lost_date or "-" }}</small>
+            </td>
             <td>
               <strong title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
               <small>{{ row.facility_code or "" }} / {{ row.exam_date or "受診日なし" }}</small>
