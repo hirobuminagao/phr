@@ -2912,6 +2912,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     name_kana = filters.get("name_kana", "").strip()
     insurance_symbol = filters.get("insurance_symbol", "").strip()
     insurance_number = filters.get("insurance_number", "").strip()
+    hia_subscriber_id = filters.get("hia_subscriber_id", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
     if event_id:
@@ -3815,9 +3816,12 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     source_mode = filters.get("source_mode", "").strip()
     exam_months = split_filter_values(filters.get("exam_month", ""))
     query = filters.get("q", "").strip()
+    case_id = filters.get("case_id", "").strip()
+    name_full = filters.get("name_full", "").strip()
     name_kana = filters.get("name_kana", "").strip()
     insurance_symbol = filters.get("insurance_symbol", "").strip()
     insurance_number = filters.get("insurance_number", "").strip()
+    hia_subscriber_id = filters.get("hia_subscriber_id", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     if event_id:
         where_parts.append("eec.event_id = %s")
@@ -3878,10 +3882,21 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
             """
         )
         params.extend([query, like, like, like])
+    if case_id:
+        where_parts.append("CAST(eec.exam_export_case_id AS CHAR) = %s")
+        params.append(case_id)
+    if name_full:
+        like = f"%{name_full}%"
+        where_parts.append("(eec.name_full_raw LIKE %s OR eec.name_full_export_value LIKE %s)")
+        params.extend([like, like])
     if name_kana:
         like = f"%{name_kana}%"
         where_parts.append("(eec.name_kana_raw LIKE %s OR eec.name_kana_export_value LIKE %s)")
         params.extend([like, like])
+    if hia_subscriber_id:
+        like = f"%{hia_subscriber_id}%"
+        where_parts.append("eec.hia_subscriber_id LIKE %s")
+        params.append(like)
     if insurance_symbol:
         like = f"%{insurance_symbol}%"
         where_parts.append("(eec.insurance_symbol_raw LIKE %s OR eec.insurance_symbol_export_value LIKE %s)")
@@ -7822,9 +7837,12 @@ def exam_export_cases(request: Request) -> Response:
         "source_mode": request.query_params.get("source_mode", ""),
         "exam_month": request.query_params.get("exam_month", ""),
         "q": request.query_params.get("q", ""),
+        "case_id": request.query_params.get("case_id", ""),
+        "name_full": request.query_params.get("name_full", ""),
         "name_kana": request.query_params.get("name_kana", ""),
         "insurance_symbol": request.query_params.get("insurance_symbol", ""),
         "insurance_number": request.query_params.get("insurance_number", ""),
+        "hia_subscriber_id": request.query_params.get("hia_subscriber_id", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "2000"),
         "page": request.query_params.get("page", "1"),

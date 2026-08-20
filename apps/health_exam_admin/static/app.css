@@ -1252,6 +1252,28 @@ a.home-menu-card:hover {
   background: var(--panel);
 }
 
+.case-filter-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.case-filter-event-control {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 280px);
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.case-filter-event-control select {
+  min-height: var(--control-height);
+}
+
 .case-filter-form {
   min-height: 0;
   overflow: hidden;
@@ -1260,18 +1282,57 @@ a.home-menu-card:hover {
 .case-filter-scroll {
   max-height: 100%;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   overflow-y: auto;
   padding: 18px 22px;
 }
 
+.case-filter-group {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d5e0ea;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.case-filter-group h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.case-filter-row-basic,
+.case-filter-row-facility,
+.case-filter-row-checks,
+.case-filter-row-work {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .case-filter-footer {
   display: flex;
+  flex-wrap: wrap;
+  align-items: end;
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 22px;
   border-top: 1px solid #d5e0ea;
   background: #f8fbfd;
+}
+
+.case-filter-limit-control {
+  display: grid;
+  grid-template-columns: auto 88px;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-height);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.case-filter-limit-control input {
+  min-height: var(--control-height);
 }
 
 .case-filter-modal-panel .case-filter-row-primary,
