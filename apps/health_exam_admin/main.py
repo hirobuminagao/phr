@@ -55,11 +55,13 @@ from scripts.hia.dev_tools.check_hia_xml_zip import (
 )
 from scripts.lib.identity.field.address import normalize_address_export, normalize_postal_code_export
 from scripts.lib.identity.field.date_field import normalize_date_to_ymd_and_compact
+from scripts.lib.identity.field.gender_code import normalize_gender_code
 from scripts.lib.identity.field.insurance_number import normalize_insurance_number
 from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
 from scripts.lib.identity.field.insurer_number import normalize_insurer_number
 from scripts.lib.identity.field.name_kana import normalize_name_kana_full
 from scripts.lib.identity.field.ticket_identifier import normalize_ticket_identifier
+from scripts.lib.identity.generator import generate_identity_bundle
 from scripts.lib.identity.primitive.digits import zero_pad
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
@@ -1586,6 +1588,410 @@ def parent_path_text(value: Any) -> str:
     if separator_index <= 0:
         return ""
     return text[:separator_index]
+
+
+PERSON_SELECTION_COLUMNS = (
+    ("unused", "未使用"),
+    ("insurer_number", "保険者番号"),
+    ("insurance_symbol", "記号"),
+    ("insurance_number", "番号"),
+    ("insurance_branch_number", "枝番"),
+    ("name_kana", "氏名カナ"),
+    ("name_full", "氏名"),
+    ("birthdate", "生年月日"),
+    ("gender", "性別"),
+    ("hia_subscriber_id", "HIA加入者ID"),
+    ("subscriber_id", "subscriber_id"),
+    ("case_id", "case_id"),
+    ("exam_date", "健診実施日"),
+    ("facility_code", "健診機関コード"),
+    ("employee_code", "社員番号"),
+)
+
+
+PERSON_SELECTION_STATUS_LABELS = {
+    "READY": "追加OK",
+    "ALREADY_ADDED": "既に追加済み",
+    "MULTIPLE": "候補複数",
+    "NOT_FOUND": "未突合",
+    "INSUFFICIENT": "入力不足",
+    "CASE_NOT_FOUND": "caseなし",
+    "PARSE_ERROR": "解析エラー",
+}
+
+
+templates.env.globals["person_selection_status_label"] = lambda status: PERSON_SELECTION_STATUS_LABELS.get(
+    status or "", status or ""
+)
+
+
+def split_person_selection_line(line: str, *, delimiter: str, custom_delimiter: str = "") -> list[str]:
+    if delimiter == "tab":
+        return line.split("\t")
+    if delimiter == "comma":
+        return line.split(",")
+    if delimiter == "hyphen":
+        return line.split("-")
+    if delimiter == "space":
+        return re.split(r"\s+", line.strip()) if line.strip() else []
+    if delimiter == "custom" and custom_delimiter:
+        return line.split(custom_delimiter)
+    return line.split("\t")
+
+
+def normalize_person_selection_raw(row: Mapping[str, Any], *, fixed_insurer_number: str) -> dict[str, Any]:
+    insurer_raw = str(row.get("insurer_number") or fixed_insurer_number or "").strip()
+    symbol_raw = str(row.get("insurance_symbol") or "").strip()
+    number_raw = str(row.get("insurance_number") or "").strip()
+    kana_raw = str(row.get("name_kana") or "").strip()
+    birth_raw = str(row.get("birthdate") or "").strip()
+    gender_raw = str(row.get("gender") or "").strip()
+
+    insurer = normalize_insurer_number(insurer_raw) if insurer_raw else {"ok": False, "match": None, "reason": "missing"}
+    symbol = normalize_insurance_symbol(symbol_raw) if symbol_raw else {"ok": False, "match": None, "reason": "missing"}
+    number = normalize_insurance_number(number_raw) if number_raw else {"ok": False, "match": None, "reason": "missing"}
+    kana = normalize_name_kana_full(kana_raw) if kana_raw else {"ok": False, "match": None, "reason": "missing"}
+    birth = normalize_date_to_ymd_and_compact(birth_raw, purpose="birthdate") if birth_raw else {
+        "ok": False,
+        "match": None,
+        "reason": "missing",
+    }
+    gender = normalize_gender_code(gender_raw) if gender_raw else {"ok": False, "match": None, "reason": "missing"}
+
+    normalized = {
+        "insurer_number": insurer.get("match"),
+        "insurance_symbol": symbol.get("match"),
+        "insurance_number": number.get("match"),
+        "name_kana": kana.get("match"),
+        "birthdate": birth.get("match"),
+        "gender": gender.get("match"),
+        "normalization_errors": [],
+    }
+    for key, result in (
+        ("保険者番号", insurer),
+        ("記号", symbol),
+        ("番号", number),
+        ("氏名カナ", kana),
+        ("生年月日", birth),
+        ("性別", gender),
+    ):
+        if str(row.get({
+            "保険者番号": "insurer_number",
+            "記号": "insurance_symbol",
+            "番号": "insurance_number",
+            "氏名カナ": "name_kana",
+            "生年月日": "birthdate",
+            "性別": "gender",
+        }[key]) or (fixed_insurer_number if key == "保険者番号" else "")).strip() and not result.get("ok"):
+            normalized["normalization_errors"].append(f"{key}:{result.get('reason')}")
+
+    if all(
+        normalized.get(field)
+        for field in ("insurer_number", "insurance_symbol", "insurance_number", "name_kana", "birthdate", "gender")
+    ):
+        bundle = generate_identity_bundle(
+            birthdate=normalized["birthdate"],
+            insurer_number_raw=normalized["insurer_number"],
+            insurance_symbol_raw=normalized["insurance_symbol"],
+            insurance_number_raw=normalized["insurance_number"],
+            name_kana_full_raw=normalized["name_kana"],
+            gender_code=normalized["gender"],
+        )
+        normalized["person_id_custom"] = bundle.get("person_id_custom")
+        normalized["identity_hash"] = bundle.get("identity_hash")
+        if not bundle.get("ok"):
+            normalized["normalization_errors"].append(str(bundle.get("reason") or "identity生成失敗"))
+    else:
+        normalized["person_id_custom"] = None
+        normalized["identity_hash"] = None
+    return normalized
+
+
+def parse_person_selection_paste(
+    *,
+    raw_text: str,
+    delimiter: str,
+    custom_delimiter: str,
+    has_header: bool,
+    column_map: list[str],
+    fixed_insurer_number: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    lines = [line for line in raw_text.splitlines() if line.strip()]
+    if has_header and lines:
+        lines = lines[1:]
+    for index, line in enumerate(lines, start=1):
+        values = [part.strip() for part in split_person_selection_line(line, delimiter=delimiter, custom_delimiter=custom_delimiter)]
+        parsed: dict[str, Any] = {}
+        for col_index, value in enumerate(values):
+            field = column_map[col_index] if col_index < len(column_map) else "unused"
+            if field == "unused" or value == "":
+                continue
+            if field in parsed and parsed[field]:
+                parsed[f"{field}_duplicate"] = value
+                continue
+            parsed[field] = value
+        normalized = normalize_person_selection_raw(parsed, fixed_insurer_number=fixed_insurer_number)
+        rows.append(
+            {
+                "row_no": index,
+                "raw_line": line,
+                "values": values,
+                "parsed": parsed,
+                "normalized": normalized,
+                "status": "INSUFFICIENT",
+                "reason": "",
+                "candidates": [],
+                "case_candidates": [],
+            }
+        )
+    return rows
+
+
+def build_person_selection_single_row(*, form: Mapping[str, Any], fixed_insurer_number: str) -> list[dict[str, Any]]:
+    parsed = {
+        "case_id": str(form.get("single_case_id") or "").strip(),
+        "subscriber_id": str(form.get("single_subscriber_id") or "").strip(),
+        "hia_subscriber_id": str(form.get("single_hia_subscriber_id") or "").strip(),
+        "employee_code": str(form.get("single_employee_code") or "").strip(),
+        "insurer_number": str(form.get("single_insurer_number") or fixed_insurer_number or "").strip(),
+        "insurance_symbol": str(form.get("single_insurance_symbol") or "").strip(),
+        "insurance_number": str(form.get("single_insurance_number") or "").strip(),
+        "name_kana": str(form.get("single_name_kana") or "").strip(),
+        "birthdate": str(form.get("single_birthdate") or "").strip(),
+        "gender": str(form.get("single_gender") or "").strip(),
+    }
+    parsed = {key: value for key, value in parsed.items() if value}
+    normalized = normalize_person_selection_raw(parsed, fixed_insurer_number=fixed_insurer_number)
+    return [
+        {
+            "row_no": 1,
+            "raw_line": " / ".join(f"{key}={value}" for key, value in parsed.items()),
+            "values": list(parsed.values()),
+            "parsed": parsed,
+            "normalized": normalized,
+            "status": "INSUFFICIENT",
+            "reason": "",
+            "candidates": [],
+            "case_candidates": [],
+        }
+    ]
+
+
+def load_person_selection_case(cur: Any, *, case_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          eec.exam_export_case_id,
+          eec.event_id,
+          eec.subscriber_id,
+          eec.hia_subscriber_id,
+          eec.person_id_custom,
+          eec.identity_hash,
+          eec.name_full_raw,
+          eec.name_kana_raw,
+          eec.birthdate,
+          eec.gender_code,
+          eec.facility_name,
+          eec.facility_code,
+          eec.exam_date,
+          eec.export_readiness_status,
+          eec.xml_export_status
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        WHERE eec.exam_export_case_id = %s
+        """,
+        (case_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_person_selection_cases_for_subscriber(
+    cur: Any,
+    *,
+    event_id: int,
+    subscriber_id: int,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          exam_export_case_id,
+          event_id,
+          subscriber_id,
+          hia_subscriber_id,
+          person_id_custom,
+          identity_hash,
+          name_full_raw,
+          name_kana_raw,
+          birthdate,
+          gender_code,
+          facility_name,
+          facility_code,
+          exam_date,
+          export_readiness_status,
+          xml_export_status
+        FROM {qname(health_db())}.exam_export_cases
+        WHERE event_id = %s
+          AND subscriber_id = %s
+        ORDER BY exam_date DESC, exam_export_case_id DESC
+        LIMIT %s
+        """,
+        (event_id, subscriber_id, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def search_person_selection_subscribers(
+    cur: Any,
+    *,
+    row: Mapping[str, Any],
+    normalized: Mapping[str, Any],
+    event_id: int,
+    limit: int = 20,
+) -> tuple[list[dict[str, Any]], str]:
+    parsed = row.get("parsed", {}) if isinstance(row.get("parsed"), Mapping) else {}
+    where_parts: list[str] = []
+    params: list[Any] = []
+    matched_by = ""
+    subscriber_id = str(parsed.get("subscriber_id") or "").strip()
+    case_id = str(parsed.get("case_id") or "").strip()
+    if case_id:
+        return [], "case_id"
+    if subscriber_id.isdigit():
+        where_parts.append("s.id = %s")
+        params.append(int(subscriber_id))
+        matched_by = "subscriber_id"
+    elif str(parsed.get("hia_subscriber_id") or "").strip():
+        where_parts.append("s.hia_subscriber_id = %s")
+        params.append(str(parsed.get("hia_subscriber_id")).strip())
+        matched_by = "hia_subscriber_id"
+    elif str(parsed.get("employee_code") or "").strip():
+        where_parts.append("s.employee_code = %s")
+        params.append(str(parsed.get("employee_code")).strip())
+        matched_by = "employee_code"
+    elif normalized.get("identity_hash"):
+        where_parts.append("s.identity_hash = %s")
+        params.append(normalized.get("identity_hash"))
+        matched_by = "identity_hash"
+    elif normalized.get("person_id_custom"):
+        where_parts.append("s.person_id_custom = %s")
+        params.append(normalized.get("person_id_custom"))
+        matched_by = "person_id_custom"
+    elif normalized.get("birthdate") and normalized.get("name_kana"):
+        where_parts.append("s.birth = %s AND s.name_kana_full_match = %s")
+        params.extend([normalized.get("birthdate"), normalized.get("name_kana")])
+        matched_by = "birthdate_name_kana"
+    else:
+        return [], ""
+
+    cur.execute(
+        f"""
+        SELECT
+          s.id AS subscriber_id,
+          s.hia_subscriber_id,
+          s.person_id_custom,
+          s.identity_hash,
+          s.name_full,
+          s.name_kana_full,
+          s.name_kana_full_match,
+          s.birth,
+          s.gender_code,
+          s.insurance_symbol,
+          s.insurance_symbol_match,
+          s.insurance_number,
+          s.insurance_number_match,
+          s.insurance_branchnumber,
+          s.employee_code,
+          s.relationship_name,
+          s.qualification_lost_date,
+          COUNT(eec.exam_export_case_id) AS event_case_count,
+          MAX(eec.exam_export_case_id) AS latest_case_id
+        FROM {qname(dev_db())}.subscribers AS s
+        LEFT JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON eec.event_id = %s
+         AND eec.subscriber_id = s.id
+        WHERE {" AND ".join(where_parts)}
+        GROUP BY
+          s.id,
+          s.hia_subscriber_id,
+          s.person_id_custom,
+          s.identity_hash,
+          s.name_full,
+          s.name_kana_full,
+          s.name_kana_full_match,
+          s.birth,
+          s.gender_code,
+          s.insurance_symbol,
+          s.insurance_symbol_match,
+          s.insurance_number,
+          s.insurance_number_match,
+          s.insurance_branchnumber,
+          s.employee_code,
+          s.relationship_name,
+          s.qualification_lost_date
+        ORDER BY event_case_count DESC, s.id DESC
+        LIMIT %s
+        """,
+        (event_id, *params, limit),
+    )
+    return [dict(item) for item in cur.fetchall()], matched_by
+
+
+def resolve_person_selection_rows(cur: Any, *, event_id: int, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for row in rows:
+        parsed = row.get("parsed", {})
+        normalized = row.get("normalized", {})
+        case_id = str(parsed.get("case_id") or "").strip() if isinstance(parsed, Mapping) else ""
+        if case_id:
+            if not case_id.isdigit():
+                row["status"] = "PARSE_ERROR"
+                row["reason"] = "case_idが数値ではありません"
+                continue
+            case = load_person_selection_case(cur, case_id=int(case_id))
+            if not case:
+                row["status"] = "NOT_FOUND"
+                row["reason"] = "case_idに一致するcaseがありません"
+                continue
+            row["status"] = "READY"
+            row["reason"] = "case_id一致"
+            row["case_candidates"] = [case]
+            continue
+
+        subscribers, matched_by = search_person_selection_subscribers(
+            cur,
+            row=row,
+            normalized=normalized,
+            event_id=event_id,
+        )
+        row["matched_by"] = matched_by
+        row["candidates"] = subscribers
+        if not subscribers:
+            if normalized.get("normalization_errors"):
+                row["status"] = "PARSE_ERROR"
+                row["reason"] = " / ".join(normalized.get("normalization_errors") or [])
+            else:
+                row["status"] = "NOT_FOUND" if matched_by else "INSUFFICIENT"
+                row["reason"] = "候補が見つかりません" if matched_by else "突合キーが不足しています"
+            continue
+        if len(subscribers) > 1:
+            row["status"] = "MULTIPLE"
+            row["reason"] = f"{matched_by}で候補が複数あります"
+            continue
+        subscriber = subscribers[0]
+        cases = load_person_selection_cases_for_subscriber(
+            cur,
+            event_id=event_id,
+            subscriber_id=int(subscriber["subscriber_id"]),
+        )
+        row["case_candidates"] = cases
+        if not cases:
+            row["status"] = "CASE_NOT_FOUND"
+            row["reason"] = "加入者は見つかりましたが、このeventのcaseがありません"
+        else:
+            row["status"] = "READY"
+            row["reason"] = f"{matched_by}一致"
+    return rows
 
 
 def load_external_feedback_summary(cur: Any) -> dict[str, int]:
@@ -7189,6 +7595,122 @@ async def create_external_feedback(request: Request) -> Response:
     return RedirectResponse(
         f"/external-feedback?message={quote(f'外部指摘を登録しました。report={report_id} item={item_id}')}",
         status_code=303,
+    )
+
+
+@app.get("/utilities/person-selection", response_class=HTMLResponse)
+def person_selection_utility(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+    default_event_id = str(events[0]["event_id"]) if events else "2"
+    return templates.TemplateResponse(
+        "person_selection_utility.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "column_options": PERSON_SELECTION_COLUMNS,
+            "form": {
+                "input_mode": "bulk",
+                "event_id": default_event_id,
+                "fixed_insurer_number": "",
+                "delimiter": "tab",
+                "custom_delimiter": "",
+                "has_header": "0",
+                "raw_text": "",
+                "single": {},
+                "columns": [
+                    "insurer_number",
+                    "insurance_symbol",
+                    "insurance_number",
+                    "name_kana",
+                    "birthdate",
+                    "gender",
+                    "unused",
+                    "unused",
+                    "unused",
+                    "unused",
+                    "unused",
+                    "unused",
+                ],
+            },
+            "rows": [],
+            "summary": {},
+        },
+    )
+
+
+@app.post("/utilities/person-selection", response_class=HTMLResponse)
+async def resolve_person_selection_utility(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    event_id = parse_positive_int(str(form.get("event_id") or "2"), default=2, maximum=999999)
+    input_mode = str(form.get("input_mode") or "bulk")
+    raw_text = str(form.get("raw_text") or "")
+    delimiter = str(form.get("delimiter") or "tab")
+    custom_delimiter = str(form.get("custom_delimiter") or "")
+    fixed_insurer_number = str(form.get("fixed_insurer_number") or "").strip()
+    has_header = str(form.get("has_header") or "") == "1"
+    columns = [str(form.get(f"col_{index}") or "unused") for index in range(12)]
+    if input_mode == "single":
+        rows = build_person_selection_single_row(form=form, fixed_insurer_number=fixed_insurer_number)
+    else:
+        rows = parse_person_selection_paste(
+            raw_text=raw_text,
+            delimiter=delimiter,
+            custom_delimiter=custom_delimiter,
+            has_header=has_header,
+            column_map=columns,
+            fixed_insurer_number=fixed_insurer_number,
+        )
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        rows = resolve_person_selection_rows(cur, event_id=event_id, rows=rows)
+    summary: dict[str, int] = {}
+    for row in rows:
+        status = str(row.get("status") or "UNKNOWN")
+        summary[status] = summary.get(status, 0) + 1
+    return templates.TemplateResponse(
+        "person_selection_utility.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "column_options": PERSON_SELECTION_COLUMNS,
+            "form": {
+                "input_mode": input_mode,
+                "event_id": str(event_id),
+                "fixed_insurer_number": fixed_insurer_number,
+                "delimiter": delimiter,
+                "custom_delimiter": custom_delimiter,
+                "has_header": "1" if has_header else "0",
+                "raw_text": raw_text,
+                "single": {
+                    "case_id": str(form.get("single_case_id") or "").strip(),
+                    "subscriber_id": str(form.get("single_subscriber_id") or "").strip(),
+                    "hia_subscriber_id": str(form.get("single_hia_subscriber_id") or "").strip(),
+                    "employee_code": str(form.get("single_employee_code") or "").strip(),
+                    "insurer_number": str(form.get("single_insurer_number") or "").strip(),
+                    "insurance_symbol": str(form.get("single_insurance_symbol") or "").strip(),
+                    "insurance_number": str(form.get("single_insurance_number") or "").strip(),
+                    "name_kana": str(form.get("single_name_kana") or "").strip(),
+                    "birthdate": str(form.get("single_birthdate") or "").strip(),
+                    "gender": str(form.get("single_gender") or "").strip(),
+                },
+                "columns": columns,
+            },
+            "rows": rows,
+            "summary": summary,
+        },
     )
 
 

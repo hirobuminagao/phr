@@ -78,6 +78,7 @@
     {% if "hia_upload.perform" in user.permissions or "hia_upload_status.edit" in user.permissions or "users.manage" in user.permissions %}
       <a href="#home-section-fund">健保納品</a>
     {% endif %}
+      <a href="#home-section-utility">ユーティリティ</a>
     {% if "business_settings.view" in user.permissions or "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
       <a href="#home-section-admin">管理</a>
     {% endif %}
@@ -172,6 +173,21 @@
     </div>
   </section>
   {% endif %}
+
+  <section id="home-section-utility" class="home-menu-section">
+    <div class="section-heading">
+      <div>
+        <h2>ユーティリティ</h2>
+        <p class="subtle">Excel貼り付けやID指定から、人・caseの候補を作る共通作業です。</p>
+      </div>
+    </div>
+    <div class="home-menu-grid">
+      <a class="home-menu-card" href="/utilities/person-selection">
+        <span class="status-pill status-ready">利用可</span>
+        <div><strong>対象者リスト作成</strong><small>一人ずつ、またはExcel貼り付けからidentity/HIA ID/subscriber/case候補を作る</small></div>
+      </a>
+    </div>
+  </section>
 
   {% if "business_settings.view" in user.permissions or "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
   <section id="home-section-admin" class="home-menu-section">

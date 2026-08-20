@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% set title = "対象者リスト作成ユーティリティ" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Utility</p>
+    <h1>対象者リスト作成ユーティリティ</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page export-page">
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>貼り付けから対象者候補を作る</h2>
+        <p class="subtle">DBには保存しません。Excelやテキストを貼り付け、列割当から identity / subscriber / case 候補へ変換します。</p>
+      </div>
+    </div>
+
+    <form method="post" action="/utilities/person-selection" class="person-selection-form">
+      <div class="person-selection-mode">
+        <label class="choice-card">
+          <input type="radio" name="input_mode" value="single" {% if form.input_mode == "single" %}checked{% endif %}>
+          <span><strong>一人ずつ追加</strong><small>IDや基本情報で1人だけ候補を作ります。</small></span>
+        </label>
+        <label class="choice-card">
+          <input type="radio" name="input_mode" value="bulk" {% if form.input_mode != "single" %}checked{% endif %}>
+          <span><strong>複数まとめて追加</strong><small>Excel貼り付けや区切り文字で複数人を解析します。</small></span>
+        </label>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>event</span>
+          <select name="event_id">
+            {% for event in events %}
+            <option value="{{ event.event_id }}" {% if form.event_id|string == event.event_id|string %}selected{% endif %}>
+              {{ event.event_id }} / {{ event.event_name }} / {{ event.insurer_number }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>固定保険者番号</span>
+          <input name="fixed_insurer_number" value="{{ form.fixed_insurer_number or '' }}" placeholder="貼り付け列にない場合だけ使用">
+        </label>
+        <label>
+          <span>区切り文字</span>
+          <select name="delimiter">
+            <option value="tab" {% if form.delimiter == "tab" %}selected{% endif %}>タブ（Excel貼り付け）</option>
+            <option value="comma" {% if form.delimiter == "comma" %}selected{% endif %}>カンマ</option>
+            <option value="hyphen" {% if form.delimiter == "hyphen" %}selected{% endif %}>ハイフン</option>
+            <option value="space" {% if form.delimiter == "space" %}selected{% endif %}>空白</option>
+            <option value="custom" {% if form.delimiter == "custom" %}selected{% endif %}>任意</option>
+          </select>
+        </label>
+        <label>
+          <span>任意区切り文字</span>
+          <input name="custom_delimiter" value="{{ form.custom_delimiter or '' }}" placeholder="例: |">
+        </label>
+      </div>
+
+      <section class="person-selection-subpanel">
+        <h3>一人ずつ追加</h3>
+        <div class="form-grid four-columns">
+          <label>
+            <span>case_id</span>
+            <input name="single_case_id" value="{{ form.single.case_id or '' }}" placeholder="case直指定">
+          </label>
+          <label>
+            <span>HIA加入者ID</span>
+            <input name="single_hia_subscriber_id" value="{{ form.single.hia_subscriber_id or '' }}">
+          </label>
+          <label>
+            <span>subscriber_id</span>
+            <input name="single_subscriber_id" value="{{ form.single.subscriber_id or '' }}">
+          </label>
+          <label>
+            <span>社員番号</span>
+            <input name="single_employee_code" value="{{ form.single.employee_code or '' }}">
+          </label>
+          <label>
+            <span>保険者番号</span>
+            <input name="single_insurer_number" value="{{ form.single.insurer_number or '' }}" placeholder="空なら固定値">
+          </label>
+          <label>
+            <span>記号</span>
+            <input name="single_insurance_symbol" value="{{ form.single.insurance_symbol or '' }}">
+          </label>
+          <label>
+            <span>番号</span>
+            <input name="single_insurance_number" value="{{ form.single.insurance_number or '' }}">
+          </label>
+          <label>
+            <span>氏名カナ</span>
+            <input name="single_name_kana" value="{{ form.single.name_kana or '' }}">
+          </label>
+          <label>
+            <span>生年月日</span>
+            <input name="single_birthdate" value="{{ form.single.birthdate or '' }}" placeholder="YYYYMMDD / YYYY-MM-DD">
+          </label>
+          <label>
+            <span>性別</span>
+            <input name="single_gender" value="{{ form.single.gender or '' }}" placeholder="男 / 女 / 1 / 2">
+          </label>
+        </div>
+      </section>
+
+      <section class="person-selection-subpanel">
+        <h3>複数まとめて追加</h3>
+      <div class="switch-row">
+        <span>先頭行</span>
+        <label class="toggle-switch-label">
+          <input type="checkbox" name="has_header" value="1" {% if form.has_header == "1" %}checked{% endif %}>
+          <span class="toggle-switch-text"><span>データ</span><span>ヘッダー</span></span>
+        </label>
+      </div>
+
+      <div class="person-selection-columns">
+        {% for index in range(12) %}
+        <label>
+          <span>{{ index + 1 }}列目</span>
+          <select name="col_{{ index }}">
+            {% for value, label in column_options %}
+            <option value="{{ value }}" {% if form.columns[index] == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% endfor %}
+      </div>
+
+      <label class="textarea-block">
+        <span>貼り付け内容</span>
+        <textarea name="raw_text" rows="9" spellcheck="false" placeholder="Excelからそのまま貼り付け。関係ない列は列割当で未使用にします。">{{ form.raw_text or '' }}</textarea>
+      </label>
+      </section>
+
+      <div class="form-actions">
+        <button type="submit">解析して候補を表示</button>
+        <a class="ghost-button" href="/utilities/person-selection">クリア</a>
+      </div>
+    </form>
+  </section>
+
+  {% if rows %}
+  <section class="summary-grid">
+    <div class="summary-card"><span>行数</span><strong>{{ rows|length }}</strong><small>解析対象</small></div>
+    {% for status, count in summary.items() %}
+    <div class="summary-card"><span>{{ person_selection_status_label(status) }}</span><strong>{{ count }}</strong><small>{{ status }}</small></div>
+    {% endfor %}
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>解析結果</h2>
+        <p class="subtle">追加先への登録はまだ行いません。まず、どのキーで誰に当たるかを確認します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table person-selection-result-table">
+        <thead>
+          <tr>
+            <th>行</th>
+            <th>状態</th>
+            <th>解釈したキー</th>
+            <th>生成キー</th>
+            <th>候補</th>
+            <th>case</th>
+            <th>raw</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.row_no }}</td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if row.status == 'READY' else 'status-pending' if row.status in ['MULTIPLE', 'CASE_NOT_FOUND'] else 'status-danger' if row.status in ['PARSE_ERROR', 'NOT_FOUND'] else 'status-muted' }}">
+                {{ person_selection_status_label(row.status) }}
+              </span>
+              <small>{{ row.reason }}</small>
+              {% if row.matched_by %}<small>by {{ row.matched_by }}</small>{% endif %}
+            </td>
+            <td>
+              <small>保険者 {{ row.parsed.insurer_number or form.fixed_insurer_number or "-" }}</small>
+              <small>記号 {{ row.parsed.insurance_symbol or "-" }} / 番号 {{ row.parsed.insurance_number or "-" }}</small>
+              <small>カナ {{ row.parsed.name_kana or "-" }}</small>
+              <small>生年月日 {{ row.parsed.birthdate or "-" }} / 性別 {{ row.parsed.gender or "-" }}</small>
+              {% if row.parsed.hia_subscriber_id %}<small>HIA {{ row.parsed.hia_subscriber_id }}</small>{% endif %}
+              {% if row.parsed.subscriber_id %}<small>subscriber {{ row.parsed.subscriber_id }}</small>{% endif %}
+              {% if row.parsed.case_id %}<small>case {{ row.parsed.case_id }}</small>{% endif %}
+              {% if row.parsed.employee_code %}<small>社員 {{ row.parsed.employee_code }}</small>{% endif %}
+            </td>
+            <td>
+              <small>person {{ row.normalized.person_id_custom or "-" }}</small>
+              <small>identity {{ row.normalized.identity_hash or "-" }}</small>
+              {% if row.normalized.normalization_errors %}
+              <small>{{ row.normalized.normalization_errors|join(" / ") }}</small>
+              {% endif %}
+            </td>
+            <td>
+              {% for candidate in row.candidates %}
+              <div class="person-selection-candidate">
+                <strong>{{ candidate.name_kana_full or candidate.name_full or "-" }}</strong>
+                <small>subscriber {{ candidate.subscriber_id }} / HIA {{ candidate.hia_subscriber_id or "-" }}</small>
+                <small>{{ candidate.insurance_symbol_match or candidate.insurance_symbol or "-" }}-{{ candidate.insurance_number_match or candidate.insurance_number or "-" }} / {{ gender_code_label(candidate.gender_code) }} / {{ candidate.birth or "-" }}</small>
+                <small>社員 {{ candidate.employee_code or "-" }} / case {{ candidate.latest_case_id or "-" }} / {{ candidate.relationship_name or "-" }}</small>
+              </div>
+              {% else %}
+              <small>-</small>
+              {% endfor %}
+            </td>
+            <td>
+              {% for case in row.case_candidates %}
+              <div class="person-selection-candidate">
+                <strong><a href="/exam-export-cases/{{ case.exam_export_case_id }}">case {{ case.exam_export_case_id }}</a></strong>
+                <small>{{ case.facility_name or "-" }} / {{ case.exam_date or "-" }}</small>
+                <small>HIA {{ case.hia_subscriber_id or "-" }} / {{ case.export_readiness_status or "-" }} / {{ case.xml_export_status or "-" }}</small>
+              </div>
+              {% else %}
+              <small>-</small>
+              {% endfor %}
+            </td>
+            <td><code>{{ row.raw_line }}</code></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
