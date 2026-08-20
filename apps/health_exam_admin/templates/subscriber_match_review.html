@@ -188,10 +188,9 @@
         <table class="data-table subscriber-candidate-table">
           <thead>
             <tr>
-              <th>候補</th>
-              <th>照合情報</th>
-              <th>資格</th>
-              <th>適用</th>
+              <th>候補/適用情報</th>
+              <th>照合・資格</th>
+              <th>case</th>
               <th>ダッシュボード</th>
               <th class="help-cell">
                 <span class="table-help-heading">
@@ -213,39 +212,32 @@
                 <strong>{{ candidate.name_kana_full or "カナなし" }}</strong>
                 <small>{{ candidate.name_kanji_full or "氏名なし" }} / subscriber {{ candidate.subscriber_id }}</small>
                 <small>{{ candidate.birth or "-" }} / 性別 {{ gender_code_label(candidate.gender_code) }}</small>
+                <small>記号 {{ candidate.insurance_symbol_export or candidate.insurance_symbol or "-" }} / 番号 {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
+                <small>〒 {{ candidate.subscriber_postal_code or "-" }} / {{ candidate.subscriber_address_line or "-" }}{{ candidate.subscriber_building or "" }}</small>
               </td>
               <td>
                 <strong>score {{ candidate.match_score or 0 }}</strong>
                 <small>HIA {{ candidate.hia_subscriber_id or "-" }} / person_id_custom {{ candidate.person_id_custom or "-" }}</small>
                 <small>{{ candidate.insurer_number or "-" }} / {{ candidate.insurance_symbol or "-" }} / {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
+                <small>続柄 {{ candidate.relationship_name or "-" }} / 喪失 {{ candidate.qualification_lost_date or "-" }} / 社員 {{ candidate.employee_code or "-" }}</small>
               </td>
               <td>
-                <strong>{{ candidate.relationship_name or "-" }}</strong>
-                <small>喪失 {{ candidate.qualification_lost_date or "-" }} / 社員 {{ candidate.employee_code or "-" }}</small>
-                <div class="mini-status-box">
-                  <strong>既存case {{ candidate.candidate_case_count or 0 }}件</strong>
-                  {% if candidate.candidate_latest_case_id %}
-                  <small>
-                    最新 case {{ candidate.candidate_latest_case_id }}
-                    / {{ candidate.candidate_latest_case_exam_date or "-" }}
-                    / {{ candidate.candidate_latest_case_facility_name or "健診機関なし" }}
-                  </small>
-                  <small>
-                    出力 {{ candidate.candidate_latest_case_export_readiness_status or "-" }}
-                    / XML {{ candidate.candidate_latest_case_xml_export_status or "-" }}
-                    / 法定 {{ check_result_label(candidate.candidate_latest_case_legal_check_result) or "-" }}
-                    / 特定 {{ check_result_label(normalize_specific_check_result(candidate.candidate_latest_case_specific_check_result)) or "-" }}
-                  </small>
-                  {% else %}
-                  <small>同じeventのcaseはまだありません。</small>
-                  {% endif %}
-                </div>
-              </td>
-              <td>
-                <strong>加入者情報</strong>
-                <small>氏名カナ {{ candidate.name_kana_full or "-" }}</small>
-                <small>記号 {{ candidate.insurance_symbol_export or candidate.insurance_symbol or "-" }} / 番号 {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
-                <small>〒 {{ candidate.subscriber_postal_code or "-" }} / {{ candidate.subscriber_address_line or "-" }}{{ candidate.subscriber_building or "" }}</small>
+                <strong>既存case {{ candidate.candidate_case_count or 0 }}件</strong>
+                {% if candidate.candidate_latest_case_id %}
+                <small>
+                  最新 case {{ candidate.candidate_latest_case_id }}
+                  / {{ candidate.candidate_latest_case_exam_date or "-" }}
+                  / {{ candidate.candidate_latest_case_facility_name or "健診機関なし" }}
+                </small>
+                <small>
+                  出力 {{ candidate.candidate_latest_case_export_readiness_status or "-" }}
+                  / XML {{ candidate.candidate_latest_case_xml_export_status or "-" }}
+                  / 法定 {{ check_result_label(candidate.candidate_latest_case_legal_check_result) or "-" }}
+                  / 特定 {{ check_result_label(normalize_specific_check_result(candidate.candidate_latest_case_specific_check_result)) or "-" }}
+                </small>
+                {% else %}
+                <small>同じeventのcaseはまだありません。</small>
+                {% endif %}
               </td>
               <td>
                 <strong>{{ candidate.hia_dashboard_status or "-" }}</strong>
@@ -267,7 +259,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="6">候補が見つかりません。検索語を追加してください。</td>
+              <td colspan="5">候補が見つかりません。検索語を追加してください。</td>
             </tr>
             {% endfor %}
           </tbody>
