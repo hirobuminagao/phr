@@ -616,7 +616,7 @@ def build_group(
     if len(folder_names) != 1:
         raise ValueError(f"FACILITY_FOLDER_CONFLICT: {sorted(folder_names)}")
     folder_name = next(iter(folder_names))
-    exam_months = {exam_month_yyyymm(row.get("exam_date")) for row in group}
+    exam_months = {exam_month_yyyymm(row.get("exam_date_export_value") or row.get("exam_date")) for row in group}
     if len(exam_months) != 1:
         raise ValueError(f"EXAM_MONTH_CONFLICT: {sorted(exam_months)}")
     exam_month = next(iter(exam_months))
@@ -672,6 +672,11 @@ def build_group(
                 program_type_code=str(row["program_code"]),
                 postal_code=fields.postal_code,
                 address=fields.address,
+                exam_ticket_number=fields.exam_ticket_number,
+                exam_ticket_number_root_oid=fields.exam_ticket_number_root_oid,
+                exam_ticket_kind_code=fields.exam_ticket_kind_code,
+                exam_ticket_kind_code_system=fields.exam_ticket_kind_code_system,
+                exam_ticket_expires_on=fields.exam_ticket_expires_on,
             )
             items = fetch_valid_items(
                 cur,
@@ -771,7 +776,13 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                 groups: dict[tuple[int, str, str], list[dict[str, Any]]] = defaultdict(list)
                 for row in ready:
                     insurer = _digits(row.get("insurer_number"), 8, "insurer_number")
-                    groups[(int(row["exam_facility_id"]), insurer, exam_month_yyyymm(row.get("exam_date")))].append(row)
+                    groups[
+                        (
+                            int(row["exam_facility_id"]),
+                            insurer,
+                            exam_month_yyyymm(row.get("exam_date_export_value") or row.get("exam_date")),
+                        )
+                    ].append(row)
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 operator_rows: list[tuple[str, str, str, str, str, int]] = []

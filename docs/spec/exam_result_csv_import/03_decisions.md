@@ -505,7 +505,7 @@ Current as of 2026-08-05.
 - 健診機関、受診月、氏名カナ、HIA加入者IDなどの一時検索条件は箱作成画面では扱わず、人追加モーダル側だけで扱う。
 - 人追加モーダルでは、健診機関名または健診機関コードの部分一致サジェスト、受診月、状態、氏名カナ、HIA加入者IDで検索できるようにする。検索結果は状態タグの下に追加操作を置き、追加済みは操作不可として見せる。
 - 検索結果および追加済みリストでは、本人確認用に保険証記号-番号、氏名カナ、生年月日を縦並びで表示する。健診機関名、受診日、HIA加入者IDも同じセル内で縦並び表示し、長い健診機関名は省略表示しつつhoverで全体を確認できるようにする。
-- 作成後の出力リスト画面には `基本情報補正` への入口を置く。ただし基本情報補正そのもの、補正履歴、加入者候補からの補正採用は後続画面/APIの責務とする。
+- 作成後の出力リスト画面および個人case一覧から、個人case詳細へ入り、基本情報補正を行う。
 - 個人XML履歴には、出力時点の手動許可有無、理由、承認者、承認日時をsnapshotとして残す。
 - 再出力は通常運用として想定し、過去の出力履歴を更新・削除せず、新しいZIP・個人XML履歴として追加する。
 - 出力履歴は「誰をどのZIPへ出力したか」という事実を保存する責務に限定する。個人単位の業務状態、修正版の正本判定、後続業務データへの反映時点は後続版で決める。
@@ -518,10 +518,14 @@ Current as of 2026-08-05.
 - 日本郵便データに含まれる「以下に掲載がない場合」等の表現は、XML出力用にそのまま使わず、住所文字列として扱える表記へ整備する。整備規則と元表記は記録する。
 - 郵便番号からも住所を補完できない場合は、HIA提出用の代替値として郵便番号 `000-0000`、住所 `－`（全角ハイフン）を使用できる。
 - 住所補完または代替値使用を行った場合は、XMLに出した値、元値、補完元、補完理由、処理日時、処理者または処理Runを必ず記帳する。原本CSV/XML値そのものは上書きしない。
-- 基本情報の補正はCSVだけでなくXML取込にも必要である。現在XML出力で使う補正値と項目別の最新変更履歴IDは `exam_ledgers` 側に持たせ、変更履歴は `exam_ledger_id` を起点に項目ごとの変更チェーンとして残す。
-- 初期の補正対象は `insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branch_number`, `exam_ticket_number`, `exam_ticket_expires_on`, `name_kana`, `postal_code`, `address` とする。
-- 補正履歴は `field_name`, `before_value`, `after_value`, `correction_source`, `correction_reason`, `previous_correction_history_id`, `etl_run_id`, `corrected_by`, `corrected_at` を持つ。`active` flagではなく、ledger側の最新履歴IDで現在値を示す。
-- 基本情報修正画面では、加入者突合済みの行に対して `subscribers` の保険証記号、保険証番号、枝番、氏名カナ、郵便番号、住所を補正候補として表示する。採用時は `correction_source = 'SUBSCRIBER'` の補正履歴として記録し、原本値を上書きしない。
+- 基本情報の補正はCSVだけでなくXML取込にも必要である。XML出力の清書単位は `exam_export_cases` なので、初期版の補正はcase単位で扱う。
+- 補正保存時は、出力に使う現在値を `exam_export_cases` の出力用カラムへ即時反映する。補正の現在状態は `exam_case_basic_info_corrections`、変更履歴は `exam_case_basic_info_correction_audit_logs` に残す。
+- 初期の画面補正対象は `exam_date`, `insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branch_number`, `exam_ticket_number`, `exam_ticket_expires_on`, `name_kana`, `postal_code`, `address` とする。
+- `exam_date` はcaseの自然キーに含まれるため、case本体の `exam_date` は直接上書きしない。補正値は `exam_date_export_value` に保存し、XML出力、出力月判定、出力候補抽出では補正値を優先する。
+- 補正値の正規化は既存identity共通libを必ず使用する。画面側に独自の氏名カナ、記号、番号、住所、郵便番号、保険者番号変換を再実装しない。
+- 受診券整理番号・利用券整理番号は保険証番号と異なり、先頭0を保持する11桁固定の券面識別子として扱う。`normalize_insurance_number()` は使わず、`scripts/lib/identity/field/ticket_identifier.py` の `normalize_ticket_identifier()` を使用する。
+- `normalize_ticket_identifier()` は券面種別を受け取り、受診券は券面種別コード `1` / OID prefix `1.2.392.200119.6.209.`、利用券は券面種別コード `2` / OID prefix `1.2.392.200119.6.210.` として、値、券面種別コード、券面種別OID、発行保険者番号、整理番号root OIDを返す。root OIDは発行保険者番号が渡された場合のみ生成する。
+- 基本情報修正画面では、加入者突合済みの行に対して `subscribers` の保険証記号、保険証番号、枝番、氏名カナ、郵便番号、住所を補正候補として表示する機能を後続で追加する。採用時も原本値を上書きせず、通常のcase補正として履歴へ記録する。
 - 人向けの不足情報CSVを追加するかは後続で決め、初期XML実装を止めない。item valueの `APPROVED_WITH_REASON` とaudit `note` は不足情報CSVとは別概念とする。
 - `*_match` は照合・検索専用であり、HIA/XML出力値としては使用しない。
 - 保険証記号、保険証番号、氏名カナは、ledgerに `*_export_value` / `*_export_source` / `*_export_reason` を持たせる。

@@ -24,6 +24,7 @@ OID_FACILITY = "1.2.392.200119.6.102"
 OID_SYMBOL = "1.2.392.200119.6.204"
 OID_NUMBER = "1.2.392.200119.6.205"
 OID_GENDER = "1.2.392.200119.6.1104"
+OID_TICKET_KIND = "1.2.392.200119.6.208"
 
 ET.register_namespace("", NS_HL7)
 ET.register_namespace("xsi", NS_XSI)
@@ -51,6 +52,11 @@ class Person:
     program_type_code: str
     postal_code: str | None = None
     address: str | None = None
+    exam_ticket_number: str | None = None
+    exam_ticket_number_root_oid: str | None = None
+    exam_ticket_kind_code: str | None = None
+    exam_ticket_kind_code_system: str | None = None
+    exam_ticket_expires_on: str | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,37 @@ def _add_organization(parent: ET.Element, facility: Facility) -> None:
     if facility.phone:
         ET.SubElement(organization, _h("telecom"), {"value": facility.phone})
     _add_address(organization, facility.postal_code, facility.address)
+
+
+def _add_exam_ticket_participant(parent: ET.Element, person: Person) -> None:
+    if not person.exam_ticket_number:
+        return
+    if not person.exam_ticket_number_root_oid:
+        raise ValueError("exam_ticket_number_root_oid is missing")
+
+    participant = ET.SubElement(parent, _h("participant"), {"typeCode": "HLD"})
+    ET.SubElement(
+        participant,
+        _h("functionCode"),
+        {
+            "code": person.exam_ticket_kind_code or "1",
+            "codeSystem": person.exam_ticket_kind_code_system or OID_TICKET_KIND,
+        },
+    )
+    time_node = ET.SubElement(participant, _h("time"))
+    if person.exam_ticket_expires_on:
+        ET.SubElement(time_node, _h("high"), {"value": person.exam_ticket_expires_on})
+    associated = ET.SubElement(participant, _h("associatedEntity"), {"classCode": "IDENT"})
+    ET.SubElement(
+        associated,
+        _h("id"),
+        {
+            "extension": person.exam_ticket_number,
+            "root": person.exam_ticket_number_root_oid,
+        },
+    )
+    scoping = ET.SubElement(associated, _h("scopingOrganization"))
+    ET.SubElement(scoping, _h("id"), {"extension": person.insurer_number, "root": OID_INSURER})
 
 
 def _add_exam_item_observation(parent: ET.Element, item: ExamItem) -> ET.Element:
@@ -207,6 +244,8 @@ def build_clinical_document(person: Person, facility: Facility, items: Iterable[
 
     custodian_org = ET.SubElement(ET.SubElement(ET.SubElement(root, _h("custodian")), _h("assignedCustodian")), _h("representedCustodianOrganization"))
     ET.SubElement(custodian_org, _h("id"), {"nullFlavor": "NI"})
+
+    _add_exam_ticket_participant(root, person)
 
     service_event = ET.SubElement(ET.SubElement(root, _h("documentationOf")), _h("serviceEvent"))
     ET.SubElement(service_event, _h("code"), {"code": person.program_type_code, "codeSystem": OID_PROGRAM_TYPE})

@@ -2707,6 +2707,64 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   grid-column: 1 / -1;
 }
 
+.compact-heading {
+  margin-top: 18px;
+}
+
+.compact-heading h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.basic-info-correction-panel {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #d8e2ee;
+}
+
+.basic-info-correction-table th:nth-child(1),
+.basic-info-correction-table td:nth-child(1) {
+  width: 150px;
+}
+
+.basic-info-correction-table th:nth-child(2),
+.basic-info-correction-table td:nth-child(2),
+.basic-info-correction-table th:nth-child(3),
+.basic-info-correction-table td:nth-child(3) {
+  width: 22%;
+}
+
+.basic-info-correction-table tr.is-corrected-row td {
+  background: #ecfdf5;
+}
+
+.basic-info-correction-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1.2fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.basic-info-correction-form input,
+.basic-info-correction-form textarea {
+  width: 100%;
+}
+
+.basic-info-correction-form textarea {
+  min-height: 44px;
+}
+
+.inline-action-row {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.inline-action-row button {
+  min-width: 72px;
+}
+
 .exam-item-detail-table th:nth-child(1),
 .exam-item-detail-table td:nth-child(1) {
   width: 120px;

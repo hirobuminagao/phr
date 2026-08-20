@@ -823,9 +823,12 @@ APIはデータ更新の手間が少ない一方、ビジネスアカウント�
 住所補完または代替値使用を行った場合、原本値は上書きせず、XMLに出した値、元値、補完元、補完理由、処理Run、処理日時を記帳する。
 
 基本情報補正はCSV由来とXML由来の両方を対象にする。
-現在XML出力で使う補正値は `exam_ledgers` に横持ちし、変更履歴は `exam_ledger_id` を起点にした共通テーブルへ残す。
+現在XML出力で使う補正値は、清書XMLの人単位である `exam_export_cases` へ反映する。
+補正の現在状態は `exam_case_basic_info_corrections`、変更履歴は `exam_case_basic_info_correction_audit_logs` へ残す。
+source原本である `exam_ledgers` / `exam_item_values` は上書きしない。
 補正対象は初期版では以下に限定する。
 
+- `exam_date`
 - `insurer_number`
 - `insurance_symbol`
 - `insurance_number`
@@ -836,38 +839,53 @@ APIはデータ更新の手間が少ない一方、ビジネスアカウント�
 - `postal_code`
 - `address`
 
+`exam_date` は `exam_export_cases` の自然キーに含まれるため、case本体の `exam_date` は上書きしない。
+補正値は `exam_date_export_value` に保存し、XML出力、出力月判定、出力候補抽出では `exam_date_export_value` を優先する。
+
 `insurer_number` はCSVにない場合、取込時にeventまたはfile_receipt由来で自動補完する。
 XMLでは原本XML内の保険者番号を優先するが、欠落や明確な誤りがある場合は同じ補正機構で扱う。
 手修正対象というより、自動補完値と補完元を追跡する対象とする。
 
-各ledger側には、各補正項目ごとに補正値と最新変更履歴IDを持たせる。
+case側には、出力に使う現在値を既存の出力用カラムへ持たせる。
 たとえば氏名カナなら以下のように扱う。
 
 ```text
-name_kana_raw = 長尾
-name_kana_corrected = 佐藤
-name_kana_correction_history_id = 3
+exam_export_cases.name_kana_raw = 長尾
+exam_export_cases.name_kana_export_value = 佐藤
+exam_export_cases.name_kana_export_source = MANUAL_CORRECTION
+exam_case_basic_info_corrections.field_code = name_kana
+exam_case_basic_info_corrections.normalized_value = 佐藤
 ```
 
-XML由来もCSV由来も同じ画面・同じ出力projectionで補正するため、補正対象項目の原本値または補正値を受け止めるカラムは `exam_ledgers` 側に揃える。
-XMLに存在しない項目は原本値NULLとして保持し、補正値と履歴で補える状態にする。
+XML由来もCSV由来もcase化された後は同じ画面・同じ出力projectionで補正する。
+XMLに存在しない項目はsource側ではNULLのままとし、case補正値と履歴で補える状態にする。
 
-履歴テーブルは、項目ごとの変更チェーンを保持する。
-前回履歴IDを持つことで、`active` flagに依存せず、どの値からどの値へ変わったかを追えるようにする。
+履歴テーブルは、項目ごとの変更履歴を保持する。
+現在値は `exam_case_basic_info_corrections.correction_status = ACTIVE` と `exam_export_cases` の出力値で表す。
 
 ```text
-exam_ledger_basic_info_correction_histories
-  correction_history_id
-  exam_ledger_id
-  field_name
-  before_value
-  after_value
-  correction_source
+exam_case_basic_info_corrections
+  exam_case_basic_info_correction_id
+  exam_export_case_id
+  field_code
+  source_value
+  corrected_value
+  normalized_value
+  correction_status
   correction_reason
-  previous_correction_history_id
-  etl_run_id
-  corrected_by
+  corrected_by_app_user_id
   corrected_at
+
+exam_case_basic_info_correction_audit_logs
+  exam_case_basic_info_correction_audit_log_id
+  exam_case_basic_info_correction_id
+  exam_export_case_id
+  field_name
+  old_value
+  new_value
+  note
+  changed_by_app_user_id
+  changed_at
   created_at
 ```
 
@@ -875,18 +893,19 @@ exam_ledger_basic_info_correction_histories
 
 ```text
 row原本値: 氏名カナ = 長尾
-履歴ID 1: field=name_kana, before=長尾, after=田中, previous=NULL
-履歴ID 3: field=name_kana, before=田中, after=佐藤, previous=1
-ledger現在値: name_kana_corrected=佐藤, name_kana_correction_history_id=3
+補正1: field=name_kana, source=長尾, normalized=田中
+補正2: field=name_kana, old=田中, normalized=佐藤
+case現在値: name_kana_export_value=佐藤, name_kana_export_source=MANUAL_CORRECTION
 ```
 
-XML出力projectionは、補正値がある項目は補正値を優先し、なければ原本値を使用する。
-どちらを採用したかと、参照した変更履歴IDはXML出力履歴または出力時snapshotに残す。
+XML出力projectionは `exam_export_cases` の出力用カラムを読む。
+補正済みの場合は `*_export_source = MANUAL_CORRECTION` や `address_source = MANUAL_CORRECTION` で採用元を確認できる。
+出力時snapshotには、出力時点のcase値を残す。
 
 修正画面では、加入者突合済みの行について `subscribers` テーブルの値を補正候補として表示する。
 候補表示は手入力の代替ではなく、入力支援と確認材料とする。
 利用者が `subscribers` 由来の候補を採用した場合も、直接ledger原本値を上書きせず、通常の補正操作として履歴テーブルへ記録する。
-この場合の `correction_source` は `SUBSCRIBER` とし、候補値を採用した事実、採用者、採用日時、理由を残す。
+この場合の補正理由またはsourceには `SUBSCRIBER` 由来候補を採用した事実、採用者、採用日時、理由を残す。
 
 `subscribers` から候補表示する初期項目は以下とする。
 
@@ -1052,6 +1071,11 @@ mapping対象がない、またはmapping値がNULLの場合は、CSV取込時�
    - 結合出力用caseで採用した健診機関コードとmaster値が不一致の場合は、そのZIPを停止する。
 5. 健診機関情報
    - export時に `exam_facilities` を参照し、名称、郵便番号、住所、電話番号を取得する。
+6. 受診券情報
+   - `exam_export_cases.exam_ticket_number_export_value` がある場合のみ、特定健診情報ファイル `hc08` の `participant typeCode="HLD"` として受診券情報を出力する。
+   - 受診券番号は `normalize_ticket_identifier(ticket_kind="exam_ticket")` で11桁固定・先頭0保持・OID生成を行う。
+   - 受診券有効期限 `exam_ticket_expires_on_export_value` がある場合は `participant/time/high/@value` に `YYYYMMDD` で出力する。受診券番号がない場合は `participant` 自体を出力しない。
+   - 利用券情報は特定保健指導XML側の責務とし、今回の健診XML出力では扱わない。
 
 ### Export History
 

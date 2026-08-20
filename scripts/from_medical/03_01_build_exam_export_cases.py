@@ -185,6 +185,9 @@ def case_params(primary: dict[str, Any], group: list[dict[str, Any]], run_id: in
         "facility_code": primary.get("facility_code"),
         "facility_name": primary.get("facility_name"),
         "exam_date": primary.get("exam_date"),
+        "exam_date_export_value": primary.get("exam_date_export_value"),
+        "exam_date_export_source": primary.get("exam_date_export_source"),
+        "exam_date_export_reason": primary.get("exam_date_export_reason"),
         "health_exam_report_category": primary.get("health_exam_report_category") or primary.get("report_category_code"),
         "program_code": primary.get("program_code") or primary.get("program_type_code"),
         "name_full_raw": primary.get("name_full_raw"),
@@ -201,6 +204,15 @@ def case_params(primary: dict[str, Any], group: list[dict[str, Any]], run_id: in
         "insurance_number_export_source": primary.get("insurance_number_export_source"),
         "insurance_number_export_reason": primary.get("insurance_number_export_reason"),
         "insurance_branch_number_raw": primary.get("insurance_branch_number_raw"),
+        "insurance_branch_number_export_value": primary.get("insurance_branch_number_export_value"),
+        "insurance_branch_number_export_source": primary.get("insurance_branch_number_export_source"),
+        "insurance_branch_number_export_reason": primary.get("insurance_branch_number_export_reason"),
+        "exam_ticket_number_export_value": primary.get("exam_ticket_number_export_value"),
+        "exam_ticket_number_export_source": primary.get("exam_ticket_number_export_source"),
+        "exam_ticket_number_export_reason": primary.get("exam_ticket_number_export_reason"),
+        "exam_ticket_expires_on_export_value": primary.get("exam_ticket_expires_on_export_value"),
+        "exam_ticket_expires_on_export_source": primary.get("exam_ticket_expires_on_export_source"),
+        "exam_ticket_expires_on_export_reason": primary.get("exam_ticket_expires_on_export_reason"),
         "birthdate": primary.get("birthdate"),
         "gender_code": primary.get("gender_code"),
         "gender_raw": primary.get("gender_raw"),
@@ -238,6 +250,9 @@ CASE_COLUMNS = [
     "facility_code",
     "facility_name",
     "exam_date",
+    "exam_date_export_value",
+    "exam_date_export_source",
+    "exam_date_export_reason",
     "health_exam_report_category",
     "program_code",
     "name_full_raw",
@@ -254,6 +269,15 @@ CASE_COLUMNS = [
     "insurance_number_export_source",
     "insurance_number_export_reason",
     "insurance_branch_number_raw",
+    "insurance_branch_number_export_value",
+    "insurance_branch_number_export_source",
+    "insurance_branch_number_export_reason",
+    "exam_ticket_number_export_value",
+    "exam_ticket_number_export_source",
+    "exam_ticket_number_export_reason",
+    "exam_ticket_expires_on_export_value",
+    "exam_ticket_expires_on_export_source",
+    "exam_ticket_expires_on_export_reason",
     "birthdate",
     "gender_code",
     "gender_raw",
@@ -276,6 +300,80 @@ CASE_COLUMNS = [
     "built_etl_run_id",
     "built_at",
 ]
+
+
+BASIC_INFO_CORRECTION_CASE_COLUMNS = {
+    "exam_date": ("exam_date_export_value", "exam_date_export_source", "exam_date_export_reason"),
+    "name_kana": ("name_kana_export_value", "name_kana_export_source", "name_kana_export_reason"),
+    "insurance_symbol": (
+        "insurance_symbol_export_value",
+        "insurance_symbol_export_source",
+        "insurance_symbol_export_reason",
+    ),
+    "insurance_number": (
+        "insurance_number_export_value",
+        "insurance_number_export_source",
+        "insurance_number_export_reason",
+    ),
+    "insurance_branch_number": (
+        "insurance_branch_number_export_value",
+        "insurance_branch_number_export_source",
+        "insurance_branch_number_export_reason",
+    ),
+    "exam_ticket_number": (
+        "exam_ticket_number_export_value",
+        "exam_ticket_number_export_source",
+        "exam_ticket_number_export_reason",
+    ),
+    "exam_ticket_expires_on": (
+        "exam_ticket_expires_on_export_value",
+        "exam_ticket_expires_on_export_source",
+        "exam_ticket_expires_on_export_reason",
+    ),
+    "insurer_number": ("insurer_number_export_value", None, None),
+    "postal_code": ("postal_code_completed_value", None, "address_completion_reason"),
+    "address": ("address_completed_value", "address_source", "address_completion_reason"),
+}
+
+
+def reapply_basic_info_corrections(cur: Any, config: BuildCaseConfig, *, case_id: int) -> None:
+    cur.execute(
+        f"""
+        SELECT field_code, normalized_value, correction_reason
+        FROM {qname(config.health_db)}.`exam_case_basic_info_corrections`
+        WHERE exam_export_case_id = %s
+          AND correction_status = 'ACTIVE'
+        ORDER BY exam_case_basic_info_correction_id
+        """,
+        (case_id,),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    if not rows:
+        return
+    for row in rows:
+        field_code = str(row.get("field_code") or "")
+        columns = BASIC_INFO_CORRECTION_CASE_COLUMNS.get(field_code)
+        if not columns:
+            continue
+        value_column, source_column, reason_column = columns
+        update_columns = [f"`{value_column}` = %s", "`correction_status` = 'CORRECTED'"]
+        params: list[Any] = [row.get("normalized_value")]
+        if source_column:
+            update_columns.append(f"`{source_column}` = 'MANUAL_CORRECTION'")
+        if reason_column:
+            update_columns.append(f"`{reason_column}` = %s")
+            params.append(row.get("correction_reason") or "MANUAL_CORRECTION")
+        if field_code in {"postal_code", "address"}:
+            update_columns.append("`address_completion_status` = 'MANUAL_CORRECTION'")
+        params.append(case_id)
+        cur.execute(
+            f"""
+            UPDATE {qname(config.health_db)}.`exam_export_cases`
+            SET {", ".join(update_columns)}
+            WHERE exam_export_case_id = %s
+            """,
+            tuple(params),
+        )
 
 
 def upsert_case(cur: Any, config: BuildCaseConfig, params: dict[str, Any]) -> tuple[int, str]:
@@ -407,6 +505,7 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
             if params["merge_status"] == "REVIEW_REQUIRED":
                 summary.review_required += 1
             summary.sources_upserted += upsert_sources(cur, config, case_id=case_id, group=group, primary=primary)
+            reapply_basic_info_corrections(cur, config, case_id=case_id)
 
         refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.event_id)
         etl_finish_run(cur, run_id, summary.to_metrics(), extra_notes=summary.message())

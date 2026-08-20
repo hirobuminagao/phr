@@ -10,6 +10,7 @@ from scripts.lib.identity.field.insurance_number import normalize_insurance_numb
 from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
 from scripts.lib.identity.field.insurer_number import normalize_insurer_number
 from scripts.lib.identity.field.name_kana import normalize_name_kana_full
+from scripts.lib.identity.field.ticket_identifier import normalize_ticket_identifier
 from scripts.lib.identity.primitive.digits import zero_pad
 
 
@@ -24,6 +25,11 @@ class XmlExportFields:
     exam_date: str
     postal_code: str | None
     address: str | None
+    exam_ticket_number: str | None = None
+    exam_ticket_number_root_oid: str | None = None
+    exam_ticket_kind_code: str | None = None
+    exam_ticket_kind_code_system: str | None = None
+    exam_ticket_expires_on: str | None = None
 
 
 class ExportFieldError(ValueError):
@@ -34,6 +40,19 @@ def _required(result: Mapping[str, Any], key: str, field_name: str) -> str:
     value = result.get(key)
     if not result.get("ok") or value in (None, ""):
         reason = result.get("reason") or "missing"
+        raise ExportFieldError(f"{field_name}: {reason}")
+    return str(value)
+
+
+def _optional(result: Mapping[str, Any], key: str, field_name: str) -> str | None:
+    value = result.get(key)
+    if value in (None, ""):
+        if result.get("ok") or result.get("missing"):
+            return None
+        reason = result.get("reason") or "invalid"
+        raise ExportFieldError(f"{field_name}: {reason}")
+    if not result.get("ok"):
+        reason = result.get("reason") or "invalid"
         raise ExportFieldError(f"{field_name}: {reason}")
     return str(value)
 
@@ -53,12 +72,29 @@ def build_xml_export_fields(
     kana = normalize_name_kana_full(row.get("name_kana_export_value") or row.get("name_kana_raw"))
     gender = normalize_gender_code(row.get("gender_code") or row.get("gender_raw"))
     birth = normalize_date_to_ymd_and_compact(row.get("birthdate"), purpose="birthdate")
-    exam = normalize_date_to_ymd_and_compact(row.get("exam_date"), purpose="exam_date")
+    exam = normalize_date_to_ymd_and_compact(
+        row.get("exam_date_export_value") or row.get("exam_date"),
+        purpose="exam_date",
+    )
 
     insurer_number = zero_pad(_required(insurer, "field_norm", "insurer_number"), 8)
     assert insurer_number is not None
     if len(insurer_number) != 8:
         raise ExportFieldError("insurer_number: invalid_length")
+
+    exam_ticket = None
+    if row.get("exam_ticket_number_export_value") not in (None, ""):
+        exam_ticket = normalize_ticket_identifier(
+            row.get("exam_ticket_number_export_value"),
+            ticket_kind="exam_ticket",
+            issuer_insurer_number=insurer_number,
+        )
+        if not exam_ticket.get("ok"):
+            raise ExportFieldError(f"exam_ticket_number: {exam_ticket.get('reason') or 'invalid'}")
+    exam_ticket_expires_on = normalize_date_to_ymd_and_compact(
+        row.get("exam_ticket_expires_on_export_value"),
+        purpose="exam_ticket_expires_on",
+    )
 
     return XmlExportFields(
         insurer_number=insurer_number,
@@ -74,4 +110,9 @@ def build_xml_export_fields(
         address=normalize_address_export(
             row.get("address") if address_override is None else address_override
         ),
+        exam_ticket_number=str(exam_ticket["field_norm"]) if exam_ticket else None,
+        exam_ticket_number_root_oid=str(exam_ticket["root_oid"]) if exam_ticket else None,
+        exam_ticket_kind_code=str(exam_ticket["ticket_kind_code"]) if exam_ticket else None,
+        exam_ticket_kind_code_system=str(exam_ticket["ticket_kind_code_system"]) if exam_ticket else None,
+        exam_ticket_expires_on=_optional(exam_ticket_expires_on, "match", "exam_ticket_expires_on"),
     )

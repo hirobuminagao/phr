@@ -53,6 +53,14 @@ from scripts.hia.dev_tools.check_hia_xml_zip import (
     check_zip as check_hia_xml_zip_file,
     write_report as write_hia_xml_zip_check_report,
 )
+from scripts.lib.identity.field.address import normalize_address_export, normalize_postal_code_export
+from scripts.lib.identity.field.date_field import normalize_date_to_ymd_and_compact
+from scripts.lib.identity.field.insurance_number import normalize_insurance_number
+from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
+from scripts.lib.identity.field.insurer_number import normalize_insurer_number
+from scripts.lib.identity.field.name_kana import normalize_name_kana_full
+from scripts.lib.identity.field.ticket_identifier import normalize_ticket_identifier
+from scripts.lib.identity.primitive.digits import zero_pad
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
     get_authenticated_session,
@@ -108,6 +116,69 @@ WORK_PERMISSION_ITEMS = (
         "edit_codes": ("business_settings.manage",),
     },
 )
+
+BASIC_INFO_CORRECTION_FIELDS: dict[str, dict[str, Any]] = {
+    "exam_date": {
+        "label": "健診実施日",
+        "case_value_column": "exam_date_export_value",
+        "case_source_column": "exam_date_export_source",
+        "case_reason_column": "exam_date_export_reason",
+    },
+    "name_kana": {
+        "label": "氏名カナ",
+        "case_value_column": "name_kana_export_value",
+        "case_source_column": "name_kana_export_source",
+        "case_reason_column": "name_kana_export_reason",
+    },
+    "insurance_symbol": {
+        "label": "記号",
+        "case_value_column": "insurance_symbol_export_value",
+        "case_source_column": "insurance_symbol_export_source",
+        "case_reason_column": "insurance_symbol_export_reason",
+    },
+    "insurance_number": {
+        "label": "番号",
+        "case_value_column": "insurance_number_export_value",
+        "case_source_column": "insurance_number_export_source",
+        "case_reason_column": "insurance_number_export_reason",
+    },
+    "insurance_branch_number": {
+        "label": "枝番",
+        "case_value_column": "insurance_branch_number_export_value",
+        "case_source_column": "insurance_branch_number_export_source",
+        "case_reason_column": "insurance_branch_number_export_reason",
+    },
+    "exam_ticket_number": {
+        "label": "受診券番号",
+        "case_value_column": "exam_ticket_number_export_value",
+        "case_source_column": "exam_ticket_number_export_source",
+        "case_reason_column": "exam_ticket_number_export_reason",
+    },
+    "exam_ticket_expires_on": {
+        "label": "受診券有効期限",
+        "case_value_column": "exam_ticket_expires_on_export_value",
+        "case_source_column": "exam_ticket_expires_on_export_source",
+        "case_reason_column": "exam_ticket_expires_on_export_reason",
+    },
+    "insurer_number": {
+        "label": "保険者番号",
+        "case_value_column": "insurer_number_export_value",
+        "case_source_column": None,
+        "case_reason_column": None,
+    },
+    "postal_code": {
+        "label": "郵便番号",
+        "case_value_column": "postal_code_completed_value",
+        "case_source_column": None,
+        "case_reason_column": "address_completion_reason",
+    },
+    "address": {
+        "label": "住所",
+        "case_value_column": "address_completed_value",
+        "case_source_column": "address_source",
+        "case_reason_column": "address_completion_reason",
+    },
+}
 BUSINESS_SETTINGS_VIEW_PERMISSION = "business_settings.view"
 BUSINESS_SETTINGS_PERMISSION = "business_settings.manage"
 SYSTEM_SETTINGS_PERMISSION = "users.manage"
@@ -3544,6 +3615,372 @@ def load_exam_export_case_check_rows(cur: Any, *, exam_export_case_id: int, limi
     return [dict(row) for row in cur.fetchall()]
 
 
+def _case_basic_info_display_value(case: Mapping[str, Any], field_code: str) -> str | None:
+    if field_code == "exam_date":
+        value = case.get("exam_date_export_value") or case.get("exam_date")
+        return None if value in (None, "") else str(value)
+    if field_code == "insurer_number":
+        return case.get("insurer_number_export_value") or case.get("insurer_number")
+    if field_code == "insurance_branch_number":
+        return case.get("insurance_branch_number_export_value") or case.get("insurance_branch_number_raw")
+    if field_code == "postal_code":
+        return case.get("postal_code_completed_value") or case.get("postal_code")
+    if field_code == "address":
+        return case.get("address_completed_value") or case.get("address")
+    config = BASIC_INFO_CORRECTION_FIELDS[field_code]
+    value = case.get(str(config["case_value_column"]))
+    return None if value in (None, "") else str(value)
+
+
+def normalize_basic_info_correction_value(
+    field_code: str,
+    raw_value: str,
+    *,
+    case: Mapping[str, Any] | None = None,
+) -> tuple[str | None, str, str | None]:
+    value = raw_value.strip()
+    if not value:
+        return None, "ERROR", "VALUE_REQUIRED"
+    if field_code == "exam_date":
+        result = normalize_date_to_ymd_and_compact(value, purpose="exam_date")
+        normalized = result.get("field_norm")
+    elif field_code == "name_kana":
+        result = normalize_name_kana_full(value)
+        normalized = result.get("field_norm")
+    elif field_code == "insurance_symbol":
+        result = normalize_insurance_symbol(value)
+        normalized = result.get("export")
+    elif field_code == "insurance_number":
+        result = normalize_insurance_number(value)
+        normalized = result.get("field_norm")
+    elif field_code == "insurance_branch_number":
+        result = normalize_insurance_number(value)
+        normalized = result.get("field_norm")
+    elif field_code == "exam_ticket_number":
+        issuer_insurer_number = None
+        if case is not None:
+            issuer_insurer_number = case.get("insurer_number_export_value") or case.get("insurer_number")
+        result = normalize_ticket_identifier(
+            value,
+            ticket_kind="exam_ticket",
+            issuer_insurer_number=issuer_insurer_number,
+        )
+        normalized = result.get("field_norm")
+    elif field_code == "exam_ticket_expires_on":
+        result = normalize_date_to_ymd_and_compact(value, purpose="exam_ticket_expires_on")
+        normalized = result.get("field_norm")
+    elif field_code == "insurer_number":
+        result = normalize_insurer_number(value)
+        normalized = result.get("field_norm")
+        if result.get("ok") and normalized not in (None, ""):
+            normalized = zero_pad(str(normalized), 8)
+            if normalized is None or len(normalized) != 8:
+                return None, "ERROR", "INVALID_INSURER_NUMBER_LENGTH"
+    elif field_code == "postal_code":
+        normalized = normalize_postal_code_export(value)
+        if not normalized:
+            return None, "ERROR", "INVALID_POSTAL_CODE"
+        return normalized, "OK", None
+    elif field_code == "address":
+        normalized = normalize_address_export(value)
+        if not normalized:
+            return None, "ERROR", "INVALID_ADDRESS"
+        return normalized, "OK", None
+    else:
+        return None, "ERROR", "UNKNOWN_FIELD"
+
+    if not result.get("ok") or normalized in (None, ""):
+        return None, "ERROR", str(result.get("reason") or "NORMALIZE_FAILED")
+    return str(normalized), "OK", None
+
+
+def load_exam_case_basic_info_corrections(cur: Any, *, exam_export_case_id: int) -> dict[str, dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {qname(health_db())}.exam_case_basic_info_corrections
+        WHERE exam_export_case_id = %s
+        """,
+        (exam_export_case_id,),
+    )
+    return {str(row["field_code"]): dict(row) for row in cur.fetchall()}
+
+
+def build_basic_info_correction_rows(
+    case: Mapping[str, Any],
+    corrections: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for field_code, config in BASIC_INFO_CORRECTION_FIELDS.items():
+        correction = dict(corrections.get(field_code) or {})
+        current_value = _case_basic_info_display_value(case, field_code)
+        rows.append(
+            {
+                "field_code": field_code,
+                "label": config["label"],
+                "current_value": current_value,
+                "correction": correction,
+                "has_active_correction": correction.get("correction_status") == "ACTIVE",
+            }
+        )
+    return rows
+
+
+def update_exam_case_basic_info_correction(
+    cur: Any,
+    *,
+    exam_export_case_id: int,
+    field_code: str,
+    corrected_value: str,
+    correction_reason: str,
+    app_user_id: int,
+) -> dict[str, Any] | None:
+    if field_code not in BASIC_INFO_CORRECTION_FIELDS:
+        return None
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {qname(health_db())}.exam_export_cases
+        WHERE exam_export_case_id = %s
+        LIMIT 1
+        """,
+        (exam_export_case_id,),
+    )
+    case = cur.fetchone()
+    if not case:
+        return None
+    case_row = dict(case)
+    normalized_value, status, reason = normalize_basic_info_correction_value(
+        field_code,
+        corrected_value,
+        case=case_row,
+    )
+    if status != "OK" or normalized_value is None:
+        return {
+            "ok": False,
+            "reason": reason or "NORMALIZE_FAILED",
+            "exam_export_case_id": exam_export_case_id,
+            "field_code": field_code,
+        }
+
+    config = BASIC_INFO_CORRECTION_FIELDS[field_code]
+    field_label = str(config["label"])
+    source_value = _case_basic_info_display_value(case_row, field_code)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_case_basic_info_corrections (
+          event_id,
+          exam_export_case_id,
+          field_code,
+          field_label,
+          source_value,
+          corrected_value,
+          normalized_value,
+          normalization_status,
+          normalization_reason,
+          correction_status,
+          correction_reason,
+          corrected_at,
+          corrected_by_app_user_id
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'OK', NULL, 'ACTIVE', %s, CURRENT_TIMESTAMP(3), %s)
+        ON DUPLICATE KEY UPDATE
+          field_label = VALUES(field_label),
+          corrected_value = VALUES(corrected_value),
+          normalized_value = VALUES(normalized_value),
+          normalization_status = VALUES(normalization_status),
+          normalization_reason = VALUES(normalization_reason),
+          correction_status = 'ACTIVE',
+          correction_reason = VALUES(correction_reason),
+          corrected_at = CURRENT_TIMESTAMP(3),
+          corrected_by_app_user_id = VALUES(corrected_by_app_user_id)
+        """,
+        (
+            case_row.get("event_id"),
+            exam_export_case_id,
+            field_code,
+            field_label,
+            source_value,
+            corrected_value,
+            normalized_value,
+            correction_reason,
+            app_user_id,
+        ),
+    )
+    cur.execute(
+        f"""
+        SELECT exam_case_basic_info_correction_id
+        FROM {qname(health_db())}.exam_case_basic_info_corrections
+        WHERE exam_export_case_id = %s
+          AND field_code = %s
+        LIMIT 1
+        """,
+        (exam_export_case_id, field_code),
+    )
+    correction = cur.fetchone()
+    if not correction:
+        return None
+    correction_id = int(correction["exam_case_basic_info_correction_id"])
+
+    update_columns = [f"`{config['case_value_column']}` = %s", "`correction_status` = 'CORRECTED'"]
+    update_params: list[Any] = [normalized_value]
+    if config.get("case_source_column"):
+        update_columns.append(f"`{config['case_source_column']}` = 'MANUAL_CORRECTION'")
+    if config.get("case_reason_column"):
+        update_columns.append(f"`{config['case_reason_column']}` = %s")
+        update_params.append(correction_reason or "MANUAL_CORRECTION")
+    if field_code == "address":
+        update_columns.append("`address_completion_status` = 'MANUAL_CORRECTION'")
+    elif field_code == "postal_code":
+        update_columns.append("`address_completion_status` = 'MANUAL_CORRECTION'")
+    update_params.append(exam_export_case_id)
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_export_cases
+        SET {", ".join(update_columns)}
+        WHERE exam_export_case_id = %s
+        """,
+        tuple(update_params),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_case_basic_info_correction_audit_logs (
+          exam_case_basic_info_correction_id,
+          event_id,
+          exam_export_case_id,
+          field_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          note,
+          changed_by_app_user_id
+        )
+        VALUES (%s, %s, %s, %s, 'normalized_value', %s, %s, 'ADMIN_UI', %s, %s)
+        """,
+        (
+            correction_id,
+            case_row.get("event_id"),
+            exam_export_case_id,
+            field_code,
+            source_value,
+            normalized_value,
+            correction_reason,
+            app_user_id,
+        ),
+    )
+    return {
+        "ok": True,
+        "exam_export_case_id": exam_export_case_id,
+        "field_code": field_code,
+        "field_label": field_label,
+        "old_value": source_value,
+        "new_value": normalized_value,
+    }
+
+
+def clear_exam_case_basic_info_correction(
+    cur: Any,
+    *,
+    exam_export_case_id: int,
+    field_code: str,
+    note: str,
+    app_user_id: int,
+) -> dict[str, Any] | None:
+    if field_code not in BASIC_INFO_CORRECTION_FIELDS:
+        return None
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {qname(health_db())}.exam_case_basic_info_corrections
+        WHERE exam_export_case_id = %s
+          AND field_code = %s
+        LIMIT 1
+        """,
+        (exam_export_case_id, field_code),
+    )
+    correction = cur.fetchone()
+    if not correction:
+        return None
+    item = dict(correction)
+    config = BASIC_INFO_CORRECTION_FIELDS[field_code]
+    restore_value = item.get("source_value")
+    update_columns = [f"`{config['case_value_column']}` = %s"]
+    update_params: list[Any] = [restore_value]
+    if config.get("case_source_column"):
+        update_columns.append(f"`{config['case_source_column']}` = NULL")
+    if config.get("case_reason_column"):
+        update_columns.append(f"`{config['case_reason_column']}` = NULL")
+    if field_code in {"postal_code", "address"}:
+        update_columns.append("`address_completion_status` = NULL")
+    update_params.append(exam_export_case_id)
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_export_cases
+        SET {", ".join(update_columns)}
+        WHERE exam_export_case_id = %s
+        """,
+        tuple(update_params),
+    )
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_case_basic_info_corrections
+        SET correction_status = 'CLEARED',
+            correction_reason = %s,
+            corrected_at = CURRENT_TIMESTAMP(3),
+            corrected_by_app_user_id = %s
+        WHERE exam_case_basic_info_correction_id = %s
+        """,
+        (note or "補正解除", app_user_id, item["exam_case_basic_info_correction_id"]),
+    )
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS active_count
+        FROM {qname(health_db())}.exam_case_basic_info_corrections
+        WHERE exam_export_case_id = %s
+          AND correction_status = 'ACTIVE'
+        """,
+        (exam_export_case_id,),
+    )
+    active_count_row = cur.fetchone() or {}
+    if int(active_count_row.get("active_count") or 0) == 0:
+        cur.execute(
+            f"""
+            UPDATE {qname(health_db())}.exam_export_cases
+            SET correction_status = 'NONE'
+            WHERE exam_export_case_id = %s
+            """,
+            (exam_export_case_id,),
+        )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_case_basic_info_correction_audit_logs (
+          exam_case_basic_info_correction_id,
+          event_id,
+          exam_export_case_id,
+          field_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          note,
+          changed_by_app_user_id
+        )
+        VALUES (%s, %s, %s, %s, 'correction_status', %s, 'CLEARED', 'ADMIN_UI', %s, %s)
+        """,
+        (
+            item["exam_case_basic_info_correction_id"],
+            item.get("event_id"),
+            exam_export_case_id,
+            field_code,
+            item.get("correction_status"),
+            note or "補正解除",
+            app_user_id,
+        ),
+    )
+    return item
+
+
 def update_exam_case_check_review(
     cur: Any,
     *,
@@ -6374,6 +6811,11 @@ def exam_export_case_detail(request: Request, exam_export_case_id: int) -> Respo
             values = load_exam_export_case_values(cur, exam_export_case_id=exam_export_case_id)
             placeholders = load_exam_export_case_placeholders(cur, exam_export_case_id=exam_export_case_id)
             check_rows = load_exam_export_case_check_rows(cur, exam_export_case_id=exam_export_case_id)
+            basic_info_corrections = load_exam_case_basic_info_corrections(
+                cur,
+                exam_export_case_id=exam_export_case_id,
+            )
+            basic_info_correction_rows = build_basic_info_correction_rows(case, basic_info_corrections)
             if audit_enabled(cur):
                 log_audit(
                     cur,
@@ -6405,10 +6847,95 @@ def exam_export_case_detail(request: Request, exam_export_case_id: int) -> Respo
             "values": values,
             "placeholders": placeholders,
             "check_rows": check_rows,
+            "basic_info_correction_rows": basic_info_correction_rows,
             "message": request.query_params.get("message", ""),
             "error": request.query_params.get("error", ""),
         },
     )
+
+
+@app.post("/exam-export-cases/{exam_export_case_id}/basic-info-correction")
+async def exam_export_case_basic_info_correction(request: Request, exam_export_case_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    field_code = str(form.get("field_code") or "").strip()
+    action = str(form.get("action") or "save").strip()
+    corrected_value = str(form.get("corrected_value") or "").strip()
+    correction_reason = str(form.get("correction_reason") or "").strip()
+    if field_code not in BASIC_INFO_CORRECTION_FIELDS:
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=補正対象が不正です。", status_code=303)
+    if action == "save":
+        if not corrected_value:
+            return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=補正値を入力してください。", status_code=303)
+        if not correction_reason:
+            return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=補正理由を入力してください。", status_code=303)
+    elif action != "clear":
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=補正操作が不正です。", status_code=303)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if action == "clear":
+                result = clear_exam_case_basic_info_correction(
+                    cur,
+                    exam_export_case_id=exam_export_case_id,
+                    field_code=field_code,
+                    note=correction_reason,
+                    app_user_id=int(user["app_user_id"]),
+                )
+                if result is None:
+                    conn.rollback()
+                    return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=解除する補正が見つかりません。", status_code=303)
+                message = "基本情報補正を解除しました。step5〜7を再実行するとcase一覧へ反映されます。"
+                audit_after = {
+                    "exam_export_case_id": exam_export_case_id,
+                    "field_code": field_code,
+                    "action": "clear",
+                }
+            else:
+                result = update_exam_case_basic_info_correction(
+                    cur,
+                    exam_export_case_id=exam_export_case_id,
+                    field_code=field_code,
+                    corrected_value=corrected_value,
+                    correction_reason=correction_reason,
+                    app_user_id=int(user["app_user_id"]),
+                )
+                if result is None:
+                    conn.rollback()
+                    return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=補正対象caseが見つかりません。", status_code=303)
+                if not result.get("ok"):
+                    conn.rollback()
+                    reason = result.get("reason") or "正規化できませんでした。"
+                    return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=補正値を正規化できません: {reason}", status_code=303)
+                message = "基本情報補正を保存しました。step5〜7を再実行するとcase一覧へ反映されます。"
+                audit_after = {
+                    "exam_export_case_id": exam_export_case_id,
+                    "field_code": field_code,
+                    "action": "save",
+                    "new_value": result.get("new_value"),
+                }
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="EXAM_CASE_BASIC_INFO_CORRECTION_UPDATE",
+                    target_schema=health_db(),
+                    target_table="exam_case_basic_info_corrections",
+                    target_id=str(exam_export_case_id),
+                    after=audit_after,
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?message={quote(message, safe='')}", status_code=303)
 
 
 @app.post("/exam-export-cases/{exam_export_case_id}/item-review")

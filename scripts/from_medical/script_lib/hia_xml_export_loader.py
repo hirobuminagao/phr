@@ -117,7 +117,7 @@ def fetch_candidates(
     if selectors.person_id_customs:
         filters.append(f"eec.person_id_custom IN ({_in_clause(selectors.person_id_customs, params)})")
     if selectors.exam_month:
-        filters.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
+        filters.append("DATE_FORMAT(COALESCE(eec.exam_date_export_value, eec.exam_date), '%Y-%m') = %s")
         params.append(selectors.exam_month)
     if not selectors.include_exported:
         filters.append(
