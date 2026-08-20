@@ -60,7 +60,7 @@ scripts/kenshin_list_pydir/scripts/medi_export_xml.py
 3. 加入者突合が `MATCHED`。
 4. 次のいずれかを満たす。
    - case単位の法定checkが `OK`。
-   - 法定チェックNGの原因が `MISSING` のみで、該当不足項目の `MISSING_PLACEHOLDER` に `APPROVED_WITH_REASON`、理由、承認者、承認日時が記録されている。
+   - 法定チェックNGの原因が `MISSING` のみで、該当不足項目の `exam_case_check_review_items` に `APPROVED_WITH_REASON`、理由、承認者、承認日時が記録されている。
 
 `03_04_check_exam_export_cases.py` の `check_status` は現状、法定チェック結果を基準に `OK` / `NG` を設定している。
 したがって4は、法定チェックOKまたはMISSINGだけを理由として明示的に手動許可された状態を意味する。
@@ -68,10 +68,10 @@ scripts/kenshin_list_pydir/scripts/medi_export_xml.py
 手動出力許可は、妊娠中等の確認済み理由により法定検査値がMISSINGとなる場合の例外とする。
 `exam_check_results` とcase側 `check_status` は書き換えず、XML出力用の架空entryを作らない。MISSINGの該当entryはXMLへ出力しない。
 `INVALID`、`PARSE_ERROR`、加入者不一致、報告区分・プログラムコード不足、健診機関不一致は手動許可の対象外とする。
-手動許可の現在状態は `exam_item_values.review_status`、理由や変更前後は `exam_item_value_audit_logs` に持たせる。手動許可時は理由、承認者、承認日時を必須とする。
+存在しない不足項目に対する手動許可の現在状態は `exam_case_check_review_items.review_status` に持たせ、理由や変更前後は `exam_case_check_review_item_audit_logs` に持たせる。手動許可時は理由、承認者、承認日時を必須とする。
 理由ありOKはcase全体のフラグではない。
-case内のMISSING detailに対応する `MISSING_PLACEHOLDER` 全件が、item_value単位で `APPROVED_WITH_REASON` になっている場合だけ出力候補にする。
-同じ理由を複数項目へ一括入力するUIは作ってよいが、内部的には各placeholderを個別更新し、それぞれにaudit rowを作る。
+case内のMISSING detailに対応するcase確認項目全件が、業務チェックID単位で `APPROVED_WITH_REASON` になっている場合だけ出力候補にする。
+同じ理由を複数項目へ一括入力するUIは作ってよいが、内部的には各 `exam_case_check_review_items` を個別更新し、それぞれにaudit rowを作る。
 1件でも `review_status`、`reviewed_at`、`reviewed_by_app_user_id`、空でないaudit `note` が欠ける場合は、caseを `APPROVED_WITH_REASON` とみなさない。
 
 上記4条件は業務上の出力候補条件とする。
@@ -158,27 +158,43 @@ XML exporterは case checkがOK、または理由ありOKのcaseだけを読み�
 case単位の法定チェック結果は、source単位checkとは分けて保持する。
 実装入口は `03_04_check_exam_export_cases.py` とし、保存先は結合出力用caseを参照する。
 
-### Missing Placeholder and Item Value Review
+### Case Check Review Items and Item Value Review
 
-値の確認、除外、理由ありOK、再提出待ちは、case直持ちではなく `exam_item_values` を基本単位にする。
-存在する値は `ledger_type = EXAM` のsource item valueとして扱う。
-存在しないMISSING項目は、case作成またはcase再チェック時に以下のplaceholderとして扱う。
+値が存在する検査結果に対する確認、除外、再提出待ちは `exam_item_values` を基本単位にする。
+一方で、法定チェックや特定健診チェックで検出される「存在しないMISSING項目」は、値ではないため `exam_item_values` へ架空行を作らない。
+存在しないMISSING項目は、case再チェック時に以下のcase確認項目として扱う。
 
 ```text
-exam_item_values
-  ledger_type = EXPORT_CASE
-  ledger_id = exam_export_cases.exam_export_case_id
-  value_source_role = MISSING_PLACEHOLDER
+exam_case_check_review_items
+  exam_export_case_id
+  check_scope
+  check_item_code
+  check_item_name
+  review_status
+  reviewed_at
+  reviewed_by_app_user_id
+
+exam_case_check_review_item_audit_logs
+  exam_case_check_review_item_id
+  field_name
+  old_value
+  new_value
+  note
+  changed_by_app_user_id
 ```
 
-`MISSING_PLACEHOLDER` はXML出力用の値ではなく、不足項目への人手判断を記録するための行である。
+`exam_case_check_review_items` はXML出力用の値ではなく、不足項目への人手判断を記録するための行である。
 `APPROVED_WITH_REASON` になってもXML entryは作らない。
-不足が再取込、CSV補完、再提出などで解消した場合もplaceholderは削除せず、`RESOLVED_BY_SOURCE_VALUE` へ状態変更して残す。
+不足が再取込、CSV補完、再提出などで解消した場合もcase確認項目は削除せず、`RESOLVED_BY_SOURCE_VALUE` へ状態変更して残す。
 
-case再チェックでは、check detailのMISSING項目とplaceholderを照合する。
-不足項目ごとにplaceholderがない場合は未承認扱いとし、作成対象にする。
+case再チェックでは、check detailのMISSING項目とcase確認項目を照合する。
+不足項目ごとにcase確認項目がない場合は未承認扱いとし、作成対象にする。
 兄弟項目、同じnamecodeの別occurrence、同じcase内の別MISSINGへ承認を自動流用しない。
-すべての不足placeholderに理由が揃って初めて、caseの出力可否summaryを理由ありOKとして扱う。
+すべての不足確認項目に理由が揃って初めて、caseの出力可否summaryを理由ありOKとして扱う。
+
+法定チェックの `MISSING` は、`440...` の業務チェックID単位で `check_scope = ARTICLE44` として作成する。視力、聴力、血糖など複数namecodeで成立する項目をnamecode単位へ展開すると、理由ありOKの記帳対象が過剰になるため、出力前の不足管理は業務チェックID単位を正とする。
+
+個人case詳細画面では、業務チェックIDに含まれる候補namecodeをアコーディオンで確認できるようにする。健診機関への問い合わせや傾向把握は健診機関サマリーを入口とし、個人case詳細ではその個人caseの出力判断だけを記帳する。
 
 `exam_item_values` に直持ちする現在状態は、軽快さを優先して `review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成にする。
 変更履歴は `subscriber_audit` と同じく、値に変化があったfieldだけを `exam_item_value_audit_logs` へ記録する。

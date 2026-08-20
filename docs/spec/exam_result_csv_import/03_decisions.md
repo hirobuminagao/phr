@@ -469,8 +469,8 @@ Current as of 2026-08-05.
 - 同じ理由を複数項目へ一括適用する画面操作は許可する。ただしDB上は対象の `exam_case_check_review_items` を1行ずつ更新し、`exam_case_check_review_item_audit_logs` も1行ずつ作成する。まとめ操作の便利さと、項目ごとの通過責任は分けて扱う。
 - `APPROVED_WITH_REASON` 判定では、`review_status` だけでなく、`reviewed_at`、`reviewed_by_app_user_id`、最新auditの空でない `note` を必須とする。状態だけ立っていて理由がないものは未承認として扱う。
 - `03_04_check_exam_export_cases.py` によるcase再チェックは、`exam_check_results` を再作成し、`exam_export_cases.check_status` / `check_reason` と出力可否summaryを再計算する。人手判断の正はcase直持ちではなく、`exam_case_check_review_items` に置く。
-- `03_01_build_exam_export_cases.py` のcase再作成も、同じcaseキーで既存行を更新する場合は既存placeholderの `review_status` を保持する。そのため同一caseのままなら、全チェックを再実行しても理由ありOKや確認待ちは保持される。
-- ただし、加入者、健診日、健診機関、保険者番号などcase同一性キーが変わり、別caseとして新規作成された場合は、既存placeholderの人手判断は自動移行しない。理由ありOKは人が確認したcase内item_value単位の判断として扱う。
+- `03_01_build_exam_export_cases.py` のcase再作成も、同じcaseキーで既存行を更新する場合は既存case確認項目の `review_status` を保持する。そのため同一caseのままなら、全チェックを再実行しても理由ありOKや確認待ちは保持される。
+- ただし、加入者、健診日、健診機関、保険者番号などcase同一性キーが変わり、別caseとして新規作成された場合は、既存のcase確認項目に対する人手判断は自動移行しない。理由ありOKは人が確認したcase内の業務チェックID単位の判断として扱う。
 - 健診機関への連絡管理は、初期実装では専用の連絡台帳から始めず、健診機関サマリーで問題の塊を見える化し、健診機関単位で絞ったcase一覧へ遷移して個別確認する導線を優先する。
 - 健診機関サマリーでは、受領ファイル数、取込人数、source単位/case単位のOK/NG率、法定NG率、特定健診NG率、normalizeエラー件数、NG検査項目topを見せる。100%近い同一NGはフォーマット、マッピング、健診機関仕様の問題候補として扱い、一部だけのNGは個別事情・未実施・CSV欠損候補として扱う。
 - 確認事項の画面入口はcaseまたはledgerとする。存在するsource値や健保/HIAからnamecode指定で来る個別指摘は `exam_item_values`、存在しない法定/特定健診の不足は `exam_case_check_review_items` を物理単位にする。
@@ -484,13 +484,13 @@ Current as of 2026-08-05.
 - `review_status` の候補は `NONE`、`NEEDS_CONFIRMATION`、`APPROVED_WITH_REASON`、`EXCLUDED`、`WAITING_RESUBMISSION`、`RESOLVED_BY_SOURCE_VALUE` とする。
 - 変更履歴は `subscriber_audit` と同じく、値に変化があったfieldだけを別テーブルへ記録する。想定テーブルは `exam_item_value_audit_logs` とし、`exam_item_value_id`、`field`、`old_value`、`new_value`、`changed_at`、`source`、`note`、`changed_by_app_user_id`、`change_run_id` を持つ。
 - batchテーブルやoperation_idは初期実装では作らない。まとめ作業で複数item_valueを更新した場合は、各item_valueに同じnoteのaudit rowが並ぶことで同時処理だったことを読み取る。
-- case出力可否の再計算では、`check_reason` のMISSING detailと `MISSING_PLACEHOLDER` を突合する。該当placeholderが存在しない場合は未承認扱いとし、case作成または再チェックで不足placeholderを作る。
+- case出力可否の再計算では、`check_reason` のMISSING detailと `exam_case_check_review_items` を突合する。該当case確認項目が存在しない場合は未承認扱いとし、case再チェックで不足確認項目を作る。
 - 健診機関への問い合わせは健診機関単位に束ねて行う可能性が高いが、初期実装ではサマリーとcase詳細から「何を聞くべきか」を切り分けることを優先し、問い合わせ管理テーブルは後続で追加する。
 - 健診機関確認事項、基本情報補正、加入者突合修正、理由ありOKなど、人が確認・記帳・変更を行った後は、case側へ反映するために管理画面の「健診結果処理実行」で step5〜7 を再実行する。step5はcase更新、step6は採用済み整値更新、step7はcase単位チェック更新を行う。
 - 初期のCSV補完診断対象は、視力 `4403004001`、聴力 `4403005001`、胸部X線 `4404001001`、心電図 `4411001001`、既往歴 `4401001001`、自覚症状 `4402001001`、他覚症状 `4402001002` の7分類とする。
 - ただしCSV取込自体は7分類へ絞らない。健診機関ごとの通常マッピングを作り、取込可能な検査値・基本情報は従来どおり全てsource値として取り込む。7分類は補完診断で重点的に見る分類であり、マッピング対象や取込対象を制限するものではない。
-- 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えない。`MISSING_PLACEHOLDER` は該当entryとしてXMLへ出力しない。
-- `PRIMARY` と `SUPPLEMENT` の両方に同一namecodeが存在し、どちらもVALIDだが意味が異なる場合は、MISSINGではなく採用優先ルールまたは健診機関確認対象として扱う。例として、XML側の医師の診断（判定）にメタボリックシンドローム判定の口語文が入り、CSV側に医師コメントらしい長文があるケースは、placeholderではなく precedence rule / 確認ルールで採用元を制御する。
+- 手動出力許可後も `exam_check_results` と結合出力用caseの `check_status` は書き換えない。`exam_case_check_review_items` は該当entryとしてXMLへ出力しない。
+- `PRIMARY` と `SUPPLEMENT` の両方に同一namecodeが存在し、どちらもVALIDだが意味が異なる場合は、MISSINGではなく採用優先ルールまたは健診機関確認対象として扱う。例として、XML側の医師の診断（判定）にメタボリックシンドローム判定の口語文が入り、CSV側に医師コメントらしい長文があるケースは、不足確認項目ではなく precedence rule / 確認ルールで採用元を制御する。
 - 同日分割送信回数は既存ZIPからの自動採番を既定とし、`0`から`9`の明示指定も可能にする。既存ZIPと衝突する番号では上書きしない。
 - 個人XMLファイル名21桁目の種別は、特定健診情報を表す実施区分コード `1` 固定とする。
 - XML出力の原子単位はZIPとする。同じ健診機関・保険者・作成日・同日分割送信回数の対象者に1人でも生成またはXSD検証失敗があれば、そのZIP全体を出力しない。
