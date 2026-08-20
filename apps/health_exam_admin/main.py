@@ -2925,6 +2925,10 @@ SUBSCRIBER_MATCH_ISSUE_FILTERS = {
     "UNMATCHED": "el.subscriber_match_status = 'NOT_FOUND'",
     "NEEDS_REVIEW": "el.subscriber_match_status = 'IDENTITY_ERROR'",
     "MISSING": "(el.subscriber_match_status IS NULL OR el.subscriber_match_status = 'NOT_EXECUTED')",
+    "WAITING_RESUBMISSION": "el.subscriber_match_status = 'WAITING_RESUBMISSION'",
+    "RESUBMITTED": "el.subscriber_match_status = 'RESUBMITTED'",
+    "ALREADY_UPLOADED": "el.subscriber_match_status = 'ALREADY_UPLOADED'",
+    "EXCLUDED": "el.subscriber_match_status = 'EXCLUDED'",
 }
 
 
@@ -2941,6 +2945,10 @@ def subscriber_match_status_label(status: str | None, method: str | None = None)
         "NOT_FOUND": "UNMATCHED",
         "IDENTITY_ERROR": "要確認",
         "NOT_EXECUTED": "MISSING",
+        "WAITING_RESUBMISSION": "再提出待ち",
+        "RESUBMITTED": "再提出済み",
+        "ALREADY_UPLOADED": "アップロード済み",
+        "EXCLUDED": "除外",
         None: "MISSING",
         "": "MISSING",
     }
@@ -3452,6 +3460,89 @@ def confirm_exam_ledger_subscriber_match(
         "applied_subscriber_export_values": bool(apply_subscriber_values),
         "applied_fields": applied_fields,
     }
+
+
+SUBSCRIBER_MATCH_WORKFLOW_STATUSES = {
+    "WAITING_RESUBMISSION": "再提出待ち",
+    "RESUBMITTED": "再提出済み",
+    "ALREADY_UPLOADED": "アップロード済み",
+    "EXCLUDED": "除外",
+    "NOT_FOUND": "UNMATCHEDに戻す",
+}
+
+
+def update_exam_ledger_subscriber_match_workflow_status(
+    cur: Any,
+    *,
+    exam_ledger_id: int,
+    new_status: str,
+    note: str,
+    app_user_id: int,
+) -> dict[str, Any] | None:
+    if new_status not in SUBSCRIBER_MATCH_WORKFLOW_STATUSES:
+        raise ValueError(f"unsupported subscriber match workflow status: {new_status}")
+    ledger = load_exam_ledger_detail(cur, exam_ledger_id=exam_ledger_id)
+    if ledger is None:
+        return None
+    new_reason = note or SUBSCRIBER_MATCH_WORKFLOW_STATUSES[new_status]
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_ledger_subscriber_match_audit_logs (
+          event_id,
+          exam_ledger_id,
+          old_subscriber_id,
+          new_subscriber_id,
+          old_hia_subscriber_id,
+          new_hia_subscriber_id,
+          old_person_id_custom,
+          new_person_id_custom,
+          old_identity_hash,
+          new_identity_hash,
+          old_subscriber_match_status,
+          new_subscriber_match_status,
+          old_subscriber_match_method,
+          new_subscriber_match_method,
+          old_subscriber_match_reason,
+          new_subscriber_match_reason,
+          applied_subscriber_export_values,
+          applied_fields_json,
+          note,
+          changed_by_app_user_id
+        )
+        VALUES (%s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'manual_review', %s, %s, 0, JSON_ARRAY(), %s, %s)
+        """,
+        (
+            ledger.get("event_id"),
+            exam_ledger_id,
+            ledger.get("subscriber_id"),
+            ledger.get("hia_subscriber_id"),
+            ledger.get("hia_subscriber_id"),
+            ledger.get("person_id_custom"),
+            ledger.get("person_id_custom"),
+            ledger.get("identity_hash"),
+            ledger.get("identity_hash"),
+            ledger.get("subscriber_match_status"),
+            new_status,
+            ledger.get("subscriber_match_method"),
+            ledger.get("subscriber_match_reason"),
+            new_reason,
+            note,
+            app_user_id,
+        ),
+    )
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_ledgers
+        SET
+          subscriber_id = NULL,
+          subscriber_match_status = %s,
+          subscriber_match_method = 'manual_review',
+          subscriber_match_reason = %s
+        WHERE exam_ledger_id = %s
+        """,
+        (new_status, new_reason, exam_ledger_id),
+    )
+    return {"exam_ledger_id": exam_ledger_id, "status": new_status, "reason": new_reason}
 
 
 def load_exam_ledger_detail(cur: Any, *, exam_ledger_id: int) -> dict[str, Any] | None:
@@ -7297,6 +7388,54 @@ async def subscriber_match_confirm(request: Request, exam_ledger_id: int) -> Res
         message = "加入者突合を確定し、加入者情報を出力用基本情報へ適用しました。case反映には健診結果処理のstep5〜7を再実行してください。"
     else:
         message = "加入者突合を手動確定しました。case反映には健診結果処理のstep5〜7を再実行してください。"
+    return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&message={quote(message, safe='')}", status_code=303)
+
+
+@app.post("/subscriber-match-review/{exam_ledger_id}/workflow-status")
+async def subscriber_match_workflow_status(request: Request, exam_ledger_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    new_status = str(form.get("new_status") or "").strip()
+    note = str(form.get("note") or "").strip()
+    if new_status not in SUBSCRIBER_MATCH_WORKFLOW_STATUSES:
+        return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&error=変更先の状態が不正です。", status_code=303)
+    if not note:
+        return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&error=状態変更理由を入力してください。", status_code=303)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            result = update_exam_ledger_subscriber_match_workflow_status(
+                cur,
+                exam_ledger_id=exam_ledger_id,
+                new_status=new_status,
+                note=note,
+                app_user_id=int(user["app_user_id"]),
+            )
+            if result is None:
+                conn.rollback()
+                return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&error=ledgerが見つかりません。", status_code=303)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="UPDATE_SUBSCRIBER_MATCH_WORKFLOW_STATUS",
+                    target_schema=health_db(),
+                    target_table="exam_ledgers",
+                    target_id=str(exam_ledger_id),
+                    after=result,
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    label = SUBSCRIBER_MATCH_WORKFLOW_STATUSES.get(new_status, new_status)
+    message = f"加入者突合の業務状態を「{label}」に変更しました。必要に応じて健診結果処理のstep5〜7を再実行してください。"
     return RedirectResponse(f"/subscriber-match-review?ledger_id={exam_ledger_id}&message={quote(message, safe='')}", status_code=303)
 
 

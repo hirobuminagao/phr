@@ -34,4 +34,4 @@ CREATE TABLE `health_exam_result`.`exam_ledger_subscriber_match_audit_logs` (
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_ja_0900_as_cs
-COMMENT='受領ledgerの加入者突合を手動確定した履歴';
+COMMENT='受領ledgerの加入者突合手動確定、および未突合ledgerの業務状態変更履歴';

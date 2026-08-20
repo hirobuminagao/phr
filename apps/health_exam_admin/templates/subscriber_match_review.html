@@ -54,6 +54,10 @@
             <button type="button" data-server-filter-toggle="status_filter" data-filter-value="UNMATCHED" class="{{ 'is-active' if filters.status_filter == 'UNMATCHED' else '' }}">UNMATCHED</button>
             <button type="button" data-server-filter-toggle="status_filter" data-filter-value="NEEDS_REVIEW" class="{{ 'is-active' if filters.status_filter == 'NEEDS_REVIEW' else '' }}">要確認</button>
             <button type="button" data-server-filter-toggle="status_filter" data-filter-value="MISSING" class="{{ 'is-active' if filters.status_filter == 'MISSING' else '' }}">MISSING</button>
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="WAITING_RESUBMISSION" class="{{ 'is-active' if filters.status_filter == 'WAITING_RESUBMISSION' else '' }}">再提出待ち</button>
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="RESUBMITTED" class="{{ 'is-active' if filters.status_filter == 'RESUBMITTED' else '' }}">再提出済み</button>
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="ALREADY_UPLOADED" class="{{ 'is-active' if filters.status_filter == 'ALREADY_UPLOADED' else '' }}">アップロード済み</button>
+            <button type="button" data-server-filter-toggle="status_filter" data-filter-value="EXCLUDED" class="{{ 'is-active' if filters.status_filter == 'EXCLUDED' else '' }}">除外</button>
           </div>
           <input type="hidden" name="status_filter" value="{{ filters.status_filter }}" data-server-filter-value="status_filter">
         </fieldset>
@@ -88,7 +92,7 @@
             <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
             <small>{{ row.name_full_raw or "氏名なし" }} / ledger {{ row.exam_ledger_id }}</small>
             <small>HIA {{ row.hia_subscriber_id or "-" }} / person_id_custom {{ row.person_id_custom or "-" }}</small>
-            <small>記号 {{ row.insurance_symbol_raw or "-" }} / 番号 {{ row.insurance_number_raw or "-" }} / 生年月日 {{ row.birthdate or "-" }}</small>
+            <small>記号 {{ row.insurance_symbol_raw or "-" }} / 番号 {{ row.insurance_number_raw or "-" }} / 生年月日 {{ row.birthdate or "-" }} / 性別 {{ gender_code_label(row.gender_code) }}</small>
             <small>{{ row.facility_name or "健診機関なし" }} / {{ row.exam_date or "受診日なし" }} / {{ row.source_type }}</small>
           </div>
         </a>
@@ -132,6 +136,25 @@
         </div>
       </div>
 
+      <section class="sub-panel subscriber-match-workflow-panel">
+        <div class="section-heading section-heading-compact">
+          <div>
+            <h3>未突合ledgerの業務状態</h3>
+            <p class="subtle">正しい再提出が来る、既にアップロード済み、対象外など、加入者を確定しない判断をここに記帳します。</p>
+          </div>
+        </div>
+        <form method="post" action="/subscriber-match-review/{{ selected_ledger.exam_ledger_id }}/workflow-status" class="subscriber-workflow-status-form">
+          <input name="note" required placeholder="状態変更理由（例: 正しい再提出ファイル受領済み、既にHIAアップロード済み）">
+          <div class="subscriber-match-confirm-actions">
+            <button type="submit" name="new_status" value="WAITING_RESUBMISSION" class="ghost-button" data-confirm-message="このledgerを再提出待ちにします。よろしいですか？">再提出待ち</button>
+            <button type="submit" name="new_status" value="RESUBMITTED" class="ghost-button" data-confirm-message="このledgerを再提出済みにします。よろしいですか？">再提出済み</button>
+            <button type="submit" name="new_status" value="ALREADY_UPLOADED" class="ghost-button" data-confirm-message="このledgerをアップロード済みにします。よろしいですか？">アップロード済み</button>
+            <button type="submit" name="new_status" value="EXCLUDED" class="ghost-button" data-confirm-message="このledgerを除外にします。よろしいですか？">除外</button>
+            <button type="submit" name="new_status" value="NOT_FOUND" class="ghost-button" data-confirm-message="このledgerをUNMATCHEDに戻します。よろしいですか？">UNMATCHEDに戻す</button>
+          </div>
+        </form>
+      </section>
+
       <form method="get" action="/subscriber-match-review" class="subscriber-candidate-search">
         <input type="hidden" name="event_id" value="{{ filters.event_id }}">
         <input type="hidden" name="status_filter" value="{{ filters.status_filter }}">
@@ -169,6 +192,7 @@
               <th>照合情報</th>
               <th>資格</th>
               <th>適用</th>
+              <th>ダッシュボード</th>
               <th class="help-cell">
                 <span class="table-help-heading">
                   確定
@@ -199,10 +223,6 @@
               <td>
                 <strong>{{ candidate.relationship_name or "-" }}</strong>
                 <small>喪失 {{ candidate.qualification_lost_date or "-" }} / 社員 {{ candidate.employee_code or "-" }}</small>
-                <small>HIA状態 {{ candidate.hia_dashboard_status or "-" }}</small>
-                <small>{{ candidate.hia_dashboard_medical_institution or "医療機関なし" }}</small>
-                <small>予約 {{ candidate.hia_dashboard_reservation_date or "-" }} / 受診 {{ candidate.hia_dashboard_exam_date or "-" }}</small>
-                <small>{{ candidate.hia_dashboard_course_name or "コースなし" }}</small>
                 <div class="mini-status-box">
                   <strong>既存case {{ candidate.candidate_case_count or 0 }}件</strong>
                   {% if candidate.candidate_latest_case_id %}
@@ -229,6 +249,13 @@
                 <small>〒 {{ candidate.subscriber_postal_code or "-" }} / {{ candidate.subscriber_address_line or "-" }}{{ candidate.subscriber_building or "" }}</small>
               </td>
               <td>
+                <strong>{{ candidate.hia_dashboard_status or "-" }}</strong>
+                <small>{{ candidate.hia_dashboard_medical_institution or "医療機関なし" }}</small>
+                <small>予約 {{ candidate.hia_dashboard_reservation_date or "-" }}</small>
+                <small>受診 {{ candidate.hia_dashboard_exam_date or "-" }}</small>
+                <small>{{ candidate.hia_dashboard_course_name or "コースなし" }}</small>
+              </td>
+              <td>
                 <form method="post" action="/subscriber-match-review/{{ selected_ledger.exam_ledger_id }}/confirm" class="subscriber-match-confirm-form">
                   <input type="hidden" name="subscriber_id" value="{{ candidate.subscriber_id }}">
                   <input name="note" required placeholder="確定理由">
@@ -241,7 +268,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="5">候補が見つかりません。検索語を追加してください。</td>
+              <td colspan="6">候補が見つかりません。検索語を追加してください。</td>
             </tr>
             {% endfor %}
           </tbody>
