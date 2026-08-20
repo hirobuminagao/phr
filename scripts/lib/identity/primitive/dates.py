@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 
 def detect_date_format(text: str | None) -> str | None:
@@ -40,6 +40,23 @@ def parse_yyyymmdd(text: str | None) -> tuple[int, int, int] | None:
         return None
 
     return y, m, d
+
+
+def parse_excel_serial_date(text: str | None) -> tuple[int, int, int] | None:
+    """Excel シリアル日付を (year, month, day) に変換する。
+
+    Excel の 1900 年うるう年バグを実務上の換算に合わせるため、
+    基準日は 1899-12-30 とする。
+    """
+    if text is None or not text.isdigit():
+        return None
+
+    serial = int(text)
+    if serial <= 0:
+        return None
+
+    parsed = date(1899, 12, 30) + timedelta(days=serial)
+    return parsed.year, parsed.month, parsed.day
 
 
 # 元号コード: 明治=1, 大正=2, 昭和=3, 平成=4, 令和=5

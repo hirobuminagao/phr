@@ -1109,6 +1109,65 @@ a.home-menu-card:hover {
   border-bottom: 0;
 }
 
+.selectable-candidate {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.selectable-candidate + .selectable-candidate {
+  margin-top: 6px;
+}
+
+.selectable-candidate input {
+  margin-top: 3px;
+}
+
+.selectable-candidate span {
+  display: grid;
+  gap: 3px;
+}
+
+.selectable-candidate.is-added {
+  border-color: #7ec7b2;
+  background: #e9f7f3;
+  color: #0c5f4a;
+}
+
+.person-selection-checks {
+  display: grid;
+  gap: 6px;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.small-button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #b9c5d2;
+  border-radius: 6px;
+  background: #fff;
+  color: #25313f;
+  font-weight: 800;
+}
+
+.danger-outline {
+  border: 1px solid #d64d4d;
+  background: #fff;
+  color: #b42318;
+}
+
 .compact-form {
   margin-top: 14px;
 }

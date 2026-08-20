@@ -40,6 +40,13 @@
   }
 
   const normalize = (value) => String(value || "").toLocaleLowerCase().replace(/\s+/g, "");
+  const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[char]));
   const filters = new Map();
 
   for (const input of document.querySelectorAll("[data-live-filter-input]")) {
@@ -779,5 +786,92 @@
     }
 
     applyFindingFilter();
+  }
+
+  const personSelectionList = document.querySelector("[data-person-selection-list]");
+  if (personSelectionList) {
+    const emptyRow = personSelectionList.querySelector("[data-person-selection-empty]");
+    const choiceSelector = "[data-person-selection-choice]";
+
+    const setEmptyVisible = () => {
+      if (!emptyRow) return;
+      emptyRow.hidden = Boolean(personSelectionList.querySelector("[data-person-selection-item]"));
+    };
+
+    const addChoice = (choice) => {
+      const subscriberId = choice.dataset.subscriberId || "";
+      if (!subscriberId || personSelectionList.querySelector(`[data-person-selection-item="${subscriberId}"]`)) {
+        return;
+      }
+      const row = document.createElement("tr");
+      row.setAttribute("data-person-selection-item", subscriberId);
+      row.innerHTML = `
+        <td><strong>${escapeHtml(subscriberId)}</strong><small>HIA ${escapeHtml(choice.dataset.hiaSubscriberId || "-")}</small></td>
+        <td><strong>${escapeHtml(choice.dataset.personName || "-")}</strong><small>${escapeHtml(choice.dataset.gender || "-")}</small></td>
+        <td><strong>${escapeHtml(choice.dataset.insurance || "-")}</strong><small>${escapeHtml(choice.dataset.birthdate || "-")}</small></td>
+        <td><strong>${escapeHtml(choice.dataset.latestCaseId || "-")}</strong><small>${escapeHtml(choice.dataset.caseCount || "0")}件</small></td>
+        <td><button type="button" class="small-button" data-person-selection-remove>外す</button></td>
+      `;
+      personSelectionList.appendChild(row);
+      choice.disabled = true;
+      choice.checked = true;
+      choice.closest(".selectable-candidate")?.classList.add("is-added");
+      setEmptyVisible();
+    };
+
+    document.querySelector("[data-person-selection-add-all]")?.addEventListener("click", () => {
+      for (const choice of document.querySelectorAll(choiceSelector)) {
+        addChoice(choice);
+      }
+    });
+
+    document.querySelector("[data-person-selection-add-selected]")?.addEventListener("click", () => {
+      for (const choice of document.querySelectorAll(`${choiceSelector}:checked`)) {
+        addChoice(choice);
+      }
+    });
+
+    personSelectionList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-person-selection-remove]");
+      if (!button) return;
+      const row = button.closest("[data-person-selection-item]");
+      const subscriberId = row?.getAttribute("data-person-selection-item");
+      if (subscriberId) {
+        const choice = document.querySelector(`${choiceSelector}[data-subscriber-id="${subscriberId}"]`);
+        if (choice) {
+          choice.disabled = false;
+          choice.checked = false;
+          choice.closest(".selectable-candidate")?.classList.remove("is-added");
+        }
+      }
+      row?.remove();
+      setEmptyVisible();
+    });
+
+    document.querySelector("[data-person-selection-clear]")?.addEventListener("click", () => {
+      for (const row of personSelectionList.querySelectorAll("[data-person-selection-item]")) {
+        row.remove();
+      }
+      for (const choice of document.querySelectorAll(choiceSelector)) {
+        choice.disabled = false;
+        choice.checked = false;
+        choice.closest(".selectable-candidate")?.classList.remove("is-added");
+      }
+      setEmptyVisible();
+    });
+
+    document.querySelector("[data-person-selection-copy]")?.addEventListener("click", async () => {
+      const subscriberIds = Array.from(personSelectionList.querySelectorAll("[data-person-selection-item]"))
+        .map((row) => row.getAttribute("data-person-selection-item"))
+        .filter(Boolean);
+      if (!subscriberIds.length) return;
+      try {
+        await navigator.clipboard.writeText(subscriberIds.join("\n"));
+      } catch (_error) {
+        window.prompt("subscriber_id一覧", subscriberIds.join("\n"));
+      }
+    });
+
+    setEmptyVisible();
   }
 })();

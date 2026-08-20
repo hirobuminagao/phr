@@ -27,7 +27,7 @@
       <div class="person-selection-mode">
         <label class="choice-card">
           <input type="radio" name="input_mode" value="single" {% if form.input_mode == "single" %}checked{% endif %}>
-          <span><strong>一人ずつ追加</strong><small>IDや基本情報で1人だけ候補を作ります。</small></span>
+          <span><strong>一人ずつ追加</strong><small>検索して候補を出し、選んだ人を作業リストへ追加します。</small></span>
         </label>
         <label class="choice-card">
           <input type="radio" name="input_mode" value="bulk" {% if form.input_mode != "single" %}checked{% endif %}>
@@ -67,7 +67,8 @@
       </div>
 
       <section class="person-selection-subpanel">
-        <h3>一人ずつ追加</h3>
+	        <h3>一人ずつ追加</h3>
+	        <p class="subtle">条件を入力して検索します。候補表示後に、全員または選択した人だけを作業リストへ追加します。</p>
         <div class="form-grid four-columns">
           <label>
             <span>case_id</span>
@@ -142,7 +143,7 @@
       </section>
 
       <div class="form-actions">
-        <button type="submit">解析して候補を表示</button>
+	        <button type="submit">{{ "検索して候補を表示" if form.input_mode == "single" else "解析して候補を表示" }}</button>
         <a class="ghost-button" href="/utilities/person-selection">クリア</a>
       </div>
     </form>
@@ -156,19 +157,23 @@
     {% endfor %}
   </section>
 
-  <section class="panel">
-    <div class="section-heading">
-      <div>
-        <h2>解析結果</h2>
-        <p class="subtle">追加先への登録はまだ行いません。まず、どのキーで誰に当たるかを確認します。</p>
-      </div>
-    </div>
-    <div class="table-panel">
-      <table class="data-table person-selection-result-table">
-        <thead>
-          <tr>
-            <th>行</th>
-            <th>状態</th>
+	  <section class="panel">
+	    <div class="section-heading">
+	      <div>
+	        <h2>候補</h2>
+	        <p class="subtle">候補から全員、または選択した人だけを下の作業リストへ追加します。DBには保存しません。</p>
+	      </div>
+	      <div class="button-row">
+	        <button type="button" class="ghost-button" data-person-selection-add-all>候補全員を追加</button>
+	        <button type="button" data-person-selection-add-selected>選択した人だけ追加</button>
+	      </div>
+	    </div>
+	    <div class="table-panel">
+	      <table class="data-table person-selection-result-table">
+	        <thead>
+	          <tr>
+	            <th>行</th>
+	            <th>状態</th>
             <th>解釈したキー</th>
             <th>生成キー</th>
             <th>候補</th>
@@ -177,9 +182,9 @@
           </tr>
         </thead>
         <tbody>
-          {% for row in rows %}
-          <tr>
-            <td>{{ row.row_no }}</td>
+	          {% for row in rows %}
+	          <tr>
+	            <td>{{ row.row_no }}</td>
             <td>
               <span class="status-pill {{ 'status-ready' if row.status == 'READY' else 'status-pending' if row.status in ['MULTIPLE', 'CASE_NOT_FOUND'] else 'status-danger' if row.status in ['PARSE_ERROR', 'NOT_FOUND'] else 'status-muted' }}">
                 {{ person_selection_status_label(row.status) }}
@@ -205,13 +210,27 @@
               {% endif %}
             </td>
             <td>
-              {% for candidate in row.candidates %}
-              <div class="person-selection-candidate">
-                <strong>{{ candidate.name_kana_full or candidate.name_full or "-" }}</strong>
-                <small>subscriber {{ candidate.subscriber_id }} / HIA {{ candidate.hia_subscriber_id or "-" }}</small>
-                <small>{{ candidate.insurance_symbol_match or candidate.insurance_symbol or "-" }}-{{ candidate.insurance_number_match or candidate.insurance_number or "-" }} / {{ gender_code_label(candidate.gender_code) }} / {{ candidate.birth or "-" }}</small>
-                <small>社員 {{ candidate.employee_code or "-" }} / case {{ candidate.latest_case_id or "-" }} / {{ candidate.relationship_name or "-" }}</small>
-              </div>
+	              {% for candidate in row.candidates %}
+	              <label class="person-selection-candidate selectable-candidate">
+	                <input
+	                  type="checkbox"
+	                  data-person-selection-choice
+	                  data-subscriber-id="{{ candidate.subscriber_id or '' }}"
+	                  data-hia-subscriber-id="{{ candidate.hia_subscriber_id or '' }}"
+	                  data-person-name="{{ candidate.name_kana_full or candidate.name_full or '-' }}"
+	                  data-insurance="{{ (candidate.insurance_symbol_match or candidate.insurance_symbol or '-') ~ '-' ~ (candidate.insurance_number_match or candidate.insurance_number or '-') }}"
+	                  data-birthdate="{{ candidate.birth or '-' }}"
+	                  data-gender="{{ gender_code_label(candidate.gender_code) }}"
+	                  data-latest-case-id="{{ candidate.latest_case_id or '' }}"
+	                  data-case-count="{{ candidate.event_case_count or 0 }}"
+	                >
+	                <span>
+	                  <strong>{{ candidate.name_kana_full or candidate.name_full or "-" }}</strong>
+	                <small>subscriber {{ candidate.subscriber_id }} / HIA {{ candidate.hia_subscriber_id or "-" }}</small>
+	                <small>{{ candidate.insurance_symbol_match or candidate.insurance_symbol or "-" }}-{{ candidate.insurance_number_match or candidate.insurance_number or "-" }} / {{ gender_code_label(candidate.gender_code) }} / {{ candidate.birth or "-" }}</small>
+	                <small>社員 {{ candidate.employee_code or "-" }} / case {{ candidate.latest_case_id or "-" }} / {{ candidate.relationship_name or "-" }}</small>
+	                </span>
+	              </label>
               {% else %}
               <small>-</small>
               {% endfor %}
@@ -233,7 +252,38 @@
         </tbody>
       </table>
     </div>
-  </section>
-  {% endif %}
-</main>
+	  </section>
+
+	  <section class="panel" data-person-selection-worklist>
+	    <div class="section-heading">
+	      <div>
+	        <h2>作業リスト</h2>
+	        <p class="subtle">この画面内だけの一時リストです。外部指摘、納品記帳などに使う前段の確認用です。</p>
+	      </div>
+	      <div class="button-row">
+		        <button type="button" class="ghost-button" data-person-selection-copy>subscriber_idをコピー</button>
+	        <button type="button" class="danger-outline" data-person-selection-clear>リストを空にする</button>
+	      </div>
+	    </div>
+	    <div class="table-panel">
+	      <table class="data-table compact-table">
+	        <thead>
+	          <tr>
+		            <th>subscriber</th>
+		            <th>対象者</th>
+		            <th>保険証 / 生年月日</th>
+		            <th>case</th>
+	            <th>操作</th>
+	          </tr>
+	        </thead>
+	        <tbody data-person-selection-list>
+	          <tr data-person-selection-empty>
+	            <td colspan="5">まだ追加されていません。</td>
+	          </tr>
+	        </tbody>
+	      </table>
+	    </div>
+	  </section>
+	  {% endif %}
+	</main>
 {% endblock %}
