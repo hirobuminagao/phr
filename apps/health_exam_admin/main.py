@@ -2985,6 +2985,7 @@ def load_subscriber_match_issue_rows(
     event_id = filters.get("event_id", "").strip()
     status_filter = filters.get("status_filter", "").strip()
     query = filters.get("q", "").strip()
+    facility_query = filters.get("facility_q", "").strip()
     if event_id:
         where_parts.append("el.event_id = %s")
         params.append(event_id)
@@ -3012,13 +3013,15 @@ def load_subscriber_match_issue_rows(
               OR el.name_kana_raw LIKE %s
               OR el.insurance_symbol_raw LIKE %s
               OR el.insurance_number_raw LIKE %s
-              OR el.facility_name LIKE %s
-              OR el.facility_code LIKE %s
               OR el.xml_file_name LIKE %s
             )
             """
         )
-        params.extend([like] * 9)
+        params.extend([like] * 7)
+    if facility_query:
+        like = f"%{facility_query}%"
+        where_parts.append("(el.facility_code LIKE %s OR el.facility_name LIKE %s)")
+        params.extend([like, like])
     where_sql = f"WHERE {' AND '.join(where_parts)}"
     cur.execute(
         f"""
@@ -7269,6 +7272,7 @@ def subscriber_match_review(request: Request) -> Response:
         "event_id": request.query_params.get("event_id", "2"),
         "status_filter": request.query_params.get("status_filter", ""),
         "q": request.query_params.get("q", ""),
+        "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "200"),
     }
     selected_ledger_id = parse_positive_int(request.query_params.get("ledger_id", ""), default=0, maximum=999999999999)
@@ -7285,6 +7289,7 @@ def subscriber_match_review(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
+            folder_aliases = load_received_folder_alias_rows(cur)
             rows = load_subscriber_match_issue_rows(cur, filters=filters, limit=limit)
             selected_ledger = None
             if selected_ledger_id:
@@ -7327,6 +7332,7 @@ def subscriber_match_review(request: Request) -> Response:
             "event_options": event_options,
             "filters": filters,
             "rows": rows,
+            "folder_aliases": folder_aliases,
             "selected_ledger": selected_ledger,
             "candidate_rows": candidate_rows,
             "candidate_query": candidate_query,

@@ -35,7 +35,14 @@
       <div class="ledger-filter-row ledger-filter-row-primary">
         <label>
           <span>キーワード</span>
-          <input name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 記号 / 番号 / 健診機関">
+          <input name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 記号 / 番号">
+        </label>
+        <label>
+          <span>健診機関</span>
+          <span class="input-with-button">
+            <input id="ledger-facility-filter-input" name="facility_q" value="{{ filters.facility_q or '' }}" autocomplete="off" placeholder="健診機関名 / コード">
+            <button type="button" class="ghost-button compact-action-button" data-modal-open="subscriber-match-facility-picker-modal">選択</button>
+          </span>
         </label>
         <label>
           <span>イベント</span>
@@ -70,10 +77,81 @@
           <a class="ghost-button" href="/subscriber-match-review">クリア</a>
         </div>
       </div>
-    </form>
-  </section>
+	    </form>
+	  </section>
 
-  <section class="subscriber-match-workspace">
+  <div id="subscriber-match-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="subscriber-match-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">受領フォルダ alias</p>
+          <h2 id="subscriber-match-facility-picker-title">健診機関で絞り込む</h2>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          検索
+          <input data-live-filter-input="#subscriber-match-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="subscriber-match-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>受領フォルダ</th>
+              <th>実績</th>
+              <th>選択</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alias in folder_aliases %}
+            {% set code = alias.exam_facility_code or "" %}
+            {% set facility_text = code or alias.exam_facility_name or alias.exam_facility_display_name or alias.src_folder_raw or "" %}
+            <tr data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}">
+              <td>
+                <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
+                <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode or "未設定" }}</small>
+              </td>
+              <td>
+                <strong title="{{ alias.src_folder_raw or '' }}">{{ alias.src_folder_raw or "" }}</strong>
+                <small>{{ alias.csv_mapping_version or "CSVテンプレートなし" }}</small>
+              </td>
+              <td>
+                <strong>XML {{ alias.xml_file_count or 0 }} / CSV {{ alias.csv_file_count or 0 }}</strong>
+                <small>受領実績</small>
+              </td>
+              <td>
+                {% if facility_text %}
+                <button
+                  type="button"
+                  class="ghost-button"
+                  data-ledger-facility-select
+                  data-facility-query="{{ facility_text }}"
+                >選択</button>
+                {% else %}
+                <span class="status-pill status-muted">不可</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4">受領フォルダaliasがありません。</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-ledger-facility-clear>絞り込みを空にする</button>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+    </section>
+  </div>
+
+	  <section class="subscriber-match-workspace">
     <div class="panel subscriber-match-ledger-list">
       <div class="section-heading">
         <div>
@@ -84,7 +162,7 @@
       <div class="subscriber-match-list">
         {% for row in rows %}
         {% set selected = selected_ledger and selected_ledger.exam_ledger_id == row.exam_ledger_id %}
-        <a class="subscriber-match-ledger-card {{ 'is-selected' if selected else '' }}" href="/subscriber-match-review?event_id={{ filters.event_id|url_quote }}&status_filter={{ filters.status_filter|url_quote }}&q={{ filters.q|url_quote }}&limit={{ limit }}&ledger_id={{ row.exam_ledger_id }}">
+        <a class="subscriber-match-ledger-card {{ 'is-selected' if selected else '' }}" href="/subscriber-match-review?event_id={{ filters.event_id|url_quote }}&status_filter={{ filters.status_filter|url_quote }}&q={{ filters.q|url_quote }}&facility_q={{ filters.facility_q|url_quote }}&limit={{ limit }}&ledger_id={{ row.exam_ledger_id }}">
           <span class="status-pill {{ 'status-danger' if row.subscriber_match_status in ['NOT_FOUND', 'IDENTITY_ERROR'] else 'status-pending' }}">
             {{ subscriber_match_status_label(row.subscriber_match_status, row.subscriber_match_method) }}
           </span>
@@ -159,6 +237,7 @@
         <input type="hidden" name="event_id" value="{{ filters.event_id }}">
         <input type="hidden" name="status_filter" value="{{ filters.status_filter }}">
         <input type="hidden" name="q" value="{{ filters.q }}">
+        <input type="hidden" name="facility_q" value="{{ filters.facility_q }}">
         <input type="hidden" name="limit" value="{{ limit }}">
         <input type="hidden" name="ledger_id" value="{{ selected_ledger.exam_ledger_id }}">
         <label>
