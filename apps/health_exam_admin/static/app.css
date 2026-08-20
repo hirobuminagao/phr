@@ -1668,6 +1668,14 @@ a.home-menu-card:hover {
   display: block;
 }
 
+.clickable-table-row {
+  cursor: pointer;
+}
+
+.clickable-table-row:hover td {
+  background: #f4f9fc;
+}
+
 .facility-summary-table {
   min-width: 1280px;
 }

@@ -127,7 +127,11 @@
             {% for alias in folder_aliases %}
             {% set code = alias.exam_facility_code or "" %}
             {% set facility_text = code or alias.exam_facility_name or alias.exam_facility_display_name or alias.src_folder_raw or "" %}
-            <tr data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}">
+            <tr
+              class="{{ 'clickable-table-row' if facility_text else '' }}"
+              data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}"
+              {% if facility_text %}data-ledger-facility-row data-facility-query="{{ facility_text }}"{% endif %}
+            >
               <td>
                 <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
                 <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode or "未設定" }}</small>

@@ -480,22 +480,29 @@
 
   const ledgerFacilityInput = document.getElementById("ledger-facility-filter-input");
   const ledgerFacilityForm = ledgerFacilityInput ? ledgerFacilityInput.closest("form") : null;
-  for (const button of document.querySelectorAll("[data-ledger-facility-select]")) {
-    button.addEventListener("click", () => {
-      if (!ledgerFacilityInput) return;
-      const query = String(button.getAttribute("data-facility-query") || "").trim();
-      if (!query) return;
-      ledgerFacilityInput.value = query;
-      ledgerFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
-      closeModal(button.closest(".edit-modal"));
-      if (ledgerFacilityForm) {
-        if (typeof ledgerFacilityForm.requestSubmit === "function") {
-          ledgerFacilityForm.requestSubmit();
-        } else {
-          ledgerFacilityForm.submit();
-        }
+  const selectLedgerFacility = (element) => {
+    if (!ledgerFacilityInput || !(element instanceof Element)) return;
+    const query = String(element.getAttribute("data-facility-query") || "").trim();
+    if (!query) return;
+    ledgerFacilityInput.value = query;
+    ledgerFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+    closeModal(element.closest(".edit-modal"));
+    if (ledgerFacilityForm) {
+      if (typeof ledgerFacilityForm.requestSubmit === "function") {
+        ledgerFacilityForm.requestSubmit();
+      } else {
+        ledgerFacilityForm.submit();
       }
+    }
+  };
+  for (const button of document.querySelectorAll("[data-ledger-facility-select]")) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectLedgerFacility(button);
     });
+  }
+  for (const row of document.querySelectorAll("[data-ledger-facility-row]")) {
+    row.addEventListener("click", () => selectLedgerFacility(row));
   }
   for (const button of document.querySelectorAll("[data-ledger-facility-clear]")) {
     button.addEventListener("click", () => {
