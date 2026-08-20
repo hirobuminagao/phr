@@ -1236,7 +1236,42 @@ a.home-menu-card:hover {
 
 .case-filter-modal-panel {
   width: min(1180px, calc(100vw - 32px));
+  height: min(820px, calc(100vh - 32px));
+  max-height: calc(100vh - 32px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow-x: hidden;
+  overflow-y: hidden;
+  padding: 0;
+}
+
+.case-filter-modal-panel .edit-modal__head {
+  margin: 0;
+  padding: 22px 22px 16px;
+  border-bottom: 1px solid #d5e0ea;
+  background: var(--panel);
+}
+
+.case-filter-form {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.case-filter-scroll {
+  max-height: 100%;
+  display: grid;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 18px 22px;
+}
+
+.case-filter-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid #d5e0ea;
+  background: #f8fbfd;
 }
 
 .case-filter-modal-panel .case-filter-row-primary,

@@ -56,8 +56,9 @@
         </div>
         <button type="button" class="ghost-button" data-modal-close>閉じる</button>
       </div>
-    <form method="get" action="/exam-export-cases" class="case-filter-form">
-      <div class="case-filter-row case-filter-row-primary">
+    <form id="case-filter-form" method="get" action="/exam-export-cases" class="case-filter-form">
+      <div class="case-filter-scroll">
+        <div class="case-filter-row case-filter-row-primary">
         <label>
           <span>キーワード</span>
           <input id="case-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="case_id / HIA ID / 氏名">
@@ -141,8 +142,8 @@
           </div>
           <input type="hidden" name="specific_check_result" value="{{ filters.specific_check_result }}" data-server-filter-value="specific_check_result">
         </fieldset>
-      </div>
-      <div class="case-filter-row case-filter-row-secondary">
+        </div>
+        <div class="case-filter-row case-filter-row-secondary">
         <fieldset class="filter-condition-block">
           <legend>出力</legend>
           <div class="filter-toggle-group">
@@ -168,12 +169,13 @@
           <span>表示件数</span>
           <input name="limit" value="{{ limit }}">
         </label>
-        <div class="filter-actions">
-          <button type="submit">検索</button>
-          <a class="ghost-button" href="/exam-export-cases">クリア</a>
-        </div>
+      </div>
       </div>
     </form>
+    <div class="case-filter-footer">
+      <button type="submit" form="case-filter-form">検索</button>
+      <a class="ghost-button" href="/exam-export-cases">クリア</a>
+    </div>
     </section>
   </div>
 
