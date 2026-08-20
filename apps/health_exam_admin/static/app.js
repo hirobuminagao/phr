@@ -424,7 +424,8 @@
       if (!modal) return;
       modal.hidden = false;
       document.body.classList.add("has-open-modal");
-      const firstInput = modal.querySelector("input:not([disabled]), select, textarea, button");
+      const firstInput = modal.querySelector("[data-modal-focus]:not([disabled])")
+        || modal.querySelector("input:not([disabled]), select, textarea, button");
       if (firstInput) firstInput.focus();
     });
   }
