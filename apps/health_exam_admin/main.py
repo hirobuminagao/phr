@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import parse_qs, quote
+from urllib.parse import parse_qs, quote, urlencode
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -3944,7 +3944,13 @@ def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
     return int((row or {}).get("total_count") or 0)
 
 
-def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
+def load_exam_export_case_rows(
+    cur: Any,
+    *,
+    filters: dict[str, str],
+    limit: int = 200,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
     where_sql, params = build_exam_export_case_where(filters)
     cur.execute(
         f"""
@@ -4031,9 +4037,9 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
          AND mfa.exam_facility_id = eec.exam_facility_id
         {where_sql}
         ORDER BY eec.updated_at DESC, eec.exam_export_case_id DESC
-        LIMIT %s
+        LIMIT %s OFFSET %s
         """,
-        (*params, limit),
+        (*params, limit, offset),
     )
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
@@ -4043,6 +4049,58 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
             row.get("specific_reason_summary"),
         )
     return rows
+
+
+def build_exam_export_case_pagination(
+    filters: dict[str, str],
+    *,
+    total_count: int,
+    row_count: int,
+    page: int,
+    limit: int,
+) -> dict[str, Any]:
+    page_count = max(1, (total_count + limit - 1) // limit)
+    page = min(max(1, page), page_count)
+    start = ((page - 1) * limit) + 1 if total_count else 0
+    end = min(total_count, start + row_count - 1) if total_count else 0
+
+    def page_url(target_page: int) -> str:
+        query = {key: value for key, value in filters.items() if value and key != "page"}
+        query["limit"] = str(limit)
+        query["page"] = str(target_page)
+        return f"/exam-export-cases?{urlencode(query)}"
+
+    window_pages = {1, page_count}
+    for candidate in range(page - 2, page + 3):
+        if 1 <= candidate <= page_count:
+            window_pages.add(candidate)
+
+    pages: list[dict[str, Any]] = []
+    previous_page = 0
+    for page_number in sorted(window_pages):
+        pages.append(
+            {
+                "page": page_number,
+                "url": page_url(page_number),
+                "is_current": page_number == page,
+                "gap_before": previous_page > 0 and page_number > previous_page + 1,
+            }
+        )
+        previous_page = page_number
+
+    return {
+        "page": page,
+        "limit": limit,
+        "page_count": page_count,
+        "total_count": total_count,
+        "start": start,
+        "end": end,
+        "has_previous": page > 1,
+        "has_next": page < page_count,
+        "previous_url": page_url(page - 1) if page > 1 else "",
+        "next_url": page_url(page + 1) if page < page_count else "",
+        "pages": pages,
+    }
 
 
 def load_exam_export_case_month_options(cur: Any, *, event_id: str | None = None, limit: int = 36) -> list[dict[str, Any]]:
@@ -7769,8 +7827,10 @@ def exam_export_cases(request: Request) -> Response:
         "insurance_number": request.query_params.get("insurance_number", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "2000"),
+        "page": request.query_params.get("page", "1"),
     }
     limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
+    page = parse_positive_int(filters["page"], default=1, maximum=1000000)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
@@ -7779,8 +7839,18 @@ def exam_export_cases(request: Request) -> Response:
             folder_aliases = load_received_folder_alias_rows(cur)
             exam_month_options = load_exam_export_case_month_options(cur, event_id=filters["event_id"])
             total_count = load_exam_export_case_count(cur, filters=filters)
-            rows = load_exam_export_case_rows(cur, filters=filters, limit=limit)
+            page_count = max(1, (total_count + limit - 1) // limit)
+            page = min(page, page_count)
+            offset = (page - 1) * limit
+            rows = load_exam_export_case_rows(cur, filters=filters, limit=limit, offset=offset)
             summary = summarize_exam_export_cases(rows)
+            pagination = build_exam_export_case_pagination(
+                filters,
+                total_count=total_count,
+                row_count=len(rows),
+                page=page,
+                limit=limit,
+            )
             if audit_enabled(cur):
                 for row in rows:
                     log_audit(
@@ -7813,6 +7883,7 @@ def exam_export_cases(request: Request) -> Response:
             "summary": summary,
             "total_count": total_count,
             "limit": limit,
+            "pagination": pagination,
             "folder_aliases": folder_aliases,
             "exam_month_options": exam_month_options,
             "selected_exam_months": split_filter_values(filters.get("exam_month")),

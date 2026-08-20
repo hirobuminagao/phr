@@ -252,7 +252,7 @@
     <div class="summary-card">
       <span>検索結果case</span>
       <strong>{{ total_count }}</strong>
-      <small>表示中 {{ summary.total }} 件</small>
+      <small>{{ pagination.start }}-{{ pagination.end }} 件を表示</small>
     </div>
     <div class="summary-card">
       <span>出力可能</span>
@@ -285,9 +285,34 @@
     <div class="section-heading section-heading-inline-note">
       <div>
         <h2>case一覧</h2>
-        <p class="subtle">検索結果 {{ total_count }} 件中、最新 {{ rows|length }} 件を表示しています。source欄は採用値の構成元で、基本はXML優先、CSVは不足補完です。</p>
+        <p class="subtle">検索結果 {{ total_count }} 件中、{{ pagination.start }}-{{ pagination.end }} 件を表示しています。source欄は採用値の構成元で、基本はXML優先、CSVは不足補完です。</p>
       </div>
     </div>
+    <nav class="pagination-bar" aria-label="case一覧ページ切り替え">
+      <div class="pagination-status">
+        {{ pagination.page }} / {{ pagination.page_count }} ページ
+      </div>
+      <div class="pagination-actions">
+        {% if pagination.has_previous %}
+        <a class="ghost-button compact-action-button" href="{{ pagination.previous_url }}">前へ</a>
+        {% else %}
+        <span class="ghost-button compact-action-button is-disabled">前へ</span>
+        {% endif %}
+        {% for item in pagination.pages %}
+          {% if item.gap_before %}<span class="pagination-gap">…</span>{% endif %}
+          {% if item.is_current %}
+          <span class="pagination-page is-current">{{ item.page }}</span>
+          {% else %}
+          <a class="pagination-page" href="{{ item.url }}">{{ item.page }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if pagination.has_next %}
+        <a class="ghost-button compact-action-button" href="{{ pagination.next_url }}">次へ</a>
+        {% else %}
+        <span class="ghost-button compact-action-button is-disabled">次へ</span>
+        {% endif %}
+      </div>
+    </nav>
     <div class="table-panel">
       <table id="exam-export-case-table" class="data-table exam-export-case-table" data-empty-message="表示中のcaseに一致するものはありません。">
         <thead>
@@ -354,6 +379,31 @@
         </tbody>
       </table>
     </div>
+    <nav class="pagination-bar pagination-bar-bottom" aria-label="case一覧ページ切り替え">
+      <div class="pagination-status">
+        {{ pagination.page }} / {{ pagination.page_count }} ページ
+      </div>
+      <div class="pagination-actions">
+        {% if pagination.has_previous %}
+        <a class="ghost-button compact-action-button" href="{{ pagination.previous_url }}">前へ</a>
+        {% else %}
+        <span class="ghost-button compact-action-button is-disabled">前へ</span>
+        {% endif %}
+        {% for item in pagination.pages %}
+          {% if item.gap_before %}<span class="pagination-gap">…</span>{% endif %}
+          {% if item.is_current %}
+          <span class="pagination-page is-current">{{ item.page }}</span>
+          {% else %}
+          <a class="pagination-page" href="{{ item.url }}">{{ item.page }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if pagination.has_next %}
+        <a class="ghost-button compact-action-button" href="{{ pagination.next_url }}">次へ</a>
+        {% else %}
+        <span class="ghost-button compact-action-button is-disabled">次へ</span>
+        {% endif %}
+      </div>
+    </nav>
   </section>
 </main>
 {% endblock %}
