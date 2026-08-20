@@ -302,6 +302,29 @@ button[type="submit"]:disabled {
   gap: 6px;
 }
 
+.case-summary-grid .summary-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+
+.case-summary-grid .summary-card span {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.case-summary-grid .summary-card small {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.case-summary-grid .summary-card strong {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  justify-self: end;
+}
+
 .admin-home-head {
   display: grid;
   grid-template-columns: minmax(280px, 0.7fr) minmax(560px, 1.3fr);
@@ -808,6 +831,18 @@ a.home-menu-card:hover {
   margin-bottom: 4px;
 }
 
+.section-heading-inline-note > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+
+.section-heading-inline-note h2,
+.section-heading-inline-note .subtle {
+  margin: 0;
+}
+
 .section-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1105,11 +1140,46 @@ a.home-menu-card:hover {
   right: 22px;
   bottom: 22px;
   z-index: 20;
-  box-shadow: 0 12px 28px rgba(31, 41, 51, 0.22);
+  min-width: 136px;
+  min-height: 48px;
+  padding: 12px 18px;
+  border: 1px solid var(--accent-dark);
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 0 14px 30px rgba(15, 118, 93, 0.28);
+}
+
+.floating-filter-button:hover {
+  background: var(--accent-dark);
+  box-shadow: 0 16px 34px rgba(15, 118, 93, 0.34);
+}
+
+.floating-filter-button:focus-visible {
+  outline: 3px solid rgba(24, 147, 111, 0.28);
+  outline-offset: 3px;
 }
 
 .case-filter-modal-panel {
   width: min(1180px, calc(100vw - 32px));
+  overflow-x: hidden;
+}
+
+.case-filter-modal-panel .case-filter-row-primary,
+.case-filter-modal-panel .case-filter-row-secondary {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.case-filter-modal-panel .filter-actions {
+  align-self: end;
+}
+
+.case-filter-modal-panel .filter-toggle-group button {
+  white-space: normal;
+  min-width: 74px;
 }
 
 .stacked-actions {
