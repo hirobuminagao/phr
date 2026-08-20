@@ -39,9 +39,10 @@
         <label>
           <span>健診機関</span>
           <span class="input-with-button">
-            <input id="ledger-facility-filter-input" name="facility_q" value="{{ filters.facility_q or '' }}" autocomplete="off" placeholder="健診機関名 / コード" data-live-filter-input="#exam-ledger-table">
+            <input id="ledger-facility-filter-input" name="facility_codes" value="{{ filters.facility_codes or '' }}" autocomplete="off" placeholder="複数選択できます">
             <button type="button" class="ghost-button compact-action-button" data-modal-open="ledger-facility-picker-modal">選択</button>
           </span>
+          <small id="ledger-facility-codes-summary">未指定: 全施設</small>
         </label>
         <label>
           <span>イベント</span>
@@ -128,9 +129,9 @@
             {% set code = alias.exam_facility_code or "" %}
             {% set facility_text = code or alias.exam_facility_name or alias.exam_facility_display_name or alias.src_folder_raw or "" %}
             <tr
-              class="{{ 'clickable-table-row' if facility_text else '' }}"
+              class="{{ 'clickable-table-row' if code else '' }}"
               data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}"
-              {% if facility_text %}data-ledger-facility-row data-facility-query="{{ facility_text }}"{% endif %}
+              {% if code %}data-ledger-facility-row data-facility-code="{{ code }}"{% endif %}
             >
               <td>
                 <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
@@ -145,13 +146,13 @@
                 <small>受領実績</small>
               </td>
               <td>
-                {% if facility_text %}
+                {% if code %}
                 <button
                   type="button"
                   class="ghost-button"
                   data-ledger-facility-select
-                  data-facility-query="{{ facility_text }}"
-                >選択</button>
+                  data-facility-code="{{ code }}"
+                >追加</button>
                 {% else %}
                 <span class="status-pill status-muted">不可</span>
                 {% endif %}

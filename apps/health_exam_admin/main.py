@@ -2910,6 +2910,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     file_receipt_id = filters.get("file_receipt_id", "").strip()
     query = filters.get("q", "").strip()
     facility_query = filters.get("facility_q", "").strip()
+    facility_codes = split_filter_values(filters.get("facility_codes", ""))
     if event_id:
         where_parts.append("event_id = %s")
         params.append(event_id)
@@ -2967,6 +2968,9 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
         like = f"%{facility_query}%"
         where_parts.append("(facility_code LIKE %s OR facility_name LIKE %s)")
         params.extend([like, like])
+    if facility_codes:
+        where_parts.append(f"facility_code IN ({', '.join(['%s'] * len(facility_codes))})")
+        params.extend(facility_codes)
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur.execute(
         f"""
@@ -3151,6 +3155,7 @@ def subscriber_match_issue_where_parts(
     status_filter = filters.get("status_filter", "").strip()
     query = filters.get("q", "").strip()
     facility_query = filters.get("facility_q", "").strip()
+    facility_codes = split_filter_values(filters.get("facility_codes", ""))
     exam_months = split_filter_values(filters.get("exam_month", ""))
     if event_id:
         where_parts.append("el.event_id = %s")
@@ -3188,6 +3193,9 @@ def subscriber_match_issue_where_parts(
         like = f"%{facility_query}%"
         where_parts.append("(el.facility_code LIKE %s OR el.facility_name LIKE %s)")
         params.extend([like, like])
+    if include_facility and facility_codes:
+        where_parts.append(f"el.facility_code IN ({', '.join(['%s'] * len(facility_codes))})")
+        params.extend(facility_codes)
     if include_exam_month and exam_months:
         known_months = [
             month for month in exam_months
@@ -7337,6 +7345,7 @@ def exam_ledgers(request: Request) -> Response:
         "check_status": request.query_params.get("check_status", ""),
         "q": request.query_params.get("q", ""),
         "facility_q": request.query_params.get("facility_q", ""),
+        "facility_codes": request.query_params.get("facility_codes", ""),
         "limit": request.query_params.get("limit", "2000"),
     }
     limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
@@ -7395,6 +7404,7 @@ def subscriber_match_review(request: Request) -> Response:
         "status_filter": request.query_params.get("status_filter", ""),
         "q": request.query_params.get("q", ""),
         "facility_q": request.query_params.get("facility_q", ""),
+        "facility_codes": request.query_params.get("facility_codes", ""),
         "exam_month": request.query_params.get("exam_month", ""),
         "limit": request.query_params.get("limit", "200"),
     }

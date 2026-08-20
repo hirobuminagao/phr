@@ -479,22 +479,43 @@
   }
 
   const ledgerFacilityInput = document.getElementById("ledger-facility-filter-input");
+  const ledgerFacilitySummary = document.getElementById("ledger-facility-codes-summary");
   const ledgerFacilityForm = ledgerFacilityInput ? ledgerFacilityInput.closest("form") : null;
-  const selectLedgerFacility = (element) => {
-    if (!ledgerFacilityInput || !(element instanceof Element)) return;
-    const query = String(element.getAttribute("data-facility-query") || "").trim();
-    if (!query) return;
-    ledgerFacilityInput.value = query;
-    ledgerFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
-    closeModal(element.closest(".edit-modal"));
-    if (ledgerFacilityForm) {
-      if (typeof ledgerFacilityForm.requestSubmit === "function") {
-        ledgerFacilityForm.requestSubmit();
-      } else {
-        ledgerFacilityForm.submit();
-      }
+  const ledgerFacilityValues = () => {
+    if (!ledgerFacilityInput) return [];
+    return ledgerFacilityInput.value
+      .split(/[\s,，、]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  };
+  const updateLedgerFacilityPickerState = () => {
+    const values = new Set(ledgerFacilityValues());
+    if (ledgerFacilitySummary) {
+      ledgerFacilitySummary.textContent = values.size ? `${values.size}施設を指定中` : "未指定: 全施設";
+    }
+    for (const button of document.querySelectorAll("[data-ledger-facility-select]")) {
+      const code = String(button.getAttribute("data-facility-code") || "").trim();
+      const added = code && values.has(code);
+      button.textContent = added ? "追加済み" : "追加";
+      button.disabled = Boolean(added);
     }
   };
+  const selectLedgerFacility = (element) => {
+    if (!ledgerFacilityInput || !(element instanceof Element)) return;
+    const code = String(element.getAttribute("data-facility-code") || "").trim();
+    if (!code) return;
+    const values = ledgerFacilityValues();
+    if (!values.includes(code)) {
+      values.push(code);
+      ledgerFacilityInput.value = values.join(", ");
+    }
+    ledgerFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+    updateLedgerFacilityPickerState();
+  };
+  if (ledgerFacilityInput) {
+    ledgerFacilityInput.addEventListener("input", updateLedgerFacilityPickerState);
+    updateLedgerFacilityPickerState();
+  }
   for (const button of document.querySelectorAll("[data-ledger-facility-select]")) {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -509,6 +530,7 @@
       if (!ledgerFacilityInput) return;
       ledgerFacilityInput.value = "";
       ledgerFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      updateLedgerFacilityPickerState();
       closeModal(button.closest(".edit-modal"));
       if (ledgerFacilityForm) {
         if (typeof ledgerFacilityForm.requestSubmit === "function") {
