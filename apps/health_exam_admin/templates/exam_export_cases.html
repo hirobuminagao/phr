@@ -18,18 +18,61 @@
 </header>
 
 <main class="page">
-  <section class="panel filter-panel">
+  <button type="button" class="floating-filter-button" data-modal-open="case-filter-modal">絞り込み</button>
+
+  <section class="panel active-filter-summary" data-modal-open="case-filter-modal" role="button" tabindex="0">
     <div class="section-heading">
       <div>
-        <h2>絞り込み</h2>
-        <p class="subtle">氏名カナ、HIA ID、記号番号、健診機関などで絞り込めます。</p>
+        <h2>現在の絞り込み</h2>
+        <p class="subtle">クリックすると絞り込み条件を変更できます。</p>
       </div>
+      <button type="button" class="ghost-button compact-action-button" data-modal-open="case-filter-modal">変更</button>
     </div>
+    <div class="active-filter-chip-list">
+      {% if filters.q %}<span class="active-filter-chip">キーワード: {{ filters.q }}</span>{% endif %}
+      {% if filters.name_kana %}<span class="active-filter-chip">カナ: {{ filters.name_kana }}</span>{% endif %}
+      {% if filters.insurance_symbol %}<span class="active-filter-chip">記号: {{ filters.insurance_symbol }}</span>{% endif %}
+      {% if filters.insurance_number %}<span class="active-filter-chip">番号: {{ filters.insurance_number }}</span>{% endif %}
+      {% if filters.facility_q %}<span class="active-filter-chip">健診機関: {{ filters.facility_q }}</span>{% endif %}
+      {% if filters.exam_month %}<span class="active-filter-chip">受診月: {{ filters.exam_month }}</span>{% endif %}
+      {% if filters.legal_check_result %}<span class="active-filter-chip">法定: {{ filters.legal_check_result }}</span>{% endif %}
+      {% if filters.specific_check_result %}<span class="active-filter-chip">特定健診: {{ check_result_label(filters.specific_check_result) or filters.specific_check_result }}</span>{% endif %}
+      {% if filters.export_readiness_status %}<span class="active-filter-chip">出力: {{ filters.export_readiness_status }}</span>{% endif %}
+      {% if filters.source_mode %}<span class="active-filter-chip">source: {{ filters.source_mode }}</span>{% endif %}
+      {% if not filters.q and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.facility_q and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
+      <span class="active-filter-chip is-empty">条件なし</span>
+      {% endif %}
+    </div>
+  </section>
+
+  <div id="case-filter-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel case-filter-modal-panel" role="dialog" aria-modal="true" aria-labelledby="case-filter-modal-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">CASE FILTER</p>
+          <h2 id="case-filter-modal-title">case一覧を絞り込む</h2>
+          <p class="subtle">氏名カナ、HIA ID、記号番号、健診機関などで絞り込めます。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
     <form method="get" action="/exam-export-cases" class="case-filter-form">
       <div class="case-filter-row case-filter-row-primary">
         <label>
           <span>キーワード</span>
-          <input id="case-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / カナ / 記号番号" data-live-filter-input="#exam-export-case-table">
+          <input id="case-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="case_id / HIA ID / 氏名">
+        </label>
+        <label>
+          <span>氏名カナ</span>
+          <input name="name_kana" value="{{ filters.name_kana or '' }}" autocomplete="off" placeholder="氏名カナ">
+        </label>
+        <label>
+          <span>記号</span>
+          <input name="insurance_symbol" value="{{ filters.insurance_symbol or '' }}" autocomplete="off" placeholder="保険証記号">
+        </label>
+        <label>
+          <span>番号</span>
+          <input name="insurance_number" value="{{ filters.insurance_number or '' }}" autocomplete="off" placeholder="保険証番号">
         </label>
         <label>
           <span>健診機関</span>
@@ -131,7 +174,8 @@
         </div>
       </div>
     </form>
-  </section>
+    </section>
+  </div>
 
   <div id="case-facility-picker-modal" class="edit-modal" hidden>
     <div class="edit-modal__backdrop" data-modal-close></div>
@@ -206,9 +250,9 @@
 
   <section class="summary-grid case-summary-grid">
     <div class="summary-card">
-      <span>表示中case</span>
-      <strong>{{ summary.total }}</strong>
-      <small>検索条件に一致</small>
+      <span>検索結果case</span>
+      <strong>{{ total_count }}</strong>
+      <small>表示中 {{ summary.total }} 件</small>
     </div>
     <div class="summary-card">
       <span>出力可能</span>
@@ -241,7 +285,7 @@
     <div class="section-heading">
       <div>
         <h2>case一覧</h2>
-        <p class="subtle">最新 {{ rows|length }} 件を表示しています。source欄は採用値の構成元で、基本はXML優先、CSVは不足補完です。</p>
+        <p class="subtle">検索結果 {{ total_count }} 件中、最新 {{ rows|length }} 件を表示しています。source欄は採用値の構成元で、基本はXML優先、CSVは不足補完です。</p>
       </div>
     </div>
     <div class="table-panel">

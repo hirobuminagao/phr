@@ -2909,6 +2909,9 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     check_status = filters.get("check_status", "").strip()
     file_receipt_id = filters.get("file_receipt_id", "").strip()
     query = filters.get("q", "").strip()
+    name_kana = filters.get("name_kana", "").strip()
+    insurance_symbol = filters.get("insurance_symbol", "").strip()
+    insurance_number = filters.get("insurance_number", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
     if event_id:
@@ -3802,7 +3805,7 @@ def search_exam_ledger_candidates(
     return [dict(row) for row in cur.fetchall()]
 
 
-def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
+def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
     event_id = filters.get("event_id", "").strip()
@@ -3812,6 +3815,9 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
     source_mode = filters.get("source_mode", "").strip()
     exam_months = split_filter_values(filters.get("exam_month", ""))
     query = filters.get("q", "").strip()
+    name_kana = filters.get("name_kana", "").strip()
+    insurance_symbol = filters.get("insurance_symbol", "").strip()
+    insurance_number = filters.get("insurance_number", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     if event_id:
         where_parts.append("eec.event_id = %s")
@@ -3868,13 +3874,22 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
               OR eec.hia_subscriber_id LIKE %s
               OR eec.person_id_custom LIKE %s
               OR eec.name_full_raw LIKE %s
-              OR eec.name_kana_raw LIKE %s
-              OR eec.insurance_number_raw LIKE %s
-              OR eec.insurance_number_export_value LIKE %s
             )
             """
         )
-        params.extend([query, like, like, like, like, like, like])
+        params.extend([query, like, like, like])
+    if name_kana:
+        like = f"%{name_kana}%"
+        where_parts.append("(eec.name_kana_raw LIKE %s OR eec.name_kana_export_value LIKE %s)")
+        params.extend([like, like])
+    if insurance_symbol:
+        like = f"%{insurance_symbol}%"
+        where_parts.append("(eec.insurance_symbol_raw LIKE %s OR eec.insurance_symbol_export_value LIKE %s)")
+        params.extend([like, like])
+    if insurance_number:
+        like = f"%{insurance_number}%"
+        where_parts.append("(eec.insurance_number_raw LIKE %s OR eec.insurance_number_export_value LIKE %s)")
+        params.extend([like, like])
     if facility_query:
         like = f"%{facility_query}%"
         where_parts.append(
@@ -3888,6 +3903,49 @@ def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int 
         )
         params.extend([like, like, like])
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    return where_sql, params
+
+
+def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
+    where_sql, params = build_exam_export_case_where(filters)
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS total_count
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest
+            ON latest.max_id = r1.id
+        ) AS ecr
+          ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            MAX(expected_source_mode) AS expected_source_mode
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE is_active = 1
+          GROUP BY event_id, exam_facility_id
+        ) AS mfa
+          ON mfa.event_id = eec.event_id
+         AND mfa.exam_facility_id = eec.exam_facility_id
+        {where_sql}
+        """,
+        tuple(params),
+    )
+    row = cur.fetchone()
+    return int((row or {}).get("total_count") or 0)
+
+
+def load_exam_export_case_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
+    where_sql, params = build_exam_export_case_where(filters)
     cur.execute(
         f"""
         SELECT
@@ -7706,6 +7764,9 @@ def exam_export_cases(request: Request) -> Response:
         "source_mode": request.query_params.get("source_mode", ""),
         "exam_month": request.query_params.get("exam_month", ""),
         "q": request.query_params.get("q", ""),
+        "name_kana": request.query_params.get("name_kana", ""),
+        "insurance_symbol": request.query_params.get("insurance_symbol", ""),
+        "insurance_number": request.query_params.get("insurance_number", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "2000"),
     }
@@ -7717,6 +7778,7 @@ def exam_export_cases(request: Request) -> Response:
             event_options = load_event_options(cur)
             folder_aliases = load_received_folder_alias_rows(cur)
             exam_month_options = load_exam_export_case_month_options(cur, event_id=filters["event_id"])
+            total_count = load_exam_export_case_count(cur, filters=filters)
             rows = load_exam_export_case_rows(cur, filters=filters, limit=limit)
             summary = summarize_exam_export_cases(rows)
             if audit_enabled(cur):
@@ -7749,6 +7811,7 @@ def exam_export_cases(request: Request) -> Response:
             "filters": filters,
             "rows": rows,
             "summary": summary,
+            "total_count": total_count,
             "limit": limit,
             "folder_aliases": folder_aliases,
             "exam_month_options": exam_month_options,

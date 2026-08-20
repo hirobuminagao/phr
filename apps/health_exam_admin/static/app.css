@@ -1068,6 +1068,50 @@ a.home-menu-card:hover {
   padding-inline: 12px;
 }
 
+.active-filter-summary {
+  cursor: pointer;
+}
+
+.active-filter-summary:hover {
+  border-color: var(--accent);
+}
+
+.active-filter-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid #b9c5d2;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.active-filter-chip.is-empty {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.floating-filter-button {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 20;
+  box-shadow: 0 12px 28px rgba(31, 41, 51, 0.22);
+}
+
+.case-filter-modal-panel {
+  width: min(1180px, calc(100vw - 32px));
+}
+
 .stacked-actions {
   display: grid;
   gap: 8px;
