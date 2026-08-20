@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% set title = "HIAアップロード作業" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">HIA Upload</p>
+    <h1>HIAアップロード作業</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/export-lists">出力リスト</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page export-page">
+  {% if message %}
+    <div class="notice">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="summary-grid">
+    <div class="summary-card"><span>ZIP</span><strong>{{ summary.zip_count }}</strong><small>本番出力履歴</small></div>
+    <div class="summary-card"><span>ZIPアップロード済み</span><strong>{{ summary.zip_uploaded_count }}</strong><small>ZIP単位</small></div>
+    <div class="summary-card"><span>ZIPエラー</span><strong>{{ summary.zip_error_count }}</strong><small>ZIP単位</small></div>
+    <div class="summary-card"><span>個人XML</span><strong>{{ summary.member_count }}</strong><small>member単位</small></div>
+    <div class="summary-card"><span>個人XMLエラー</span><strong>{{ summary.member_error_count }}</strong><small>member単位</small></div>
+  </section>
+
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">ZIP、健診機関、リスト、個人XML、HIA ID、状態で画面内を絞り込みます。</p>
+      </div>
+    </div>
+    <div class="fund-filter-grid">
+      <label>
+        <span>ZIP一覧</span>
+        <input data-live-filter-input="#hia-upload-zip-table" autocomplete="off" placeholder="ZIP / 健診機関 / リスト / 状態">
+      </label>
+      <label>
+        <span>個人XML明細</span>
+        <input data-live-filter-input="#hia-upload-member-table" autocomplete="off" placeholder="XML / 氏名カナ / HIA ID / 健診機関 / 状態">
+      </label>
+    </div>
+    <div class="fund-filter-toggles">
+      <fieldset class="filter-condition-block">
+        <legend>ZIP状態</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#hia-upload-zip-table" data-filter-field="status" data-filter-value="PENDING">未アップロード</button>
+          <button type="button" data-live-filter-toggle="#hia-upload-zip-table" data-filter-field="status" data-filter-value="UPLOADED">アップロード済み</button>
+          <button type="button" data-live-filter-toggle="#hia-upload-zip-table" data-filter-field="status" data-filter-value="PARTIAL">一部エラー</button>
+          <button type="button" data-live-filter-toggle="#hia-upload-zip-table" data-filter-field="status" data-filter-value="UPLOAD_ERROR">エラー</button>
+        </div>
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>個人XML状態</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-live-filter-toggle="#hia-upload-member-table" data-filter-field="status" data-filter-value="PENDING">未アップロード</button>
+          <button type="button" data-live-filter-toggle="#hia-upload-member-table" data-filter-field="status" data-filter-value="UPLOADED">アップロード済み</button>
+          <button type="button" data-live-filter-toggle="#hia-upload-member-table" data-filter-field="status" data-filter-value="UPLOAD_ERROR">エラー</button>
+          <button type="button" data-live-filter-toggle="#hia-upload-member-table" data-filter-field="status" data-filter-value="EXCLUDED">対象外</button>
+        </div>
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>アップロードZIP</h2>
+        <p class="subtle">健診機関ページからHIAへアップロードするZIP単位の作業リストです。ZIP単位で完了やエラーを記帳します。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ zips|length }}件</span>
+    </div>
+    <div class="table-panel">
+      <table id="hia-upload-zip-table" class="data-table fund-run-table" data-empty-message="表示中のZIPに一致するものはありません。">
+        <thead>
+          <tr>
+            <th>ZIP</th>
+            <th>健診機関</th>
+            <th>出力リスト</th>
+            <th>状態</th>
+            <th>人数</th>
+            <th>作業記帳</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in zips %}
+          <tr data-filter-text="{{ item.xml_export_zip_id }} {{ item.zip_file_name }} {{ item.zip_path }} {{ item.facility_code }} {{ item.facility_name }} {{ item.xml_export_list_id or '' }} {{ item.xml_export_list_name or '' }} {{ item.hia_upload_status }} {{ item.hia_upload_error_summary or '' }} {{ item.hia_upload_note or '' }}" data-status="{{ item.hia_upload_status }}">
+            <td>
+              <strong>{{ item.zip_file_name }}</strong>
+              <small>#{{ item.xml_export_zip_id }} / {{ item.file_date }} / {{ item.zip_path }}</small>
+            </td>
+            <td>
+              <strong>{{ item.facility_name }}</strong>
+              <small>{{ item.facility_code }} / {{ item.facility_folder_name }}</small>
+            </td>
+            <td>
+              <strong>{{ item.xml_export_list_name or "-" }}</strong>
+              <small>list {{ item.xml_export_list_id or "-" }}</small>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if item.hia_upload_status == 'UPLOADED' else 'status-danger' if item.hia_upload_status == 'UPLOAD_ERROR' else 'status-pending' if item.hia_upload_status == 'PARTIAL' else 'status-muted' }}">{{ hia_upload_status_label(item.hia_upload_status) }}</span>
+              <small>{{ item.hia_uploaded_at or "" }} {{ item.hia_uploaded_by or "" }}</small>
+              {% if item.hia_upload_error_summary %}<small>{{ item.hia_upload_error_summary }}</small>{% endif %}
+              {% if item.hia_upload_note %}<small>{{ item.hia_upload_note }}</small>{% endif %}
+            </td>
+            <td>
+              <strong>{{ item.uploaded_members or 0 }}/{{ item.member_rows or item.member_count }}</strong>
+              <small>エラー {{ item.error_members or 0 }}</small>
+            </td>
+            <td>
+              <form method="post" action="/hia/upload-work/zips/{{ item.xml_export_zip_id }}/status" class="inline-status-form">
+                <select name="target_status" {% if not can_edit %}disabled{% endif %}>
+                  <option value="UPLOADED">アップロード済み</option>
+                  <option value="PARTIAL">一部エラー</option>
+                  <option value="UPLOAD_ERROR">エラー</option>
+                  <option value="PENDING">未アップロードに戻す</option>
+                  <option value="CONFIRMED">確認済み</option>
+                </select>
+                <input name="error_summary" placeholder="エラー要約">
+                <input name="note" placeholder="メモ">
+                <button type="submit" {% if not can_edit %}disabled{% endif %}>更新</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">本番出力されたZIPはまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>個人XML明細</h2>
+        <p class="subtle">HIAから個人単位のエラーが返った場合は、ここでエラー区分と内容を記帳します。後続で外部指摘の明細にも接続します。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ members|length }}件</span>
+    </div>
+    <div class="table-panel">
+      <table id="hia-upload-member-table" class="data-table fund-member-table" data-empty-message="表示中の個人XMLに一致するものはありません。">
+        <thead>
+          <tr>
+            <th>個人XML</th>
+            <th>人</th>
+            <th>健診</th>
+            <th>状態</th>
+            <th>作業記帳</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in members %}
+          <tr data-filter-text="{{ item.xml_export_member_id }} {{ item.xml_export_zip_id }} {{ item.zip_file_name }} {{ item.person_xml_file_name }} {{ item.hia_subscriber_id or '' }} {{ item.name_kana_export_value or '' }} {{ item.name_full_raw or '' }} {{ item.insurance_symbol_export_value or '' }} {{ item.insurance_number_export_value or '' }} {{ item.facility_code }} {{ item.facility_name }} {{ item.exam_date or '' }} {{ item.hia_upload_status }} {{ item.hia_upload_error_code or '' }} {{ item.hia_upload_error_message or '' }} {{ item.hia_upload_note or '' }}" data-status="{{ item.hia_upload_status }}">
+            <td>
+              <strong>{{ item.person_xml_file_name }}</strong>
+              <small>member {{ item.xml_export_member_id }} / zip {{ item.xml_export_zip_id }}</small>
+              <small>{{ item.zip_file_name }}</small>
+            </td>
+            <td>
+              <strong>{{ item.name_kana_export_value or item.name_full_raw or "-" }}</strong>
+              <small>HIA {{ item.hia_subscriber_id or "-" }}</small>
+              <small>{{ item.insurance_symbol_export_value or "-" }}-{{ item.insurance_number_export_value or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.facility_name }}</strong>
+              <small>{{ item.facility_code }} / {{ item.exam_date or "-" }}</small>
+              {% if item.exam_export_case_id %}<small><a href="/exam-export-cases/{{ item.exam_export_case_id }}">case {{ item.exam_export_case_id }}</a></small>{% endif %}
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if item.hia_upload_status == 'UPLOADED' else 'status-danger' if item.hia_upload_status == 'UPLOAD_ERROR' else 'status-muted' }}">{{ hia_upload_status_label(item.hia_upload_status) }}</span>
+              <small>{{ item.hia_uploaded_at or "" }} {{ item.hia_uploaded_by or "" }}</small>
+              {% if item.hia_upload_error_code %}<small>{{ item.hia_upload_error_code }}</small>{% endif %}
+              {% if item.hia_upload_error_message %}<small>{{ item.hia_upload_error_message }}</small>{% endif %}
+              {% if item.hia_upload_note %}<small>{{ item.hia_upload_note }}</small>{% endif %}
+            </td>
+            <td>
+              <form method="post" action="/hia/upload-work/members/{{ item.xml_export_member_id }}/status" class="inline-status-form">
+                <select name="target_status" {% if not can_edit %}disabled{% endif %}>
+                  <option value="UPLOADED">アップロード済み</option>
+                  <option value="UPLOAD_ERROR">エラー</option>
+                  <option value="PENDING">未アップロードに戻す</option>
+                  <option value="EXCLUDED">対象外</option>
+                </select>
+                <input name="error_code" placeholder="エラー区分">
+                <input name="error_message" placeholder="エラー内容">
+                <input name="note" placeholder="メモ">
+                <button type="submit" {% if not can_edit %}disabled{% endif %}>更新</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">個人XML明細はまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

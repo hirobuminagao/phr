@@ -1125,6 +1125,21 @@ def fund_delivery_status_label(status: str | None) -> str:
 templates.env.globals["fund_delivery_status_label"] = fund_delivery_status_label
 
 
+def hia_upload_status_label(status: str | None) -> str:
+    labels = {
+        "PENDING": "未アップロード",
+        "UPLOADED": "アップロード済み",
+        "UPLOAD_ERROR": "アップロードエラー",
+        "PARTIAL": "一部エラー",
+        "CONFIRMED": "確認済み",
+        "EXCLUDED": "対象外",
+    }
+    return labels.get(status or "", status or "")
+
+
+templates.env.globals["hia_upload_status_label"] = hia_upload_status_label
+
+
 FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
 HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
 APP_DATA_DIR = REPO_ROOT / "data"
@@ -1344,6 +1359,162 @@ def load_fund_delivery_member_rows(cur: Any, *, limit: int = 120) -> list[dict[s
         (limit,),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def load_hia_upload_summary(cur: Any) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS zip_count,
+          SUM(CASE WHEN hia_upload_status = 'UPLOADED' THEN 1 ELSE 0 END) AS zip_uploaded_count,
+          SUM(CASE WHEN hia_upload_status = 'UPLOAD_ERROR' THEN 1 ELSE 0 END) AS zip_error_count,
+          COALESCE(SUM(member_count), 0) AS member_count
+        FROM {qname(health_db())}.xml_export_zips
+        """
+    )
+    zip_row = cur.fetchone() or {}
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS member_total,
+          SUM(CASE WHEN hia_upload_status = 'UPLOADED' THEN 1 ELSE 0 END) AS member_uploaded_count,
+          SUM(CASE WHEN hia_upload_status = 'UPLOAD_ERROR' THEN 1 ELSE 0 END) AS member_error_count
+        FROM {qname(health_db())}.xml_export_members
+        """
+    )
+    member_row = cur.fetchone() or {}
+    return {
+        "zip_count": int(zip_row.get("zip_count") or 0),
+        "zip_uploaded_count": int(zip_row.get("zip_uploaded_count") or 0),
+        "zip_error_count": int(zip_row.get("zip_error_count") or 0),
+        "member_count": int(member_row.get("member_total") or zip_row.get("member_count") or 0),
+        "member_uploaded_count": int(member_row.get("member_uploaded_count") or 0),
+        "member_error_count": int(member_row.get("member_error_count") or 0),
+    }
+
+
+def load_hia_upload_zip_rows(cur: Any, *, limit: int = 80) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          zez.xml_export_zip_id,
+          zez.xml_export_list_id,
+          xel.list_name AS xml_export_list_name,
+          zez.event_id,
+          zez.exam_facility_id,
+          zez.facility_code,
+          zez.facility_name,
+          zez.facility_folder_name,
+          zez.insurer_number,
+          zez.file_date,
+          zez.split_no,
+          zez.zip_file_name,
+          zez.zip_path,
+          zez.member_count,
+          zez.hia_upload_status,
+          zez.hia_uploaded_at,
+          zez.hia_uploaded_by,
+          zez.hia_upload_checked_at,
+          zez.hia_upload_checked_by,
+          zez.hia_upload_error_summary,
+          zez.hia_upload_note,
+          zez.created_at,
+          COUNT(zem.xml_export_member_id) AS member_rows,
+          SUM(CASE WHEN zem.hia_upload_status = 'UPLOADED' THEN 1 ELSE 0 END) AS uploaded_members,
+          SUM(CASE WHEN zem.hia_upload_status = 'UPLOAD_ERROR' THEN 1 ELSE 0 END) AS error_members
+        FROM {qname(health_db())}.xml_export_zips AS zez
+        LEFT JOIN {qname(health_db())}.ops_xml_export_lists AS xel
+          ON xel.xml_export_list_id = zez.xml_export_list_id
+        LEFT JOIN {qname(health_db())}.xml_export_members AS zem
+          ON zem.xml_export_zip_id = zez.xml_export_zip_id
+        GROUP BY
+          zez.xml_export_zip_id,
+          zez.xml_export_list_id,
+          xel.list_name,
+          zez.event_id,
+          zez.exam_facility_id,
+          zez.facility_code,
+          zez.facility_name,
+          zez.facility_folder_name,
+          zez.insurer_number,
+          zez.file_date,
+          zez.split_no,
+          zez.zip_file_name,
+          zez.zip_path,
+          zez.member_count,
+          zez.hia_upload_status,
+          zez.hia_uploaded_at,
+          zez.hia_uploaded_by,
+          zez.hia_upload_checked_at,
+          zez.hia_upload_checked_by,
+          zez.hia_upload_error_summary,
+          zez.hia_upload_note,
+          zez.created_at
+        ORDER BY zez.xml_export_zip_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_hia_upload_member_rows(cur: Any, *, limit: int = 240) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          zem.xml_export_member_id,
+          zem.xml_export_zip_id,
+          zez.xml_export_list_id,
+          xel.list_name AS xml_export_list_name,
+          zem.event_id,
+          zem.ledger_type,
+          zem.ledger_id,
+          zem.source_file_receipt_id,
+          zem.subscriber_id,
+          zem.hia_subscriber_id,
+          zem.person_xml_file_name,
+          zem.report_category_code,
+          zem.program_type_code,
+          zem.hia_upload_status,
+          zem.hia_upload_error_code,
+          zem.hia_upload_error_message,
+          zem.hia_upload_note,
+          zem.hia_uploaded_at,
+          zem.hia_uploaded_by,
+          zem.created_at,
+          zez.zip_file_name,
+          zez.facility_code,
+          zez.facility_name,
+          zez.file_date,
+          eec.exam_export_case_id,
+          eec.name_kana_export_value,
+          eec.name_full_raw,
+          eec.insurance_symbol_export_value,
+          eec.insurance_number_export_value,
+          eec.exam_date,
+          eec.export_readiness_status
+        FROM {qname(health_db())}.xml_export_members AS zem
+        INNER JOIN {qname(health_db())}.xml_export_zips AS zez
+          ON zez.xml_export_zip_id = zem.xml_export_zip_id
+        LEFT JOIN {qname(health_db())}.ops_xml_export_lists AS xel
+          ON xel.xml_export_list_id = zez.xml_export_list_id
+        LEFT JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON zem.ledger_type = 'CASE'
+         AND zem.ledger_id = eec.exam_export_case_id
+        ORDER BY zem.xml_export_member_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_hia_upload_page_data(cur: Any) -> dict[str, Any]:
+    return {
+        "summary": load_hia_upload_summary(cur),
+        "zips": load_hia_upload_zip_rows(cur),
+        "members": load_hia_upload_member_rows(cur),
+    }
 
 
 def build_hia_download_import_config(raw: dict[str, Any]) -> HiaDownloadImportConfig:
@@ -6546,6 +6717,30 @@ def hia_fund_delivery(request: Request) -> Response:
     )
 
 
+@app.get("/hia/upload-work", response_class=HTMLResponse)
+def hia_upload_work(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        page_data = load_hia_upload_page_data(cur)
+    return templates.TemplateResponse(
+        "hia_upload_work.html",
+        {
+            "request": request,
+            "user": user,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+            "can_edit": has_any_permission(user, ("hia_upload_status.edit", "users.manage")),
+            **page_data,
+        },
+    )
+
+
 @app.get("/hia/xml-zip-check", response_class=HTMLResponse)
 def hia_xml_zip_check(request: Request) -> Response:
     user = require_user(request)
@@ -6899,6 +7094,148 @@ async def run_hia_fund_delivery(request: Request) -> Response:
             conn.rollback()
             return RedirectResponse(f"/hia/fund-delivery?error={quote(str(exc))}", status_code=303)
     return RedirectResponse(f"/hia/fund-delivery?message={quote(message)}", status_code=303)
+
+
+@app.post("/hia/upload-work/zips/{xml_export_zip_id}/status", response_class=HTMLResponse)
+async def update_hia_upload_zip_status(request: Request, xml_export_zip_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    target_status = str(form.get("target_status") or "").strip()
+    if target_status not in {"PENDING", "UPLOADED", "UPLOAD_ERROR", "PARTIAL", "CONFIRMED"}:
+        return RedirectResponse(f"/hia/upload-work?error={quote('未対応のZIP状態です。')}", status_code=303)
+    note = str(form.get("note") or "").strip()
+    error_summary = str(form.get("error_summary") or "").strip()
+    actor = fund_delivery_actor(user)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db())}.xml_export_zips
+                   SET hia_upload_status = %s,
+                       hia_uploaded_at = CASE WHEN %s IN ('UPLOADED', 'CONFIRMED') THEN CURRENT_TIMESTAMP(3) ELSE hia_uploaded_at END,
+                       hia_uploaded_by = CASE WHEN %s IN ('UPLOADED', 'CONFIRMED') THEN %s ELSE hia_uploaded_by END,
+                       hia_upload_checked_at = CURRENT_TIMESTAMP(3),
+                       hia_upload_checked_by = %s,
+                       hia_upload_error_summary = NULLIF(%s, ''),
+                       hia_upload_note = NULLIF(%s, '')
+                 WHERE xml_export_zip_id = %s
+                """,
+                (target_status, target_status, target_status, actor, actor, error_summary, note, xml_export_zip_id),
+            )
+            if target_status == "UPLOADED":
+                cur.execute(
+                    f"""
+                    UPDATE {qname(health_db())}.xml_export_members
+                       SET hia_upload_status = 'UPLOADED',
+                           hia_uploaded_at = CURRENT_TIMESTAMP(3),
+                           hia_uploaded_by = %s
+                     WHERE xml_export_zip_id = %s
+                       AND hia_upload_status IN ('PENDING', 'UPLOADED')
+                    """,
+                    (actor, xml_export_zip_id),
+                )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/hia/upload-work?error={quote(str(exc))}", status_code=303)
+    log_app_operation(
+        request=request,
+        user=user,
+        action_code="HIA_UPLOAD_ZIP_STATUS_UPDATE",
+        target_schema=health_db(),
+        target_table="xml_export_zips",
+        target_id=str(xml_export_zip_id),
+        after={"status": target_status, "note": note, "error_summary": error_summary},
+    )
+    return RedirectResponse(f"/hia/upload-work?message={quote('ZIPのHIAアップロード状態を更新しました。')}", status_code=303)
+
+
+@app.post("/hia/upload-work/members/{xml_export_member_id}/status", response_class=HTMLResponse)
+async def update_hia_upload_member_status(request: Request, xml_export_member_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    target_status = str(form.get("target_status") or "").strip()
+    if target_status not in {"PENDING", "UPLOADED", "UPLOAD_ERROR", "EXCLUDED"}:
+        return RedirectResponse(f"/hia/upload-work?error={quote('未対応の個人XML状態です。')}", status_code=303)
+    error_code = str(form.get("error_code") or "").strip()
+    error_message = str(form.get("error_message") or "").strip()
+    note = str(form.get("note") or "").strip()
+    actor = fund_delivery_actor(user)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db())}.xml_export_members
+                   SET hia_upload_status = %s,
+                       hia_upload_error_code = NULLIF(%s, ''),
+                       hia_upload_error_message = NULLIF(%s, ''),
+                       hia_upload_note = NULLIF(%s, ''),
+                       hia_uploaded_at = CASE WHEN %s = 'UPLOADED' THEN CURRENT_TIMESTAMP(3) ELSE hia_uploaded_at END,
+                       hia_uploaded_by = CASE WHEN %s = 'UPLOADED' THEN %s ELSE hia_uploaded_by END
+                 WHERE xml_export_member_id = %s
+                """,
+                (target_status, error_code, error_message, note, target_status, target_status, actor, xml_export_member_id),
+            )
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db())}.xml_export_zips z
+                JOIN (
+                  SELECT
+                    xml_export_zip_id,
+                    SUM(CASE WHEN hia_upload_status = 'UPLOAD_ERROR' THEN 1 ELSE 0 END) AS error_count,
+                    SUM(CASE WHEN hia_upload_status = 'UPLOADED' THEN 1 ELSE 0 END) AS uploaded_count,
+                    COUNT(*) AS total_count
+                  FROM {qname(health_db())}.xml_export_members
+                  WHERE xml_export_zip_id = (
+                    SELECT xml_export_zip_id
+                    FROM {qname(health_db())}.xml_export_members
+                    WHERE xml_export_member_id = %s
+                  )
+                  GROUP BY xml_export_zip_id
+                ) s
+                  ON s.xml_export_zip_id = z.xml_export_zip_id
+                   SET z.hia_upload_status = CASE
+                         WHEN s.error_count > 0 AND s.uploaded_count > 0 THEN 'PARTIAL'
+                         WHEN s.error_count > 0 THEN 'UPLOAD_ERROR'
+                         WHEN s.uploaded_count = s.total_count THEN 'UPLOADED'
+                         ELSE z.hia_upload_status
+                       END,
+                       z.hia_upload_checked_at = CURRENT_TIMESTAMP(3),
+                       z.hia_upload_checked_by = %s
+                """,
+                (xml_export_member_id, actor),
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/hia/upload-work?error={quote(str(exc))}", status_code=303)
+    log_app_operation(
+        request=request,
+        user=user,
+        action_code="HIA_UPLOAD_MEMBER_STATUS_UPDATE",
+        target_schema=health_db(),
+        target_table="xml_export_members",
+        target_id=str(xml_export_member_id),
+        after={
+            "status": target_status,
+            "error_code": error_code,
+            "error_message": error_message,
+            "note": note,
+        },
+    )
+    return RedirectResponse(f"/hia/upload-work?message={quote('個人XMLのHIAアップロード状態を更新しました。')}", status_code=303)
 
 
 @app.post("/hia/fund-delivery/members/status", response_class=HTMLResponse)

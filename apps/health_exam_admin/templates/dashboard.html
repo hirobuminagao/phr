@@ -8,6 +8,7 @@
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/account">登録情報</a>
+    <a class="ghost-button" href="/hia/upload-work">HIAアップロード</a>
     <a class="ghost-button" href="/hia/fund-delivery">健保納品</a>
     {% if "users.manage" in user.permissions %}
     <a class="ghost-button" href="/admin/users">アカウント管理</a>
@@ -134,11 +135,10 @@
         <span class="status-pill status-ready">利用可</span>
         <div><strong>出力リスト</strong><small>HIAアップロード対象の箱を作成し、追加済みの人を確認する</small></div>
       </a>
-      <div class="home-menu-card is-disabled">
-        <span class="status-pill status-pending">準備中</span>
+      <a class="home-menu-card" href="/hia/upload-work">
+        <span class="status-pill status-ready">利用可</span>
         <div><strong>HIAアップロード作業</strong><small>ZIP単位でアップロード完了、エラー、再対応を記帳する</small></div>
-        <span class="status-pill status-muted">未実装</span>
-      </div>
+      </a>
       <div class="home-menu-card is-disabled">
         <span class="status-pill status-pending">準備中</span>
         <div><strong>XML出力実行</strong><small>READYの出力リストからreview/official XMLを出力する</small></div>
