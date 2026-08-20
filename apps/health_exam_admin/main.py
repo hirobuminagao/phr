@@ -3910,7 +3910,6 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     insurance_symbol = filters.get("insurance_symbol", "").strip()
     insurance_number = filters.get("insurance_number", "").strip()
     hia_subscriber_id = filters.get("hia_subscriber_id", "").strip()
-    subscriber_id = filters.get("subscriber_id", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
     if event_id:
@@ -4820,6 +4819,9 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     insurance_symbol = filters.get("insurance_symbol", "").strip()
     insurance_number = filters.get("insurance_number", "").strip()
     hia_subscriber_id = filters.get("hia_subscriber_id", "").strip()
+    subscriber_id = filters.get("subscriber_id", "").strip()
+    qualification_lost_status = filters.get("qualification_lost_status", "").strip()
+    qualification_lost_date = filters.get("qualification_lost_date", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     if event_id:
         where_parts.append("eec.event_id = %s")
@@ -4898,6 +4900,17 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     if subscriber_id:
         where_parts.append("CAST(eec.subscriber_id AS CHAR) = %s")
         params.append(subscriber_id)
+    if qualification_lost_status == "LOST":
+        where_parts.append("s.qualification_lost_date IS NOT NULL")
+    elif qualification_lost_status == "ACTIVE":
+        where_parts.append("s.qualification_lost_date IS NULL")
+    if qualification_lost_date:
+        if re.fullmatch(r"\d{4}-\d{2}", qualification_lost_date):
+            where_parts.append("DATE_FORMAT(s.qualification_lost_date, '%Y-%m') = %s")
+            params.append(qualification_lost_date)
+        else:
+            where_parts.append("s.qualification_lost_date = %s")
+            params.append(qualification_lost_date)
     if insurance_symbol:
         like = f"%{insurance_symbol}%"
         where_parts.append("(eec.insurance_symbol_raw LIKE %s OR eec.insurance_symbol_export_value LIKE %s)")
@@ -4941,6 +4954,8 @@ def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
             ON latest.max_id = r1.id
         ) AS ecr
           ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN {qname(dev_db())}.subscribers AS s
+          ON s.id = eec.subscriber_id
         LEFT JOIN (
           SELECT
             event_id,
@@ -4989,6 +5004,8 @@ def load_exam_export_case_rows(
           eec.name_kana_raw,
           eec.birthdate,
           eec.gender_code,
+          s.relationship_name,
+          s.qualification_lost_date,
           eec.source_mode,
           eec.case_status,
           eec.case_reason,
@@ -5029,6 +5046,8 @@ def load_exam_export_case_rows(
             ON latest.max_id = r1.id
         ) AS ecr
           ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN {qname(dev_db())}.subscribers AS s
+          ON s.id = eec.subscriber_id
         LEFT JOIN (
           SELECT
             exam_export_case_id,
@@ -9215,6 +9234,8 @@ def exam_export_cases(request: Request) -> Response:
         "insurance_number": request.query_params.get("insurance_number", ""),
         "hia_subscriber_id": request.query_params.get("hia_subscriber_id", ""),
         "subscriber_id": request.query_params.get("subscriber_id", ""),
+        "qualification_lost_status": request.query_params.get("qualification_lost_status", ""),
+        "qualification_lost_date": request.query_params.get("qualification_lost_date", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "limit": request.query_params.get("limit", "2000"),
         "page": request.query_params.get("page", "1"),

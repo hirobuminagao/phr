@@ -36,13 +36,16 @@
       {% if filters.insurance_number %}<span class="active-filter-chip">番号: {{ filters.insurance_number }}</span>{% endif %}
       {% if filters.hia_subscriber_id %}<span class="active-filter-chip">HIA ID: {{ filters.hia_subscriber_id }}</span>{% endif %}
       {% if filters.subscriber_id %}<span class="active-filter-chip">subscriber: {{ filters.subscriber_id }}</span>{% endif %}
+      {% if filters.qualification_lost_status == 'LOST' %}<span class="active-filter-chip">資格: 喪失あり</span>{% endif %}
+      {% if filters.qualification_lost_status == 'ACTIVE' %}<span class="active-filter-chip">資格: 喪失なし</span>{% endif %}
+      {% if filters.qualification_lost_date %}<span class="active-filter-chip">喪失日: {{ filters.qualification_lost_date }}</span>{% endif %}
       {% if filters.facility_q %}<span class="active-filter-chip">健診機関: {{ filters.facility_q }}</span>{% endif %}
       {% if filters.exam_month %}<span class="active-filter-chip">受診月: {{ filters.exam_month }}</span>{% endif %}
       {% if filters.legal_check_result %}<span class="active-filter-chip">法定: {{ filters.legal_check_result }}</span>{% endif %}
       {% if filters.specific_check_result %}<span class="active-filter-chip">特定健診: {{ check_result_label(filters.specific_check_result) or filters.specific_check_result }}</span>{% endif %}
       {% if filters.export_readiness_status %}<span class="active-filter-chip">出力: {{ filters.export_readiness_status }}</span>{% endif %}
       {% if filters.source_mode %}<span class="active-filter-chip">source: {{ filters.source_mode }}</span>{% endif %}
-      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.subscriber_id and not filters.facility_q and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
+      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.subscriber_id and not filters.qualification_lost_status and not filters.qualification_lost_date and not filters.facility_q and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
       <span class="active-filter-chip is-empty">条件なし</span>
       {% endif %}
     </div>
@@ -96,6 +99,18 @@
               <span>HIA ID</span>
               <input name="hia_subscriber_id" value="{{ filters.hia_subscriber_id or '' }}" autocomplete="off" placeholder="HIA加入者ID">
             </label>
+            <label>
+              <span>資格喪失日</span>
+              <input name="qualification_lost_date" value="{{ filters.qualification_lost_date or '' }}" autocomplete="off" placeholder="YYYY-MM-DD / YYYY-MM">
+            </label>
+            <fieldset class="filter-condition-block">
+              <legend>資格喪失</legend>
+              <div class="filter-toggle-group">
+                <button type="button" data-server-filter-toggle="qualification_lost_status" data-filter-value="LOST" class="{{ 'is-active' if filters.qualification_lost_status == 'LOST' else '' }}">喪失あり</button>
+                <button type="button" data-server-filter-toggle="qualification_lost_status" data-filter-value="ACTIVE" class="{{ 'is-active' if filters.qualification_lost_status == 'ACTIVE' else '' }}">喪失なし</button>
+              </div>
+              <input type="hidden" name="qualification_lost_status" value="{{ filters.qualification_lost_status }}" data-server-filter-value="qualification_lost_status">
+            </fieldset>
           </div>
         </section>
 
@@ -362,17 +377,18 @@
         </thead>
         <tbody>
           {% for row in rows %}
-          <tr data-filter-text="{{ row.exam_export_case_id }} {{ row.event_id }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }} {{ row.exam_date or '' }} {{ row.subscriber_match_status }} {{ row.legal_check_result }} {{ row.legal_reason_summary or '' }} {{ row.specific_check_result_display }} {{ check_result_label(row.specific_check_result_display) }} {{ row.specific_reason_summary or '' }} {{ row.export_readiness_status }} {{ row.export_readiness_reason or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }} {{ row.output_zip_file_name or '' }} {{ row.output_xml_file_name or '' }}">
+          <tr data-filter-text="{{ row.exam_export_case_id }} {{ row.event_id }} {{ row.hia_subscriber_id or '' }} {{ row.person_id_custom or '' }} {{ row.name_full_raw or '' }} {{ row.name_kana_raw or '' }} {{ row.facility_name or '' }} {{ row.facility_code or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }} {{ row.exam_date or '' }} {{ row.subscriber_match_status }} {{ row.relationship_name or '' }} {{ row.qualification_lost_date or '' }} {{ row.legal_check_result }} {{ row.legal_reason_summary or '' }} {{ row.specific_check_result_display }} {{ check_result_label(row.specific_check_result_display) }} {{ row.specific_reason_summary or '' }} {{ row.export_readiness_status }} {{ row.export_readiness_reason or '' }} {{ row.health_exam_report_category or '' }} {{ row.program_code or '' }} {{ row.output_zip_file_name or '' }} {{ row.output_xml_file_name or '' }}">
             <td>
               <strong>{{ row.exam_export_case_id }}</strong>
               <small>event {{ row.event_id }}</small>
               <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ row.exam_export_case_id }}">詳細</a>
             </td>
             <td>
-              <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
-              <small>{{ row.name_full_raw or "氏名なし" }}</small>
-              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
-            </td>
+	              <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
+	              <small>{{ row.name_full_raw or "氏名なし" }}</small>
+	              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
+	              <small>資格 {{ "喪失 " ~ row.qualification_lost_date if row.qualification_lost_date else "有効" }}{% if row.relationship_name %} / {{ row.relationship_name }}{% endif %}</small>
+	            </td>
             <td>
               <strong title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
               <small>{{ row.facility_code or "" }} / {{ row.exam_date or "受診日なし" }}</small>
