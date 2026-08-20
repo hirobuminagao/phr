@@ -93,6 +93,9 @@
         }
         const matched = keywordMatched && togglesMatched;
         row.hidden = !matched;
+        if (row.nextElementSibling?.classList.contains("nested-member-row")) {
+          row.nextElementSibling.hidden = !matched;
+        }
         if (matched) visibleCount += 1;
       }
       emptyRow.hidden = visibleCount !== 0;

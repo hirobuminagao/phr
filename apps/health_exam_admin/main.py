@@ -1140,6 +1140,50 @@ def hia_upload_status_label(status: str | None) -> str:
 templates.env.globals["hia_upload_status_label"] = hia_upload_status_label
 
 
+def external_feedback_status_label(status: str | None) -> str:
+    labels = {
+        "OPEN": "未対応",
+        "IN_PROGRESS": "対応中",
+        "RESOLVED": "解決済み",
+        "CLOSED": "クローズ",
+        "CANCELLED": "取消",
+        "CONFIRMED": "確認済み",
+        "FIX_PLANNED": "修正予定",
+        "WAITING_RESUBMISSION": "再提出待ち",
+        "RESUBMITTED": "再提出済み",
+        "WONT_FIX": "対応しない",
+    }
+    return labels.get(status or "", status or "")
+
+
+def external_feedback_source_label(source: str | None) -> str:
+    labels = {
+        "HIA_UPLOAD": "HIAアップロード",
+        "FUND_DELIVERY": "健保納品",
+        "EMPLOYER_DELIVERY": "事業所納品",
+        "MANUAL": "手動記帳",
+    }
+    return labels.get(source or "", source or "")
+
+
+def external_feedback_category_label(category: str | None) -> str:
+    labels = {
+        "SUBSCRIBER": "加入者",
+        "BASIC_INFO": "基本情報",
+        "EXAM_ITEM": "検査項目",
+        "XML_SCHEMA": "XMLスキーマ",
+        "UPLOAD": "アップロード",
+        "DELIVERY": "納品",
+        "OTHER": "その他",
+    }
+    return labels.get(category or "", category or "")
+
+
+templates.env.globals["external_feedback_status_label"] = external_feedback_status_label
+templates.env.globals["external_feedback_source_label"] = external_feedback_source_label
+templates.env.globals["external_feedback_category_label"] = external_feedback_category_label
+
+
 FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
 HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
 APP_DATA_DIR = REPO_ROOT / "data"
@@ -1455,7 +1499,10 @@ def load_hia_upload_zip_rows(cur: Any, *, limit: int = 80) -> list[dict[str, Any
         """,
         (limit,),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["zip_dir_path"] = parent_path_text(row.get("zip_path"))
+    return rows
 
 
 def load_hia_upload_member_rows(cur: Any, *, limit: int = 240) -> list[dict[str, Any]]:
@@ -1510,11 +1557,359 @@ def load_hia_upload_member_rows(cur: Any, *, limit: int = 240) -> list[dict[str,
 
 
 def load_hia_upload_page_data(cur: Any) -> dict[str, Any]:
+    zips = load_hia_upload_zip_rows(cur)
+    members = load_hia_upload_member_rows(cur)
+    members_by_zip: dict[int, list[dict[str, Any]]] = {}
+    for member in members:
+        zip_id = int(member.get("xml_export_zip_id") or 0)
+        members_by_zip.setdefault(zip_id, []).append(member)
     return {
         "summary": load_hia_upload_summary(cur),
-        "zips": load_hia_upload_zip_rows(cur),
-        "members": load_hia_upload_member_rows(cur),
+        "zips": zips,
+        "members": members,
+        "members_by_zip": members_by_zip,
     }
+
+
+def _optional_int(value: Any) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return int(text)
+
+
+def parent_path_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    separator_index = max(text.rfind("/"), text.rfind("\\"))
+    if separator_index <= 0:
+        return ""
+    return text[:separator_index]
+
+
+def load_external_feedback_summary(cur: Any) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS report_count,
+          SUM(CASE WHEN report_status IN ('OPEN', 'IN_PROGRESS') THEN 1 ELSE 0 END) AS active_report_count
+        FROM {qname(health_db())}.ops_external_feedback_reports
+        """
+    )
+    report_row = cur.fetchone() or {}
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS item_count,
+          SUM(CASE WHEN handling_status IN ('OPEN', 'CONFIRMED', 'FIX_PLANNED', 'WAITING_RESUBMISSION') THEN 1 ELSE 0 END) AS active_item_count,
+          SUM(CASE WHEN issue_level = 'ERROR' THEN 1 ELSE 0 END) AS error_item_count,
+          SUM(CASE WHEN exam_export_case_id IS NULL THEN 1 ELSE 0 END) AS unlinked_item_count
+        FROM {qname(health_db())}.ops_external_feedback_items
+        """
+    )
+    item_row = cur.fetchone() or {}
+    return {
+        "report_count": int(report_row.get("report_count") or 0),
+        "active_report_count": int(report_row.get("active_report_count") or 0),
+        "item_count": int(item_row.get("item_count") or 0),
+        "active_item_count": int(item_row.get("active_item_count") or 0),
+        "error_item_count": int(item_row.get("error_item_count") or 0),
+        "unlinked_item_count": int(item_row.get("unlinked_item_count") or 0),
+    }
+
+
+def load_external_feedback_report_rows(cur: Any, *, limit: int = 80) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          r.external_feedback_report_id,
+          r.event_id,
+          r.feedback_source,
+          r.feedback_scope,
+          r.report_status,
+          r.received_at,
+          r.received_from,
+          r.channel,
+          r.summary,
+          r.source_file_name,
+          r.xml_export_list_id,
+          xel.list_name AS xml_export_list_name,
+          r.xml_export_zip_id,
+          zez.zip_file_name AS xml_export_zip_name,
+          r.fund_delivery_list_id,
+          fdl.list_name AS fund_delivery_list_name,
+          r.fund_delivery_run_id,
+          fdr.output_zip_name AS fund_delivery_zip_name,
+          r.created_by,
+          r.created_at,
+          COUNT(i.external_feedback_item_id) AS item_count,
+          SUM(CASE WHEN i.handling_status IN ('OPEN', 'CONFIRMED', 'FIX_PLANNED', 'WAITING_RESUBMISSION') THEN 1 ELSE 0 END) AS active_item_count
+        FROM {qname(health_db())}.ops_external_feedback_reports AS r
+        LEFT JOIN {qname(health_db())}.ops_external_feedback_items AS i
+          ON i.external_feedback_report_id = r.external_feedback_report_id
+        LEFT JOIN {qname(health_db())}.ops_xml_export_lists AS xel
+          ON xel.xml_export_list_id = r.xml_export_list_id
+        LEFT JOIN {qname(health_db())}.xml_export_zips AS zez
+          ON zez.xml_export_zip_id = r.xml_export_zip_id
+        LEFT JOIN {qname(health_db())}.fund_delivery_lists AS fdl
+          ON fdl.delivery_list_id = r.fund_delivery_list_id
+        LEFT JOIN {qname(health_db())}.fund_delivery_runs AS fdr
+          ON fdr.delivery_run_id = r.fund_delivery_run_id
+        GROUP BY
+          r.external_feedback_report_id,
+          r.event_id,
+          r.feedback_source,
+          r.feedback_scope,
+          r.report_status,
+          r.received_at,
+          r.received_from,
+          r.channel,
+          r.summary,
+          r.source_file_name,
+          r.xml_export_list_id,
+          xel.list_name,
+          r.xml_export_zip_id,
+          zez.zip_file_name,
+          r.fund_delivery_list_id,
+          fdl.list_name,
+          r.fund_delivery_run_id,
+          fdr.output_zip_name,
+          r.created_by,
+          r.created_at
+        ORDER BY r.external_feedback_report_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_external_feedback_item_rows(cur: Any, *, limit: int = 240) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          i.external_feedback_item_id,
+          i.external_feedback_report_id,
+          r.feedback_source,
+          r.report_status,
+          i.event_id,
+          i.exam_export_case_id,
+          i.xml_export_member_id,
+          i.xml_export_zip_id,
+          i.fund_delivery_member_id,
+          i.issue_level,
+          i.issue_category,
+          i.handling_status,
+          i.external_error_code,
+          i.external_message,
+          i.namecode,
+          i.check_item_code,
+          i.source_xml_file_name,
+          i.source_zip_file_name,
+          i.reported_value,
+          i.resolution_note,
+          i.assigned_to,
+          i.resolved_at,
+          i.created_by,
+          i.created_at,
+          eec.name_kana_export_value,
+          eec.name_full_raw,
+          eec.hia_subscriber_id,
+          eec.exam_date,
+          ef.exam_facility_code,
+          ef.exam_facility_name AS facility_name
+        FROM {qname(health_db())}.ops_external_feedback_items AS i
+        JOIN {qname(health_db())}.ops_external_feedback_reports AS r
+          ON r.external_feedback_report_id = i.external_feedback_report_id
+        LEFT JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON eec.exam_export_case_id = i.exam_export_case_id
+        LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_id = eec.exam_facility_id
+        ORDER BY i.external_feedback_item_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_hia_upload_member_prefill(cur: Any, *, xml_export_member_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          zem.xml_export_member_id,
+          zem.xml_export_zip_id,
+          zez.xml_export_list_id,
+          zem.event_id,
+          zem.ledger_type,
+          zem.ledger_id,
+          zem.person_xml_file_name,
+          zem.hia_upload_error_code,
+          zem.hia_upload_error_message,
+          zem.hia_upload_note,
+          zez.zip_file_name,
+          zez.hia_upload_error_summary,
+          eec.exam_export_case_id
+        FROM {qname(health_db())}.xml_export_members AS zem
+        JOIN {qname(health_db())}.xml_export_zips AS zez
+          ON zez.xml_export_zip_id = zem.xml_export_zip_id
+        LEFT JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON zem.ledger_type = 'CASE'
+         AND zem.ledger_id = eec.exam_export_case_id
+        WHERE zem.xml_export_member_id = %s
+        """,
+        (xml_export_member_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_external_feedback_page_data(cur: Any, *, query_params: Mapping[str, Any]) -> dict[str, Any]:
+    prefill: dict[str, Any] = {
+        "feedback_source": str(query_params.get("feedback_source") or "HIA_UPLOAD"),
+        "feedback_scope": str(query_params.get("feedback_scope") or "CASE"),
+        "issue_level": str(query_params.get("issue_level") or "ERROR"),
+        "issue_category": str(query_params.get("issue_category") or "OTHER"),
+        "handling_status": str(query_params.get("handling_status") or "OPEN"),
+        "xml_export_member_id": str(query_params.get("xml_export_member_id") or ""),
+        "xml_export_zip_id": str(query_params.get("xml_export_zip_id") or ""),
+        "xml_export_list_id": str(query_params.get("xml_export_list_id") or ""),
+        "exam_export_case_id": str(query_params.get("exam_export_case_id") or ""),
+    }
+    if prefill["xml_export_member_id"]:
+        member = load_hia_upload_member_prefill(cur, xml_export_member_id=int(prefill["xml_export_member_id"]))
+        if member:
+            prefill.update(
+                {
+                    "event_id": str(member.get("event_id") or ""),
+                    "xml_export_zip_id": str(member.get("xml_export_zip_id") or ""),
+                    "xml_export_list_id": str(member.get("xml_export_list_id") or ""),
+                    "exam_export_case_id": str(member.get("exam_export_case_id") or ""),
+                    "source_xml_file_name": str(member.get("person_xml_file_name") or ""),
+                    "source_zip_file_name": str(member.get("zip_file_name") or ""),
+                    "external_error_code": str(member.get("hia_upload_error_code") or ""),
+                    "external_message": str(member.get("hia_upload_error_message") or member.get("hia_upload_error_summary") or ""),
+                    "resolution_note": str(member.get("hia_upload_note") or ""),
+                }
+            )
+    return {
+        "summary": load_external_feedback_summary(cur),
+        "reports": load_external_feedback_report_rows(cur),
+        "items": load_external_feedback_item_rows(cur),
+        "prefill": prefill,
+    }
+
+
+def create_external_feedback_from_form(cur: Any, *, form: Mapping[str, Any], user: dict[str, Any]) -> tuple[int, int]:
+    actor = fund_delivery_actor(user)
+    received_at_text = str(form.get("received_at") or "").strip()
+    received_at = received_at_text or None
+    event_id = _optional_int(form.get("event_id"))
+    xml_export_list_id = _optional_int(form.get("xml_export_list_id"))
+    xml_export_zip_id = _optional_int(form.get("xml_export_zip_id"))
+    xml_export_member_id = _optional_int(form.get("xml_export_member_id"))
+    exam_export_case_id = _optional_int(form.get("exam_export_case_id"))
+    fund_delivery_list_id = _optional_int(form.get("fund_delivery_list_id"))
+    fund_delivery_run_id = _optional_int(form.get("fund_delivery_run_id"))
+    fund_delivery_list_member_id = _optional_int(form.get("fund_delivery_list_member_id"))
+    fund_delivery_member_id = _optional_int(form.get("fund_delivery_member_id"))
+    if xml_export_member_id:
+        member = load_hia_upload_member_prefill(cur, xml_export_member_id=xml_export_member_id)
+        if member:
+            event_id = event_id or _optional_int(member.get("event_id"))
+            xml_export_zip_id = xml_export_zip_id or _optional_int(member.get("xml_export_zip_id"))
+            xml_export_list_id = xml_export_list_id or _optional_int(member.get("xml_export_list_id"))
+            exam_export_case_id = exam_export_case_id or _optional_int(member.get("exam_export_case_id"))
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_reports (
+          event_id, feedback_source, feedback_scope, report_status,
+          received_at, received_from, channel, summary,
+          source_file_name, source_file_path,
+          xml_export_list_id, xml_export_zip_id,
+          fund_delivery_list_id, fund_delivery_run_id,
+          created_by, updated_by
+        )
+        VALUES (%s, %s, %s, 'OPEN', %s, NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''),
+                NULLIF(%s, ''), NULLIF(%s, ''), %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            event_id,
+            str(form.get("feedback_source") or "HIA_UPLOAD"),
+            str(form.get("feedback_scope") or "CASE"),
+            received_at,
+            str(form.get("received_from") or ""),
+            str(form.get("channel") or ""),
+            str(form.get("summary") or ""),
+            str(form.get("source_file_name") or ""),
+            str(form.get("source_file_path") or ""),
+            xml_export_list_id,
+            xml_export_zip_id,
+            fund_delivery_list_id,
+            fund_delivery_run_id,
+            actor,
+            actor,
+        ),
+    )
+    report_id = int(cur.lastrowid)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_items (
+          external_feedback_report_id, event_id, exam_export_case_id,
+          xml_export_list_case_id, xml_export_member_id, xml_export_zip_id,
+          fund_delivery_list_member_id, fund_delivery_member_id,
+          issue_level, issue_category, handling_status,
+          external_error_code, external_message, namecode, check_item_code,
+          source_xml_file_name, source_zip_file_name, reported_value,
+          resolution_note, assigned_to, created_by, updated_by
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''),
+                NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''),
+                NULLIF(%s, ''), NULLIF(%s, ''), %s, %s)
+        """,
+        (
+            report_id,
+            event_id,
+            exam_export_case_id,
+            _optional_int(form.get("xml_export_list_case_id")),
+            xml_export_member_id,
+            xml_export_zip_id,
+            fund_delivery_list_member_id,
+            fund_delivery_member_id,
+            str(form.get("issue_level") or "ERROR"),
+            str(form.get("issue_category") or "OTHER"),
+            str(form.get("handling_status") or "OPEN"),
+            str(form.get("external_error_code") or ""),
+            str(form.get("external_message") or ""),
+            str(form.get("namecode") or ""),
+            str(form.get("check_item_code") or ""),
+            str(form.get("source_xml_file_name") or ""),
+            str(form.get("source_zip_file_name") or ""),
+            str(form.get("reported_value") or ""),
+            str(form.get("resolution_note") or ""),
+            str(form.get("assigned_to") or ""),
+            actor,
+            actor,
+        ),
+    )
+    item_id = int(cur.lastrowid)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_item_audit_logs (
+          external_feedback_item_id, action_type, after_status, after_json, changed_by
+        )
+        VALUES (%s, 'CREATE', %s, %s, %s)
+        """,
+        (
+            item_id,
+            str(form.get("handling_status") or "OPEN"),
+            json.dumps({"report_id": report_id, "item_id": item_id}, ensure_ascii=False),
+            actor,
+        ),
+    )
+    return report_id, item_id
 
 
 def build_hia_download_import_config(raw: dict[str, Any]) -> HiaDownloadImportConfig:
@@ -6741,6 +7136,62 @@ def hia_upload_work(request: Request) -> Response:
     )
 
 
+@app.get("/external-feedback", response_class=HTMLResponse)
+def external_feedback_work(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        page_data = load_external_feedback_page_data(cur, query_params=request.query_params)
+    return templates.TemplateResponse(
+        "external_feedback.html",
+        {
+            "request": request,
+            "user": user,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+            "can_edit": has_any_permission(user, ("hia_upload_status.edit", "users.manage")),
+            **page_data,
+        },
+    )
+
+
+@app.post("/external-feedback", response_class=HTMLResponse)
+async def create_external_feedback(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            report_id, item_id = create_external_feedback_from_form(cur, form=form, user=user)
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback?error={quote(str(exc))}", status_code=303)
+    log_app_operation(
+        request=request,
+        user=user,
+        action_code="EXTERNAL_FEEDBACK_CREATE",
+        target_schema=health_db(),
+        target_table="ops_external_feedback_items",
+        target_id=str(item_id),
+        after={"external_feedback_report_id": report_id, "external_feedback_item_id": item_id},
+    )
+    return RedirectResponse(
+        f"/external-feedback?message={quote(f'外部指摘を登録しました。report={report_id} item={item_id}')}",
+        status_code=303,
+    )
+
+
 @app.get("/hia/xml-zip-check", response_class=HTMLResponse)
 def hia_xml_zip_check(request: Request) -> Response:
     user = require_user(request)
@@ -7128,18 +7579,46 @@ async def update_hia_upload_zip_status(request: Request, xml_export_zip_id: int)
                 """,
                 (target_status, target_status, target_status, actor, actor, error_summary, note, xml_export_zip_id),
             )
-            if target_status == "UPLOADED":
-                cur.execute(
-                    f"""
-                    UPDATE {qname(health_db())}.xml_export_members
-                       SET hia_upload_status = 'UPLOADED',
-                           hia_uploaded_at = CURRENT_TIMESTAMP(3),
-                           hia_uploaded_by = %s
-                     WHERE xml_export_zip_id = %s
-                       AND hia_upload_status IN ('PENDING', 'UPLOADED')
-                    """,
-                    (actor, xml_export_zip_id),
-                )
+            member_status = {
+                "UPLOADED": "UPLOADED",
+                "CONFIRMED": "UPLOADED",
+                "UPLOAD_ERROR": "UPLOAD_ERROR",
+                "PARTIAL": "UPLOAD_ERROR",
+                "PENDING": "PENDING",
+            }[target_status]
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db())}.xml_export_members
+                   SET hia_upload_status = %s,
+                       hia_upload_error_code = CASE
+                         WHEN %s IN ('UPLOAD_ERROR', 'PARTIAL') THEN 'ZIP_STATUS'
+                         WHEN %s = 'PENDING' THEN NULL
+                         ELSE hia_upload_error_code
+                       END,
+                       hia_upload_error_message = CASE
+                         WHEN %s IN ('UPLOAD_ERROR', 'PARTIAL') THEN NULLIF(%s, '')
+                         WHEN %s = 'PENDING' THEN NULL
+                         ELSE hia_upload_error_message
+                       END,
+                       hia_upload_note = NULLIF(%s, ''),
+                       hia_uploaded_at = CASE WHEN %s = 'UPLOADED' THEN CURRENT_TIMESTAMP(3) ELSE hia_uploaded_at END,
+                       hia_uploaded_by = CASE WHEN %s = 'UPLOADED' THEN %s ELSE hia_uploaded_by END
+                 WHERE xml_export_zip_id = %s
+                """,
+                (
+                    member_status,
+                    target_status,
+                    target_status,
+                    target_status,
+                    error_summary,
+                    target_status,
+                    note,
+                    member_status,
+                    member_status,
+                    actor,
+                    xml_export_zip_id,
+                ),
+            )
             conn.commit()
         except Exception as exc:
             conn.rollback()

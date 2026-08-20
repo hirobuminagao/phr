@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% set title = "外部指摘・エラー記帳" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">External Feedback</p>
+    <h1>外部指摘・エラー記帳</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/hia/upload-work">HIAアップロード</a>
+    <a class="ghost-button" href="/hia/fund-delivery">健保納品</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page export-page">
+  {% if message %}
+    <div class="notice">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="summary-grid">
+    <div class="summary-card"><span>受領単位</span><strong>{{ summary.report_count }}</strong><small>HIA/健保/事業所</small></div>
+    <div class="summary-card"><span>対応中受領</span><strong>{{ summary.active_report_count }}</strong><small>OPEN/対応中</small></div>
+    <div class="summary-card"><span>指摘明細</span><strong>{{ summary.item_count }}</strong><small>case/ZIP/XML</small></div>
+    <div class="summary-card"><span>対応中明細</span><strong>{{ summary.active_item_count }}</strong><small>未解決</small></div>
+    <div class="summary-card"><span>case未紐付</span><strong>{{ summary.unlinked_item_count }}</strong><small>ZIP全体など</small></div>
+  </section>
+
+  {% if can_edit %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>指摘を登録</h2>
+        <p class="subtle">外部から来た指摘を受領単位と明細1件で登録します。HIAアップロード画面から来た場合はZIP/member/caseを自動補完します。</p>
+      </div>
+    </div>
+    <form method="post" action="/external-feedback" class="stack-form">
+      <div class="form-grid">
+        <label>
+          <span>指摘元</span>
+          <select name="feedback_source">
+            {% set feedback_source = prefill.feedback_source or "HIA_UPLOAD" %}
+            <option value="HIA_UPLOAD" {% if feedback_source == "HIA_UPLOAD" %}selected{% endif %}>HIAアップロード</option>
+            <option value="FUND_DELIVERY" {% if feedback_source == "FUND_DELIVERY" %}selected{% endif %}>健保納品</option>
+            <option value="EMPLOYER_DELIVERY" {% if feedback_source == "EMPLOYER_DELIVERY" %}selected{% endif %}>事業所納品</option>
+            <option value="MANUAL" {% if feedback_source == "MANUAL" %}selected{% endif %}>手動記帳</option>
+          </select>
+        </label>
+        <label>
+          <span>対象単位</span>
+          <select name="feedback_scope">
+            {% set feedback_scope = prefill.feedback_scope or "CASE" %}
+            <option value="CASE" {% if feedback_scope == "CASE" %}selected{% endif %}>case</option>
+            <option value="XML" {% if feedback_scope == "XML" %}selected{% endif %}>個人XML</option>
+            <option value="ZIP" {% if feedback_scope == "ZIP" %}selected{% endif %}>ZIP</option>
+            <option value="OUTPUT_LIST" {% if feedback_scope == "OUTPUT_LIST" %}selected{% endif %}>出力リスト</option>
+            <option value="OTHER" {% if feedback_scope == "OTHER" %}selected{% endif %}>その他</option>
+          </select>
+        </label>
+        <label>
+          <span>受領日時</span>
+          <input name="received_at" placeholder="YYYY-MM-DD hh:mm:ss">
+        </label>
+        <label>
+          <span>受領元</span>
+          <input name="received_from" placeholder="HIA / 健保担当 / 事業所">
+        </label>
+        <label>
+          <span>チャネル</span>
+          <input name="channel" placeholder="MAIL / WEB / PHONE">
+        </label>
+        <label>
+          <span>event</span>
+          <input name="event_id" value="{{ prefill.event_id or '' }}" inputmode="numeric">
+        </label>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>出力リストID</span>
+          <input name="xml_export_list_id" value="{{ prefill.xml_export_list_id or '' }}" inputmode="numeric">
+        </label>
+        <label>
+          <span>HIA ZIP ID</span>
+          <input name="xml_export_zip_id" value="{{ prefill.xml_export_zip_id or '' }}" inputmode="numeric">
+        </label>
+        <label>
+          <span>HIA member ID</span>
+          <input name="xml_export_member_id" value="{{ prefill.xml_export_member_id or '' }}" inputmode="numeric">
+        </label>
+        <label>
+          <span>case ID</span>
+          <input name="exam_export_case_id" value="{{ prefill.exam_export_case_id or '' }}" inputmode="numeric">
+        </label>
+        <label>
+          <span>健保納品list ID</span>
+          <input name="fund_delivery_list_id" inputmode="numeric">
+        </label>
+        <label>
+          <span>健保納品run ID</span>
+          <input name="fund_delivery_run_id" inputmode="numeric">
+        </label>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>重要度</span>
+          <select name="issue_level">
+            {% set issue_level = prefill.issue_level or "ERROR" %}
+            <option value="ERROR" {% if issue_level == "ERROR" %}selected{% endif %}>エラー</option>
+            <option value="WARNING" {% if issue_level == "WARNING" %}selected{% endif %}>警告</option>
+            <option value="INFO" {% if issue_level == "INFO" %}selected{% endif %}>情報</option>
+          </select>
+        </label>
+        <label>
+          <span>区分</span>
+          <select name="issue_category">
+            {% set issue_category = prefill.issue_category or "OTHER" %}
+            <option value="SUBSCRIBER" {% if issue_category == "SUBSCRIBER" %}selected{% endif %}>加入者</option>
+            <option value="BASIC_INFO" {% if issue_category == "BASIC_INFO" %}selected{% endif %}>基本情報</option>
+            <option value="EXAM_ITEM" {% if issue_category == "EXAM_ITEM" %}selected{% endif %}>検査項目</option>
+            <option value="XML_SCHEMA" {% if issue_category == "XML_SCHEMA" %}selected{% endif %}>XMLスキーマ</option>
+            <option value="UPLOAD" {% if issue_category == "UPLOAD" %}selected{% endif %}>アップロード</option>
+            <option value="DELIVERY" {% if issue_category == "DELIVERY" %}selected{% endif %}>納品</option>
+            <option value="OTHER" {% if issue_category == "OTHER" %}selected{% endif %}>その他</option>
+          </select>
+        </label>
+        <label>
+          <span>状態</span>
+          <select name="handling_status">
+            {% set handling_status = prefill.handling_status or "OPEN" %}
+            <option value="OPEN" {% if handling_status == "OPEN" %}selected{% endif %}>未対応</option>
+            <option value="CONFIRMED" {% if handling_status == "CONFIRMED" %}selected{% endif %}>確認済み</option>
+            <option value="FIX_PLANNED" {% if handling_status == "FIX_PLANNED" %}selected{% endif %}>修正予定</option>
+            <option value="WAITING_RESUBMISSION" {% if handling_status == "WAITING_RESUBMISSION" %}selected{% endif %}>再提出待ち</option>
+            <option value="RESUBMITTED" {% if handling_status == "RESUBMITTED" %}selected{% endif %}>再提出済み</option>
+            <option value="RESOLVED" {% if handling_status == "RESOLVED" %}selected{% endif %}>解決済み</option>
+            <option value="WONT_FIX" {% if handling_status == "WONT_FIX" %}selected{% endif %}>対応しない</option>
+          </select>
+        </label>
+        <label>
+          <span>外部エラーコード</span>
+          <input name="external_error_code" value="{{ prefill.external_error_code or '' }}">
+        </label>
+        <label>
+          <span>namecode</span>
+          <input name="namecode">
+        </label>
+        <label>
+          <span>業務チェックID</span>
+          <input name="check_item_code" placeholder="440... / 100...">
+        </label>
+      </div>
+
+      <div class="form-grid two-column-form-grid">
+        <label>
+          <span>XMLファイル名</span>
+          <input name="source_xml_file_name" value="{{ prefill.source_xml_file_name or '' }}">
+        </label>
+        <label>
+          <span>ZIPファイル名</span>
+          <input name="source_zip_file_name" value="{{ prefill.source_zip_file_name or '' }}">
+        </label>
+      </div>
+      <label>
+        <span>受領単位メモ</span>
+        <textarea name="summary" rows="2" placeholder="メールや画面上の指摘全体の要約"></textarea>
+      </label>
+      <label>
+        <span>指摘内容</span>
+        <textarea name="external_message" rows="3" placeholder="HIA/健保から返ってきたエラー内容">{{ prefill.external_message or "" }}</textarea>
+      </label>
+      <label>
+        <span>対応メモ</span>
+        <textarea name="resolution_note" rows="2" placeholder="対応方針、健診機関確認、再提出予定など">{{ prefill.resolution_note or "" }}</textarea>
+      </label>
+      <input type="hidden" name="source_file_name" value="">
+      <input type="hidden" name="source_file_path" value="">
+      <input type="hidden" name="xml_export_list_case_id" value="">
+      <input type="hidden" name="fund_delivery_list_member_id" value="">
+      <input type="hidden" name="fund_delivery_member_id" value="">
+      <div class="action-row">
+        <button type="submit">外部指摘を登録</button>
+      </div>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">受領単位と明細を画面内で絞り込みます。</p>
+      </div>
+    </div>
+    <div class="fund-filter-grid">
+      <label>
+        <span>受領単位</span>
+        <input data-live-filter-input="#external-feedback-report-table" autocomplete="off" placeholder="HIA / 健保 / ZIP / 状態 / メモ">
+      </label>
+      <label>
+        <span>指摘明細</span>
+        <input data-live-filter-input="#external-feedback-item-table" autocomplete="off" placeholder="case / HIA ID / 健診機関 / namecode / エラー内容">
+      </label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>受領単位</h2>
+        <p class="subtle">HIA、健保、事業所などから来た指摘のまとまりです。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ reports|length }}件</span>
+    </div>
+    <div class="table-panel">
+      <table id="external-feedback-report-table" class="data-table" data-empty-message="表示中の受領単位に一致するものはありません。">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>指摘元</th>
+            <th>状態</th>
+            <th>関連</th>
+            <th>件数</th>
+            <th>内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for report in reports %}
+          <tr data-filter-text="{{ report.external_feedback_report_id }} {{ report.feedback_source }} {{ report.feedback_scope }} {{ report.report_status }} {{ report.received_from or '' }} {{ report.summary or '' }} {{ report.source_file_name or '' }} {{ report.xml_export_list_name or '' }} {{ report.xml_export_zip_name or '' }} {{ report.fund_delivery_list_name or '' }} {{ report.fund_delivery_zip_name or '' }}">
+            <td><strong>{{ report.external_feedback_report_id }}</strong><small>{{ report.received_at or report.created_at }}</small></td>
+            <td><strong>{{ external_feedback_source_label(report.feedback_source) }}</strong><small>{{ report.feedback_scope }}</small></td>
+            <td><span class="status-pill {{ 'status-ready' if report.report_status in ['RESOLVED', 'CLOSED'] else 'status-pending' if report.report_status == 'IN_PROGRESS' else 'status-danger' if report.report_status == 'OPEN' else 'status-muted' }}">{{ external_feedback_status_label(report.report_status) }}</span></td>
+            <td>
+              <small>出力リスト {{ report.xml_export_list_id or "-" }} {{ report.xml_export_list_name or "" }}</small>
+              <small>HIA ZIP {{ report.xml_export_zip_id or "-" }} {{ report.xml_export_zip_name or "" }}</small>
+              <small>健保 {{ report.fund_delivery_list_id or "-" }} / run {{ report.fund_delivery_run_id or "-" }}</small>
+            </td>
+            <td><strong>{{ report.item_count or 0 }}</strong><small>対応中 {{ report.active_item_count or 0 }}</small></td>
+            <td><strong>{{ report.summary or "-" }}</strong><small>{{ report.received_from or "" }} {{ report.channel or "" }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">外部指摘はまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>指摘明細</h2>
+        <p class="subtle">対応単位です。caseに紐づくものはcase詳細から修正・確認へ進みます。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ items|length }}件</span>
+    </div>
+    <div class="table-panel">
+      <table id="external-feedback-item-table" class="data-table" data-empty-message="表示中の指摘明細に一致するものはありません。">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>対象</th>
+            <th>区分</th>
+            <th>状態</th>
+            <th>内容</th>
+            <th>対応</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr data-filter-text="{{ item.external_feedback_item_id }} {{ item.external_feedback_report_id }} {{ item.feedback_source }} {{ item.handling_status }} {{ item.issue_category }} {{ item.issue_level }} {{ item.external_error_code or '' }} {{ item.external_message or '' }} {{ item.namecode or '' }} {{ item.check_item_code or '' }} {{ item.exam_export_case_id or '' }} {{ item.hia_subscriber_id or '' }} {{ item.name_kana_export_value or '' }} {{ item.name_full_raw or '' }} {{ item.facility_name or '' }} {{ item.source_xml_file_name or '' }} {{ item.source_zip_file_name or '' }}">
+            <td><strong>{{ item.external_feedback_item_id }}</strong><small>report {{ item.external_feedback_report_id }}</small></td>
+            <td>
+              <strong>{{ item.name_kana_export_value or item.name_full_raw or "-" }}</strong>
+              <small>case {{ item.exam_export_case_id or "-" }} / HIA {{ item.hia_subscriber_id or "-" }}</small>
+              <small>{{ item.facility_name or "-" }} / {{ item.exam_date or "-" }}</small>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-danger' if item.issue_level == 'ERROR' else 'status-pending' if item.issue_level == 'WARNING' else 'status-muted' }}">{{ item.issue_level }}</span>
+              <small>{{ external_feedback_category_label(item.issue_category) }}</small>
+              <small>{{ item.namecode or item.check_item_code or "" }}</small>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if item.handling_status in ['RESOLVED', 'RESUBMITTED'] else 'status-pending' if item.handling_status in ['CONFIRMED', 'FIX_PLANNED', 'WAITING_RESUBMISSION'] else 'status-danger' if item.handling_status == 'OPEN' else 'status-muted' }}">{{ external_feedback_status_label(item.handling_status) }}</span>
+              <small>{{ item.assigned_to or "" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.external_error_code or "-" }}</strong>
+              <small>{{ item.external_message or "-" }}</small>
+              <small>{{ item.source_zip_file_name or "" }} {{ item.source_xml_file_name or "" }}</small>
+            </td>
+            <td>
+              {% if item.exam_export_case_id %}
+                <a class="ghost-button" href="/exam-export-cases/{{ item.exam_export_case_id }}">case</a>
+              {% else %}
+                <span class="status-pill status-muted">case未紐付</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">指摘明細はまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
