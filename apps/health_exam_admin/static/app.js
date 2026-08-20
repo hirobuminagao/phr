@@ -496,8 +496,13 @@
     for (const button of document.querySelectorAll("[data-ledger-facility-select]")) {
       const code = String(button.getAttribute("data-facility-code") || "").trim();
       const added = code && values.has(code);
-      button.textContent = added ? "追加済み" : "追加";
-      button.disabled = Boolean(added);
+      button.textContent = added ? "解除" : "追加";
+      button.classList.toggle("is-active", Boolean(added));
+      button.disabled = false;
+    }
+    for (const row of document.querySelectorAll("[data-ledger-facility-row]")) {
+      const code = String(row.getAttribute("data-facility-code") || "").trim();
+      row.classList.toggle("is-selected", Boolean(code && values.has(code)));
     }
   };
   const selectLedgerFacility = (element) => {
@@ -505,7 +510,9 @@
     const code = String(element.getAttribute("data-facility-code") || "").trim();
     if (!code) return;
     const values = ledgerFacilityValues();
-    if (!values.includes(code)) {
+    if (values.includes(code)) {
+      ledgerFacilityInput.value = values.filter((value) => value !== code).join(", ");
+    } else {
       values.push(code);
       ledgerFacilityInput.value = values.join(", ");
     }

@@ -217,6 +217,12 @@ button[type="submit"]:disabled {
   font-weight: 700;
 }
 
+.ghost-button.is-active {
+  border-color: var(--accent);
+  background: #e7f7f1;
+  color: var(--accent-dark);
+}
+
 .alert {
   margin-top: 20px;
   padding: 12px 14px;
@@ -1674,6 +1680,14 @@ a.home-menu-card:hover {
 
 .clickable-table-row:hover td {
   background: #f4f9fc;
+}
+
+.clickable-table-row.is-selected td {
+  background: #e7f7f1;
+}
+
+.clickable-table-row.is-selected:hover td {
+  background: #d9f1e8;
 }
 
 .facility-summary-table {
