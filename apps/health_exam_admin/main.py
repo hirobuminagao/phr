@@ -1625,6 +1625,13 @@ templates.env.globals["person_selection_status_label"] = lambda status: PERSON_S
 )
 
 
+def event_insurer_number_from_options(events: list[Mapping[str, Any]], event_id: int) -> str:
+    for event in events:
+        if int(event.get("event_id") or 0) == event_id:
+            return str(event.get("insurer_number") or "").strip()
+    return ""
+
+
 def split_person_selection_line(line: str, *, delimiter: str, custom_delimiter: str = "") -> list[str]:
     if delimiter == "tab":
         return line.split("\t")
@@ -1853,7 +1860,7 @@ def search_person_selection_subscribers(
     parsed = row.get("parsed", {}) if isinstance(row.get("parsed"), Mapping) else {}
     where_parts: list[str] = []
     params: list[Any] = []
-    matched_by = ""
+    matched_parts: list[str] = []
     subscriber_id = str(parsed.get("subscriber_id") or "").strip()
     case_id = str(parsed.get("case_id") or "").strip()
     if case_id:
@@ -1861,28 +1868,46 @@ def search_person_selection_subscribers(
     if subscriber_id.isdigit():
         where_parts.append("s.id = %s")
         params.append(int(subscriber_id))
-        matched_by = "subscriber_id"
+        matched_parts.append("subscriber_id")
     elif str(parsed.get("hia_subscriber_id") or "").strip():
         where_parts.append("s.hia_subscriber_id = %s")
         params.append(str(parsed.get("hia_subscriber_id")).strip())
-        matched_by = "hia_subscriber_id"
+        matched_parts.append("hia_subscriber_id")
     elif str(parsed.get("employee_code") or "").strip():
         where_parts.append("s.employee_code = %s")
         params.append(str(parsed.get("employee_code")).strip())
-        matched_by = "employee_code"
-    elif normalized.get("identity_hash"):
-        where_parts.append("s.identity_hash = %s")
-        params.append(normalized.get("identity_hash"))
-        matched_by = "identity_hash"
-    elif normalized.get("person_id_custom"):
-        where_parts.append("s.person_id_custom = %s")
-        params.append(normalized.get("person_id_custom"))
-        matched_by = "person_id_custom"
-    elif normalized.get("birthdate") and normalized.get("name_kana"):
-        where_parts.append("s.birth = %s AND s.name_kana_full_match = %s")
-        params.extend([normalized.get("birthdate"), normalized.get("name_kana")])
-        matched_by = "birthdate_name_kana"
+        matched_parts.append("employee_code")
     else:
+        if normalized.get("insurance_symbol"):
+            where_parts.append("(s.insurance_symbol_match = %s OR s.insurance_symbol = %s)")
+            params.extend([normalized.get("insurance_symbol"), normalized.get("insurance_symbol")])
+            matched_parts.append("記号")
+        if normalized.get("insurance_number"):
+            where_parts.append("(s.insurance_number_match = %s OR s.insurance_number = %s)")
+            params.extend([normalized.get("insurance_number"), normalized.get("insurance_number")])
+            matched_parts.append("番号")
+        if normalized.get("name_kana"):
+            where_parts.append("s.name_kana_full_match LIKE %s")
+            params.append(f"%{normalized.get('name_kana')}%")
+            matched_parts.append("氏名カナ")
+        if normalized.get("birthdate"):
+            where_parts.append("s.birth = %s")
+            params.append(normalized.get("birthdate"))
+            matched_parts.append("生年月日")
+        if normalized.get("gender"):
+            where_parts.append("s.gender_code = %s")
+            params.append(normalized.get("gender"))
+            matched_parts.append("性別")
+        if not where_parts and normalized.get("identity_hash"):
+            where_parts.append("s.identity_hash = %s")
+            params.append(normalized.get("identity_hash"))
+            matched_parts.append("identity_hash")
+        elif not where_parts and normalized.get("person_id_custom"):
+            where_parts.append("s.person_id_custom = %s")
+            params.append(normalized.get("person_id_custom"))
+            matched_parts.append("person_id_custom")
+
+    if not where_parts:
         return [], ""
 
     cur.execute(
@@ -1933,9 +1958,9 @@ def search_person_selection_subscribers(
         ORDER BY event_case_count DESC, s.id DESC
         LIMIT %s
         """,
-        (event_id, *params, limit),
-    )
-    return [dict(item) for item in cur.fetchall()], matched_by
+	        (event_id, *params, limit),
+	    )
+    return [dict(item) for item in cur.fetchall()], "+".join(matched_parts)
 
 
 def resolve_person_selection_rows(cur: Any, *, event_id: int, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -7608,6 +7633,7 @@ def person_selection_utility(request: Request) -> Response:
         cur = dict_cursor(conn)
         events = load_event_options(cur)
     default_event_id = str(events[0]["event_id"]) if events else "2"
+    default_insurer_number = event_insurer_number_from_options(events, int(default_event_id))
     return templates.TemplateResponse(
         "person_selection_utility.html",
         {
@@ -7618,7 +7644,7 @@ def person_selection_utility(request: Request) -> Response:
             "form": {
                 "input_mode": "bulk",
                 "event_id": default_event_id,
-                "fixed_insurer_number": "",
+                "fixed_insurer_number": default_insurer_number,
                 "delimiter": "tab",
                 "custom_delimiter": "",
                 "has_header": "0",
@@ -7656,9 +7682,14 @@ async def resolve_person_selection_utility(request: Request) -> Response:
     raw_text = str(form.get("raw_text") or "")
     delimiter = str(form.get("delimiter") or "tab")
     custom_delimiter = str(form.get("custom_delimiter") or "")
-    fixed_insurer_number = str(form.get("fixed_insurer_number") or "").strip()
+    requested_fixed_insurer_number = str(form.get("fixed_insurer_number") or "").strip()
     has_header = str(form.get("has_header") or "") == "1"
     columns = [str(form.get(f"col_{index}") or "unused") for index in range(12)]
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        fixed_insurer_number = event_insurer_number_from_options(events, event_id) or requested_fixed_insurer_number
     if input_mode == "single":
         rows = build_person_selection_single_row(form=form, fixed_insurer_number=fixed_insurer_number)
     else:
@@ -7670,10 +7701,8 @@ async def resolve_person_selection_utility(request: Request) -> Response:
             column_map=columns,
             fixed_insurer_number=fixed_insurer_number,
         )
-    params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
-        events = load_event_options(cur)
         rows = resolve_person_selection_rows(cur, event_id=event_id, rows=rows)
     summary: dict[str, int] = {}
     for row in rows:

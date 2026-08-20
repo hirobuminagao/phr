@@ -46,10 +46,10 @@
             {% endfor %}
           </select>
         </label>
-        <label>
-          <span>固定保険者番号</span>
-          <input name="fixed_insurer_number" value="{{ form.fixed_insurer_number or '' }}" placeholder="貼り付け列にない場合だけ使用">
-        </label>
+	        <label>
+	          <span>event保険者番号</span>
+	          <input name="fixed_insurer_number" value="{{ form.fixed_insurer_number or '' }}" placeholder="選択eventの保険者番号を使用">
+	        </label>
         <label>
           <span>区切り文字</span>
           <select name="delimiter">
