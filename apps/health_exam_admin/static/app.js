@@ -213,6 +213,48 @@
     }
   }
 
+  const normalizeDateInputValue = (raw) => {
+    const text = String(raw || "").trim();
+    if (!text) return "";
+    const digits = text.replace(/[^\d]/g, "");
+    if (digits.length !== 8) return text;
+    const year = Number(digits.slice(0, 4));
+    const month = Number(digits.slice(4, 6));
+    const day = Number(digits.slice(6, 8));
+    const date = new Date(year, month - 1, day);
+    if (
+      date.getFullYear() !== year
+      || date.getMonth() !== month - 1
+      || date.getDate() !== day
+    ) {
+      return text;
+    }
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  };
+
+  for (const input of document.querySelectorAll("input[data-date-normalize='true']")) {
+    const toTextInput = () => {
+      input.type = "text";
+      input.value = normalizeDateInputValue(input.value);
+    };
+    input.value = normalizeDateInputValue(input.value);
+    input.inputMode = "numeric";
+    input.autocomplete = "off";
+    input.addEventListener("focus", () => {
+      input.value = normalizeDateInputValue(input.value);
+      input.type = "date";
+      if (typeof input.showPicker === "function") {
+        try {
+          input.showPicker();
+        } catch {
+          // Some browsers only allow showPicker from a direct user gesture.
+        }
+      }
+    });
+    input.addEventListener("blur", toTextInput);
+    input.addEventListener("change", toTextInput);
+  }
+
   const closeHelpPopovers = (exceptId = "") => {
     for (const popover of document.querySelectorAll(".help-popover")) {
       if (popover.classList.contains("hover-help-popover")) continue;

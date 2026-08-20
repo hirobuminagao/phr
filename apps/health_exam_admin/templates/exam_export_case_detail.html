@@ -83,62 +83,81 @@
       <div><span>value build</span><strong>{{ case.value_build_status }}</strong><small>{{ case.value_build_reason or "" }}</small></div>
       <div class="detail-grid-wide"><span>出力可否理由</span><strong>{{ case.export_readiness_reason or "-" }}</strong><small>変更後は健診結果処理の step5〜7 を再実行してください。</small></div>
     </div>
+  </section>
 
-    <div class="basic-info-correction-panel">
-      <div class="section-heading compact-heading">
-        <div>
-          <h3>基本情報補正</h3>
-          <p class="subtle">氏名カナ・記号・番号・保険者番号・郵便番号・住所をcase単位で補正します。保存すると出力用のcase値へ即時反映し、理由と履歴を残します。</p>
+  <section class="panel basic-info-correction-panel">
+    <details class="basic-info-correction-accordion">
+      <summary>
+        <span>
+          <strong>基本情報補正</strong>
+          <small>健診実施日・受診券・氏名カナ・記号番号・郵便番号・住所などをcase単位で補正します。</small>
+        </span>
+        <span class="summary-action">補正する</span>
+      </summary>
+      <div class="basic-info-correction-body">
+        <div class="section-heading compact-heading">
+          <div>
+            <h3>基本情報補正</h3>
+            <p class="subtle">保存すると出力用のcase値へ即時反映し、理由と履歴を残します。変更後は健診結果処理の step5〜7 を再実行してください。</p>
+          </div>
+        </div>
+        <div class="table-panel">
+          <table class="data-table compact-table basic-info-correction-table">
+            <thead>
+              <tr>
+                <th>項目</th>
+                <th>現在の出力値</th>
+                <th>補正状態</th>
+                <th>変更</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in basic_info_correction_rows %}
+              {% set correction = row.correction %}
+              <tr class="{{ 'is-corrected-row' if row.has_active_correction else '' }}">
+                <td>
+                  <strong>{{ row.label }}</strong>
+                  <small>{{ row.field_code }}</small>
+                </td>
+                <td>
+                  <strong>{{ row.current_value or "-" }}</strong>
+                  {% if row.has_active_correction %}
+                  <small>補正値: {{ correction.normalized_value or "-" }}</small>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="status-pill {{ 'status-ready' if row.has_active_correction else 'status-muted' }}">{{ "補正中" if row.has_active_correction else "未補正" }}</span>
+                  {% if correction %}
+                  <small>{{ correction.correction_reason or "" }}</small>
+                  <small>{{ correction.corrected_at or "" }} / user {{ correction.corrected_by_app_user_id or "-" }}</small>
+                  {% endif %}
+                </td>
+                <td>
+                  <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/basic-info-correction" class="basic-info-correction-form">
+                    <input type="hidden" name="field_code" value="{{ row.field_code }}">
+                    <input
+                      name="corrected_value"
+                      value="{{ correction.corrected_value or row.current_value or '' }}"
+                      placeholder="{{ 'YYYY-MM-DD' if row.field_code in ['exam_date', 'exam_ticket_expires_on'] else '補正値' }}"
+                      {% if row.field_code in ["exam_date", "exam_ticket_expires_on"] %}
+                      data-date-normalize="true"
+                      data-date-display-format="hyphen"
+                      {% endif %}
+                    >
+                    <textarea name="correction_reason" rows="2" placeholder="補正理由。保存時は必須">{{ correction.correction_reason or "" }}</textarea>
+                    <div class="inline-action-row">
+                      <button type="submit" name="action" value="save">保存</button>
+                      <button type="submit" name="action" value="clear" class="ghost-button" {% if not row.has_active_correction %}disabled{% endif %}>解除</button>
+                    </div>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
       </div>
-      <div class="table-panel">
-        <table class="data-table compact-table basic-info-correction-table">
-          <thead>
-            <tr>
-              <th>項目</th>
-              <th>現在の出力値</th>
-              <th>補正状態</th>
-              <th>変更</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in basic_info_correction_rows %}
-            {% set correction = row.correction %}
-            <tr class="{{ 'is-corrected-row' if row.has_active_correction else '' }}">
-              <td>
-                <strong>{{ row.label }}</strong>
-                <small>{{ row.field_code }}</small>
-              </td>
-              <td>
-                <strong>{{ row.current_value or "-" }}</strong>
-                {% if row.has_active_correction %}
-                <small>補正値: {{ correction.normalized_value or "-" }}</small>
-                {% endif %}
-              </td>
-              <td>
-                <span class="status-pill {{ 'status-ready' if row.has_active_correction else 'status-muted' }}">{{ "補正中" if row.has_active_correction else "未補正" }}</span>
-                {% if correction %}
-                <small>{{ correction.correction_reason or "" }}</small>
-                <small>{{ correction.corrected_at or "" }} / user {{ correction.corrected_by_app_user_id or "-" }}</small>
-                {% endif %}
-              </td>
-              <td>
-                <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/basic-info-correction" class="basic-info-correction-form">
-                  <input type="hidden" name="field_code" value="{{ row.field_code }}">
-                  <input name="corrected_value" value="{{ correction.corrected_value or row.current_value or '' }}" placeholder="補正値">
-                  <textarea name="correction_reason" rows="2" placeholder="補正理由。保存時は必須">{{ correction.correction_reason or "" }}</textarea>
-                  <div class="inline-action-row">
-                    <button type="submit" name="action" value="save">保存</button>
-                    <button type="submit" name="action" value="clear" class="ghost-button" {% if not row.has_active_correction %}disabled{% endif %}>解除</button>
-                  </div>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </details>
   </section>
 
   <section class="panel">

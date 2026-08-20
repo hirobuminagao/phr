@@ -2717,8 +2717,56 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .basic-info-correction-panel {
-  margin-top: 14px;
-  padding-top: 12px;
+  margin-top: 0;
+}
+
+.basic-info-correction-accordion summary {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  cursor: pointer;
+}
+
+.basic-info-correction-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.basic-info-correction-accordion summary strong,
+.basic-info-correction-accordion summary small {
+  display: block;
+}
+
+.basic-info-correction-accordion summary strong {
+  font-size: 18px;
+}
+
+.basic-info-correction-accordion summary small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.basic-info-correction-accordion .summary-action {
+  flex: 0 0 auto;
+  border: 1px solid #b7c7d9;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #fff;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.basic-info-correction-accordion[open] .summary-action {
+  background: #e8f6f1;
+  border-color: var(--green);
+  color: var(--green-dark);
+}
+
+.basic-info-correction-body {
+  margin-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid #d8e2ee;
 }
 
