@@ -146,11 +146,11 @@
         <form method="post" action="/subscriber-match-review/{{ selected_ledger.exam_ledger_id }}/workflow-status" class="subscriber-workflow-status-form">
           <input name="note" required placeholder="状態変更理由（例: 正しい再提出ファイル受領済み、既にHIAアップロード済み）">
           <div class="subscriber-match-confirm-actions">
-            <button type="submit" name="new_status" value="WAITING_RESUBMISSION" class="ghost-button" data-confirm-message="このledgerを再提出待ちにします。よろしいですか？">再提出待ち</button>
-            <button type="submit" name="new_status" value="RESUBMITTED" class="ghost-button" data-confirm-message="このledgerを再提出済みにします。よろしいですか？">再提出済み</button>
-            <button type="submit" name="new_status" value="ALREADY_UPLOADED" class="ghost-button" data-confirm-message="このledgerをアップロード済みにします。よろしいですか？">アップロード済み</button>
-            <button type="submit" name="new_status" value="EXCLUDED" class="ghost-button" data-confirm-message="このledgerを除外にします。よろしいですか？">除外</button>
-            <button type="submit" name="new_status" value="NOT_FOUND" class="ghost-button" data-confirm-message="このledgerをUNMATCHEDに戻します。よろしいですか？">UNMATCHEDに戻す</button>
+            <button type="submit" name="new_status" value="WAITING_RESUBMISSION" class="ghost-button" data-confirm-message="再提出待ちに変更します。">再提出待ち</button>
+            <button type="submit" name="new_status" value="RESUBMITTED" class="ghost-button" data-confirm-message="再提出済みに変更します。">再提出済み</button>
+            <button type="submit" name="new_status" value="ALREADY_UPLOADED" class="ghost-button" data-confirm-message="アップロード済みに変更します。">アップロード済み</button>
+            <button type="submit" name="new_status" value="EXCLUDED" class="ghost-button" data-confirm-message="除外に変更します。">除外</button>
+            <button type="submit" name="new_status" value="NOT_FOUND" class="ghost-button" data-confirm-message="UNMATCHEDに戻します。">UNMATCHEDに戻す</button>
           </div>
         </form>
       </section>
@@ -251,8 +251,13 @@
                   <input type="hidden" name="subscriber_id" value="{{ candidate.subscriber_id }}">
                   <input name="note" required placeholder="確定理由">
                   <div class="subscriber-match-confirm-actions">
-                    <button class="ghost-button" type="submit" name="apply_subscriber_values" value="0" data-confirm-message="この加入者で突合だけ確定します。よろしいですか？">突合だけ確定</button>
-                    <button type="submit" name="apply_subscriber_values" value="1" data-confirm-message="この加入者で確定し、加入者情報を出力用基本情報へ適用します。よろしいですか？">加入者情報も適用</button>
+                    <button class="ghost-button" type="submit" name="apply_subscriber_values" value="0" data-confirm-message="この加入者で突合だけ確定します。">突合だけ確定</button>
+                    <button
+                      type="submit"
+                      name="apply_subscriber_values"
+                      value="1"
+                      data-confirm-message="この加入者で確定し、以下の加入者情報を出力用基本情報へ適用します。&#10;&#10;氏名カナ: {{ candidate.name_kana_full or '-' }}&#10;記号: {{ candidate.insurance_symbol_export or candidate.insurance_symbol or '-' }}&#10;番号: {{ candidate.insurance_number or '-' }}&#10;枝番: {{ candidate.insurance_branchnumber or '-' }}&#10;郵便番号: {{ candidate.subscriber_postal_code or '-' }}&#10;住所: {{ (candidate.subscriber_address_line or '-') ~ (candidate.subscriber_building or '') }}"
+                    >加入者情報も適用</button>
                   </div>
                 </form>
               </td>
