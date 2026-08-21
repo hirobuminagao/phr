@@ -227,7 +227,7 @@ async def restrict_admin_client_ip(request: Request, call_next: Any) -> Response
 
 
 def is_csrf_exempt_path(path: str) -> bool:
-    return path in {"/login", "/register"} or path.startswith("/static/")
+    return path in {"/login", "/logout", "/register"} or path.startswith("/static/")
 
 
 async def request_csrf_token(request: Request) -> str | None:
