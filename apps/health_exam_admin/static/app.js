@@ -1300,12 +1300,12 @@
         const identityName = row.dataset.identityItemName || "";
         const itemLabel = identityName && identityName !== itemName ? `${itemName} / ${identityName}` : itemName;
         return `
-          <div class="manual-entry-floating-item-result">
+          <div class="manual-entry-floating-item-result" role="button" tabindex="0" data-manual-entry-floating-item-jump="${index}">
             <div>
               <strong>${escapeHtml(itemLabel)}</strong>
               <small>${escapeHtml(namecode)} / ${escapeHtml(categoryName)}</small>
             </div>
-            <button type="button" class="ghost-button" data-manual-entry-floating-item-jump="${index}">項目に飛ぶ</button>
+            <span class="manual-entry-floating-item-jump-label">項目に飛ぶ</span>
           </div>
         `;
       }).join("");
@@ -1344,16 +1344,26 @@
     manualEntryFloatingItemSearchInput?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        const firstButton = manualEntryFloatingItemResults?.querySelector("[data-manual-entry-floating-item-jump]");
-        firstButton?.click();
+        const firstCard = manualEntryFloatingItemResults?.querySelector("[data-manual-entry-floating-item-jump]");
+        firstCard?.click();
       }
     });
     manualEntryFloatingItemResults?.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const button = target.closest("[data-manual-entry-floating-item-jump]");
-      if (!button) return;
-      const rowIndex = Number(button.getAttribute("data-manual-entry-floating-item-jump"));
+      const card = target.closest("[data-manual-entry-floating-item-jump]");
+      if (!card) return;
+      const rowIndex = Number(card.getAttribute("data-manual-entry-floating-item-jump"));
+      jumpToManualEntryRow(itemRows[rowIndex]);
+    });
+    manualEntryFloatingItemResults?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const card = target.closest("[data-manual-entry-floating-item-jump]");
+      if (!card) return;
+      event.preventDefault();
+      const rowIndex = Number(card.getAttribute("data-manual-entry-floating-item-jump"));
       jumpToManualEntryRow(itemRows[rowIndex]);
     });
   }

@@ -1974,13 +1974,20 @@ a.home-menu-card.is-navigating {
 
 .manual-entry-floating-item-result {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
+  gap: 5px;
   padding: 7px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #f8fafc;
+  cursor: pointer;
+  text-align: left;
+}
+
+.manual-entry-floating-item-result:hover,
+.manual-entry-floating-item-result:focus-visible {
+  border-color: #8ccab9;
+  background: #eef8f5;
+  outline: none;
 }
 
 .manual-entry-floating-item-result strong {
@@ -1997,10 +2004,10 @@ a.home-menu-card.is-navigating {
   line-height: 1.35;
 }
 
-.manual-entry-floating-item-result button {
-  min-height: 30px;
-  padding: 0 8px;
+.manual-entry-floating-item-jump-label {
+  color: var(--accent-dark);
   font-size: 12px;
+  font-weight: 800;
   white-space: nowrap;
 }
 
