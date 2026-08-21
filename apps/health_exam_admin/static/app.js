@@ -1141,6 +1141,7 @@
     const caseSearchQualificationLostStatus = document.querySelector("#manual-entry-case-search-qualification-lost-status");
     const caseSearchLimit = document.querySelector("#manual-entry-case-search-limit");
     let selectedSubscriber = null;
+    let selectedManualCaseId = "";
 
     const setValue = (selector, value) => {
       const input = document.querySelector(selector);
@@ -1221,13 +1222,23 @@
       const purpose = document.querySelector("select[name='entry_purpose']");
       if (purpose) purpose.value = "SUPPLEMENT";
       if (selectedCasePanel) selectedCasePanel.hidden = false;
+      document.querySelector("#manual-entry-case-starter")?.classList.add("is-selected");
+      selectedManualCaseId = String(item.exam_export_case_id || "");
       if (selectedCaseTitle) {
         selectedCaseTitle.textContent = `case ${item.exam_export_case_id || "-"} / ${item.name_kana || "-"}`;
       }
       if (selectedCaseDetail) {
         selectedCaseDetail.textContent = `${item.facility_name || "-"} / ${item.exam_date || "-"} / ${item.source_mode || "-"} / 出力 ${item.export_readiness_status || "-"}`;
       }
-      renderManualCaseRows([item]);
+      for (const row of document.querySelectorAll("[data-manual-entry-case-row]")) {
+        const isSelected = row.getAttribute("data-case-id") === selectedManualCaseId;
+        row.classList.toggle("is-selected", isSelected);
+        const applyButton = row.querySelector("[data-manual-entry-case-apply]");
+        if (applyButton) {
+          applyButton.textContent = isSelected ? "使用中" : "使う";
+          applyButton.classList.toggle("is-active", isSelected);
+        }
+      }
       document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
       document.querySelector("#manual-entry-basic")?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
@@ -1260,6 +1271,11 @@
         const legal = `${item.legal_check_result || "PENDING"}${item.legal_reason_summary ? ` / ${item.legal_reason_summary}` : ""}`;
         const specific = `${item.specific_check_result || "PENDING"}${item.specific_reason_summary ? ` / ${item.specific_reason_summary}` : ""}`;
         const row = document.createElement("tr");
+        const caseId = String(item.exam_export_case_id || "");
+        const isSelected = selectedManualCaseId !== "" && selectedManualCaseId === caseId;
+        row.setAttribute("data-manual-entry-case-row", "true");
+        row.setAttribute("data-case-id", caseId);
+        row.classList.toggle("is-selected", isSelected);
         row.innerHTML = `
           <td>
             <strong>${escapeHtml(item.exam_export_case_id || "-")}</strong>
@@ -1278,8 +1294,10 @@
             <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
           </td>
           <td>
-            <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-apply>このcaseを使う</button>
-            <a class="ghost-button compact-action-button" href="/exam-export-cases/${encodeURIComponent(item.exam_export_case_id)}">詳細</a>
+            <div class="manual-entry-case-actions">
+              <button type="button" class="ghost-button compact-action-button ${isSelected ? "is-active" : ""}" data-manual-entry-case-apply>${isSelected ? "使用中" : "使う"}</button>
+              <a class="ghost-button compact-action-button" href="/exam-export-cases/${encodeURIComponent(item.exam_export_case_id)}">詳細</a>
+            </div>
           </td>
         `;
         row.querySelector("[data-manual-entry-case-apply]")?.addEventListener("click", () => {
