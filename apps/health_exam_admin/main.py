@@ -9,6 +9,7 @@ import string
 import subprocess
 import sys
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import parse_qs, quote, urlencode
@@ -7510,6 +7511,14 @@ def manual_exam_input_type(xml_value_type: Any) -> str:
     return "text"
 
 
+def json_int(value: Any) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, Decimal):
+        return int(value)
+    return int(value or 0)
+
+
 @app.get("/api/manual-exam-entry/subscribers")
 def manual_exam_entry_subscribers(request: Request) -> Response:
     user = require_user(request)
@@ -7688,11 +7697,11 @@ def manual_exam_entry_case_candidates(request: Request) -> Response:
                 "expected_source_mode_label": source_mode_label(row.get("expected_source_mode")),
                 "exam_date": str(row.get("exam_date") or ""),
                 "source_mode": row.get("source_mode"),
-                "case_value_count": row.get("case_value_count") or 0,
-                "source_count": row.get("source_count") or 0,
-                "xml_count": row.get("xml_count") or 0,
-                "csv_count": row.get("csv_count") or 0,
-                "paper_count": row.get("paper_count") or 0,
+                "case_value_count": json_int(row.get("case_value_count")),
+                "source_count": json_int(row.get("source_count")),
+                "xml_count": json_int(row.get("xml_count")),
+                "csv_count": json_int(row.get("csv_count")),
+                "paper_count": json_int(row.get("paper_count")),
                 "legal_check_result": row.get("legal_check_result") or "PENDING",
                 "legal_reason_summary": row.get("legal_reason_summary") or "",
                 "specific_check_result": row.get("specific_check_result") or "PENDING",
