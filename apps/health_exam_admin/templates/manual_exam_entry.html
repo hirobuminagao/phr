@@ -16,7 +16,7 @@
   </nav>
 </header>
 
-<nav class="floating-category-nav manual-entry-floating-nav" aria-label="入力カテゴリ移動" data-floating-category-nav>
+<nav class="floating-category-nav manual-entry-floating-nav is-category-collapsed" aria-label="入力カテゴリ移動" data-floating-category-nav>
   <a class="ghost-button manual-entry-floating-top-link" href="#top">TOPへ</a>
   <div class="manual-entry-floating-item-search">
     <label>
@@ -28,7 +28,7 @@
   <div class="manual-entry-floating-actions">
     <button type="button" class="primary-button" disabled title="保存処理は次ステップで接続します">source作成</button>
   </div>
-  <div class="floating-category-head manual-entry-category-toggle-head" role="button" tabindex="0" aria-label="カテゴリ一覧を閉じる" aria-expanded="true" data-manual-entry-floating-category-toggle>
+  <div class="floating-category-head manual-entry-category-toggle-head" role="button" tabindex="0" aria-label="カテゴリ一覧を開く" aria-expanded="false" data-manual-entry-floating-category-toggle>
     <strong>カテゴリ</strong>
     <span aria-hidden="true">...</span>
   </div>
@@ -45,10 +45,12 @@
   <section id="manual-entry-case-starter" class="panel manual-entry-anchor">
     <div class="section-heading">
       <div>
-        <h2>caseから選択</h2>
+        <div class="manual-entry-heading-inline">
+          <h2>caseから選択</h2>
+          <button type="button" class="primary-button compact-action-button" data-modal-open="manual-entry-case-picker-modal">caseを検索</button>
+        </div>
         <p class="subtle">既存caseを起点に、XML/CSVの不足を補足する手入力sourceを作り始めます。選択すると健診機関・人・受診日を入力欄へ反映します。</p>
       </div>
-      <button type="button" class="primary-button" data-modal-open="manual-entry-case-picker-modal">caseを検索</button>
     </div>
     <div class="manual-entry-selected-case" data-manual-entry-selected-case hidden>
       <span class="status-pill status-ready">選択中</span>
@@ -62,10 +64,12 @@
   <section id="manual-entry-basic" class="panel manual-entry-anchor">
     <div class="section-heading">
       <div>
-        <h2>入力sourceの基本情報</h2>
+        <div class="manual-entry-heading-inline">
+          <h2>入力sourceの基本情報</h2>
+          <span class="status-pill status-pending">保存未接続</span>
+        </div>
         <p class="subtle">紙のみ、またはXML/CSVの補足として、手入力sourceを作るための入力画面です。現時点では画面確認用で、保存処理は次ステップで接続します。</p>
       </div>
-      <span class="status-pill status-pending">保存未接続</span>
     </div>
 
     <form class="manual-entry-form">

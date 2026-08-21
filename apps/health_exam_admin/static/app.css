@@ -880,6 +880,18 @@ a.home-menu-card.is-navigating {
   margin-bottom: 4px;
 }
 
+.manual-entry-heading-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 4px;
+}
+
+.manual-entry-heading-inline h2 {
+  margin-bottom: 0;
+}
+
 .section-heading-inline-note > div {
   display: flex;
   flex-wrap: wrap;
