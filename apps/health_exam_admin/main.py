@@ -9218,6 +9218,9 @@ def admin_folder_aliases(request: Request) -> Response:
             "alias_rows": alias_rows,
             "csv_format_options": csv_format_options,
             "source_mode_options": source_mode_options(),
+            "filters": {
+                "q": request.query_params.get("q", ""),
+            },
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
