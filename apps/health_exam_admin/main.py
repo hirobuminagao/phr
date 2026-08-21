@@ -7625,20 +7625,37 @@ def manual_exam_entry_case_candidates(request: Request) -> Response:
     filters = {
         "event_id": request.query_params.get("event_id", "2"),
         "facility_q": request.query_params.get("facility_q", "").strip(),
+        "exam_month": request.query_params.get("exam_month", "").strip(),
+        "name_full": request.query_params.get("name_full", "").strip(),
         "name_kana": request.query_params.get("name_kana", "").strip(),
         "hia_subscriber_id": request.query_params.get("hia_subscriber_id", "").strip(),
         "insurance_symbol": request.query_params.get("insurance_symbol", "").strip(),
         "insurance_number": request.query_params.get("insurance_number", "").strip(),
-        "limit": "50",
+        "qualification_lost_status": request.query_params.get("qualification_lost_status", "").strip(),
+        "qualification_lost_date": request.query_params.get("qualification_lost_date", "").strip(),
+        "limit": request.query_params.get("limit", "50").strip(),
     }
-    if not any(filters[key] for key in ("facility_q", "name_kana", "hia_subscriber_id", "insurance_number")):
+    if not any(
+        filters[key]
+        for key in (
+            "facility_q",
+            "exam_month",
+            "name_full",
+            "name_kana",
+            "hia_subscriber_id",
+            "insurance_number",
+            "qualification_lost_status",
+            "qualification_lost_date",
+        )
+    ):
         return JSONResponse({"items": []})
+    limit = parse_positive_int(filters["limit"], default=50, maximum=500)
 
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            rows = load_exam_export_case_rows(cur, filters=filters, limit=50, offset=0)
+            rows = load_exam_export_case_rows(cur, filters=filters, limit=limit, offset=0)
             conn.commit()
         except Exception:
             conn.rollback()

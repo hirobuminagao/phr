@@ -1127,10 +1127,16 @@
     const searchSymbol = document.querySelector("#manual-entry-subscriber-search-symbol");
     const searchNumber = document.querySelector("#manual-entry-subscriber-search-number");
     const caseSearchFacility = document.querySelector("#manual-entry-case-search-facility");
+    const caseSearchEvent = document.querySelector("#manual-entry-case-search-event");
+    const caseSearchNameFull = document.querySelector("#manual-entry-case-search-name-full");
     const caseSearchKana = document.querySelector("#manual-entry-case-search-kana");
     const caseSearchHia = document.querySelector("#manual-entry-case-search-hia");
     const caseSearchSymbol = document.querySelector("#manual-entry-case-search-symbol");
     const caseSearchNumber = document.querySelector("#manual-entry-case-search-number");
+    const caseSearchExamMonth = document.querySelector("#manual-entry-case-search-exam-month");
+    const caseSearchQualificationLostDate = document.querySelector("#manual-entry-case-search-qualification-lost-date");
+    const caseSearchQualificationLostStatus = document.querySelector("#manual-entry-case-search-qualification-lost-status");
+    const caseSearchLimit = document.querySelector("#manual-entry-case-search-limit");
     let selectedSubscriber = null;
 
     const setValue = (selector, value) => {
@@ -1387,14 +1393,19 @@
     };
 
     const searchManualCases = async () => {
-      const eventId = document.querySelector("select[name='event_id']")?.value || "2";
+      const eventId = caseSearchEvent?.value || document.querySelector("select[name='event_id']")?.value || "2";
       const params = new URLSearchParams({
         event_id: eventId,
         facility_q: caseSearchFacility ? caseSearchFacility.value.trim() : "",
+        exam_month: caseSearchExamMonth ? caseSearchExamMonth.value.trim() : "",
+        name_full: caseSearchNameFull ? caseSearchNameFull.value.trim() : "",
         name_kana: caseSearchKana ? caseSearchKana.value.trim() : "",
         hia_subscriber_id: caseSearchHia ? caseSearchHia.value.trim() : "",
         insurance_symbol: caseSearchSymbol ? caseSearchSymbol.value.trim() : "",
         insurance_number: caseSearchNumber ? caseSearchNumber.value.trim() : "",
+        qualification_lost_status: caseSearchQualificationLostStatus ? caseSearchQualificationLostStatus.value.trim() : "",
+        qualification_lost_date: caseSearchQualificationLostDate ? caseSearchQualificationLostDate.value.trim() : "",
+        limit: caseSearchLimit ? caseSearchLimit.value.trim() : "50",
       });
       if (![...params.values()].some((value) => value && value !== eventId)) {
         setManualCaseMessage("検索条件を入力してください。", "未検索");
@@ -1419,6 +1430,18 @@
 
     searchButton?.addEventListener("click", searchManualSubscribers);
     caseSearchButton?.addEventListener("click", searchManualCases);
+    for (const button of document.querySelectorAll("[data-manual-entry-case-toggle]")) {
+      button.addEventListener("click", () => {
+        const target = button.getAttribute("data-manual-entry-case-toggle");
+        const value = button.getAttribute("data-filter-value") || "";
+        if (!target || target !== "qualification_lost_status" || !caseSearchQualificationLostStatus) return;
+        const nextValue = caseSearchQualificationLostStatus.value === value ? "" : value;
+        caseSearchQualificationLostStatus.value = nextValue;
+        for (const peer of document.querySelectorAll(`[data-manual-entry-case-toggle="${target}"]`)) {
+          peer.classList.toggle("is-active", nextValue !== "" && peer.getAttribute("data-filter-value") === nextValue);
+        }
+      });
+    }
     for (const input of [searchQ, searchKana, searchSymbol, searchNumber]) {
       input?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -1427,7 +1450,17 @@
         }
       });
     }
-    for (const input of [caseSearchFacility, caseSearchKana, caseSearchHia, caseSearchSymbol, caseSearchNumber]) {
+    for (const input of [
+      caseSearchFacility,
+      caseSearchNameFull,
+      caseSearchKana,
+      caseSearchHia,
+      caseSearchSymbol,
+      caseSearchNumber,
+      caseSearchExamMonth,
+      caseSearchQualificationLostDate,
+      caseSearchLimit,
+    ]) {
       input?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           event.preventDefault();

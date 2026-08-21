@@ -251,10 +251,20 @@
       <div class="edit-modal__head">
         <div>
           <p class="eyebrow">CASE SEARCH</p>
-          <h2 id="manual-entry-case-picker-title">caseを検索</h2>
-          <p class="subtle">検索条件を指定すると、画面本体の既存case確認に候補を表示します。</p>
+          <h2 id="manual-entry-case-picker-title">case一覧を絞り込む</h2>
+          <p class="subtle">氏名カナ、HIA ID、記号番号、健診機関などで絞り込めます。</p>
         </div>
         <div class="case-filter-head-actions">
+          <label class="case-filter-event-control">
+            <span>イベント</span>
+            <select id="manual-entry-case-search-event">
+              {% for event in event_options %}
+                <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+                  {{ event.event_name or ("event " ~ event.event_id) }}
+                </option>
+              {% endfor %}
+            </select>
+          </label>
           <button type="button" class="ghost-button" data-modal-close>閉じる</button>
         </div>
       </div>
@@ -275,9 +285,25 @@
               <input id="manual-entry-case-search-kana" autocomplete="off" placeholder="氏名カナ">
             </label>
             <label>
+              <span>氏名</span>
+              <input id="manual-entry-case-search-name-full" autocomplete="off" placeholder="氏名">
+            </label>
+            <label>
               <span>HIA加入者ID</span>
               <input id="manual-entry-case-search-hia" autocomplete="off" placeholder="HIA加入者ID">
             </label>
+            <label>
+              <span>資格喪失日</span>
+              <input id="manual-entry-case-search-qualification-lost-date" autocomplete="off" placeholder="YYYY-MM-DD / YYYY-MM">
+            </label>
+            <fieldset class="filter-condition-block">
+              <legend>資格喪失</legend>
+              <div class="filter-toggle-group">
+                <button type="button" data-manual-entry-case-toggle="qualification_lost_status" data-filter-value="LOST">喪失あり</button>
+                <button type="button" data-manual-entry-case-toggle="qualification_lost_status" data-filter-value="ACTIVE">喪失なし</button>
+              </div>
+              <input type="hidden" id="manual-entry-case-search-qualification-lost-status">
+            </fieldset>
           </div>
         </section>
         <section class="case-filter-group">
@@ -291,10 +317,18 @@
                 <div class="manual-entry-case-facility-popover" data-manual-entry-case-facility-popover hidden></div>
               </span>
             </label>
+            <label>
+              <span>受診月</span>
+              <input id="manual-entry-case-search-exam-month" autocomplete="off" placeholder="YYYY-MM">
+            </label>
           </div>
         </section>
       </div>
       <div class="case-filter-footer manual-entry-modal-actions">
+        <label class="case-filter-limit-control">
+          <span>表示件数</span>
+          <input id="manual-entry-case-search-limit" value="50" inputmode="numeric">
+        </label>
         <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
         <button type="button" class="primary-button" data-manual-entry-case-search>検索</button>
       </div>
