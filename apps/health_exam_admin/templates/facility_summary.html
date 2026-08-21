@@ -157,10 +157,10 @@
         <tbody>
           {% for row in rows %}
           {% set facility_q = row.facility_filter_value or row.facility_name or row.facility_code or '' %}
-          <tr data-filter-text="{{ row.facility_code or '' }} {{ row.facility_name or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }}">
+          <tr data-filter-text="{{ row.facility_code or '' }} {{ row.facility_name or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }} {{ row.receipt_source_mode_label or '' }} {{ row.facility_source_mode_summary or '' }}">
             <td class="facility-summary-name-cell" data-sort-value="{{ row.facility_name or '' }}">
               <strong class="line-clamp-2" title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
-              <small>{{ row.facility_code or "コードなし" }} / {{ row.expected_source_mode_label or "受領設定なし" }}</small>
+              <small>{{ row.facility_code or "コードなし" }} / {{ row.facility_source_mode_summary or "受領設定なし" }}</small>
             </td>
             <td class="numeric-cell" data-sort-value="{{ row.xml_file_count }}">{{ row.xml_file_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.csv_file_count }}">{{ row.csv_file_count }}</td>

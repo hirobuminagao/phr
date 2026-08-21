@@ -6533,6 +6533,14 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
         row["specific_ng_rate"] = pct_label(row.get("specific_ng_count"), row.get("specific_subject_count"))
         row["source_ng_rate"] = pct_label(row.get("source_ng_count"), row.get("source_count"))
         row["case_ng_rate"] = pct_label(row.get("case_blocked_count"), row.get("case_count"))
+        row["receipt_source_mode_label"] = receipt_source_mode_label(
+            int(row.get("xml_file_count") or 0) + int(row.get("zip_file_count") or 0),
+            row.get("csv_file_count"),
+        )
+        if source_mode_is_configured(row.get("expected_source_mode")):
+            row["facility_source_mode_summary"] = f"想定 {row.get('expected_source_mode_label')}"
+        else:
+            row["facility_source_mode_summary"] = f"想定未設定 / 実績 {row.get('receipt_source_mode_label')}"
         row["facility_filter_value"] = row.get("facility_code") or row.get("facility_name") or ""
         row["risk_score"] = (
             int(row.get("legal_ng_count") or 0) * 5
