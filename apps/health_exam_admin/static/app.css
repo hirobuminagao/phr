@@ -1307,6 +1307,18 @@ a.home-menu-card.is-navigating {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.inline-picker-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline-picker-field .ghost-button {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
 .facility-form .form-actions {
   align-self: end;
 }

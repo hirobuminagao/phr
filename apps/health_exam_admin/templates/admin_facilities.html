@@ -65,6 +65,11 @@
       </div>
     </div>
     <div class="table-panel">
+      <datalist id="exam-facility-selector-options">
+        {% for facility in facility_rows %}
+        <option value="{{ facility.exam_facility_code or facility.exam_facility_id }}">{{ facility.exam_facility_display_name or facility.exam_facility_name }}{% if facility.exam_facility_code %} / {{ facility.exam_facility_code }}{% endif %}</option>
+        {% endfor %}
+      </datalist>
       <table id="alias-admin-table" class="data-table admin-master-table alias-table" data-empty-message="一致するaliasはありません。">
         <thead>
           <tr>
@@ -142,7 +147,11 @@
                     </label>
                     <label>
                       <span>健診機関ID/コード</span>
-                      <input name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}">
+                      <div class="inline-picker-field">
+                        <input id="alias-facility-selector-{{ alias.alias_id }}" name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}" list="exam-facility-selector-options" placeholder="健診機関コードを入力・選択">
+                        <button type="button" class="ghost-button" data-alias-facility-picker-open data-target-input="alias-facility-selector-{{ alias.alias_id }}" data-modal-open="alias-facility-picker-modal">候補から選ぶ</button>
+                      </div>
+                      <small>未確定を直す場合は、健診機関コードまたは候補から選択して更新します。</small>
                     </label>
                     <div class="form-wide-field source-kind-picker" data-source-kind-picker data-current-mode="{{ alias.expected_source_mode or 'UNKNOWN' }}">
                       <span>想定受領モード</span>
@@ -208,6 +217,53 @@
       </table>
     </div>
   </section>
+
+  <div id="alias-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="alias-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">Facility Picker</p>
+          <h2 id="alias-facility-picker-title">紐づく健診機関を選ぶ</h2>
+          <p class="subtle">未確定の受領フォルダに、健診機関マスタのコードを設定します。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          <span>候補検索</span>
+          <input data-live-filter-input="#alias-facility-picker-table" data-modal-focus placeholder="健診機関名 / コード / 住所">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="alias-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>所在地</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for facility in facility_rows %}
+            <tr data-alias-facility-row data-facility-code="{{ facility.exam_facility_code or facility.exam_facility_id }}" data-filter-text="{{ facility.exam_facility_code }} {{ facility.exam_facility_name }} {{ facility.exam_facility_display_name }} {{ facility.address }} {{ facility.postal_code }} {{ facility.phone_number }}">
+              <td>
+                <strong>{{ facility.exam_facility_display_name or facility.exam_facility_name }}</strong>
+                <small>{{ facility.exam_facility_code or facility.exam_facility_id }}</small>
+              </td>
+              <td>
+                <small>{{ facility.postal_code or "" }} {{ facility.address or "" }}</small>
+              </td>
+              <td>
+                <button type="button" class="ghost-button" data-alias-facility-select data-facility-code="{{ facility.exam_facility_code or facility.exam_facility_id }}">選択</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
   <section class="panel">
     <div class="section-heading">

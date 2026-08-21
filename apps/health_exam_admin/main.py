@@ -3880,8 +3880,6 @@ def resolve_exam_facility_selector(cur: Any, selector: str | None) -> int | None
     text = (selector or "").strip()
     if not text:
         return None
-    if text.isdigit():
-        return int(text)
     cur.execute(
         f"""
         SELECT exam_facility_id
@@ -3892,9 +3890,22 @@ def resolve_exam_facility_selector(cur: Any, selector: str | None) -> int | None
         (text,),
     )
     row = cur.fetchone()
-    if not row:
-        raise ValueError("指定された健診機関ID/コードが見つかりません。")
-    return int(row["exam_facility_id"])
+    if row:
+        return int(row["exam_facility_id"])
+    if text.isdigit():
+        cur.execute(
+            f"""
+            SELECT exam_facility_id
+            FROM {qname(master_db())}.exam_facilities
+            WHERE exam_facility_id = %s
+            LIMIT 1
+            """,
+            (int(text),),
+        )
+        row = cur.fetchone()
+        if row:
+            return int(row["exam_facility_id"])
+    raise ValueError("指定された健診機関ID/コードが見つかりません。")
 
 
 def resolve_csv_format_version_selector(cur: Any, selector: str | None) -> int | None:
@@ -9198,6 +9209,7 @@ def admin_folder_aliases(request: Request) -> Response:
             event_options = load_event_options(cur)
             alias_facility_rows = load_alias_facility_admin_rows(cur)
             alias_rows = load_folder_alias_admin_rows(cur)
+            facility_rows = load_facility_master_admin_rows(cur, limit=2000)
             csv_format_options = load_csv_format_options(cur)
             alias_count_by_event: dict[str, int] = {}
             for row in alias_rows:
@@ -9216,6 +9228,7 @@ def admin_folder_aliases(request: Request) -> Response:
             "alias_count_by_event": alias_count_by_event,
             "alias_facility_rows": alias_facility_rows,
             "alias_rows": alias_rows,
+            "facility_rows": facility_rows,
             "csv_format_options": csv_format_options,
             "source_mode_options": source_mode_options(),
             "filters": {

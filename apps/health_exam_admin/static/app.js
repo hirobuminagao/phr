@@ -751,6 +751,32 @@
     });
   }
 
+  let aliasFacilityTargetInput = null;
+  for (const button of document.querySelectorAll("[data-alias-facility-picker-open]")) {
+    button.addEventListener("click", () => {
+      const targetId = button.getAttribute("data-target-input") || "";
+      aliasFacilityTargetInput = targetId ? document.getElementById(targetId) : null;
+    });
+  }
+  const selectAliasFacility = (element) => {
+    if (!aliasFacilityTargetInput || !(element instanceof Element)) return;
+    const code = String(element.getAttribute("data-facility-code") || "").trim();
+    if (!code) return;
+    aliasFacilityTargetInput.value = code;
+    aliasFacilityTargetInput.dispatchEvent(new Event("input", { bubbles: true }));
+    closeModal(element.closest(".edit-modal"));
+    aliasFacilityTargetInput.focus();
+  };
+  for (const button of document.querySelectorAll("[data-alias-facility-select]")) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectAliasFacility(button);
+    });
+  }
+  for (const row of document.querySelectorAll("[data-alias-facility-row]")) {
+    row.addEventListener("click", () => selectAliasFacility(row));
+  }
+
   const closeMonthPickers = (except = null) => {
     for (const popover of document.querySelectorAll("[data-month-picker-popover]")) {
       if (except && popover === except) continue;
