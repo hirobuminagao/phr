@@ -166,7 +166,7 @@
       <details class="manual-entry-category" open>
         <summary>
           <strong>{{ group.category_name }}</strong>
-          <span>{{ group.items|length }}項目</span>
+          <span>{{ group["items"]|length }}項目</span>
         </summary>
         <div class="manual-entry-item-table-wrap">
           <table class="data-table compact-table manual-entry-item-table">
@@ -181,7 +181,7 @@
               </tr>
             </thead>
             <tbody>
-              {% for item in group.items %}
+              {% for item in group["items"] %}
               <tr data-filter-text="{{ item.namecode }} {{ item.item_name }} {{ item.category_name or '' }} {{ item.identity_item_code or '' }} {{ item.identity_item_name or '' }} {{ item.method_name or '' }} {{ item.result_code_oid or '' }}">
                 <td>
                   <input
