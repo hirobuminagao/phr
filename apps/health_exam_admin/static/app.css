@@ -1965,11 +1965,32 @@ a.home-menu-card.is-navigating {
   display: none;
 }
 
+.manual-entry-category-toggle-head {
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.manual-entry-category-toggle-head:hover,
+.manual-entry-category-toggle-head:focus-visible {
+  border-color: #8ccab9;
+  background: #eef8f5;
+  outline: none;
+}
+
+.manual-entry-category-toggle-head span {
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .manual-entry-floating-item-search {
   display: grid;
   gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
 }
 
 .manual-entry-floating-item-search label {
@@ -2036,6 +2057,8 @@ a.home-menu-card.is-navigating {
 .manual-entry-floating-actions {
   padding-top: 8px;
   border-top: 1px solid var(--line);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
 }
 
 .manual-entry-floating-actions .primary-button {

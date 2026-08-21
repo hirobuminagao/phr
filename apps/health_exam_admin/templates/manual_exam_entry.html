@@ -17,17 +17,6 @@
 </header>
 
 <nav class="floating-category-nav manual-entry-floating-nav" aria-label="入力カテゴリ移動" data-floating-category-nav>
-  <div class="floating-category-head">
-    <strong>カテゴリ</strong>
-    <button type="button" aria-label="カテゴリだけ閉じる" aria-expanded="true" data-manual-entry-floating-category-toggle>...</button>
-  </div>
-  <div class="floating-category-links" data-floating-category-links>
-    <a href="#manual-entry-basic">基本</a>
-    <a href="#manual-entry-items">検査項目</a>
-    {% for group in item_groups %}
-      <a href="#manual-entry-category-{{ loop.index }}">{{ group.category_name }}</a>
-    {% endfor %}
-  </div>
   <div class="manual-entry-floating-item-search">
     <label>
       <span>健診項目詳細名</span>
@@ -37,6 +26,17 @@
   </div>
   <div class="manual-entry-floating-actions">
     <button type="button" class="primary-button" disabled title="保存処理は次ステップで接続します">source作成</button>
+  </div>
+  <div class="floating-category-head manual-entry-category-toggle-head" role="button" tabindex="0" aria-label="カテゴリ一覧を閉じる" aria-expanded="true" data-manual-entry-floating-category-toggle>
+    <strong>カテゴリ</strong>
+    <span aria-hidden="true">...</span>
+  </div>
+  <div class="floating-category-links" data-floating-category-links>
+    <a href="#manual-entry-basic">基本</a>
+    <a href="#manual-entry-items">検査項目</a>
+    {% for group in item_groups %}
+      <a href="#manual-entry-category-{{ loop.index }}">{{ group.category_name }}</a>
+    {% endfor %}
   </div>
 </nav>
 

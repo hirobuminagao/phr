@@ -1336,10 +1336,15 @@
       const setCategoryCollapsed = (collapsed) => {
         manualEntryFloatingNav.classList.toggle("is-category-collapsed", collapsed);
         manualEntryFloatingCategoryToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-        manualEntryFloatingCategoryToggle.setAttribute("aria-label", collapsed ? "カテゴリだけ開く" : "カテゴリだけ閉じる");
+        manualEntryFloatingCategoryToggle.setAttribute("aria-label", collapsed ? "カテゴリ一覧を開く" : "カテゴリ一覧を閉じる");
       };
       setCategoryCollapsed(false);
       manualEntryFloatingCategoryToggle.addEventListener("click", () => {
+        setCategoryCollapsed(!manualEntryFloatingNav.classList.contains("is-category-collapsed"));
+      });
+      manualEntryFloatingCategoryToggle.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
         setCategoryCollapsed(!manualEntryFloatingNav.classList.contains("is-category-collapsed"));
       });
     }
