@@ -232,6 +232,19 @@ button[type="submit"]:disabled {
   font-weight: 700;
 }
 
+.alert-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.alert-with-action .ghost-button {
+  flex: 0 0 auto;
+  background: #fff;
+  color: var(--text);
+}
+
 .alert-warning {
   background: #fff7d6;
   color: #7a5200;

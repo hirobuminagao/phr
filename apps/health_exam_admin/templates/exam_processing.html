@@ -20,10 +20,20 @@
 
 <main class="page">
   {% if message %}
-  <div class="alert alert-success">{{ message }}</div>
+  <div class="alert alert-success alert-with-action">
+    <span>{{ message }}</span>
+    {% if results %}
+    <button type="button" class="ghost-button" data-scroll-target="#exam-processing-current-results">今回の実行結果へ</button>
+    {% endif %}
+  </div>
   {% endif %}
   {% if error %}
-  <div class="alert">{{ error }}</div>
+  <div class="alert alert-with-action">
+    <span>{{ error }}</span>
+    {% if results %}
+    <button type="button" class="ghost-button" data-scroll-target="#exam-processing-current-results">今回の実行結果へ</button>
+    {% endif %}
+  </div>
   {% endif %}
   {% if running_runs %}
   <div class="alert alert-warning">
@@ -148,7 +158,7 @@
   {% endif %}
 
   {% if results %}
-  <section class="panel">
+  <section id="exam-processing-current-results" class="panel">
     <div class="section-heading">
       <div>
         <h2>今回の実行結果</h2>
