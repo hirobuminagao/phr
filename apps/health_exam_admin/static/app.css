@@ -1898,7 +1898,7 @@ a.home-menu-card.is-navigating {
 }
 
 .ledger-filter-row-primary {
-  grid-template-columns: minmax(240px, 1.25fr) minmax(300px, 1.3fr) minmax(170px, 0.8fr) minmax(190px, 0.75fr);
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(300px, 1.25fr) minmax(170px, 0.75fr) minmax(190px, 0.7fr);
 }
 
 .ledger-filter-row-secondary {

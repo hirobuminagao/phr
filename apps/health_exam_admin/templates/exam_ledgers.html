@@ -34,7 +34,11 @@
       <div class="ledger-filter-row ledger-filter-row-primary">
         <label>
           <span>キーワード</span>
-          <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / XML名" data-live-filter-input="#exam-ledger-table">
+          <input id="ledger-live-search" name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="HIA ID / 氏名 / XML名" data-live-filter-input="#exam-ledger-table">
+        </label>
+        <label>
+          <span>氏名カナ</span>
+          <input name="name_kana" value="{{ filters.name_kana or '' }}" autocomplete="off" placeholder="半角カナ・小書き揺れも検索">
         </label>
         <label>
           <span>健診機関</span>

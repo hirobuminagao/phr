@@ -3932,6 +3932,10 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     file_receipt_id = filters.get("file_receipt_id", "").strip()
     query = filters.get("q", "").strip()
     name_kana = filters.get("name_kana", "").strip()
+    name_kana_match = None
+    if name_kana:
+        kana_result = normalize_name_kana_full(name_kana)
+        name_kana_match = kana_result.get("match")
     insurance_symbol = filters.get("insurance_symbol", "").strip()
     insurance_number = filters.get("insurance_number", "").strip()
     hia_subscriber_id = filters.get("hia_subscriber_id", "").strip()
@@ -3984,12 +3988,20 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
               hia_subscriber_id LIKE %s
               OR person_id_custom LIKE %s
               OR name_full_raw LIKE %s
-              OR name_kana_raw LIKE %s
               OR xml_file_name LIKE %s
             )
             """
         )
-        params.extend([like, like, like, like, like])
+        params.extend([like, like, like, like])
+    if name_kana:
+        kana_like = f"%{name_kana}%"
+        if name_kana_match:
+            match_like = f"%{name_kana_match}%"
+            where_parts.append("(name_kana_raw LIKE %s OR name_kana_match LIKE %s)")
+            params.extend([kana_like, match_like])
+        else:
+            where_parts.append("name_kana_raw LIKE %s")
+            params.append(kana_like)
     if facility_query:
         like = f"%{facility_query}%"
         where_parts.append("(facility_code LIKE %s OR facility_name LIKE %s)")
@@ -8911,6 +8923,7 @@ def exam_ledgers(request: Request) -> Response:
         "subscriber_match_filter": request.query_params.get("subscriber_match_filter", ""),
         "check_status": request.query_params.get("check_status", ""),
         "q": request.query_params.get("q", ""),
+        "name_kana": request.query_params.get("name_kana", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "facility_codes": request.query_params.get("facility_codes", ""),
         "limit": request.query_params.get("limit", "2000"),
