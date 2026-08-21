@@ -48,6 +48,46 @@
     "'": "&#39;",
   }[char]));
   const filters = new Map();
+  const processingOverlay = document.querySelector("[data-processing-overlay]");
+  const processingTitle = document.querySelector("[data-processing-overlay-title]");
+  const processingMessage = document.querySelector("[data-processing-overlay-message]");
+  let navigationStarted = false;
+
+  const showProcessingOverlay = (title, message) => {
+    if (processingTitle) processingTitle.textContent = title || "処理しています";
+    if (processingMessage) processingMessage.textContent = message || "しばらくお待ちください。";
+    if (processingOverlay) processingOverlay.hidden = false;
+  };
+
+  const isPlainLeftClick = (event) => (
+    event.button === 0
+    && !event.metaKey
+    && !event.ctrlKey
+    && !event.shiftKey
+    && !event.altKey
+  );
+
+  for (const link of document.querySelectorAll("a.home-menu-card[href]")) {
+    link.addEventListener("click", (event) => {
+      if (!isPlainLeftClick(event) || link.target === "_blank") {
+        return;
+      }
+      if (navigationStarted || link.classList.contains("is-navigating")) {
+        event.preventDefault();
+        return;
+      }
+      navigationStarted = true;
+      link.classList.add("is-navigating");
+      link.setAttribute("aria-busy", "true");
+      showProcessingOverlay("画面を開いています", "移動先の画面を読み込んでいます。");
+      const badge = link.querySelector(".status-pill");
+      if (badge) {
+        badge.textContent = "移動中";
+        badge.classList.remove("status-ready", "status-pending", "status-muted", "status-danger");
+        badge.classList.add("status-pending");
+      }
+    });
+  }
 
   for (const input of document.querySelectorAll("[data-live-filter-input]")) {
     const tableSelector = input.getAttribute("data-live-filter-input");
@@ -690,16 +730,11 @@
     });
   }
 
-  const processingOverlay = document.querySelector("[data-processing-overlay]");
-  const processingTitle = document.querySelector("[data-processing-overlay-title]");
-  const processingMessage = document.querySelector("[data-processing-overlay-message]");
   for (const form of document.querySelectorAll("[data-processing-form]")) {
     form.addEventListener("submit", () => {
       const button = form.querySelector("button[type='submit']");
       const message = form.getAttribute("data-processing-message") || "処理しています";
-      if (processingTitle) processingTitle.textContent = message;
-      if (processingMessage) processingMessage.textContent = "ファイル数や内容によって時間がかかることがあります。";
-      if (processingOverlay) processingOverlay.hidden = false;
+      showProcessingOverlay(message, "ファイル数や内容によって時間がかかることがあります。");
       if (button) {
         button.disabled = true;
         button.textContent = "処理中";
@@ -811,7 +846,7 @@
       const row = document.createElement("tr");
       row.setAttribute("data-person-selection-item", subscriberId);
       const eventId = document.querySelector("select[name='event_id']")?.value || "2";
-      const caseListUrl = `/exam-export-cases?event_id=${encodeURIComponent(eventId)}&subscriber_id=${encodeURIComponent(subscriberId)}&limit=2000`;
+      const caseListUrl = `/exam-export-cases?event_id=${encodeURIComponent(eventId)}&subscriber_id=${encodeURIComponent(subscriberId)}&limit=500`;
       row.innerHTML = `
         <td><strong>${escapeHtml(subscriberId)}</strong><small>HIA ${escapeHtml(choice.dataset.hiaSubscriberId || "-")}</small></td>
         <td><strong>${escapeHtml(choice.dataset.personName || "-")}</strong><small>${escapeHtml(choice.dataset.gender || "-")}</small></td>

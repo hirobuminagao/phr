@@ -9262,10 +9262,10 @@ def exam_export_cases(request: Request) -> Response:
         "qualification_lost_status": request.query_params.get("qualification_lost_status", ""),
         "qualification_lost_date": request.query_params.get("qualification_lost_date", ""),
         "facility_q": request.query_params.get("facility_q", ""),
-        "limit": request.query_params.get("limit", "2000"),
+        "limit": request.query_params.get("limit", "500"),
         "page": request.query_params.get("page", "1"),
     }
-    limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
+    limit = parse_positive_int(filters["limit"], default=500, maximum=5000)
     page = parse_positive_int(filters["page"], default=1, maximum=1000000)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:

@@ -748,6 +748,13 @@ a.home-menu-card:hover {
   box-shadow: 0 8px 18px rgba(31, 41, 51, 0.08);
 }
 
+a.home-menu-card.is-navigating {
+  pointer-events: none;
+  border-color: #8fb8ad;
+  background: #eef8f5;
+  opacity: 0.76;
+}
+
 .home-menu-card strong,
 .home-menu-card small {
   display: block;
