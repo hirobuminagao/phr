@@ -103,6 +103,28 @@
     });
   }
 
+  const copyTextToClipboard = async (text) => {
+    if (!text) return false;
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "readonly");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-1000px";
+    textarea.style.left = "-1000px";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      return document.execCommand("copy");
+    } finally {
+      textarea.remove();
+    }
+  };
+
   for (const button of document.querySelectorAll("[data-copy-target]")) {
     button.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -113,8 +135,8 @@
       if (!text) return;
       const originalLabel = button.textContent;
       try {
-        await navigator.clipboard.writeText(text);
-        button.textContent = "コピーしました";
+        const copied = await copyTextToClipboard(text);
+        button.textContent = copied ? "コピーしました" : "コピー失敗";
       } catch {
         button.textContent = "コピー失敗";
       }
