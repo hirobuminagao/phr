@@ -1989,6 +1989,29 @@ a.home-menu-card.is-navigating {
   color: var(--accent-dark);
 }
 
+.manual-entry-case-table-panel {
+  margin-top: 14px;
+}
+
+.manual-entry-case-table {
+  min-width: 980px;
+}
+
+.manual-entry-case-table th:nth-child(1),
+.manual-entry-case-table td:nth-child(1) {
+  width: 120px;
+}
+
+.manual-entry-case-table th:nth-child(3),
+.manual-entry-case-table td:nth-child(3) {
+  width: 150px;
+}
+
+.manual-entry-case-table th:nth-child(5),
+.manual-entry-case-table td:nth-child(5) {
+  width: 88px;
+}
+
 .manual-entry-modal-actions {
   justify-content: center;
 }

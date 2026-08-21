@@ -1850,6 +1850,75 @@ def load_person_selection_cases_for_subscriber(
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_manual_exam_entry_cases_for_subscriber(
+    cur: Any,
+    *,
+    event_id: int,
+    subscriber_id: int,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          eec.exam_export_case_id,
+          eec.event_id,
+          eec.subscriber_id,
+          eec.hia_subscriber_id,
+          eec.name_full_raw,
+          eec.name_kana_raw,
+          eec.facility_name,
+          eec.facility_code,
+          eec.exam_date,
+          eec.source_mode,
+          eec.case_status,
+          eec.merge_status,
+          eec.value_build_status,
+          eec.case_value_count,
+          eec.export_readiness_status,
+          eec.xml_export_status,
+          COALESCE(ecr.legal_check_result, 'PENDING') AS legal_check_result,
+          ecr.legal_reason_summary,
+          COALESCE(ecr.specific_check_result, 'PENDING') AS specific_check_result,
+          ecr.specific_reason_summary,
+          COALESCE(src.source_count, 0) AS source_count,
+          COALESCE(src.xml_count, 0) AS xml_count,
+          COALESCE(src.csv_count, 0) AS csv_count,
+          COALESCE(src.paper_count, 0) AS paper_count
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest
+            ON latest.max_id = r1.id
+        ) AS ecr
+          ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN (
+          SELECT
+            exam_export_case_id,
+            COUNT(*) AS source_count,
+            SUM(CASE WHEN source_type = 'XML' THEN 1 ELSE 0 END) AS xml_count,
+            SUM(CASE WHEN source_type = 'CSV' THEN 1 ELSE 0 END) AS csv_count,
+            SUM(CASE WHEN source_type = 'PAPER' THEN 1 ELSE 0 END) AS paper_count
+          FROM {qname(health_db())}.exam_export_case_sources
+          GROUP BY exam_export_case_id
+        ) AS src
+          ON src.exam_export_case_id = eec.exam_export_case_id
+        WHERE eec.event_id = %s
+          AND eec.subscriber_id = %s
+        ORDER BY eec.exam_date DESC, eec.exam_export_case_id DESC
+        LIMIT %s
+        """,
+        (event_id, subscriber_id, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def search_person_selection_subscribers(
     cur: Any,
     *,
@@ -7411,6 +7480,40 @@ def manual_exam_entry_subscribers(request: Request) -> Response:
             }
         )
     return JSONResponse({"items": items})
+
+
+@app.get("/api/manual-exam-entry/cases")
+def manual_exam_entry_cases(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"items": []}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"items": []}, status_code=403)
+
+    event_id = _optional_int(request.query_params.get("event_id")) or 2
+    subscriber_id = _optional_int(request.query_params.get("subscriber_id"))
+    if subscriber_id is None:
+        return JSONResponse({"items": []})
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            rows = load_manual_exam_entry_cases_for_subscriber(
+                cur,
+                event_id=event_id,
+                subscriber_id=subscriber_id,
+                limit=10,
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    for row in rows:
+        row["exam_date"] = str(row.get("exam_date") or "")
+        row["legal_reason_summary"] = str(row.get("legal_reason_summary") or "")
+        row["specific_reason_summary"] = str(row.get("specific_reason_summary") or "")
+    return JSONResponse({"items": rows})
 
 
 @app.get("/health")

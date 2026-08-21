@@ -978,6 +978,9 @@
   if (manualSubscriberResults) {
     const searchButton = document.querySelector("[data-manual-entry-subscriber-search]");
     const applyButton = document.querySelector("[data-manual-entry-subscriber-apply]");
+    const casePanel = document.querySelector("[data-manual-entry-case-panel]");
+    const caseResults = document.querySelector("[data-manual-entry-case-results]");
+    const caseCount = document.querySelector("[data-manual-entry-case-count]");
     const searchQ = document.querySelector("#manual-entry-subscriber-search-q");
     const searchKana = document.querySelector("#manual-entry-subscriber-search-kana");
     const searchSymbol = document.querySelector("#manual-entry-subscriber-search-symbol");
@@ -1002,6 +1005,84 @@
       if (applyButton) {
         applyButton.disabled = !selectedSubscriber;
         applyButton.classList.toggle("disabled", !selectedSubscriber);
+      }
+    };
+
+    const setManualCaseMessage = (message, label = "未検索") => {
+      if (casePanel) casePanel.hidden = false;
+      if (caseResults) {
+        caseResults.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
+      }
+      if (caseCount) {
+        caseCount.textContent = label;
+        caseCount.className = "status-pill status-muted";
+      }
+    };
+
+    const renderManualCaseRows = (items) => {
+      if (!casePanel || !caseResults) return;
+      casePanel.hidden = false;
+      if (caseCount) {
+        caseCount.textContent = `${items.length}件`;
+        caseCount.className = `status-pill ${items.length ? "status-ready" : "status-muted"}`;
+      }
+      if (!items.length) {
+        caseResults.innerHTML = `<tr><td colspan="5">この加入者の既存caseはありません。紙のみ新規sourceとして作成する想定です。</td></tr>`;
+        return;
+      }
+      caseResults.innerHTML = "";
+      for (const item of items) {
+        const sourceText = `XML ${item.xml_count || 0} / CSV ${item.csv_count || 0} / 紙 ${item.paper_count || 0}`;
+        const legal = `${item.legal_check_result || "PENDING"}${item.legal_reason_summary ? ` / ${item.legal_reason_summary}` : ""}`;
+        const specific = `${item.specific_check_result || "PENDING"}${item.specific_reason_summary ? ` / ${item.specific_reason_summary}` : ""}`;
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>
+            <strong>${escapeHtml(item.exam_export_case_id || "-")}</strong>
+            <small>${escapeHtml(item.source_mode || "-")} / 値 ${escapeHtml(item.case_value_count || "0")}</small>
+          </td>
+          <td>
+            <strong title="${escapeHtml(item.facility_name || "")}">${escapeHtml(item.facility_name || "-")}</strong>
+            <small>${escapeHtml(item.exam_date || "-")} / ${escapeHtml(item.facility_code || "-")}</small>
+          </td>
+          <td>
+            <strong>${escapeHtml(sourceText)}</strong>
+            <small>構成source ${escapeHtml(item.source_count || "0")}</small>
+          </td>
+          <td>
+            <strong>法定 ${escapeHtml(legal)}</strong>
+            <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
+          </td>
+          <td>
+            <a class="ghost-button compact-action-button" href="/exam-export-cases/${encodeURIComponent(item.exam_export_case_id)}">詳細</a>
+          </td>
+        `;
+        caseResults.appendChild(row);
+      }
+    };
+
+    const loadManualCasesForSubscriber = async (subscriberId) => {
+      if (!subscriberId) {
+        setManualCaseMessage("加入者を選択してください。", "未検索");
+        return;
+      }
+      const eventId = document.querySelector("select[name='event_id']")?.value || "2";
+      const params = new URLSearchParams({
+        event_id: eventId,
+        subscriber_id: String(subscriberId),
+      });
+      setManualCaseMessage("caseを確認中...", "検索中");
+      try {
+        const response = await fetch(`/api/manual-exam-entry/cases?${params.toString()}`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        renderManualCaseRows(Array.isArray(payload.items) ? payload.items : []);
+      } catch (_error) {
+        setManualCaseMessage("case確認でエラーが発生しました。", "エラー");
       }
     };
 
@@ -1111,6 +1192,7 @@
       setValue("#manual-entry-birthdate-input", selectedSubscriber.birth);
       setValue("#manual-entry-gender-input", selectedSubscriber.gender_label);
       document.querySelector("#manual-entry-subscriber-picker-modal [data-modal-close]")?.click();
+      loadManualCasesForSubscriber(selectedSubscriber.subscriber_id);
     });
   }
 

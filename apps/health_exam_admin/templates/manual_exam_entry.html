@@ -121,6 +121,34 @@
     </form>
   </section>
 
+  <section id="manual-entry-case-context" class="panel manual-entry-case-panel manual-entry-anchor" data-manual-entry-case-panel hidden>
+    <div class="section-heading">
+      <div>
+        <h2>既存case確認</h2>
+        <p class="subtle">加入者を選択すると、この人の既存caseを表示します。補足入力する場合は、対象caseと受診日・健診機関を確認してください。</p>
+      </div>
+      <span class="status-pill status-muted" data-manual-entry-case-count>未検索</span>
+    </div>
+    <div class="table-panel manual-entry-case-table-panel">
+      <table class="data-table compact-table manual-entry-case-table">
+        <thead>
+          <tr>
+            <th>case</th>
+            <th>健診機関 / 受診日</th>
+            <th>source</th>
+            <th>チェック / 出力</th>
+            <th>確認</th>
+          </tr>
+        </thead>
+        <tbody data-manual-entry-case-results>
+          <tr>
+            <td colspan="5">加入者を選択してください。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <div id="manual-entry-facility-picker-modal" class="edit-modal" hidden>
     <div class="edit-modal__backdrop" data-modal-close></div>
     <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="manual-entry-facility-picker-title">
