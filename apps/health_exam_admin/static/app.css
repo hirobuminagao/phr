@@ -1983,10 +1983,15 @@ a.home-menu-card.is-navigating {
 }
 
 .manual-entry-case-search {
-  display: grid;
-  grid-template-columns: minmax(250px, 1.2fr) minmax(180px, 1fr) minmax(150px, 0.8fr) minmax(120px, 0.65fr) minmax(120px, 0.65fr) auto;
-  gap: 12px;
-  align-items: end;
+  min-height: 0;
+}
+
+.manual-entry-case-search-basic {
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+}
+
+.manual-entry-case-search-visit {
+  grid-template-columns: minmax(320px, 0.8fr);
 }
 
 .manual-entry-case-facility-field {

@@ -247,41 +247,54 @@
 
   <div id="manual-entry-case-picker-modal" class="edit-modal" hidden>
     <div class="edit-modal__backdrop" data-modal-close></div>
-    <section class="edit-modal__panel export-facility-modal manual-entry-case-picker-modal" role="dialog" aria-modal="true" aria-labelledby="manual-entry-case-picker-title">
+    <section class="edit-modal__panel case-filter-modal-panel manual-entry-case-picker-modal" role="dialog" aria-modal="true" aria-labelledby="manual-entry-case-picker-title">
       <div class="edit-modal__head">
         <div>
           <p class="eyebrow">CASE SEARCH</p>
           <h2 id="manual-entry-case-picker-title">caseを検索</h2>
+          <p class="subtle">検索条件を指定すると、画面本体の既存case確認に候補を表示します。</p>
         </div>
-        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+        <div class="case-filter-head-actions">
+          <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+        </div>
       </div>
-      <div class="manual-entry-case-search">
-        <label>
-          健診機関
-          <span class="input-with-button manual-entry-case-facility-field">
-            <input id="manual-entry-case-search-facility" autocomplete="off" placeholder="健診機関コード / 名称">
-            <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-facility-toggle>選択</button>
-            <div class="manual-entry-case-facility-popover" data-manual-entry-case-facility-popover hidden></div>
-          </span>
-        </label>
-        <label>
-          氏名カナ
-          <input id="manual-entry-case-search-kana" autocomplete="off" placeholder="カナ">
-        </label>
-        <label>
-          HIA加入者ID
-          <input id="manual-entry-case-search-hia" autocomplete="off">
-        </label>
-        <label>
-          記号
-          <input id="manual-entry-case-search-symbol" autocomplete="off">
-        </label>
-        <label>
-          番号
-          <input id="manual-entry-case-search-number" autocomplete="off">
-        </label>
+      <div class="manual-entry-case-search case-filter-scroll">
+        <section class="case-filter-group">
+          <h3>基本情報</h3>
+          <div class="case-filter-row manual-entry-case-search-basic">
+            <label>
+              <span>記号</span>
+              <input id="manual-entry-case-search-symbol" autocomplete="off" placeholder="保険証記号">
+            </label>
+            <label>
+              <span>番号</span>
+              <input id="manual-entry-case-search-number" autocomplete="off" placeholder="保険証番号">
+            </label>
+            <label>
+              <span>氏名カナ</span>
+              <input id="manual-entry-case-search-kana" autocomplete="off" placeholder="氏名カナ">
+            </label>
+            <label>
+              <span>HIA加入者ID</span>
+              <input id="manual-entry-case-search-hia" autocomplete="off" placeholder="HIA加入者ID">
+            </label>
+          </div>
+        </section>
+        <section class="case-filter-group">
+          <h3>受診</h3>
+          <div class="case-filter-row manual-entry-case-search-visit">
+            <label>
+              <span>健診機関</span>
+              <span class="input-with-button manual-entry-case-facility-field">
+                <input id="manual-entry-case-search-facility" autocomplete="off" placeholder="健診機関コード / 名称">
+                <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-facility-toggle>選択</button>
+                <div class="manual-entry-case-facility-popover" data-manual-entry-case-facility-popover hidden></div>
+              </span>
+            </label>
+          </div>
+        </section>
       </div>
-      <div class="edit-modal__foot manual-entry-modal-actions">
+      <div class="case-filter-footer manual-entry-modal-actions">
         <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
         <button type="button" class="primary-button" data-manual-entry-case-search>検索</button>
       </div>
