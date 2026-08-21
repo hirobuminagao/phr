@@ -1142,5 +1142,14 @@
       input.addEventListener("input", () => refreshManualMethodGroup(input.dataset.manualMethodGroup || ""));
       refreshManualMethodGroup(input.dataset.manualMethodGroup || "");
     }
+
+    for (const select of document.querySelectorAll("[data-manual-code-select]")) {
+      select.addEventListener("change", () => {
+        const input = select.closest(".manual-entry-value-control")?.querySelector(".manual-entry-value-input");
+        if (!input || !select.value) return;
+        input.value = select.value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
   }
 })();

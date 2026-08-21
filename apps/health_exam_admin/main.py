@@ -7196,6 +7196,7 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
         (limit,),
     )
     rows = [dict(row) for row in cur.fetchall()]
+    code_options = load_manual_exam_cd_options(cur, rows)
     method_group_counts: dict[str, int] = {}
     for row in rows:
         group_key = str(row.get("identity_item_code") or row.get("namecode") or "")
@@ -7206,7 +7207,69 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
         row["manual_method_group_key"] = group_key
         row["manual_method_group_count"] = method_group_counts.get(group_key, 0)
         row["manual_input_type"] = manual_exam_input_type(row.get("xml_value_type"))
+        result_code_oid = str(row.get("result_code_oid") or "")
+        row["manual_code_options"] = code_options.get(result_code_oid, [])
     return rows
+
+
+def load_manual_exam_cd_options(cur: Any, rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    result_code_oids = sorted(
+        {
+            str(row.get("result_code_oid") or "").strip()
+            for row in rows
+            if str(row.get("xml_value_type") or "").upper() == "CD"
+            and str(row.get("result_code_oid") or "").strip()
+        }
+    )
+    if not result_code_oids:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(result_code_oids))
+    cur.execute(
+        f"""
+        SELECT
+          result_code_oid,
+          normalized_code,
+          display_name,
+          priority,
+          variant_id
+        FROM {qname(master_db())}.norm_variants
+        WHERE is_active = 1
+          AND is_canonical = 1
+          AND result_code_oid IN ({placeholders})
+          AND normalized_code IS NOT NULL
+          AND normalized_code <> ''
+          AND normalized_code <> '<<CODE>>'
+        ORDER BY
+          result_code_oid,
+          priority,
+          normalized_code,
+          variant_id
+        """,
+        tuple(result_code_oids),
+    )
+
+    options_by_oid: dict[str, list[dict[str, Any]]] = {}
+    seen: set[tuple[str, str]] = set()
+    for row in cur.fetchall():
+        item = dict(row)
+        oid = str(item.get("result_code_oid") or "").strip()
+        code = str(item.get("normalized_code") or "").strip()
+        if not oid or not code:
+            continue
+        key = (oid, code)
+        if key in seen:
+            continue
+        seen.add(key)
+        label = str(item.get("display_name") or "").strip() or code
+        options_by_oid.setdefault(oid, []).append(
+            {
+                "code": code,
+                "label": label,
+                "option_label": f"{code}: {label}" if label != code else code,
+            }
+        )
+    return options_by_oid
 
 
 def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

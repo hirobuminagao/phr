@@ -278,13 +278,23 @@
                   <small>{{ item.namecode }}{% if item.identity_item_code %} / {{ item.identity_item_code }}{% endif %}</small>
                 </td>
                 <td>
-                  <input
-                    class="manual-entry-value-input"
-                    type="{{ item.manual_input_type }}"
-                    name="item_value_{{ item.namecode }}"
-                    data-manual-method-group="{{ item.manual_method_group_key }}"
-                    placeholder="{{ item.xml_value_type or '値' }}"
-                  >
+                  <div class="manual-entry-value-control">
+                    <input
+                      class="manual-entry-value-input"
+                      type="{{ item.manual_input_type }}"
+                      name="item_value_{{ item.namecode }}"
+                      data-manual-method-group="{{ item.manual_method_group_key }}"
+                      placeholder="{{ item.xml_value_type or '値' }}"
+                    >
+                    {% if item.xml_value_type == "CD" and item.manual_code_options %}
+                    <select data-manual-code-select aria-label="{{ item.item_name }}の候補">
+                      <option value="">候補</option>
+                      {% for option in item.manual_code_options %}
+                      <option value="{{ option.code }}" title="{{ option.option_label }}">{{ option.option_label }}</option>
+                      {% endfor %}
+                    </select>
+                    {% endif %}
+                  </div>
                 </td>
                 <td>
                   <span class="status-pill status-muted">{{ item.xml_value_type or "-" }}</span>

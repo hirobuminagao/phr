@@ -2038,7 +2038,7 @@ a.home-menu-card.is-navigating {
 
 .manual-entry-item-table th:nth-child(2),
 .manual-entry-item-table td:nth-child(2) {
-  width: 180px;
+  width: 300px;
 }
 
 .manual-entry-item-table th:nth-child(3),
@@ -2051,6 +2051,21 @@ a.home-menu-card.is-navigating {
 .manual-entry-value-input:disabled,
 .manual-entry-item-table tr.is-method-disabled {
   opacity: 0.48;
+}
+
+.manual-entry-value-control {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 0.9fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.manual-entry-value-control select {
+  min-width: 0;
+}
+
+.manual-entry-value-control .manual-entry-value-input:only-child {
+  grid-column: 1 / -1;
 }
 
 .inline-check {
