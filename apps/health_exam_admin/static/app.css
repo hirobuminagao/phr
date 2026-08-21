@@ -749,6 +749,15 @@ button[type="submit"]:disabled {
   cursor: pointer;
 }
 
+.run-result-card summary strong {
+  min-width: 0;
+}
+
+.run-result-copy-button {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .run-result-card pre {
   max-height: 360px;
   margin: 0;

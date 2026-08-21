@@ -173,8 +173,11 @@
           <span class="status-pill {{ 'status-ready' if result.ok else 'status-danger' }}">{{ 'OK' if result.ok else 'ERROR' }}</span>
           <strong>{{ result.label }}</strong>
           <small>returncode={{ result.returncode }}</small>
+          {% if not result.ok %}
+          <button type="button" class="ghost-button compact-action-button run-result-copy-button" data-copy-target="#run-result-output-{{ loop.index }}">エラー内容をコピー</button>
+          {% endif %}
         </summary>
-        <pre>{{ result.output }}</pre>
+        <pre id="run-result-output-{{ loop.index }}">{{ result.output }}</pre>
       </details>
       {% endfor %}
     </div>

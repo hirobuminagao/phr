@@ -100,6 +100,27 @@
     });
   }
 
+  for (const button of document.querySelectorAll("[data-copy-target]")) {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const selector = button.getAttribute("data-copy-target");
+      const target = selector ? document.querySelector(selector) : null;
+      const text = target?.textContent || "";
+      if (!text) return;
+      const originalLabel = button.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "コピーしました";
+      } catch {
+        button.textContent = "コピー失敗";
+      }
+      window.setTimeout(() => {
+        button.textContent = originalLabel;
+      }, 1600);
+    });
+  }
+
   for (const input of document.querySelectorAll("[data-live-filter-input]")) {
     const tableSelector = input.getAttribute("data-live-filter-input");
     const table = tableSelector ? document.querySelector(tableSelector) : null;
