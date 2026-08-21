@@ -1249,11 +1249,22 @@
   const manualEntryItemList = document.querySelector("#manual-entry-item-list");
   const manualEntryItemSearchInput = document.querySelector("#manual-entry-item-search-input");
   if (manualEntryItemList) {
+    const manualEntryFloatingNav = document.querySelector(".manual-entry-floating-nav");
+    const manualEntryFloatingCategoryToggle = document.querySelector("[data-manual-entry-floating-category-toggle]");
+    const manualEntryFloatingItemSearchInput = document.querySelector("#manual-entry-floating-item-search-input");
+    const manualEntryFloatingItemResults = document.querySelector("[data-manual-entry-floating-item-results]");
     const categories = Array.from(manualEntryItemList.querySelectorAll(".manual-entry-category"));
     const itemRows = Array.from(manualEntryItemList.querySelectorAll("tbody tr[data-filter-text]"));
     const openCategoryForRow = (row) => {
       const category = row.closest(".manual-entry-category");
       if (category) category.open = true;
+    };
+    const jumpToManualEntryRow = (row) => {
+      if (!row) return;
+      openCategoryForRow(row);
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("is-scroll-target");
+      window.setTimeout(() => row.classList.remove("is-scroll-target"), 1600);
     };
     const jumpToManualEntryItem = () => {
       const keyword = normalize(manualEntryItemSearchInput?.value || "");
@@ -1263,12 +1274,54 @@
         }
         return !row.hidden;
       });
-      if (!target) return;
-      openCategoryForRow(target);
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
-      target.classList.add("is-scroll-target");
-      window.setTimeout(() => target.classList.remove("is-scroll-target"), 1600);
+      jumpToManualEntryRow(target);
     };
+    const renderFloatingItemResults = () => {
+      if (!manualEntryFloatingItemSearchInput || !manualEntryFloatingItemResults) return;
+      const keyword = normalize(manualEntryFloatingItemSearchInput.value);
+      if (!keyword) {
+        manualEntryFloatingItemResults.hidden = true;
+        manualEntryFloatingItemResults.innerHTML = "";
+        return;
+      }
+      const matches = itemRows
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => normalize(row.dataset.filterText).includes(keyword))
+        .slice(0, 10);
+      manualEntryFloatingItemResults.hidden = false;
+      if (!matches.length) {
+        manualEntryFloatingItemResults.innerHTML = `<p class="manual-entry-floating-item-empty">該当項目はありません。</p>`;
+        return;
+      }
+      manualEntryFloatingItemResults.innerHTML = matches.map(({ row, index }) => {
+        const itemName = row.dataset.itemName || "-";
+        const namecode = row.dataset.namecode || "-";
+        const categoryName = row.dataset.categoryName || "-";
+        const identityName = row.dataset.identityItemName || "";
+        const itemLabel = identityName && identityName !== itemName ? `${itemName} / ${identityName}` : itemName;
+        return `
+          <div class="manual-entry-floating-item-result">
+            <div>
+              <strong>${escapeHtml(itemLabel)}</strong>
+              <small>${escapeHtml(namecode)} / ${escapeHtml(categoryName)}</small>
+            </div>
+            <button type="button" class="ghost-button" data-manual-entry-floating-item-jump="${index}">項目に飛ぶ</button>
+          </div>
+        `;
+      }).join("");
+    };
+
+    if (manualEntryFloatingNav && manualEntryFloatingCategoryToggle) {
+      const setCategoryCollapsed = (collapsed) => {
+        manualEntryFloatingNav.classList.toggle("is-category-collapsed", collapsed);
+        manualEntryFloatingCategoryToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        manualEntryFloatingCategoryToggle.setAttribute("aria-label", collapsed ? "カテゴリだけ開く" : "カテゴリだけ閉じる");
+      };
+      setCategoryCollapsed(false);
+      manualEntryFloatingCategoryToggle.addEventListener("click", () => {
+        setCategoryCollapsed(!manualEntryFloatingNav.classList.contains("is-category-collapsed"));
+      });
+    }
 
     document.querySelector("[data-manual-entry-categories-open]")?.addEventListener("click", () => {
       for (const category of categories) {
@@ -1286,6 +1339,22 @@
         event.preventDefault();
         jumpToManualEntryItem();
       }
+    });
+    manualEntryFloatingItemSearchInput?.addEventListener("input", renderFloatingItemResults);
+    manualEntryFloatingItemSearchInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const firstButton = manualEntryFloatingItemResults?.querySelector("[data-manual-entry-floating-item-jump]");
+        firstButton?.click();
+      }
+    });
+    manualEntryFloatingItemResults?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const button = target.closest("[data-manual-entry-floating-item-jump]");
+      if (!button) return;
+      const rowIndex = Number(button.getAttribute("data-manual-entry-floating-item-jump"));
+      jumpToManualEntryRow(itemRows[rowIndex]);
     });
   }
 })();

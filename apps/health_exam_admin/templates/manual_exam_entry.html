@@ -19,7 +19,7 @@
 <nav class="floating-category-nav manual-entry-floating-nav" aria-label="入力カテゴリ移動" data-floating-category-nav>
   <div class="floating-category-head">
     <strong>カテゴリ</strong>
-    <button type="button" aria-label="カテゴリメニューを閉じる" aria-expanded="true" data-floating-category-toggle>...</button>
+    <button type="button" aria-label="カテゴリだけ閉じる" aria-expanded="true" data-manual-entry-floating-category-toggle>...</button>
   </div>
   <div class="floating-category-links" data-floating-category-links>
     <a href="#manual-entry-basic">基本</a>
@@ -27,6 +27,13 @@
     {% for group in item_groups %}
       <a href="#manual-entry-category-{{ loop.index }}">{{ group.category_name }}</a>
     {% endfor %}
+  </div>
+  <div class="manual-entry-floating-item-search">
+    <label>
+      <span>健診項目詳細名</span>
+      <input id="manual-entry-floating-item-search-input" autocomplete="off" placeholder="項目名 / namecode">
+    </label>
+    <div class="manual-entry-floating-item-results" data-manual-entry-floating-item-results hidden></div>
   </div>
   <div class="manual-entry-floating-actions">
     <button type="button" class="primary-button" disabled title="保存処理は次ステップで接続します">source作成</button>
@@ -310,7 +317,14 @@
             </thead>
             <tbody>
               {% for item in group["items"] %}
-              <tr data-filter-text="{{ item.namecode }} {{ item.item_name }} {{ item.category_name or '' }} {{ item.identity_item_code or '' }} {{ item.identity_item_name or '' }} {{ item.method_name or '' }} {{ item.result_code_oid or '' }}">
+              <tr
+                data-manual-entry-item-row
+                data-filter-text="{{ item.namecode }} {{ item.item_name }} {{ item.category_name or '' }} {{ item.identity_item_code or '' }} {{ item.identity_item_name or '' }} {{ item.method_name or '' }} {{ item.result_code_oid or '' }}"
+                data-item-name="{{ item.item_name }}"
+                data-namecode="{{ item.namecode }}"
+                data-category-name="{{ item.category_name or group.category_name }}"
+                data-identity-item-name="{{ item.identity_item_name or '' }}"
+              >
                 <td>
                   <strong>{{ item.item_name }}</strong>
                   <small>{{ item.namecode }}{% if item.identity_item_code %} / {{ item.identity_item_code }}{% endif %}</small>
