@@ -2068,6 +2068,18 @@ a.home-menu-card.is-navigating {
   grid-column: 1 / -1;
 }
 
+.manual-entry-item-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.manual-entry-item-badges .status-pill {
+  font-size: 0.72rem;
+  padding: 2px 7px;
+}
+
 .inline-check {
   display: inline-flex;
   gap: 6px;

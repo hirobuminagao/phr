@@ -276,6 +276,13 @@
                 <td>
                   <strong>{{ item.item_name }}</strong>
                   <small>{{ item.namecode }}{% if item.identity_item_code %} / {{ item.identity_item_code }}{% endif %}</small>
+                  {% if item.manual_article44_items %}
+                  <div class="manual-entry-item-badges">
+                    {% for article44 in item.manual_article44_items %}
+                    <span class="status-pill status-ready" title="法定チェック対象: {{ article44.label }}">法定 {{ article44.detail_name }}</span>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
                 </td>
                 <td>
                   <div class="manual-entry-value-control">

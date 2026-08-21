@@ -80,6 +80,7 @@ LOGGER = logging.getLogger("health_exam_admin")
 SESSION_COOKIE_NAME = "phr_app_session"
 CSRF_COOKIE_NAME = "phr_app_csrf"
 CSRF_FIELD_NAME = "_csrf_token"
+ARTICLE44_GROUP_CODE = "v2_2026_ARTICLE44_CHECK_ITEMS"
 LOGIN_ERROR_MESSAGES = {
     "USER_NOT_FOUND": "社員番号またはパスワードが違います。",
     "PASSWORD_MISMATCH": "社員番号またはパスワードが違います。",
@@ -7197,6 +7198,7 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
     )
     rows = [dict(row) for row in cur.fetchall()]
     code_options = load_manual_exam_cd_options(cur, rows)
+    article44_flags = load_manual_exam_article44_flags(cur, rows)
     method_group_counts: dict[str, int] = {}
     for row in rows:
         group_key = str(row.get("identity_item_code") or row.get("namecode") or "")
@@ -7209,7 +7211,56 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
         row["manual_input_type"] = manual_exam_input_type(row.get("xml_value_type"))
         result_code_oid = str(row.get("result_code_oid") or "")
         row["manual_code_options"] = code_options.get(result_code_oid, [])
+        namecode = str(row.get("namecode") or "")
+        row["manual_article44_items"] = article44_flags.get(namecode, [])
     return rows
+
+
+def load_manual_exam_article44_flags(cur: Any, rows: list[dict[str, Any]]) -> dict[str, list[dict[str, str]]]:
+    namecodes = sorted({str(row.get("namecode") or "").strip() for row in rows if str(row.get("namecode") or "").strip()})
+    if not namecodes:
+        return {}
+
+    placeholders = ", ".join(["%s"] * len(namecodes))
+    cur.execute(
+        f"""
+        SELECT
+          namecode,
+          value_type,
+          notes
+        FROM {qname(dev_db())}.exam_item_group_members
+        WHERE group_code = %s
+          AND namecode IN ({placeholders})
+        ORDER BY
+          priority,
+          namecode,
+          value_type
+        """,
+        (ARTICLE44_GROUP_CODE, *namecodes),
+    )
+
+    flags: dict[str, list[dict[str, str]]] = {}
+    seen: set[tuple[str, str]] = set()
+    for row in cur.fetchall():
+        namecode = str(row.get("namecode") or "").strip()
+        notes = str(row.get("notes") or "")
+        match = re.search(r"Article44\s+(?P<detail_no>44\d{8})\s*:\s*(?P<detail_name>.+)", notes)
+        if not namecode or not match:
+            continue
+        detail_no = match.group("detail_no")
+        detail_name = match.group("detail_name").strip()
+        key = (namecode, detail_no)
+        if key in seen:
+            continue
+        seen.add(key)
+        flags.setdefault(namecode, []).append(
+            {
+                "detail_no": detail_no,
+                "detail_name": detail_name,
+                "label": f"{detail_no} / {detail_name}" if detail_name else detail_no,
+            }
+        )
+    return flags
 
 
 def load_manual_exam_cd_options(cur: Any, rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
