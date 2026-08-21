@@ -1981,6 +1981,14 @@ a.home-menu-card.is-navigating {
   flex: 0 0 auto;
 }
 
+.manual-entry-selected-case .compact-action-button {
+  flex: 0 0 auto;
+  min-width: 48px;
+  min-height: 30px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
 .manual-entry-selected-case strong,
 .manual-entry-selected-case small {
   display: block;

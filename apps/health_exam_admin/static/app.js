@@ -1122,6 +1122,7 @@
     const selectedCasePanel = document.querySelector("[data-manual-entry-selected-case]");
     const selectedCaseTitle = document.querySelector("[data-manual-entry-selected-case-title]");
     const selectedCaseDetail = document.querySelector("[data-manual-entry-selected-case-detail]");
+    const selectedCaseDetailLink = document.querySelector("[data-manual-entry-selected-case-detail-link]");
     const casePanel = document.querySelector("[data-manual-entry-case-panel]");
     const caseResults = document.querySelector("[data-manual-entry-case-results]");
     const caseCount = document.querySelector("[data-manual-entry-case-count]");
@@ -1230,15 +1231,11 @@
       if (selectedCaseDetail) {
         selectedCaseDetail.textContent = `${item.facility_name || "-"} / ${item.exam_date || "-"} / ${item.source_mode || "-"} / 出力 ${item.export_readiness_status || "-"}`;
       }
-      for (const row of document.querySelectorAll("[data-manual-entry-case-row]")) {
-        const isSelected = row.getAttribute("data-case-id") === selectedManualCaseId;
-        row.classList.toggle("is-selected", isSelected);
-        const applyButton = row.querySelector("[data-manual-entry-case-apply]");
-        if (applyButton) {
-          applyButton.textContent = isSelected ? "使用中" : "使う";
-          applyButton.classList.toggle("is-active", isSelected);
-        }
+      if (selectedCaseDetailLink) {
+        selectedCaseDetailLink.href = `/exam-export-cases/${encodeURIComponent(item.exam_export_case_id || "")}`;
+        selectedCaseDetailLink.hidden = !item.exam_export_case_id;
       }
+      renderManualCaseRows([item]);
       document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
       document.querySelector("#manual-entry-basic")?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
