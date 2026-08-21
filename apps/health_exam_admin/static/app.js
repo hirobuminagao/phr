@@ -974,6 +974,146 @@
     }
   }
 
+  const manualSubscriberResults = document.querySelector("[data-manual-entry-subscriber-results]");
+  if (manualSubscriberResults) {
+    const searchButton = document.querySelector("[data-manual-entry-subscriber-search]");
+    const applyButton = document.querySelector("[data-manual-entry-subscriber-apply]");
+    const searchQ = document.querySelector("#manual-entry-subscriber-search-q");
+    const searchKana = document.querySelector("#manual-entry-subscriber-search-kana");
+    const searchSymbol = document.querySelector("#manual-entry-subscriber-search-symbol");
+    const searchNumber = document.querySelector("#manual-entry-subscriber-search-number");
+    let selectedSubscriber = null;
+
+    const setManualSubscriberMessage = (message) => {
+      manualSubscriberResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
+    };
+
+    const setManualSubscriberSelected = (subscriber) => {
+      selectedSubscriber = subscriber;
+      for (const row of manualSubscriberResults.querySelectorAll("[data-manual-entry-subscriber-row]")) {
+        const isSelected = subscriber && row.dataset.subscriberId === String(subscriber.subscriber_id || "");
+        row.classList.toggle("is-selected", Boolean(isSelected));
+        const button = row.querySelector("[data-manual-entry-subscriber-pick]");
+        if (button) {
+          button.textContent = isSelected ? "選択中" : "選ぶ";
+          button.classList.toggle("is-active", Boolean(isSelected));
+        }
+      }
+      if (applyButton) {
+        applyButton.disabled = !selectedSubscriber;
+        applyButton.classList.toggle("disabled", !selectedSubscriber);
+      }
+    };
+
+    const renderManualSubscriberRows = (items) => {
+      if (!items.length) {
+        setManualSubscriberMessage("一致する加入者はいません。");
+        setManualSubscriberSelected(null);
+        return;
+      }
+      manualSubscriberResults.innerHTML = "";
+      for (const item of items) {
+        const row = document.createElement("tr");
+        row.setAttribute("data-manual-entry-subscriber-row", "true");
+        row.dataset.subscriberId = String(item.subscriber_id || "");
+        const insurance = `${item.insurance_symbol || "-"}-${item.insurance_number || "-"} 枝番 ${item.insurance_branch_number || "-"}`;
+        const hia = `HIA ${item.hia_subscriber_id || "-"} / subscriber ${item.subscriber_id || "-"}`;
+        const dashboard = item.hia_dashboard_status
+          ? `${item.hia_dashboard_status} / ${item.hia_dashboard_medical_institution || "-"}`
+          : "HIAダッシュボードなし";
+        row.innerHTML = `
+          <td>
+            <strong>${escapeHtml(item.name_kana || "-")}</strong>
+            <small>${escapeHtml(item.name_full || "-")} / ${escapeHtml(item.birth || "-")} / ${escapeHtml(item.gender_label || "-")}</small>
+          </td>
+          <td>
+            <strong>${escapeHtml(insurance)}</strong>
+            <small>社員 ${escapeHtml(item.employee_code || "-")} / 資格喪失 ${escapeHtml(item.qualification_lost_date || "-")}</small>
+          </td>
+          <td>
+            <strong>${escapeHtml(hia)}</strong>
+            <small>case ${escapeHtml(item.candidate_case_count || "0")}件 / ${escapeHtml(dashboard)}</small>
+          </td>
+          <td><button type="button" class="ghost-button" data-manual-entry-subscriber-pick>選ぶ</button></td>
+        `;
+        row.addEventListener("click", () => {
+          if (selectedSubscriber && String(selectedSubscriber.subscriber_id || "") === String(item.subscriber_id || "")) {
+            setManualSubscriberSelected(null);
+          } else {
+            setManualSubscriberSelected(item);
+          }
+        });
+        row.querySelector("[data-manual-entry-subscriber-pick]")?.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (selectedSubscriber && String(selectedSubscriber.subscriber_id || "") === String(item.subscriber_id || "")) {
+            setManualSubscriberSelected(null);
+          } else {
+            setManualSubscriberSelected(item);
+          }
+        });
+        manualSubscriberResults.appendChild(row);
+      }
+      setManualSubscriberSelected(null);
+    };
+
+    const searchManualSubscribers = async () => {
+      const eventId = document.querySelector("select[name='event_id']")?.value || "2";
+      const params = new URLSearchParams({
+        event_id: eventId,
+        q: searchQ ? searchQ.value.trim() : "",
+        name_kana: searchKana ? searchKana.value.trim() : "",
+        insurance_symbol: searchSymbol ? searchSymbol.value.trim() : "",
+        insurance_number: searchNumber ? searchNumber.value.trim() : "",
+      });
+      if (![...params.values()].some((value) => value && value !== eventId)) {
+        setManualSubscriberMessage("検索条件を入力してください。");
+        setManualSubscriberSelected(null);
+        return;
+      }
+      setManualSubscriberMessage("検索中...");
+      try {
+        const response = await fetch(`/api/manual-exam-entry/subscribers?${params.toString()}`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        renderManualSubscriberRows(Array.isArray(payload.items) ? payload.items : []);
+      } catch (_error) {
+        setManualSubscriberMessage("検索でエラーが発生しました。");
+        setManualSubscriberSelected(null);
+      }
+    };
+
+    searchButton?.addEventListener("click", searchManualSubscribers);
+    for (const input of [searchQ, searchKana, searchSymbol, searchNumber]) {
+      input?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          searchManualSubscribers();
+        }
+      });
+    }
+    applyButton?.addEventListener("click", () => {
+      if (!selectedSubscriber) return;
+      const setValue = (selector, value) => {
+        const input = document.querySelector(selector);
+        if (input) input.value = value || "";
+      };
+      setValue("#manual-entry-subscriber-id-input", selectedSubscriber.subscriber_id);
+      setValue("#manual-entry-hia-subscriber-id-input", selectedSubscriber.hia_subscriber_id);
+      setValue("#manual-entry-name-full-input", selectedSubscriber.name_full);
+      setValue("#manual-entry-name-kana-input", selectedSubscriber.name_kana);
+      setValue("#manual-entry-insurance-symbol-input", selectedSubscriber.insurance_symbol);
+      setValue("#manual-entry-insurance-number-input", selectedSubscriber.insurance_number);
+      setValue("#manual-entry-insurance-branch-input", selectedSubscriber.insurance_branch_number);
+      setValue("#manual-entry-birthdate-input", selectedSubscriber.birth);
+      setValue("#manual-entry-gender-input", selectedSubscriber.gender_label);
+      document.querySelector("#manual-entry-subscriber-picker-modal [data-modal-close]")?.click();
+    });
+  }
+
   const manualValueInputs = Array.from(document.querySelectorAll("[data-manual-method-group]"));
   if (manualValueInputs.length) {
     const refreshManualMethodGroup = (groupKey) => {

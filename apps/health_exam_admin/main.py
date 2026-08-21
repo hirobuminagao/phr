@@ -14,7 +14,7 @@ from typing import Any, Mapping
 from urllib.parse import parse_qs, quote, urlencode
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.background import BackgroundTask
@@ -4303,10 +4303,15 @@ def load_subscriber_match_candidate_rows(
               s.hia_subscriber_id LIKE %s
               OR s.person_id_custom LIKE %s
               OR s.name_kanji_full LIKE %s
+              OR s.name_kana_full LIKE %s
+              OR s.name_kana_full_match LIKE %s
+              OR s.insurance_number LIKE %s
+              OR s.insurance_number_match LIKE %s
+              OR s.employee_code LIKE %s
             )
             """
         )
-        params.extend([like] * 3)
+        params.extend([like] * 8)
     candidate_kana = str(candidate_filters.get("name_kana") or "").strip()
     if candidate_kana:
         like = f"%{candidate_kana}%"
@@ -7222,6 +7227,76 @@ def manual_exam_input_type(xml_value_type: Any) -> str:
     if value_type == "PQ":
         return "number"
     return "text"
+
+
+@app.get("/api/manual-exam-entry/subscribers")
+def manual_exam_entry_subscribers(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"items": []}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"items": []}, status_code=403)
+
+    event_id = request.query_params.get("event_id", "2")
+    query = request.query_params.get("q", "").strip()
+    filters = {
+        "name_kana": request.query_params.get("name_kana", "").strip(),
+        "insurance_symbol": request.query_params.get("insurance_symbol", "").strip(),
+        "insurance_number": request.query_params.get("insurance_number", "").strip(),
+        "employee_code": request.query_params.get("employee_code", "").strip(),
+    }
+    if not query and not any(filters.values()):
+        return JSONResponse({"items": []})
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            rows = load_subscriber_match_candidate_rows(
+                cur,
+                ledger=None,
+                event_id=event_id,
+                query=query,
+                candidate_filters=filters,
+                limit=50,
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        items.append(
+            {
+                "subscriber_id": row.get("subscriber_id"),
+                "hia_subscriber_id": row.get("hia_subscriber_id"),
+                "person_id_custom": row.get("person_id_custom"),
+                "name_full": row.get("name_kanji_full"),
+                "name_kana": row.get("name_kana_full"),
+                "birth": str(row.get("birth") or ""),
+                "gender_code": row.get("gender_code"),
+                "gender_label": gender_code_label(row.get("gender_code")),
+                "insurer_number": row.get("insurer_number"),
+                "insurance_symbol": row.get("insurance_symbol_export") or row.get("insurance_symbol"),
+                "insurance_number": row.get("insurance_number"),
+                "insurance_branch_number": row.get("insurance_branchnumber"),
+                "employee_code": row.get("employee_code"),
+                "relationship_name": row.get("relationship_name"),
+                "qualification_lost_date": str(row.get("qualification_lost_date") or ""),
+                "hia_dashboard_status": row.get("hia_dashboard_status"),
+                "hia_dashboard_medical_institution": row.get("hia_dashboard_medical_institution"),
+                "hia_dashboard_reservation_date": str(row.get("hia_dashboard_reservation_date") or ""),
+                "hia_dashboard_exam_date": str(row.get("hia_dashboard_exam_date") or ""),
+                "hia_dashboard_course_name": row.get("hia_dashboard_course_name"),
+                "candidate_case_count": row.get("candidate_case_count") or 0,
+                "candidate_latest_case_id": row.get("candidate_latest_case_id"),
+                "candidate_latest_case_facility_name": row.get("candidate_latest_case_facility_name"),
+                "candidate_latest_case_exam_date": str(row.get("candidate_latest_case_exam_date") or ""),
+                "candidate_latest_case_export_readiness_status": row.get("candidate_latest_case_export_readiness_status"),
+            }
+        )
+    return JSONResponse({"items": items})
 
 
 @app.get("/health")

@@ -1959,6 +1959,36 @@ a.home-menu-card.is-navigating {
   align-items: start;
 }
 
+.manual-entry-subscriber-modal {
+  width: min(1120px, calc(100vw - 48px));
+}
+
+.manual-entry-subscriber-search {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.3fr) minmax(180px, 1fr) minmax(140px, 0.7fr) minmax(140px, 0.7fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.manual-entry-subscriber-table tr[data-manual-entry-subscriber-row] {
+  cursor: pointer;
+}
+
+.manual-entry-subscriber-table tr[data-manual-entry-subscriber-row]:hover {
+  background: #f3faf7;
+}
+
+.manual-entry-subscriber-table tr.is-selected {
+  background: #e7f6ef;
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.manual-entry-subscriber-table .ghost-button.is-active {
+  border-color: var(--accent);
+  background: #dff3eb;
+  color: var(--accent-dark);
+}
+
 .manual-entry-item-search {
   min-width: min(420px, 100%);
 }

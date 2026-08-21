@@ -81,21 +81,41 @@
       </div>
 
       <div class="manual-entry-basic-grid">
+        <input id="manual-entry-subscriber-id-input" type="hidden" name="subscriber_id">
         <label>
           <span>HIA加入者ID</span>
-          <input name="hia_subscriber_id" autocomplete="off" placeholder="加入者検索から反映予定">
+          <span class="input-with-button">
+            <input id="manual-entry-hia-subscriber-id-input" name="hia_subscriber_id" autocomplete="off" placeholder="加入者検索から反映予定">
+            <button type="button" class="ghost-button compact-action-button" data-modal-open="manual-entry-subscriber-picker-modal">検索</button>
+          </span>
+        </label>
+        <label>
+          <span>氏名</span>
+          <input id="manual-entry-name-full-input" name="name_full" autocomplete="off" placeholder="加入者検索または手入力">
         </label>
         <label>
           <span>氏名カナ</span>
-          <input name="name_kana" autocomplete="off" placeholder="加入者検索または手入力">
+          <input id="manual-entry-name-kana-input" name="name_kana" autocomplete="off" placeholder="加入者検索または手入力">
         </label>
         <label>
           <span>記号</span>
-          <input name="insurance_symbol" autocomplete="off">
+          <input id="manual-entry-insurance-symbol-input" name="insurance_symbol" autocomplete="off">
         </label>
         <label>
           <span>番号</span>
-          <input name="insurance_number" autocomplete="off">
+          <input id="manual-entry-insurance-number-input" name="insurance_number" autocomplete="off">
+        </label>
+        <label>
+          <span>枝番</span>
+          <input id="manual-entry-insurance-branch-input" name="insurance_branch_number" autocomplete="off">
+        </label>
+        <label>
+          <span>生年月日</span>
+          <input id="manual-entry-birthdate-input" name="birthdate" autocomplete="off" placeholder="YYYY-MM-DD">
+        </label>
+        <label>
+          <span>性別</span>
+          <input id="manual-entry-gender-input" name="gender" autocomplete="off" placeholder="男 / 女">
         </label>
       </div>
     </form>
@@ -162,6 +182,59 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+    </section>
+  </div>
+
+  <div id="manual-entry-subscriber-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal manual-entry-subscriber-modal" role="dialog" aria-modal="true" aria-labelledby="manual-entry-subscriber-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">加入者検索</p>
+          <h2 id="manual-entry-subscriber-picker-title">人を選択</h2>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="manual-entry-subscriber-search">
+        <label>
+          キーワード
+          <input id="manual-entry-subscriber-search-q" autocomplete="off" placeholder="HIA ID / 氏名 / 社員番号">
+        </label>
+        <label>
+          氏名カナ
+          <input id="manual-entry-subscriber-search-kana" autocomplete="off" placeholder="カナ">
+        </label>
+        <label>
+          記号
+          <input id="manual-entry-subscriber-search-symbol" autocomplete="off">
+        </label>
+        <label>
+          番号
+          <input id="manual-entry-subscriber-search-number" autocomplete="off">
+        </label>
+        <button type="button" class="primary-button" data-manual-entry-subscriber-search>検索</button>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table class="data-table compact-table manual-entry-subscriber-table">
+          <thead>
+            <tr>
+              <th>加入者</th>
+              <th>保険証</th>
+              <th>HIA / case</th>
+              <th>選択</th>
+            </tr>
+          </thead>
+          <tbody data-manual-entry-subscriber-results>
+            <tr data-manual-entry-subscriber-empty>
+              <td colspan="4">条件を入力して検索してください。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="edit-modal__foot">
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="button" class="primary-button" data-manual-entry-subscriber-apply disabled" disabled>選択</button>
       </div>
     </section>
   </div>
