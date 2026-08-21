@@ -52,6 +52,7 @@
       </div>
     </div>
     <form id="exam-processing-form" method="post" action="/exam-processing/run" class="exam-processing-form" data-processing-form data-processing-message="健診結果処理を実行しています">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
       <div class="form-grid four-columns">
         <label>
           対象event

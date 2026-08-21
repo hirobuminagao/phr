@@ -20,7 +20,10 @@
         return;
       }
       const token = cookieValue("phr_app_csrf");
-      if (token && !form.querySelector("input[name='_csrf_token']")) {
+      const csrfInput = form.querySelector("input[name='_csrf_token']");
+      if (token && csrfInput) {
+        csrfInput.value = token;
+      } else if (token) {
         const input = document.createElement("input");
         input.type = "hidden";
         input.name = "_csrf_token";
