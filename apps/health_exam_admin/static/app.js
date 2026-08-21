@@ -1234,4 +1234,47 @@
       });
     }
   }
+
+  const manualEntryItemList = document.querySelector("#manual-entry-item-list");
+  const manualEntryItemSearchInput = document.querySelector("#manual-entry-item-search-input");
+  if (manualEntryItemList) {
+    const categories = Array.from(manualEntryItemList.querySelectorAll(".manual-entry-category"));
+    const itemRows = Array.from(manualEntryItemList.querySelectorAll("tbody tr[data-filter-text]"));
+    const openCategoryForRow = (row) => {
+      const category = row.closest(".manual-entry-category");
+      if (category) category.open = true;
+    };
+    const jumpToManualEntryItem = () => {
+      const keyword = normalize(manualEntryItemSearchInput?.value || "");
+      const target = itemRows.find((row) => {
+        if (keyword) {
+          return normalize(row.dataset.filterText).includes(keyword);
+        }
+        return !row.hidden;
+      });
+      if (!target) return;
+      openCategoryForRow(target);
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("is-scroll-target");
+      window.setTimeout(() => target.classList.remove("is-scroll-target"), 1600);
+    };
+
+    document.querySelector("[data-manual-entry-categories-open]")?.addEventListener("click", () => {
+      for (const category of categories) {
+        category.open = true;
+      }
+    });
+    document.querySelector("[data-manual-entry-categories-close]")?.addEventListener("click", () => {
+      for (const category of categories) {
+        category.open = false;
+      }
+    });
+    document.querySelector("[data-manual-entry-item-jump]")?.addEventListener("click", jumpToManualEntryItem);
+    manualEntryItemSearchInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        jumpToManualEntryItem();
+      }
+    });
+  }
 })();

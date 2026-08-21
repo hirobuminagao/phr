@@ -2020,6 +2020,14 @@ a.home-menu-card.is-navigating {
   min-width: min(420px, 100%);
 }
 
+.manual-entry-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: end;
+}
+
 .manual-entry-item-groups {
   display: grid;
   gap: 12px;
@@ -2069,6 +2077,11 @@ a.home-menu-card.is-navigating {
 .manual-entry-item-table th:nth-child(6),
 .manual-entry-item-table td:nth-child(6) {
   width: 92px;
+}
+
+.manual-entry-item-table tr.is-scroll-target {
+  background: #fff7d6;
+  box-shadow: inset 4px 0 0 #c99700;
 }
 
 .manual-entry-value-input:disabled,

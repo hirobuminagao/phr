@@ -275,8 +275,18 @@
       </div>
       <label class="manual-entry-item-search">
         <span>項目検索</span>
-        <input data-live-filter-input="#manual-entry-item-list" autocomplete="off" placeholder="項目名 / namecode / 区分 / OID">
+        <input
+          id="manual-entry-item-search-input"
+          data-live-filter-input="#manual-entry-item-list"
+          autocomplete="off"
+          placeholder="項目名 / namecode / 区分 / OID"
+        >
       </label>
+      <div class="manual-entry-item-actions">
+        <button type="button" class="ghost-button compact-action-button" data-manual-entry-item-jump>該当へ移動</button>
+        <button type="button" class="ghost-button compact-action-button" data-manual-entry-categories-open>全て開く</button>
+        <button type="button" class="ghost-button compact-action-button" data-manual-entry-categories-close>全て閉じる</button>
+      </div>
     </div>
 
     <div id="manual-entry-item-list" class="manual-entry-item-groups">
