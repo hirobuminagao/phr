@@ -50,6 +50,24 @@
     '"': "&quot;",
     "'": "&#39;",
   }[char]));
+  const fetchJson = async (url) => {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
+    let payload = null;
+    let bodyText = "";
+    try {
+      bodyText = await response.text();
+      payload = bodyText ? JSON.parse(bodyText) : null;
+    } catch (_error) {
+      payload = null;
+    }
+    if (!response.ok) {
+      const detail = payload?.message || payload?.detail || bodyText.slice(0, 160);
+      throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+    }
+    return payload || {};
+  };
   const filters = new Map();
   const processingOverlay = document.querySelector("[data-processing-overlay]");
   const processingTitle = document.querySelector("[data-processing-overlay-title]");
@@ -1260,7 +1278,7 @@
             <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
           </td>
           <td>
-            <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-apply>選択</button>
+            <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-apply>このcaseを使う</button>
             <a class="ghost-button compact-action-button" href="/exam-export-cases/${encodeURIComponent(item.exam_export_case_id)}">詳細</a>
           </td>
         `;
@@ -1283,16 +1301,10 @@
       });
       setManualCaseMessage("caseを確認中...", "検索中");
       try {
-        const response = await fetch(`/api/manual-exam-entry/cases?${params.toString()}`, {
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const payload = await response.json();
+        const payload = await fetchJson(`/api/manual-exam-entry/cases?${params.toString()}`);
         renderManualCaseRows(Array.isArray(payload.items) ? payload.items : []);
-      } catch (_error) {
-        setManualCaseMessage("case確認でエラーが発生しました。", "エラー");
+      } catch (error) {
+        setManualCaseMessage(`case確認でエラーが発生しました。${error?.message || ""}`, "エラー");
       }
     };
 
@@ -1363,16 +1375,10 @@
       }
       setManualSubscriberMessage("検索中...");
       try {
-        const response = await fetch(`/api/manual-exam-entry/subscribers?${params.toString()}`, {
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const payload = await response.json();
+        const payload = await fetchJson(`/api/manual-exam-entry/subscribers?${params.toString()}`);
         renderManualSubscriberRows(Array.isArray(payload.items) ? payload.items : []);
-      } catch (_error) {
-        setManualSubscriberMessage("検索でエラーが発生しました。");
+      } catch (error) {
+        setManualSubscriberMessage(`検索でエラーが発生しました。${error?.message || ""}`);
         setManualSubscriberSelected(null);
       }
     };
@@ -1399,17 +1405,11 @@
       setManualCaseMessage("caseを検索中...", "検索中");
       document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
       try {
-        const response = await fetch(`/api/manual-exam-entry/case-candidates?${params.toString()}`, {
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const payload = await response.json();
+        const payload = await fetchJson(`/api/manual-exam-entry/case-candidates?${params.toString()}`);
         renderManualCaseRows(Array.isArray(payload.items) ? payload.items : []);
         document.querySelector("#manual-entry-case-context")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      } catch (_error) {
-        setManualCaseMessage("case検索でエラーが発生しました。", "エラー");
+      } catch (error) {
+        setManualCaseMessage(`case検索でエラーが発生しました。${error?.message || ""}`, "エラー");
       }
     };
 
