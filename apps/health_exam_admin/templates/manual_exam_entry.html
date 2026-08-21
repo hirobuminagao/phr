@@ -412,6 +412,15 @@
                 </td>
                 <td>
                   <div class="manual-entry-value-control">
+                    {% if item.xml_value_type == "ST" %}
+                    <textarea
+                      class="manual-entry-value-input manual-entry-st-value-input"
+                      name="item_value_{{ item.namecode }}"
+                      data-manual-method-group="{{ item.manual_method_group_key }}"
+                      placeholder="ST"
+                      rows="3"
+                    ></textarea>
+                    {% else %}
                     <input
                       class="manual-entry-value-input"
                       type="{{ item.manual_input_type }}"
@@ -419,6 +428,7 @@
                       data-manual-method-group="{{ item.manual_method_group_key }}"
                       placeholder="{{ item.xml_value_type or '値' }}"
                     >
+                    {% endif %}
                     {% if item.xml_value_type == "CD" and item.manual_code_options %}
                     <select data-manual-code-select aria-label="{{ item.item_name }}の候補">
                       <option value="">候補</option>

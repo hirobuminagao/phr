@@ -2213,7 +2213,7 @@ a.home-menu-card.is-navigating {
 }
 
 .manual-entry-item-table {
-  min-width: 1160px;
+  min-width: 1280px;
 }
 
 .manual-entry-item-table th:nth-child(1),
@@ -2223,7 +2223,7 @@ a.home-menu-card.is-navigating {
 
 .manual-entry-item-table th:nth-child(2),
 .manual-entry-item-table td:nth-child(2) {
-  width: 300px;
+  width: 420px;
 }
 
 .manual-entry-item-table th:nth-child(3),
@@ -2256,6 +2256,12 @@ a.home-menu-card.is-navigating {
 
 .manual-entry-value-control .manual-entry-value-input:only-child {
   grid-column: 1 / -1;
+}
+
+.manual-entry-st-value-input {
+  min-height: 86px;
+  resize: vertical;
+  line-height: 1.5;
 }
 
 .manual-entry-item-badges {
