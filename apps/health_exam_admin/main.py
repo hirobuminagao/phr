@@ -7402,15 +7402,27 @@ def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, 
     groups: list[dict[str, Any]] = []
     group_index: dict[str, dict[str, Any]] = {}
     item_index: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    item_names_by_method_key: dict[tuple[str, str, str], set[str]] = {}
+    for row in rows:
+        category = str(row.get("category_name") or "未分類")
+        identity_key = str(row.get("identity_item_code") or row.get("namecode") or "")
+        value_type = str(row.get("xml_value_type") or "")
+        item_name = str(row.get("item_name") or "")
+        if category and identity_key and value_type:
+            item_names_by_method_key.setdefault((category, identity_key, value_type), set()).add(item_name)
     for row in rows:
         category = str(row.get("category_name") or "未分類")
         if category not in group_index:
             group = {"category_name": category, "items": []}
             group_index[category] = group
             groups.append(group)
-        expand_methods = manual_exam_should_expand_method_rows(row)
-        entry_key = str(row.get("namecode") if expand_methods else row.get("identity_item_code") or row.get("namecode") or "")
+        identity_key = str(row.get("identity_item_code") or row.get("namecode") or "")
         value_type = str(row.get("xml_value_type") or "")
+        expand_methods = manual_exam_should_expand_method_rows(
+            row,
+            same_identity_item_names=item_names_by_method_key.get((category, identity_key, value_type), set()),
+        )
+        entry_key = str(row.get("namecode") if expand_methods else identity_key)
         item_key = (category, entry_key, value_type, str(row.get("namecode") or "") if expand_methods else "")
         method_option = {
             "namecode": str(row.get("namecode") or ""),
@@ -7474,7 +7486,9 @@ def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, 
     return groups
 
 
-def manual_exam_should_expand_method_rows(row: dict[str, Any]) -> bool:
+def manual_exam_should_expand_method_rows(row: dict[str, Any], *, same_identity_item_names: set[str]) -> bool:
+    if len({name for name in same_identity_item_names if name}) > 1:
+        return True
     text = " ".join(
         str(row.get(field) or "")
         for field in ("item_name", "identity_item_name", "category_name", "method_name")
