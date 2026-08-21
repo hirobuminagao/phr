@@ -5167,6 +5167,23 @@ def build_exam_export_case_pagination(
     }
 
 
+def build_exam_export_case_summary_filter_urls(filters: dict[str, str], *, limit: int) -> dict[str, str]:
+    def filter_url(**overrides: str) -> str:
+        query = {key: value for key, value in filters.items() if value and key != "page"}
+        query.update(overrides)
+        query["limit"] = str(limit)
+        query["page"] = "1"
+        return f"/exam-export-cases?{urlencode(query)}"
+
+    return {
+        "ready": filter_url(export_readiness_status="EXPORT_READY"),
+        "approved_with_reason": filter_url(export_readiness_status="APPROVED_WITH_REASON"),
+        "blocked": filter_url(export_readiness_status="BLOCKED"),
+        "exported": filter_url(export_readiness_status="EXPORTED"),
+        "multi_source": filter_url(source_mode="XML_CSV"),
+    }
+
+
 def load_exam_export_case_month_options(cur: Any, *, event_id: str | None = None, limit: int = 36) -> list[dict[str, Any]]:
     where_parts = ["exam_date IS NOT NULL"]
     params: list[Any] = []
@@ -9292,6 +9309,7 @@ def exam_export_cases(request: Request) -> Response:
                 page=page,
                 limit=limit,
             )
+            summary_filter_urls = build_exam_export_case_summary_filter_urls(filters, limit=limit)
             if audit_enabled(cur):
                 for row in rows:
                     log_audit(
@@ -9322,6 +9340,7 @@ def exam_export_cases(request: Request) -> Response:
             "filters": filters,
             "rows": rows,
             "summary": summary,
+            "summary_filter_urls": summary_filter_urls,
             "total_count": total_count,
             "limit": limit,
             "pagination": pagination,

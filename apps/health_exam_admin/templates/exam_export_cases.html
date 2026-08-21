@@ -308,31 +308,31 @@
       <strong>{{ total_count }}</strong>
       <small>{{ pagination.start }}-{{ pagination.end }} 件を表示</small>
     </div>
-    <div class="summary-card">
+    <a class="summary-card summary-card-link {{ 'is-active' if filters.export_readiness_status == 'EXPORT_READY' else '' }}" href="{{ summary_filter_urls.ready }}">
       <span>出力可能</span>
       <strong>{{ summary.ready }}</strong>
       <small>READY</small>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-card-link {{ 'is-active' if filters.export_readiness_status == 'APPROVED_WITH_REASON' else '' }}" href="{{ summary_filter_urls.approved_with_reason }}">
       <span>理由ありOK</span>
       <strong>{{ summary.approved_with_reason }}</strong>
       <small>人手判断済み</small>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-card-link {{ 'is-active' if filters.export_readiness_status == 'BLOCKED' else '' }}" href="{{ summary_filter_urls.blocked }}">
       <span>BLOCKED</span>
       <strong>{{ summary.blocked }}</strong>
       <small>出力前確認</small>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-card-link {{ 'is-active' if filters.export_readiness_status == 'EXPORTED' else '' }}" href="{{ summary_filter_urls.exported }}">
       <span>出力済み</span>
       <strong>{{ summary.exported }}</strong>
       <small>XML作成済み</small>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-card-link {{ 'is-active' if filters.source_mode == 'XML_CSV' else '' }}" href="{{ summary_filter_urls.multi_source }}">
       <span>XML+CSV</span>
       <strong>{{ summary.multi_source }}</strong>
       <small>複数source</small>
-    </div>
+    </a>
   </section>
 
   <section class="panel">

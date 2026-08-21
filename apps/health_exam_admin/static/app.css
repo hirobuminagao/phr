@@ -302,6 +302,22 @@ button[type="submit"]:disabled {
   gap: 6px;
 }
 
+.summary-card-link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.summary-card-link:hover {
+  border-color: #8fb8ad;
+  background: #eef8f5;
+}
+
+.summary-card-link.is-active {
+  border-color: #0f7f65;
+  background: #e7f7f1;
+  box-shadow: inset 0 0 0 1px rgba(15, 127, 101, 0.18);
+}
+
 .case-summary-grid .summary-card {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
