@@ -2199,23 +2199,27 @@ a.home-menu-card.is-navigating {
   margin-top: 14px;
 }
 
+.manual-entry-case-panel.is-selected .section-heading {
+  margin-bottom: 0;
+}
+
+.manual-entry-case-panel.is-selected .section-heading p,
+.manual-entry-case-panel.is-selected .manual-entry-case-table-panel {
+  display: none;
+}
+
 .manual-entry-case-table {
   min-width: 980px;
 }
 
 .manual-entry-case-table th:nth-child(1),
 .manual-entry-case-table td:nth-child(1) {
-  width: 120px;
+  width: 160px;
 }
 
 .manual-entry-case-table th:nth-child(3),
 .manual-entry-case-table td:nth-child(3) {
   width: 150px;
-}
-
-.manual-entry-case-table th:nth-child(5),
-.manual-entry-case-table td:nth-child(5) {
-  width: 118px;
 }
 
 .manual-entry-case-table tr.is-selected {
@@ -2227,6 +2231,7 @@ a.home-menu-card.is-navigating {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-bottom: 6px;
   white-space: nowrap;
 }
 

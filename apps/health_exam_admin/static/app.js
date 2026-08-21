@@ -1236,6 +1236,7 @@
         selectedCaseDetailLink.hidden = !item.exam_export_case_id;
       }
       renderManualCaseRows([item]);
+      if (casePanel) casePanel.classList.add("is-selected");
       document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
       document.querySelector("#manual-entry-basic")?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
@@ -1243,7 +1244,7 @@
     const setManualCaseMessage = (message, label = "未検索") => {
       if (casePanel) casePanel.hidden = false;
       if (caseResults) {
-        caseResults.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
+        caseResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
       }
       if (caseCount) {
         caseCount.textContent = label;
@@ -1259,7 +1260,7 @@
         caseCount.className = `status-pill ${items.length ? "status-ready" : "status-muted"}`;
       }
       if (!items.length) {
-        caseResults.innerHTML = `<tr><td colspan="5">一致するcaseはありません。紙のみ新規sourceとして作成する場合は、基本情報を入力してください。</td></tr>`;
+        caseResults.innerHTML = `<tr><td colspan="4">一致するcaseはありません。紙のみ新規sourceとして作成する場合は、基本情報を入力してください。</td></tr>`;
         return;
       }
       caseResults.innerHTML = "";
@@ -1275,6 +1276,10 @@
         row.classList.toggle("is-selected", isSelected);
         row.innerHTML = `
           <td>
+            <div class="manual-entry-case-actions">
+              <button type="button" class="ghost-button compact-action-button ${isSelected ? "is-active" : ""}" data-manual-entry-case-apply>${isSelected ? "使用中" : "使う"}</button>
+              <a class="ghost-button compact-action-button" href="/exam-export-cases/${encodeURIComponent(item.exam_export_case_id)}">詳細</a>
+            </div>
             <strong>${escapeHtml(item.exam_export_case_id || "-")}</strong>
             <small>${escapeHtml(item.source_mode || "-")} / 値 ${escapeHtml(item.case_value_count || "0")}</small>
           </td>
@@ -1289,12 +1294,6 @@
           <td>
             <strong>法定 ${escapeHtml(legal)}</strong>
             <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
-          </td>
-          <td>
-            <div class="manual-entry-case-actions">
-              <button type="button" class="ghost-button compact-action-button ${isSelected ? "is-active" : ""}" data-manual-entry-case-apply>${isSelected ? "使用中" : "使う"}</button>
-              <a class="ghost-button compact-action-button" href="/exam-export-cases/${encodeURIComponent(item.exam_export_case_id)}">詳細</a>
-            </div>
           </td>
         `;
         row.querySelector("[data-manual-entry-case-apply]")?.addEventListener("click", () => {
@@ -1418,6 +1417,7 @@
         return;
       }
       setManualCaseMessage("caseを検索中...", "検索中");
+      if (casePanel) casePanel.classList.remove("is-selected");
       document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
       try {
         const payload = await fetchJson(`/api/manual-exam-entry/case-candidates?${params.toString()}`);
