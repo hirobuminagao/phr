@@ -7625,6 +7625,7 @@ def manual_exam_entry_case_candidates(request: Request) -> Response:
     filters = {
         "event_id": request.query_params.get("event_id", "2"),
         "facility_q": request.query_params.get("facility_q", "").strip(),
+        "facility_codes": request.query_params.get("facility_codes", "").strip(),
         "exam_month": request.query_params.get("exam_month", "").strip(),
         "name_full": request.query_params.get("name_full", "").strip(),
         "name_kana": request.query_params.get("name_kana", "").strip(),
@@ -7639,6 +7640,7 @@ def manual_exam_entry_case_candidates(request: Request) -> Response:
         filters[key]
         for key in (
             "facility_q",
+            "facility_codes",
             "exam_month",
             "name_full",
             "name_kana",

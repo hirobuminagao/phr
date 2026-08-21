@@ -312,10 +312,10 @@
             <label>
               <span>健診機関</span>
               <span class="input-with-button manual-entry-case-facility-field">
-                <input id="manual-entry-case-search-facility" autocomplete="off" placeholder="健診機関コード / 名称">
-                <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-facility-toggle>選択</button>
-                <div class="manual-entry-case-facility-popover" data-manual-entry-case-facility-popover hidden></div>
+                <input id="manual-entry-case-search-facility" autocomplete="off" placeholder="複数選択できます">
+                <button type="button" class="ghost-button compact-action-button" data-modal-open="manual-entry-case-facility-picker-modal">選択</button>
               </span>
+              <small id="manual-entry-case-facility-codes-summary">未指定: 全施設</small>
             </label>
             <label>
               <span>受診月</span>
@@ -331,6 +331,80 @@
         </label>
         <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
         <button type="button" class="primary-button" data-manual-entry-case-search>検索</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="manual-entry-case-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="manual-entry-case-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">受領フォルダ alias</p>
+          <h2 id="manual-entry-case-facility-picker-title">健診機関で絞り込む</h2>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          検索
+          <input data-live-filter-input="#manual-entry-case-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="manual-entry-case-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>受領フォルダ</th>
+              <th>実績</th>
+              <th>選択</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alias in folder_aliases %}
+            {% set code = alias.exam_facility_code or "" %}
+            <tr
+              class="{{ 'clickable-table-row' if code else '' }}"
+              data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}"
+              {% if code %}data-manual-entry-case-facility-row data-facility-code="{{ code }}"{% endif %}
+            >
+              <td>
+                <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
+                <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode_label or "未設定" }}</small>
+              </td>
+              <td>
+                <strong title="{{ alias.src_folder_raw or '' }}">{{ alias.src_folder_raw or "" }}</strong>
+                <small>{{ alias.csv_mapping_version or "CSVテンプレートなし" }}</small>
+              </td>
+              <td>
+                <strong>XML {{ alias.xml_file_count or 0 }} / CSV {{ alias.csv_file_count or 0 }}</strong>
+                <small>受領実績</small>
+              </td>
+              <td>
+                {% if code %}
+                <button
+                  type="button"
+                  class="ghost-button"
+                  data-manual-entry-case-facility-select
+                  data-facility-code="{{ code }}"
+                >追加</button>
+                {% else %}
+                <span class="status-pill status-muted">不可</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4">受領フォルダaliasがありません。</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-manual-entry-case-facility-clear>絞り込みを空にする</button>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
       </div>
     </section>
   </div>

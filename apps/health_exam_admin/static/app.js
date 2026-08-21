@@ -1033,81 +1033,66 @@
     }
   }
 
-  const caseFacilityToggle = document.querySelector("[data-manual-entry-case-facility-toggle]");
-  const caseFacilityPopover = document.querySelector("[data-manual-entry-case-facility-popover]");
   const manualCaseFacilityInput = document.querySelector("#manual-entry-case-search-facility");
-  if (caseFacilityToggle && caseFacilityPopover && manualCaseFacilityInput) {
-    const facilityOptions = Array.from(document.querySelectorAll("[data-manual-entry-facility-row]")).map((row) => {
-      const code = row.getAttribute("data-facility-code") || "";
-      const facilityName = row.querySelector("td:nth-child(1) strong")?.textContent?.trim() || "";
-      const mode = row.querySelector("td:nth-child(1) small")?.textContent?.trim() || "";
-      const folder = row.querySelector("td:nth-child(2) strong")?.textContent?.trim() || "";
-      const filterText = row.getAttribute("data-filter-text") || `${code} ${facilityName} ${folder}`;
-      return { code, facilityName, mode, folder, filterText };
-    }).filter((item) => item.code);
-
-    const closeCaseFacilityPopover = () => {
-      caseFacilityPopover.hidden = true;
-      caseFacilityToggle.setAttribute("aria-expanded", "false");
-    };
-
-    const openCaseFacilityPopover = () => {
-      renderCaseFacilityOptions();
-      caseFacilityPopover.hidden = false;
-      caseFacilityToggle.setAttribute("aria-expanded", "true");
-    };
-
-    const selectCaseFacility = (code) => {
-      manualCaseFacilityInput.value = code || "";
-      closeCaseFacilityPopover();
-      manualCaseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
-      manualCaseFacilityInput.focus();
-    };
-
-    const renderCaseFacilityOptions = () => {
-      const keyword = manualCaseFacilityInput.value.trim().toLowerCase();
-      const matches = facilityOptions.filter((item) => {
-        if (!keyword) return true;
-        return item.filterText.toLowerCase().includes(keyword);
-      }).slice(0, 80);
-      if (!matches.length) {
-        caseFacilityPopover.innerHTML = `<p class="manual-entry-case-facility-empty">一致する健診機関はありません。</p>`;
-        return;
-      }
-      caseFacilityPopover.innerHTML = matches.map((item) => `
-        <button type="button" class="manual-entry-case-facility-option" data-manual-entry-case-facility-code="${escapeHtml(item.code)}">
-          <strong>${escapeHtml(item.facilityName || item.code)}</strong>
-          <small>${escapeHtml(item.code)} / ${escapeHtml(item.mode || "未設定")}</small>
-          <small>${escapeHtml(item.folder || "")}</small>
-        </button>
-      `).join("");
-    };
-
-    caseFacilityToggle.addEventListener("click", (event) => {
+  const manualCaseFacilitySummary = document.getElementById("manual-entry-case-facility-codes-summary");
+  const manualCaseFacilityValues = () => {
+    if (!manualCaseFacilityInput) return [];
+    return manualCaseFacilityInput.value
+      .split(/[\s,，、]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  };
+  const updateManualCaseFacilityPickerState = () => {
+    const values = new Set(manualCaseFacilityValues());
+    if (manualCaseFacilitySummary) {
+      manualCaseFacilitySummary.textContent = values.size ? `${values.size}施設を指定中` : "未指定: 全施設";
+    }
+    for (const button of document.querySelectorAll("[data-manual-entry-case-facility-select]")) {
+      const code = String(button.getAttribute("data-facility-code") || "").trim();
+      const added = code && values.has(code);
+      button.textContent = added ? "解除" : "追加";
+      button.classList.toggle("is-active", Boolean(added));
+      button.disabled = false;
+    }
+    for (const row of document.querySelectorAll("[data-manual-entry-case-facility-row]")) {
+      const code = String(row.getAttribute("data-facility-code") || "").trim();
+      row.classList.toggle("is-selected", Boolean(code && values.has(code)));
+    }
+  };
+  const selectManualCaseFacility = (element) => {
+    if (!manualCaseFacilityInput || !(element instanceof Element)) return;
+    const code = String(element.getAttribute("data-facility-code") || "").trim();
+    if (!code) return;
+    const values = manualCaseFacilityValues();
+    if (values.includes(code)) {
+      manualCaseFacilityInput.value = values.filter((value) => value !== code).join(", ");
+    } else {
+      values.push(code);
+      manualCaseFacilityInput.value = values.join(", ");
+    }
+    manualCaseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+    updateManualCaseFacilityPickerState();
+  };
+  if (manualCaseFacilityInput) {
+    manualCaseFacilityInput.addEventListener("input", updateManualCaseFacilityPickerState);
+    updateManualCaseFacilityPickerState();
+  }
+  for (const button of document.querySelectorAll("[data-manual-entry-case-facility-select]")) {
+    button.addEventListener("click", (event) => {
       event.stopPropagation();
-      if (caseFacilityPopover.hidden) {
-        openCaseFacilityPopover();
-      } else {
-        closeCaseFacilityPopover();
-      }
+      selectManualCaseFacility(button);
     });
-
-    manualCaseFacilityInput.addEventListener("input", () => {
-      if (!caseFacilityPopover.hidden) renderCaseFacilityOptions();
-    });
-
-    caseFacilityPopover.addEventListener("click", (event) => {
-      const option = event.target.closest("[data-manual-entry-case-facility-code]");
-      if (!option) return;
-      selectCaseFacility(option.getAttribute("data-manual-entry-case-facility-code") || "");
-    });
-
-    document.addEventListener("click", (event) => {
-      if (caseFacilityPopover.hidden) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest(".manual-entry-case-facility-field")) return;
-      closeCaseFacilityPopover();
+  }
+  for (const row of document.querySelectorAll("[data-manual-entry-case-facility-row]")) {
+    row.addEventListener("click", () => selectManualCaseFacility(row));
+  }
+  for (const button of document.querySelectorAll("[data-manual-entry-case-facility-clear]")) {
+    button.addEventListener("click", () => {
+      if (!manualCaseFacilityInput) return;
+      manualCaseFacilityInput.value = "";
+      manualCaseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      updateManualCaseFacilityPickerState();
+      closeModal(button.closest(".edit-modal"));
     });
   }
 
@@ -1396,7 +1381,7 @@
       const eventId = caseSearchEvent?.value || document.querySelector("select[name='event_id']")?.value || "2";
       const params = new URLSearchParams({
         event_id: eventId,
-        facility_q: caseSearchFacility ? caseSearchFacility.value.trim() : "",
+        facility_codes: caseSearchFacility ? caseSearchFacility.value.trim() : "",
         exam_month: caseSearchExamMonth ? caseSearchExamMonth.value.trim() : "",
         name_full: caseSearchNameFull ? caseSearchNameFull.value.trim() : "",
         name_kana: caseSearchKana ? caseSearchKana.value.trim() : "",
