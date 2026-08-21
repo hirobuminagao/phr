@@ -2154,15 +2154,19 @@ a.home-menu-card.is-navigating {
 }
 
 .manual-entry-floating-actions {
+  display: grid;
+  gap: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--line);
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
 }
 
-.manual-entry-floating-actions .primary-button {
+.manual-entry-floating-actions .primary-button,
+.manual-entry-floating-clear-button {
   width: 100%;
   min-height: 38px;
+  justify-content: center;
 }
 
 .floating-category-nav.is-collapsed .manual-entry-floating-actions {

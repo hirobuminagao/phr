@@ -1155,6 +1155,39 @@
       setValue("#manual-entry-gender-input", person.gender_label);
     };
 
+    for (const button of document.querySelectorAll("[data-manual-entry-basic-clear]")) {
+      button.addEventListener("click", () => {
+        if (!window.confirm("基本情報をクリアします。よろしいですか？")) return;
+        for (const input of document.querySelectorAll(".manual-entry-form input, .manual-entry-form textarea")) {
+          if (input.name === "event_id") continue;
+          input.value = "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        const purpose = document.querySelector("select[name='entry_purpose']");
+        if (purpose) purpose.value = "PAPER_ONLY";
+        selectedSubscriber = null;
+        if (selectedCasePanel) selectedCasePanel.hidden = true;
+        if (casePanel) casePanel.hidden = true;
+        setManualSubscriberSelected(null);
+      });
+    }
+
+    for (const button of document.querySelectorAll("[data-manual-entry-values-clear]")) {
+      button.addEventListener("click", () => {
+        if (!window.confirm("検査項目の入力値をクリアします。よろしいですか？")) return;
+        for (const input of document.querySelectorAll(".manual-entry-value-input")) {
+          input.value = "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        for (const select of document.querySelectorAll("[data-manual-code-select]")) {
+          select.value = "";
+        }
+        for (const checkbox of document.querySelectorAll("input[name^='include_']")) {
+          checkbox.checked = false;
+        }
+      });
+    }
+
     const fillManualEntryFromCase = (item) => {
       fillManualEntryFromPerson(item);
       setValue("#manual-entry-facility-input", item.facility_code);

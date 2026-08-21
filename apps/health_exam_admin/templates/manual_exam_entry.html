@@ -27,6 +27,7 @@
   </div>
   <div class="manual-entry-floating-actions">
     <button type="button" class="primary-button" disabled title="保存処理は次ステップで接続します">source作成</button>
+    <button type="button" class="ghost-button manual-entry-floating-clear-button" data-manual-entry-values-clear>入力値クリア</button>
   </div>
   <div class="floating-category-head manual-entry-category-toggle-head" role="button" tabindex="0" aria-label="カテゴリ一覧を開く" aria-expanded="false" data-manual-entry-floating-category-toggle>
     <strong>カテゴリ</strong>
@@ -67,6 +68,7 @@
         <div class="manual-entry-heading-inline">
           <h2>入力sourceの基本情報</h2>
           <span class="status-pill status-pending">保存未接続</span>
+          <button type="button" class="ghost-button compact-action-button" data-manual-entry-basic-clear>基本情報クリア</button>
         </div>
         <p class="subtle">紙のみ、またはXML/CSVの補足として、手入力sourceを作るための入力画面です。現時点では画面確認用で、保存処理は次ステップで接続します。</p>
       </div>
@@ -371,6 +373,7 @@
       </label>
       <div class="manual-entry-item-actions">
         <button type="button" class="ghost-button compact-action-button" data-manual-entry-item-jump>該当へ移動</button>
+        <button type="button" class="ghost-button compact-action-button" data-manual-entry-values-clear>入力値クリア</button>
         <button type="button" class="ghost-button compact-action-button" data-manual-entry-categories-open>全て開く</button>
         <button type="button" class="ghost-button compact-action-button" data-manual-entry-categories-close>全て閉じる</button>
       </div>
