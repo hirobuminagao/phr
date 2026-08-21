@@ -7401,16 +7401,17 @@ def load_manual_exam_cd_options(cur: Any, rows: list[dict[str, Any]]) -> dict[st
 def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     groups: list[dict[str, Any]] = []
     group_index: dict[str, dict[str, Any]] = {}
-    item_index: dict[tuple[str, str, str], dict[str, Any]] = {}
+    item_index: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for row in rows:
         category = str(row.get("category_name") or "未分類")
         if category not in group_index:
             group = {"category_name": category, "items": []}
             group_index[category] = group
             groups.append(group)
-        entry_key = str(row.get("identity_item_code") or row.get("namecode") or "")
+        expand_methods = manual_exam_should_expand_method_rows(row)
+        entry_key = str(row.get("namecode") if expand_methods else row.get("identity_item_code") or row.get("namecode") or "")
         value_type = str(row.get("xml_value_type") or "")
-        item_key = (category, entry_key, value_type)
+        item_key = (category, entry_key, value_type, str(row.get("namecode") or "") if expand_methods else "")
         method_option = {
             "namecode": str(row.get("namecode") or ""),
             "method_name": str(row.get("method_name") or ""),
@@ -7451,6 +7452,12 @@ def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, 
                 str(row.get("xml_method_code") or ""),
             ]
             item["manual_filter_text"] = " ".join(part for part in filter_parts if part)
+    for item in item_index.values():
+        item["manual_method_options"].sort(key=manual_exam_method_option_sort_key)
+        if item["manual_method_options"]:
+            default_method = item["manual_method_options"][0]
+            item["method_name"] = default_method.get("method_name") or item.get("method_name")
+            item["xml_method_code"] = default_method.get("xml_method_code") or item.get("xml_method_code")
     for group in groups:
         items_by_entry_key: dict[str, list[dict[str, Any]]] = {}
         for item in group["items"]:
@@ -7465,6 +7472,21 @@ def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, 
             )
             item["manual_st_required_hint"] = has_related_cd
     return groups
+
+
+def manual_exam_should_expand_method_rows(row: dict[str, Any]) -> bool:
+    text = " ".join(
+        str(row.get(field) or "")
+        for field in ("item_name", "identity_item_name", "category_name", "method_name")
+    )
+    return "血圧" in text or "空腹" in text or "随時" in text or "心電図" in text
+
+
+def manual_exam_method_option_sort_key(option: dict[str, Any]) -> tuple[int, str, str]:
+    method_name = str(option.get("method_name") or "")
+    xml_method_code = str(option.get("xml_method_code") or "")
+    preferred = any(keyword in method_name for keyword in ("一般", "その他"))
+    return (0 if preferred else 1, method_name, xml_method_code)
 
 
 def manual_exam_input_type(xml_value_type: Any) -> str:

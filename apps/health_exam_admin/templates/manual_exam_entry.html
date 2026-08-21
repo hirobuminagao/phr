@@ -256,9 +256,10 @@
       <div class="manual-entry-case-search">
         <label>
           健診機関
-          <span class="input-with-button">
+          <span class="input-with-button manual-entry-case-facility-field">
             <input id="manual-entry-case-search-facility" autocomplete="off" placeholder="健診機関コード / 名称">
-            <button type="button" class="ghost-button compact-action-button" data-modal-open="manual-entry-facility-picker-modal">選択</button>
+            <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-facility-toggle>選択</button>
+            <div class="manual-entry-case-facility-popover" data-manual-entry-case-facility-popover hidden></div>
           </span>
         </label>
         <label>
