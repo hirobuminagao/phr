@@ -297,6 +297,10 @@ button[type="submit"]:disabled {
   padding: 20px;
 }
 
+.panel.is-scroll-target-panel {
+  box-shadow: 0 0 0 3px rgba(0, 132, 94, 0.18);
+}
+
 .summary-card {
   display: grid;
   gap: 6px;

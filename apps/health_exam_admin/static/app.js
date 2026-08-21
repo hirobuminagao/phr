@@ -89,6 +89,17 @@
     });
   }
 
+  for (const button of document.querySelectorAll("[data-scroll-target]")) {
+    button.addEventListener("click", () => {
+      const selector = button.getAttribute("data-scroll-target");
+      const target = selector ? document.querySelector(selector) : null;
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.classList.add("is-scroll-target-panel");
+      window.setTimeout(() => target.classList.remove("is-scroll-target-panel"), 1600);
+    });
+  }
+
   for (const input of document.querySelectorAll("[data-live-filter-input]")) {
     const tableSelector = input.getAttribute("data-live-filter-input");
     const table = tableSelector ? document.querySelector(tableSelector) : null;

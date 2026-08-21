@@ -154,6 +154,7 @@
         <h2>今回の実行結果</h2>
         <p class="subtle">画面から実行した処理の出力です。失敗した場合はここに理由が出ます。</p>
       </div>
+      <button type="button" class="ghost-button" data-scroll-target="#exam-processing-run-log">結果詳細を見る</button>
     </div>
     <div class="run-result-list">
       {% for result in results %}
@@ -170,7 +171,7 @@
   </section>
   {% endif %}
 
-  <section class="panel">
+  <section id="exam-processing-run-log" class="panel">
     <div class="section-heading">
       <div>
         <h2>直近の実行履歴</h2>
