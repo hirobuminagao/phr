@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set title = "健診結果手入力" %}
 {% block body %}
-<header class="topbar">
+<header id="top" class="topbar">
   <div>
     <p class="eyebrow">MANUAL EXAM ENTRY</p>
     <h1>健診結果手入力</h1>
@@ -17,6 +17,7 @@
 </header>
 
 <nav class="floating-category-nav manual-entry-floating-nav" aria-label="入力カテゴリ移動" data-floating-category-nav>
+  <a class="ghost-button manual-entry-floating-top-link" href="#top">TOPへ</a>
   <div class="manual-entry-floating-item-search">
     <label>
       <span>健診項目詳細名</span>
@@ -384,7 +385,7 @@
                 <th>項目</th>
                 <th>入力</th>
                 <th>型</th>
-                <th>単位/コード体系</th>
+                <th>単位</th>
                 <th>検査方法</th>
                 <th>記帳</th>
               </tr>
@@ -442,6 +443,9 @@
                       {% endfor %}
                     </select>
                     {% endif %}
+                    {% if item.result_code_oid %}
+                    <small class="manual-entry-code-system">コード体系 {{ item.result_code_oid }}</small>
+                    {% endif %}
                   </div>
                 </td>
                 <td>
@@ -449,8 +453,7 @@
                   <small>{{ item.data_type_label or "" }}</small>
                 </td>
                 <td>
-                  <strong>{{ item.display_unit or item.ucum_unit or item.result_code_oid or "-" }}</strong>
-                  <small>{{ item.result_code_oid or "" }}</small>
+                  <strong>{{ item.display_unit or item.ucum_unit or "-" }}</strong>
                 </td>
                 <td>
                   <strong>{{ item.method_name or "-" }}</strong>

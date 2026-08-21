@@ -1997,6 +1997,13 @@ a.home-menu-card.is-navigating {
   display: none;
 }
 
+.manual-entry-floating-top-link {
+  justify-content: center;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
 .manual-entry-category-toggle-head {
   min-height: 34px;
   padding: 6px 8px;
@@ -2228,6 +2235,8 @@ a.home-menu-card.is-navigating {
 
 .manual-entry-item-table th:nth-child(3),
 .manual-entry-item-table td:nth-child(3),
+.manual-entry-item-table th:nth-child(4),
+.manual-entry-item-table td:nth-child(4),
 .manual-entry-item-table th:nth-child(6),
 .manual-entry-item-table td:nth-child(6) {
   width: 92px;
@@ -2252,6 +2261,13 @@ a.home-menu-card.is-navigating {
 
 .manual-entry-value-control select {
   min-width: 0;
+}
+
+.manual-entry-code-system {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .manual-entry-value-control .manual-entry-value-input:only-child {
