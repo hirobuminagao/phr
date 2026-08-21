@@ -3490,17 +3490,37 @@ def enrich_folder_alias_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     return rows
 
 
-def load_received_folder_alias_rows(cur: Any, *, limit: int = 400) -> list[dict[str, Any]]:
+def load_received_folder_alias_rows(cur: Any, *, limit: int = 2000) -> list[dict[str, Any]]:
     cur.execute(
         f"""
+        WITH receipt_counts AS (
+          SELECT
+            event_id,
+            exam_facility_id,
+            SUM(CASE WHEN file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
+            SUM(CASE WHEN file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count
+          FROM {qname(health_db())}.file_receipts
+          WHERE exam_facility_id IS NOT NULL
+          GROUP BY event_id, exam_facility_id
+        ),
+        alias_ranked AS (
+          SELECT
+            mfa.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY mfa.event_id, mfa.exam_facility_id
+              ORDER BY mfa.is_active DESC, mfa.updated_at DESC, mfa.alias_id DESC
+            ) AS alias_rank
+          FROM {qname(master_db())}.medical_folder_aliases mfa
+          WHERE mfa.exam_facility_id IS NOT NULL
+        )
         SELECT
           mfa.alias_id,
-          mfa.event_id,
+          receipt_counts.event_id,
           ev.event_name,
           ev.event_year,
           mfa.src_folder_raw,
           mfa.dst_folder_norm,
-          mfa.exam_facility_id,
+          receipt_counts.exam_facility_id,
           mfa.expected_source_mode,
           mfa.csv_format_version_id,
           ef.exam_facility_code,
@@ -3513,28 +3533,20 @@ def load_received_folder_alias_rows(cur: Any, *, limit: int = 400) -> list[dict[
           receipt_counts.csv_file_count,
           mfa.manual_judgement,
           mfa.note,
-          mfa.is_active,
+          COALESCE(mfa.is_active, 0) AS is_active,
           mfa.updated_at
-        FROM {qname(master_db())}.medical_folder_aliases mfa
-        INNER JOIN (
-          SELECT
-            event_id,
-            exam_facility_id,
-            SUM(CASE WHEN file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
-            SUM(CASE WHEN file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count
-          FROM {qname(health_db())}.file_receipts
-          WHERE exam_facility_id IS NOT NULL
-          GROUP BY event_id, exam_facility_id
-        ) receipt_counts
-          ON receipt_counts.event_id = mfa.event_id
-         AND receipt_counts.exam_facility_id = mfa.exam_facility_id
+        FROM receipt_counts
+        LEFT JOIN alias_ranked mfa
+          ON mfa.event_id = receipt_counts.event_id
+         AND mfa.exam_facility_id = receipt_counts.exam_facility_id
+         AND mfa.alias_rank = 1
         LEFT JOIN {qname(master_db())}.exam_facilities ef
-          ON ef.exam_facility_id = mfa.exam_facility_id
+          ON ef.exam_facility_id = receipt_counts.exam_facility_id
         LEFT JOIN {qname(master_db())}.csv_format_versions cfv
           ON cfv.csv_format_version_id = mfa.csv_format_version_id
         LEFT JOIN {qname(dev_db())}.event ev
-          ON ev.event_id = mfa.event_id
-        ORDER BY mfa.is_active DESC, mfa.event_id DESC, mfa.src_folder_raw
+          ON ev.event_id = receipt_counts.event_id
+        ORDER BY COALESCE(mfa.is_active, 0) DESC, receipt_counts.event_id DESC, COALESCE(mfa.src_folder_raw, ef.exam_facility_name)
         LIMIT %s
         """,
         (limit,),
@@ -3546,21 +3558,46 @@ def load_subscriber_match_issue_folder_alias_rows(
     cur: Any,
     *,
     filters: dict[str, str],
-    limit: int = 400,
+    limit: int = 2000,
 ) -> list[dict[str, Any]]:
     issue_parts, issue_params = subscriber_match_issue_where_parts(filters, include_facility=False)
     issue_parts.append("el.exam_facility_id IS NOT NULL")
     issue_where_sql = " AND ".join(issue_parts)
     cur.execute(
         f"""
+        WITH issue_facilities AS (
+          SELECT DISTINCT el.event_id, el.exam_facility_id
+          FROM {qname(health_db())}.exam_ledgers AS el
+          WHERE {issue_where_sql}
+        ),
+        alias_ranked AS (
+          SELECT
+            mfa.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY mfa.event_id, mfa.exam_facility_id
+              ORDER BY mfa.is_active DESC, mfa.updated_at DESC, mfa.alias_id DESC
+            ) AS alias_rank
+          FROM {qname(master_db())}.medical_folder_aliases mfa
+          WHERE mfa.exam_facility_id IS NOT NULL
+        ),
+        receipt_counts AS (
+          SELECT
+            event_id,
+            exam_facility_id,
+            SUM(CASE WHEN file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
+            SUM(CASE WHEN file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count
+          FROM {qname(health_db())}.file_receipts
+          WHERE exam_facility_id IS NOT NULL
+          GROUP BY event_id, exam_facility_id
+        )
         SELECT
           mfa.alias_id,
-          mfa.event_id,
+          issue_facilities.event_id,
           ev.event_name,
           ev.event_year,
           mfa.src_folder_raw,
           mfa.dst_folder_norm,
-          mfa.exam_facility_id,
+          issue_facilities.exam_facility_id,
           mfa.expected_source_mode,
           mfa.csv_format_version_id,
           ef.exam_facility_code,
@@ -3573,35 +3610,23 @@ def load_subscriber_match_issue_folder_alias_rows(
           receipt_counts.csv_file_count,
           mfa.manual_judgement,
           mfa.note,
-          mfa.is_active,
+          COALESCE(mfa.is_active, 0) AS is_active,
           mfa.updated_at
-        FROM {qname(master_db())}.medical_folder_aliases mfa
-        INNER JOIN (
-          SELECT DISTINCT el.event_id, el.exam_facility_id
-          FROM {qname(health_db())}.exam_ledgers AS el
-          WHERE {issue_where_sql}
-        ) AS issue_facilities
-          ON issue_facilities.event_id = mfa.event_id
-         AND issue_facilities.exam_facility_id = mfa.exam_facility_id
-        LEFT JOIN (
-          SELECT
-            event_id,
-            exam_facility_id,
-            SUM(CASE WHEN file_type = 'XML' THEN 1 ELSE 0 END) AS xml_file_count,
-            SUM(CASE WHEN file_type = 'CSV' THEN 1 ELSE 0 END) AS csv_file_count
-          FROM {qname(health_db())}.file_receipts
-          WHERE exam_facility_id IS NOT NULL
-          GROUP BY event_id, exam_facility_id
-        ) receipt_counts
-          ON receipt_counts.event_id = mfa.event_id
-         AND receipt_counts.exam_facility_id = mfa.exam_facility_id
+        FROM issue_facilities
+        LEFT JOIN alias_ranked mfa
+          ON mfa.event_id = issue_facilities.event_id
+         AND mfa.exam_facility_id = issue_facilities.exam_facility_id
+         AND mfa.alias_rank = 1
+        LEFT JOIN receipt_counts
+          ON receipt_counts.event_id = issue_facilities.event_id
+         AND receipt_counts.exam_facility_id = issue_facilities.exam_facility_id
         LEFT JOIN {qname(master_db())}.exam_facilities ef
-          ON ef.exam_facility_id = mfa.exam_facility_id
+          ON ef.exam_facility_id = issue_facilities.exam_facility_id
         LEFT JOIN {qname(master_db())}.csv_format_versions cfv
           ON cfv.csv_format_version_id = mfa.csv_format_version_id
         LEFT JOIN {qname(dev_db())}.event ev
-          ON ev.event_id = mfa.event_id
-        ORDER BY mfa.is_active DESC, mfa.event_id DESC, mfa.src_folder_raw
+          ON ev.event_id = issue_facilities.event_id
+        ORDER BY COALESCE(mfa.is_active, 0) DESC, issue_facilities.event_id DESC, COALESCE(mfa.src_folder_raw, ef.exam_facility_name)
         LIMIT %s
         """,
         (*issue_params, limit),

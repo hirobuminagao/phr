@@ -104,7 +104,7 @@
               <small>{{ item.facility_code }} / {{ item.facility_folder_name }}</small>
             </td>
             <td>
-              <input class="copy-path-input" value="{{ item.zip_dir_path }}" readonly aria-label="出力フォルダパス">
+              <textarea class="copy-path-textarea" readonly rows="2" aria-label="出力フォルダパス">{{ item.zip_dir_path }}</textarea>
               <small>エクスプローラーへコピーするフォルダパス</small>
             </td>
             <td>

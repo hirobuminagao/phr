@@ -1700,11 +1700,15 @@ a.home-menu-card:hover {
   white-space: nowrap;
 }
 
-.copy-path-input {
+.copy-path-textarea {
   width: min(520px, 100%);
-  min-height: 38px;
+  min-height: 58px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.84rem;
+  line-height: 1.35;
+  resize: vertical;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .nested-member-row > td {
