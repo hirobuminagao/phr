@@ -2264,6 +2264,13 @@ a.home-menu-card.is-navigating {
   line-height: 1.5;
 }
 
+.manual-entry-method-select {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
 .manual-entry-item-badges {
   display: flex;
   flex-wrap: wrap;

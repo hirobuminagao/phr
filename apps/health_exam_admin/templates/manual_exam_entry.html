@@ -393,7 +393,7 @@
               {% for item in group["items"] %}
               <tr
                 data-manual-entry-item-row
-                data-filter-text="{{ item.namecode }} {{ item.item_name }} {{ item.category_name or '' }} {{ item.identity_item_code or '' }} {{ item.identity_item_name or '' }} {{ item.method_name or '' }} {{ item.result_code_oid or '' }}"
+                data-filter-text="{{ item.manual_filter_text or (item.namecode ~ ' ' ~ item.item_name ~ ' ' ~ (item.category_name or '') ~ ' ' ~ (item.identity_item_code or '') ~ ' ' ~ (item.identity_item_name or '') ~ ' ' ~ (item.method_name or '') ~ ' ' ~ (item.result_code_oid or '')) }}"
                 data-item-name="{{ item.item_name }}"
                 data-namecode="{{ item.namecode }}"
                 data-category-name="{{ item.category_name or group.category_name }}"
@@ -409,14 +409,19 @@
                     {% endfor %}
                   </div>
                   {% endif %}
+                  {% if item.manual_st_required_hint %}
+                  <div class="manual-entry-item-badges">
+                    <span class="status-pill status-warning">特記事項あり時 必須</span>
+                  </div>
+                  {% endif %}
                 </td>
                 <td>
                   <div class="manual-entry-value-control">
                     {% if item.xml_value_type == "ST" %}
                     <textarea
                       class="manual-entry-value-input manual-entry-st-value-input"
-                      name="item_value_{{ item.namecode }}"
-                      data-manual-method-group="{{ item.manual_method_group_key }}"
+                      name="item_value_{{ item.manual_entry_key or item.namecode }}"
+                      data-manual-method-group="{{ item.manual_entry_key or item.namecode }}_{{ item.xml_value_type or '' }}"
                       placeholder="ST"
                       rows="3"
                     ></textarea>
@@ -424,8 +429,8 @@
                     <input
                       class="manual-entry-value-input"
                       type="{{ item.manual_input_type }}"
-                      name="item_value_{{ item.namecode }}"
-                      data-manual-method-group="{{ item.manual_method_group_key }}"
+                      name="item_value_{{ item.manual_entry_key or item.namecode }}"
+                      data-manual-method-group="{{ item.manual_entry_key or item.namecode }}_{{ item.xml_value_type or '' }}"
                       placeholder="{{ item.xml_value_type or '値' }}"
                     >
                     {% endif %}
@@ -451,12 +456,21 @@
                   <strong>{{ item.method_name or "-" }}</strong>
                   <small>
                     {{ item.xml_method_code or "" }}
-                    {% if item.manual_method_group_count > 1 %} / 方法選択{% endif %}
+                    {% if item.manual_method_option_count > 1 %} / 方法選択{% endif %}
                   </small>
+                  {% if item.manual_method_option_count > 1 %}
+                  <select class="manual-entry-method-select" name="item_method_namecode_{{ item.manual_entry_key or item.namecode }}" aria-label="{{ item.item_name }}の検査方法">
+                    {% for method in item.manual_method_options %}
+                    <option value="{{ method.namecode }}">
+                      {{ method.method_name or method.xml_method_code or method.namecode }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                  {% endif %}
                 </td>
                 <td>
                   <label class="inline-check">
-                    <input type="checkbox" name="include_{{ item.namecode }}" disabled>
+                    <input type="checkbox" name="include_{{ item.manual_entry_key or item.namecode }}" disabled>
                     <span>追加</span>
                   </label>
                 </td>

@@ -7401,13 +7401,69 @@ def load_manual_exam_cd_options(cur: Any, rows: list[dict[str, Any]]) -> dict[st
 def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     groups: list[dict[str, Any]] = []
     group_index: dict[str, dict[str, Any]] = {}
+    item_index: dict[tuple[str, str, str], dict[str, Any]] = {}
     for row in rows:
         category = str(row.get("category_name") or "未分類")
         if category not in group_index:
             group = {"category_name": category, "items": []}
             group_index[category] = group
             groups.append(group)
-        group_index[category]["items"].append(row)
+        entry_key = str(row.get("identity_item_code") or row.get("namecode") or "")
+        value_type = str(row.get("xml_value_type") or "")
+        item_key = (category, entry_key, value_type)
+        method_option = {
+            "namecode": str(row.get("namecode") or ""),
+            "method_name": str(row.get("method_name") or ""),
+            "xml_method_code": str(row.get("xml_method_code") or ""),
+        }
+        if item_key not in item_index:
+            item = dict(row)
+            item["manual_entry_key"] = entry_key
+            item["manual_filter_text"] = " ".join(
+                str(row.get(field) or "")
+                for field in (
+                    "namecode",
+                    "item_name",
+                    "category_name",
+                    "identity_item_code",
+                    "identity_item_name",
+                    "method_name",
+                    "xml_method_code",
+                    "result_code_oid",
+                )
+            )
+            item["manual_method_options"] = [method_option]
+            item["manual_method_option_count"] = 1
+            item["manual_method_required"] = False
+            item["manual_st_required_hint"] = False
+            item_index[item_key] = item
+            group_index[category]["items"].append(item)
+        else:
+            item = item_index[item_key]
+            item["manual_method_options"].append(method_option)
+            item["manual_method_option_count"] = len(item["manual_method_options"])
+            item["manual_method_required"] = True
+            filter_parts = [
+                str(item.get("manual_filter_text") or ""),
+                str(row.get("namecode") or ""),
+                str(row.get("item_name") or ""),
+                str(row.get("method_name") or ""),
+                str(row.get("xml_method_code") or ""),
+            ]
+            item["manual_filter_text"] = " ".join(part for part in filter_parts if part)
+    for group in groups:
+        items_by_entry_key: dict[str, list[dict[str, Any]]] = {}
+        for item in group["items"]:
+            items_by_entry_key.setdefault(str(item.get("manual_entry_key") or ""), []).append(item)
+        for item in group["items"]:
+            if str(item.get("xml_value_type") or "").upper() != "ST":
+                continue
+            key = str(item.get("manual_entry_key") or "")
+            has_related_cd = any(
+                str(other.get("xml_value_type") or "").upper() == "CD"
+                for other in items_by_entry_key.get(key, [])
+            )
+            item["manual_st_required_hint"] = has_related_cd
     return groups
 
 
