@@ -3770,6 +3770,29 @@ def source_mode_label(value: Any) -> str:
     return labels.get(str(value or "UNKNOWN"), str(value or "未設定"))
 
 
+def source_mode_is_configured(value: Any) -> bool:
+    return str(value or "").strip().upper() not in ("", "UNKNOWN")
+
+
+def preferred_alias_source_mode_sql() -> str:
+    return """
+            SUBSTRING_INDEX(
+              GROUP_CONCAT(
+                expected_source_mode
+                ORDER BY
+                  CASE
+                    WHEN expected_source_mode IS NULL OR expected_source_mode = '' OR expected_source_mode = 'UNKNOWN' THEN 1
+                    ELSE 0
+                  END,
+                  expected_source_mode
+                SEPARATOR ','
+              ),
+              ',',
+              1
+            ) AS expected_source_mode
+    """
+
+
 def source_mode_options() -> list[dict[str, str]]:
     return [
         {"value": "UNKNOWN", "label": "未設定"},
@@ -6240,9 +6263,14 @@ def _ensure_facility_summary_row(rows: dict[str, dict[str, Any]], source: Mappin
             "top_error_items": [],
         },
     )
-    for field in ("event_id", "exam_facility_id", "facility_code", "facility_name", "expected_source_mode"):
+    for field in ("event_id", "exam_facility_id", "facility_code", "facility_name"):
         if row.get(field) in (None, "") and source.get(field) not in (None, ""):
             row[field] = source.get(field)
+    if (
+        not source_mode_is_configured(row.get("expected_source_mode"))
+        and source_mode_is_configured(source.get("expected_source_mode"))
+    ):
+        row["expected_source_mode"] = source.get("expected_source_mode")
     row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
     return row
 
@@ -6312,7 +6340,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           SELECT
             event_id,
             exam_facility_id,
-            MAX(expected_source_mode) AS expected_source_mode
+{preferred_alias_source_mode_sql()}
           FROM {qname(master_db())}.medical_folder_aliases
           WHERE is_active = 1
           GROUP BY event_id, exam_facility_id
