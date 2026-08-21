@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% set title = "健診結果手入力" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">MANUAL EXAM ENTRY</p>
+    <h1>健診結果手入力</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/exam-export-cases">個人case一覧</a>
+    <a class="ghost-button" href="/exam-ledgers">健診結果一覧（受領）</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>入力sourceの基本情報</h2>
+        <p class="subtle">紙のみ、またはXML/CSVの補足として、手入力sourceを作るための入力画面です。現時点では画面確認用で、保存処理は次ステップで接続します。</p>
+      </div>
+      <span class="status-pill status-pending">保存未接続</span>
+    </div>
+
+    <form class="manual-entry-form">
+      <div class="manual-entry-basic-grid">
+        <label>
+          <span>イベント</span>
+          <select name="event_id">
+            {% for event in event_options %}
+              <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+                {{ event.event_name or ("event " ~ event.event_id) }}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>健診機関</span>
+          <span class="input-with-button">
+            <input id="manual-entry-facility-input" name="facility_code" autocomplete="off" placeholder="健診機関を選択">
+            <button type="button" class="ghost-button compact-action-button" data-modal-open="manual-entry-facility-picker-modal">選択</button>
+          </span>
+        </label>
+        <label>
+          <span>健診受診日</span>
+          <input name="exam_date" autocomplete="off" placeholder="YYYY-MM-DD">
+        </label>
+        <label>
+          <span>健診機関ドキュメントID</span>
+          <input name="facility_document_id" autocomplete="off" placeholder="任意 / 問い合わせ用ID">
+        </label>
+        <label>
+          <span>入力目的</span>
+          <select name="entry_purpose">
+            <option value="PAPER_ONLY">紙のみ</option>
+            <option value="SUPPLEMENT">XML/CSV補足</option>
+            <option value="RESUBMISSION_FIX">再提出補正</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="manual-entry-basic-grid">
+        <label>
+          <span>HIA加入者ID</span>
+          <input name="hia_subscriber_id" autocomplete="off" placeholder="加入者検索から反映予定">
+        </label>
+        <label>
+          <span>氏名カナ</span>
+          <input name="name_kana" autocomplete="off" placeholder="加入者検索または手入力">
+        </label>
+        <label>
+          <span>記号</span>
+          <input name="insurance_symbol" autocomplete="off">
+        </label>
+        <label>
+          <span>番号</span>
+          <input name="insurance_number" autocomplete="off">
+        </label>
+      </div>
+    </form>
+  </section>
+
+  <div id="manual-entry-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="manual-entry-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">受領実績あり</p>
+          <h2 id="manual-entry-facility-picker-title">健診機関を選択</h2>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          検索
+          <input data-live-filter-input="#manual-entry-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="manual-entry-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>受領フォルダ</th>
+              <th>実績</th>
+              <th>選択</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alias in folder_aliases %}
+            {% set code = alias.exam_facility_code or "" %}
+            <tr
+              class="{{ 'clickable-table-row' if code else '' }}"
+              data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }}"
+              {% if code %}data-manual-entry-facility-row data-facility-code="{{ code }}"{% endif %}
+            >
+              <td>
+                <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
+                <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode_label or "未設定" }}</small>
+              </td>
+              <td>
+                <strong title="{{ alias.src_folder_raw or '' }}">{{ alias.src_folder_raw or "" }}</strong>
+                <small>{{ alias.csv_mapping_version or "CSVテンプレートなし" }}</small>
+              </td>
+              <td>
+                <strong>XML {{ alias.xml_file_count or 0 }} / CSV {{ alias.csv_file_count or 0 }}</strong>
+                <small>受領実績</small>
+              </td>
+              <td>
+                {% if code %}
+                <button type="button" class="ghost-button" data-manual-entry-facility-select data-facility-code="{{ code }}">選択</button>
+                {% else %}
+                <span class="status-pill status-muted">不可</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4">受領実績のある健診機関がありません。</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>検査項目入力</h2>
+        <p class="subtle">exam_item_master {{ item_count }}項目を表示します。同じ項目で検査方法が複数ある場合は、入力した方法以外を自動で無効化します。</p>
+      </div>
+      <label class="manual-entry-item-search">
+        <span>項目検索</span>
+        <input data-live-filter-input="#manual-entry-item-list" autocomplete="off" placeholder="項目名 / namecode / 区分 / OID">
+      </label>
+    </div>
+
+    <div id="manual-entry-item-list" class="manual-entry-item-groups">
+      {% for group in item_groups %}
+      <details class="manual-entry-category" open>
+        <summary>
+          <strong>{{ group.category_name }}</strong>
+          <span>{{ group.items|length }}項目</span>
+        </summary>
+        <div class="manual-entry-item-table-wrap">
+          <table class="data-table compact-table manual-entry-item-table">
+            <thead>
+              <tr>
+                <th>入力</th>
+                <th>項目</th>
+                <th>型</th>
+                <th>単位/コード体系</th>
+                <th>検査方法</th>
+                <th>記帳</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in group.items %}
+              <tr data-filter-text="{{ item.namecode }} {{ item.item_name }} {{ item.category_name or '' }} {{ item.identity_item_code or '' }} {{ item.identity_item_name or '' }} {{ item.method_name or '' }} {{ item.result_code_oid or '' }}">
+                <td>
+                  <input
+                    class="manual-entry-value-input"
+                    type="{{ item.manual_input_type }}"
+                    name="item_value_{{ item.namecode }}"
+                    data-manual-method-group="{{ item.manual_method_group_key }}"
+                    placeholder="{{ item.xml_value_type or '値' }}"
+                  >
+                </td>
+                <td>
+                  <strong>{{ item.item_name }}</strong>
+                  <small>{{ item.namecode }}{% if item.identity_item_code %} / {{ item.identity_item_code }}{% endif %}</small>
+                </td>
+                <td>
+                  <span class="status-pill status-muted">{{ item.xml_value_type or "-" }}</span>
+                  <small>{{ item.data_type_label or "" }}</small>
+                </td>
+                <td>
+                  <strong>{{ item.display_unit or item.ucum_unit or item.result_code_oid or "-" }}</strong>
+                  <small>{{ item.result_code_oid or "" }}</small>
+                </td>
+                <td>
+                  <strong>{{ item.method_name or "-" }}</strong>
+                  <small>
+                    {{ item.xml_method_code or "" }}
+                    {% if item.manual_method_group_count > 1 %} / 方法選択{% endif %}
+                  </small>
+                </td>
+                <td>
+                  <label class="inline-check">
+                    <input type="checkbox" name="include_{{ item.namecode }}" disabled>
+                    <span>追加</span>
+                  </label>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+{% endblock %}

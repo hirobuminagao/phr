@@ -72,6 +72,7 @@
 | 外部指摘リスト | HIA/健保/事業所から返った指摘を箱で管理し、対象caseへ記帳する | 指摘リスト作成、対象追加、case/項目単位の記帳、対応状態管理 | 初期版は直接登録画面。後続で「箱作成→対象追加→case毎に記帳」へ寄せる |
 | 個人出力case詳細 | 1人分の出力可否、source、採用値、確認事項を確認する | source確認、採用値確認、確認事項記帳、理由ありOK | `41_exam_export_case_detail_mock.html` を元に、case一覧から遷移する実作業画面として追加する |
 | 基本情報補正 | HIA必須基本情報の不足や誤りを補正する | 氏名カナ、郵便番号、住所、記号番号等の補正 | 個人case詳細に初期実装済み。住所不足対応に必須 |
+| 健診結果手入力 | 紙のみ、XML/CSV補足、再提出補正用の手入力sourceを作る | 健診機関、加入者、受診日、検査項目値の入力 | 初期版は `exam_item_master` 全項目の入力画面。保存処理は後続 |
 | 加入者突合NG修正 | 取込済みsourceを正しい加入者へ紐付けし、必要に応じて加入者情報を出力用基本情報へ適用する | 突合落ちledger一覧、候補検索、比較、理由付き確定、加入者情報適用、未突合ledgerの業務状態変更 | 初期版は画面実装済み。候補にはHIAダッシュボード状態と同event内の既存case状態を表示し、既に同人のcaseがあるか確認できる。未突合のまま再提出待ち、再提出済み、アップロード済み、除外を記帳できる。確定後や状態変更後は必要に応じてstep5〜7再実行でcaseへ反映 |
 
 ### P1: 取込とチェック運用を安定させる
@@ -443,6 +444,42 @@ URL:
 - 同じ理由を、個人case内の未処理・確認待ち・再提出待ち、または表示中の全確認項目へまとめて保存できる。
 - まとめ保存でも、内部的には `exam_case_check_review_items` を1行ずつ更新し、`exam_case_check_review_item_audit_logs` も1行ずつ作成する。
 - 変更後は、case側の出力可否summaryへ反映するために「健診結果処理実行」の step5〜7 を再実行する。
+
+### 健診結果手入力
+
+実装場所:
+
+- `apps/health_exam_admin/main.py`
+- `apps/health_exam_admin/templates/manual_exam_entry.html`
+- `apps/health_exam_admin/static/app.js`
+- `apps/health_exam_admin/static/app.css`
+
+URL:
+
+- `/manual-exam-entry`
+
+位置付け:
+
+- 紙のみ、XML/CSV補足、再提出補正を、手入力sourceとして作るための画面である。
+- 最終的な正は `exam_ledgers` と `exam_item_values` に置く。
+- 手入力専用の別テーブルは、入力途中、テンプレート、監査など、画面作業を助ける必要が出た場合だけ追加する。
+- case側の採用値はこの画面では直接変更しない。保存後に既存のcase再生成処理へ乗せて反映する。
+
+初期版でできること:
+
+- 健診機関、event、受診日、健診機関ドキュメントID、入力目的、基本情報欄を表示する。
+- 健診機関は受領実績がある候補から選択する。
+- `exam_item_master` の全項目を区分別に表示し、項目名、namecode、区分、OIDで絞り込む。
+- 同じ `identity_item_code` に複数の検査方法がある場合は、入力した1方法以外を無効化する。
+- 値を入力した項目は、今回sourceへ記帳する候補として自動ONにする。
+- 健診機関ドキュメントIDは `exam_ledgers.facility_document_id` に保存する想定とする。既存の `document_id` はXML `ClinicalDocument/id` 由来なので、健診機関への問い合わせ用IDとは混ぜない。
+
+後続:
+
+- 加入者検索から基本情報を反映する。
+- 同一caseがある場合は、case側の現在値を参照専用で表示し、同値を今回sourceへ記帳するか選択できるようにする。
+- 保存時に `exam_ledgers.source_type = 'PAPER'` または後続で定義する手入力source typeでledgerを作り、入力値を `exam_item_values` に作成する。
+- 保存後は「健診結果処理実行」の step5〜7 再実行を案内する。
 
 ### HIAアップロード作業
 

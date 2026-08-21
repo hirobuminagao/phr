@@ -7158,6 +7158,72 @@ def replace_user_role(cur: Any, *, app_user_id: int, role_code: str, assigned_by
     return True
 
 
+def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          namecode,
+          item_name,
+          xml_value_type,
+          result_code_oid,
+          display_unit,
+          ucum_unit,
+          method_name,
+          category_name,
+          data_type_label,
+          xml_method_code,
+          identity_item_code,
+          identity_item_name,
+          annex2_exec_requirement,
+          annex2_legal_report_flag,
+          cda_section_code_default,
+          annex2_series_group_identifier,
+          annex2_series_group_relation_code
+        FROM {qname(dev_db())}.exam_item_master
+        ORDER BY
+          COALESCE(kubun_no, 999999),
+          COALESCE(jun_no, 999999),
+          COALESCE(category_name, ''),
+          COALESCE(identity_item_code, namecode),
+          namecode
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    method_group_counts: dict[str, int] = {}
+    for row in rows:
+        group_key = str(row.get("identity_item_code") or row.get("namecode") or "")
+        if group_key:
+            method_group_counts[group_key] = method_group_counts.get(group_key, 0) + 1
+    for row in rows:
+        group_key = str(row.get("identity_item_code") or row.get("namecode") or "")
+        row["manual_method_group_key"] = group_key
+        row["manual_method_group_count"] = method_group_counts.get(group_key, 0)
+        row["manual_input_type"] = manual_exam_input_type(row.get("xml_value_type"))
+    return rows
+
+
+def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+    group_index: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        category = str(row.get("category_name") or "未分類")
+        if category not in group_index:
+            group = {"category_name": category, "items": []}
+            group_index[category] = group
+            groups.append(group)
+        group_index[category]["items"].append(row)
+    return groups
+
+
+def manual_exam_input_type(xml_value_type: Any) -> str:
+    value_type = str(xml_value_type or "").upper()
+    if value_type == "PQ":
+        return "number"
+    return "text"
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -7169,6 +7235,41 @@ def index(request: Request) -> HTMLResponse:
     if isinstance(user, RedirectResponse):
         return user
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
+
+
+@app.get("/manual-exam-entry", response_class=HTMLResponse)
+def manual_exam_entry(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            folder_aliases = load_received_folder_alias_rows(cur)
+            item_rows = load_manual_exam_entry_items(cur)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "manual_exam_entry.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "folder_aliases": folder_aliases,
+            "item_groups": group_manual_exam_entry_items(item_rows),
+            "item_count": len(item_rows),
+            "filters": {
+                "event_id": request.query_params.get("event_id", "2"),
+            },
+        },
+    )
 
 
 @app.get("/login", response_class=HTMLResponse)

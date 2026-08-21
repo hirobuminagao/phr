@@ -952,4 +952,55 @@
 
     setEmptyVisible();
   }
+
+  const manualFacilityInput = document.querySelector("#manual-entry-facility-input");
+  if (manualFacilityInput) {
+    const setManualFacility = (code) => {
+      manualFacilityInput.value = code || "";
+      document.querySelector("#manual-entry-facility-picker-modal [data-modal-close]")?.click();
+    };
+
+    for (const button of document.querySelectorAll("[data-manual-entry-facility-select]")) {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setManualFacility(button.dataset.facilityCode || "");
+      });
+    }
+
+    for (const row of document.querySelectorAll("[data-manual-entry-facility-row]")) {
+      row.addEventListener("click", () => {
+        setManualFacility(row.dataset.facilityCode || "");
+      });
+    }
+  }
+
+  const manualValueInputs = Array.from(document.querySelectorAll("[data-manual-method-group]"));
+  if (manualValueInputs.length) {
+    const refreshManualMethodGroup = (groupKey) => {
+      if (!groupKey) return;
+      const groupInputs = manualValueInputs.filter((input) => input.dataset.manualMethodGroup === groupKey);
+      const activeInput = groupInputs.find((input) => input.value.trim() !== "");
+      for (const input of groupInputs) {
+        const row = input.closest("tr");
+        const include = row ? row.querySelector("input[type='checkbox'][name^='include_']") : null;
+        const hasValue = input.value.trim() !== "";
+        if (include) {
+          include.checked = hasValue;
+          include.disabled = !hasValue;
+        }
+        if (activeInput && input !== activeInput) {
+          input.disabled = true;
+          row?.classList.add("is-method-disabled");
+        } else {
+          input.disabled = false;
+          row?.classList.remove("is-method-disabled");
+        }
+      }
+    };
+
+    for (const input of manualValueInputs) {
+      input.addEventListener("input", () => refreshManualMethodGroup(input.dataset.manualMethodGroup || ""));
+      refreshManualMethodGroup(input.dataset.manualMethodGroup || "");
+    }
+  }
 })();

@@ -1924,6 +1924,80 @@ a.home-menu-card.is-navigating {
   grid-template-columns: minmax(330px, 1.5fr) minmax(260px, 1fr) minmax(100px, 0.35fr) auto;
 }
 
+.manual-entry-form {
+  display: grid;
+  gap: 16px;
+}
+
+.manual-entry-basic-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.manual-entry-item-search {
+  min-width: min(420px, 100%);
+}
+
+.manual-entry-item-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.manual-entry-category {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.manual-entry-category summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  cursor: pointer;
+  background: #f8fafc;
+  color: var(--text);
+}
+
+.manual-entry-category summary span {
+  color: var(--muted);
+}
+
+.manual-entry-item-table-wrap {
+  overflow-x: auto;
+}
+
+.manual-entry-item-table {
+  min-width: 1160px;
+}
+
+.manual-entry-item-table th:nth-child(1),
+.manual-entry-item-table td:nth-child(1) {
+  width: 180px;
+}
+
+.manual-entry-item-table th:nth-child(3),
+.manual-entry-item-table td:nth-child(3),
+.manual-entry-item-table th:nth-child(6),
+.manual-entry-item-table td:nth-child(6) {
+  width: 92px;
+}
+
+.manual-entry-value-input:disabled,
+.manual-entry-item-table tr.is-method-disabled {
+  opacity: 0.48;
+}
+
+.inline-check {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+}
+
 .filter-form label {
   display: grid;
   grid-template-rows: 24px var(--control-height);
