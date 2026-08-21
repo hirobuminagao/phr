@@ -1989,6 +1989,10 @@ a.home-menu-card.is-navigating {
   color: var(--accent-dark);
 }
 
+.manual-entry-modal-actions {
+  justify-content: center;
+}
+
 .manual-entry-item-search {
   min-width: min(420px, 100%);
 }
