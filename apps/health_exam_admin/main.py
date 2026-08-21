@@ -4848,6 +4848,7 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     qualification_lost_status = filters.get("qualification_lost_status", "").strip()
     qualification_lost_date = filters.get("qualification_lost_date", "").strip()
     facility_query = filters.get("facility_q", "").strip()
+    facility_codes = split_filter_values(filters.get("facility_codes", ""))
     if event_id:
         where_parts.append("eec.event_id = %s")
         params.append(event_id)
@@ -4956,6 +4957,9 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
             """
         )
         params.extend([like, like, like])
+    if facility_codes:
+        where_parts.append(f"eec.facility_code IN ({', '.join(['%s'] * len(facility_codes))})")
+        params.extend(facility_codes)
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     return where_sql, params
 
@@ -9262,6 +9266,7 @@ def exam_export_cases(request: Request) -> Response:
         "qualification_lost_status": request.query_params.get("qualification_lost_status", ""),
         "qualification_lost_date": request.query_params.get("qualification_lost_date", ""),
         "facility_q": request.query_params.get("facility_q", ""),
+        "facility_codes": request.query_params.get("facility_codes", ""),
         "limit": request.query_params.get("limit", "500"),
         "page": request.query_params.get("page", "1"),
     }

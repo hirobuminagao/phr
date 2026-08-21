@@ -606,29 +606,65 @@
   }
 
   const caseFacilityInput = document.getElementById("case-facility-filter-input");
+  const caseFacilitySummary = document.getElementById("case-facility-codes-summary");
   const caseFacilityForm = caseFacilityInput ? caseFacilityInput.closest("form") : null;
+  const caseFacilityValues = () => {
+    if (!caseFacilityInput) return [];
+    return caseFacilityInput.value
+      .split(/[\s,，、]+/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  };
+  const updateCaseFacilityPickerState = () => {
+    const values = new Set(caseFacilityValues());
+    if (caseFacilitySummary) {
+      caseFacilitySummary.textContent = values.size ? `${values.size}施設を指定中` : "未指定: 全施設";
+    }
+    for (const button of document.querySelectorAll("[data-case-facility-select]")) {
+      const code = String(button.getAttribute("data-facility-code") || "").trim();
+      const added = code && values.has(code);
+      button.textContent = added ? "解除" : "追加";
+      button.classList.toggle("is-active", Boolean(added));
+      button.disabled = false;
+    }
+    for (const row of document.querySelectorAll("[data-case-facility-row]")) {
+      const code = String(row.getAttribute("data-facility-code") || "").trim();
+      row.classList.toggle("is-selected", Boolean(code && values.has(code)));
+    }
+  };
+  const selectCaseFacility = (element) => {
+    if (!caseFacilityInput || !(element instanceof Element)) return;
+    const code = String(element.getAttribute("data-facility-code") || "").trim();
+    if (!code) return;
+    const values = caseFacilityValues();
+    if (values.includes(code)) {
+      caseFacilityInput.value = values.filter((value) => value !== code).join(", ");
+    } else {
+      values.push(code);
+      caseFacilityInput.value = values.join(", ");
+    }
+    caseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+    updateCaseFacilityPickerState();
+  };
+  if (caseFacilityInput) {
+    caseFacilityInput.addEventListener("input", updateCaseFacilityPickerState);
+    updateCaseFacilityPickerState();
+  }
   for (const button of document.querySelectorAll("[data-case-facility-select]")) {
-    button.addEventListener("click", () => {
-      if (!caseFacilityInput) return;
-      const query = String(button.getAttribute("data-facility-query") || "").trim();
-      if (!query) return;
-      caseFacilityInput.value = query;
-      caseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
-      closeModal(button.closest(".edit-modal"));
-      if (caseFacilityForm) {
-        if (typeof caseFacilityForm.requestSubmit === "function") {
-          caseFacilityForm.requestSubmit();
-        } else {
-          caseFacilityForm.submit();
-        }
-      }
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectCaseFacility(button);
     });
+  }
+  for (const row of document.querySelectorAll("[data-case-facility-row]")) {
+    row.addEventListener("click", () => selectCaseFacility(row));
   }
   for (const button of document.querySelectorAll("[data-case-facility-clear]")) {
     button.addEventListener("click", () => {
       if (!caseFacilityInput) return;
       caseFacilityInput.value = "";
       caseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      updateCaseFacilityPickerState();
       closeModal(button.closest(".edit-modal"));
       if (caseFacilityForm) {
         if (typeof caseFacilityForm.requestSubmit === "function") {
