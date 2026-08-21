@@ -16,8 +16,25 @@
   </nav>
 </header>
 
+<nav class="floating-category-nav manual-entry-floating-nav" aria-label="入力カテゴリ移動" data-floating-category-nav>
+  <div class="floating-category-head">
+    <strong>カテゴリ</strong>
+    <button type="button" aria-label="カテゴリメニューを閉じる" aria-expanded="true" data-floating-category-toggle>...</button>
+  </div>
+  <div class="floating-category-links" data-floating-category-links>
+    <a href="#manual-entry-basic">基本</a>
+    <a href="#manual-entry-items">検査項目</a>
+    {% for group in item_groups %}
+      <a href="#manual-entry-category-{{ loop.index }}">{{ group.category_name }}</a>
+    {% endfor %}
+  </div>
+  <div class="manual-entry-floating-actions">
+    <button type="button" class="primary-button" disabled title="保存処理は次ステップで接続します">source作成</button>
+  </div>
+</nav>
+
 <main class="page">
-  <section class="panel">
+  <section id="manual-entry-basic" class="panel manual-entry-anchor">
     <div class="section-heading">
       <div>
         <h2>入力sourceの基本情報</h2>
@@ -149,7 +166,7 @@
     </section>
   </div>
 
-  <section class="panel">
+  <section id="manual-entry-items" class="panel manual-entry-anchor">
     <div class="section-heading">
       <div>
         <h2>検査項目入力</h2>
@@ -163,7 +180,7 @@
 
     <div id="manual-entry-item-list" class="manual-entry-item-groups">
       {% for group in item_groups %}
-      <details class="manual-entry-category" open>
+      <details id="manual-entry-category-{{ loop.index }}" class="manual-entry-category manual-entry-anchor" open>
         <summary>
           <strong>{{ group.category_name }}</strong>
           <span>{{ group["items"]|length }}項目</span>
@@ -172,8 +189,8 @@
           <table class="data-table compact-table manual-entry-item-table">
             <thead>
               <tr>
-                <th>入力</th>
                 <th>項目</th>
+                <th>入力</th>
                 <th>型</th>
                 <th>単位/コード体系</th>
                 <th>検査方法</th>
@@ -184,6 +201,10 @@
               {% for item in group["items"] %}
               <tr data-filter-text="{{ item.namecode }} {{ item.item_name }} {{ item.category_name or '' }} {{ item.identity_item_code or '' }} {{ item.identity_item_name or '' }} {{ item.method_name or '' }} {{ item.result_code_oid or '' }}">
                 <td>
+                  <strong>{{ item.item_name }}</strong>
+                  <small>{{ item.namecode }}{% if item.identity_item_code %} / {{ item.identity_item_code }}{% endif %}</small>
+                </td>
+                <td>
                   <input
                     class="manual-entry-value-input"
                     type="{{ item.manual_input_type }}"
@@ -191,10 +212,6 @@
                     data-manual-method-group="{{ item.manual_method_group_key }}"
                     placeholder="{{ item.xml_value_type or '値' }}"
                   >
-                </td>
-                <td>
-                  <strong>{{ item.item_name }}</strong>
-                  <small>{{ item.namecode }}{% if item.identity_item_code %} / {{ item.identity_item_code }}{% endif %}</small>
                 </td>
                 <td>
                   <span class="status-pill status-muted">{{ item.xml_value_type or "-" }}</span>
