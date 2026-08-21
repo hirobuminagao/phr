@@ -105,7 +105,7 @@
 
   const copyTextToClipboard = async (text) => {
     if (!text) return false;
-    if (navigator.clipboard?.writeText && window.isSecureContext) {
+    if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
       await navigator.clipboard.writeText(text);
       return true;
     }
@@ -1035,8 +1035,8 @@
 
   const caseFacilityToggle = document.querySelector("[data-manual-entry-case-facility-toggle]");
   const caseFacilityPopover = document.querySelector("[data-manual-entry-case-facility-popover]");
-  const caseFacilityInput = document.querySelector("#manual-entry-case-search-facility");
-  if (caseFacilityToggle && caseFacilityPopover && caseFacilityInput) {
+  const manualCaseFacilityInput = document.querySelector("#manual-entry-case-search-facility");
+  if (caseFacilityToggle && caseFacilityPopover && manualCaseFacilityInput) {
     const facilityOptions = Array.from(document.querySelectorAll("[data-manual-entry-facility-row]")).map((row) => {
       const code = row.getAttribute("data-facility-code") || "";
       const facilityName = row.querySelector("td:nth-child(1) strong")?.textContent?.trim() || "";
@@ -1058,14 +1058,14 @@
     };
 
     const selectCaseFacility = (code) => {
-      caseFacilityInput.value = code || "";
+      manualCaseFacilityInput.value = code || "";
       closeCaseFacilityPopover();
-      caseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
-      caseFacilityInput.focus();
+      manualCaseFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      manualCaseFacilityInput.focus();
     };
 
     const renderCaseFacilityOptions = () => {
-      const keyword = caseFacilityInput.value.trim().toLowerCase();
+      const keyword = manualCaseFacilityInput.value.trim().toLowerCase();
       const matches = facilityOptions.filter((item) => {
         if (!keyword) return true;
         return item.filterText.toLowerCase().includes(keyword);
@@ -1092,7 +1092,7 @@
       }
     });
 
-    caseFacilityInput.addEventListener("input", () => {
+    manualCaseFacilityInput.addEventListener("input", () => {
       if (!caseFacilityPopover.hidden) renderCaseFacilityOptions();
     });
 
