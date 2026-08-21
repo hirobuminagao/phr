@@ -5116,6 +5116,12 @@ def load_exam_export_case_rows(
           eec.exam_date,
           eec.health_exam_report_category,
           eec.program_code,
+          eec.insurance_symbol_raw,
+          eec.insurance_symbol_export_value,
+          eec.insurance_number_raw,
+          eec.insurance_number_export_value,
+          eec.insurance_branch_number_raw,
+          eec.insurance_branch_number_export_value,
           eec.name_full_raw,
           eec.name_kana_raw,
           eec.birthdate,
@@ -7514,6 +7520,77 @@ def manual_exam_entry_cases(request: Request) -> Response:
         row["legal_reason_summary"] = str(row.get("legal_reason_summary") or "")
         row["specific_reason_summary"] = str(row.get("specific_reason_summary") or "")
     return JSONResponse({"items": rows})
+
+
+@app.get("/api/manual-exam-entry/case-candidates")
+def manual_exam_entry_case_candidates(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"items": []}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"items": []}, status_code=403)
+
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "facility_q": request.query_params.get("facility_q", "").strip(),
+        "name_kana": request.query_params.get("name_kana", "").strip(),
+        "hia_subscriber_id": request.query_params.get("hia_subscriber_id", "").strip(),
+        "insurance_symbol": request.query_params.get("insurance_symbol", "").strip(),
+        "insurance_number": request.query_params.get("insurance_number", "").strip(),
+        "limit": "50",
+    }
+    if not any(filters[key] for key in ("facility_q", "name_kana", "hia_subscriber_id", "insurance_number")):
+        return JSONResponse({"items": []})
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            rows = load_exam_export_case_rows(cur, filters=filters, limit=50, offset=0)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        items.append(
+            {
+                "exam_export_case_id": row.get("exam_export_case_id"),
+                "event_id": row.get("event_id"),
+                "subscriber_id": row.get("subscriber_id"),
+                "hia_subscriber_id": row.get("hia_subscriber_id"),
+                "person_id_custom": row.get("person_id_custom"),
+                "name_full": row.get("name_full_raw"),
+                "name_kana": row.get("name_kana_raw"),
+                "birthdate": str(row.get("birthdate") or ""),
+                "gender_code": row.get("gender_code"),
+                "gender_label": gender_code_label(row.get("gender_code")),
+                "insurer_number": row.get("insurer_number"),
+                "insurance_symbol": row.get("insurance_symbol_export_value") or row.get("insurance_symbol_raw"),
+                "insurance_number": row.get("insurance_number_export_value") or row.get("insurance_number_raw"),
+                "insurance_branch_number": row.get("insurance_branch_number_export_value")
+                or row.get("insurance_branch_number_raw"),
+                "facility_code": row.get("facility_code"),
+                "facility_name": row.get("facility_name"),
+                "expected_source_mode": row.get("expected_source_mode"),
+                "expected_source_mode_label": source_mode_label(row.get("expected_source_mode")),
+                "exam_date": str(row.get("exam_date") or ""),
+                "source_mode": row.get("source_mode"),
+                "case_value_count": row.get("case_value_count") or 0,
+                "source_count": row.get("source_count") or 0,
+                "xml_count": row.get("xml_count") or 0,
+                "csv_count": row.get("csv_count") or 0,
+                "paper_count": row.get("paper_count") or 0,
+                "legal_check_result": row.get("legal_check_result") or "PENDING",
+                "legal_reason_summary": row.get("legal_reason_summary") or "",
+                "specific_check_result": row.get("specific_check_result") or "PENDING",
+                "specific_reason_summary": row.get("specific_reason_summary") or "",
+                "export_readiness_status": row.get("export_readiness_status"),
+                "xml_export_status": row.get("xml_export_status"),
+            }
+        )
+    return JSONResponse({"items": items})
 
 
 @app.get("/health")

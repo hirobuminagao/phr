@@ -1955,6 +1955,38 @@ a.home-menu-card.is-navigating {
   gap: 16px;
 }
 
+.manual-entry-selected-case {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #bfe3d8;
+  border-radius: 8px;
+  background: #eef8f5;
+}
+
+.manual-entry-selected-case strong,
+.manual-entry-selected-case small {
+  display: block;
+}
+
+.manual-entry-case-search {
+  display: grid;
+  grid-template-columns: minmax(250px, 1.2fr) minmax(180px, 1fr) minmax(150px, 0.8fr) minmax(120px, 0.65fr) minmax(120px, 0.65fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.manual-entry-case-picker-table th:nth-child(1),
+.manual-entry-case-picker-table td:nth-child(1) {
+  min-width: 260px;
+}
+
+.manual-entry-case-picker-table th:nth-child(2),
+.manual-entry-case-picker-table td:nth-child(2) {
+  min-width: 260px;
+}
+
 .manual-entry-floating-nav {
   width: 240px;
   max-height: calc(100vh - 120px);

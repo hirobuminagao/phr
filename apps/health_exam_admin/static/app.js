@@ -989,6 +989,8 @@
   if (manualFacilityInput) {
     const setManualFacility = (code) => {
       manualFacilityInput.value = code || "";
+      const caseFacilityInput = document.querySelector("#manual-entry-case-search-facility");
+      if (caseFacilityInput) caseFacilityInput.value = code || "";
       document.querySelector("#manual-entry-facility-picker-modal [data-modal-close]")?.click();
     };
 
@@ -1010,6 +1012,11 @@
   if (manualSubscriberResults) {
     const searchButton = document.querySelector("[data-manual-entry-subscriber-search]");
     const applyButton = document.querySelector("[data-manual-entry-subscriber-apply]");
+    const caseSearchButton = document.querySelector("[data-manual-entry-case-search]");
+    const casePickerResults = document.querySelector("[data-manual-entry-case-picker-results]");
+    const selectedCasePanel = document.querySelector("[data-manual-entry-selected-case]");
+    const selectedCaseTitle = document.querySelector("[data-manual-entry-selected-case-title]");
+    const selectedCaseDetail = document.querySelector("[data-manual-entry-selected-case-detail]");
     const casePanel = document.querySelector("[data-manual-entry-case-panel]");
     const caseResults = document.querySelector("[data-manual-entry-case-results]");
     const caseCount = document.querySelector("[data-manual-entry-case-count]");
@@ -1017,10 +1024,25 @@
     const searchKana = document.querySelector("#manual-entry-subscriber-search-kana");
     const searchSymbol = document.querySelector("#manual-entry-subscriber-search-symbol");
     const searchNumber = document.querySelector("#manual-entry-subscriber-search-number");
+    const caseSearchFacility = document.querySelector("#manual-entry-case-search-facility");
+    const caseSearchKana = document.querySelector("#manual-entry-case-search-kana");
+    const caseSearchHia = document.querySelector("#manual-entry-case-search-hia");
+    const caseSearchSymbol = document.querySelector("#manual-entry-case-search-symbol");
+    const caseSearchNumber = document.querySelector("#manual-entry-case-search-number");
     let selectedSubscriber = null;
+
+    const setValue = (selector, value) => {
+      const input = document.querySelector(selector);
+      if (input) input.value = value || "";
+    };
 
     const setManualSubscriberMessage = (message) => {
       manualSubscriberResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
+    };
+
+    const setManualCasePickerMessage = (message) => {
+      if (!casePickerResults) return;
+      casePickerResults.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
     };
 
     const setManualSubscriberSelected = (subscriber) => {
@@ -1038,6 +1060,37 @@
         applyButton.disabled = !selectedSubscriber;
         applyButton.classList.toggle("disabled", !selectedSubscriber);
       }
+    };
+
+    const fillManualEntryFromPerson = (person) => {
+      setValue("#manual-entry-subscriber-id-input", person.subscriber_id);
+      setValue("#manual-entry-hia-subscriber-id-input", person.hia_subscriber_id);
+      setValue("#manual-entry-name-full-input", person.name_full);
+      setValue("#manual-entry-name-kana-input", person.name_kana);
+      setValue("#manual-entry-insurance-symbol-input", person.insurance_symbol);
+      setValue("#manual-entry-insurance-number-input", person.insurance_number);
+      setValue("#manual-entry-insurance-branch-input", person.insurance_branch_number);
+      setValue("#manual-entry-birthdate-input", person.birth || person.birthdate);
+      setValue("#manual-entry-gender-input", person.gender_label);
+    };
+
+    const fillManualEntryFromCase = (item) => {
+      fillManualEntryFromPerson(item);
+      setValue("#manual-entry-facility-input", item.facility_code);
+      setValue("#manual-entry-case-search-facility", item.facility_code);
+      setValue("#manual-entry-exam-date-input", item.exam_date);
+      const purpose = document.querySelector("select[name='entry_purpose']");
+      if (purpose) purpose.value = "SUPPLEMENT";
+      if (selectedCasePanel) selectedCasePanel.hidden = false;
+      if (selectedCaseTitle) {
+        selectedCaseTitle.textContent = `case ${item.exam_export_case_id || "-"} / ${item.name_kana || "-"}`;
+      }
+      if (selectedCaseDetail) {
+        selectedCaseDetail.textContent = `${item.facility_name || "-"} / ${item.exam_date || "-"} / ${item.source_mode || "-"} / 出力 ${item.export_readiness_status || "-"}`;
+      }
+      renderManualCaseRows([item]);
+      document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
+      document.querySelector("#manual-entry-basic")?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
 
     const setManualCaseMessage = (message, label = "未検索") => {
@@ -1090,6 +1143,47 @@
           </td>
         `;
         caseResults.appendChild(row);
+      }
+    };
+
+    const renderManualCasePickerRows = (items) => {
+      if (!casePickerResults) return;
+      if (!items.length) {
+        setManualCasePickerMessage("一致するcaseはありません。");
+        return;
+      }
+      casePickerResults.innerHTML = "";
+      for (const item of items) {
+        const sourceText = `XML ${item.xml_count || 0} / CSV ${item.csv_count || 0} / 紙 ${item.paper_count || 0}`;
+        const legal = `${item.legal_check_result || "PENDING"}${item.legal_reason_summary ? ` / ${item.legal_reason_summary}` : ""}`;
+        const specific = `${item.specific_check_result || "PENDING"}${item.specific_reason_summary ? ` / ${item.specific_reason_summary}` : ""}`;
+        const row = document.createElement("tr");
+        row.className = "clickable-table-row";
+        row.innerHTML = `
+          <td>
+            <strong>case ${escapeHtml(item.exam_export_case_id || "-")} / ${escapeHtml(item.name_kana || "-")}</strong>
+            <small>${escapeHtml(item.name_full || "-")} / HIA ${escapeHtml(item.hia_subscriber_id || "-")} / ${escapeHtml(item.birthdate || "-")} / ${escapeHtml(item.gender_label || "-")}</small>
+          </td>
+          <td>
+            <strong title="${escapeHtml(item.facility_name || "")}">${escapeHtml(item.facility_name || "-")}</strong>
+            <small>${escapeHtml(item.exam_date || "-")} / ${escapeHtml(item.facility_code || "-")} / ${escapeHtml(item.expected_source_mode_label || "-")}</small>
+          </td>
+          <td>
+            <strong>${escapeHtml(sourceText)}</strong>
+            <small>${escapeHtml(item.source_mode || "-")} / 値 ${escapeHtml(item.case_value_count || "0")}</small>
+          </td>
+          <td>
+            <strong>法定 ${escapeHtml(legal)}</strong>
+            <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
+          </td>
+          <td><button type="button" class="ghost-button compact-action-button" data-manual-entry-case-pick>選択</button></td>
+        `;
+        row.addEventListener("click", () => fillManualEntryFromCase(item));
+        row.querySelector("[data-manual-entry-case-pick]")?.addEventListener("click", (event) => {
+          event.stopPropagation();
+          fillManualEntryFromCase(item);
+        });
+        casePickerResults.appendChild(row);
       }
     };
 
@@ -1199,7 +1293,38 @@
       }
     };
 
+    const searchManualCases = async () => {
+      if (!casePickerResults) return;
+      const eventId = document.querySelector("select[name='event_id']")?.value || "2";
+      const params = new URLSearchParams({
+        event_id: eventId,
+        facility_q: caseSearchFacility ? caseSearchFacility.value.trim() : "",
+        name_kana: caseSearchKana ? caseSearchKana.value.trim() : "",
+        hia_subscriber_id: caseSearchHia ? caseSearchHia.value.trim() : "",
+        insurance_symbol: caseSearchSymbol ? caseSearchSymbol.value.trim() : "",
+        insurance_number: caseSearchNumber ? caseSearchNumber.value.trim() : "",
+      });
+      if (![...params.values()].some((value) => value && value !== eventId)) {
+        setManualCasePickerMessage("検索条件を入力してください。");
+        return;
+      }
+      setManualCasePickerMessage("検索中...");
+      try {
+        const response = await fetch(`/api/manual-exam-entry/case-candidates?${params.toString()}`, {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        renderManualCasePickerRows(Array.isArray(payload.items) ? payload.items : []);
+      } catch (_error) {
+        setManualCasePickerMessage("case検索でエラーが発生しました。");
+      }
+    };
+
     searchButton?.addEventListener("click", searchManualSubscribers);
+    caseSearchButton?.addEventListener("click", searchManualCases);
     for (const input of [searchQ, searchKana, searchSymbol, searchNumber]) {
       input?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -1208,21 +1333,17 @@
         }
       });
     }
+    for (const input of [caseSearchFacility, caseSearchKana, caseSearchHia, caseSearchSymbol, caseSearchNumber]) {
+      input?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          searchManualCases();
+        }
+      });
+    }
     applyButton?.addEventListener("click", () => {
       if (!selectedSubscriber) return;
-      const setValue = (selector, value) => {
-        const input = document.querySelector(selector);
-        if (input) input.value = value || "";
-      };
-      setValue("#manual-entry-subscriber-id-input", selectedSubscriber.subscriber_id);
-      setValue("#manual-entry-hia-subscriber-id-input", selectedSubscriber.hia_subscriber_id);
-      setValue("#manual-entry-name-full-input", selectedSubscriber.name_full);
-      setValue("#manual-entry-name-kana-input", selectedSubscriber.name_kana);
-      setValue("#manual-entry-insurance-symbol-input", selectedSubscriber.insurance_symbol);
-      setValue("#manual-entry-insurance-number-input", selectedSubscriber.insurance_number);
-      setValue("#manual-entry-insurance-branch-input", selectedSubscriber.insurance_branch_number);
-      setValue("#manual-entry-birthdate-input", selectedSubscriber.birth);
-      setValue("#manual-entry-gender-input", selectedSubscriber.gender_label);
+      fillManualEntryFromPerson(selectedSubscriber);
       document.querySelector("#manual-entry-subscriber-picker-modal [data-modal-close]")?.click();
       loadManualCasesForSubscriber(selectedSubscriber.subscriber_id);
     });
