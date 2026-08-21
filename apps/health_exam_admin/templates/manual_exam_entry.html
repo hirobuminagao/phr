@@ -156,7 +156,7 @@
     <div class="section-heading">
       <div>
         <h2>既存case確認</h2>
-        <p class="subtle">加入者を選択すると、この人の既存caseを表示します。補足入力する場合は、対象caseと受診日・健診機関を確認してください。</p>
+        <p class="subtle">加入者検索、またはcase検索の結果をここに表示します。補足入力するcaseを選択すると、健診機関・人・受診日を基本情報へ反映します。</p>
       </div>
       <span class="status-pill status-muted" data-manual-entry-case-count>未検索</span>
     </div>
@@ -168,7 +168,7 @@
             <th>健診機関 / 受診日</th>
             <th>source</th>
             <th>チェック / 出力</th>
-            <th>確認</th>
+            <th>選択 / 確認</th>
           </tr>
         </thead>
         <tbody data-manual-entry-case-results>
@@ -251,7 +251,7 @@
       <div class="edit-modal__head">
         <div>
           <p class="eyebrow">CASE SEARCH</p>
-          <h2 id="manual-entry-case-picker-title">caseを選択</h2>
+          <h2 id="manual-entry-case-picker-title">caseを検索</h2>
         </div>
         <button type="button" class="ghost-button" data-modal-close>閉じる</button>
       </div>
@@ -280,25 +280,10 @@
           番号
           <input id="manual-entry-case-search-number" autocomplete="off">
         </label>
-        <button type="button" class="primary-button" data-manual-entry-case-search>検索</button>
       </div>
-      <div class="table-panel export-facility-picker-table-panel">
-        <table class="data-table compact-table manual-entry-case-picker-table">
-          <thead>
-            <tr>
-              <th>case / 人</th>
-              <th>健診機関 / 受診日</th>
-              <th>source</th>
-              <th>チェック / 出力</th>
-              <th>選択</th>
-            </tr>
-          </thead>
-          <tbody data-manual-entry-case-picker-results>
-            <tr>
-              <td colspan="5">条件を入力して検索してください。</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="edit-modal__foot manual-entry-modal-actions">
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="button" class="primary-button" data-manual-entry-case-search>検索</button>
       </div>
     </section>
   </div>

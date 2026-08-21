@@ -1116,7 +1116,6 @@
     const searchButton = document.querySelector("[data-manual-entry-subscriber-search]");
     const applyButton = document.querySelector("[data-manual-entry-subscriber-apply]");
     const caseSearchButton = document.querySelector("[data-manual-entry-case-search]");
-    const casePickerResults = document.querySelector("[data-manual-entry-case-picker-results]");
     const selectedCasePanel = document.querySelector("[data-manual-entry-selected-case]");
     const selectedCaseTitle = document.querySelector("[data-manual-entry-selected-case-title]");
     const selectedCaseDetail = document.querySelector("[data-manual-entry-selected-case-detail]");
@@ -1141,11 +1140,6 @@
 
     const setManualSubscriberMessage = (message) => {
       manualSubscriberResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
-    };
-
-    const setManualCasePickerMessage = (message) => {
-      if (!casePickerResults) return;
-      casePickerResults.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
     };
 
     const setManualSubscriberSelected = (subscriber) => {
@@ -1248,7 +1242,7 @@
         caseCount.className = `status-pill ${items.length ? "status-ready" : "status-muted"}`;
       }
       if (!items.length) {
-        caseResults.innerHTML = `<tr><td colspan="5">この加入者の既存caseはありません。紙のみ新規sourceとして作成する想定です。</td></tr>`;
+        caseResults.innerHTML = `<tr><td colspan="5">一致するcaseはありません。紙のみ新規sourceとして作成する場合は、基本情報を入力してください。</td></tr>`;
         return;
       }
       caseResults.innerHTML = "";
@@ -1275,51 +1269,14 @@
             <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
           </td>
           <td>
+            <button type="button" class="ghost-button compact-action-button" data-manual-entry-case-apply>選択</button>
             <a class="ghost-button compact-action-button" href="/exam-export-cases/${encodeURIComponent(item.exam_export_case_id)}">詳細</a>
           </td>
         `;
-        caseResults.appendChild(row);
-      }
-    };
-
-    const renderManualCasePickerRows = (items) => {
-      if (!casePickerResults) return;
-      if (!items.length) {
-        setManualCasePickerMessage("一致するcaseはありません。");
-        return;
-      }
-      casePickerResults.innerHTML = "";
-      for (const item of items) {
-        const sourceText = `XML ${item.xml_count || 0} / CSV ${item.csv_count || 0} / 紙 ${item.paper_count || 0}`;
-        const legal = `${item.legal_check_result || "PENDING"}${item.legal_reason_summary ? ` / ${item.legal_reason_summary}` : ""}`;
-        const specific = `${item.specific_check_result || "PENDING"}${item.specific_reason_summary ? ` / ${item.specific_reason_summary}` : ""}`;
-        const row = document.createElement("tr");
-        row.className = "clickable-table-row";
-        row.innerHTML = `
-          <td>
-            <strong>case ${escapeHtml(item.exam_export_case_id || "-")} / ${escapeHtml(item.name_kana || "-")}</strong>
-            <small>${escapeHtml(item.name_full || "-")} / HIA ${escapeHtml(item.hia_subscriber_id || "-")} / ${escapeHtml(item.birthdate || "-")} / ${escapeHtml(item.gender_label || "-")}</small>
-          </td>
-          <td>
-            <strong title="${escapeHtml(item.facility_name || "")}">${escapeHtml(item.facility_name || "-")}</strong>
-            <small>${escapeHtml(item.exam_date || "-")} / ${escapeHtml(item.facility_code || "-")} / ${escapeHtml(item.expected_source_mode_label || "-")}</small>
-          </td>
-          <td>
-            <strong>${escapeHtml(sourceText)}</strong>
-            <small>${escapeHtml(item.source_mode || "-")} / 値 ${escapeHtml(item.case_value_count || "0")}</small>
-          </td>
-          <td>
-            <strong>法定 ${escapeHtml(legal)}</strong>
-            <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
-          </td>
-          <td><button type="button" class="ghost-button compact-action-button" data-manual-entry-case-pick>選択</button></td>
-        `;
-        row.addEventListener("click", () => fillManualEntryFromCase(item));
-        row.querySelector("[data-manual-entry-case-pick]")?.addEventListener("click", (event) => {
-          event.stopPropagation();
+        row.querySelector("[data-manual-entry-case-apply]")?.addEventListener("click", () => {
           fillManualEntryFromCase(item);
         });
-        casePickerResults.appendChild(row);
+        caseResults.appendChild(row);
       }
     };
 
@@ -1430,7 +1387,6 @@
     };
 
     const searchManualCases = async () => {
-      if (!casePickerResults) return;
       const eventId = document.querySelector("select[name='event_id']")?.value || "2";
       const params = new URLSearchParams({
         event_id: eventId,
@@ -1441,10 +1397,11 @@
         insurance_number: caseSearchNumber ? caseSearchNumber.value.trim() : "",
       });
       if (![...params.values()].some((value) => value && value !== eventId)) {
-        setManualCasePickerMessage("検索条件を入力してください。");
+        setManualCaseMessage("検索条件を入力してください。", "未検索");
         return;
       }
-      setManualCasePickerMessage("検索中...");
+      setManualCaseMessage("caseを検索中...", "検索中");
+      document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
       try {
         const response = await fetch(`/api/manual-exam-entry/case-candidates?${params.toString()}`, {
           headers: { Accept: "application/json" },
@@ -1453,9 +1410,10 @@
           throw new Error(`HTTP ${response.status}`);
         }
         const payload = await response.json();
-        renderManualCasePickerRows(Array.isArray(payload.items) ? payload.items : []);
+        renderManualCaseRows(Array.isArray(payload.items) ? payload.items : []);
+        document.querySelector("#manual-entry-case-context")?.scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (_error) {
-        setManualCasePickerMessage("case検索でエラーが発生しました。");
+        setManualCaseMessage("case検索でエラーが発生しました。", "エラー");
       }
     };
 
