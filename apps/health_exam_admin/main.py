@@ -3793,6 +3793,22 @@ def preferred_alias_source_mode_sql() -> str:
     """
 
 
+def alias_source_mode_by_facility_code_sql() -> str:
+    return f"""
+          SELECT
+            mfa.event_id,
+            COALESCE(ef.exam_facility_code, SUBSTRING_INDEX(mfa.src_folder_raw, '_', 1)) AS facility_code,
+{preferred_alias_source_mode_sql()}
+          FROM {qname(master_db())}.medical_folder_aliases AS mfa
+          LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+            ON ef.exam_facility_id = mfa.exam_facility_id
+          WHERE mfa.is_active = 1
+          GROUP BY
+            mfa.event_id,
+            COALESCE(ef.exam_facility_code, SUBSTRING_INDEX(mfa.src_folder_raw, '_', 1))
+    """
+
+
 def source_mode_options() -> list[dict[str, str]]:
     return [
         {"value": "UNKNOWN", "label": "未設定"},
@@ -6337,16 +6353,10 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           SUM(CASE WHEN fr.status = 'WAITING_CONFIRM' THEN 1 ELSE 0 END) AS file_waiting_count
         FROM {qname(health_db())}.file_receipts AS fr
         LEFT JOIN (
-          SELECT
-            event_id,
-            exam_facility_id,
-{preferred_alias_source_mode_sql()}
-          FROM {qname(master_db())}.medical_folder_aliases
-          WHERE is_active = 1
-          GROUP BY event_id, exam_facility_id
+{alias_source_mode_by_facility_code_sql()}
         ) AS mfa
           ON mfa.event_id = fr.event_id
-         AND mfa.exam_facility_id = fr.exam_facility_id
+         AND mfa.facility_code = fr.facility_code
         {fr_event_clause}
         GROUP BY
           fr.event_id,
