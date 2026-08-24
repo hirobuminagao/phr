@@ -117,7 +117,6 @@ CREATE TABLE IF NOT EXISTS `manual_exam_entry_draft_check_results` (
   `specific_check_result` varchar(16) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
   `legal_reason_summary` text COLLATE utf8mb4_ja_0900_as_cs,
   `specific_reason_summary` text COLLATE utf8mb4_ja_0900_as_cs,
-  `specific_detail_json` json DEFAULT NULL,
   `a44_4401001001_status` varchar(16) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
   `a44_4401001001_reason` text COLLATE utf8mb4_ja_0900_as_cs,
   `a44_4402001001_status` varchar(16) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
