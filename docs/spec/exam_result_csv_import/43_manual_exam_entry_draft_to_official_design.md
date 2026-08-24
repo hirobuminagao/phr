@@ -339,8 +339,8 @@ caseから選択した場合:
 - 出力可否は、本データ反映後に通常stepで作成される `exam_check_results` を正とする。
 - 実行入口は `健診結果仮登録リスト` に置く。
 - `健診結果処理実行` 画面に置く場合も、通常stepには混ぜず、仮登録用の別ブロックとして扱う。
-- 特定健診の項目別横持ちは、正式 `exam_check_results` に入れる前にdraft側で先行検証する。draftは本データへ混ざらず、まだ投入件数も少ないため、detail code、カラム構成、画面表示、保存処理を安全に試せる。
-- draft側で確定した特定健診detail codeと `status` / `reason` の持ち方を、後続で正式 `exam_check_results` へ横展開する。
+- 特定健診の項目別横持ちは、正式 `exam_check_results` に入れる前にdraft側で先行検証した。
+- draft側で確定した特定健診detail codeと `status` / `reason` の持ち方を、正式 `exam_check_results` にも同じ構造で展開する。
 
 画面操作:
 
@@ -383,8 +383,8 @@ caseから選択した場合:
 - 保存先が2つになるため、ルール追加時の影響範囲を必ず確認する。
 - 正式 `exam_check_results` の横持ち項目を追加した場合、必要に応じて `manual_exam_entry_draft_check_results` 側にも同じ項目を追加する。
 - 画面表示、DDL、migration、チェック結果保存処理の4点をセットで更新する。
-- draft先行期間中は、draft側だけが特定健診の項目別横持ちを持ち、正式 `exam_check_results` は `specific_check_result` / `specific_reason_summary` 中心のままになる。この差は意図した検証期間の差分であり、draft側確認後に正式側へ同じ構造を追加して解消する。
-- `specific_reason_summary` のパースは、特定健診の項目別横持ちが正式側に入るまでの暫定処理とする。最終的には、summaryではなく横持ちの項目別 `status` / `reason` を正として確認項目を作る。
+- 正式 `exam_check_results` 側にも特定健診の項目別横持ちを追加する。これにより、draftと正式チェックの保持構造を揃える。
+- `specific_reason_summary` のパースは、横持ちカラム未適用環境や過去データ向けの互換fallbackとする。正はsummaryではなく横持ちの項目別 `status` / `reason` とし、確認項目もそこから作る。
 
 ### 6. 仮登録リストから削除
 

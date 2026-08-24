@@ -471,14 +471,14 @@ XML出力条件を画面から指定できるようにする。
 現行実装では、法定チェックとは別に `specific_check_result` / `specific_reason_summary` を更新している。
 判断は解釈ではなく、取込済み値の事実確認に限定する。
 `specific_*` は特定健診チェックの総合判定とsummary枠として使う。
-ただし、特定健診も固定制度チェックであるため、項目別の正はsummary文字列ではなく横持ち `status` / `reason` で保持する方針へ改める。
-本データ側を直接揺らす前に、まず `manual_exam_entry_draft_check_results` 側で特定健診detail codeごとの横持ち保存を先行実装し、画面表示・保存処理・確認項目作成の形を検証する。
-draft側で固めた構造を、後続で正式 `exam_check_results` へ横展開する。
+ただし、特定健診も固定制度チェックであるため、項目別の正はsummary文字列ではなく横持ち `sp_<detail_code>_status` / `sp_<detail_code>_reason` で保持する。
+`manual_exam_entry_draft_check_results` 側で先行検証したdetail codeごとの横持ち保存を、正式 `exam_check_results` 側へも同じ構造で展開する。
 
 初版の対象:
 
 - `03_00_check_imported_exam_ledgers.py` で、受領source単位の特定健診チェックを `exam_check_results` に保存する。
 - `03_04_check_exam_export_cases.py` で、出力case単位の特定健診チェックを `exam_check_results` に保存する。
+- `exam_check_results` には総合判定とsummaryに加え、特定健診detailごとの `status` / `reason` を横持ちで保存する。既存データはstep再実行で再生成する。
 - 年齢判定はevent年度の年度末日を使う。event=2では `event_year = 2026` の年度末 `2027-03-31` 時点の満年齢で40-74歳を特定健診対象とする。
 - `dev_phr.event.age_reference_date` は予約/運用上の年齢換算日と混同しないため、特定健診チェックでは参照しない。
 - 年齢対象外は `specific_check_result = NOT_APPLICABLE` とし、OKとは分けて表示する。summaryには対象外理由を残す。
@@ -525,7 +525,7 @@ draft側で固めた構造を、後続で正式 `exam_check_results` へ横展�
 実装メモ:
 
 - `03_04_check_exam_export_cases.py` 実行時に、法定チェックの `MISSING` と、特定健診の `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` を抽出し、case側の `exam_case_check_review_items` を作成・更新する。
-- 現行実装では特定健診の項目別横持ちが未整備のため、`specific_reason_summary` をパースして確認項目を作っている。これは暫定処理であり、draft側・正式側の横持ち整備後は、項目別 `status` / `reason` を正として確認項目を作る。
+- 特定健診の確認項目は、項目別横持ち `sp_<detail_code>_status` / `sp_<detail_code>_reason` を正として作る。`specific_reason_summary` パースは、横持ち未適用環境や過去データ向けの互換fallbackに限定する。
 - 法定チェック由来の確認項目は `check_scope = ARTICLE44` とし、値そのものではなく確認・理由ありOKの作業対象として扱う。保存単位は業務チェックID、画面上の補助情報として関連namecode一覧と状態を表示する。
 - 特定健診由来の確認項目は `check_scope = SPECIFIC_HEALTH` とし、値そのものではなく確認・理由ありOKの作業対象として扱う。再チェックで不足が解消した場合は、未処理状態の確認項目を `RESOLVED_BY_SOURCE_VALUE` に変更して経緯を残す。
 - `PRIMARY` / `SUPPLEMENT` の両方にVALID値があり、採用値だけが業務的に怪しい場合は、MISSING placeholderではなく採用優先ルールまたは確認ルールで扱う。case詳細画面では両候補を横並びで確認し、健診機関確認や precedence rule 追加判断につなげる。
@@ -536,9 +536,9 @@ draft側で固めた構造を、後続で正式 `exam_check_results` へ横展�
 2. draft参考チェックで、特定健診の項目別結果をsummaryだけでなく横持ちへ保存する。
 3. 仮登録リスト/参考チェック詳細で、法定と特定健診の項目別結果を同じ見え方にする。
 4. 法定側と重なる項目は特定健診detail横持ちから除外し、法定チェック結果を利用する。
-5. draft側で問題がないことを確認後、正式 `exam_check_results` に同じ横持ちカラムを追加する。
-6. `specific_reason_summary` パース依存の確認項目作成を、横持ち項目別結果参照へ置き換える。
-6. 既存正式データは source/case のチェックを再実行して横持ち結果を再生成する。
+5. 正式 `exam_check_results` に同じ横持ちカラムを追加し、03_00/03_04の共通チェック処理で保存する。
+6. `specific_reason_summary` パース依存の確認項目作成を、横持ち項目別結果参照へ置き換える。summaryはfallbackに残す。
+7. 既存正式データは source/case のチェックを再実行して横持ち結果を再生成する。
 
 ### 9. Master and Facility Admin UI
 

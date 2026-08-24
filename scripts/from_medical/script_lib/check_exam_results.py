@@ -31,8 +31,10 @@ from scripts.from_medical.script_lib.article44_required_namecodes import ARTICLE
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
 from scripts.from_medical.script_lib.article44_value_loader import load_article44_value_map
 from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
+from scripts.from_medical.script_lib.specific_health_checker import SPECIFIC_DETAIL_CODE_BY_NAMECODE
+from scripts.from_medical.script_lib.specific_health_checker import SPECIFIC_ITEM_NAMES
 from scripts.from_medical.script_lib.specific_health_checker import SPECIFIC_REQUIRED_NAMECODES
-from scripts.from_medical.script_lib.specific_health_checker import aggregate_specific_result
+from scripts.from_medical.script_lib.specific_health_checker import aggregate_specific_result_with_details
 from scripts.from_medical.script_lib.specific_health_required_namecodes import fetch_specific_health_required_namecodes
 from scripts.lib.db.lookup.event import get_event_year
 from scripts.lib.examination.lookup import qname
@@ -287,6 +289,40 @@ def article44_result_columns(
     return columns
 
 
+def existing_table_columns(cur: Any, *, schema_name: str, table_name: str) -> set[str]:
+    cur.execute(
+        """
+        SELECT COLUMN_NAME AS column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = %s
+        """,
+        (schema_name, table_name),
+    )
+    columns: set[str] = set()
+    for row in cur.fetchall():
+        column_name = row.get("column_name") or row.get("COLUMN_NAME")
+        if column_name:
+            columns.add(str(column_name))
+    return columns
+
+
+def specific_result_columns(
+    specific_detail_results: Mapping[str, CheckResult],
+    *,
+    existing_columns: set[str],
+) -> dict[str, object]:
+    columns: dict[str, object] = {}
+    for detail_code, result in sorted(specific_detail_results.items()):
+        status_column = f"sp_{detail_code}_status"
+        reason_column = f"sp_{detail_code}_reason"
+        if status_column not in existing_columns or reason_column not in existing_columns:
+            continue
+        columns[status_column] = result.status
+        columns[reason_column] = result.reason
+    return columns
+
+
 def aggregate_article44_legal_result(article44_result: Article44Result) -> tuple[str, str | None]:
     validate_article44_result(article44_result)
     reasons: list[str] = []
@@ -455,6 +491,41 @@ def parse_specific_missing_placeholder_items(
     return results
 
 
+def specific_missing_placeholder_items_from_details(
+    specific_detail_results: Mapping[str, CheckResult],
+    required_namecodes: tuple[RequiredNamecode, ...],
+) -> list[MissingPlaceholderItem]:
+    """Build review placeholder targets from specific-health detail results."""
+
+    required_by_detail = {
+        SPECIFIC_DETAIL_CODE_BY_NAMECODE[required.namecode]: required
+        for required in required_namecodes
+        if required.namecode in SPECIFIC_DETAIL_CODE_BY_NAMECODE
+    }
+    namecode_by_detail = {detail_code: namecode for namecode, detail_code in SPECIFIC_DETAIL_CODE_BY_NAMECODE.items()}
+    results: list[MissingPlaceholderItem] = []
+    for detail_code, result in sorted(specific_detail_results.items()):
+        required = required_by_detail.get(detail_code)
+        if required is None:
+            continue
+        reason = (result.reason or result.status or "").strip()
+        if result.status not in {STATUS_MISSING, STATUS_INVALID}:
+            continue
+        if reason not in {"NOT_FOUND", "NULL", "EMPTY", "CODE_VALUE_MISSING", "TEXT_VALUE_MISSING"}:
+            continue
+        namecode = namecode_by_detail.get(detail_code, required.namecode)
+        results.append(
+            MissingPlaceholderItem(
+                namecode=namecode,
+                item_name=SPECIFIC_ITEM_NAMES.get(namecode, namecode),
+                raw_value_type=expected_value_type_text(required),
+                validation_reason=f"SPECIFIC_HEALTH:{reason}",
+                check_scope="SPECIFIC_HEALTH",
+            )
+        )
+    return results
+
+
 def sync_export_case_missing_placeholders(
     cur: Any,
     *,
@@ -464,15 +535,22 @@ def sync_export_case_missing_placeholders(
     article44_required_namecodes_by_detail: Mapping[str, tuple[RequiredNamecode, ...]],
     specific_summary: str | None,
     specific_required_namecodes: tuple[RequiredNamecode, ...],
+    specific_detail_results: Mapping[str, CheckResult],
 ) -> int:
     """Upsert case-level check review rows for reviewable missing items."""
 
     if ledger.get("ledger_type") != LEDGER_TYPE_EXPORT_CASE:
         return 0
     case_id = int(ledger["id"])
+    specific_items = specific_missing_placeholder_items_from_details(
+        specific_detail_results,
+        specific_required_namecodes,
+    )
+    if not specific_items:
+        specific_items = parse_specific_missing_placeholder_items(specific_summary, specific_required_namecodes)
     items = [
         *parse_article44_missing_placeholder_items(article44_result, article44_required_namecodes_by_detail),
-        *parse_specific_missing_placeholder_items(specific_summary, specific_required_namecodes),
+        *specific_items,
     ]
     active_keys = {(item.check_scope, item.namecode) for item in items}
     changed = 0
@@ -608,6 +686,8 @@ def insert_check_result(
     specific_result: str | None,
     legal_summary: str | None,
     specific_summary: str | None,
+    specific_detail_results: Mapping[str, CheckResult],
+    existing_columns: set[str],
 ) -> None:
     row: dict[str, Any] = {
         "ledger_type": ledger["ledger_type"],
@@ -624,6 +704,7 @@ def insert_check_result(
         "specific_reason_summary": specific_summary,
     }
     row.update(article44_result_columns(article44_result))
+    row.update(specific_result_columns(specific_detail_results, existing_columns=existing_columns))
     columns = list(row.keys())
     placeholders = ", ".join(["%s"] * len(columns))
     column_sql = ", ".join(f"`{column}`" for column in columns)
@@ -1024,6 +1105,11 @@ def process_ledgers(
     ledgers = fetch_target_check_ledgers(health_cur, config=config)
     ledger_refs = [(str(ledger["ledger_type"]), int(ledger["id"])) for ledger in ledgers]
     summary.ledgers_seen = len(ledgers)
+    exam_check_result_columns = existing_table_columns(
+        health_cur,
+        schema_name=config.health_db,
+        table_name="exam_check_results",
+    )
 
     if not config.dry_run:
         summary.rows_deleted = delete_existing_results(health_cur, health_db=config.health_db, ledger_refs=ledger_refs)
@@ -1050,7 +1136,7 @@ def process_ledgers(
             result_db=config.health_db,
             dev_db=config.dev_db,
         )
-        specific_result, specific_summary = aggregate_specific_result(
+        specific_result, specific_summary, specific_detail_results = aggregate_specific_result_with_details(
             value_map=specific_value_map,
             required_namecodes=specific_required_namecodes,
             birthdate=ledger.get("birthdate"),
@@ -1087,6 +1173,8 @@ def process_ledgers(
             specific_result=specific_result,
             legal_summary=legal_summary,
             specific_summary=specific_summary,
+            specific_detail_results=specific_detail_results,
+            existing_columns=exam_check_result_columns,
         )
         summary.rows_inserted += 1
         if ledger["ledger_type"] == LEDGER_TYPE_EXPORT_CASE:
@@ -1098,6 +1186,7 @@ def process_ledgers(
                 article44_required_namecodes_by_detail=article44_required_namecodes_by_detail,
                 specific_summary=specific_summary,
                 specific_required_namecodes=specific_required_namecodes,
+                specific_detail_results=specific_detail_results,
             )
         if ledger["ledger_type"] == LEDGER_TYPE_EXAM:
             update_exam_ledger_check(

@@ -175,10 +175,10 @@ Current as of 2026-08-05.
 - 特定健診チェックも則44と同じく「制度detail code -> namecode候補 -> OK/MISSING/INVALID」の形へ寄せる。則44の `4401001001` などと衝突しないよう、特定健診用detail codeは先頭を `10` とする。
 - 特定健診用detail codeは `10` + チェックカテゴリ + 項番の体系で採番する。具体的な桁配分は初期seed作成時に確定するが、カテゴリ単位で一覧・集計・追加ができる形を優先する。
 - 法定健診チェックと重なる項目は、特定健診側で別detailとして二重に横持ちしない。例: `9N141000000000011` 採血時間は、法定44の血糖チェック側で必要に応じて確認されるため、特定健診detail横持ちからは除外する。
-- 特定健診チェック結果は、総合判定として既存の `exam_check_results.specific_check_result` / `specific_reason_summary` を使う。ただし、特定健診も固定制度チェックであるため、項目別の正はsummary文字列ではなく横持ち `status` / `reason` として保持する方針へ改める。
-- 特定健診の項目別横持ちは、まず本データへ混ぜない `manual_exam_entry_draft_check_results` で先行検証する。draft側はまだ投入データが少なく削除・再作成しやすいため、detail code、DDL、画面表示、チェック保存処理の形を先に固める。
-- draft側で問題がないことを確認した後、正式 `exam_check_results` に同じ特定健診detail codeの横持ちカラムを追加する。既存データは `exam_item_values` / `exam_export_case_values` から再チェックすれば再生成可能な最新結果として扱う。
-- `specific_reason_summary` から `exam_case_check_review_items` を作成する現行処理は暫定の橋渡しであり、特定健診横持ちが整備された後は、横持ちの項目別結果を正として確認項目を作る。
+- 特定健診チェック結果は、総合判定として既存の `exam_check_results.specific_check_result` / `specific_reason_summary` を使う。ただし、特定健診も固定制度チェックであるため、項目別の正はsummary文字列ではなく横持ち `sp_<detail_code>_status` / `sp_<detail_code>_reason` として保持する。
+- 特定健診の項目別横持ちは、`manual_exam_entry_draft_check_results` で先行検証したうえで、正式 `exam_check_results` にも同じdetail codeで展開する。`03_00_check_imported_exam_ledgers.py` と `03_04_check_exam_export_cases.py` は同じ共通処理を使うため、source単位ledgerとcase単位の両方へ保存される。
+- 既存データは `exam_item_values` / `exam_export_case_values` から再チェックすれば、正式 `exam_check_results` の特定健診横持ち結果を再生成できる。
+- `exam_case_check_review_items` は、特定健診横持ちdetailの `MISSING` / `INVALID` を正として作成する。`specific_reason_summary` のパースは、横持ちカラム未適用環境や過去データ向けの互換fallbackに限定する。
 - 特定健診チェックでは、対象者として必要項目を満たす `OK` と、年度末年齢により対象外となる `NOT_APPLICABLE` を分ける。対象外は画面では「対象外」と表示し、OK件数へ混ぜない。
 - 生年月日や年度末基準日が不足して年齢判定できない場合は `UNDETERMINABLE` とする。画面では「判定不能」と表示し、出力前の確認対象とする。
 - 健保、事業所、納品先、運用都合で追加したい任意チェックは、`exam_check_results` の横持ち制度チェックへ混ぜない。任意チェックは、後続でルールセット型の柔軟な仕組みとして扱い、重くなっても出力前や納品前の限定タイミングで評価する。
@@ -483,7 +483,7 @@ Current as of 2026-08-05.
 - 法定チェックの `MISSING` は、`440...` の業務チェックID単位で `check_scope = ARTICLE44` として作成する。視力、聴力、血糖など複数namecodeで成立する項目をnamecode単位へ展開すると、理由ありOKの記帳対象が過剰になるため、出力前の不足管理は業務チェックID単位を正とする。
 - 法定確認項目に含まれる候補namecodeは画面上で確認できるようにする。健保/HIAからnamecode指定で指摘が来る場合は、`exam_item_values` の器を使いつつ、namecode単位の確認事項として扱う。
 - 特定健診チェックで `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` となった固定項目も `exam_case_check_review_items` として作成する。特定健診項目は法定健診より理由ありOKが多くなる可能性があるが、HIA/XML受付上の不足確認対象として同じ記帳導線に載せる。
-- 現行実装では特定健診の項目別横持ちが未整備のため、`specific_reason_summary` をパースして確認項目を作っている。これは作業画面に載せるための暫定処理であり、恒久的な機械判定の正ではない。
+- 特定健診の確認項目は、正式 `exam_check_results` の `sp_<detail_code>_status` / `sp_<detail_code>_reason` を正として作る。`specific_reason_summary` のパースは、横持ちカラム未適用環境や過去データ向けの互換fallbackとする。
 - caseチェック確認項目は削除しない。不足が解消した場合は `review_status = 'RESOLVED_BY_SOURCE_VALUE'` のように状態変更して残す。これにより、一度不足だった項目がCSV補完、再提出、再取込で解消した経緯を追える。
 - `exam_item_values` は件数が多いため、人手判断の現在状態だけを最小限持つ。長文理由や変更前後は別のauditテーブルへ寄せる。
 - `exam_item_values` に持つ現在状態候補は、`review_status`、`reviewed_at`、`reviewed_by_app_user_id` の最小構成を基本とする。
