@@ -506,10 +506,18 @@
 
     <div id="manual-entry-item-list" class="manual-entry-item-groups">
       {% for group in item_groups %}
-      <details id="manual-entry-category-{{ loop.index }}" class="manual-entry-category manual-entry-anchor" open>
+      <details id="manual-entry-category-{{ loop.index }}" class="manual-entry-category manual-entry-anchor">
         <summary>
-          <strong>{{ group.category_name }}</strong>
-          <span>{{ group["items"]|length }}項目</span>
+          <span class="manual-entry-category-summary-main">
+            <strong>{{ group.category_name }}</strong>
+            <span>{{ group["items"]|length }}項目</span>
+          </span>
+          <span class="manual-entry-category-summary-items">
+            {% for item in group["items"][:14] %}
+              {{ item.item_name }}{% if not loop.last %} / {% endif %}
+            {% endfor %}
+            {% if group["items"]|length > 14 %} / 他{{ group["items"]|length - 14 }}項目{% endif %}
+          </span>
         </summary>
         <div class="manual-entry-item-table-wrap">
           <table class="data-table compact-table manual-entry-item-table">

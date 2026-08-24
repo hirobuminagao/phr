@@ -2377,8 +2377,9 @@ a.home-menu-card.is-navigating {
 }
 
 .manual-entry-category summary {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(190px, 280px) minmax(0, 1fr);
+  align-items: start;
   gap: 16px;
   padding: 12px 14px;
   cursor: pointer;
@@ -2386,8 +2387,28 @@ a.home-menu-card.is-navigating {
   color: var(--text);
 }
 
-.manual-entry-category summary span {
+.manual-entry-category-summary-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.manual-entry-category-summary-main span {
   color: var(--muted);
+}
+
+.manual-entry-category-summary-items {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: right;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .manual-entry-item-table-wrap {
