@@ -7811,6 +7811,74 @@ def insert_manual_exam_entry_draft(
     return draft_id
 
 
+def update_manual_exam_entry_draft_facility(
+    cur: Any,
+    *,
+    draft_id: int,
+    event_id: int,
+    facility_code: str,
+    facility_name: str,
+    user_id: int,
+) -> None:
+    before = load_manual_exam_entry_draft_by_id(cur, draft_id)
+    if before is None:
+        raise ValueError("draft_not_found")
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.manual_exam_entry_drafts
+           SET facility_code = %s,
+               facility_name = %s,
+               updated_by_app_user_id = %s
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (facility_code, facility_name, user_id, draft_id),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_audit_logs (
+          manual_exam_entry_draft_id,
+          event_id,
+          action_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          changed_by_app_user_id
+        ) VALUES (
+          %s,
+          %s,
+          'UPDATE_FACILITY',
+          'facility',
+          %s,
+          %s,
+          'ADMIN_UI',
+          %s
+        )
+        """,
+        (
+            draft_id,
+            event_id,
+            json.dumps(
+                {
+                    "facility_code": before.get("facility_code"),
+                    "facility_name": before.get("facility_name"),
+                },
+                ensure_ascii=False,
+                default=manual_exam_json_default,
+            ),
+            json.dumps(
+                {
+                    "facility_code": facility_code,
+                    "facility_name": facility_name,
+                },
+                ensure_ascii=False,
+                default=manual_exam_json_default,
+            ),
+            user_id,
+        ),
+    )
+
+
 def summarize_manual_exam_entry_drafts(rows: list[dict[str, Any]]) -> dict[str, int]:
     summary = {
         "total": len(rows),
@@ -8362,6 +8430,49 @@ async def create_manual_exam_entry_draft_from_case(request: Request) -> Response
             "message": f"仮登録 draft {draft_id} を作成しました。",
         }
     )
+
+
+@app.post("/api/manual-exam-entry-drafts/{draft_id}/facility")
+async def update_manual_exam_entry_draft_facility_api(draft_id: int, request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        return JSONResponse({"message": "健診機関情報がありません。"}, status_code=400)
+    facility_code = _manual_text(payload.get("facility_code"))
+    facility_name = _manual_text(payload.get("facility_name"))
+    event_id = _optional_int(payload.get("event_id")) or 2
+    if not facility_code:
+        return JSONResponse({"message": "健診機関コードを選択してください。"}, status_code=400)
+    if not facility_name:
+        facility_name = facility_code
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
+                return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
+            try:
+                update_manual_exam_entry_draft_facility(
+                    cur,
+                    draft_id=draft_id,
+                    event_id=event_id,
+                    facility_code=facility_code,
+                    facility_name=facility_name,
+                    user_id=int(user["app_user_id"]),
+                )
+            except ValueError:
+                return JSONResponse({"message": "対象の仮登録が見つかりません。"}, status_code=404)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse({"message": f"draft {draft_id} の健診機関を更新しました。"})
 
 
 @app.get("/health")

@@ -1681,11 +1681,59 @@
     const draftCaseExamMonth = document.querySelector("#manual-draft-case-exam-month");
     const draftCaseLimit = document.querySelector("#manual-draft-case-limit");
     const draftCaseResults = document.querySelector("[data-manual-draft-case-results]");
+    const draftFacilityTarget = document.querySelector("[data-manual-draft-facility-target]");
+    let activeDraftFacilityTarget = null;
 
     const reloadDraftListWithMessage = (message) => {
       const query = new URLSearchParams();
       if (message) query.set("message", message);
       window.location.href = `/manual-exam-entry-drafts${query.toString() ? `?${query.toString()}` : ""}`;
+    };
+
+    const setActiveDraftFacilityTarget = (button) => {
+      if (!button) {
+        activeDraftFacilityTarget = null;
+        return;
+      }
+      activeDraftFacilityTarget = {
+        draftId: button.getAttribute("data-draft-id") || "",
+        eventId: button.getAttribute("data-event-id") || "2",
+        facilityCode: button.getAttribute("data-facility-code") || "",
+        facilityName: button.getAttribute("data-facility-name") || "",
+      };
+      if (draftFacilityTarget) {
+        const current = activeDraftFacilityTarget.facilityName || activeDraftFacilityTarget.facilityCode || "未設定";
+        draftFacilityTarget.textContent = `draft ${activeDraftFacilityTarget.draftId} の健診機関を変更します。現在: ${current}`;
+      }
+      for (const row of document.querySelectorAll("[data-manual-draft-facility-row]")) {
+        const code = row.getAttribute("data-facility-code") || "";
+        row.classList.toggle("is-selected", Boolean(code && code === activeDraftFacilityTarget.facilityCode));
+      }
+      for (const selectButton of document.querySelectorAll("[data-manual-draft-facility-select]")) {
+        const code = selectButton.getAttribute("data-facility-code") || "";
+        const selected = code && code === activeDraftFacilityTarget.facilityCode;
+        selectButton.textContent = selected ? "選択中" : "選択";
+        selectButton.classList.toggle("is-active", Boolean(selected));
+      }
+    };
+
+    const updateDraftFacility = async (element) => {
+      if (!activeDraftFacilityTarget?.draftId || !(element instanceof Element)) return;
+      const facilityCode = element.getAttribute("data-facility-code") || "";
+      const facilityName = element.getAttribute("data-facility-name") || facilityCode;
+      if (!facilityCode) return;
+      try {
+        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(activeDraftFacilityTarget.draftId)}/facility`, {
+          event_id: activeDraftFacilityTarget.eventId,
+          facility_code: facilityCode,
+          facility_name: facilityName,
+        });
+        reloadDraftListWithMessage(payload.message || "健診機関を更新しました。");
+      } catch (error) {
+        if (draftFacilityTarget) {
+          draftFacilityTarget.textContent = `健診機関変更でエラーが発生しました。${error?.message || ""}`;
+        }
+      }
     };
 
     const createManualDraftFromPerson = async (item, button) => {
@@ -1729,6 +1777,19 @@
         setDraftCaseMessage(`仮登録作成でエラーが発生しました。${error?.message || ""}`);
       }
     };
+
+    for (const button of document.querySelectorAll("[data-manual-draft-facility-change]")) {
+      button.addEventListener("click", () => setActiveDraftFacilityTarget(button));
+    }
+    for (const row of document.querySelectorAll("[data-manual-draft-facility-row]")) {
+      row.addEventListener("click", () => updateDraftFacility(row));
+    }
+    for (const button of document.querySelectorAll("[data-manual-draft-facility-select]")) {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        updateDraftFacility(button);
+      });
+    }
 
     const setDraftPersonMessage = (message) => {
       manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
