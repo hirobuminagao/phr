@@ -99,10 +99,14 @@
         <h2>仮登録リスト</h2>
         <p class="subtle">
           人ごとに仮登録の状態、登録者、更新者、入力済み値数を確認します。
+          参考チェックは仮登録専用テーブルに保存し、本番のcheck_resultとは混ぜません。
           {% if status_filter %}現在は {{ status_filter }} で絞り込み中です。{% endif %}
         </p>
       </div>
-      <span class="status-pill status-muted">{{ "最新200件" if not status_filter else status_filter ~ " 最新200件" }}</span>
+      <div class="inline-actions">
+        <button type="button" class="ghost-button compact-action-button" data-manual-draft-check-visible>表示中を参考チェック</button>
+        <span class="status-pill status-muted">{{ "最新200件" if not status_filter else status_filter ~ " 最新200件" }}</span>
+      </div>
     </div>
 
     <div class="table-panel">
@@ -116,13 +120,18 @@
             <th>健診実施日</th>
             <th>入力目的</th>
             <th>値</th>
+            <th>参考チェック</th>
             <th>登録者 / 更新者</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           {% for draft in draft_rows %}
-            <tr>
+            <tr
+              data-manual-draft-list-row
+              data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+              data-value-count="{{ draft.value_count }}"
+            >
               <td>
                 {% set status = (draft.draft_status or "DRAFT")|upper %}
                 <span class="status-pill {% if status == 'READY' %}status-ready{% elif status == 'APPLIED' %}status-muted{% elif status in ['ERROR', 'FAILED'] %}status-danger{% else %}status-pending{% endif %}">
@@ -200,6 +209,25 @@
                 <small>入力値</small>
               </td>
               <td>
+                {% set check_status = draft.draft_check_display_status or "UNCHECKED" %}
+                <span class="status-pill {% if check_status == 'OK' %}status-ready{% elif check_status == 'NG' %}status-danger{% elif check_status == 'STALE' %}status-pending{% else %}status-muted{% endif %}">
+                  {% if check_status == "OK" %}OK{% elif check_status == "NG" %}NG{% elif check_status == "STALE" %}要再チェック{% elif check_status == "UNDETERMINABLE" %}判定不能{% else %}未チェック{% endif %}
+                </span>
+                <small>
+                  法定 {{ draft.draft_legal_check_result or "-" }}
+                  <br>特定 {{ check_result_label(draft.draft_specific_check_result) if draft.draft_specific_check_result else "-" }}
+                  {% if draft.draft_checked_at %}
+                    <br>{{ draft.draft_checked_by_name or "-" }} / {{ draft.draft_checked_at }}
+                  {% endif %}
+                  {% if draft.draft_legal_reason_summary %}
+                    <br>法定 {{ draft.draft_legal_reason_summary }}
+                  {% endif %}
+                  {% if draft.draft_specific_reason_summary %}
+                    <br>特定 {{ draft.draft_specific_reason_summary }}
+                  {% endif %}
+                </small>
+              </td>
+              <td>
                 <strong>{{ draft.created_by_name or ("user " ~ draft.created_by_app_user_id) }}</strong>
                 <small>
                   登録 {{ draft.created_at or "-" }}
@@ -210,6 +238,14 @@
                 <a class="ghost-button compact-action-button" href="/manual-exam-entry?draft_id={{ draft.manual_exam_entry_draft_id }}">入力へ</a>
                 {% if draft.exam_export_case_id %}
                   <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ draft.exam_export_case_id }}">case</a>
+                {% endif %}
+                {% if draft.value_count > 0 %}
+                  <button
+                    type="button"
+                    class="ghost-button compact-action-button"
+                    data-manual-draft-check
+                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                  >参考チェック</button>
                 {% endif %}
                 {% if can_manage_manual_entry and status in ['DRAFT', 'READY', 'ERROR'] and draft.value_count > 0 %}
                   <button
@@ -234,7 +270,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="9">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
+              <td colspan="10">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
             </tr>
           {% endfor %}
         </tbody>

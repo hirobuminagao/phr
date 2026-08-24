@@ -1868,7 +1868,7 @@
     });
 
     const reloadDraftListWithMessage = (message) => {
-      const query = new URLSearchParams();
+      const query = new URLSearchParams(window.location.search);
       if (message) query.set("message", message);
       window.location.href = `/manual-exam-entry-drafts${query.toString() ? `?${query.toString()}` : ""}`;
     };
@@ -2047,6 +2047,49 @@
       }
     };
 
+    const checkManualDraft = async (button) => {
+      const draftId = button?.getAttribute("data-draft-id") || "";
+      if (!draftId) return;
+      const originalText = button.textContent || "参考チェック";
+      button.disabled = true;
+      button.textContent = "確認中";
+      try {
+        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(draftId)}/check`, {});
+        reloadDraftListWithMessage(payload.message || "参考チェックを実行しました。");
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = originalText;
+        window.alert(`参考チェックでエラーが発生しました。${error?.message || ""}`);
+      }
+    };
+
+    const checkVisibleManualDrafts = async (button) => {
+      const rows = Array.from(document.querySelectorAll("[data-manual-draft-list-row]"));
+      const draftIds = rows
+        .filter((row) => Number(row.getAttribute("data-value-count") || "0") > 0)
+        .map((row) => Number(row.getAttribute("data-draft-id") || "0"))
+        .filter(Boolean);
+      if (!draftIds.length) {
+        window.alert("参考チェック対象がありません。入力値のある仮登録が対象です。");
+        return;
+      }
+      const originalText = button?.textContent || "表示中を参考チェック";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "確認中";
+      }
+      try {
+        const payload = await postJson("/api/manual-exam-entry-drafts/check", { draft_ids: draftIds });
+        reloadDraftListWithMessage(payload.message || "表示中の参考チェックを実行しました。");
+      } catch (error) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText;
+        }
+        window.alert(`参考チェックでエラーが発生しました。${error?.message || ""}`);
+      }
+    };
+
     const createManualDraftFromPerson = async (item, button) => {
       const originalText = button?.textContent || "";
       if (button) {
@@ -2117,6 +2160,12 @@
       button.addEventListener("click", () => openManualDraftApplyModal(button));
     }
     draftApplyConfirmButton?.addEventListener("click", applyManualDraft);
+    for (const button of document.querySelectorAll("[data-manual-draft-check]")) {
+      button.addEventListener("click", () => checkManualDraft(button));
+    }
+    document.querySelector("[data-manual-draft-check-visible]")?.addEventListener("click", (event) => {
+      checkVisibleManualDrafts(event.currentTarget);
+    });
 
     const setDraftPersonMessage = (message) => {
       manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;

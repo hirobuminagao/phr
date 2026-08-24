@@ -22,15 +22,33 @@ from fastapi.templating import Jinja2Templates
 from starlette.background import BackgroundTask
 
 from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.lookup.event import get_event_year
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.etl.metrics import RunMetrics
 from scripts.lib.etl.runs import finish_run, start_run
 from scripts.lib.examination.lookup import qname
+from scripts.lib.examination.models import RESULT_NG, RESULT_OK
+from scripts.lib.examination.report_classification import fiscal_year_end_date
+from scripts.from_medical.script_lib.article44_checker import check_article44
+from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
+from scripts.from_medical.script_lib.article44_value_loader import _build_value_map as build_article44_value_map
+from scripts.from_medical.script_lib.check_exam_results import (
+    aggregate_article44_legal_result,
+    article44_result_columns,
+    validate_article44_result,
+)
 from scripts.from_medical.script_lib.hia_xml_export_loader import (
     ExportSelectors,
     decide_candidate,
     fetch_candidates,
 )
+from scripts.from_medical.script_lib.specific_health_checker import (
+    RESULT_NOT_APPLICABLE,
+    RESULT_UNDETERMINABLE,
+    SPECIFIC_REQUIRED_NAMECODES,
+    aggregate_specific_result,
+)
+from scripts.from_medical.script_lib.specific_health_required_namecodes import fetch_specific_health_required_namecodes
 from scripts.hia.script_lib.config_loader import config_bool, config_value, load_yaml_config
 from scripts.hia.script_lib.fund_delivery_list_builder import (
     FundDeliveryListConfig,
@@ -7799,6 +7817,32 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
         ) v
           ON v.manual_exam_entry_draft_id = d.manual_exam_entry_draft_id
         """
+    check_join = ""
+    check_select = """
+          NULL AS draft_legal_check_result,
+          NULL AS draft_legal_reason_summary,
+          NULL AS draft_specific_check_result,
+          NULL AS draft_specific_reason_summary,
+          NULL AS draft_checked_at,
+          NULL AS draft_updated_at_snapshot,
+          NULL AS draft_checked_by_name
+    """
+    if manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_check_results"):
+        check_select = """
+          dcr.legal_check_result AS draft_legal_check_result,
+          dcr.legal_reason_summary AS draft_legal_reason_summary,
+          dcr.specific_check_result AS draft_specific_check_result,
+          dcr.specific_reason_summary AS draft_specific_reason_summary,
+          dcr.checked_at AS draft_checked_at,
+          dcr.draft_updated_at_snapshot AS draft_updated_at_snapshot,
+          COALESCE(cbu.display_name, cbu.employee_no, CONCAT('user ', dcr.checked_by_app_user_id)) AS draft_checked_by_name
+        """
+        check_join = f"""
+        LEFT JOIN {qname(health_db())}.manual_exam_entry_draft_check_results dcr
+          ON dcr.manual_exam_entry_draft_id = d.manual_exam_entry_draft_id
+        LEFT JOIN {qname(app_db())}.app_users cbu
+          ON cbu.app_user_id = dcr.checked_by_app_user_id
+        """
 
     status_filter = status_filter.upper().strip()
     where_clause = ""
@@ -7838,10 +7882,12 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           d.updated_at,
           d.applied_at,
           {value_select},
+          {check_select},
           COALESCE(cu.display_name, cu.employee_no, CONCAT('user ', d.created_by_app_user_id)) AS created_by_name,
           COALESCE(uu.display_name, uu.employee_no, CONCAT('user ', d.updated_by_app_user_id)) AS updated_by_name
         FROM {qname(health_db())}.manual_exam_entry_drafts d
         {value_join}
+        {check_join}
         LEFT JOIN {qname(app_db())}.app_users cu
           ON cu.app_user_id = d.created_by_app_user_id
         LEFT JOIN {qname(app_db())}.app_users uu
@@ -7854,7 +7900,28 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
         """,
         (*sql_params, limit),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["draft_check_display_status"] = manual_exam_draft_check_display_status(row)
+    return rows
+
+
+def manual_exam_draft_check_display_status(row: Mapping[str, Any]) -> str:
+    if not row.get("draft_checked_at"):
+        return "UNCHECKED"
+    snapshot = row.get("draft_updated_at_snapshot")
+    updated = row.get("updated_at")
+    if snapshot and updated and updated > snapshot:
+        return "STALE"
+    legal = str(row.get("draft_legal_check_result") or "").upper()
+    specific = str(row.get("draft_specific_check_result") or "").upper()
+    if legal == RESULT_NG or specific == RESULT_NG:
+        return "NG"
+    if legal in {RESULT_UNDETERMINABLE, "PENDING"} or specific in {RESULT_UNDETERMINABLE, "PENDING"}:
+        return "UNDETERMINABLE"
+    if legal == RESULT_OK and specific in {RESULT_OK, RESULT_NOT_APPLICABLE}:
+        return "OK"
+    return "UNDETERMINABLE"
 
 
 def load_manual_exam_entry_draft_by_id(cur: Any, draft_id: int) -> dict[str, Any] | None:
@@ -7928,6 +7995,182 @@ def load_manual_exam_entry_draft_by_id(cur: Any, draft_id: int) -> dict[str, Any
     else:
         draft["values"] = []
     return draft
+
+
+def load_manual_exam_draft_check_value_map(
+    cur: Any,
+    *,
+    draft_id: int,
+    required_namecodes: tuple[Any, ...],
+) -> dict[str, Any]:
+    namecodes = tuple(required.namecode for required in required_namecodes)
+    if not namecodes:
+        raise ValueError("required_namecodes_empty")
+    placeholders = ", ".join(["%s"] * len(namecodes))
+    cur.execute(
+        f"""
+        SELECT
+          dv.manual_exam_entry_draft_id AS ledger_id,
+          dv.manual_exam_entry_draft_value_id AS id,
+          dv.namecode,
+          COALESCE(dv.xml_value_type, im.xml_value_type, 'ST') AS raw_value_type,
+          dv.raw_value,
+          dv.display_unit AS raw_unit,
+          COALESCE(dv.normalized_value, dv.raw_value, dv.code_value) AS normalized_value,
+          COALESCE(dv.ucum_unit, dv.display_unit, im.ucum_unit, im.display_unit) AS normalized_unit,
+          dv.code_value,
+          COALESCE(im.cda_section_code_default, '01030') AS section_code
+        FROM {qname(health_db())}.manual_exam_entry_draft_values AS dv
+        LEFT JOIN {qname(dev_db())}.exam_item_master AS im
+          ON im.namecode = dv.namecode
+        WHERE dv.manual_exam_entry_draft_id = %s
+          AND dv.include_flag = 1
+          AND dv.namecode IN ({placeholders})
+        ORDER BY dv.namecode, dv.manual_exam_entry_draft_value_id
+        """,
+        (draft_id, *namecodes),
+    )
+    return build_article44_value_map(required_namecodes, cur.fetchall())
+
+
+def insert_manual_exam_draft_check_result(
+    cur: Any,
+    *,
+    draft: Mapping[str, Any],
+    article44_result: Mapping[str, Any],
+    legal_result: str,
+    legal_summary: str | None,
+    specific_result: str,
+    specific_summary: str | None,
+    user_id: int,
+) -> None:
+    draft_id = int(draft["manual_exam_entry_draft_id"])
+    cur.execute(
+        f"""
+        DELETE FROM {qname(health_db())}.manual_exam_entry_draft_check_results
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (draft_id,),
+    )
+    row: dict[str, Any] = {
+        "manual_exam_entry_draft_id": draft_id,
+        "event_id": _optional_int(draft.get("event_id")) or 2,
+        "subscriber_id": _optional_int(draft.get("subscriber_id")),
+        "hia_subscriber_id": _manual_text(draft.get("hia_subscriber_id")),
+        "legal_check_result": legal_result,
+        "specific_check_result": specific_result,
+        "legal_reason_summary": legal_summary,
+        "specific_reason_summary": specific_summary,
+        "draft_updated_at_snapshot": draft.get("updated_at"),
+        "checked_by_app_user_id": user_id,
+    }
+    row.update(article44_result_columns(article44_result))
+    columns = list(row.keys())
+    placeholders = ", ".join(["%s"] * len(columns))
+    column_sql = ", ".join(f"`{column}`" for column in columns)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_check_results ({column_sql})
+        VALUES ({placeholders})
+        """,
+        tuple(row[column] for column in columns),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_audit_logs (
+          manual_exam_entry_draft_id,
+          event_id,
+          action_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          changed_by_app_user_id
+        ) VALUES (
+          %s,
+          %s,
+          'RUN_DRAFT_CHECK',
+          'draft_check',
+          NULL,
+          %s,
+          'ADMIN_UI',
+          %s
+        )
+        """,
+        (
+            draft_id,
+            _optional_int(draft.get("event_id")) or 2,
+            json.dumps(
+                {
+                    "legal_check_result": legal_result,
+                    "specific_check_result": specific_result,
+                    "legal_reason_summary": legal_summary,
+                    "specific_reason_summary": specific_summary,
+                },
+                ensure_ascii=False,
+                default=manual_exam_json_default,
+            ),
+            user_id,
+        ),
+    )
+
+
+def check_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> dict[str, Any]:
+    draft = load_manual_exam_entry_draft_by_id(cur, draft_id)
+    if draft is None:
+        raise ValueError("draft_not_found")
+    if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_check_results"):
+        raise ValueError("draft_check_table_not_found")
+    if not draft.get("values"):
+        raise ValueError("draft_has_no_values")
+
+    event_id = _optional_int(draft.get("event_id")) or 2
+    article44_required = fetch_article44_required_namecodes(cur, dev_db=dev_db())
+    article44_value_map = load_manual_exam_draft_check_value_map(
+        cur,
+        draft_id=draft_id,
+        required_namecodes=article44_required,
+    )
+    article44_result = check_article44(article44_value_map)
+    validate_article44_result(article44_result)
+    legal_result, legal_summary = aggregate_article44_legal_result(article44_result)
+
+    specific_required = fetch_specific_health_required_namecodes(
+        cur,
+        dev_db=dev_db(),
+        fallback=SPECIFIC_REQUIRED_NAMECODES,
+    )
+    specific_value_map = load_manual_exam_draft_check_value_map(
+        cur,
+        draft_id=draft_id,
+        required_namecodes=specific_required,
+    )
+    event_year = get_event_year(cur, event_id=event_id, dev_db=dev_db())
+    fiscal_end = fiscal_year_end_date(event_year) if event_year is not None else None
+    specific_result, specific_summary = aggregate_specific_result(
+        value_map=specific_value_map,
+        required_namecodes=specific_required,
+        birthdate=draft.get("birthdate"),
+        age_reference_date=fiscal_end,
+        legal_result=legal_result,
+    )
+    insert_manual_exam_draft_check_result(
+        cur,
+        draft=draft,
+        article44_result=article44_result,
+        legal_result=legal_result,
+        legal_summary=legal_summary,
+        specific_result=specific_result,
+        specific_summary=specific_summary,
+        user_id=user_id,
+    )
+    return {
+        "draft_id": draft_id,
+        "legal_check_result": legal_result,
+        "legal_reason_summary": legal_summary,
+        "specific_check_result": specific_result,
+        "specific_reason_summary": specific_summary,
+    }
 
 
 def manual_exam_json_default(value: Any) -> str:
@@ -9580,6 +9823,104 @@ async def apply_manual_exam_entry_draft_api(draft_id: int, request: Request) -> 
                 f" ledger {result['exam_ledger_id']} / {result['value_count']}件"
             ),
             **result,
+        }
+    )
+
+
+@app.post("/api/manual-exam-entry-drafts/{draft_id}/check")
+async def check_manual_exam_entry_draft_api(draft_id: int, request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_edit_manual_exam_entry(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            for table_name in (
+                "manual_exam_entry_drafts",
+                "manual_exam_entry_draft_values",
+                "manual_exam_entry_draft_check_results",
+            ):
+                if not manual_exam_entry_table_exists(cur, health_db(), table_name):
+                    return JSONResponse({"message": f"{table_name} テーブルが未適用です。"}, status_code=400)
+            try:
+                result = check_manual_exam_entry_draft(
+                    cur,
+                    draft_id=draft_id,
+                    user_id=int(user["app_user_id"]),
+                )
+            except ValueError as exc:
+                error_code = str(exc)
+                if error_code == "draft_has_no_values":
+                    return JSONResponse({"message": "入力済みの検査値がないため参考チェックできません。"}, status_code=400)
+                if error_code == "draft_check_table_not_found":
+                    return JSONResponse({"message": "仮登録チェック結果テーブルが未適用です。"}, status_code=400)
+                return JSONResponse({"message": "対象の仮登録が見つかりません。"}, status_code=404)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse(
+        {
+            "message": (
+                f"draft {draft_id} の参考チェックを実行しました。"
+                f" 法定 {result['legal_check_result']} / 特定 {check_result_label(result['specific_check_result'])}"
+            ),
+            **result,
+        }
+    )
+
+
+@app.post("/api/manual-exam-entry-drafts/check")
+async def check_manual_exam_entry_drafts_api(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_edit_manual_exam_entry(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    payload = await request.json()
+    draft_ids_raw = payload.get("draft_ids") if isinstance(payload, dict) else None
+    draft_ids = [
+        int(draft_id)
+        for draft_id in (draft_ids_raw if isinstance(draft_ids_raw, list) else [])
+        if _optional_int(draft_id) is not None
+    ]
+    draft_ids = list(dict.fromkeys(draft_ids))
+    if not draft_ids:
+        return JSONResponse({"message": "参考チェック対象がありません。"}, status_code=400)
+
+    checked = 0
+    errors: list[dict[str, Any]] = []
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            for table_name in (
+                "manual_exam_entry_drafts",
+                "manual_exam_entry_draft_values",
+                "manual_exam_entry_draft_check_results",
+            ):
+                if not manual_exam_entry_table_exists(cur, health_db(), table_name):
+                    return JSONResponse({"message": f"{table_name} テーブルが未適用です。"}, status_code=400)
+            for draft_id in draft_ids:
+                try:
+                    check_manual_exam_entry_draft(cur, draft_id=draft_id, user_id=int(user["app_user_id"]))
+                    checked += 1
+                except ValueError as exc:
+                    errors.append({"draft_id": draft_id, "error": str(exc)})
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse(
+        {
+            "message": f"参考チェック checked={checked} errors={len(errors)}",
+            "checked": checked,
+            "errors": errors,
         }
     )
 
