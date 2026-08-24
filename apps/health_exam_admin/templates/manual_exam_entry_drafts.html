@@ -153,18 +153,21 @@
               </td>
               <td>
                 <strong>{{ draft.exam_date or "未設定" }}</strong>
-                <div class="inline-action-row">
+                <div class="manual-draft-date-edit">
                   <button
                     type="button"
-                    class="ghost-button compact-action-button"
-                    data-modal-open="manual-draft-facility-picker-modal"
-                    data-manual-draft-facility-change
+                    class="text-link-button"
+                    data-manual-draft-date-toggle
                     data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
                     data-event-id="{{ draft.event_id or 2 }}"
                     data-facility-code="{{ draft.facility_code or '' }}"
                     data-facility-name="{{ draft.facility_name or '' }}"
                     data-exam-date="{{ draft.exam_date or '' }}"
                   >変更</button>
+                  <span class="manual-draft-date-editor" hidden>
+                    <input type="date" value="{{ draft.exam_date or '' }}" data-manual-draft-date-input>
+                    <button type="button" class="ghost-button compact-action-button" data-manual-draft-date-save>保存</button>
+                  </span>
                 </div>
               </td>
               <td>
@@ -278,11 +281,6 @@
           検索
           <input data-live-filter-input="#manual-draft-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
         </label>
-        <label>
-          健診実施日
-          <input id="manual-draft-exam-date-input" autocomplete="off" placeholder="YYYY-MM-DD" data-date-normalize="true">
-        </label>
-        <button type="button" class="primary-button compact-action-button" data-manual-draft-basic-info-save>更新</button>
       </div>
       <div class="table-panel export-facility-picker-table-panel">
         <table id="manual-draft-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
@@ -316,7 +314,7 @@
               </td>
               <td>
                 {% if code %}
-                <button type="button" class="ghost-button" data-manual-draft-facility-select data-facility-code="{{ code }}" data-facility-name="{{ alias.exam_facility_display_name or alias.exam_facility_name or '' }}">選択</button>
+                <button type="button" class="ghost-button compact-action-button" data-manual-draft-facility-select data-facility-code="{{ code }}" data-facility-name="{{ alias.exam_facility_display_name or alias.exam_facility_name or '' }}">選択</button>
                 {% else %}
                 <span class="status-pill status-muted">不可</span>
                 {% endif %}

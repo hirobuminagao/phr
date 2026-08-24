@@ -1682,7 +1682,6 @@
     const draftCaseLimit = document.querySelector("#manual-draft-case-limit");
     const draftCaseResults = document.querySelector("[data-manual-draft-case-results]");
     const draftFacilityTarget = document.querySelector("[data-manual-draft-facility-target]");
-    const draftExamDateInput = document.querySelector("#manual-draft-exam-date-input");
     let activeDraftFacilityTarget = null;
 
     const reloadDraftListWithMessage = (message) => {
@@ -1703,11 +1702,9 @@
         facilityName: button.getAttribute("data-facility-name") || "",
         examDate: button.getAttribute("data-exam-date") || "",
       };
-      if (draftExamDateInput) draftExamDateInput.value = activeDraftFacilityTarget.examDate;
       if (draftFacilityTarget) {
         const current = activeDraftFacilityTarget.facilityName || activeDraftFacilityTarget.facilityCode || "未設定";
-        const dateText = activeDraftFacilityTarget.examDate || "未設定";
-        draftFacilityTarget.textContent = `draft ${activeDraftFacilityTarget.draftId} を変更します。現在: ${current} / 健診実施日 ${dateText}`;
+        draftFacilityTarget.textContent = `draft ${activeDraftFacilityTarget.draftId} の健診機関を変更します。現在: ${current}`;
       }
       for (const row of document.querySelectorAll("[data-manual-draft-facility-row]")) {
         const code = row.getAttribute("data-facility-code") || "";
@@ -1721,14 +1718,14 @@
       }
     };
 
-    const updateDraftBasicInfo = async ({ facilityCode = null, facilityName = null } = {}) => {
-      if (!activeDraftFacilityTarget?.draftId) return;
-      const nextFacilityCode = facilityCode ?? activeDraftFacilityTarget.facilityCode;
-      const nextFacilityName = facilityName ?? activeDraftFacilityTarget.facilityName;
-      const nextExamDate = draftExamDateInput?.value?.trim() || "";
+    const updateDraftBasicInfo = async (target, { facilityCode = null, facilityName = null, examDate = null } = {}) => {
+      if (!target?.draftId) return;
+      const nextFacilityCode = facilityCode ?? target.facilityCode;
+      const nextFacilityName = facilityName ?? target.facilityName;
+      const nextExamDate = examDate ?? target.examDate ?? "";
       try {
-        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(activeDraftFacilityTarget.draftId)}/basic-info`, {
-          event_id: activeDraftFacilityTarget.eventId,
+        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(target.draftId)}/basic-info`, {
+          event_id: target.eventId,
           facility_code: nextFacilityCode,
           facility_name: nextFacilityName,
           exam_date: nextExamDate,
@@ -1746,7 +1743,33 @@
       const facilityCode = element.getAttribute("data-facility-code") || "";
       const facilityName = element.getAttribute("data-facility-name") || facilityCode;
       if (!facilityCode) return;
-      await updateDraftBasicInfo({ facilityCode, facilityName });
+      await updateDraftBasicInfo(activeDraftFacilityTarget, { facilityCode, facilityName });
+    };
+
+    const draftTargetFromElement = (element) => ({
+      draftId: element.getAttribute("data-draft-id") || "",
+      eventId: element.getAttribute("data-event-id") || "2",
+      facilityCode: element.getAttribute("data-facility-code") || "",
+      facilityName: element.getAttribute("data-facility-name") || "",
+      examDate: element.getAttribute("data-exam-date") || "",
+    });
+
+    const toggleDraftDateEditor = (button) => {
+      const container = button.closest(".manual-draft-date-edit");
+      const editor = container?.querySelector(".manual-draft-date-editor");
+      const input = container?.querySelector("[data-manual-draft-date-input]");
+      if (!editor || !input) return;
+      editor.hidden = !editor.hidden;
+      if (!editor.hidden) {
+        input.focus();
+        if (typeof input.showPicker === "function") {
+          try {
+            input.showPicker();
+          } catch (_error) {
+            // Safari may block programmatic picker opening; focus still leaves it editable.
+          }
+        }
+      }
     };
 
     const createManualDraftFromPerson = async (item, button) => {
@@ -1803,7 +1826,18 @@
         updateDraftFacility(button);
       });
     }
-    document.querySelector("[data-manual-draft-basic-info-save]")?.addEventListener("click", () => updateDraftBasicInfo());
+    for (const button of document.querySelectorAll("[data-manual-draft-date-toggle]")) {
+      button.addEventListener("click", () => toggleDraftDateEditor(button));
+    }
+    for (const button of document.querySelectorAll("[data-manual-draft-date-save]")) {
+      button.addEventListener("click", () => {
+        const container = button.closest(".manual-draft-date-edit");
+        const input = container?.querySelector("[data-manual-draft-date-input]");
+        const toggle = container?.querySelector("[data-manual-draft-date-toggle]");
+        if (!(toggle instanceof Element)) return;
+        updateDraftBasicInfo(draftTargetFromElement(toggle), { examDate: input?.value?.trim() || "" });
+      });
+    }
 
     const setDraftPersonMessage = (message) => {
       manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;

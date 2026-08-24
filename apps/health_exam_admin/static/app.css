@@ -1514,6 +1514,40 @@ a.home-menu-card.is-navigating {
   padding-inline: 12px;
 }
 
+.text-link-button {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.manual-draft-date-edit {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.manual-draft-date-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.manual-draft-date-editor[hidden] {
+  display: none;
+}
+
+.manual-draft-date-editor input {
+  min-width: 140px;
+  height: 34px;
+  padding: 4px 8px;
+}
+
 .active-filter-summary {
   cursor: pointer;
 }
@@ -1812,6 +1846,18 @@ a.home-menu-card.is-navigating {
 
 .export-facility-search {
   margin-bottom: 14px;
+}
+
+#manual-draft-facility-picker-table th:last-child,
+#manual-draft-facility-picker-table td:last-child {
+  width: 74px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+#manual-draft-facility-picker-table .compact-action-button {
+  min-width: 52px;
+  padding-inline: 8px;
 }
 
 .export-facility-picker-table-panel {
