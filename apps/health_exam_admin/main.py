@@ -8172,6 +8172,7 @@ def manual_exam_entry_drafts(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
+            folder_aliases = load_received_folder_alias_rows(cur)
             schema_ready = manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts")
             draft_rows = load_manual_exam_entry_draft_rows(cur) if schema_ready else []
             summary = summarize_manual_exam_entry_drafts(draft_rows)
@@ -8185,6 +8186,7 @@ def manual_exam_entry_drafts(request: Request) -> Response:
             "request": request,
             "user": user,
             "event_options": event_options,
+            "folder_aliases": folder_aliases,
             "schema_ready": schema_ready,
             "draft_rows": draft_rows,
             "summary": summary,

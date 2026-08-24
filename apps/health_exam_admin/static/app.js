@@ -1545,7 +1545,328 @@
       document.querySelector("#manual-entry-subscriber-picker-modal [data-modal-close]")?.click();
       loadManualCasesForSubscriber(selectedSubscriber.subscriber_id);
     });
+    const applyManualEntryInitialParams = () => {
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get("manual_new") || "";
+      if (!mode) return;
+      const person = {
+        subscriber_id: params.get("subscriber_id") || "",
+        hia_subscriber_id: params.get("hia_subscriber_id") || "",
+        name_full: params.get("name_full") || "",
+        name_kana: params.get("name_kana") || "",
+        insurance_symbol: params.get("insurance_symbol") || "",
+        insurance_number: params.get("insurance_number") || "",
+        insurance_branch_number: params.get("insurance_branch_number") || "",
+        birth: params.get("birthdate") || "",
+        gender_label: params.get("gender_label") || "",
+      };
+      const eventId = params.get("event_id") || "";
+      if (eventId) setValue("select[name='event_id']", eventId);
+      if (mode === "case") {
+        fillManualEntryFromCase({
+          ...person,
+          exam_export_case_id: params.get("case_id") || "",
+          facility_code: params.get("facility_code") || "",
+          facility_name: params.get("facility_name") || "",
+          exam_date: params.get("exam_date") || "",
+          source_mode: params.get("source_mode") || "",
+          export_readiness_status: params.get("export_readiness_status") || "",
+          legal_check_result: params.get("legal_check_result") || "",
+          legal_reason_summary: params.get("legal_reason_summary") || "",
+          specific_check_result: params.get("specific_check_result") || "",
+          specific_reason_summary: params.get("specific_reason_summary") || "",
+          source_count: params.get("source_count") || "",
+          xml_count: params.get("xml_count") || "",
+          csv_count: params.get("csv_count") || "",
+          paper_count: params.get("paper_count") || "",
+          case_value_count: params.get("case_value_count") || "",
+        });
+        return;
+      }
+      fillManualEntryFromPerson(person);
+      const purpose = document.querySelector("select[name='entry_purpose']");
+      if (purpose) purpose.value = "PAPER_ONLY";
+      document.querySelector("#manual-entry-basic")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    applyManualEntryInitialParams();
     updateManualPersonFloat();
+  }
+
+  const manualDraftPersonResults = document.querySelector("[data-manual-draft-person-results]");
+  if (manualDraftPersonResults) {
+    const draftPersonEvent = document.querySelector("#manual-draft-person-event");
+    const draftPersonQ = document.querySelector("#manual-draft-person-q");
+    const draftPersonKana = document.querySelector("#manual-draft-person-kana");
+    const draftPersonSymbol = document.querySelector("#manual-draft-person-symbol");
+    const draftPersonNumber = document.querySelector("#manual-draft-person-number");
+    const draftCaseEvent = document.querySelector("#manual-draft-case-event");
+    const draftCaseFacility = document.querySelector("#manual-draft-case-facility");
+    const draftCaseFacilitySummary = document.querySelector("#manual-draft-case-facility-summary");
+    const draftCaseSymbol = document.querySelector("#manual-draft-case-symbol");
+    const draftCaseNumber = document.querySelector("#manual-draft-case-number");
+    const draftCaseKana = document.querySelector("#manual-draft-case-kana");
+    const draftCaseNameFull = document.querySelector("#manual-draft-case-name-full");
+    const draftCaseHia = document.querySelector("#manual-draft-case-hia");
+    const draftCaseExamMonth = document.querySelector("#manual-draft-case-exam-month");
+    const draftCaseLimit = document.querySelector("#manual-draft-case-limit");
+    const draftCaseResults = document.querySelector("[data-manual-draft-case-results]");
+
+    const manualEntryUrl = (params) => {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null && String(value) !== "") {
+          query.set(key, String(value));
+        }
+      }
+      return `/manual-exam-entry?${query.toString()}`;
+    };
+
+    const startManualEntryFromPerson = (item) => {
+      window.location.href = manualEntryUrl({
+        manual_new: "person",
+        event_id: draftPersonEvent?.value || "2",
+        subscriber_id: item.subscriber_id,
+        hia_subscriber_id: item.hia_subscriber_id,
+        person_id_custom: item.person_id_custom,
+        name_full: item.name_full,
+        name_kana: item.name_kana,
+        insurance_symbol: item.insurance_symbol,
+        insurance_number: item.insurance_number,
+        insurance_branch_number: item.insurance_branch_number,
+        birthdate: item.birth || item.birthdate,
+        gender_label: item.gender_label,
+      });
+    };
+
+    const startManualEntryFromCase = (item) => {
+      window.location.href = manualEntryUrl({
+        manual_new: "case",
+        event_id: item.event_id || draftCaseEvent?.value || "2",
+        case_id: item.exam_export_case_id,
+        subscriber_id: item.subscriber_id,
+        hia_subscriber_id: item.hia_subscriber_id,
+        person_id_custom: item.person_id_custom,
+        name_full: item.name_full,
+        name_kana: item.name_kana,
+        insurance_symbol: item.insurance_symbol,
+        insurance_number: item.insurance_number,
+        insurance_branch_number: item.insurance_branch_number,
+        birthdate: item.birthdate,
+        gender_label: item.gender_label,
+        facility_code: item.facility_code,
+        facility_name: item.facility_name,
+        exam_date: item.exam_date,
+        source_mode: item.source_mode,
+        export_readiness_status: item.export_readiness_status,
+        legal_check_result: item.legal_check_result,
+        legal_reason_summary: item.legal_reason_summary,
+        specific_check_result: item.specific_check_result,
+        specific_reason_summary: item.specific_reason_summary,
+        source_count: item.source_count,
+        xml_count: item.xml_count,
+        csv_count: item.csv_count,
+        paper_count: item.paper_count,
+        case_value_count: item.case_value_count,
+      });
+    };
+
+    const setDraftPersonMessage = (message) => {
+      manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
+    };
+
+    const setDraftCaseMessage = (message) => {
+      if (draftCaseResults) {
+        draftCaseResults.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
+      }
+    };
+
+    const renderDraftPersonRows = (items) => {
+      if (!items.length) {
+        setDraftPersonMessage("一致する加入者はいません。");
+        return;
+      }
+      manualDraftPersonResults.innerHTML = "";
+      for (const item of items) {
+        const row = document.createElement("tr");
+        const insurance = `${item.insurance_symbol || "-"}-${item.insurance_number || "-"} 枝番 ${item.insurance_branch_number || "-"}`;
+        const hia = `HIA ${item.hia_subscriber_id || "-"} / subscriber ${item.subscriber_id || "-"}`;
+        row.innerHTML = `
+          <td>
+            <strong>${escapeHtml(item.name_kana || "-")}</strong>
+            <small>${escapeHtml(item.name_full || "-")} / ${escapeHtml(item.birth || "-")} / ${escapeHtml(item.gender_label || "-")}</small>
+          </td>
+          <td>
+            <strong>${escapeHtml(insurance)}</strong>
+            <small>社員 ${escapeHtml(item.employee_code || "-")} / 資格喪失 ${escapeHtml(item.qualification_lost_date || "-")}</small>
+          </td>
+          <td>
+            <strong>${escapeHtml(hia)}</strong>
+            <small>case ${escapeHtml(item.candidate_case_count || "0")}件</small>
+          </td>
+          <td><button type="button" class="primary-button compact-action-button" data-manual-draft-person-start>入力開始</button></td>
+        `;
+        row.addEventListener("dblclick", () => startManualEntryFromPerson(item));
+        row.querySelector("[data-manual-draft-person-start]")?.addEventListener("click", () => startManualEntryFromPerson(item));
+        manualDraftPersonResults.appendChild(row);
+      }
+    };
+
+    const renderDraftCaseRows = (items) => {
+      if (!draftCaseResults) return;
+      if (!items.length) {
+        setDraftCaseMessage("一致するcaseはありません。");
+        return;
+      }
+      draftCaseResults.innerHTML = "";
+      for (const item of items) {
+        const row = document.createElement("tr");
+        const sourceText = `XML ${item.xml_count || 0} / CSV ${item.csv_count || 0} / 紙 ${item.paper_count || 0}`;
+        const legal = `${item.legal_check_result || "PENDING"}${item.legal_reason_summary ? ` / ${item.legal_reason_summary}` : ""}`;
+        const specific = `${item.specific_check_result || "PENDING"}${item.specific_reason_summary ? ` / ${item.specific_reason_summary}` : ""}`;
+        row.innerHTML = `
+          <td>
+            <strong>${escapeHtml(item.exam_export_case_id || "-")}</strong>
+            <small>${escapeHtml(item.name_kana || "-")} / HIA ${escapeHtml(item.hia_subscriber_id || "-")}</small>
+          </td>
+          <td>
+            <strong title="${escapeHtml(item.facility_name || "")}">${escapeHtml(item.facility_name || "-")}</strong>
+            <small>${escapeHtml(item.exam_date || "-")} / ${escapeHtml(item.facility_code || "-")}</small>
+          </td>
+          <td>
+            <strong>${escapeHtml(sourceText)}</strong>
+            <small>構成source ${escapeHtml(item.source_count || "0")} / 値 ${escapeHtml(item.case_value_count || "0")}</small>
+          </td>
+          <td>
+            <strong>法定 ${escapeHtml(legal)}</strong>
+            <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
+          </td>
+          <td><button type="button" class="primary-button compact-action-button" data-manual-draft-case-start>入力開始</button></td>
+        `;
+        row.addEventListener("dblclick", () => startManualEntryFromCase(item));
+        row.querySelector("[data-manual-draft-case-start]")?.addEventListener("click", () => startManualEntryFromCase(item));
+        draftCaseResults.appendChild(row);
+      }
+    };
+
+    const searchDraftPersons = async () => {
+      const eventId = draftPersonEvent?.value || "2";
+      const params = new URLSearchParams({
+        event_id: eventId,
+        q: draftPersonQ?.value.trim() || "",
+        name_kana: draftPersonKana?.value.trim() || "",
+        insurance_symbol: draftPersonSymbol?.value.trim() || "",
+        insurance_number: draftPersonNumber?.value.trim() || "",
+      });
+      if (![...params.values()].some((value) => value && value !== eventId)) {
+        setDraftPersonMessage("検索条件を入力してください。");
+        return;
+      }
+      setDraftPersonMessage("検索中...");
+      try {
+        const payload = await fetchJson(`/api/manual-exam-entry/subscribers?${params.toString()}`);
+        renderDraftPersonRows(Array.isArray(payload.items) ? payload.items : []);
+      } catch (error) {
+        setDraftPersonMessage(`検索でエラーが発生しました。${error?.message || ""}`);
+      }
+    };
+
+    const searchDraftCases = async () => {
+      const eventId = draftCaseEvent?.value || "2";
+      const params = new URLSearchParams({
+        event_id: eventId,
+        facility_codes: draftCaseFacility?.value.trim() || "",
+        exam_month: draftCaseExamMonth?.value.trim() || "",
+        name_full: draftCaseNameFull?.value.trim() || "",
+        name_kana: draftCaseKana?.value.trim() || "",
+        hia_subscriber_id: draftCaseHia?.value.trim() || "",
+        insurance_symbol: draftCaseSymbol?.value.trim() || "",
+        insurance_number: draftCaseNumber?.value.trim() || "",
+        limit: draftCaseLimit?.value.trim() || "50",
+      });
+      if (![...params.values()].some((value) => value && value !== eventId)) {
+        setDraftCaseMessage("検索条件を入力してください。");
+        return;
+      }
+      setDraftCaseMessage("検索中...");
+      try {
+        const payload = await fetchJson(`/api/manual-exam-entry/case-candidates?${params.toString()}`);
+        renderDraftCaseRows(Array.isArray(payload.items) ? payload.items : []);
+      } catch (error) {
+        setDraftCaseMessage(`検索でエラーが発生しました。${error?.message || ""}`);
+      }
+    };
+
+    const draftCaseFacilityValues = () => {
+      if (!draftCaseFacility) return [];
+      return draftCaseFacility.value
+        .split(/[\s,，、]+/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+    };
+    const updateDraftCaseFacilityState = () => {
+      const values = new Set(draftCaseFacilityValues());
+      if (draftCaseFacilitySummary) {
+        draftCaseFacilitySummary.textContent = values.size ? `${values.size}施設を指定中` : "未指定: 全施設";
+      }
+      for (const row of document.querySelectorAll("[data-manual-draft-case-facility-row]")) {
+        const code = String(row.getAttribute("data-facility-code") || "").trim();
+        row.classList.toggle("is-selected", Boolean(code && values.has(code)));
+      }
+      for (const button of document.querySelectorAll("[data-manual-draft-case-facility-select]")) {
+        const code = String(button.getAttribute("data-facility-code") || "").trim();
+        const added = code && values.has(code);
+        button.textContent = added ? "解除" : "追加";
+        button.classList.toggle("is-active", Boolean(added));
+      }
+    };
+    const toggleDraftCaseFacility = (element) => {
+      if (!draftCaseFacility || !(element instanceof Element)) return;
+      const code = String(element.getAttribute("data-facility-code") || "").trim();
+      if (!code) return;
+      const values = draftCaseFacilityValues();
+      draftCaseFacility.value = values.includes(code)
+        ? values.filter((value) => value !== code).join(", ")
+        : [...values, code].join(", ");
+      draftCaseFacility.dispatchEvent(new Event("input", { bubbles: true }));
+      updateDraftCaseFacilityState();
+    };
+
+    document.querySelector("[data-manual-draft-person-search]")?.addEventListener("click", searchDraftPersons);
+    document.querySelector("[data-manual-draft-case-search]")?.addEventListener("click", searchDraftCases);
+    for (const input of [draftPersonQ, draftPersonKana, draftPersonSymbol, draftPersonNumber]) {
+      input?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          searchDraftPersons();
+        }
+      });
+    }
+    for (const input of [draftCaseFacility, draftCaseSymbol, draftCaseNumber, draftCaseKana, draftCaseNameFull, draftCaseHia, draftCaseExamMonth, draftCaseLimit]) {
+      input?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          searchDraftCases();
+        }
+      });
+    }
+    for (const row of document.querySelectorAll("[data-manual-draft-case-facility-row]")) {
+      row.addEventListener("click", () => toggleDraftCaseFacility(row));
+    }
+    for (const button of document.querySelectorAll("[data-manual-draft-case-facility-select]")) {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleDraftCaseFacility(button);
+      });
+    }
+    document.querySelector("[data-manual-draft-case-facility-clear]")?.addEventListener("click", () => {
+      if (!draftCaseFacility) return;
+      draftCaseFacility.value = "";
+      draftCaseFacility.dispatchEvent(new Event("input", { bubbles: true }));
+      updateDraftCaseFacilityState();
+      closeModal(document.querySelector("#manual-draft-case-facility-picker-modal"));
+    });
+    draftCaseFacility?.addEventListener("input", updateDraftCaseFacilityState);
+    updateDraftCaseFacilityState();
   }
 
   const manualValueInputs = Array.from(document.querySelectorAll("[data-manual-method-group]"));
