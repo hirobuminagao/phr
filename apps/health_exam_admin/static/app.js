@@ -1299,6 +1299,12 @@
     refreshManualEntryFilledCount = () => {
       const count = collectManualEntryValues().length;
       if (manualEntryFilledCount) manualEntryFilledCount.textContent = String(count);
+      for (const category of document.querySelectorAll("[data-manual-entry-category]")) {
+        const categoryCount = Array.from(category.querySelectorAll(".manual-entry-value-input"))
+          .filter((input) => String(input.value || "").trim() !== "").length;
+        const categoryCountNode = category.querySelector("[data-manual-entry-category-filled-count]");
+        if (categoryCountNode) categoryCountNode.textContent = String(categoryCount);
+      }
       return count;
     };
 

@@ -520,11 +520,11 @@
 
     <div id="manual-entry-item-list" class="manual-entry-item-groups">
       {% for group in item_groups %}
-      <details id="manual-entry-category-{{ loop.index }}" class="manual-entry-category manual-entry-anchor">
+      <details id="manual-entry-category-{{ loop.index }}" class="manual-entry-category manual-entry-anchor" data-manual-entry-category>
         <summary>
           <span class="manual-entry-category-summary-main">
             <strong>{{ group.category_name }}</strong>
-            <span>{{ group["items"]|length }}項目</span>
+            <span><span data-manual-entry-category-filled-count>0</span>/{{ group["items"]|length }}項目</span>
           </span>
           <span class="manual-entry-category-summary-items">
             {% for item in group["items"][:14] %}
