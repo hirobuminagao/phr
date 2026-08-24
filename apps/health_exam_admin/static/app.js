@@ -1666,6 +1666,7 @@
   const manualDraftPersonResults = document.querySelector("[data-manual-draft-person-results]");
   if (manualDraftPersonResults) {
     const draftNewToggle = document.querySelector("[data-manual-draft-new-toggle]");
+    const draftNewToggleArea = document.querySelector("[data-manual-draft-new-toggle-area]");
     const draftNewActions = document.querySelector("[data-manual-draft-new-actions]");
     const draftPersonEvent = document.querySelector("#manual-draft-person-event");
     const draftPersonQ = document.querySelector("#manual-draft-person-q");
@@ -1686,12 +1687,21 @@
     const draftFacilityTarget = document.querySelector("[data-manual-draft-facility-target]");
     let activeDraftFacilityTarget = null;
 
-    draftNewToggle?.addEventListener("click", () => {
+    const toggleManualDraftNewActions = () => {
       if (!draftNewActions) return;
-      const expanded = draftNewToggle.getAttribute("aria-expanded") === "true";
+      const expanded = draftNewToggleArea?.getAttribute("aria-expanded") === "true" || draftNewToggle?.getAttribute("aria-expanded") === "true";
       draftNewActions.hidden = expanded;
-      draftNewToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
-      draftNewToggle.textContent = expanded ? "開く" : "畳む";
+      const nextExpanded = expanded ? "false" : "true";
+      draftNewToggleArea?.setAttribute("aria-expanded", nextExpanded);
+      draftNewToggle?.setAttribute("aria-expanded", nextExpanded);
+      if (draftNewToggle) draftNewToggle.textContent = expanded ? "開く" : "畳む";
+    };
+
+    draftNewToggleArea?.addEventListener("click", toggleManualDraftNewActions);
+    draftNewToggleArea?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleManualDraftNewActions();
     });
 
     const reloadDraftListWithMessage = (message) => {

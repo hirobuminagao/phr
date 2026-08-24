@@ -1513,6 +1513,14 @@ a.home-menu-card.is-navigating {
   min-width: 0;
 }
 
+.manual-draft-new-heading {
+  cursor: pointer;
+}
+
+.manual-draft-new-heading:hover {
+  border-color: #c9d6e2;
+}
+
 .compact-action-button {
   min-width: 74px;
   padding-inline: 12px;
