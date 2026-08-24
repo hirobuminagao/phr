@@ -358,7 +358,7 @@ caseから選択した場合:
 
 - 通常運用では、正式反映済みの `exam_ledgers` / `exam_item_values` を物理削除しない。
 - 本番運用で取り消す場合は、削除ではなく無効化・再作成で扱う。
-- 開発/試走時だけ、管理者専用画面から「手入力正式ledgerをdraftへ戻す」導線を用意する。
+- 開発/試走時だけ、現場管理者以上の画面から「手入力正式ledgerをdraftへ戻す」導線を用意する。
 - 戻し対象は、手入力由来の `exam_ledgers.source_type IN ('PAPER', 'MANUAL')` とし、`manual_exam_entry_drafts.applied_exam_ledger_id` でdraftへ辿れるものを基本にする。
 - 戻し操作は通常の個人case一覧には置かない。caseは正式ledgerから作られる派生物であり、戻し判断の責務はledger側に寄せる。
 - 戻し後は `03_01`〜`03_04` 相当のcase再生成・case値再作成・caseチェックを再実行する。
@@ -504,7 +504,8 @@ Migration:
 
 ### 仮登録削除の実装済み仕様
 
-- `APPLIED` 以外のdraftを削除できる。
+- `manual_exam_entry.edit` を持つ利用者は、仮登録作成、基本情報変更、検査値下書き保存ができる。
+- `manual_exam_entry.manage` を持つ現場管理者以上は、`APPLIED` 以外のdraftを削除できる。
 - 削除は画面内モーダルで確認する。ブラウザ標準confirmは使わない。
 - 削除確認モーダルは画面中央に表示する。
 - 削除完了メッセージには氏名、カナ等の機微情報を出さず、`draft {id}` のみを表示する。
@@ -512,7 +513,7 @@ Migration:
 
 ### 手入力正式ledger管理の実装済み仕様
 
-- 管理者専用画面 `/admin/manual-exam-ledgers` を追加する。
+- 現場管理者以上の画面 `/admin/manual-exam-ledgers` を追加する。
 - 通常の個人case一覧には危険操作を追加しない。
 - `source_type IN ('PAPER', 'MANUAL')` の正式ledgerを対象にする。
 - `manual_exam_entry_drafts.applied_exam_ledger_id` でdraftとの紐づきを表示する。

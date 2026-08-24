@@ -211,13 +211,13 @@
                 {% if draft.exam_export_case_id %}
                   <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ draft.exam_export_case_id }}">case</a>
                 {% endif %}
-                {% if status != 'APPLIED' %}
+                {% if can_manage_manual_entry and status != 'APPLIED' %}
                   <button
                     type="button"
                     class="danger-button compact-action-button"
                     data-manual-draft-delete
                     data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                    data-draft-label="{{ draft.name_kana or draft.name_full or ('draft ' ~ draft.manual_exam_entry_draft_id) }}"
+                    data-draft-label="draft {{ draft.manual_exam_entry_draft_id }}"
                   >削除</button>
                 {% endif %}
               </td>

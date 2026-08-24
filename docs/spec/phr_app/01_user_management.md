@@ -51,6 +51,8 @@ PHR画面の利用者本体。
 - `users.manage`
 - `business_settings.view`
 - `business_settings.manage`
+- `manual_exam_entry.edit`
+- `manual_exam_entry.manage`
 - `exam_cases.view`
 - `exam_cases.edit`
 - `export_lists.view`
@@ -67,6 +69,13 @@ PHR画面の利用者本体。
 - `business_settings.manage`: イベント設定、健診機関マスタ、健診機関受領フォルダ管理など、業務側の管理カテゴリを操作する。
 - `users.manage`: アカウント管理、権限設定、セキュリティ、監査ログなど、システム管理カテゴリを操作する。
 - 初期ロールでは `ADMIN` と `EDITOR` に `business_settings.view` / `business_settings.manage` を付与し、システム管理は `ADMIN` のみとする。
+
+手入力カテゴリの扱い:
+
+- `manual_exam_entry.edit`: 手入力draftの作成、基本情報変更、検査値下書き保存を行う。
+- `manual_exam_entry.manage`: 手入力draft削除、手入力正式ledger管理、将来の巻き戻し操作を行う。
+- 初期ロールでは `EDITOR` に `manual_exam_entry.edit`、`FIELD_MANAGER` に `manual_exam_entry.edit` / `manual_exam_entry.manage` を付与する。
+- `FIELD_MANAGER` は現場管理者向けロールであり、アカウント管理、権限設定、セキュリティ設定などの `users.manage` は持たない。
 
 ### `app_role_permissions`
 
@@ -94,6 +103,7 @@ PHR画面の利用者本体。
 | XML出力 | `xml_export.review` | `xml_export.official` |
 | HIAアップロード | `hia_upload.perform` | `hia_upload_status.edit` |
 | 管理カテゴリ | `business_settings.view` | `business_settings.manage` |
+| 健診結果手入力 | `manual_exam_entry.edit` | `manual_exam_entry.manage` |
 
 システム管理カテゴリの `users.manage` は、個人作業権限ON/OFFでは扱わず、管理者ロールの責務とする。
 

@@ -114,8 +114,13 @@
     </div>
     <div class="home-menu-grid">
       <a class="home-menu-card" href="/subscriber-match-review"><span class="status-pill status-ready">利用可</span><div><strong>加入者突合NG修正</strong><small>候補検索、比較、手動確定で正しい加入者へ紐付ける</small></div></a>
+      {% if "manual_exam_entry.edit" in user.permissions or "manual_exam_entry.manage" in user.permissions or "users.manage" in user.permissions %}
       <a class="home-menu-card" href="/manual-exam-entry-drafts"><span class="status-pill status-ready">試作</span><div><strong>健診結果仮登録リスト</strong><small>人/caseを選んで仮登録IDを発行し、紙・補足入力を管理する</small></div></a>
       <a class="home-menu-card" href="/manual-exam-entry"><span class="status-pill status-ready">試作</span><div><strong>健診結果手入力</strong><small>仮登録リストから遷移する入力画面。直接確認用にも開けます</small></div></a>
+      {% endif %}
+      {% if "manual_exam_entry.manage" in user.permissions or "users.manage" in user.permissions %}
+      <a class="home-menu-card" href="/admin/manual-exam-ledgers"><span class="status-pill status-ready">試作</span><div><strong>手入力正式ledger管理</strong><small>手入力から正式反映されたledgerとdraft紐づきを管理する</small></div></a>
+      {% endif %}
       <div class="home-menu-card is-disabled"><span class="status-pill status-pending">準備中</span><div><strong>normalizeエラー確認</strong><small>変換できないraw値を辞書追加、除外、確認事項へ振り分ける</small></div><span class="status-pill status-muted">未実装</span></div>
     </div>
   </section>
@@ -222,7 +227,6 @@
       <a class="home-menu-card" href="/admin/security"><span class="status-pill status-ready">利用可</span><div><strong>セキュリティ</strong><small>自動ログアウト、個人情報監査ログ設定を管理する</small></div></a>
       <a class="home-menu-card" href="/admin/audit-logs"><span class="status-pill status-ready">利用可</span><div><strong>監査ログ</strong><small>個人情報閲覧、設定変更などの操作履歴を確認する</small></div></a>
       <a class="home-menu-card" href="/admin/etl-runs"><span class="status-pill status-ready">利用可</span><div><strong>実行中処理</strong><small>running中の処理確認、長期化したrunの停止扱い</small></div></a>
-      <a class="home-menu-card" href="/admin/manual-exam-ledgers"><span class="status-pill status-ready">試作</span><div><strong>手入力正式ledger管理</strong><small>手入力から正式反映されたledgerとdraft紐づきを管理する</small></div></a>
     </div>
   </section>
   {% endif %}

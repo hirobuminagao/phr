@@ -82,6 +82,11 @@ SESSION_COOKIE_NAME = "phr_app_session"
 CSRF_COOKIE_NAME = "phr_app_csrf"
 CSRF_FIELD_NAME = "_csrf_token"
 ARTICLE44_GROUP_CODE = "v2_2026_ARTICLE44_CHECK_ITEMS"
+BUSINESS_SETTINGS_VIEW_PERMISSION = "business_settings.view"
+BUSINESS_SETTINGS_PERMISSION = "business_settings.manage"
+SYSTEM_SETTINGS_PERMISSION = "users.manage"
+MANUAL_EXAM_ENTRY_EDIT_PERMISSION = "manual_exam_entry.edit"
+MANUAL_EXAM_ENTRY_MANAGE_PERMISSION = "manual_exam_entry.manage"
 LOGIN_ERROR_MESSAGES = {
     "USER_NOT_FOUND": "社員番号またはパスワードが違います。",
     "PASSWORD_MISMATCH": "社員番号またはパスワードが違います。",
@@ -118,6 +123,13 @@ WORK_PERMISSION_ITEMS = (
         "description": "イベント、健診機関、受領フォルダなど業務側の管理を担当する",
         "view_codes": ("business_settings.view",),
         "edit_codes": ("business_settings.manage",),
+    },
+    {
+        "key": "manual_exam_entry",
+        "name": "健診結果手入力",
+        "description": "表示=手入力draftの作成・更新、編集=削除や正式ledger管理を担当する",
+        "view_codes": (MANUAL_EXAM_ENTRY_EDIT_PERMISSION,),
+        "edit_codes": (MANUAL_EXAM_ENTRY_MANAGE_PERMISSION,),
     },
 )
 
@@ -183,10 +195,6 @@ BASIC_INFO_CORRECTION_FIELDS: dict[str, dict[str, Any]] = {
         "case_reason_column": "address_completion_reason",
     },
 }
-BUSINESS_SETTINGS_VIEW_PERMISSION = "business_settings.view"
-BUSINESS_SETTINGS_PERMISSION = "business_settings.manage"
-SYSTEM_SETTINGS_PERMISSION = "users.manage"
-
 app = FastAPI(title="PHR Health Exam Admin")
 app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=APP_ROOT / "templates")
@@ -381,6 +389,17 @@ def can_run_exam_processing(user: dict[str, Any]) -> bool:
     return has_any_permission(user, ("export_lists.edit", SYSTEM_SETTINGS_PERMISSION))
 
 
+def can_edit_manual_exam_entry(user: dict[str, Any]) -> bool:
+    return has_any_permission(
+        user,
+        (MANUAL_EXAM_ENTRY_EDIT_PERMISSION, MANUAL_EXAM_ENTRY_MANAGE_PERMISSION, SYSTEM_SETTINGS_PERMISSION),
+    )
+
+
+def can_manage_manual_exam_entry(user: dict[str, Any]) -> bool:
+    return has_any_permission(user, (MANUAL_EXAM_ENTRY_MANAGE_PERMISSION, SYSTEM_SETTINGS_PERMISSION))
+
+
 def require_user(request: Request) -> dict[str, Any] | RedirectResponse:
     user = current_user(request)
     if not user:
@@ -529,8 +548,8 @@ def load_manageable_roles(cur: Any) -> list[dict[str, Any]]:
         SELECT app_role_id, role_code, role_name
         FROM app_roles
         WHERE is_active = 1
-          AND role_code IN ('VIEWER', 'EDITOR', 'ADMIN')
-        ORDER BY FIELD(role_code, 'VIEWER', 'EDITOR', 'ADMIN'), role_code
+          AND role_code IN ('VIEWER', 'EDITOR', 'FIELD_MANAGER', 'ADMIN')
+        ORDER BY FIELD(role_code, 'VIEWER', 'EDITOR', 'FIELD_MANAGER', 'ADMIN'), role_code
         """
     )
     return [dict(row) for row in cur.fetchall()]
@@ -8602,7 +8621,7 @@ def manual_exam_entry_subscribers(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"items": []}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return JSONResponse({"items": []}, status_code=403)
 
     event_id = request.query_params.get("event_id", "2")
@@ -8672,7 +8691,7 @@ def manual_exam_entry_cases(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"items": []}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return JSONResponse({"items": []}, status_code=403)
 
     event_id = _optional_int(request.query_params.get("event_id")) or 2
@@ -8706,7 +8725,7 @@ def manual_exam_entry_case_candidates(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"items": []}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return JSONResponse({"items": []}, status_code=403)
 
     filters = {
@@ -8796,7 +8815,7 @@ async def create_manual_exam_entry_draft_from_person(request: Request) -> Respon
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"message": "ログインしてください。"}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return JSONResponse({"message": "権限がありません。"}, status_code=403)
 
     payload = await request.json()
@@ -8837,7 +8856,7 @@ async def create_manual_exam_entry_draft_from_case(request: Request) -> Response
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"message": "ログインしてください。"}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return JSONResponse({"message": "権限がありません。"}, status_code=403)
 
     payload = await request.json()
@@ -8878,7 +8897,7 @@ async def update_manual_exam_entry_draft_basic_info_api(draft_id: int, request: 
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"message": "ログインしてください。"}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return JSONResponse({"message": "権限がありません。"}, status_code=403)
 
     payload = await request.json()
@@ -8923,7 +8942,7 @@ async def delete_manual_exam_entry_draft_api(draft_id: int, request: Request) ->
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"message": "ログインしてください。"}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_manage_manual_exam_entry(user):
         return JSONResponse({"message": "権限がありません。"}, status_code=403)
 
     params = load_mysql_base_params(db_prefix())
@@ -8950,7 +8969,7 @@ async def save_manual_exam_entry_draft_api(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"message": "ログインしてください。"}, status_code=401)
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return JSONResponse({"message": "権限がありません。"}, status_code=403)
 
     payload = await request.json()
@@ -9039,7 +9058,7 @@ def manual_exam_entry(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     params = load_mysql_base_params(db_prefix())
@@ -9084,7 +9103,7 @@ def manual_exam_entry_drafts(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+    if not can_edit_manual_exam_entry(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     params = load_mysql_base_params(db_prefix())
@@ -9115,6 +9134,7 @@ def manual_exam_entry_drafts(request: Request) -> Response:
             "draft_rows": draft_rows,
             "summary": summary,
             "status_filter": status_filter,
+            "can_manage_manual_entry": can_manage_manual_exam_entry(user),
             "message": request.query_params.get("message", ""),
         },
     )
@@ -9487,7 +9507,7 @@ def admin_manual_exam_ledgers(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_any_permission(user, ("users.manage",)):
+    if not can_manage_manual_exam_entry(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     filters = {
         "event_id": request.query_params.get("event_id", "2"),
