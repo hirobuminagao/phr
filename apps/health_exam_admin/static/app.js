@@ -2317,6 +2317,64 @@
     updateDraftCaseFacilityState();
   }
 
+  const manualLedgerRevertModal = document.querySelector("#manual-ledger-revert-confirm-modal");
+  if (manualLedgerRevertModal) {
+    const manualLedgerRevertLabel = document.querySelector("[data-manual-ledger-revert-label]");
+    const manualLedgerRevertConfirm = document.querySelector("[data-manual-ledger-revert-confirm]");
+    let activeManualLedgerRevertButton = null;
+
+    const openManualLedgerRevertModal = (button) => {
+      const ledgerId = button.getAttribute("data-ledger-id") || "";
+      const draftId = button.getAttribute("data-draft-id") || "";
+      const valueCount = button.getAttribute("data-value-count") || "0";
+      if (!ledgerId || !draftId) return;
+      activeManualLedgerRevertButton = button;
+      if (manualLedgerRevertLabel) {
+        manualLedgerRevertLabel.textContent = `ledger ${ledgerId} / draft ${draftId} / 正式値 ${valueCount}件`;
+      }
+      if (manualLedgerRevertConfirm) {
+        manualLedgerRevertConfirm.disabled = false;
+        manualLedgerRevertConfirm.textContent = "draftへ戻す";
+      }
+      manualLedgerRevertModal.hidden = false;
+      document.body.classList.add("has-open-modal");
+      manualLedgerRevertConfirm?.focus();
+    };
+
+    const revertManualLedger = async () => {
+      const button = activeManualLedgerRevertButton;
+      if (!button) return;
+      const ledgerId = button.getAttribute("data-ledger-id") || "";
+      if (!ledgerId) return;
+      const originalText = button.textContent || "戻す";
+      button.disabled = true;
+      button.textContent = "戻し中";
+      if (manualLedgerRevertConfirm) {
+        manualLedgerRevertConfirm.disabled = true;
+        manualLedgerRevertConfirm.textContent = "戻し中";
+      }
+      try {
+        const payload = await postJson(`/admin/manual-exam-ledgers/${encodeURIComponent(ledgerId)}/revert`, {});
+        const query = new URLSearchParams();
+        query.set("message", payload.message || "draftへ戻しました。");
+        window.location.href = `/admin/manual-exam-ledgers?${query.toString()}`;
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = originalText;
+        if (manualLedgerRevertConfirm) {
+          manualLedgerRevertConfirm.disabled = false;
+          manualLedgerRevertConfirm.textContent = "draftへ戻す";
+        }
+        window.alert(`draft戻しでエラーが発生しました。${error?.message || ""}`);
+      }
+    };
+
+    for (const button of document.querySelectorAll("[data-manual-ledger-revert-open]")) {
+      button.addEventListener("click", () => openManualLedgerRevertModal(button));
+    }
+    manualLedgerRevertConfirm?.addEventListener("click", revertManualLedger);
+  }
+
   const manualValueInputs = Array.from(document.querySelectorAll("[data-manual-method-group]"));
   if (manualValueInputs.length) {
     const refreshManualMethodGroup = (groupKey) => {

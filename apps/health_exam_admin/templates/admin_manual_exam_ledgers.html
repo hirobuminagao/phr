@@ -17,6 +17,13 @@
 </header>
 
 <main class="page">
+  {% if message %}
+  <div class="success-banner">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="error-banner">{{ error }}</div>
+  {% endif %}
+
   <section class="panel">
     <div class="section-heading">
       <div>
@@ -82,7 +89,7 @@
     <div class="section-heading">
       <div>
         <h2>正式反映済みledger</h2>
-        <p class="subtle">最新 {{ rows|length }} 件を表示しています。巻き戻し実行は次の段階で、安全条件を満たす行だけに追加します。</p>
+        <p class="subtle">最新 {{ rows|length }} 件を表示しています。安全条件を満たす行だけ、正式ledgerをdraftへ戻せます。</p>
       </div>
     </div>
     <div class="table-panel">
@@ -97,6 +104,7 @@
             <th>case・出力</th>
             <th>戻し判断</th>
             <th>確認</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -146,9 +154,12 @@
               {% if blocked_reason %}
               <span class="status-pill status-pending">要確認</span>
               <small>{{ " / ".join(blocked_reason) }}</small>
+              {% elif row.row_status == "REVERTED_TO_DRAFT" %}
+              <span class="status-pill status-pending">戻し済み</span>
+              <small>draftへ戻されています</small>
               {% else %}
               <span class="status-pill status-ready">候補</span>
-              <small>次段階でテスト巻き戻し可能にする対象</small>
+              <small>draftへ戻せます</small>
               {% endif %}
             </td>
             <td>
@@ -159,10 +170,24 @@
                 {% endif %}
               </div>
             </td>
+            <td>
+              {% if not blocked_reason and row.row_status != "REVERTED_TO_DRAFT" %}
+              <button
+                class="danger-button compact-action-button"
+                type="button"
+                data-manual-ledger-revert-open
+                data-ledger-id="{{ row.exam_ledger_id }}"
+                data-draft-id="{{ row.manual_exam_entry_draft_id }}"
+                data-value-count="{{ row.item_value_count or 0 }}"
+              >戻す</button>
+              {% else %}
+              <button class="ghost-button compact-action-button" type="button" disabled>戻す</button>
+              {% endif %}
+            </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="8">手入力由来ledgerはありません。</td>
+            <td colspan="9">手入力由来ledgerはありません。</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -170,4 +195,28 @@
     </div>
   </section>
 </main>
+
+<div class="edit-modal" id="manual-ledger-revert-confirm-modal" hidden>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <div class="edit-modal__panel small-modal" role="dialog" aria-modal="true" aria-labelledby="manual-ledger-revert-title">
+    <div class="edit-modal__header">
+      <div>
+        <p class="eyebrow">REVERT</p>
+        <h2 id="manual-ledger-revert-title">正式ledgerをdraftへ戻す</h2>
+      </div>
+      <button class="icon-button" type="button" data-modal-close aria-label="閉じる">×</button>
+    </div>
+    <div class="edit-modal__body">
+      <p class="subtle">正式ledgerを戻し済みにし、紐づくdraftを再編集できる状態へ戻します。</p>
+      <p class="warning-text">戻した後は、必要に応じて健診結果処理 step5〜7 を再実行してください。</p>
+      <div class="inline-summary-card">
+        <strong data-manual-ledger-revert-label>ledger / draft</strong>
+      </div>
+    </div>
+    <div class="edit-modal__footer centered-actions">
+      <button class="ghost-button" type="button" data-modal-close>キャンセル</button>
+      <button class="danger-button" type="button" data-manual-ledger-revert-confirm>draftへ戻す</button>
+    </div>
+  </div>
+</div>
 {% endblock %}

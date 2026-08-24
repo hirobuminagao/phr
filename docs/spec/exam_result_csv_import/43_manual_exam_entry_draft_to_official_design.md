@@ -373,6 +373,11 @@ caseから選択した場合:
 - 戻し対象は、手入力由来の `exam_ledgers.source_type IN ('PAPER', 'MANUAL')` とし、`manual_exam_entry_drafts.applied_exam_ledger_id` でdraftへ辿れるものを基本にする。
 - 戻し操作は通常の個人case一覧には置かない。caseは正式ledgerから作られる派生物であり、戻し判断の責務はledger側に寄せる。
 - 戻し後は `03_01`〜`03_04` 相当のcase再生成・case値再作成・caseチェックを再実行する。
+- 戻し実行時は、正式ledgerを物理削除せず `exam_ledgers.row_status = 'REVERTED_TO_DRAFT'` として残す。
+- 紐づく `manual_exam_entry_drafts` は `draft_status = 'DRAFT'`、`applied_*` をNULLに戻し、再編集・再反映できる状態へ戻す。
+- 既に出力リストへ掲載されている正式ledgerは、初期版では戻し不可とする。
+- 戻し時は該当 `exam_export_case_sources.source_status` を `REVERTED_TO_DRAFT` にし、該当source由来の `exam_export_case_values` は削除する。
+- 戻し操作は `manual_exam_entry_draft_audit_logs` と個人情報監査ログへ記録する。
 
 初期実装:
 
@@ -447,6 +452,7 @@ DDL:
 Migration:
 
 - `sql/migrations/health_exam_result/20260824_001_health_exam_result_create_manual_exam_entry_drafts.sql`
+- `sql/migrations/health_exam_result/20260824_002_health_exam_result_fix_manual_exam_item_value_ledger_type.sql`
 
 既存テーブル追加検討:
 
@@ -534,7 +540,8 @@ Migration:
 - draftの作成者、更新者、正式反映者を表示し、作業担当者単位で絞り込める。
 - 作業担当者による絞り込みは、作成者・更新者・正式反映者のいずれかに一致するものを対象にする。
 - 画面上では「戻し候補」または「要確認」を表示する。
-- 初期版では巻き戻し実行ボタンは置かず、安全条件の見える化までとする。
+- 安全条件を満たす行だけ「戻す」ボタンを表示する。
+- 戻し不可条件は、draft紐づきなし、出力リスト掲載あり、case採用値ありなど。
 - この画面の個人情報閲覧は監査ログに記録する。
 
 ### スクリプト
@@ -548,11 +555,13 @@ Migration:
 
 - `03_00_check_imported_exam_ledgers.py`
   - `source_type = PAPER/MANUAL` を対象に含める。
+  - `row_status = REVERTED_TO_DRAFT` は対象外にする。
 - `03_01_build_exam_export_cases.py`
   - 手入力sourceをcase構成sourceに含める。
+  - `row_status = REVERTED_TO_DRAFT` は対象外にする。
 - `03_02_build_exam_export_case_values.py`
   - XML/CSV/手入力sourceの優先順位を扱う。
-  - 基本方針はXML優先、CSV補足、手入力補足。
+  - 基本方針はXML優先、CSV補足、手入力補足。デフォルト採用は XML -> CSV -> PAPER/MANUAL とする。
   - 紙のみの場合は手入力sourceがprimaryになる。
 - `03_04_check_exam_export_cases.py`
   - 手入力値もcase採用値としてチェックする。

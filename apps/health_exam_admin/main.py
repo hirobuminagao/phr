@@ -7969,6 +7969,7 @@ def insert_manual_exam_entry_draft(
           name_kana,
           birthdate,
           gender_code,
+          exam_facility_id,
           facility_code,
           facility_name,
           facility_document_id,
@@ -7978,6 +7979,7 @@ def insert_manual_exam_entry_draft(
         ) VALUES (
           %s,
           'DRAFT',
+          %s,
           %s,
           %s,
           %s,
@@ -8014,6 +8016,7 @@ def insert_manual_exam_entry_draft(
             _manual_text(source_payload.get("name_kana")),
             _manual_date_text(source_payload.get("birthdate") or source_payload.get("birth")),
             _manual_text(source_payload.get("gender_code") or source_payload.get("gender_label")),
+            _optional_int(source_payload.get("exam_facility_id")),
             _manual_text(source_payload.get("facility_code")),
             _manual_text(source_payload.get("facility_name")),
             _manual_text(source_payload.get("facility_document_id")),
@@ -8191,6 +8194,26 @@ def manual_exam_entry_identity_from_draft(draft: Mapping[str, Any]) -> dict[str,
     return result
 
 
+def resolve_manual_exam_entry_facility_id(cur: Any, draft: Mapping[str, Any]) -> int | None:
+    facility_id = _optional_int(draft.get("exam_facility_id"))
+    if facility_id is not None:
+        return facility_id
+    facility_code = _manual_text(draft.get("facility_code"))
+    if not facility_code:
+        return None
+    cur.execute(
+        f"""
+        SELECT exam_facility_id
+        FROM {qname(master_db())}.exam_facilities
+        WHERE exam_facility_code = %s
+        LIMIT 1
+        """,
+        (facility_code,),
+    )
+    row = cur.fetchone()
+    return _optional_int(row.get("exam_facility_id")) if row else None
+
+
 def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> dict[str, Any]:
     draft = load_manual_exam_entry_draft_by_id(cur, draft_id)
     if draft is None:
@@ -8223,6 +8246,7 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
     match_reason = "manual exam entry draft applied"
     if identity.get("reason"):
         match_reason = f"{match_reason}; {identity['reason']}"
+    exam_facility_id = resolve_manual_exam_entry_facility_id(cur, draft)
 
     cur.execute(
         f"""
@@ -8320,7 +8344,7 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
             f"manual-draft-{draft_id}",
             _manual_text(draft.get("facility_document_id")),
             _manual_text(draft.get("insurer_number")),
-            _optional_int(draft.get("exam_facility_id")),
+            exam_facility_id,
             _manual_text(draft.get("facility_code")),
             _manual_text(draft.get("facility_name")),
             _manual_date_text(draft.get("exam_date")),
@@ -8379,7 +8403,7 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
         rows.append(
             (
                 event_id,
-                source_type,
+                "EXAM",
                 exam_ledger_id,
                 _optional_int(draft.get("subscriber_id")),
                 _manual_text(draft.get("hia_subscriber_id")),
@@ -8503,6 +8527,159 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
     return {"exam_ledger_id": exam_ledger_id, "value_count": len(rows), "source_type": source_type}
 
 
+def revert_manual_exam_ledger_to_draft(cur: Any, *, exam_ledger_id: int, user_id: int) -> dict[str, Any]:
+    cur.execute(
+        f"""
+        SELECT
+          el.exam_ledger_id,
+          el.event_id,
+          el.source_type,
+          el.row_status,
+          el.xml_export_status,
+          d.manual_exam_entry_draft_id,
+          d.draft_status,
+          COALESCE(eiv.item_value_count, 0) AS item_value_count,
+          COALESCE(src.case_source_count, 0) AS case_source_count,
+          COALESCE(adopted.adopted_value_count, 0) AS adopted_value_count,
+          COALESCE(listed.list_case_count, 0) AS list_case_count
+        FROM {qname(health_db())}.exam_ledgers AS el
+        LEFT JOIN {qname(health_db())}.manual_exam_entry_drafts AS d
+          ON d.applied_exam_ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT ledger_id, COUNT(*) AS item_value_count
+          FROM {qname(health_db())}.exam_item_values
+          WHERE ledger_type = 'EXAM'
+          GROUP BY ledger_id
+        ) AS eiv
+          ON eiv.ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT source_exam_ledger_id, COUNT(*) AS case_source_count
+          FROM {qname(health_db())}.exam_export_case_sources
+          WHERE source_status = 'ACTIVE'
+          GROUP BY source_exam_ledger_id
+        ) AS src
+          ON src.source_exam_ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT source_exam_ledger_id, COUNT(*) AS adopted_value_count
+          FROM {qname(health_db())}.exam_export_case_values
+          GROUP BY source_exam_ledger_id
+        ) AS adopted
+          ON adopted.source_exam_ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT eecs.source_exam_ledger_id, COUNT(*) AS list_case_count
+          FROM {qname(health_db())}.exam_export_case_sources AS eecs
+          INNER JOIN {qname(health_db())}.ops_xml_export_list_cases AS oelc
+            ON oelc.exam_export_case_id = eecs.exam_export_case_id
+          GROUP BY eecs.source_exam_ledger_id
+        ) AS listed
+          ON listed.source_exam_ledger_id = el.exam_ledger_id
+        WHERE el.exam_ledger_id = %s
+        LIMIT 1
+        """,
+        (exam_ledger_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError("manual_exam_ledger_not_found")
+    if str(row.get("source_type") or "").upper() not in {"PAPER", "MANUAL"}:
+        raise ValueError("manual_exam_ledger_source_type_not_allowed")
+    draft_id = _optional_int(row.get("manual_exam_entry_draft_id"))
+    if draft_id is None:
+        raise ValueError("manual_exam_ledger_has_no_draft")
+    if str(row.get("draft_status") or "").upper() != "APPLIED":
+        raise ValueError("manual_exam_draft_is_not_applied")
+    if int(row.get("list_case_count") or 0) > 0:
+        raise ValueError("manual_exam_ledger_is_in_export_list")
+
+    old_value = {
+        "exam_ledger_id": exam_ledger_id,
+        "row_status": row.get("row_status"),
+        "xml_export_status": row.get("xml_export_status"),
+        "case_source_count": int(row.get("case_source_count") or 0),
+        "adopted_value_count": int(row.get("adopted_value_count") or 0),
+        "item_value_count": int(row.get("item_value_count") or 0),
+    }
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_export_case_sources
+           SET source_status = 'REVERTED_TO_DRAFT',
+               source_reason = 'manual exam ledger reverted to draft',
+               updated_at = CURRENT_TIMESTAMP(3)
+         WHERE source_exam_ledger_id = %s
+        """,
+        (exam_ledger_id,),
+    )
+    cur.execute(
+        f"""
+        DELETE FROM {qname(health_db())}.exam_export_case_values
+         WHERE source_exam_ledger_id = %s
+        """,
+        (exam_ledger_id,),
+    )
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.exam_ledgers
+           SET row_status = 'REVERTED_TO_DRAFT',
+               row_reason = 'manual exam ledger reverted to draft',
+               check_status = 'PENDING',
+               check_reason = NULL,
+               xml_export_status = 'PENDING',
+               merge_status = 'REVERTED_TO_DRAFT',
+               merge_reason = 'manual exam ledger reverted to draft',
+               updated_at = CURRENT_TIMESTAMP(3)
+         WHERE exam_ledger_id = %s
+        """,
+        (exam_ledger_id,),
+    )
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.manual_exam_entry_drafts
+           SET draft_status = 'DRAFT',
+               applied_by_app_user_id = NULL,
+               applied_at = NULL,
+               applied_exam_ledger_id = NULL,
+               updated_by_app_user_id = %s
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (user_id, draft_id),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_audit_logs (
+          manual_exam_entry_draft_id,
+          event_id,
+          action_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          changed_by_app_user_id
+        ) VALUES (
+          %s,
+          %s,
+          'REVERT_FROM_EXAM_LEDGER',
+          'exam_ledger',
+          %s,
+          %s,
+          'ADMIN_UI',
+          %s
+        )
+        """,
+        (
+            draft_id,
+            _optional_int(row.get("event_id")) or 2,
+            json.dumps(old_value, ensure_ascii=False, default=manual_exam_json_default),
+            json.dumps({"draft_status": "DRAFT", "exam_ledger_row_status": "REVERTED_TO_DRAFT"}, ensure_ascii=False),
+            user_id,
+        ),
+    )
+    return {
+        "exam_ledger_id": exam_ledger_id,
+        "manual_exam_entry_draft_id": draft_id,
+        "item_value_count": int(row.get("item_value_count") or 0),
+    }
+
+
 def update_manual_exam_entry_draft_from_basic(
     cur: Any,
     *,
@@ -8531,6 +8708,7 @@ def update_manual_exam_entry_draft_from_basic(
                name_kana = %s,
                birthdate = %s,
                gender_code = %s,
+               exam_facility_id = %s,
                facility_code = %s,
                facility_name = %s,
                facility_document_id = %s,
@@ -8553,6 +8731,7 @@ def update_manual_exam_entry_draft_from_basic(
             _manual_text(basic.get("name_kana")),
             _manual_date_text(basic.get("birthdate")),
             _manual_text(basic.get("gender_code") or basic.get("gender_label") or basic.get("gender")),
+            _optional_int(basic.get("exam_facility_id")),
             _manual_text(basic.get("facility_code")),
             _manual_text(basic.get("facility_name")),
             _manual_text(basic.get("facility_document_id")),
@@ -9977,8 +10156,47 @@ def admin_manual_exam_ledgers(request: Request) -> Response:
             "limit": limit,
             "event_options": event_options,
             "worker_options": worker_options,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
         },
     )
+
+
+@app.post("/admin/manual-exam-ledgers/{exam_ledger_id}/revert")
+async def admin_revert_manual_exam_ledger(exam_ledger_id: int, request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_manual_exam_entry(user):
+        return JSONResponse({"ok": False, "message": "権限がありません。"}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            result = revert_manual_exam_ledger_to_draft(cur, exam_ledger_id=exam_ledger_id, user_id=int(user["app_user_id"]))
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="REVERT_ADMIN_MANUAL_EXAM_LEDGER_TO_DRAFT",
+                    target_schema=health_db(),
+                    target_table="exam_ledgers",
+                    target_id=str(exam_ledger_id),
+                    after=result,
+                )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return JSONResponse({"ok": False, "message": f"戻しできません: {exc}"}, status_code=400)
+        except Exception:
+            conn.rollback()
+            raise
+    message = (
+        f"ledger {result['exam_ledger_id']} をdraft {result['manual_exam_entry_draft_id']} へ戻しました。"
+        "必要に応じて健診結果処理 step5〜7 を再実行してください。"
+    )
+    return JSONResponse({"ok": True, "message": message, **result})
 
 
 @app.post("/admin/etl-runs/{run_id}/stop")

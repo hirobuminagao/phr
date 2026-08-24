@@ -112,7 +112,8 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
         SELECT *
         FROM {qname(config.health_db)}.`exam_ledgers`
         WHERE `event_id` = %s
-          AND `source_type` IN ('XML', 'CSV')
+          AND `source_type` IN ('XML', 'CSV', 'PAPER', 'MANUAL')
+          AND COALESCE(`row_status`, '') <> 'REVERTED_TO_DRAFT'
           AND `subscriber_id` IS NOT NULL
           AND `subscriber_match_status` = 'MATCHED'
           AND `exam_date` IS NOT NULL
@@ -151,22 +152,29 @@ def choose_primary(group: list[dict[str, Any]]) -> dict[str, Any]:
 def source_mode(group: list[dict[str, Any]]) -> str:
     xml_count = sum(1 for row in group if row["source_type"] == "XML")
     csv_count = sum(1 for row in group if row["source_type"] == "CSV")
-    if xml_count == 1 and csv_count == 0:
+    paper_count = sum(1 for row in group if row["source_type"] in {"PAPER", "MANUAL"})
+    if xml_count == 1 and csv_count == 0 and paper_count == 0:
         return "XML_ONLY"
-    if xml_count == 0 and csv_count == 1:
+    if xml_count == 0 and csv_count == 1 and paper_count == 0:
         return "CSV_ONLY"
-    if xml_count == 1 and csv_count == 1:
+    if xml_count == 0 and csv_count == 0 and paper_count == 1:
+        return "PAPER_ONLY"
+    if xml_count == 1 and csv_count == 1 and paper_count == 0:
         return "XML_CSV"
+    if paper_count >= 1:
+        return "WITH_MANUAL_SOURCE"
     return "MULTI_SOURCE"
 
 
 def merge_status(group: list[dict[str, Any]]) -> tuple[str, str | None]:
     mode = source_mode(group)
-    if mode in {"XML_ONLY", "CSV_ONLY"}:
+    if mode in {"XML_ONLY", "CSV_ONLY", "PAPER_ONLY"}:
         return "SOURCE_SINGLE", mode
     if mode == "XML_CSV":
         return "READY", "XML primary with CSV supplement candidate"
-    return "REVIEW_REQUIRED", "multiple XML or CSV source ledgers require manual review"
+    if mode == "WITH_MANUAL_SOURCE":
+        return "READY", "manual source supplement candidate"
+    return "REVIEW_REQUIRED", "multiple source ledgers require manual review"
 
 
 def case_params(primary: dict[str, Any], group: list[dict[str, Any]], run_id: int) -> dict[str, Any]:

@@ -299,6 +299,9 @@ def choose_default(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any] | N
     csv_candidates = [row for row in candidates if row["source_type"] == "CSV"]
     if csv_candidates:
         return csv_candidates[0], "CSV_PRIMARY"
+    manual_candidates = [row for row in candidates if row["source_type"] in {"PAPER", "MANUAL"}]
+    if manual_candidates:
+        return manual_candidates[0], "MANUAL_PRIMARY"
     return None, None
 
 

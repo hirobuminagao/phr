@@ -897,8 +897,9 @@ def fetch_target_exam_ledgers(
           AND (
             (source_type = 'XML' AND xml_status = 'READY')
             OR (source_type = 'CSV' AND row_status IN ('READY', 'ERROR'))
-            OR source_type = 'PAPER'
+            OR (source_type IN ('PAPER', 'MANUAL') AND row_status = 'READY')
           )
+          AND COALESCE(row_status, '') <> 'REVERTED_TO_DRAFT'
         ORDER BY exam_ledger_id
         {limit_sql}
         """,
