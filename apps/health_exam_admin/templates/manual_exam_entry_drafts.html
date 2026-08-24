@@ -102,7 +102,8 @@
           <tr>
             <th>状態</th>
             <th>入力対象</th>
-            <th>健診機関 / 受診日</th>
+            <th>健診機関</th>
+            <th>健診実施日</th>
             <th>入力目的</th>
             <th>値</th>
             <th>登録者 / 更新者</th>
@@ -142,13 +143,29 @@
                     data-event-id="{{ draft.event_id or 2 }}"
                     data-facility-code="{{ draft.facility_code or '' }}"
                     data-facility-name="{{ draft.facility_name or '' }}"
-                  >健診機関変更</button>
+                    data-exam-date="{{ draft.exam_date or '' }}"
+                  >変更</button>
                 </div>
                 <small>
                   {% if draft.facility_code %}{{ draft.facility_code }}{% endif %}
                   {% if draft.facility_document_id %}<br>doc {{ draft.facility_document_id }}{% endif %}
-                  {% if draft.exam_date %}<br>{{ draft.exam_date }}{% endif %}
                 </small>
+              </td>
+              <td>
+                <strong>{{ draft.exam_date or "未設定" }}</strong>
+                <div class="inline-action-row">
+                  <button
+                    type="button"
+                    class="ghost-button compact-action-button"
+                    data-modal-open="manual-draft-facility-picker-modal"
+                    data-manual-draft-facility-change
+                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                    data-event-id="{{ draft.event_id or 2 }}"
+                    data-facility-code="{{ draft.facility_code or '' }}"
+                    data-facility-name="{{ draft.facility_name or '' }}"
+                    data-exam-date="{{ draft.exam_date or '' }}"
+                  >変更</button>
+                </div>
               </td>
               <td>
                 <strong>{{ draft.entry_purpose or "未設定" }}</strong>
@@ -174,7 +191,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="7">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
+              <td colspan="8">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -261,6 +278,11 @@
           検索
           <input data-live-filter-input="#manual-draft-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
         </label>
+        <label>
+          健診実施日
+          <input id="manual-draft-exam-date-input" autocomplete="off" placeholder="YYYY-MM-DD" data-date-normalize="true">
+        </label>
+        <button type="button" class="primary-button compact-action-button" data-manual-draft-basic-info-save>更新</button>
       </div>
       <div class="table-panel export-facility-picker-table-panel">
         <table id="manual-draft-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">

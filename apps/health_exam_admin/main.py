@@ -7811,13 +7811,14 @@ def insert_manual_exam_entry_draft(
     return draft_id
 
 
-def update_manual_exam_entry_draft_facility(
+def update_manual_exam_entry_draft_basic_info(
     cur: Any,
     *,
     draft_id: int,
     event_id: int,
-    facility_code: str,
-    facility_name: str,
+    facility_code: str | None,
+    facility_name: str | None,
+    exam_date: str | None,
     user_id: int,
 ) -> None:
     before = load_manual_exam_entry_draft_by_id(cur, draft_id)
@@ -7828,10 +7829,11 @@ def update_manual_exam_entry_draft_facility(
         UPDATE {qname(health_db())}.manual_exam_entry_drafts
            SET facility_code = %s,
                facility_name = %s,
+               exam_date = %s,
                updated_by_app_user_id = %s
          WHERE manual_exam_entry_draft_id = %s
         """,
-        (facility_code, facility_name, user_id, draft_id),
+        (facility_code, facility_name, exam_date, user_id, draft_id),
     )
     cur.execute(
         f"""
@@ -7847,8 +7849,8 @@ def update_manual_exam_entry_draft_facility(
         ) VALUES (
           %s,
           %s,
-          'UPDATE_FACILITY',
-          'facility',
+          'UPDATE_BASIC_INFO',
+          'basic_info',
           %s,
           %s,
           'ADMIN_UI',
@@ -7862,6 +7864,7 @@ def update_manual_exam_entry_draft_facility(
                 {
                     "facility_code": before.get("facility_code"),
                     "facility_name": before.get("facility_name"),
+                    "exam_date": before.get("exam_date"),
                 },
                 ensure_ascii=False,
                 default=manual_exam_json_default,
@@ -7870,6 +7873,7 @@ def update_manual_exam_entry_draft_facility(
                 {
                     "facility_code": facility_code,
                     "facility_name": facility_name,
+                    "exam_date": exam_date,
                 },
                 ensure_ascii=False,
                 default=manual_exam_json_default,
@@ -8432,8 +8436,8 @@ async def create_manual_exam_entry_draft_from_case(request: Request) -> Response
     )
 
 
-@app.post("/api/manual-exam-entry-drafts/{draft_id}/facility")
-async def update_manual_exam_entry_draft_facility_api(draft_id: int, request: Request) -> Response:
+@app.post("/api/manual-exam-entry-drafts/{draft_id}/basic-info")
+async def update_manual_exam_entry_draft_basic_info_api(draft_id: int, request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return JSONResponse({"message": "ログインしてください。"}, status_code=401)
@@ -8442,14 +8446,15 @@ async def update_manual_exam_entry_draft_facility_api(draft_id: int, request: Re
 
     payload = await request.json()
     if not isinstance(payload, dict):
-        return JSONResponse({"message": "健診機関情報がありません。"}, status_code=400)
+        return JSONResponse({"message": "基本情報がありません。"}, status_code=400)
     facility_code = _manual_text(payload.get("facility_code"))
     facility_name = _manual_text(payload.get("facility_name"))
+    exam_date = _manual_date_text(payload.get("exam_date"))
     event_id = _optional_int(payload.get("event_id")) or 2
-    if not facility_code:
-        return JSONResponse({"message": "健診機関コードを選択してください。"}, status_code=400)
     if not facility_name:
         facility_name = facility_code
+    if not facility_code and not exam_date:
+        return JSONResponse({"message": "健診機関または健診実施日を指定してください。"}, status_code=400)
 
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -8458,12 +8463,13 @@ async def update_manual_exam_entry_draft_facility_api(draft_id: int, request: Re
             if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
                 return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
             try:
-                update_manual_exam_entry_draft_facility(
+                update_manual_exam_entry_draft_basic_info(
                     cur,
                     draft_id=draft_id,
                     event_id=event_id,
                     facility_code=facility_code,
                     facility_name=facility_name,
+                    exam_date=exam_date,
                     user_id=int(user["app_user_id"]),
                 )
             except ValueError:
@@ -8472,7 +8478,7 @@ async def update_manual_exam_entry_draft_facility_api(draft_id: int, request: Re
         except Exception:
             conn.rollback()
             raise
-    return JSONResponse({"message": f"draft {draft_id} の健診機関を更新しました。"})
+    return JSONResponse({"message": f"draft {draft_id} の基本情報を更新しました。"})
 
 
 @app.get("/health")

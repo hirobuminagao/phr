@@ -1682,6 +1682,7 @@
     const draftCaseLimit = document.querySelector("#manual-draft-case-limit");
     const draftCaseResults = document.querySelector("[data-manual-draft-case-results]");
     const draftFacilityTarget = document.querySelector("[data-manual-draft-facility-target]");
+    const draftExamDateInput = document.querySelector("#manual-draft-exam-date-input");
     let activeDraftFacilityTarget = null;
 
     const reloadDraftListWithMessage = (message) => {
@@ -1700,10 +1701,13 @@
         eventId: button.getAttribute("data-event-id") || "2",
         facilityCode: button.getAttribute("data-facility-code") || "",
         facilityName: button.getAttribute("data-facility-name") || "",
+        examDate: button.getAttribute("data-exam-date") || "",
       };
+      if (draftExamDateInput) draftExamDateInput.value = activeDraftFacilityTarget.examDate;
       if (draftFacilityTarget) {
         const current = activeDraftFacilityTarget.facilityName || activeDraftFacilityTarget.facilityCode || "未設定";
-        draftFacilityTarget.textContent = `draft ${activeDraftFacilityTarget.draftId} の健診機関を変更します。現在: ${current}`;
+        const dateText = activeDraftFacilityTarget.examDate || "未設定";
+        draftFacilityTarget.textContent = `draft ${activeDraftFacilityTarget.draftId} を変更します。現在: ${current} / 健診実施日 ${dateText}`;
       }
       for (const row of document.querySelectorAll("[data-manual-draft-facility-row]")) {
         const code = row.getAttribute("data-facility-code") || "";
@@ -1717,23 +1721,32 @@
       }
     };
 
+    const updateDraftBasicInfo = async ({ facilityCode = null, facilityName = null } = {}) => {
+      if (!activeDraftFacilityTarget?.draftId) return;
+      const nextFacilityCode = facilityCode ?? activeDraftFacilityTarget.facilityCode;
+      const nextFacilityName = facilityName ?? activeDraftFacilityTarget.facilityName;
+      const nextExamDate = draftExamDateInput?.value?.trim() || "";
+      try {
+        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(activeDraftFacilityTarget.draftId)}/basic-info`, {
+          event_id: activeDraftFacilityTarget.eventId,
+          facility_code: nextFacilityCode,
+          facility_name: nextFacilityName,
+          exam_date: nextExamDate,
+        });
+        reloadDraftListWithMessage(payload.message || "基本情報を更新しました。");
+      } catch (error) {
+        if (draftFacilityTarget) {
+          draftFacilityTarget.textContent = `基本情報更新でエラーが発生しました。${error?.message || ""}`;
+        }
+      }
+    };
+
     const updateDraftFacility = async (element) => {
-      if (!activeDraftFacilityTarget?.draftId || !(element instanceof Element)) return;
+      if (!(element instanceof Element)) return;
       const facilityCode = element.getAttribute("data-facility-code") || "";
       const facilityName = element.getAttribute("data-facility-name") || facilityCode;
       if (!facilityCode) return;
-      try {
-        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(activeDraftFacilityTarget.draftId)}/facility`, {
-          event_id: activeDraftFacilityTarget.eventId,
-          facility_code: facilityCode,
-          facility_name: facilityName,
-        });
-        reloadDraftListWithMessage(payload.message || "健診機関を更新しました。");
-      } catch (error) {
-        if (draftFacilityTarget) {
-          draftFacilityTarget.textContent = `健診機関変更でエラーが発生しました。${error?.message || ""}`;
-        }
-      }
+      await updateDraftBasicInfo({ facilityCode, facilityName });
     };
 
     const createManualDraftFromPerson = async (item, button) => {
@@ -1790,6 +1803,7 @@
         updateDraftFacility(button);
       });
     }
+    document.querySelector("[data-manual-draft-basic-info-save]")?.addEventListener("click", () => updateDraftBasicInfo());
 
     const setDraftPersonMessage = (message) => {
       manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
