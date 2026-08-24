@@ -140,7 +140,21 @@
                 </small>
               </td>
               <td>
-                <strong>{{ draft.facility_name or draft.facility_code or "未設定" }}</strong>
+                {% if draft.facility_name or draft.facility_code %}
+                  <strong>{{ draft.facility_name or draft.facility_code }}</strong>
+                {% else %}
+                  <button
+                    type="button"
+                    class="text-link-button"
+                    data-modal-open="manual-draft-facility-picker-modal"
+                    data-manual-draft-facility-change
+                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                    data-event-id="{{ draft.event_id or 2 }}"
+                    data-facility-code=""
+                    data-facility-name=""
+                    data-exam-date="{{ draft.exam_date or '' }}"
+                  >未設定</button>
+                {% endif %}
                 <small>
                   {% if draft.facility_code %}{{ draft.facility_code }}{% endif %}
                   {% if draft.facility_document_id %}<br>doc {{ draft.facility_document_id }}{% endif %}
@@ -157,7 +171,7 @@
                   data-facility-code="{{ draft.facility_code or '' }}"
                   data-facility-name="{{ draft.facility_name or '' }}"
                   data-exam-date="{{ draft.exam_date or '' }}"
-                >変更</button>
+                >{{ "変更" if draft.facility_name or draft.facility_code else "選択" }}</button>
               </td>
               <td>
                 <div class="manual-draft-date-edit">
