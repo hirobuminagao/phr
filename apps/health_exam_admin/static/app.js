@@ -1169,11 +1169,44 @@
     const caseSearchLimit = document.querySelector("#manual-entry-case-search-limit");
     let selectedSubscriber = null;
     let selectedManualCaseId = "";
+    const manualPersonFloat = document.querySelector("[data-manual-entry-person-float]");
+    const manualPersonFloatName = document.querySelector("[data-manual-entry-float-name]");
+    const manualPersonFloatHia = document.querySelector("[data-manual-entry-float-hia]");
+    const manualPersonFloatInsurance = document.querySelector("[data-manual-entry-float-insurance]");
+    const manualPersonFloatVisit = document.querySelector("[data-manual-entry-float-visit]");
 
     const setValue = (selector, value) => {
       const input = document.querySelector(selector);
-      if (input) input.value = value || "";
+      if (input) {
+        input.value = value || "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     };
+
+    const updateManualPersonFloat = () => {
+      if (!manualPersonFloat) return;
+      const nameKana = document.querySelector("#manual-entry-name-kana-input")?.value?.trim() || "";
+      const nameFull = document.querySelector("#manual-entry-name-full-input")?.value?.trim() || "";
+      const hiaId = document.querySelector("#manual-entry-hia-subscriber-id-input")?.value?.trim() || "";
+      const symbol = document.querySelector("#manual-entry-insurance-symbol-input")?.value?.trim() || "";
+      const number = document.querySelector("#manual-entry-insurance-number-input")?.value?.trim() || "";
+      const branch = document.querySelector("#manual-entry-insurance-branch-input")?.value?.trim() || "";
+      const facility = document.querySelector("#manual-entry-facility-input")?.value?.trim() || "";
+      const examDate = document.querySelector("#manual-entry-exam-date-input")?.value?.trim() || "";
+      const displayName = nameKana || nameFull || "未選択";
+      const insuranceText = [symbol, number].filter(Boolean).join("-");
+      const branchText = branch ? `-${branch}` : "";
+      if (manualPersonFloatName) manualPersonFloatName.textContent = displayName;
+      if (manualPersonFloatHia) manualPersonFloatHia.textContent = hiaId ? `HIA ${hiaId}` : "HIA -";
+      if (manualPersonFloatInsurance) manualPersonFloatInsurance.textContent = insuranceText ? `記号番号 ${insuranceText}${branchText}` : "記号番号 -";
+      if (manualPersonFloatVisit) manualPersonFloatVisit.textContent = facility || examDate ? `${facility || "施設-"} / ${examDate || "受診日-"}` : "施設/受診日 -";
+      manualPersonFloat.classList.toggle("is-empty", displayName === "未選択" && !hiaId && !insuranceText && !facility && !examDate);
+    };
+
+    for (const input of document.querySelectorAll(".manual-entry-form input, .manual-entry-form select, .manual-entry-form textarea")) {
+      input.addEventListener("input", updateManualPersonFloat);
+      input.addEventListener("change", updateManualPersonFloat);
+    }
 
     const setManualSubscriberMessage = (message) => {
       manualSubscriberResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
@@ -1206,6 +1239,7 @@
       setValue("#manual-entry-insurance-branch-input", person.insurance_branch_number);
       setValue("#manual-entry-birthdate-input", person.birth || person.birthdate);
       setValue("#manual-entry-gender-input", person.gender_label);
+      updateManualPersonFloat();
     };
 
     for (const button of document.querySelectorAll("[data-manual-entry-basic-clear]")) {
@@ -1222,6 +1256,7 @@
         if (selectedCasePanel) selectedCasePanel.hidden = true;
         if (casePanel) casePanel.hidden = true;
         setManualSubscriberSelected(null);
+        updateManualPersonFloat();
       });
     }
 
@@ -1261,6 +1296,7 @@
         selectedCaseDetailLink.href = `/exam-export-cases/${encodeURIComponent(item.exam_export_case_id || "")}`;
         selectedCaseDetailLink.hidden = !item.exam_export_case_id;
       }
+      updateManualPersonFloat();
       renderManualCaseRows([item]);
       if (casePanel) casePanel.classList.add("is-selected");
       document.querySelector("#manual-entry-case-picker-modal [data-modal-close]")?.click();
@@ -1500,6 +1536,7 @@
       document.querySelector("#manual-entry-subscriber-picker-modal [data-modal-close]")?.click();
       loadManualCasesForSubscriber(selectedSubscriber.subscriber_id);
     });
+    updateManualPersonFloat();
   }
 
   const manualValueInputs = Array.from(document.querySelectorAll("[data-manual-method-group]"));
