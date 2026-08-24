@@ -226,6 +226,21 @@
                     <br>特定 {{ draft.draft_specific_reason_summary }}
                   {% endif %}
                 </small>
+                {% if draft.draft_checked_at %}
+                  <script type="application/json" data-manual-draft-check-detail-json="{{ draft.manual_exam_entry_draft_id }}">
+                    {{ {
+                      "draft_id": draft.manual_exam_entry_draft_id,
+                      "status": check_status,
+                      "legal_check_result": draft.draft_legal_check_result,
+                      "legal_reason_summary": draft.draft_legal_reason_summary,
+                      "specific_check_result": draft.draft_specific_check_result,
+                      "specific_reason_summary": draft.draft_specific_reason_summary,
+                      "checked_at": draft.draft_checked_at|string,
+                      "checked_by": draft.draft_checked_by_name,
+                      "details": draft.draft_check_details,
+                    }|tojson }}
+                  </script>
+                {% endif %}
               </td>
               <td>
                 <strong>{{ draft.created_by_name or ("user " ~ draft.created_by_app_user_id) }}</strong>
@@ -246,6 +261,15 @@
                     data-manual-draft-check
                     data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
                   >参考チェック</button>
+                {% endif %}
+                {% if draft.draft_checked_at %}
+                  <button
+                    type="button"
+                    class="ghost-button compact-action-button"
+                    data-modal-open="manual-draft-check-detail-modal"
+                    data-manual-draft-check-detail
+                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                  >詳細</button>
                 {% endif %}
                 {% if can_manage_manual_entry and status in ['DRAFT', 'READY', 'ERROR'] and draft.value_count > 0 %}
                   <button
@@ -318,6 +342,48 @@
       <div class="edit-modal__actions manual-entry-modal-actions">
         <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
         <button type="button" class="primary-button" data-manual-draft-apply-confirm>本データ反映する</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="manual-draft-check-detail-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel manual-draft-check-detail-modal" role="dialog" aria-modal="true" aria-labelledby="manual-draft-check-detail-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">DRAFT CHECK DETAIL</p>
+          <h2 id="manual-draft-check-detail-title">参考チェック詳細</h2>
+          <p class="subtle" data-manual-draft-check-detail-summary>仮登録専用のチェック結果です。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="manual-draft-check-detail-overview">
+        <span class="status-pill status-muted" data-manual-draft-check-detail-status>未選択</span>
+        <div>
+          <strong data-manual-draft-check-detail-main>draft -</strong>
+          <small data-manual-draft-check-detail-meta>チェック日時 -</small>
+        </div>
+      </div>
+      <div class="table-panel manual-draft-check-detail-table-panel">
+        <table class="data-table compact-table">
+          <thead>
+            <tr>
+              <th>区分</th>
+              <th>チェックID</th>
+              <th>項目</th>
+              <th>状態</th>
+              <th>理由</th>
+            </tr>
+          </thead>
+          <tbody data-manual-draft-check-detail-body>
+            <tr>
+              <td colspan="5">詳細を選択してください。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="edit-modal__foot manual-entry-modal-actions">
+        <button type="button" class="primary-button" data-modal-close>閉じる</button>
       </div>
     </section>
   </div>

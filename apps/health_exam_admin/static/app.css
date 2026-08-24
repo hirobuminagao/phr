@@ -1494,6 +1494,28 @@ a.home-menu-card.is-navigating {
   transform: translateY(-50%);
 }
 
+.manual-draft-check-detail-modal {
+  width: min(1120px, calc(100vw - 32px));
+  margin: 24px auto;
+  transform: none;
+}
+
+.manual-draft-check-detail-overview {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.manual-draft-check-detail-table-panel {
+  max-height: min(58vh, 680px);
+  overflow: auto;
+}
+
 .edit-modal__head {
   display: flex;
   align-items: flex-start;

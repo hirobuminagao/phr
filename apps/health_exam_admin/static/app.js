@@ -1849,6 +1849,12 @@
     const draftApplyLabel = document.querySelector("[data-manual-draft-apply-label]");
     const draftApplyConfirmButton = document.querySelector("[data-manual-draft-apply-confirm]");
     let activeDraftApplyButton = null;
+    const draftCheckDetailModal = document.querySelector("#manual-draft-check-detail-modal");
+    const draftCheckDetailStatus = document.querySelector("[data-manual-draft-check-detail-status]");
+    const draftCheckDetailSummary = document.querySelector("[data-manual-draft-check-detail-summary]");
+    const draftCheckDetailMain = document.querySelector("[data-manual-draft-check-detail-main]");
+    const draftCheckDetailMeta = document.querySelector("[data-manual-draft-check-detail-meta]");
+    const draftCheckDetailBody = document.querySelector("[data-manual-draft-check-detail-body]");
 
     const toggleManualDraftNewActions = () => {
       if (!draftNewActions) return;
@@ -2090,6 +2096,76 @@
       }
     };
 
+    const manualDraftCheckStatusLabel = (status) => {
+      const labels = {
+        OK: "OK",
+        NG: "NG",
+        STALE: "要再チェック",
+        UNDETERMINABLE: "判定不能",
+        UNCHECKED: "未チェック",
+      };
+      return labels[status] || status || "-";
+    };
+
+    const manualDraftCheckStatusClass = (status) => {
+      if (["OK", "CALCULATED", "ALTERNATIVE", "NOT_APPLICABLE"].includes(status)) return "status-ready";
+      if (["NG", "MISSING", "INVALID"].includes(status)) return "status-danger";
+      if (["STALE", "UNDETERMINABLE", "PENDING"].includes(status)) return "status-pending";
+      return "status-muted";
+    };
+
+    const openManualDraftCheckDetail = (button) => {
+      const draftId = button?.getAttribute("data-draft-id") || "";
+      const jsonElement = Array.from(document.querySelectorAll("[data-manual-draft-check-detail-json]"))
+        .find((element) => element.getAttribute("data-manual-draft-check-detail-json") === draftId);
+      if (!jsonElement) return;
+      let detail;
+      try {
+        detail = JSON.parse(jsonElement.textContent || "{}");
+      } catch (_error) {
+        detail = {};
+      }
+      const status = detail.status || "UNCHECKED";
+      if (draftCheckDetailStatus) {
+        draftCheckDetailStatus.className = `status-pill ${manualDraftCheckStatusClass(status)}`;
+        draftCheckDetailStatus.textContent = manualDraftCheckStatusLabel(status);
+      }
+      if (draftCheckDetailMain) {
+        draftCheckDetailMain.textContent = `draft ${detail.draft_id || draftId} / 法定 ${detail.legal_check_result || "-"} / 特定 ${manualDraftCheckStatusLabel(detail.specific_check_result)}`;
+      }
+      if (draftCheckDetailMeta) {
+        draftCheckDetailMeta.textContent = `${detail.checked_by || "-"} / ${detail.checked_at || "-"}`;
+      }
+      if (draftCheckDetailSummary) {
+        const legal = detail.legal_reason_summary ? `法定: ${detail.legal_reason_summary}` : "法定: 不足なし";
+        const specific = detail.specific_reason_summary ? `特定: ${detail.specific_reason_summary}` : "特定: 不足なし";
+        draftCheckDetailSummary.textContent = `${legal} / ${specific}`;
+      }
+      if (draftCheckDetailBody) {
+        const rows = Array.isArray(detail.details) ? detail.details : [];
+        if (!rows.length) {
+          draftCheckDetailBody.innerHTML = '<tr><td colspan="5">詳細はありません。</td></tr>';
+        } else {
+          draftCheckDetailBody.innerHTML = rows.map((row) => {
+            const rowStatus = row.status || "-";
+            return `
+              <tr>
+                <td>${escapeHtml(row.scope || "-")}</td>
+                <td><strong>${escapeHtml(row.detail_no || "-")}</strong></td>
+                <td>${escapeHtml(row.name || "-")}</td>
+                <td><span class="status-pill ${manualDraftCheckStatusClass(rowStatus)}">${escapeHtml(rowStatus)}</span></td>
+                <td>${escapeHtml(row.reason || "")}</td>
+              </tr>
+            `;
+          }).join("");
+        }
+      }
+      if (draftCheckDetailModal) {
+        draftCheckDetailModal.hidden = false;
+        document.body.classList.add("has-open-modal");
+      }
+    };
+
     const createManualDraftFromPerson = async (item, button) => {
       const originalText = button?.textContent || "";
       if (button) {
@@ -2166,6 +2242,9 @@
     document.querySelector("[data-manual-draft-check-visible]")?.addEventListener("click", (event) => {
       checkVisibleManualDrafts(event.currentTarget);
     });
+    for (const button of document.querySelectorAll("[data-manual-draft-check-detail]")) {
+      button.addEventListener("click", () => openManualDraftCheckDetail(button));
+    }
 
     const setDraftPersonMessage = (message) => {
       manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;

@@ -33,6 +33,7 @@ from scripts.from_medical.script_lib.article44_checker import check_article44
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
 from scripts.from_medical.script_lib.article44_value_loader import _build_value_map as build_article44_value_map
 from scripts.from_medical.script_lib.check_exam_results import (
+    ARTICLE44_DETAIL_NAMES,
     aggregate_article44_legal_result,
     article44_result_columns,
     validate_article44_result,
@@ -7817,25 +7818,35 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
         ) v
           ON v.manual_exam_entry_draft_id = d.manual_exam_entry_draft_id
         """
+    article44_check_columns = ",\n          ".join(
+        f"NULL AS a44_{detail_no}_status, NULL AS a44_{detail_no}_reason"
+        for detail_no in ARTICLE44_DETAIL_NAMES
+    )
     check_join = ""
-    check_select = """
+    check_select = f"""
           NULL AS draft_legal_check_result,
           NULL AS draft_legal_reason_summary,
           NULL AS draft_specific_check_result,
           NULL AS draft_specific_reason_summary,
           NULL AS draft_checked_at,
           NULL AS draft_updated_at_snapshot,
-          NULL AS draft_checked_by_name
+          NULL AS draft_checked_by_name,
+          {article44_check_columns}
     """
     if manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_check_results"):
-        check_select = """
+        article44_check_columns = ",\n          ".join(
+            f"dcr.a44_{detail_no}_status, dcr.a44_{detail_no}_reason"
+            for detail_no in ARTICLE44_DETAIL_NAMES
+        )
+        check_select = f"""
           dcr.legal_check_result AS draft_legal_check_result,
           dcr.legal_reason_summary AS draft_legal_reason_summary,
           dcr.specific_check_result AS draft_specific_check_result,
           dcr.specific_reason_summary AS draft_specific_reason_summary,
           dcr.checked_at AS draft_checked_at,
           dcr.draft_updated_at_snapshot AS draft_updated_at_snapshot,
-          COALESCE(cbu.display_name, cbu.employee_no, CONCAT('user ', dcr.checked_by_app_user_id)) AS draft_checked_by_name
+          COALESCE(cbu.display_name, cbu.employee_no, CONCAT('user ', dcr.checked_by_app_user_id)) AS draft_checked_by_name,
+          {article44_check_columns}
         """
         check_join = f"""
         LEFT JOIN {qname(health_db())}.manual_exam_entry_draft_check_results dcr
@@ -7903,6 +7914,7 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
         row["draft_check_display_status"] = manual_exam_draft_check_display_status(row)
+        row["draft_check_details"] = manual_exam_draft_check_details(row)
     return rows
 
 
@@ -7922,6 +7934,25 @@ def manual_exam_draft_check_display_status(row: Mapping[str, Any]) -> str:
     if legal == RESULT_OK and specific in {RESULT_OK, RESULT_NOT_APPLICABLE}:
         return "OK"
     return "UNDETERMINABLE"
+
+
+def manual_exam_draft_check_details(row: Mapping[str, Any]) -> list[dict[str, str | None]]:
+    if not row.get("draft_checked_at"):
+        return []
+    details: list[dict[str, str | None]] = []
+    for detail_no, detail_name in ARTICLE44_DETAIL_NAMES.items():
+        status = _manual_text(row.get(f"a44_{detail_no}_status"))
+        reason = _manual_text(row.get(f"a44_{detail_no}_reason"))
+        details.append(
+            {
+                "scope": "法定",
+                "detail_no": detail_no,
+                "name": detail_name,
+                "status": status,
+                "reason": reason,
+            }
+        )
+    return details
 
 
 def load_manual_exam_entry_draft_by_id(cur: Any, draft_id: int) -> dict[str, Any] | None:
