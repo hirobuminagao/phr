@@ -523,7 +523,7 @@ def load_admin_user_rows(cur: Any, *, filters: dict[str, str] | None = None) -> 
 
 def load_app_user_options(cur: Any) -> list[dict[str, Any]]:
     cur.execute(
-        """
+        f"""
         SELECT
           app_user_id,
           employee_no,
@@ -532,7 +532,7 @@ def load_app_user_options(cur: Any) -> list[dict[str, Any]]:
           department_name,
           is_active,
           approval_status
-        FROM app_users
+        FROM {qname(app_db())}.app_users
         ORDER BY
           CASE WHEN approval_status = 'APPROVED' AND is_active = 1 THEN 0 ELSE 1 END,
           COALESCE(display_name_kana, display_name, employee_no),
