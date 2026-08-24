@@ -1850,8 +1850,6 @@
     const draftApplyConfirmButton = document.querySelector("[data-manual-draft-apply-confirm]");
     let activeDraftApplyButton = null;
     const draftCheckDetailModal = document.querySelector("#manual-draft-check-detail-modal");
-    const draftCheckDetailStatus = document.querySelector("[data-manual-draft-check-detail-status]");
-    const draftCheckDetailSummary = document.querySelector("[data-manual-draft-check-detail-summary]");
     const draftCheckDetailMain = document.querySelector("[data-manual-draft-check-detail-main]");
     const draftCheckDetailMeta = document.querySelector("[data-manual-draft-check-detail-meta]");
     const draftCheckDetailBody = document.querySelector("[data-manual-draft-check-detail-body]");
@@ -2125,21 +2123,11 @@
       } catch (_error) {
         detail = {};
       }
-      const status = detail.status || "UNCHECKED";
-      if (draftCheckDetailStatus) {
-        draftCheckDetailStatus.className = `status-pill ${manualDraftCheckStatusClass(status)}`;
-        draftCheckDetailStatus.textContent = manualDraftCheckStatusLabel(status);
-      }
       if (draftCheckDetailMain) {
-        draftCheckDetailMain.textContent = `draft ${detail.draft_id || draftId} / 法定 ${detail.legal_check_result || "-"} / 特定 ${manualDraftCheckStatusLabel(detail.specific_check_result)}`;
+        draftCheckDetailMain.textContent = `draft ${detail.draft_id || draftId}`;
       }
       if (draftCheckDetailMeta) {
-        draftCheckDetailMeta.textContent = `${detail.checked_by || "-"} / ${detail.checked_at || "-"}`;
-      }
-      if (draftCheckDetailSummary) {
-        const legal = detail.legal_reason_summary ? `法定: ${detail.legal_reason_summary}` : "法定: 不足なし";
-        const specific = detail.specific_reason_summary ? `特定: ${detail.specific_reason_summary}` : "特定: 不足なし";
-        draftCheckDetailSummary.textContent = `${legal} / ${specific}`;
+        draftCheckDetailMeta.textContent = ` / ${detail.checked_by || "-"} / ${detail.checked_at || "-"}`;
       }
       if (draftCheckDetailBody) {
         const rows = Array.isArray(detail.details) ? detail.details : [];

@@ -27,7 +27,7 @@ from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.etl.metrics import RunMetrics
 from scripts.lib.etl.runs import finish_run, start_run
 from scripts.lib.examination.lookup import qname
-from scripts.lib.examination.models import RESULT_NG, RESULT_OK
+from scripts.lib.examination.models import RESULT_NG, RESULT_OK, STATUS_OK
 from scripts.lib.examination.report_classification import fiscal_year_end_date
 from scripts.from_medical.script_lib.article44_checker import check_article44
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
@@ -47,7 +47,10 @@ from scripts.from_medical.script_lib.specific_health_checker import (
     RESULT_NOT_APPLICABLE,
     RESULT_UNDETERMINABLE,
     SPECIFIC_REQUIRED_NAMECODES,
+    SPECIFIC_ITEM_NAMES,
     aggregate_specific_result,
+    check_required_specific_value,
+    specific_target_state,
 )
 from scripts.from_medical.script_lib.specific_health_required_namecodes import fetch_specific_health_required_namecodes
 from scripts.hia.script_lib.config_loader import config_bool, config_value, load_yaml_config
@@ -7805,6 +7808,21 @@ def manual_exam_entry_table_exists(cur: Any, schema_name: str, table_name: str) 
     return bool(row and int(row.get("cnt") or 0) > 0)
 
 
+def manual_exam_entry_column_exists(cur: Any, schema_name: str, table_name: str, column_name: str) -> bool:
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = %s
+          AND column_name = %s
+        """,
+        (schema_name, table_name, column_name),
+    )
+    row = cur.fetchone()
+    return bool(row and int(row.get("cnt") or 0) > 0)
+
+
 def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filter: str = "") -> list[dict[str, Any]]:
     value_join = ""
     value_select = "0 AS value_count"
@@ -7828,12 +7846,18 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           NULL AS draft_legal_reason_summary,
           NULL AS draft_specific_check_result,
           NULL AS draft_specific_reason_summary,
+          NULL AS specific_detail_json,
           NULL AS draft_checked_at,
           NULL AS draft_updated_at_snapshot,
           NULL AS draft_checked_by_name,
           {article44_check_columns}
     """
     if manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_check_results"):
+        specific_detail_select = (
+            "dcr.specific_detail_json"
+            if manual_exam_entry_column_exists(cur, health_db(), "manual_exam_entry_draft_check_results", "specific_detail_json")
+            else "NULL AS specific_detail_json"
+        )
         article44_check_columns = ",\n          ".join(
             f"dcr.a44_{detail_no}_status, dcr.a44_{detail_no}_reason"
             for detail_no in ARTICLE44_DETAIL_NAMES
@@ -7843,6 +7867,7 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           dcr.legal_reason_summary AS draft_legal_reason_summary,
           dcr.specific_check_result AS draft_specific_check_result,
           dcr.specific_reason_summary AS draft_specific_reason_summary,
+          {specific_detail_select},
           dcr.checked_at AS draft_checked_at,
           dcr.draft_updated_at_snapshot AS draft_updated_at_snapshot,
           COALESCE(cbu.display_name, cbu.employee_no, CONCAT('user ', dcr.checked_by_app_user_id)) AS draft_checked_by_name,
@@ -7936,6 +7961,22 @@ def manual_exam_draft_check_display_status(row: Mapping[str, Any]) -> str:
     return "UNDETERMINABLE"
 
 
+def _json_list(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [dict(item) for item in value if isinstance(item, Mapping)]
+    if isinstance(value, (bytes, bytearray)):
+        value = value.decode("utf-8", errors="replace")
+    if not isinstance(value, str) or not value.strip():
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [dict(item) for item in parsed if isinstance(item, Mapping)]
+
+
 def manual_exam_draft_check_details(row: Mapping[str, Any]) -> list[dict[str, str | None]]:
     if not row.get("draft_checked_at"):
         return []
@@ -7948,6 +7989,49 @@ def manual_exam_draft_check_details(row: Mapping[str, Any]) -> list[dict[str, st
                 "scope": "法定",
                 "detail_no": detail_no,
                 "name": detail_name,
+                "status": status,
+                "reason": reason,
+            }
+        )
+    for detail in _json_list(row.get("specific_detail_json")):
+        details.append(
+            {
+                "scope": "特定",
+                "detail_no": _manual_text(detail.get("namecode")),
+                "name": _manual_text(detail.get("name")),
+                "status": _manual_text(detail.get("status")),
+                "reason": _manual_text(detail.get("reason")),
+            }
+        )
+    return details
+
+
+def build_manual_exam_specific_detail_rows(
+    *,
+    value_map: Mapping[str, Any],
+    required_namecodes: tuple[Any, ...],
+    birthdate: Any,
+    age_reference_date: date | None,
+) -> list[dict[str, str | None]]:
+    target = specific_target_state(birthdate=birthdate, age_reference_date=age_reference_date)
+    target_reason = target.reason or target.status
+    details: list[dict[str, str | None]] = []
+    for required in required_namecodes:
+        namecode = required.namecode
+        if target.status != STATUS_OK:
+            status = RESULT_UNDETERMINABLE
+            reason = target_reason
+        elif target.reason == "NOT_TARGET_AGE":
+            status = RESULT_NOT_APPLICABLE
+            reason = target_reason
+        else:
+            result = check_required_specific_value(value_map, namecode)
+            status = result.status
+            reason = result.reason
+        details.append(
+            {
+                "namecode": namecode,
+                "name": SPECIFIC_ITEM_NAMES.get(namecode, namecode),
                 "status": status,
                 "reason": reason,
             }
@@ -8073,6 +8157,7 @@ def insert_manual_exam_draft_check_result(
     legal_summary: str | None,
     specific_result: str,
     specific_summary: str | None,
+    specific_details: list[dict[str, str | None]],
     user_id: int,
 ) -> None:
     draft_id = int(draft["manual_exam_entry_draft_id"])
@@ -8092,6 +8177,11 @@ def insert_manual_exam_draft_check_result(
         "specific_check_result": specific_result,
         "legal_reason_summary": legal_summary,
         "specific_reason_summary": specific_summary,
+        "specific_detail_json": json.dumps(
+            specific_details,
+            ensure_ascii=False,
+            default=manual_exam_json_default,
+        ),
         "draft_updated_at_snapshot": draft.get("updated_at"),
         "checked_by_app_user_id": user_id,
     }
@@ -8137,6 +8227,7 @@ def insert_manual_exam_draft_check_result(
                     "specific_check_result": specific_result,
                     "legal_reason_summary": legal_summary,
                     "specific_reason_summary": specific_summary,
+                    "specific_detail_count": len(specific_details),
                 },
                 ensure_ascii=False,
                 default=manual_exam_json_default,
@@ -8185,6 +8276,12 @@ def check_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
         age_reference_date=fiscal_end,
         legal_result=legal_result,
     )
+    specific_details = build_manual_exam_specific_detail_rows(
+        value_map=specific_value_map,
+        required_namecodes=specific_required,
+        birthdate=draft.get("birthdate"),
+        age_reference_date=fiscal_end,
+    )
     insert_manual_exam_draft_check_result(
         cur,
         draft=draft,
@@ -8193,6 +8290,7 @@ def check_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
         legal_summary=legal_summary,
         specific_result=specific_result,
         specific_summary=specific_summary,
+        specific_details=specific_details,
         user_id=user_id,
     )
     return {

@@ -1500,15 +1500,14 @@ a.home-menu-card.is-navigating {
   transform: none;
 }
 
-.manual-draft-check-detail-overview {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  margin: 18px 0;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel-soft);
+.manual-draft-check-detail-modal .edit-modal__head {
+  position: sticky;
+  top: -22px;
+  z-index: 2;
+  margin: -22px -22px 18px;
+  padding: 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
 }
 
 .manual-draft-check-detail-table-panel {
