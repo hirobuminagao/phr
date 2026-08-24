@@ -436,8 +436,17 @@ Migration:
 
 対象:
 
+- `apps/health_exam_admin/templates/manual_exam_entry_drafts.html`
 - `apps/health_exam_admin/templates/manual_exam_entry.html`
 - `apps/health_exam_admin/main.py`
+
+初期画面:
+
+- `/manual-exam-entry-drafts` を「健診結果仮登録リスト」とする。
+- HOMEからは手入力画面へ直接入るより先に、仮登録リストへ入る導線を置く。
+- 新規登録は、仮登録リスト上で「人を選んで新規」または「caseを選んで新規」を選び、仮登録IDを発行してから手入力画面へ遷移する。
+- リストは人ごとに表示し、登録者、更新者、入力値数、反映状態を確認できるようにする。
+- DDL/migration未適用環境では、画面は表示しつつ「仮登録テーブル未適用」として落ちないようにする。
 - `apps/health_exam_admin/static/app.js`
 - `apps/health_exam_admin/static/app.css`
 

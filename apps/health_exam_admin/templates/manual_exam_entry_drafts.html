@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% set title = "健診結果仮登録リスト" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">MANUAL EXAM DRAFTS</p>
+    <h1>健診結果仮登録リスト</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/manual-exam-entry">手入力画面</a>
+    <a class="ghost-button" href="/exam-export-cases">個人case一覧</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if not schema_ready %}
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <h2>仮登録テーブル未適用</h2>
+          <p class="subtle">DB反映前でも画面確認できる状態です。テーブル適用後に、draft id発行・下書き保存・本データ反映を接続します。</p>
+        </div>
+        <span class="status-pill status-pending">DB未作成</span>
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="summary-grid">
+    <div class="summary-card">
+      <span>仮登録</span>
+      <strong>{{ summary.total }}</strong>
+      <small>表示中</small>
+    </div>
+    <div class="summary-card">
+      <span>DRAFT</span>
+      <strong>{{ summary.draft }}</strong>
+      <small>入力中</small>
+    </div>
+    <div class="summary-card">
+      <span>READY</span>
+      <strong>{{ summary.ready }}</strong>
+      <small>反映待ち</small>
+    </div>
+    <div class="summary-card">
+      <span>APPLIED</span>
+      <strong>{{ summary.applied }}</strong>
+      <small>本データ反映済み</small>
+    </div>
+    <div class="summary-card">
+      <span>ERROR</span>
+      <strong>{{ summary.error }}</strong>
+      <small>要確認</small>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>新規登録</h2>
+        <p class="subtle">人、または既存caseを選択して仮登録IDを発行し、手入力画面へ進む流れにします。</p>
+      </div>
+    </div>
+    <div class="home-menu-grid">
+      <a class="home-menu-card" href="/manual-exam-entry?start=person">
+        <span class="status-pill status-ready">次実装</span>
+        <div>
+          <strong>人を選んで新規</strong>
+          <small>加入者検索から対象者を選び、仮登録IDを発行して紙のみ入力を始める</small>
+        </div>
+      </a>
+      <a class="home-menu-card" href="/manual-exam-entry?start=case">
+        <span class="status-pill status-ready">次実装</span>
+        <div>
+          <strong>caseを選んで新規</strong>
+          <small>既存caseを起点に、不足項目の補足入力用sourceを作る</small>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>仮登録リスト</h2>
+        <p class="subtle">人ごとに仮登録の状態、登録者、更新者、入力済み値数を確認します。</p>
+      </div>
+      <span class="status-pill status-muted">最新200件</span>
+    </div>
+
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>状態</th>
+            <th>入力対象</th>
+            <th>健診機関 / 受診日</th>
+            <th>入力目的</th>
+            <th>値</th>
+            <th>登録者 / 更新者</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for draft in draft_rows %}
+            <tr>
+              <td>
+                {% set status = (draft.draft_status or "DRAFT")|upper %}
+                <span class="status-pill {% if status == 'READY' %}status-ready{% elif status == 'APPLIED' %}status-muted{% elif status in ['ERROR', 'FAILED'] %}status-danger{% else %}status-pending{% endif %}">
+                  {{ status }}
+                </span>
+                <small>draft {{ draft.manual_exam_entry_draft_id }}</small>
+              </td>
+              <td>
+                <strong>{{ draft.name_kana or draft.name_full or "氏名未設定" }}</strong>
+                <small>
+                  {{ draft.name_full or "" }}
+                  {% if draft.hia_subscriber_id %}<br>HIA {{ draft.hia_subscriber_id }}{% endif %}
+                  {% if draft.insurance_symbol or draft.insurance_number %}
+                    <br>{{ draft.insurance_symbol or "-" }}-{{ draft.insurance_number or "-" }}{% if draft.insurance_branch_number %}-{{ draft.insurance_branch_number }}{% endif %}
+                  {% endif %}
+                  {% if draft.exam_export_case_id %}<br>case {{ draft.exam_export_case_id }}{% endif %}
+                </small>
+              </td>
+              <td>
+                <strong>{{ draft.facility_name or draft.facility_code or "未設定" }}</strong>
+                <small>
+                  {% if draft.facility_code %}{{ draft.facility_code }}{% endif %}
+                  {% if draft.facility_document_id %}<br>doc {{ draft.facility_document_id }}{% endif %}
+                  {% if draft.exam_date %}<br>{{ draft.exam_date }}{% endif %}
+                </small>
+              </td>
+              <td>
+                <strong>{{ draft.entry_purpose or "未設定" }}</strong>
+                <small>event {{ draft.event_id or "-" }}</small>
+              </td>
+              <td>
+                <strong>{{ draft.value_count }}</strong>
+                <small>入力値</small>
+              </td>
+              <td>
+                <strong>{{ draft.created_by_name or ("user " ~ draft.created_by_app_user_id) }}</strong>
+                <small>
+                  登録 {{ draft.created_at or "-" }}
+                  <br>更新 {{ draft.updated_by_name or ("user " ~ draft.updated_by_app_user_id) }} / {{ draft.updated_at or "-" }}
+                </small>
+              </td>
+              <td>
+                <a class="ghost-button compact-action-button" href="/manual-exam-entry?draft_id={{ draft.manual_exam_entry_draft_id }}">入力へ</a>
+                {% if draft.exam_export_case_id %}
+                  <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ draft.exam_export_case_id }}">case</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="7">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

@@ -7565,6 +7565,102 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
     return rows
 
 
+def manual_exam_entry_table_exists(cur: Any, schema_name: str, table_name: str) -> bool:
+    cur.execute(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM information_schema.tables
+        WHERE table_schema = %s
+          AND table_name = %s
+        """,
+        (schema_name, table_name),
+    )
+    row = cur.fetchone()
+    return bool(row and int(row.get("cnt") or 0) > 0)
+
+
+def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200) -> list[dict[str, Any]]:
+    value_join = ""
+    value_select = "0 AS value_count"
+    if manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_values"):
+        value_select = "COALESCE(v.value_count, 0) AS value_count"
+        value_join = f"""
+        LEFT JOIN (
+          SELECT manual_exam_entry_draft_id, COUNT(*) AS value_count
+          FROM {qname(health_db())}.manual_exam_entry_draft_values
+          GROUP BY manual_exam_entry_draft_id
+        ) v
+          ON v.manual_exam_entry_draft_id = d.manual_exam_entry_draft_id
+        """
+
+    cur.execute(
+        f"""
+        SELECT
+          d.manual_exam_entry_draft_id,
+          d.event_id,
+          d.draft_status,
+          d.entry_purpose,
+          d.exam_export_case_id,
+          d.subscriber_id,
+          d.hia_subscriber_id,
+          d.person_id_custom,
+          d.insurance_symbol,
+          d.insurance_number,
+          d.insurance_branch_number,
+          d.name_full,
+          d.name_kana,
+          d.birthdate,
+          d.gender_code,
+          d.facility_code,
+          d.facility_name,
+          d.facility_document_id,
+          d.exam_date,
+          d.created_by_app_user_id,
+          d.updated_by_app_user_id,
+          d.applied_exam_ledger_id,
+          d.created_at,
+          d.updated_at,
+          d.applied_at,
+          {value_select},
+          COALESCE(cu.display_name, cu.employee_no, CONCAT('user ', d.created_by_app_user_id)) AS created_by_name,
+          COALESCE(uu.display_name, uu.employee_no, CONCAT('user ', d.updated_by_app_user_id)) AS updated_by_name
+        FROM {qname(health_db())}.manual_exam_entry_drafts d
+        {value_join}
+        LEFT JOIN {qname(app_db())}.app_users cu
+          ON cu.app_user_id = d.created_by_app_user_id
+        LEFT JOIN {qname(app_db())}.app_users uu
+          ON uu.app_user_id = d.updated_by_app_user_id
+        ORDER BY
+          d.updated_at DESC,
+          d.manual_exam_entry_draft_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def summarize_manual_exam_entry_drafts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {
+        "total": len(rows),
+        "draft": 0,
+        "ready": 0,
+        "applied": 0,
+        "error": 0,
+    }
+    for row in rows:
+        status = str(row.get("draft_status") or "DRAFT").upper()
+        if status == "READY":
+            summary["ready"] += 1
+        elif status == "APPLIED":
+            summary["applied"] += 1
+        elif status in {"ERROR", "FAILED"}:
+            summary["error"] += 1
+        else:
+            summary["draft"] += 1
+    return summary
+
+
 def load_manual_exam_article44_flags(cur: Any, rows: list[dict[str, Any]]) -> dict[str, list[dict[str, str]]]:
     namecodes = sorted({str(row.get("namecode") or "").strip() for row in rows if str(row.get("namecode") or "").strip()})
     if not namecodes:
@@ -8059,6 +8155,39 @@ def manual_exam_entry(request: Request) -> Response:
             "filters": {
                 "event_id": request.query_params.get("event_id", "2"),
             },
+        },
+    )
+
+
+@app.get("/manual-exam-entry-drafts", response_class=HTMLResponse)
+def manual_exam_entry_drafts(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            schema_ready = manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts")
+            draft_rows = load_manual_exam_entry_draft_rows(cur) if schema_ready else []
+            summary = summarize_manual_exam_entry_drafts(draft_rows)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "manual_exam_entry_drafts.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "schema_ready": schema_ready,
+            "draft_rows": draft_rows,
+            "summary": summary,
         },
     )
 
