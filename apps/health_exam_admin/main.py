@@ -7016,6 +7016,7 @@ def load_ops_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list
           xelc.list_case_status,
           xelc.export_readiness_status_snapshot,
           xelc.export_readiness_reason_snapshot,
+          xelc.export_error_reason,
           xelc.added_by,
           xelc.added_at,
           xelc.exported_at,

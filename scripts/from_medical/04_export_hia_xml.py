@@ -843,6 +843,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                 if run_id is not None and writes_official_export_state(config):
                     validation_error = validate_export_list_cases(cur, config=config)
                     if validation_error:
+                        summary.errors += 1
                         conn.commit()
                         raise ValueError(validation_error)
                     conn.commit()

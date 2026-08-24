@@ -333,8 +333,11 @@
           {% for case in cases %}
           <tr>
             <td>
-              <span class="status-pill status-ready">{{ readiness_label(case.export_readiness_status) }}</span>
+              <span class="status-pill {{ 'status-danger' if case.list_case_status == 'EXPORT_ERROR' else 'status-ready' }}">{{ readiness_label(case.export_readiness_status) }}</span>
               <small>{{ case.list_case_status }}</small>
+              {% if case.export_error_reason %}
+              <small class="text-danger">{{ case.export_error_reason }}</small>
+              {% endif %}
             </td>
             <td>
               <strong>{{ case.insured_card_symbol or "" }}-{{ case.insured_card_number or "" }}</strong>
@@ -357,7 +360,7 @@
             {% if can_edit %}
             <td>
               <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/{{ case.xml_export_list_case_id }}/remove" class="inline-action-form">
-                <input name="remove_reason" placeholder="理由 任意">
+                <input name="remove_reason" value="{{ case.export_error_reason or '' }}" placeholder="理由 任意">
                 <button class="danger-button" type="submit">リストから外す</button>
               </form>
             </td>
