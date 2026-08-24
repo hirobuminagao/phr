@@ -8763,7 +8763,7 @@ async def delete_manual_exam_entry_draft_api(draft_id: int, request: Request) ->
             if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
                 return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
             try:
-                before = delete_manual_exam_entry_draft(cur, draft_id=draft_id)
+                delete_manual_exam_entry_draft(cur, draft_id=draft_id)
             except ValueError as exc:
                 if str(exc) == "draft_already_applied":
                     return JSONResponse({"message": "本データ反映済みの仮登録は削除できません。"}, status_code=400)
@@ -8772,8 +8772,7 @@ async def delete_manual_exam_entry_draft_api(draft_id: int, request: Request) ->
         except Exception:
             conn.rollback()
             raise
-    label = before.get("name_kana") or before.get("name_full") or f"draft {draft_id}"
-    return JSONResponse({"message": f"{label} の仮登録を削除しました。"})
+    return JSONResponse({"message": f"draft {draft_id} の仮登録を削除しました。"})
 
 
 @app.post("/api/manual-exam-entry-drafts/save")
