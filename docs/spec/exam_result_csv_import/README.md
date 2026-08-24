@@ -87,6 +87,9 @@
 - `42_admin_screen_scope_and_priority.md`
   - 健診管理画面全体のスコープ、優先度、マスタ管理画面候補、個人別作業権限方針を整理する。
   - 出力リスト、受領ファイル一覧、統合ledger一覧、event設定、健診機関・alias管理などの実装済み画面と、HIAアップロード、加入者アップロード、予約CSV、紙健診入力、マスタ編集などの後続画面を分けて扱う。
+- `43_manual_exam_entry_draft_to_official_design.md`
+  - 健診結果手入力の仮登録、本データ反映、仮登録削除、法定チェック、特定健診チェックへの接続方針を整理する。
+  - 手入力値をいきなり `exam_ledgers` / `exam_item_values` に作らず、仮登録を経由して正式sourceへ昇格する設計を正とする。
 
 ## ADR Policy
 
