@@ -120,7 +120,8 @@
             <th>健診実施日</th>
             <th>入力目的</th>
             <th>値</th>
-            <th>参考チェック</th>
+            <th>参考チェック状態</th>
+            <th>参考チェック操作</th>
             <th>登録者 / 更新者</th>
             <th>操作</th>
           </tr>
@@ -215,9 +216,9 @@
                 </span>
                 <small>
                   法定 {{ draft.draft_legal_check_result or "-" }}
-                  <br>特定 {{ check_result_label(draft.draft_specific_check_result) if draft.draft_specific_check_result else "-" }}
+                  / 特定 {{ check_result_label(draft.draft_specific_check_result) if draft.draft_specific_check_result else "-" }}
                   {% if draft.draft_checked_at %}
-                    <br>{{ draft.draft_checked_by_name or "-" }} / {{ draft.draft_checked_at }}
+                    <br>{{ draft.draft_checked_at }}
                   {% endif %}
                   {% if draft.draft_legal_reason_summary %}
                     <br>法定 {{ draft.draft_legal_reason_summary }}
@@ -242,25 +243,14 @@
                   </script>
                 {% endif %}
               </td>
-              <td>
-                <strong>{{ draft.created_by_name or ("user " ~ draft.created_by_app_user_id) }}</strong>
-                <small>
-                  登録 {{ draft.created_at or "-" }}
-                  <br>更新 {{ draft.updated_by_name or ("user " ~ draft.updated_by_app_user_id) }} / {{ draft.updated_at or "-" }}
-                </small>
-              </td>
-              <td>
-                <a class="ghost-button compact-action-button" href="/manual-exam-entry?draft_id={{ draft.manual_exam_entry_draft_id }}">入力へ</a>
-                {% if draft.exam_export_case_id %}
-                  <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ draft.exam_export_case_id }}">case</a>
-                {% endif %}
+              <td class="manual-draft-check-actions">
                 {% if draft.value_count > 0 %}
                   <button
                     type="button"
                     class="ghost-button compact-action-button"
                     data-manual-draft-check
                     data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                  >{{ "再チェック" if draft.draft_checked_at else "参考チェック" }}</button>
+                  >{{ "再チェック" if draft.draft_checked_at else "チェック" }}</button>
                 {% endif %}
                 {% if draft.draft_checked_at %}
                   <button
@@ -271,30 +261,45 @@
                     data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
                   >詳細</button>
                 {% endif %}
-                {% if can_manage_manual_entry and status in ['DRAFT', 'READY', 'ERROR'] and draft.value_count > 0 %}
-                  <button
-                    type="button"
-                    class="primary-button compact-action-button"
-                    data-manual-draft-apply
-                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                    data-draft-label="{{ draft.name_kana or draft.name_full or ('draft ' ~ draft.manual_exam_entry_draft_id) }}"
-                    data-value-count="{{ draft.value_count }}"
-                  >本データ反映</button>
-                {% endif %}
-                {% if can_manage_manual_entry and status != 'APPLIED' %}
-                  <button
-                    type="button"
-                    class="danger-button compact-action-button"
-                    data-manual-draft-delete
-                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                    data-draft-label="{{ draft.name_kana or draft.name_full or ('draft ' ~ draft.manual_exam_entry_draft_id) }}"
-                  >削除</button>
-                {% endif %}
+              </td>
+              {% set created_text = (draft.created_by_name or ("user " ~ draft.created_by_app_user_id)) ~ " / " ~ (draft.created_at or "-") %}
+              {% set updated_text = (draft.updated_by_name or ("user " ~ draft.updated_by_app_user_id)) ~ " / " ~ (draft.updated_at or "-") %}
+              <td title="登録 {{ created_text }}&#10;更新 {{ updated_text }}">
+                <strong>登録 {{ draft.created_by_name or ("user " ~ draft.created_by_app_user_id) }}</strong>
+                <small>
+                  {{ draft.created_at or "-" }}
+                  <br>更新 {{ draft.updated_by_name or ("user " ~ draft.updated_by_app_user_id) }}
+                  <br>{{ draft.updated_at or "-" }}
+                </small>
+              </td>
+              <td>
+                <div class="inline-action-stack manual-draft-primary-actions">
+                  <a class="ghost-button compact-action-button" href="/manual-exam-entry?draft_id={{ draft.manual_exam_entry_draft_id }}">入力へ</a>
+                  {% if can_manage_manual_entry and status in ['DRAFT', 'READY', 'ERROR'] and draft.value_count > 0 %}
+                    <button
+                      type="button"
+                      class="primary-button compact-action-button"
+                      data-manual-draft-apply
+                      data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                      data-draft-label="{{ draft.name_kana or draft.name_full or ('draft ' ~ draft.manual_exam_entry_draft_id) }}"
+                      data-value-count="{{ draft.value_count }}"
+                    >本データ反映</button>
+                  {% endif %}
+                  {% if can_manage_manual_entry and status != 'APPLIED' %}
+                    <button
+                      type="button"
+                      class="danger-button compact-action-button"
+                      data-manual-draft-delete
+                      data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                      data-draft-label="{{ draft.name_kana or draft.name_full or ('draft ' ~ draft.manual_exam_entry_draft_id) }}"
+                    >削除</button>
+                  {% endif %}
+                </div>
               </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="10">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
+              <td colspan="11">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
             </tr>
           {% endfor %}
         </tbody>

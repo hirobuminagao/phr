@@ -1701,12 +1701,20 @@ a.home-menu-card.is-navigating {
 
 .manual-draft-list-table th:nth-child(8),
 .manual-draft-list-table td:nth-child(8) {
-  width: 180px;
-  max-width: 180px;
+  width: 170px;
+  max-width: 170px;
+  white-space: normal;
 }
 
 .manual-draft-list-table th:nth-child(9),
 .manual-draft-list-table td:nth-child(9) {
+  width: 90px;
+  max-width: 90px;
+  white-space: normal;
+}
+
+.manual-draft-list-table th:nth-child(10),
+.manual-draft-list-table td:nth-child(10) {
   width: 120px;
   max-width: 120px;
   white-space: normal;
@@ -1714,8 +1722,8 @@ a.home-menu-card.is-navigating {
 
 .manual-draft-list-table th:last-child,
 .manual-draft-list-table td:last-child {
-  width: 210px;
-  max-width: 210px;
+  width: 170px;
+  max-width: 170px;
 }
 
 .manual-draft-list-table td:last-child {
@@ -1728,13 +1736,24 @@ a.home-menu-card.is-navigating {
   padding-inline: 8px;
 }
 
+.manual-draft-list-table .manual-draft-check-actions,
 .manual-draft-list-table td:last-child .inline-action-stack {
+  display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   gap: 5px;
 }
 
+.manual-draft-list-table .manual-draft-check-actions .compact-action-button {
+  flex: 1 1 68px;
+  min-width: 0;
+  padding-inline: 6px;
+}
+
 .manual-draft-list-table td:last-child .compact-action-button {
-  flex: 1 1 82px;
+  flex: 1 1 76px;
+  min-width: 0;
+  padding-inline: 6px;
   max-width: 100%;
 }
 
