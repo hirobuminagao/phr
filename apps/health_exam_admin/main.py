@@ -8235,13 +8235,28 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
 
     event_id = _optional_int(draft.get("event_id")) or 2
     source_type = manual_exam_entry_source_type(draft.get("entry_purpose"))
+    document_id = f"manual-draft-{draft_id}"
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS applied_count
+        FROM {qname(health_db())}.exam_ledgers
+        WHERE document_id = %s
+           OR JSON_UNQUOTE(JSON_EXTRACT(raw_row_json, '$.manual_exam_entry_draft_id')) = %s
+        """,
+        (document_id, str(draft_id)),
+    )
+    applied_count_row = cur.fetchone() or {}
+    apply_sequence = int(applied_count_row.get("applied_count") or 0) + 1
     row_payload = {
         "source": "MANUAL_EXAM_ENTRY_DRAFT",
         "manual_exam_entry_draft_id": draft_id,
+        "apply_sequence": apply_sequence,
         "entry_purpose": draft.get("entry_purpose"),
         "value_count": len(values),
     }
-    row_sha256 = hashlib.sha256(f"manual_exam_entry_draft:{draft_id}".encode("utf-8")).hexdigest()
+    row_sha256 = hashlib.sha256(
+        f"manual_exam_entry_draft:{draft_id}:apply:{apply_sequence}".encode("utf-8")
+    ).hexdigest()
     identity = manual_exam_entry_identity_from_draft(draft)
     person_id_custom = identity.get("person_id_custom") or _manual_text(draft.get("person_id_custom"))
     identity_hash = identity.get("identity_hash")
@@ -8344,7 +8359,7 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
             match_status,
             "manual_exam_entry",
             match_reason,
-            f"manual-draft-{draft_id}",
+            document_id,
             _manual_text(draft.get("facility_document_id")),
             _manual_text(draft.get("insurer_number")),
             exam_facility_id,

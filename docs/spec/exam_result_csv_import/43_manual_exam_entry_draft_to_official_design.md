@@ -365,6 +365,14 @@ caseから選択した場合:
 - 反映処理はトランザクションで行う。
 - 反映中に失敗した場合はrollbackし、draftを `ERROR` にするか、エラーをauditに残して `READY` のまま再実行可能にするかを実装時に決める。
 
+再生成の扱い:
+
+- 戻し後に同じdraftを再度本データ反映する場合、既存の正式ledgerは修正・再利用しない。
+- 新しい `exam_ledgers` / `exam_item_values` を作成し、`manual_exam_entry_drafts.applied_exam_ledger_id` は最新の正式ledgerへ付け替える。
+- 過去に作成した正式ledgerは `row_status = 'REVERTED_TO_DRAFT'` の履歴として残す。
+- `exam_ledgers.raw_row_json` には `manual_exam_entry_draft_id` と `apply_sequence` を持たせ、同じdraftから何回目に本データ反映されたledgerかを追えるようにする。
+- `exam_ledgers.row_sha256` は `manual_exam_entry_draft_id + apply_sequence` から作り、再生成のたびに別値にする。
+
 正式反映後の戻し:
 
 - 通常運用では、正式反映済みの `exam_ledgers` / `exam_item_values` を物理削除しない。
