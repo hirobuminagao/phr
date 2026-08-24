@@ -11,6 +11,7 @@
 
 - 仮データ登録
 - 仮登録リストからの削除
+- 本データ反映前の仮登録参考チェック
 - 仮登録から本データへの反映
 - 本データ反映後の法定チェック
 - 本データ反映後の特定健診チェック
@@ -29,6 +30,9 @@
   - `03_04_check_exam_export_cases.py`
 - 法定健診・特定健診の不足判定結果は `exam_item_values` に持たず、`exam_check_results` および `exam_case_check_review_items` 側で管理する既存方針を維持する。
 - 手入力値も、正式反映後はCSV/XML由来値と同じ `exam_item_values` として扱う。
+- 本データ反映前の仮登録チェック結果は、正式な `exam_check_results` へ混ぜない。
+- 仮登録チェック結果は、仮登録専用の結果テーブルへ保存し、画面上の参考チェックとして扱う。
+- XML出力可否、出力リスト作成、HIAアップロード可否は、本データ反映後の通常stepで作られる正式な `exam_check_results` を正とする。
 
 ## レイヤー方針
 
@@ -156,6 +160,47 @@ DB上のsource_type候補は以下とする。
 
 監査ログは `phr_app.app_audit_logs` にも残すが、業務データ側でdraftの履歴を追えるよう、draft専用auditも持つ。
 
+### `manual_exam_entry_draft_check_results`
+
+仮登録中の法定チェック・特定健診チェック結果を保存するテーブル。
+正式な `exam_check_results` と同じチェックロジックを使うが、保存先は分ける。
+
+目的:
+
+- 本データ反映前に「この仮登録で法定/特定健診が足りそうか」を確認する。
+- 仮登録リスト上で、DRAFT/READY/APPLIEDとは別に、チェック状況を見られるようにする。
+- 入力途中・確認前のdraftを、正式なsource/caseのチェック結果へ混ぜない。
+- 仮登録を削除しても、正式な `exam_check_results` や出力可否へ影響させない。
+
+主なカラム案:
+
+| カラム | 内容 |
+|---|---|
+| `manual_exam_entry_draft_check_result_id` | PK |
+| `manual_exam_entry_draft_id` | 対象draft |
+| `event_id` | 対象event |
+| `subscriber_id` | 加入者。任意 |
+| `hia_subscriber_id` | HIA加入者ID。任意 |
+| `legal_check_result` | 法定チェック結果 |
+| `legal_reason_summary` | 法定チェック理由 |
+| `specific_check_result` | 特定健診チェック結果 |
+| `specific_reason_summary` | 特定健診チェック理由 |
+| `article44_*` | 則44横持ち結果。正式 `exam_check_results` と同じ意味の項目 |
+| `specific_*` | 特定健診横持ち結果。正式 `exam_check_results` と同じ意味の項目 |
+| `draft_updated_at_snapshot` | チェック時点のdraft更新日時 |
+| `checked_by_app_user_id` | チェック実行者 |
+| `checked_at` | チェック実行日時 |
+| `created_at` / `updated_at` | 作成・更新日時 |
+
+方針:
+
+- `exam_check_results` へ `manual_exam_entry_draft_id` を足して共用しない。
+- 正式チェックと仮登録チェックの混在を避けるため、保存先は必ず分ける。
+- 最新結果テーブルとして扱い、同じdraftを再チェックした場合は同じdraftの結果を削除/再作成または上書きする。
+- 履歴は `manual_exam_entry_draft_audit_logs` または後続の専用履歴で扱い、初期版ではチェック結果テーブル自体を履歴テーブルにしない。
+- FK制約は既存方針に合わせて慎重に扱う。初期実装ではindexを優先し、運用DBでの救済性を残す。
+- この結果は出力可否の正にはしない。正式反映後に `03_00`〜`03_04` を実行し、正式な `exam_check_results` を作る。
+
 ## 仮登録画面フロー
 
 ### 1. 入力
@@ -280,6 +325,48 @@ caseから選択した場合:
 - 編集
 - 仮登録削除
 - 本データ反映
+- 仮登録参考チェック
+
+### 5-1. 仮登録参考チェック
+
+仮登録リスト上で、draftを本データ反映する前に法定チェック・特定健診チェックを実行できるようにする。
+
+位置づけ:
+
+- 本反映前の入力確認補助である。
+- 正式な受領sourceのチェックではない。
+- 出力可否判定には使わない。
+- 出力可否は、本データ反映後に通常stepで作成される `exam_check_results` を正とする。
+
+処理:
+
+1. チェック前に、画面上の最新入力を `manual_exam_entry_drafts` / `manual_exam_entry_draft_values` へ保存する。
+2. `manual_exam_entry_draft_values` から、正式チェック処理へ渡せる値マップを作る。
+3. 法定チェック・特定健診チェックの判定ロジックは、正式チェックと共通化する。
+4. 保存先だけ `manual_exam_entry_draft_check_results` に切り替える。
+5. 仮登録リストに、法定チェック結果、特定健診チェック結果、主な不足理由を表示する。
+
+判定不能:
+
+- `event_id` がない。
+- 健診実施日がない。
+- 生年月日がなく年度末年齢を計算できない。
+- 加入者や基本情報が不足し、対象判定に必要な前提が揃わない。
+
+上記の場合は、チェック処理を落とさず `判定不能` として保存し、理由を表示する。
+
+チェックロジック共通化:
+
+- `check_exam_results` の中核ロジックは、入力元を抽象化して再利用する。
+- 正式チェックでは `exam_item_values` / `exam_export_case_values` から値マップを作る。
+- 仮登録チェックでは `manual_exam_entry_draft_values` から値マップを作る。
+- 値マップ以降の「則44detail code」「特定健診detail code」「OK/MISSING/INVALID判定」は共通にする。
+
+注意:
+
+- 保存先が2つになるため、ルール追加時の影響範囲を必ず確認する。
+- 正式 `exam_check_results` の横持ち項目を追加した場合、必要に応じて `manual_exam_entry_draft_check_results` 側にも同じ項目を追加する。
+- 画面表示、DDL、migration、チェック結果保存処理の4点をセットで更新する。
 
 ### 6. 仮登録リストから削除
 
@@ -453,6 +540,7 @@ case単位:
 - `manual_exam_entry_drafts`
 - `manual_exam_entry_draft_values`
 - `manual_exam_entry_draft_audit_logs`
+- `manual_exam_entry_draft_check_results`
 
 DDL:
 
@@ -515,6 +603,7 @@ Migration:
 未実装:
 
 - `READY` 化する登録前チェック。
+- 仮登録参考チェック結果を `manual_exam_entry_draft_check_results` へ保存する処理。
 - ページ離脱時の未保存警告。
 - `ERROR -> READY` の明示操作。
 - `03_00`〜`03_04` が手入力sourceを期待どおり処理するかの試走確認。
@@ -641,6 +730,11 @@ Migration:
 未実装:
 
 - `READY` 化する登録前チェック。
+- 仮登録参考チェック。
+  - draft valuesから正式チェック互換の値マップを作る。
+  - 法定チェック・特定健診チェックの判定ロジックを共通利用する。
+  - 保存先は正式 `exam_check_results` ではなく `manual_exam_entry_draft_check_results` にする。
+  - 仮登録リストに参考チェック結果を表示する。
 - ページ離脱時の未保存警告。
 - `ERROR -> READY` の明示操作。
 - `03_00`〜`03_04` が手入力sourceを期待どおり処理するかの試走確認。
@@ -669,6 +763,10 @@ Migration:
 12. `03_01` が手入力sourceからcaseを作ることを確認/修正 後続
 13. `03_02` が手入力sourceを採用値候補に入れることを確認/修正 後続
 14. `03_04` で法定チェック・特定健診チェックへ反映 後続
+15. 仮登録参考チェックを追加 後続
+   - `manual_exam_entry_draft_check_results`
+   - draft値マップadapter
+   - 仮登録リストでの結果表示
 
 ## この設計で守ること
 
@@ -678,5 +776,29 @@ Migration:
 - 本データ反映は明示操作にする。
 - 本反映後は既存の `exam_ledgers` / `exam_item_values` / case / check に乗せる。
 - 制度チェック結果を `exam_item_values` に混ぜない。
+- 仮登録チェック結果を正式な `exam_check_results` に混ぜない。
 - 理由ありOKや確認事項は `exam_case_check_review_items` 側で扱う。
 - 入力値の由来を追えるように、draft、反映ledger、反映item_valuesを紐付ける。
+
+## 保守上の注意
+
+仮登録チェックは、正式チェックと判定ロジックを共有し、保存先だけ分ける。
+
+そのため、法定チェック・特定健診チェックのルールを追加/変更する場合は、以下をセットで確認する。
+
+- 正式チェックの入力元
+  - `exam_item_values`
+  - `exam_export_case_values`
+- 仮登録チェックの入力元
+  - `manual_exam_entry_draft_values`
+- 正式チェックの保存先
+  - `exam_check_results`
+  - `exam_case_check_review_items`
+- 仮登録チェックの保存先
+  - `manual_exam_entry_draft_check_results`
+- 画面表示
+  - 個人case一覧
+  - 健診結果仮登録リスト
+
+保存先を分けることで、DDLや表示項目のメンテナンス箇所は増える。
+ただし、入力途中のdraftが正式な出力可否へ混ざる事故を避けるため、この分離を優先する。
