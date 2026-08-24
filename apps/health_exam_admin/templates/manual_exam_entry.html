@@ -127,17 +127,6 @@
           </select>
         </label>
         <label>
-          <span>健診機関</span>
-          <span class="input-with-button">
-            <input id="manual-entry-facility-input" name="facility_code" autocomplete="off" placeholder="健診機関を選択">
-            <button type="button" class="ghost-button compact-action-button" data-modal-open="manual-entry-facility-picker-modal">選択</button>
-          </span>
-        </label>
-        <label>
-          <span>健診受診日</span>
-          <input id="manual-entry-exam-date-input" name="exam_date" autocomplete="off" placeholder="YYYY-MM-DD" data-date-normalize="true">
-        </label>
-        <label>
           <span>健診機関ドキュメントID</span>
           <input name="facility_document_id" autocomplete="off" placeholder="任意 / 問い合わせ用ID">
         </label>
@@ -148,6 +137,24 @@
             <option value="SUPPLEMENT">XML/CSV補足</option>
             <option value="RESUBMISSION_FIX">再提出補正</option>
           </select>
+        </label>
+      </div>
+
+      <div class="manual-entry-basic-grid">
+        <label>
+          <span>健診機関コード</span>
+          <span class="input-with-button">
+            <input id="manual-entry-facility-input" name="facility_code" autocomplete="off" placeholder="健診機関コード">
+            <button type="button" class="ghost-button compact-action-button" data-modal-open="manual-entry-facility-picker-modal">選択</button>
+          </span>
+        </label>
+        <label>
+          <span>選択された医療機関名</span>
+          <input id="manual-entry-facility-name-input" name="facility_name" autocomplete="off" placeholder="健診機関選択で反映" readonly>
+        </label>
+        <label>
+          <span>健診受診日</span>
+          <input id="manual-entry-exam-date-input" name="exam_date" autocomplete="off" placeholder="YYYY-MM-DD" data-date-normalize="true">
         </label>
       </div>
 
@@ -224,7 +231,7 @@
             <tr
               class="{{ 'clickable-table-row' if code else '' }}"
               data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }}"
-              {% if code %}data-manual-entry-facility-row data-facility-code="{{ code }}"{% endif %}
+              {% if code %}data-manual-entry-facility-row data-facility-code="{{ code }}" data-facility-name="{{ alias.exam_facility_display_name or alias.exam_facility_name or '' }}"{% endif %}
             >
               <td>
                 <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
@@ -240,7 +247,7 @@
               </td>
               <td>
                 {% if code %}
-                <button type="button" class="ghost-button" data-manual-entry-facility-select data-facility-code="{{ code }}">選択</button>
+                <button type="button" class="ghost-button" data-manual-entry-facility-select data-facility-code="{{ code }}" data-facility-name="{{ alias.exam_facility_display_name or alias.exam_facility_name or '' }}">選択</button>
                 {% else %}
                 <span class="status-pill status-muted">不可</span>
                 {% endif %}

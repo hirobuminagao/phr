@@ -2240,6 +2240,20 @@ a.home-menu-card.is-navigating {
   white-space: nowrap;
 }
 
+.manual-entry-modal-actions .primary-button[data-manual-entry-subscriber-apply]:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(18, 125, 93, 0.18);
+}
+
+.manual-entry-modal-actions .primary-button[data-manual-entry-subscriber-apply]:disabled {
+  border-color: var(--line);
+  background: #eef3f7;
+  color: var(--muted);
+  box-shadow: none;
+}
+
 .manual-entry-anchor {
   scroll-margin-top: 18px;
 }

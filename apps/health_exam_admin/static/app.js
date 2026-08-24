@@ -1056,8 +1056,14 @@
 
   const manualFacilityInput = document.querySelector("#manual-entry-facility-input");
   if (manualFacilityInput) {
-    const setManualFacility = (code) => {
+    const manualFacilityNameInput = document.querySelector("#manual-entry-facility-name-input");
+    const setManualFacility = (code, name = "") => {
       manualFacilityInput.value = code || "";
+      manualFacilityInput.dispatchEvent(new Event("input", { bubbles: true }));
+      if (manualFacilityNameInput) {
+        manualFacilityNameInput.value = name || "";
+        manualFacilityNameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
       const caseFacilityInput = document.querySelector("#manual-entry-case-search-facility");
       if (caseFacilityInput) caseFacilityInput.value = code || "";
       document.querySelector("#manual-entry-facility-picker-modal [data-modal-close]")?.click();
@@ -1066,13 +1072,13 @@
     for (const button of document.querySelectorAll("[data-manual-entry-facility-select]")) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        setManualFacility(button.dataset.facilityCode || "");
+        setManualFacility(button.dataset.facilityCode || "", button.dataset.facilityName || "");
       });
     }
 
     for (const row of document.querySelectorAll("[data-manual-entry-facility-row]")) {
       row.addEventListener("click", () => {
-        setManualFacility(row.dataset.facilityCode || "");
+        setManualFacility(row.dataset.facilityCode || "", row.dataset.facilityName || "");
       });
     }
   }
@@ -1191,7 +1197,9 @@
       const symbol = document.querySelector("#manual-entry-insurance-symbol-input")?.value?.trim() || "";
       const number = document.querySelector("#manual-entry-insurance-number-input")?.value?.trim() || "";
       const branch = document.querySelector("#manual-entry-insurance-branch-input")?.value?.trim() || "";
-      const facility = document.querySelector("#manual-entry-facility-input")?.value?.trim() || "";
+      const facilityCode = document.querySelector("#manual-entry-facility-input")?.value?.trim() || "";
+      const facilityName = document.querySelector("#manual-entry-facility-name-input")?.value?.trim() || "";
+      const facility = facilityName || facilityCode;
       const examDate = document.querySelector("#manual-entry-exam-date-input")?.value?.trim() || "";
       const displayName = nameKana || nameFull || "未選択";
       const insuranceText = [symbol, number].filter(Boolean).join("-");
@@ -1279,6 +1287,7 @@
     const fillManualEntryFromCase = (item) => {
       fillManualEntryFromPerson(item);
       setValue("#manual-entry-facility-input", item.facility_code);
+      setValue("#manual-entry-facility-name-input", item.facility_name);
       setValue("#manual-entry-case-search-facility", item.facility_code);
       setValue("#manual-entry-exam-date-input", item.exam_date);
       const purpose = document.querySelector("select[name='entry_purpose']");
