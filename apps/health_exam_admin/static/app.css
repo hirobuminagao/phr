@@ -458,6 +458,26 @@ button[type="submit"]:disabled {
   font-size: 24px;
 }
 
+.manual-draft-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.manual-draft-summary-grid .summary-card {
+  padding: 12px 14px;
+  gap: 3px;
+}
+
+.manual-draft-summary-grid .summary-card strong {
+  font-size: 19px;
+}
+
+.manual-draft-summary-grid .summary-card span,
+.manual-draft-summary-grid .summary-card small {
+  font-size: 12px;
+}
+
 .work-list {
   margin-top: 20px;
 }
