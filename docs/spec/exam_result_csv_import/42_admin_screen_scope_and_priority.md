@@ -463,22 +463,29 @@ URL:
 
 - 紙のみ、XML/CSV補足、再提出補正を、手入力sourceとして作るための画面である。
 - 最終的な正は `exam_ledgers` と `exam_item_values` に置く。
-- 手入力専用の別テーブルは、入力途中、テンプレート、監査など、画面作業を助ける必要が出た場合だけ追加する。
+- 手入力値はいきなり本データへ入れず、`manual_exam_entry_drafts` / `manual_exam_entry_draft_values` / `manual_exam_entry_draft_audit_logs` の仮登録レイヤーを経由する。
 - case側の採用値はこの画面では直接変更しない。保存後に既存のcase再生成処理へ乗せて反映する。
 
 初期版でできること:
 
+- 仮登録リストから人またはcaseを選び、draft IDを発行する。
+- 仮登録リスト上部のサマリからDRAFT/READY/APPLIED/ERRORで絞り込む。
+- 仮登録リスト上で健診機関未設定のdraftを選択し、健診機関を後から設定できる。
+- 仮登録リスト上で健診実施日を後から設定できる。
+- APPLIED以外の仮登録を削除できる。削除確認は画面内モーダルで行い、完了メッセージにはdraft IDのみを出す。
 - 健診機関、event、受診日、健診機関ドキュメントID、入力目的、基本情報欄を表示する。
 - 健診機関は受領実績がある候補から選択する。
 - `exam_item_master` の全項目を区分別に表示し、項目名、namecode、区分、OIDで絞り込む。
 - 同じ `identity_item_code` に複数の検査方法がある場合は、入力した1方法以外を無効化する。
 - 値を入力した項目は、今回sourceへ記帳する候補として自動ONにする。
+- 検査項目全体およびカテゴリごとに、入力済み数/総項目数を表示する。
+- 基本情報が入っている状態で検査値を入力すると、自動で仮登録へ下書き保存する。
+- `下書き保存` ボタンで明示保存できる。
 - 健診機関ドキュメントIDは `exam_ledgers.facility_document_id` に保存する想定とする。既存の `document_id` はXML `ClinicalDocument/id` 由来なので、健診機関への問い合わせ用IDとは混ぜない。
 
 後続:
 
-- 加入者検索から基本情報を反映する。
-- 同一caseがある場合は、case側の現在値を参照専用で表示し、同値を今回sourceへ記帳するか選択できるようにする。
+- 登録前チェックを行い、OKの場合だけ `READY` にする。
 - 保存時に `exam_ledgers.source_type = 'PAPER'` または後続で定義する手入力source typeでledgerを作り、入力値を `exam_item_values` に作成する。
 - 保存後は「健診結果処理実行」の step5〜7 再実行を案内する。
 
