@@ -1756,20 +1756,25 @@
 
     const toggleDraftDateEditor = (button) => {
       const container = button.closest(".manual-draft-date-edit");
-      const editor = container?.querySelector(".manual-draft-date-editor");
       const input = container?.querySelector("[data-manual-draft-date-input]");
-      if (!editor || !input) return;
-      editor.hidden = !editor.hidden;
-      if (!editor.hidden) {
-        input.focus();
-        if (typeof input.showPicker === "function") {
-          try {
-            input.showPicker();
-          } catch (_error) {
-            // Safari may block programmatic picker opening; focus still leaves it editable.
-          }
+      if (!input) return;
+      input.focus();
+      if (typeof input.showPicker === "function") {
+        try {
+          input.showPicker();
+        } catch (_error) {
+          // Safari may block programmatic picker opening; focus still leaves it editable.
         }
       }
+    };
+
+    const updateDraftDateFromInput = async (input) => {
+      const container = input.closest(".manual-draft-date-edit");
+      const toggle = container?.querySelector("[data-manual-draft-date-toggle]");
+      if (!(toggle instanceof Element)) return;
+      const nextDate = input.value?.trim() || "";
+      if (nextDate === (toggle.getAttribute("data-exam-date") || "")) return;
+      await updateDraftBasicInfo(draftTargetFromElement(toggle), { examDate: nextDate });
     };
 
     const createManualDraftFromPerson = async (item, button) => {
@@ -1829,13 +1834,9 @@
     for (const button of document.querySelectorAll("[data-manual-draft-date-toggle]")) {
       button.addEventListener("click", () => toggleDraftDateEditor(button));
     }
-    for (const button of document.querySelectorAll("[data-manual-draft-date-save]")) {
-      button.addEventListener("click", () => {
-        const container = button.closest(".manual-draft-date-edit");
-        const input = container?.querySelector("[data-manual-draft-date-input]");
-        const toggle = container?.querySelector("[data-manual-draft-date-toggle]");
-        if (!(toggle instanceof Element)) return;
-        updateDraftBasicInfo(draftTargetFromElement(toggle), { examDate: input?.value?.trim() || "" });
+    for (const input of document.querySelectorAll("[data-manual-draft-date-input]")) {
+      input.addEventListener("change", () => {
+        updateDraftDateFromInput(input);
       });
     }
 

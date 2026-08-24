@@ -152,7 +152,6 @@
                 </small>
               </td>
               <td>
-                <strong>{{ draft.exam_date or "未設定" }}</strong>
                 <div class="manual-draft-date-edit">
                   <button
                     type="button"
@@ -163,11 +162,8 @@
                     data-facility-code="{{ draft.facility_code or '' }}"
                     data-facility-name="{{ draft.facility_name or '' }}"
                     data-exam-date="{{ draft.exam_date or '' }}"
-                  >変更</button>
-                  <span class="manual-draft-date-editor" hidden>
-                    <input type="date" value="{{ draft.exam_date or '' }}" data-manual-draft-date-input>
-                    <button type="button" class="ghost-button compact-action-button" data-manual-draft-date-save>保存</button>
-                  </span>
+                  >{{ draft.exam_date or "未設定" }}</button>
+                  <input type="date" value="{{ draft.exam_date or '' }}" data-manual-draft-date-input aria-label="健診実施日">
                 </div>
               </td>
               <td>

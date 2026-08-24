@@ -1527,25 +1527,17 @@ a.home-menu-card.is-navigating {
 }
 
 .manual-draft-date-edit {
-  display: grid;
-  gap: 6px;
-  justify-items: start;
+  position: relative;
+  display: inline-block;
 }
 
-.manual-draft-date-editor {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.manual-draft-date-editor[hidden] {
-  display: none;
-}
-
-.manual-draft-date-editor input {
-  min-width: 140px;
-  height: 34px;
-  padding: 4px 8px;
+.manual-draft-date-edit input[type="date"] {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .active-filter-summary {
