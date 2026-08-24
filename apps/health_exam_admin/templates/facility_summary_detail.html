@@ -3,9 +3,9 @@
 {% block body %}
 <header class="topbar">
   <div>
-    <p class="eyebrow">FACILITY DETAIL</p>
-    <h1>{{ detail.header.facility_name or "健診機関" }}</h1>
-    <p class="subtle">{{ detail.header.facility_code or filters.facility_code }} / {{ detail.header.expected_source_mode_label or "受領設定なし" }}</p>
+    <p class="eyebrow">FACILITY SUMMARY</p>
+    <h1>健診機関サマリー（詳細）</h1>
+    <p class="subtle">健診機関ごとの受領、取込、チェック状況を確認します。</p>
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/facility-summary?event_id={{ filters.event_id }}&exam_month={{ filters.exam_month|url_quote }}">サマリーへ戻る</a>
@@ -19,6 +19,14 @@
 </header>
 
 <main class="page">
+  <section class="facility-detail-target-bar">
+    <div>
+      <span class="facility-detail-target-label">対象健診機関</span>
+      <strong>{{ detail.header.facility_name or "健診機関" }}</strong>
+      <small>{{ detail.header.facility_code or filters.facility_code or "コードなし" }} / {{ detail.header.expected_source_mode_label or "受領設定なし" }}</small>
+    </div>
+  </section>
+
   <section class="panel filter-panel">
     <div class="section-heading">
       <div>

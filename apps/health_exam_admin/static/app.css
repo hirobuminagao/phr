@@ -3085,6 +3085,43 @@ a.home-menu-card.is-navigating {
   background: #d9f1e8;
 }
 
+.facility-detail-target-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: -4px 0 16px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(25, 47, 70, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.facility-detail-target-bar div {
+  display: grid;
+  gap: 4px;
+}
+
+.facility-detail-target-label {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.facility-detail-target-bar strong {
+  color: var(--ink);
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.facility-detail-target-bar small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .facility-summary-table {
   min-width: 1340px;
 }
