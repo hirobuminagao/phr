@@ -104,7 +104,7 @@
         </p>
       </div>
       <div class="inline-actions">
-        <button type="button" class="ghost-button compact-action-button" data-manual-draft-check-visible>表示中を参考チェック</button>
+        <button type="button" class="ghost-button compact-action-button" data-manual-draft-check-visible>表示中を参考チェック/再チェック</button>
         <span class="status-pill status-muted">{{ "最新200件" if not status_filter else status_filter ~ " 最新200件" }}</span>
       </div>
     </div>
@@ -260,7 +260,7 @@
                     class="ghost-button compact-action-button"
                     data-manual-draft-check
                     data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                  >参考チェック</button>
+                  >{{ "再チェック" if draft.draft_checked_at else "参考チェック" }}</button>
                 {% endif %}
                 {% if draft.draft_checked_at %}
                   <button
