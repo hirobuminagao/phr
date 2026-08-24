@@ -162,8 +162,8 @@
               <span class="status-pill status-ready">候補</span>
               <small>draftへ戻せます</small>
               {% endif %}
+              {% if not blocked_reason and row.row_status != "REVERTED_TO_DRAFT" %}
               <div class="inline-action-stack admin-manual-ledger-revert-action">
-                {% if not blocked_reason and row.row_status != "REVERTED_TO_DRAFT" %}
                 <button
                   class="danger-button compact-action-button"
                   type="button"
@@ -172,10 +172,8 @@
                   data-draft-id="{{ row.manual_exam_entry_draft_id }}"
                   data-value-count="{{ row.item_value_count or 0 }}"
                 >戻す</button>
-                {% else %}
-                <button class="ghost-button compact-action-button" type="button" disabled>戻す</button>
-                {% endif %}
               </div>
+              {% endif %}
             </td>
             <td>
               <div class="inline-action-stack admin-manual-ledger-actions">
