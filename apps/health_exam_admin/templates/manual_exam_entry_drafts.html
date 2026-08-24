@@ -132,6 +132,18 @@
               </td>
               <td>
                 <strong>{{ draft.facility_name or draft.facility_code or "未設定" }}</strong>
+                <div class="inline-action-row">
+                  <button
+                    type="button"
+                    class="ghost-button compact-action-button"
+                    data-modal-open="manual-draft-facility-picker-modal"
+                    data-manual-draft-facility-change
+                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                    data-event-id="{{ draft.event_id or 2 }}"
+                    data-facility-code="{{ draft.facility_code or '' }}"
+                    data-facility-name="{{ draft.facility_name or '' }}"
+                  >健診機関変更</button>
+                </div>
                 <small>
                   {% if draft.facility_code %}{{ draft.facility_code }}{% endif %}
                   {% if draft.facility_document_id %}<br>doc {{ draft.facility_document_id }}{% endif %}
@@ -155,16 +167,6 @@
               </td>
               <td>
                 <a class="ghost-button compact-action-button" href="/manual-exam-entry?draft_id={{ draft.manual_exam_entry_draft_id }}">入力へ</a>
-                <button
-                  type="button"
-                  class="ghost-button compact-action-button"
-                  data-modal-open="manual-draft-facility-picker-modal"
-                  data-manual-draft-facility-change
-                  data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                  data-event-id="{{ draft.event_id or 2 }}"
-                  data-facility-code="{{ draft.facility_code or '' }}"
-                  data-facility-name="{{ draft.facility_name or '' }}"
-                >健診機関変更</button>
                 {% if draft.exam_export_case_id %}
                   <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ draft.exam_export_case_id }}">case</a>
                 {% endif %}
