@@ -232,6 +232,28 @@
     </div>
   </section>
 
+  <div id="manual-draft-delete-confirm-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel manual-draft-delete-modal" role="dialog" aria-modal="true" aria-labelledby="manual-draft-delete-confirm-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">DELETE DRAFT</p>
+          <h2 id="manual-draft-delete-confirm-title">仮登録を削除します</h2>
+          <p class="subtle">削除した仮登録は一覧から消えます。本データ反映済みの仮登録は削除できません。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="status-panel status-panel--danger">
+        <strong data-manual-draft-delete-label>draft -</strong>
+        <p class="subtle">この仮登録を削除してよろしいですか？</p>
+      </div>
+      <div class="edit-modal__actions manual-entry-modal-actions">
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="button" class="danger-button" data-manual-draft-delete-confirm>削除する</button>
+      </div>
+    </section>
+  </div>
+
   <div id="manual-draft-person-picker-modal" class="edit-modal" hidden>
     <div class="edit-modal__backdrop" data-modal-close></div>
     <section class="edit-modal__panel export-facility-modal manual-entry-subscriber-modal" role="dialog" aria-modal="true" aria-labelledby="manual-draft-person-picker-title">

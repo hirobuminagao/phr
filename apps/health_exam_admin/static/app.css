@@ -340,6 +340,12 @@ button[type="submit"]:disabled {
   color: #10664f;
 }
 
+.status-panel--danger {
+  border-color: #e7b5b5;
+  background: #fff1f1;
+  color: #8f1d14;
+}
+
 .summary-card {
   display: grid;
   gap: 6px;

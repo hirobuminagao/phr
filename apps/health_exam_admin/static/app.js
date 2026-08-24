@@ -1841,6 +1841,10 @@
     const draftCaseResults = document.querySelector("[data-manual-draft-case-results]");
     const draftFacilityTarget = document.querySelector("[data-manual-draft-facility-target]");
     let activeDraftFacilityTarget = null;
+    const draftDeleteModal = document.querySelector("#manual-draft-delete-confirm-modal");
+    const draftDeleteLabel = document.querySelector("[data-manual-draft-delete-label]");
+    const draftDeleteConfirmButton = document.querySelector("[data-manual-draft-delete-confirm]");
+    let activeDraftDeleteButton = null;
 
     const toggleManualDraftNewActions = () => {
       if (!draftNewActions) return;
@@ -1952,20 +1956,45 @@
       await updateDraftBasicInfo(draftTargetFromElement(toggle), { examDate: nextDate });
     };
 
-    const deleteManualDraft = async (button) => {
+    const openManualDraftDeleteModal = (button) => {
       const draftId = button.getAttribute("data-draft-id") || "";
       const label = button.getAttribute("data-draft-label") || `draft ${draftId}`;
       if (!draftId) return;
-      if (!window.confirm(`${label} の仮登録を削除します。よろしいですか？`)) return;
+      activeDraftDeleteButton = button;
+      if (draftDeleteLabel) draftDeleteLabel.textContent = `${label} / draft ${draftId}`;
+      if (draftDeleteConfirmButton) {
+        draftDeleteConfirmButton.disabled = false;
+        draftDeleteConfirmButton.textContent = "削除する";
+      }
+      if (draftDeleteModal) {
+        draftDeleteModal.hidden = false;
+        document.body.classList.add("has-open-modal");
+        draftDeleteConfirmButton?.focus();
+      }
+    };
+
+    const deleteManualDraft = async () => {
+      const button = activeDraftDeleteButton;
+      if (!button) return;
+      const draftId = button.getAttribute("data-draft-id") || "";
+      if (!draftId) return;
       const originalText = button.textContent || "削除";
       button.disabled = true;
       button.textContent = "削除中";
+      if (draftDeleteConfirmButton) {
+        draftDeleteConfirmButton.disabled = true;
+        draftDeleteConfirmButton.textContent = "削除中";
+      }
       try {
         const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(draftId)}/delete`, {});
         reloadDraftListWithMessage(payload.message || "仮登録を削除しました。");
       } catch (error) {
         button.disabled = false;
         button.textContent = originalText;
+        if (draftDeleteConfirmButton) {
+          draftDeleteConfirmButton.disabled = false;
+          draftDeleteConfirmButton.textContent = "削除する";
+        }
         window.alert(`仮登録削除でエラーが発生しました。${error?.message || ""}`);
       }
     };
@@ -2033,8 +2062,9 @@
       });
     }
     for (const button of document.querySelectorAll("[data-manual-draft-delete]")) {
-      button.addEventListener("click", () => deleteManualDraft(button));
+      button.addEventListener("click", () => openManualDraftDeleteModal(button));
     }
+    draftDeleteConfirmButton?.addEventListener("click", deleteManualDraft);
 
     const setDraftPersonMessage = (message) => {
       manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
