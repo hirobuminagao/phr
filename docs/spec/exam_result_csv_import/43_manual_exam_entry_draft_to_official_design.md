@@ -354,6 +354,15 @@ caseから選択した場合:
 - 反映処理はトランザクションで行う。
 - 反映中に失敗した場合はrollbackし、draftを `ERROR` にするか、エラーをauditに残して `READY` のまま再実行可能にするかを実装時に決める。
 
+正式反映後の戻し:
+
+- 通常運用では、正式反映済みの `exam_ledgers` / `exam_item_values` を物理削除しない。
+- 本番運用で取り消す場合は、削除ではなく無効化・再作成で扱う。
+- 開発/試走時だけ、管理者専用画面から「手入力正式ledgerをdraftへ戻す」導線を用意する。
+- 戻し対象は、手入力由来の `exam_ledgers.source_type IN ('PAPER', 'MANUAL')` とし、`manual_exam_entry_drafts.applied_exam_ledger_id` でdraftへ辿れるものを基本にする。
+- 戻し操作は通常の個人case一覧には置かない。caseは正式ledgerから作られる派生物であり、戻し判断の責務はledger側に寄せる。
+- 戻し後は `03_01`〜`03_04` 相当のcase再生成・case値再作成・caseチェックを再実行する。
+
 初期推奨:
 
 - DB書き込み失敗時はrollbackし、draftは `ERROR` に更新する。
@@ -500,6 +509,17 @@ Migration:
 - 削除確認モーダルは画面中央に表示する。
 - 削除完了メッセージには氏名、カナ等の機微情報を出さず、`draft {id}` のみを表示する。
 - 実装上は `manual_exam_entry_drafts` を物理削除する。関連する `manual_exam_entry_draft_values` / `manual_exam_entry_draft_audit_logs` はFKのCASCADEで削除される。
+
+### 手入力正式ledger管理の実装済み仕様
+
+- 管理者専用画面 `/admin/manual-exam-ledgers` を追加する。
+- 通常の個人case一覧には危険操作を追加しない。
+- `source_type IN ('PAPER', 'MANUAL')` の正式ledgerを対象にする。
+- `manual_exam_entry_drafts.applied_exam_ledger_id` でdraftとの紐づきを表示する。
+- 1行で、正式 `exam_item_values` 件数、draft値件数、case source件数、case採用値件数、出力リスト掲載件数を確認できる。
+- 画面上では「戻し候補」または「要確認」を表示する。
+- 初期版では巻き戻し実行ボタンは置かず、安全条件の見える化までとする。
+- この画面の個人情報閲覧は監査ログに記録する。
 
 ### スクリプト
 

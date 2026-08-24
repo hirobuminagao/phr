@@ -4169,6 +4169,137 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_admin_manual_exam_ledger_rows(
+    cur: Any,
+    *,
+    filters: dict[str, str],
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    where_parts = ["el.source_type IN ('PAPER', 'MANUAL')"]
+    params: list[Any] = []
+    event_id = filters.get("event_id", "").strip()
+    draft_status = filters.get("draft_status", "").strip().upper()
+    apply_state = filters.get("apply_state", "").strip().upper()
+    query = filters.get("q", "").strip()
+    if event_id:
+        where_parts.append("el.event_id = %s")
+        params.append(event_id)
+    if draft_status:
+        where_parts.append("UPPER(COALESCE(d.draft_status, '')) = %s")
+        params.append(draft_status)
+    if apply_state == "APPLIED_WITH_DRAFT":
+        where_parts.append("d.manual_exam_entry_draft_id IS NOT NULL")
+    elif apply_state == "NO_DRAFT_LINK":
+        where_parts.append("d.manual_exam_entry_draft_id IS NULL")
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              el.exam_ledger_id LIKE %s
+              OR d.manual_exam_entry_draft_id LIKE %s
+              OR el.hia_subscriber_id LIKE %s
+              OR el.person_id_custom LIKE %s
+              OR el.name_kana_raw LIKE %s
+              OR el.name_full_raw LIKE %s
+              OR el.facility_code LIKE %s
+              OR el.facility_name LIKE %s
+              OR el.xml_file_name LIKE %s
+            )
+            """
+        )
+        params.extend([like] * 9)
+    where_sql = f"WHERE {' AND '.join(where_parts)}"
+    cur.execute(
+        f"""
+        SELECT
+          el.exam_ledger_id,
+          el.event_id,
+          el.source_type,
+          el.hia_subscriber_id,
+          el.person_id_custom,
+          el.subscriber_id,
+          el.subscriber_match_status,
+          el.subscriber_match_method,
+          el.facility_code,
+          el.facility_name,
+          el.facility_document_id,
+          el.exam_date,
+          el.name_full_raw,
+          el.name_kana_raw,
+          el.insurance_symbol_raw,
+          el.insurance_number_raw,
+          el.insurance_branch_number_raw,
+          el.birthdate,
+          el.gender_code,
+          el.exam_item_count,
+          el.exam_item_error_count,
+          el.check_status,
+          el.check_reason,
+          el.xml_export_status,
+          el.merge_status,
+          el.created_at,
+          el.updated_at,
+          d.manual_exam_entry_draft_id,
+          d.draft_status,
+          d.entry_purpose,
+          d.applied_at,
+          COALESCE(dv.value_count, 0) AS draft_value_count,
+          COALESCE(eiv.item_value_count, 0) AS item_value_count,
+          COALESCE(src.case_source_count, 0) AS case_source_count,
+          COALESCE(adopted.adopted_value_count, 0) AS adopted_value_count,
+          COALESCE(listed.list_case_count, 0) AS list_case_count,
+          COALESCE(cu.display_name, cu.employee_no, CONCAT('user ', d.created_by_app_user_id)) AS draft_created_by_name,
+          COALESCE(au.display_name, au.employee_no, CONCAT('user ', d.applied_by_app_user_id)) AS draft_applied_by_name
+        FROM {qname(health_db())}.exam_ledgers AS el
+        LEFT JOIN {qname(health_db())}.manual_exam_entry_drafts AS d
+          ON d.applied_exam_ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT manual_exam_entry_draft_id, COUNT(*) AS value_count
+          FROM {qname(health_db())}.manual_exam_entry_draft_values
+          GROUP BY manual_exam_entry_draft_id
+        ) AS dv
+          ON dv.manual_exam_entry_draft_id = d.manual_exam_entry_draft_id
+        LEFT JOIN (
+          SELECT ledger_id, COUNT(*) AS item_value_count
+          FROM {qname(health_db())}.exam_item_values
+          WHERE ledger_type = 'EXAM'
+          GROUP BY ledger_id
+        ) AS eiv
+          ON eiv.ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT source_exam_ledger_id, COUNT(*) AS case_source_count
+          FROM {qname(health_db())}.exam_export_case_sources
+          GROUP BY source_exam_ledger_id
+        ) AS src
+          ON src.source_exam_ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT source_exam_ledger_id, COUNT(*) AS adopted_value_count
+          FROM {qname(health_db())}.exam_export_case_values
+          GROUP BY source_exam_ledger_id
+        ) AS adopted
+          ON adopted.source_exam_ledger_id = el.exam_ledger_id
+        LEFT JOIN (
+          SELECT eecs.source_exam_ledger_id, COUNT(*) AS list_case_count
+          FROM {qname(health_db())}.exam_export_case_sources AS eecs
+          INNER JOIN {qname(health_db())}.ops_xml_export_list_cases AS oelc
+            ON oelc.exam_export_case_id = eecs.exam_export_case_id
+          GROUP BY eecs.source_exam_ledger_id
+        ) AS listed
+          ON listed.source_exam_ledger_id = el.exam_ledger_id
+        LEFT JOIN {qname(app_db())}.app_users AS cu
+          ON cu.app_user_id = d.created_by_app_user_id
+        LEFT JOIN {qname(app_db())}.app_users AS au
+          ON au.app_user_id = d.applied_by_app_user_id
+        {where_sql}
+        ORDER BY el.updated_at DESC, el.exam_ledger_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 SUBSCRIBER_MATCH_ISSUE_FILTERS = {
     "PARTIAL_MATCHED": """
         (
@@ -9308,6 +9439,63 @@ def admin_etl_runs(request: Request) -> Response:
             "running_runs": running_runs,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.get("/admin/manual-exam-ledgers", response_class=HTMLResponse)
+def admin_manual_exam_ledgers(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("users.manage",)):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "q": request.query_params.get("q", ""),
+        "draft_status": request.query_params.get("draft_status", ""),
+        "apply_state": request.query_params.get("apply_state", ""),
+        "limit": request.query_params.get("limit", "200"),
+    }
+    limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            rows = load_admin_manual_exam_ledger_rows(cur, filters=filters, limit=limit)
+            if audit_enabled(cur):
+                for row in rows:
+                    log_audit(
+                        cur,
+                        request=request,
+                        user=user,
+                        action_code="PERSONAL_INFO_VIEW_ADMIN_MANUAL_EXAM_LEDGER",
+                        target_schema=health_db(),
+                        target_table="exam_ledgers",
+                        target_id=str(row.get("exam_ledger_id") or ""),
+                        after={
+                            "exam_ledger_id": row.get("exam_ledger_id"),
+                            "manual_exam_entry_draft_id": row.get("manual_exam_entry_draft_id"),
+                            "hia_subscriber_id": row.get("hia_subscriber_id"),
+                            "person_id_custom": row.get("person_id_custom"),
+                            "exam_date": str(row.get("exam_date") or ""),
+                            "facility_code": row.get("facility_code"),
+                        },
+                    )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_manual_exam_ledgers.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "filters": filters,
+            "limit": limit,
+            "event_options": event_options,
         },
     )
 

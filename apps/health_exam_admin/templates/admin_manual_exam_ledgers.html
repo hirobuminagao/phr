@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% set title = "手入力正式ledger管理" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">SYSTEM ADMIN</p>
+    <h1>手入力正式ledger管理</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/manual-exam-entry-drafts">仮登録リスト</a>
+    <a class="ghost-button" href="/exam-ledgers">健診結果一覧</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>管理対象</h2>
+        <p class="subtle">手入力由来の正式ledgerだけを管理します。通常のcase一覧には危険操作を置かず、巻き戻し判断はこの画面で行います。</p>
+      </div>
+    </div>
+    <form method="get" action="/admin/manual-exam-ledgers" class="filter-form">
+      <label>
+        <span>イベント</span>
+        <select name="event_id">
+          {% for event in event_options %}
+          <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+            {{ event.event_name or ("event " ~ event.event_id) }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>キーワード</span>
+        <input name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="ledger / draft / HIA ID / カナ / 健診機関">
+      </label>
+      <fieldset class="filter-condition-block">
+        <legend>draft状態</legend>
+        <div class="filter-toggle-group">
+          {% for status in ["DRAFT", "READY", "APPLIED", "ERROR"] %}
+          <button type="button" data-server-filter-toggle="draft_status" data-filter-value="{{ status }}" class="{{ 'is-active' if filters.draft_status == status else '' }}">{{ status }}</button>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="draft_status" value="{{ filters.draft_status }}" data-server-filter-value="draft_status">
+      </fieldset>
+      <fieldset class="filter-condition-block">
+        <legend>紐づき</legend>
+        <div class="filter-toggle-group">
+          <button type="button" data-server-filter-toggle="apply_state" data-filter-value="APPLIED_WITH_DRAFT" class="{{ 'is-active' if filters.apply_state == 'APPLIED_WITH_DRAFT' else '' }}">draftあり</button>
+          <button type="button" data-server-filter-toggle="apply_state" data-filter-value="NO_DRAFT_LINK" class="{{ 'is-active' if filters.apply_state == 'NO_DRAFT_LINK' else '' }}">draftなし</button>
+        </div>
+        <input type="hidden" name="apply_state" value="{{ filters.apply_state }}" data-server-filter-value="apply_state">
+      </fieldset>
+      <label>
+        <span>表示件数</span>
+        <input name="limit" value="{{ limit }}">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/admin/manual-exam-ledgers">クリア</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>正式反映済みledger</h2>
+        <p class="subtle">最新 {{ rows|length }} 件を表示しています。巻き戻し実行は次の段階で、安全条件を満たす行だけに追加します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table admin-manual-ledger-table" data-empty-message="手入力由来ledgerはありません。">
+        <thead>
+          <tr>
+            <th>ledger / draft</th>
+            <th>受診者</th>
+            <th>健診機関</th>
+            <th>値</th>
+            <th>case・出力</th>
+            <th>戻し判断</th>
+            <th>確認</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          {% set has_draft = row.manual_exam_entry_draft_id %}
+          {% set blocked_reason = [] %}
+          {% if not has_draft %}{% set _ = blocked_reason.append("draft紐づきなし") %}{% endif %}
+          {% if row.list_case_count %}{% set _ = blocked_reason.append("出力リスト掲載あり") %}{% endif %}
+          {% if row.adopted_value_count %}{% set _ = blocked_reason.append("case採用値あり") %}{% endif %}
+          <tr>
+            <td>
+              <strong>ledger {{ row.exam_ledger_id }}</strong>
+              <small>{{ row.source_type }} / {{ row.check_status or "-" }} / export {{ row.xml_export_status or "-" }}</small>
+              {% if has_draft %}
+              <small>draft {{ row.manual_exam_entry_draft_id }} / {{ row.draft_status or "-" }} / {{ row.entry_purpose or "-" }}</small>
+              {% else %}
+              <small class="text-danger">draft紐づきなし</small>
+              {% endif %}
+            </td>
+            <td>
+              <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
+              <small>{{ row.name_full_raw or "氏名なし" }}</small>
+              <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.person_id_custom or "-" }}</small>
+              <small>{{ row.insurance_symbol_raw or "-" }} - {{ row.insurance_number_raw or "-" }} / {{ row.birthdate or "-" }}</small>
+            </td>
+            <td>
+              <strong title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
+              <small>{{ row.facility_code or "-" }} / {{ row.exam_date or "受診日なし" }}</small>
+              <small>document {{ row.facility_document_id or "-" }}</small>
+            </td>
+            <td>
+              <strong>正式 {{ row.item_value_count or 0 }}</strong>
+              <small>draft {{ row.draft_value_count or 0 }}</small>
+              <small>値エラー {{ row.exam_item_error_count or 0 }}</small>
+            </td>
+            <td>
+              <strong>source {{ row.case_source_count or 0 }}</strong>
+              <small>採用値 {{ row.adopted_value_count or 0 }}</small>
+              <small>出力リスト {{ row.list_case_count or 0 }}</small>
+            </td>
+            <td>
+              {% if blocked_reason %}
+              <span class="status-pill status-pending">要確認</span>
+              <small>{{ " / ".join(blocked_reason) }}</small>
+              {% else %}
+              <span class="status-pill status-ready">候補</span>
+              <small>次段階でテスト巻き戻し可能にする対象</small>
+              {% endif %}
+            </td>
+            <td>
+              <div class="inline-action-stack">
+                <a class="ghost-button compact-action-button" href="/exam-ledgers/{{ row.exam_ledger_id }}">ledger</a>
+                {% if has_draft %}
+                <a class="ghost-button compact-action-button" href="/manual-exam-entry?draft_id={{ row.manual_exam_entry_draft_id }}">draft</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7">手入力由来ledgerはありません。</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
