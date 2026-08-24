@@ -6581,6 +6581,215 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
     return result[:limit]
 
 
+def load_facility_summary_detail(
+    cur: Any,
+    *,
+    event_id: str,
+    facility_code: str,
+    exam_month: str = "",
+) -> dict[str, Any]:
+    event_id = str(event_id or "").strip()
+    facility_code = str(facility_code or "").strip()
+    exam_months = split_filter_values(exam_month)
+    if not event_id or not facility_code:
+        raise ValueError("イベントと健診機関コードは必須です。")
+
+    month_clause = ""
+    month_params: list[Any] = []
+    if exam_months:
+        placeholders = ", ".join(["%s"] * len(exam_months))
+        month_clause = f" AND DATE_FORMAT(el.exam_date, '%Y-%m') IN ({placeholders})"
+        month_params.extend(exam_months)
+
+    cur.execute(
+        f"""
+        SELECT
+          COALESCE(MAX(fr.facility_name), MAX(el.facility_name), MAX(ef.exam_facility_display_name), MAX(ef.exam_facility_name)) AS facility_name,
+          COALESCE(MAX(fr.facility_code), MAX(el.facility_code), MAX(ef.exam_facility_code)) AS facility_code,
+          MAX(mfa.expected_source_mode) AS expected_source_mode
+        FROM {qname(health_db())}.file_receipts AS fr
+        LEFT JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.file_receipt_id = fr.id
+        LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_code = fr.facility_code
+        LEFT JOIN (
+{alias_source_mode_by_facility_code_sql()}
+        ) AS mfa
+          ON mfa.event_id = fr.event_id
+         AND mfa.facility_code = fr.facility_code
+        WHERE fr.event_id = %s
+          AND fr.facility_code = %s
+        """,
+        (event_id, facility_code),
+    )
+    header = dict(cur.fetchone() or {})
+    header["facility_code"] = header.get("facility_code") or facility_code
+    header["expected_source_mode_label"] = source_mode_label(header.get("expected_source_mode"))
+
+    cur.execute(
+        f"""
+        SELECT
+          COALESCE(DATE_FORMAT(el.exam_date, '%Y-%m'), '不明') AS exam_month,
+          COUNT(DISTINCT fr.id) AS file_count,
+          COUNT(DISTINCT el.exam_ledger_id) AS source_count,
+          SUM(CASE WHEN el.check_status = 'OK' THEN 1 ELSE 0 END) AS source_ok_count,
+          SUM(CASE WHEN el.check_status = 'NG' THEN 1 ELSE 0 END) AS source_ng_count,
+          SUM(
+            CASE
+              WHEN el.subscriber_match_status = 'MATCHED'
+               AND el.subscriber_match_method = 'identity_hash'
+                THEN 0
+              ELSE 1
+            END
+          ) AS subscriber_issue_count
+        FROM {qname(health_db())}.file_receipts AS fr
+        LEFT JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.file_receipt_id = fr.id
+        WHERE fr.event_id = %s
+          AND fr.facility_code = %s
+          {month_clause}
+        GROUP BY COALESCE(DATE_FORMAT(el.exam_date, '%Y-%m'), '不明')
+        ORDER BY exam_month
+        """,
+        (event_id, facility_code, *month_params),
+    )
+    monthly_rows = [dict(row) for row in cur.fetchall()]
+    for row in monthly_rows:
+        for field in ("file_count", "source_count", "source_ok_count", "source_ng_count", "subscriber_issue_count"):
+            row[field] = int(row.get(field) or 0)
+
+    cur.execute(
+        f"""
+        SELECT
+          fr.id AS file_receipt_id,
+          fr.file_type,
+          fr.file_name,
+          fr.relative_path,
+          fr.status,
+          COUNT(el.exam_ledger_id) AS source_count,
+          SUM(CASE WHEN el.check_status = 'OK' THEN 1 ELSE 0 END) AS source_ok_count,
+          SUM(CASE WHEN el.check_status = 'NG' THEN 1 ELSE 0 END) AS source_ng_count
+        FROM {qname(health_db())}.file_receipts AS fr
+        LEFT JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.file_receipt_id = fr.id
+        WHERE fr.event_id = %s
+          AND fr.facility_code = %s
+          {month_clause}
+        GROUP BY fr.id, fr.file_type, fr.file_name, fr.relative_path, fr.status
+        ORDER BY fr.first_seen_at DESC, fr.id DESC
+        LIMIT 80
+        """,
+        (event_id, facility_code, *month_params),
+    )
+    file_rows = [dict(row) for row in cur.fetchall()]
+    for row in file_rows:
+        for field in ("source_count", "source_ok_count", "source_ng_count"):
+            row[field] = int(row.get(field) or 0)
+
+    cur.execute(
+        f"""
+        SELECT
+          COALESCE(el.check_reason, '理由なし') AS reason,
+          COUNT(*) AS cnt
+        FROM {qname(health_db())}.exam_ledgers AS el
+        WHERE el.event_id = %s
+          AND el.facility_code = %s
+          AND el.check_status = 'NG'
+          {month_clause}
+        GROUP BY COALESCE(el.check_reason, '理由なし')
+        ORDER BY cnt DESC
+        LIMIT 20
+        """,
+        (event_id, facility_code, *month_params),
+    )
+    source_ng_reasons = [dict(row) for row in cur.fetchall()]
+
+    cur.execute(
+        f"""
+        SELECT
+          COALESCE(ecr.legal_check_result, 'PENDING') AS legal_check_result,
+          COALESCE(ecr.specific_check_result, 'PENDING') AS specific_check_result,
+          COALESCE(ecr.legal_reason_summary, '') AS legal_reason_summary,
+          COALESCE(ecr.specific_reason_summary, '') AS specific_reason_summary,
+          COUNT(*) AS cnt
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest
+            ON latest.max_id = r1.id
+        ) AS ecr
+          ON ecr.exam_export_case_id = eec.exam_export_case_id
+        WHERE eec.event_id = %s
+          AND eec.facility_code = %s
+          {month_clause.replace('el.exam_date', 'eec.exam_date')}
+        GROUP BY
+          COALESCE(ecr.legal_check_result, 'PENDING'),
+          COALESCE(ecr.specific_check_result, 'PENDING'),
+          COALESCE(ecr.legal_reason_summary, ''),
+          COALESCE(ecr.specific_reason_summary, '')
+        ORDER BY cnt DESC
+        LIMIT 30
+        """,
+        (event_id, facility_code, *month_params),
+    )
+    case_check_rows = [dict(row) for row in cur.fetchall()]
+
+    cur.execute(
+        f"""
+        SELECT
+          eiv.namecode,
+          COALESCE(eiv.namecode_display_name, eiv.namecode) AS item_name,
+          eiv.normalize_status,
+          eiv.validation_status,
+          eiv.normalize_reason,
+          eiv.validation_reason,
+          COUNT(*) AS cnt
+        FROM {qname(health_db())}.exam_item_values AS eiv
+        INNER JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.exam_ledger_id = eiv.ledger_id
+         AND eiv.ledger_type = 'EXAM'
+        WHERE el.event_id = %s
+          AND el.facility_code = %s
+          AND (eiv.normalize_status = 'ERROR' OR eiv.validation_status = 'INVALID')
+          {month_clause}
+        GROUP BY
+          eiv.namecode,
+          COALESCE(eiv.namecode_display_name, eiv.namecode),
+          eiv.normalize_status,
+          eiv.validation_status,
+          eiv.normalize_reason,
+          eiv.validation_reason
+        ORDER BY cnt DESC, eiv.namecode
+        LIMIT 50
+        """,
+        (event_id, facility_code, *month_params),
+    )
+    item_error_rows = [dict(row) for row in cur.fetchall()]
+
+    return {
+        "header": header,
+        "monthly_rows": monthly_rows,
+        "file_rows": file_rows,
+        "source_ng_reasons": source_ng_reasons,
+        "case_check_rows": case_check_rows,
+        "item_error_rows": item_error_rows,
+        "summary": {
+            "file_total": sum(int(row.get("file_count") or 0) for row in monthly_rows),
+            "source_total": sum(int(row.get("source_count") or 0) for row in monthly_rows),
+            "source_ng_total": sum(int(row.get("source_ng_count") or 0) for row in monthly_rows),
+            "subscriber_issue_total": sum(int(row.get("subscriber_issue_count") or 0) for row in monthly_rows),
+            "item_error_total": sum(int(row.get("cnt") or 0) for row in item_error_rows),
+        },
+    }
+
+
 def load_xml_export_list_detail(cur: Any, *, xml_export_list_id: int) -> dict[str, Any] | None:
     cur.execute(
         f"""
@@ -7476,11 +7685,12 @@ def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, 
             groups.append(group)
         identity_key = str(row.get("identity_item_code") or row.get("namecode") or "")
         value_type = str(row.get("xml_value_type") or "")
+        entry_identity_key = manual_exam_entry_identity_key(row, identity_key=identity_key)
         expand_methods = manual_exam_should_expand_method_rows(
             row,
             same_identity_item_names=item_names_by_method_key.get((category, identity_key, value_type), set()),
         )
-        entry_key = str(row.get("namecode") if expand_methods else identity_key)
+        entry_key = str(row.get("namecode") if expand_methods else entry_identity_key)
         item_key = (category, entry_key, value_type, str(row.get("namecode") or "") if expand_methods else "")
         method_option = {
             "namecode": str(row.get("namecode") or ""),
@@ -7545,13 +7755,34 @@ def group_manual_exam_entry_items(rows: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def manual_exam_should_expand_method_rows(row: dict[str, Any], *, same_identity_item_names: set[str]) -> bool:
+    if manual_exam_time_series_key(row):
+        return False
     if len({name for name in same_identity_item_names if name}) > 1:
         return True
     text = " ".join(
         str(row.get(field) or "")
         for field in ("item_name", "identity_item_name", "category_name", "method_name")
     )
-    return "血圧" in text or "空腹" in text or "随時" in text or "心電図" in text
+    return "血圧" in text or "心電図" in text
+
+
+def manual_exam_time_series_key(row: dict[str, Any]) -> str:
+    text = " ".join(
+        str(row.get(field) or "")
+        for field in ("item_name", "identity_item_name")
+    )
+    if "空腹" in text:
+        return "FASTING"
+    if "随時" in text:
+        return "RANDOM"
+    return ""
+
+
+def manual_exam_entry_identity_key(row: dict[str, Any], *, identity_key: str) -> str:
+    time_series_key = manual_exam_time_series_key(row)
+    if time_series_key:
+        return f"{identity_key}:{time_series_key}"
+    return identity_key
 
 
 def manual_exam_method_option_sort_key(option: dict[str, Any]) -> tuple[int, str, str]:
@@ -9859,6 +10090,48 @@ def facility_summary(request: Request) -> Response:
             "rows": rows,
             "summary": summary,
             "limit": limit,
+        },
+    )
+
+
+@app.get("/facility-summary/detail", response_class=HTMLResponse)
+def facility_summary_detail(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = {
+        "event_id": request.query_params.get("event_id", "2"),
+        "facility_code": request.query_params.get("facility_code", ""),
+        "exam_month": request.query_params.get("exam_month", ""),
+    }
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            exam_month_options = load_facility_summary_month_options(cur, event_id=filters["event_id"])
+            detail = load_facility_summary_detail(
+                cur,
+                event_id=filters["event_id"],
+                facility_code=filters["facility_code"],
+                exam_month=filters["exam_month"],
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "facility_summary_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "exam_month_options": exam_month_options,
+            "selected_exam_months": split_filter_values(filters.get("exam_month")),
+            "filters": filters,
+            "detail": detail,
         },
     )
 

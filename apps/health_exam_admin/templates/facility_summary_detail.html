@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% set title = "健診機関サマリー詳細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">FACILITY DETAIL</p>
+    <h1>{{ detail.header.facility_name or "健診機関" }}</h1>
+    <p class="subtle">{{ detail.header.facility_code or filters.facility_code }} / {{ detail.header.expected_source_mode_label or "受領設定なし" }}</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/facility-summary?event_id={{ filters.event_id }}&exam_month={{ filters.exam_month|url_quote }}">サマリーへ戻る</a>
+    <a class="ghost-button" href="/exam-export-cases?event_id={{ filters.event_id }}&facility_q={{ (detail.header.facility_code or filters.facility_code)|url_quote }}&limit=500">個人case一覧</a>
+    <a class="ghost-button" href="/exam-ledgers?event_id={{ filters.event_id }}&facility_q={{ (detail.header.facility_code or filters.facility_code)|url_quote }}&limit=2000">健診結果一覧（受領）</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel filter-panel">
+    <div class="section-heading">
+      <div>
+        <h2>絞り込み</h2>
+        <p class="subtle">この健診機関だけに絞って、受診月ごとの傾向とエラー理由を確認します。</p>
+      </div>
+    </div>
+    <form method="get" action="/facility-summary/detail" class="filter-form filter-form-wide">
+      <input type="hidden" name="facility_code" value="{{ filters.facility_code }}">
+      <label>
+        <span>イベント</span>
+        <select name="event_id">
+          {% for event in event_options %}
+            <option value="{{ event.event_id }}" {% if filters.event_id|string == event.event_id|string %}selected{% endif %}>
+              {{ event.event_name or ("event " ~ event.event_id) }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>受診月</span>
+        <span class="month-picker-field" data-month-picker>
+          <input name="exam_month" value="{{ filters.exam_month or '' }}" autocomplete="off" placeholder="YYYY-MM" data-month-picker-input>
+          <div class="month-picker-popover" data-month-picker-popover hidden>
+            <div class="month-picker-head">
+              <strong>受診月を選択</strong>
+              <button type="button" class="ghost-button compact-action-button" data-month-picker-clear>クリア</button>
+            </div>
+            <div class="month-picker-options">
+              {% for option in exam_month_options %}
+              <label class="month-picker-option">
+                <input type="checkbox" value="{{ option.exam_month }}" {% if option.exam_month in selected_exam_months %}checked{% endif %} data-month-picker-option>
+                <span>{{ option.exam_month }}</span>
+                <small>source {{ option.source_count }} / case {{ option.case_count }}</small>
+              </label>
+              {% else %}
+              <p class="subtle">選択できる受診月がありません。</p>
+              {% endfor %}
+            </div>
+          </div>
+        </span>
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/facility-summary/detail?event_id={{ filters.event_id }}&facility_code={{ filters.facility_code|url_quote }}">クリア</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="summary-grid facility-summary-grid">
+    <div class="summary-card">
+      <span>受領ファイル</span>
+      <strong>{{ detail.summary.file_total }}</strong>
+      <small>月別集計</small>
+    </div>
+    <div class="summary-card">
+      <span>source</span>
+      <strong>{{ detail.summary.source_total }}</strong>
+      <small>取込済みledger</small>
+    </div>
+    <div class="summary-card">
+      <span>source NG</span>
+      <strong>{{ detail.summary.source_ng_total }}</strong>
+      <small>ファイル/行単位</small>
+    </div>
+    <div class="summary-card">
+      <span>加入者</span>
+      <strong>{{ detail.summary.subscriber_issue_total }}</strong>
+      <small>突合要確認</small>
+    </div>
+    <div class="summary-card">
+      <span>値エラー</span>
+      <strong>{{ detail.summary.item_error_total }}</strong>
+      <small>normalize/validation</small>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>月別の状況</h2>
+        <p class="subtle">どの月に問題が寄っているかを確認します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>受診月</th>
+            <th>受領ファイル</th>
+            <th>source</th>
+            <th>source OK</th>
+            <th>source NG</th>
+            <th>加入者</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.monthly_rows %}
+          <tr>
+            <td><strong>{{ row.exam_month }}</strong></td>
+            <td>{{ row.file_count }}</td>
+            <td>{{ row.source_count }}</td>
+            <td>{{ row.source_ok_count }}</td>
+            <td>{{ row.source_ng_count }}</td>
+            <td>{{ row.subscriber_issue_count }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">月別データはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>受領ファイル</h2>
+        <p class="subtle">直近の受領ファイルと、その中のsourceチェック状況です。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>種別</th>
+            <th>ファイル</th>
+            <th>状態</th>
+            <th>OK/NG/ALL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.file_rows %}
+          <tr>
+            <td>{{ row.file_type }}</td>
+            <td>
+              <strong>{{ row.file_name }}</strong>
+              <small>{{ row.relative_path }}</small>
+            </td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.source_ok_count }} / {{ row.source_ng_count }} / {{ row.source_count }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">受領ファイルはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="two-column-panels">
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <h2>source NG理由</h2>
+          <p class="subtle">ファイル・行単位で落ちている理由です。</p>
+        </div>
+      </div>
+      <div class="table-panel">
+        <table class="data-table compact-table">
+          <thead><tr><th>理由</th><th>件数</th></tr></thead>
+          <tbody>
+            {% for row in detail.source_ng_reasons %}
+            <tr><td>{{ row.reason }}</td><td>{{ row.cnt }}</td></tr>
+            {% else %}
+            <tr><td colspan="2">source NGはありません。</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <h2>値エラー上位</h2>
+          <p class="subtle">normalize/validationで落ちている項目です。</p>
+        </div>
+      </div>
+      <div class="table-panel">
+        <table class="data-table compact-table">
+          <thead><tr><th>項目</th><th>状態</th><th>理由</th><th>件数</th></tr></thead>
+          <tbody>
+            {% for row in detail.item_error_rows %}
+            <tr>
+              <td><strong>{{ row.item_name }}</strong><small>{{ row.namecode }}</small></td>
+              <td>{{ row.normalize_status }} / {{ row.validation_status }}</td>
+              <td>{{ row.normalize_reason or row.validation_reason or "-" }}</td>
+              <td>{{ row.cnt }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4">値エラーはありません。</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>caseチェックの塊</h2>
+        <p class="subtle">同じ理由で落ちているcaseをまとめて確認します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>法定</th>
+            <th>特定</th>
+            <th>理由</th>
+            <th>件数</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.case_check_rows %}
+          <tr>
+            <td>{{ row.legal_check_result }}</td>
+            <td>{{ row.specific_check_result }}</td>
+            <td>
+              {% if row.legal_reason_summary %}<strong>法定</strong><small>{{ row.legal_reason_summary }}</small>{% endif %}
+              {% if row.specific_reason_summary %}<strong>特定</strong><small>{{ row.specific_reason_summary }}</small>{% endif %}
+              {% if not row.legal_reason_summary and not row.specific_reason_summary %}<small>理由なし</small>{% endif %}
+            </td>
+            <td>{{ row.cnt }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">caseチェック結果はありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}
