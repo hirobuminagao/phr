@@ -46,8 +46,10 @@ from scripts.from_medical.script_lib.hia_xml_export_loader import (
 from scripts.from_medical.script_lib.specific_health_checker import (
     RESULT_NOT_APPLICABLE,
     RESULT_UNDETERMINABLE,
+    SPECIFIC_DETAIL_CODE_BY_NAMECODE,
+    SPECIFIC_ITEM_NAMES,
     SPECIFIC_REQUIRED_NAMECODES,
-    aggregate_specific_result,
+    aggregate_specific_result_with_details,
 )
 from scripts.from_medical.script_lib.specific_health_required_namecodes import fetch_specific_health_required_namecodes
 from scripts.hia.script_lib.config_loader import config_bool, config_value, load_yaml_config
@@ -7820,6 +7822,19 @@ def manual_exam_entry_column_exists(cur: Any, schema_name: str, table_name: str,
     return bool(row and int(row.get("cnt") or 0) > 0)
 
 
+def manual_exam_entry_existing_columns(cur: Any, schema_name: str, table_name: str) -> set[str]:
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = %s
+        """,
+        (schema_name, table_name),
+    )
+    return {str(row.get("column_name") or "") for row in cur.fetchall()}
+
+
 def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filter: str = "") -> list[dict[str, Any]]:
     value_join = ""
     value_select = "0 AS value_count"
@@ -7837,6 +7852,11 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
         f"NULL AS a44_{detail_no}_status, NULL AS a44_{detail_no}_reason"
         for detail_no in ARTICLE44_DETAIL_NAMES
     )
+    specific_detail_codes = sorted(SPECIFIC_DETAIL_CODE_BY_NAMECODE.values())
+    specific_check_columns = ",\n          ".join(
+        f"NULL AS sp_{detail_code}_status, NULL AS sp_{detail_code}_reason"
+        for detail_code in specific_detail_codes
+    )
     check_join = ""
     check_select = f"""
           NULL AS draft_legal_check_result,
@@ -7846,12 +7866,27 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           NULL AS draft_checked_at,
           NULL AS draft_updated_at_snapshot,
           NULL AS draft_checked_by_name,
-          {article44_check_columns}
+          {article44_check_columns},
+          {specific_check_columns}
     """
     if manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_check_results"):
+        existing_check_columns = manual_exam_entry_existing_columns(
+            cur,
+            health_db(),
+            "manual_exam_entry_draft_check_results",
+        )
         article44_check_columns = ",\n          ".join(
             f"dcr.a44_{detail_no}_status, dcr.a44_{detail_no}_reason"
             for detail_no in ARTICLE44_DETAIL_NAMES
+        )
+        specific_check_columns = ",\n          ".join(
+            (
+                f"dcr.sp_{detail_code}_status, dcr.sp_{detail_code}_reason"
+                if f"sp_{detail_code}_status" in existing_check_columns
+                and f"sp_{detail_code}_reason" in existing_check_columns
+                else f"NULL AS sp_{detail_code}_status, NULL AS sp_{detail_code}_reason"
+            )
+            for detail_code in specific_detail_codes
         )
         check_select = f"""
           dcr.legal_check_result AS draft_legal_check_result,
@@ -7861,7 +7896,8 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           dcr.checked_at AS draft_checked_at,
           dcr.draft_updated_at_snapshot AS draft_updated_at_snapshot,
           COALESCE(cbu.display_name, cbu.employee_no, CONCAT('user ', dcr.checked_by_app_user_id)) AS draft_checked_by_name,
-          {article44_check_columns}
+          {article44_check_columns},
+          {specific_check_columns}
         """
         check_join = f"""
         LEFT JOIN {qname(health_db())}.manual_exam_entry_draft_check_results dcr
@@ -7967,9 +8003,25 @@ def manual_exam_draft_check_details(row: Mapping[str, Any]) -> list[dict[str, st
                 "reason": reason,
             }
         )
+    specific_detail_found = False
+    for namecode, detail_code in sorted(SPECIFIC_DETAIL_CODE_BY_NAMECODE.items(), key=lambda item: item[1]):
+        status = _manual_text(row.get(f"sp_{detail_code}_status"))
+        reason = _manual_text(row.get(f"sp_{detail_code}_reason"))
+        if not status and not reason:
+            continue
+        specific_detail_found = True
+        details.append(
+            {
+                "scope": "特定",
+                "detail_no": detail_code,
+                "name": SPECIFIC_ITEM_NAMES.get(namecode, namecode),
+                "status": status,
+                "reason": reason,
+            }
+        )
     specific_status = _manual_text(row.get("draft_specific_check_result"))
     specific_reason = _manual_text(row.get("draft_specific_reason_summary"))
-    if specific_status or specific_reason:
+    if not specific_detail_found and (specific_status or specific_reason):
         details.append(
             {
                 "scope": "特定",
@@ -8100,6 +8152,7 @@ def insert_manual_exam_draft_check_result(
     legal_summary: str | None,
     specific_result: str,
     specific_summary: str | None,
+    specific_detail_results: Mapping[str, Any],
     user_id: int,
 ) -> None:
     draft_id = int(draft["manual_exam_entry_draft_id"])
@@ -8123,6 +8176,18 @@ def insert_manual_exam_draft_check_result(
         "checked_by_app_user_id": user_id,
     }
     row.update(article44_result_columns(article44_result))
+    existing_columns = manual_exam_entry_existing_columns(
+        cur,
+        health_db(),
+        "manual_exam_entry_draft_check_results",
+    )
+    for detail_code, result in specific_detail_results.items():
+        status_column = f"sp_{detail_code}_status"
+        reason_column = f"sp_{detail_code}_reason"
+        if status_column not in existing_columns or reason_column not in existing_columns:
+            continue
+        row[status_column] = result.status
+        row[reason_column] = result.reason
     columns = list(row.keys())
     placeholders = ", ".join(["%s"] * len(columns))
     column_sql = ", ".join(f"`{column}`" for column in columns)
@@ -8205,7 +8270,7 @@ def check_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
     )
     event_year = get_event_year(cur, event_id=event_id, dev_db=dev_db())
     fiscal_end = fiscal_year_end_date(event_year) if event_year is not None else None
-    specific_result, specific_summary = aggregate_specific_result(
+    specific_result, specific_summary, specific_detail_results = aggregate_specific_result_with_details(
         value_map=specific_value_map,
         required_namecodes=specific_required,
         birthdate=draft.get("birthdate"),
@@ -8220,6 +8285,7 @@ def check_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
         legal_summary=legal_summary,
         specific_result=specific_result,
         specific_summary=specific_summary,
+        specific_detail_results=specific_detail_results,
         user_id=user_id,
     )
     return {

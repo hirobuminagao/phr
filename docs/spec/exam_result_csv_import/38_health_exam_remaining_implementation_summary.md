@@ -468,9 +468,12 @@ XML出力条件を画面から指定できるようにする。
 - 健保、事業所、納品先、運用都合で追加したい任意チェックは横持ち制度チェックへ混ぜない。
 - 任意チェックは後続でルールセット型の柔軟な仕組みに分ける。対象が限定されるため、多少重くなっても出力前・納品前の確認処理として許容する。
 
-初版では、法定チェックとは別に `specific_check_result` / `specific_reason_summary` を更新する。
+現行実装では、法定チェックとは別に `specific_check_result` / `specific_reason_summary` を更新している。
 判断は解釈ではなく、取込済み値の事実確認に限定する。
-`specific_*` は元々特定健診チェックを想定していた枠であるため、初期実装では新しい結果カラムを増やさず、この既存枠を正として使う。
+`specific_*` は特定健診チェックの総合判定とsummary枠として使う。
+ただし、特定健診も固定制度チェックであるため、項目別の正はsummary文字列ではなく横持ち `status` / `reason` で保持する方針へ改める。
+本データ側を直接揺らす前に、まず `manual_exam_entry_draft_check_results` 側で特定健診detail codeごとの横持ち保存を先行実装し、画面表示・保存処理・確認項目作成の形を検証する。
+draft側で固めた構造を、後続で正式 `exam_check_results` へ横展開する。
 
 初版の対象:
 
@@ -481,6 +484,7 @@ XML出力条件を画面から指定できるようにする。
 - 年齢対象外は `specific_check_result = NOT_APPLICABLE` とし、OKとは分けて表示する。summaryには対象外理由を残す。
 - 生年月日や年度末基準日が不足して特定健診対象判定ができない場合は `specific_check_result = UNDETERMINABLE` とし、画面では「判定不能」と表示する。
 - 法定健診チェックと重なる項目は、法定チェックがOKなら満たしているものとして扱い、特定健診側では重複チェックしない。
+- 法定44の血糖チェックで条件として確認する `9N141000000000011` 採血時間は、特定健診XML上も重要だが、特定健診detail横持ちでは二重管理しない。
 - 法定側にない特定健診項目は、namecodeの存在、normalize後のCD/ST値としての妥当性を確認する。
 - 特定健診チェックも則44と同じく「制度detail code -> namecode候補 -> OK/MISSING/INVALID」の形へ寄せる。
 - 特定健診用detail codeは、則44の `4401001001` などと衝突しないよう先頭を `10` とする。
@@ -488,9 +492,8 @@ XML出力条件を画面から指定できるようにする。
 - 必要namecode群は `dev_phr.exam_item_group_members` 等のルールマスタで管理する。
 - 実行時の特定健診チェックは `dev_phr.exam_item_group_members` の `v2_2026_SPECIFIC_HEALTH_CHECK_ITEMS` を正とする。固定リストはseed未適用環境のfallbackに限定し、チェック結果とplaceholder作成対象がズレないよう同じ必須リストを使う。
 
-初版で確認する特定健診側の主なnamecode:
+初版で特定健診固有detailとして確認する主なnamecode:
 
-- `9N141000000000011` 採血時間（食後）
 - `9N501000000000011` メタボリックシンドローム判定
 - `9N506000000000011` 保健指導レベル
 - `9N511000000000049` 医師の診断（判定）
@@ -521,10 +524,21 @@ XML出力条件を画面から指定できるようにする。
 
 実装メモ:
 
-- `03_04_check_exam_export_cases.py` 実行時に、法定チェックの `MISSING` と、特定健診の `specific_reason_summary` に含まれる `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` を抽出し、case側の `exam_case_check_review_items` を作成・更新する。
+- `03_04_check_exam_export_cases.py` 実行時に、法定チェックの `MISSING` と、特定健診の `NOT_FOUND`、`NULL`、`EMPTY`、`CODE_VALUE_MISSING`、`TEXT_VALUE_MISSING` を抽出し、case側の `exam_case_check_review_items` を作成・更新する。
+- 現行実装では特定健診の項目別横持ちが未整備のため、`specific_reason_summary` をパースして確認項目を作っている。これは暫定処理であり、draft側・正式側の横持ち整備後は、項目別 `status` / `reason` を正として確認項目を作る。
 - 法定チェック由来の確認項目は `check_scope = ARTICLE44` とし、値そのものではなく確認・理由ありOKの作業対象として扱う。保存単位は業務チェックID、画面上の補助情報として関連namecode一覧と状態を表示する。
 - 特定健診由来の確認項目は `check_scope = SPECIFIC_HEALTH` とし、値そのものではなく確認・理由ありOKの作業対象として扱う。再チェックで不足が解消した場合は、未処理状態の確認項目を `RESOLVED_BY_SOURCE_VALUE` に変更して経緯を残す。
 - `PRIMARY` / `SUPPLEMENT` の両方にVALID値があり、採用値だけが業務的に怪しい場合は、MISSING placeholderではなく採用優先ルールまたは確認ルールで扱う。case詳細画面では両候補を横並びで確認し、健診機関確認や precedence rule 追加判断につなげる。
+
+直近の実装順:
+
+1. `manual_exam_entry_draft_check_results` に特定健診detail code別の横持ち `status` / `reason` を追加する。
+2. draft参考チェックで、特定健診の項目別結果をsummaryだけでなく横持ちへ保存する。
+3. 仮登録リスト/参考チェック詳細で、法定と特定健診の項目別結果を同じ見え方にする。
+4. 法定側と重なる項目は特定健診detail横持ちから除外し、法定チェック結果を利用する。
+5. draft側で問題がないことを確認後、正式 `exam_check_results` に同じ横持ちカラムを追加する。
+6. `specific_reason_summary` パース依存の確認項目作成を、横持ち項目別結果参照へ置き換える。
+6. 既存正式データは source/case のチェックを再実行して横持ち結果を再生成する。
 
 ### 9. Master and Facility Admin UI
 

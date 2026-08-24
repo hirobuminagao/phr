@@ -25,7 +25,6 @@ RESULT_NOT_APPLICABLE = "NOT_APPLICABLE"
 RESULT_UNDETERMINABLE = "UNDETERMINABLE"
 
 SPECIFIC_REQUIRED_NAMECODES: tuple[RequiredNamecode, ...] = (
-    RequiredNamecode("9N141000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N501000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N506000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N511000000000049", ExpectedValueType.ST),
@@ -53,6 +52,45 @@ SPECIFIC_REQUIRED_NAMECODES: tuple[RequiredNamecode, ...] = (
     RequiredNamecode("9N801000000000011", ExpectedValueType.CD),
     RequiredNamecode("9N808000000000011", ExpectedValueType.CD),
 )
+
+SPECIFIC_LEGAL_OVERLAP_NAMECODES: frozenset[str] = frozenset(
+    {
+        "9N141000000000011",
+    }
+)
+
+SPECIFIC_DETAIL_CODE_BY_NAMECODE: dict[str, str] = {
+    "9N501000000000011": "1002001001",
+    "9N506000000000011": "1002001002",
+    "9N511000000000049": "1002001003",
+    "9N516000000000049": "1002001004",
+    "9N701000000000011": "1003001001",
+    "9N706000000000011": "1003001002",
+    "9N711000000000011": "1003001003",
+    "9N716000000000011": "1003001004",
+    "9N721000000000011": "1003001005",
+    "9N726000000000011": "1003001006",
+    "9N731000000000011": "1003001007",
+    "9N736000000000011": "1003001008",
+    "9N741000000000011": "1003001009",
+    "9N746000000000011": "1003001010",
+    "9N751000000000011": "1003001011",
+    "9N756000000000011": "1003001012",
+    "9N872000000000011": "1003001013",
+    "9N766000000000011": "1003001014",
+    "9N771000000000011": "1003001015",
+    "9N782000000000011": "1003001016",
+    "9N781000000000011": "1003001017",
+    "9N786000000000011": "1003001018",
+    "9N791000000000011": "1003001019",
+    "9N796000000000011": "1003001020",
+    "9N801000000000011": "1003001021",
+    "9N808000000000011": "1003001022",
+}
+
+SPECIFIC_NAMECODE_BY_DETAIL_CODE: dict[str, str] = {
+    detail_code: namecode for namecode, detail_code in SPECIFIC_DETAIL_CODE_BY_NAMECODE.items()
+}
 
 SPECIFIC_ITEM_NAMES: dict[str, str] = {
     "9N141000000000011": "採血時間（食後）",
@@ -100,23 +138,60 @@ def aggregate_specific_result(
     HIA/MHLW XML acceptance.
     """
 
+    result, summary, _detail_results = aggregate_specific_result_with_details(
+        value_map=value_map,
+        required_namecodes=required_namecodes,
+        birthdate=birthdate,
+        age_reference_date=age_reference_date,
+        legal_result=legal_result,
+    )
+    return result, summary
+
+
+def aggregate_specific_result_with_details(
+    *,
+    value_map: ValueMap,
+    required_namecodes: tuple[RequiredNamecode, ...] = SPECIFIC_REQUIRED_NAMECODES,
+    birthdate: Any,
+    age_reference_date: date | None,
+    legal_result: str,
+) -> tuple[str, str | None, dict[str, CheckResult]]:
+    """Return specific health aggregate and fixed detail-code results."""
+
     target = specific_target_state(birthdate=birthdate, age_reference_date=age_reference_date)
+    detail_results: dict[str, CheckResult] = {}
     if target.status != STATUS_OK:
-        return RESULT_UNDETERMINABLE, f"判定不能:{target.reason or target.status}"
+        reason = f"判定不能:{target.reason or target.status}"
+        for required in required_namecodes:
+            detail_code = SPECIFIC_DETAIL_CODE_BY_NAMECODE.get(required.namecode)
+            if detail_code:
+                detail_results[detail_code] = CheckResult(RESULT_UNDETERMINABLE, reason)
+        return RESULT_UNDETERMINABLE, reason, detail_results
     if target.reason == "NOT_TARGET_AGE":
-        return RESULT_NOT_APPLICABLE, "対象外:年度末年齢が40-74歳ではありません"
+        reason = "対象外:年度末年齢が40-74歳ではありません"
+        for required in required_namecodes:
+            detail_code = SPECIFIC_DETAIL_CODE_BY_NAMECODE.get(required.namecode)
+            if detail_code:
+                detail_results[detail_code] = CheckResult(RESULT_NOT_APPLICABLE, reason)
+        return RESULT_NOT_APPLICABLE, reason, detail_results
+
     reasons: list[str] = []
     if legal_result != RESULT_OK:
         reasons.append("法定重複項目:LEGAL_CHECK_NOT_OK")
     for required in required_namecodes:
+        if required.namecode in SPECIFIC_LEGAL_OVERLAP_NAMECODES:
+            continue
         result = check_required_specific_value(value_map, required.namecode)
+        detail_code = SPECIFIC_DETAIL_CODE_BY_NAMECODE.get(required.namecode)
+        if detail_code:
+            detail_results[detail_code] = result
         if result.status == STATUS_OK:
             continue
         item_name = SPECIFIC_ITEM_NAMES.get(required.namecode, required.namecode)
         reasons.append(f"{required.namecode}:{item_name}:{result.reason or result.status}")
     if reasons:
-        return RESULT_NG, " | ".join(reasons)
-    return RESULT_OK, None
+        return RESULT_NG, " | ".join(reasons), detail_results
+    return RESULT_OK, None, detail_results
 
 
 def specific_target_state(*, birthdate: Any, age_reference_date: date | None) -> CheckResult:

@@ -339,6 +339,8 @@ caseから選択した場合:
 - 出力可否は、本データ反映後に通常stepで作成される `exam_check_results` を正とする。
 - 実行入口は `健診結果仮登録リスト` に置く。
 - `健診結果処理実行` 画面に置く場合も、通常stepには混ぜず、仮登録用の別ブロックとして扱う。
+- 特定健診の項目別横持ちは、正式 `exam_check_results` に入れる前にdraft側で先行検証する。draftは本データへ混ざらず、まだ投入件数も少ないため、detail code、カラム構成、画面表示、保存処理を安全に試せる。
+- draft側で確定した特定健診detail codeと `status` / `reason` の持ち方を、後続で正式 `exam_check_results` へ横展開する。
 
 画面操作:
 
@@ -378,6 +380,8 @@ caseから選択した場合:
 - 保存先が2つになるため、ルール追加時の影響範囲を必ず確認する。
 - 正式 `exam_check_results` の横持ち項目を追加した場合、必要に応じて `manual_exam_entry_draft_check_results` 側にも同じ項目を追加する。
 - 画面表示、DDL、migration、チェック結果保存処理の4点をセットで更新する。
+- draft先行期間中は、draft側だけが特定健診の項目別横持ちを持ち、正式 `exam_check_results` は `specific_check_result` / `specific_reason_summary` 中心のままになる。この差は意図した検証期間の差分であり、draft側確認後に正式側へ同じ構造を追加して解消する。
+- `specific_reason_summary` のパースは、特定健診の項目別横持ちが正式側に入るまでの暫定処理とする。最終的には、summaryではなく横持ちの項目別 `status` / `reason` を正として確認項目を作る。
 
 ### 6. 仮登録リストから削除
 
@@ -561,6 +565,8 @@ Migration:
 
 - `sql/migrations/health_exam_result/20260824_001_health_exam_result_create_manual_exam_entry_drafts.sql`
 - `sql/migrations/health_exam_result/20260824_002_health_exam_result_fix_manual_exam_item_value_ledger_type.sql`
+- `sql/migrations/health_exam_result/20260824_003_health_exam_result_create_manual_exam_entry_draft_check_results.sql`
+- `sql/migrations/health_exam_result/20260824_004_health_exam_result_add_specific_columns_to_manual_draft_checks.sql`
 
 既存テーブル追加検討:
 
@@ -750,6 +756,8 @@ Migration:
   - draft valuesから正式チェック互換の値マップを作る。
   - 法定チェック・特定健診チェックの判定ロジックを共通利用する。
   - 保存先は正式 `exam_check_results` ではなく `manual_exam_entry_draft_check_results` にする。
+  - 特定健診固有の固定detail codeごとの `status` / `reason` を、draft側の横持ちカラムとして保存する。
+  - 法定側と重なる項目は特定健診detail横持ちから除外し、法定チェック結果を利用する。
   - 仮登録リストに参考チェック結果を表示する。
 - ページ離脱時の未保存警告。
 - `ERROR -> READY` の明示操作。
@@ -782,6 +790,8 @@ Migration:
 15. 仮登録参考チェックを追加 後続
    - `manual_exam_entry_draft_check_results`
    - draft値マップadapter
+   - 特定健診固有detail code別の横持ち保存
+   - 法定側と重なる項目は特定健診detail横持ちから除外
    - 仮登録リストでの結果表示
 
 ## この設計で守ること
@@ -795,6 +805,9 @@ Migration:
 - 仮登録チェック結果を正式な `exam_check_results` に混ぜない。
 - 理由ありOKや確認事項は `exam_case_check_review_items` 側で扱う。
 - 入力値の由来を追えるように、draft、反映ledger、反映item_valuesを紐付ける。
+- 固定制度チェックである法定健診・特定健診は、最終的に横持ち `status` / `reason` を正とする。
+- 法定健診チェックと特定健診チェックで同じ意味になる項目は、特定健診側に二重のdetailカラムを作らない。
+- 可変になり得る健保独自チェック、納品先独自チェック、外部指摘、作業状態は横持ち制度チェックに混ぜず、別の柔軟な器で扱う。
 
 ## 保守上の注意
 
@@ -818,3 +831,7 @@ Migration:
 
 保存先を分けることで、DDLや表示項目のメンテナンス箇所は増える。
 ただし、入力途中のdraftが正式な出力可否へ混ざる事故を避けるため、この分離を優先する。
+
+特定健診の横持ち追加は、draft側を先行して実装する。
+正式側へ反映する際は、draft側で固めたdetail code、カラム名、画面表示、summary生成、確認項目作成ロジックをそのまま横展開する。
+既存の正式データは `exam_item_values` / `exam_export_case_values` を元に再チェックすれば再生成できるため、ルール変更ではなく保存構造の補正として扱う。
