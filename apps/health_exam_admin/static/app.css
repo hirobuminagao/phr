@@ -1657,6 +1657,13 @@ a.home-menu-card.is-navigating {
   white-space: nowrap;
 }
 
+.manual-draft-list-table th:nth-child(6),
+.manual-draft-list-table td:nth-child(6) {
+  width: 76px;
+  max-width: 76px;
+  white-space: nowrap;
+}
+
 .manual-draft-list-table th:nth-child(7),
 .manual-draft-list-table td:nth-child(7) {
   width: 64px;
@@ -1667,8 +1674,8 @@ a.home-menu-card.is-navigating {
 
 .manual-draft-list-table th:last-child,
 .manual-draft-list-table td:last-child {
-  width: 190px;
-  max-width: 190px;
+  width: 260px;
+  max-width: 260px;
 }
 
 .manual-draft-list-table td:last-child {
