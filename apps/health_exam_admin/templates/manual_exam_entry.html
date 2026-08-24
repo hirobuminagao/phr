@@ -513,10 +513,15 @@
                 data-namecode="{{ item.namecode }}"
                 data-category-name="{{ item.category_name or group.category_name }}"
                 data-identity-item-name="{{ item.identity_item_name or '' }}"
+                {% if item.manual_blood_time_item %}data-manual-blood-time-row{% endif %}
+                {% if item.manual_random_time_required_trigger %}data-manual-random-time-row{% endif %}
               >
                 <td>
                   <strong>{{ item.item_name }}</strong>
                   <small>{{ item.namecode }}{% if item.identity_item_code %} / {{ item.identity_item_code }}{% endif %}</small>
+                  {% if item.manual_original_category_name and item.manual_original_category_name != item.category_name %}
+                  <small>元カテゴリ: {{ item.manual_original_category_name }}</small>
+                  {% endif %}
                   {% if item.manual_article44_items %}
                   <div class="manual-entry-item-badges">
                     {% for article44 in item.manual_article44_items %}
@@ -529,6 +534,11 @@
                     <span class="status-pill status-warning">特記事項あり時 必須</span>
                   </div>
                   {% endif %}
+                  {% if item.manual_blood_time_item %}
+                  <div class="manual-entry-item-badges">
+                    <span class="status-pill status-warning" data-manual-blood-time-required-badge hidden>随時入力時 必須</span>
+                  </div>
+                  {% endif %}
                 </td>
                 <td>
                   <div class="manual-entry-value-control">
@@ -537,6 +547,8 @@
                       class="manual-entry-value-input manual-entry-st-value-input"
                       name="item_value_{{ item.manual_entry_key or item.namecode }}"
                       data-manual-method-group="{{ item.manual_entry_key or item.namecode }}_{{ item.xml_value_type or '' }}"
+                      {% if item.manual_blood_time_item %}data-manual-blood-time-input{% endif %}
+                      {% if item.manual_random_time_required_trigger %}data-manual-random-time-input{% endif %}
                       placeholder="ST"
                       rows="3"
                     ></textarea>
@@ -546,6 +558,8 @@
                       type="{{ item.manual_input_type }}"
                       name="item_value_{{ item.manual_entry_key or item.namecode }}"
                       data-manual-method-group="{{ item.manual_entry_key or item.namecode }}_{{ item.xml_value_type or '' }}"
+                      {% if item.manual_blood_time_item %}data-manual-blood-time-input{% endif %}
+                      {% if item.manual_random_time_required_trigger %}data-manual-random-time-input{% endif %}
                       placeholder="{{ item.xml_value_type or '値' }}"
                     >
                     {% endif %}

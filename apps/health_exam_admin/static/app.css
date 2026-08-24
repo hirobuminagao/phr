@@ -2346,6 +2346,15 @@ a.home-menu-card.is-navigating {
   box-shadow: inset 4px 0 0 #c99700;
 }
 
+.manual-entry-item-table tr.is-manual-required td {
+  background: #fff7e6;
+}
+
+.manual-entry-item-table tr.is-manual-required .manual-entry-value-input {
+  border-color: #d89516;
+  box-shadow: 0 0 0 2px rgba(216, 149, 22, 0.14);
+}
+
 .manual-entry-value-input:disabled,
 .manual-entry-item-table tr.is-method-disabled {
   opacity: 0.48;

@@ -1541,6 +1541,31 @@
     }
   }
 
+  const manualRandomTimeInputs = Array.from(document.querySelectorAll("[data-manual-random-time-input]"));
+  const manualBloodTimeInput = document.querySelector("[data-manual-blood-time-input]");
+  const manualBloodTimeRow = document.querySelector("[data-manual-blood-time-row]");
+  const manualBloodTimeBadge = document.querySelector("[data-manual-blood-time-required-badge]");
+  if (manualRandomTimeInputs.length && manualBloodTimeInput && manualBloodTimeRow) {
+    const hasRandomTimeValue = () => manualRandomTimeInputs.some((input) => String(input.value || "").trim() !== "");
+    const hasBloodTimeValue = () => String(manualBloodTimeInput.value || "").trim() !== "";
+    const refreshBloodTimeRequirement = ({ scrollIfMissing = false } = {}) => {
+      const required = hasRandomTimeValue();
+      manualBloodTimeInput.toggleAttribute("required", required);
+      manualBloodTimeRow.classList.toggle("is-manual-required", required && !hasBloodTimeValue());
+      if (manualBloodTimeBadge) manualBloodTimeBadge.hidden = !required;
+      if (required && !hasBloodTimeValue() && scrollIfMissing) {
+        manualBloodTimeRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        manualBloodTimeInput.focus({ preventScroll: true });
+      }
+    };
+    for (const input of manualRandomTimeInputs) {
+      input.addEventListener("input", () => refreshBloodTimeRequirement());
+      input.addEventListener("change", () => refreshBloodTimeRequirement({ scrollIfMissing: true }));
+    }
+    manualBloodTimeInput.addEventListener("input", () => refreshBloodTimeRequirement());
+    refreshBloodTimeRequirement();
+  }
+
   const manualEntryItemList = document.querySelector("#manual-entry-item-list");
   const manualEntryItemSearchInput = document.querySelector("#manual-entry-item-search-input");
   if (manualEntryItemList) {

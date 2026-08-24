@@ -7547,6 +7547,13 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
         if group_key:
             method_group_counts[group_key] = method_group_counts.get(group_key, 0) + 1
     for row in rows:
+        row["manual_original_category_name"] = row.get("category_name")
+        if manual_exam_is_blood_collection_time(row):
+            row["category_name"] = "生化学検査"
+            row["manual_blood_time_item"] = True
+        else:
+            row["manual_blood_time_item"] = False
+        row["manual_random_time_required_trigger"] = manual_exam_time_series_key(row) == "RANDOM"
         group_key = str(row.get("identity_item_code") or row.get("namecode") or "")
         row["manual_method_group_key"] = group_key
         row["manual_method_group_count"] = method_group_counts.get(group_key, 0)
@@ -7783,6 +7790,13 @@ def manual_exam_entry_identity_key(row: dict[str, Any], *, identity_key: str) ->
     if time_series_key:
         return f"{identity_key}:{time_series_key}"
     return identity_key
+
+
+def manual_exam_is_blood_collection_time(row: dict[str, Any]) -> bool:
+    namecode = str(row.get("namecode") or "")
+    identity_code = str(row.get("identity_item_code") or "")
+    item_name = str(row.get("item_name") or "")
+    return namecode.startswith("9N141") or identity_code == "9N141" or "採血時間" in item_name
 
 
 def manual_exam_method_option_sort_key(option: dict[str, Any]) -> tuple[int, str, str]:
