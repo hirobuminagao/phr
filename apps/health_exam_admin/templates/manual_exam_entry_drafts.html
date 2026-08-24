@@ -103,6 +103,7 @@
             <th>状態</th>
             <th>入力対象</th>
             <th>健診機関</th>
+            <th>変更</th>
             <th>健診実施日</th>
             <th>入力目的</th>
             <th>値</th>
@@ -133,23 +134,23 @@
               </td>
               <td>
                 <strong>{{ draft.facility_name or draft.facility_code or "未設定" }}</strong>
-                <div class="inline-action-row">
-                  <button
-                    type="button"
-                    class="ghost-button compact-action-button"
-                    data-modal-open="manual-draft-facility-picker-modal"
-                    data-manual-draft-facility-change
-                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                    data-event-id="{{ draft.event_id or 2 }}"
-                    data-facility-code="{{ draft.facility_code or '' }}"
-                    data-facility-name="{{ draft.facility_name or '' }}"
-                    data-exam-date="{{ draft.exam_date or '' }}"
-                  >変更</button>
-                </div>
                 <small>
                   {% if draft.facility_code %}{{ draft.facility_code }}{% endif %}
                   {% if draft.facility_document_id %}<br>doc {{ draft.facility_document_id }}{% endif %}
                 </small>
+              </td>
+              <td>
+                <button
+                  type="button"
+                  class="ghost-button compact-action-button"
+                  data-modal-open="manual-draft-facility-picker-modal"
+                  data-manual-draft-facility-change
+                  data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                  data-event-id="{{ draft.event_id or 2 }}"
+                  data-facility-code="{{ draft.facility_code or '' }}"
+                  data-facility-name="{{ draft.facility_name or '' }}"
+                  data-exam-date="{{ draft.exam_date or '' }}"
+                >変更</button>
               </td>
               <td>
                 <div class="manual-draft-date-edit">
@@ -190,7 +191,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="8">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
+              <td colspan="9">仮登録はまだありません。上の「人を選んで新規」または「caseを選んで新規」から開始する想定です。</td>
             </tr>
           {% endfor %}
         </tbody>

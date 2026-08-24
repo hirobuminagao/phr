@@ -1540,22 +1540,46 @@ a.home-menu-card.is-navigating {
   pointer-events: none;
 }
 
-.manual-draft-list-table th:first-child,
-.manual-draft-list-table td:first-child {
+.manual-draft-list-table th:nth-child(1),
+.manual-draft-list-table td:nth-child(1) {
   width: 92px;
   max-width: 92px;
 }
 
+.manual-draft-list-table th:nth-child(4),
+.manual-draft-list-table td:nth-child(4) {
+  width: 70px;
+  max-width: 70px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.manual-draft-list-table th:nth-child(5),
+.manual-draft-list-table td:nth-child(5) {
+  width: 112px;
+  max-width: 112px;
+  white-space: nowrap;
+}
+
+.manual-draft-list-table th:nth-child(7),
+.manual-draft-list-table td:nth-child(7) {
+  width: 64px;
+  max-width: 64px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .manual-draft-list-table th:last-child,
 .manual-draft-list-table td:last-child {
-  width: 132px;
-  max-width: 132px;
+  width: 124px;
+  max-width: 124px;
 }
 
 .manual-draft-list-table td:last-child {
   white-space: nowrap;
 }
 
+.manual-draft-list-table td:nth-child(4) .compact-action-button,
 .manual-draft-list-table td:last-child .compact-action-button {
   min-width: 56px;
   padding-inline: 8px;
