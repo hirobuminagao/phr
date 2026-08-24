@@ -1583,8 +1583,8 @@ a.home-menu-card.is-navigating {
 
 .manual-draft-list-table th:last-child,
 .manual-draft-list-table td:last-child {
-  width: 180px;
-  max-width: 180px;
+  width: 190px;
+  max-width: 190px;
 }
 
 .manual-draft-list-table td:last-child {
@@ -1593,8 +1593,8 @@ a.home-menu-card.is-navigating {
 
 .manual-draft-list-table td:nth-child(4) .compact-action-button,
 .manual-draft-list-table td:last-child .compact-action-button {
-  min-width: 50px;
-  padding-inline: 7px;
+  min-width: 54px;
+  padding-inline: 8px;
 }
 
 .active-filter-summary {
@@ -4750,10 +4750,12 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .danger-button {
   background: #b42318 !important;
+  color: #fff !important;
 }
 
 .danger-button:hover {
   background: #8f1d14 !important;
+  color: #fff !important;
 }
 
 .ghost-submit {
