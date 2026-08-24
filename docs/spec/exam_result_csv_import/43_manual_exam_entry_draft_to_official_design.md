@@ -376,6 +376,7 @@ caseから選択した場合:
 - 戻し実行時は、正式ledgerを物理削除せず `exam_ledgers.row_status = 'REVERTED_TO_DRAFT'` として残す。
 - 紐づく `manual_exam_entry_drafts` は `draft_status = 'DRAFT'`、`applied_*` をNULLに戻し、再編集・再反映できる状態へ戻す。
 - 既に出力リストへ掲載されている正式ledgerは、初期版では戻し不可とする。
+- case構成sourceやcase採用値に使われていても戻し可能とする。戻し時にcase sourceを無効化し、該当source由来の採用値を削除する。
 - 戻し時は該当 `exam_export_case_sources.source_status` を `REVERTED_TO_DRAFT` にし、該当source由来の `exam_export_case_values` は削除する。
 - 戻し操作は `manual_exam_entry_draft_audit_logs` と個人情報監査ログへ記録する。
 
@@ -541,7 +542,9 @@ Migration:
 - 作業担当者による絞り込みは、作成者・更新者・正式反映者のいずれかに一致するものを対象にする。
 - 画面上では「戻し候補」または「要確認」を表示する。
 - 安全条件を満たす行だけ「戻す」ボタンを表示する。
-- 戻し不可条件は、draft紐づきなし、出力リスト掲載あり、case採用値ありなど。
+- 戻し不可条件は、draft紐づきなし、出力リスト掲載ありなど。
+- case採用値ありの行は戻し可能だが、戻し実行時に採用値が解除されることを画面に表示する。
+- 戻し後の導線として、健診結果処理画面へのリンクを表示し、step5〜7の再実行を促す。
 - この画面の個人情報閲覧は監査ログに記録する。
 
 ### スクリプト

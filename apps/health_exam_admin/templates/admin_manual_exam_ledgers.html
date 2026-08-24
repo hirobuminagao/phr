@@ -113,7 +113,6 @@
           {% set blocked_reason = [] %}
           {% if not has_draft %}{% set _ = blocked_reason.append("draft紐づきなし") %}{% endif %}
           {% if row.list_case_count %}{% set _ = blocked_reason.append("出力リスト掲載あり") %}{% endif %}
-          {% if row.adopted_value_count %}{% set _ = blocked_reason.append("case採用値あり") %}{% endif %}
           <tr>
             <td>
               <strong>ledger {{ row.exam_ledger_id }}</strong>
@@ -149,14 +148,17 @@
               <strong>source {{ row.case_source_count or 0 }}</strong>
               <small>採用値 {{ row.adopted_value_count or 0 }}</small>
               <small>出力リスト {{ row.list_case_count or 0 }}</small>
+              {% if row.adopted_value_count and not row.list_case_count %}
+              <small class="warning-text">戻すと採用値は解除されます</small>
+              {% endif %}
             </td>
             <td>
-              {% if blocked_reason %}
-              <span class="status-pill status-pending">要確認</span>
-              <small>{{ " / ".join(blocked_reason) }}</small>
-              {% elif row.row_status == "REVERTED_TO_DRAFT" %}
+              {% if row.row_status == "REVERTED_TO_DRAFT" %}
               <span class="status-pill status-pending">戻し済み</span>
               <small>draftへ戻されています</small>
+              {% elif blocked_reason %}
+              <span class="status-pill status-pending">要確認</span>
+              <small>{{ " / ".join(blocked_reason) }}</small>
               {% else %}
               <span class="status-pill status-ready">候補</span>
               <small>draftへ戻せます</small>
@@ -208,7 +210,8 @@
     </div>
     <div class="edit-modal__body">
       <p class="subtle">正式ledgerを戻し済みにし、紐づくdraftを再編集できる状態へ戻します。</p>
-      <p class="warning-text">戻した後は、必要に応じて健診結果処理 step5〜7 を再実行してください。</p>
+      <p class="warning-text">戻すとcase source/採用値は解除されます。戻した後は、健診結果処理 step5〜7 を再実行してください。</p>
+      <p><a class="ghost-button compact-action-button" href="/exam-processing">健診結果処理へ移動</a></p>
       <div class="inline-summary-card">
         <strong data-manual-ledger-revert-label>ledger / draft</strong>
       </div>

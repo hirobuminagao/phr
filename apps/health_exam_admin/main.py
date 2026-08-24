@@ -4267,11 +4267,12 @@ def load_admin_manual_exam_ledger_rows(
               OR el.name_full_raw LIKE %s
               OR el.facility_code LIKE %s
               OR el.facility_name LIKE %s
+              OR el.facility_document_id LIKE %s
               OR el.xml_file_name LIKE %s
             )
             """
         )
-        params.extend([like] * 9)
+        params.extend([like] * 10)
     where_sql = f"WHERE {' AND '.join(where_parts)}"
     cur.execute(
         f"""
@@ -4297,6 +4298,7 @@ def load_admin_manual_exam_ledger_rows(
           el.gender_code,
           el.exam_item_count,
           el.exam_item_error_count,
+          el.row_status,
           el.check_status,
           el.check_reason,
           el.xml_export_status,
@@ -4321,6 +4323,7 @@ def load_admin_manual_exam_ledger_rows(
         FROM {qname(health_db())}.exam_ledgers AS el
         LEFT JOIN {qname(health_db())}.manual_exam_entry_drafts AS d
           ON d.applied_exam_ledger_id = el.exam_ledger_id
+          OR d.manual_exam_entry_draft_id = CAST(JSON_UNQUOTE(JSON_EXTRACT(el.raw_row_json, '$.manual_exam_entry_draft_id')) AS UNSIGNED)
         LEFT JOIN (
           SELECT manual_exam_entry_draft_id, COUNT(*) AS value_count
           FROM {qname(health_db())}.manual_exam_entry_draft_values
