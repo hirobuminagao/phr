@@ -1595,11 +1595,11 @@ a.home-menu-card.is-navigating {
 }
 
 .admin-manual-ledger-table th:nth-child(7) {
-  width: 14%;
+  width: 16%;
 }
 
 .admin-manual-ledger-table th:nth-child(8) {
-  width: 10%;
+  width: 8%;
 }
 
 .admin-manual-ledger-table td:nth-child(8) {
@@ -1623,7 +1623,9 @@ a.home-menu-card.is-navigating {
 }
 
 .admin-manual-ledger-actions .compact-action-button {
-  flex: 0 1 72px;
+  flex: 0 1 62px;
+  min-width: 58px;
+  padding-inline: 6px;
 }
 
 .admin-manual-ledger-revert-action {
@@ -1703,20 +1705,37 @@ a.home-menu-card.is-navigating {
   max-width: 180px;
 }
 
+.manual-draft-list-table th:nth-child(9),
+.manual-draft-list-table td:nth-child(9) {
+  width: 120px;
+  max-width: 120px;
+  white-space: normal;
+}
+
 .manual-draft-list-table th:last-child,
 .manual-draft-list-table td:last-child {
-  width: 290px;
-  max-width: 290px;
+  width: 210px;
+  max-width: 210px;
 }
 
 .manual-draft-list-table td:last-child {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .manual-draft-list-table td:nth-child(4) .compact-action-button,
 .manual-draft-list-table td:last-child .compact-action-button {
   min-width: 54px;
   padding-inline: 8px;
+}
+
+.manual-draft-list-table td:last-child .inline-action-stack {
+  align-items: stretch;
+  gap: 5px;
+}
+
+.manual-draft-list-table td:last-child .compact-action-button {
+  flex: 1 1 82px;
+  max-width: 100%;
 }
 
 .active-filter-summary {
