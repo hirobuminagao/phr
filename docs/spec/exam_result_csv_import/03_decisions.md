@@ -213,6 +213,7 @@ Current as of 2026-08-05.
 - `sync_exam_ledgers.py` は通常運用の必須手順ではない。旧個別ledgerからの初回移行、復旧、再構築用に限定する。
 - `03_05_create_xml_export_list.py` は画面実装前の正式CLI入口として、出力可能な `exam_export_cases` を `ops_xml_export_lists` / `ops_xml_export_list_cases` へまとめる。通常はREADYリストを作成し、必要な場合のみ `--draft` で下書きにする。
 - `04_export_hia_xml.py` は `exam_export_cases` / `exam_export_case_values` 起点でXMLを出力する。画面運用の正ルートでは出力リストから出力する。
+- 出力リスト指定の本番出力では、ZIP作成前にリスト内caseが現在も存在し、イベント一致、ACTIVE sourceあり、出力可能状態であることを再検査する。戻し・再生成等で不整合が見つかったcaseは `ops_xml_export_list_cases.list_case_status = 'EXPORT_ERROR'` とし、出力を停止する。
 - 画面未実装期間の通常Runでは、`04_export_hia_xml.py` は明示条件がない場合に最新のREADY出力リストを自動選択する。直接条件指定で出したい場合のみ `--xml-export-list-id`, `--all-facilities`, `--facility-code`, `--case-id` 等を明示する。
 - XML出力先は `output_mode` で切り替える。`official` はHIAアップロード対象として従来どおり `event.result_root_path / 健診機関フォルダ / 03_健診結果（アップロードデータ）` へ出力し、`xml_export_zips` / `xml_export_members` とcase/listの正式出力状態を更新する。`review` は確認専用としてプロジェクト配下の `data/hia_xml_review_exports/event_<event_id>` へ同じZIP構造で出力し、本番フォルダを汚さない。`review` ではETL run/errorsだけを証跡として残し、正式出力履歴やcase/list状態は進めない。
 

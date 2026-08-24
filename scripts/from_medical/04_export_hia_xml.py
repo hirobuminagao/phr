@@ -461,6 +461,89 @@ def mark_export_list_started(cur: Any, *, config: ExportConfig, run_id: int) -> 
         raise ValueError(f"XML_EXPORT_LIST_NOT_READY: {config.selectors.xml_export_list_id}")
 
 
+def validate_export_list_cases(cur: Any, *, config: ExportConfig) -> str | None:
+    if config.selectors.xml_export_list_id is None:
+        return None
+    cur.execute(
+        f"""
+        SELECT
+          xelc.xml_export_list_case_id,
+          xelc.exam_export_case_id,
+          eec.event_id AS case_event_id,
+          eec.export_readiness_status,
+          eec.export_readiness_reason,
+          eec.xml_export_status,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM {qname(config.health_db)}.exam_export_case_sources ecs
+              WHERE ecs.exam_export_case_id = xelc.exam_export_case_id
+                AND ecs.source_status = 'ACTIVE'
+            ) THEN 1 ELSE 0
+          END AS has_active_source,
+          CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM {qname(config.health_db)}.xml_export_members xem
+              WHERE xem.ledger_type = 'CASE'
+                AND xem.ledger_id = xelc.exam_export_case_id
+            ) THEN 1 ELSE 0
+          END AS already_exported
+        FROM {qname(config.health_db)}.ops_xml_export_list_cases xelc
+        LEFT JOIN {qname(config.health_db)}.exam_export_cases eec
+          ON eec.exam_export_case_id = xelc.exam_export_case_id
+        WHERE xelc.xml_export_list_id = %s
+          AND xelc.list_case_status IN ('SELECTED', 'READY', 'EXPORT_ERROR')
+          AND xelc.removed_at IS NULL
+        ORDER BY xelc.xml_export_list_case_id
+        """,
+        (config.selectors.xml_export_list_id,),
+    )
+    problems: list[tuple[int, int, str]] = []
+    allowed_statuses = {"EXPORT_READY", "APPROVED_WITH_REASON"}
+    if config.selectors.include_exported:
+        allowed_statuses.add("EXPORTED")
+    for row in cur.fetchall():
+        list_case_id = int(row["xml_export_list_case_id"])
+        case_id = int(row["exam_export_case_id"])
+        reason = ""
+        if row.get("case_event_id") is None:
+            reason = "CASE_NOT_FOUND"
+        elif int(row["case_event_id"]) != config.selectors.event_id:
+            reason = f"CASE_EVENT_MISMATCH: case_event_id={row['case_event_id']}"
+        elif not int(row.get("has_active_source") or 0):
+            reason = "CASE_HAS_NO_ACTIVE_SOURCE"
+        elif row.get("export_readiness_status") not in allowed_statuses:
+            detail = row.get("export_readiness_reason") or row.get("export_readiness_status") or "UNKNOWN"
+            reason = f"CASE_NOT_EXPORTABLE: {detail}"
+        elif not config.selectors.include_exported and (
+            int(row.get("already_exported") or 0) or row.get("xml_export_status") == "EXPORTED"
+        ):
+            reason = "CASE_ALREADY_EXPORTED"
+        if reason:
+            problems.append((list_case_id, case_id, reason))
+
+    if not problems:
+        return None
+
+    for list_case_id, _case_id, reason in problems:
+        cur.execute(
+            f"""
+            UPDATE {qname(config.health_db)}.ops_xml_export_list_cases
+            SET
+              list_case_status = 'EXPORT_ERROR',
+              export_error_reason = %s,
+              updated_at = CURRENT_TIMESTAMP(3)
+            WHERE xml_export_list_case_id = %s
+            """,
+            (reason, list_case_id),
+        )
+    preview = ", ".join(f"case_id={case_id}:{reason}" for _list_case_id, case_id, reason in problems[:10])
+    if len(problems) > 10:
+        preview = f"{preview}, ... total={len(problems)}"
+    return f"XML_EXPORT_LIST_CASE_INVALID: {preview}"
+
+
 def mark_export_list_finished(cur: Any, *, config: ExportConfig, run_id: int, summary: ExportSummary) -> None:
     if config.selectors.xml_export_list_id is None:
         return
@@ -757,6 +840,12 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                     mark_export_list_started(cur, config=config, run_id=run_id)
                 conn.commit()
             try:
+                if run_id is not None and writes_official_export_state(config):
+                    validation_error = validate_export_list_cases(cur, config=config)
+                    if validation_error:
+                        conn.commit()
+                        raise ValueError(validation_error)
+                    conn.commit()
                 candidates = fetch_candidates(
                     cur,
                     selectors=config.selectors,
