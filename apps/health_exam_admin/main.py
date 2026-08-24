@@ -7579,7 +7579,7 @@ def manual_exam_entry_table_exists(cur: Any, schema_name: str, table_name: str) 
     return bool(row and int(row.get("cnt") or 0) > 0)
 
 
-def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200) -> list[dict[str, Any]]:
+def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filter: str = "") -> list[dict[str, Any]]:
     value_join = ""
     value_select = "0 AS value_count"
     if manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_values"):
@@ -7592,6 +7592,15 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200) -> list[dic
         ) v
           ON v.manual_exam_entry_draft_id = d.manual_exam_entry_draft_id
         """
+
+    status_filter = status_filter.upper().strip()
+    where_clause = ""
+    sql_params: list[Any] = []
+    if status_filter == "ERROR":
+        where_clause = "WHERE UPPER(COALESCE(d.draft_status, 'DRAFT')) IN ('ERROR', 'FAILED')"
+    elif status_filter in {"DRAFT", "READY", "APPLIED"}:
+        where_clause = "WHERE UPPER(COALESCE(d.draft_status, 'DRAFT')) = %s"
+        sql_params.append(status_filter)
 
     cur.execute(
         f"""
@@ -7630,12 +7639,13 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200) -> list[dic
           ON cu.app_user_id = d.created_by_app_user_id
         LEFT JOIN {qname(app_db())}.app_users uu
           ON uu.app_user_id = d.updated_by_app_user_id
+        {where_clause}
         ORDER BY
           d.updated_at DESC,
           d.manual_exam_entry_draft_id DESC
         LIMIT %s
         """,
-        (limit,),
+        (*sql_params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -8915,8 +8925,12 @@ def manual_exam_entry_drafts(request: Request) -> Response:
             event_options = load_event_options(cur)
             folder_aliases = load_received_folder_alias_rows(cur)
             schema_ready = manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts")
-            draft_rows = load_manual_exam_entry_draft_rows(cur) if schema_ready else []
-            summary = summarize_manual_exam_entry_drafts(draft_rows)
+            status_filter = str(request.query_params.get("status", "") or "").upper().strip()
+            if status_filter not in {"DRAFT", "READY", "APPLIED", "ERROR"}:
+                status_filter = ""
+            summary_rows = load_manual_exam_entry_draft_rows(cur, limit=100000) if schema_ready else []
+            draft_rows = load_manual_exam_entry_draft_rows(cur, status_filter=status_filter) if schema_ready else []
+            summary = summarize_manual_exam_entry_drafts(summary_rows)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -8931,6 +8945,7 @@ def manual_exam_entry_drafts(request: Request) -> Response:
             "schema_ready": schema_ready,
             "draft_rows": draft_rows,
             "summary": summary,
+            "status_filter": status_filter,
             "message": request.query_params.get("message", ""),
         },
     )

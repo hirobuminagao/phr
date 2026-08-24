@@ -35,31 +35,31 @@
   {% endif %}
 
   <section class="summary-grid manual-draft-summary-grid">
-    <div class="summary-card">
+    <a class="summary-card summary-card-link {% if not status_filter %}is-active{% endif %}" href="/manual-exam-entry-drafts">
       <span>仮登録</span>
       <strong>{{ summary.total }}</strong>
-      <small>表示中</small>
-    </div>
-    <div class="summary-card">
+      <small>すべて</small>
+    </a>
+    <a class="summary-card summary-card-link {% if status_filter == 'DRAFT' %}is-active{% endif %}" href="/manual-exam-entry-drafts?status=DRAFT">
       <span>DRAFT</span>
       <strong>{{ summary.draft }}</strong>
       <small>入力中</small>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-card-link {% if status_filter == 'READY' %}is-active{% endif %}" href="/manual-exam-entry-drafts?status=READY">
       <span>READY</span>
       <strong>{{ summary.ready }}</strong>
       <small>反映待ち</small>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-card-link {% if status_filter == 'APPLIED' %}is-active{% endif %}" href="/manual-exam-entry-drafts?status=APPLIED">
       <span>APPLIED</span>
       <strong>{{ summary.applied }}</strong>
       <small>本データ反映済み</small>
-    </div>
-    <div class="summary-card">
+    </a>
+    <a class="summary-card summary-card-link {% if status_filter == 'ERROR' %}is-active{% endif %}" href="/manual-exam-entry-drafts?status=ERROR">
       <span>ERROR</span>
       <strong>{{ summary.error }}</strong>
       <small>要確認</small>
-    </div>
+    </a>
   </section>
 
   <section class="panel">
@@ -97,9 +97,12 @@
     <div class="section-heading">
       <div>
         <h2>仮登録リスト</h2>
-        <p class="subtle">人ごとに仮登録の状態、登録者、更新者、入力済み値数を確認します。</p>
+        <p class="subtle">
+          人ごとに仮登録の状態、登録者、更新者、入力済み値数を確認します。
+          {% if status_filter %}現在は {{ status_filter }} で絞り込み中です。{% endif %}
+        </p>
       </div>
-      <span class="status-pill status-muted">最新200件</span>
+      <span class="status-pill status-muted">{{ "最新200件" if not status_filter else status_filter ~ " 最新200件" }}</span>
     </div>
 
     <div class="table-panel">
