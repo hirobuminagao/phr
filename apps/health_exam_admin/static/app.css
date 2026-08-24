@@ -876,6 +876,10 @@ a.home-menu-card.is-navigating {
   justify-self: start;
 }
 
+.home-menu-grid[hidden] {
+  display: none;
+}
+
 .home-menu-button {
   min-height: 36px;
   display: inline-flex;

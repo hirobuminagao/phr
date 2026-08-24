@@ -1665,6 +1665,8 @@
 
   const manualDraftPersonResults = document.querySelector("[data-manual-draft-person-results]");
   if (manualDraftPersonResults) {
+    const draftNewToggle = document.querySelector("[data-manual-draft-new-toggle]");
+    const draftNewActions = document.querySelector("[data-manual-draft-new-actions]");
     const draftPersonEvent = document.querySelector("#manual-draft-person-event");
     const draftPersonQ = document.querySelector("#manual-draft-person-q");
     const draftPersonKana = document.querySelector("#manual-draft-person-kana");
@@ -1683,6 +1685,14 @@
     const draftCaseResults = document.querySelector("[data-manual-draft-case-results]");
     const draftFacilityTarget = document.querySelector("[data-manual-draft-facility-target]");
     let activeDraftFacilityTarget = null;
+
+    draftNewToggle?.addEventListener("click", () => {
+      if (!draftNewActions) return;
+      const expanded = draftNewToggle.getAttribute("aria-expanded") === "true";
+      draftNewActions.hidden = expanded;
+      draftNewToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+      draftNewToggle.textContent = expanded ? "開く" : "畳む";
+    });
 
     const reloadDraftListWithMessage = (message) => {
       const query = new URLSearchParams();
