@@ -217,7 +217,7 @@
                     class="danger-button compact-action-button"
                     data-manual-draft-delete
                     data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
-                    data-draft-label="draft {{ draft.manual_exam_entry_draft_id }}"
+                    data-draft-label="{{ draft.name_kana or draft.name_full or ('draft ' ~ draft.manual_exam_entry_draft_id) }}"
                   >削除</button>
                 {% endif %}
               </td>
