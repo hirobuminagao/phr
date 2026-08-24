@@ -20,7 +20,7 @@
 
 - 手入力画面は `apps/health_exam_admin` に初期実装済み。
 - 手入力画面は仮登録への下書き保存まで接続済みである。
-- 本データ反映処理は未接続であり、仮登録を `exam_ledgers` / `exam_item_values` へ昇格する処理は後続実装とする。
+- 仮登録リストから本データ反映できる。反映時に `exam_ledgers` / `exam_item_values` を作成し、draftを `APPLIED` に更新する。
 - 本データの受け皿は既存の `health_exam_result.exam_ledgers` と `health_exam_result.exam_item_values` を使う。
 - case作成、case採用値作成、caseチェックは既存の以下stepへ乗せる。
   - `03_00_check_imported_exam_ledgers.py`
@@ -303,13 +303,11 @@ caseから選択した場合:
 
 反映処理:
 
-1. `etl_runs` を開始する。
-2. draft状態を再確認する。
-3. `exam_ledgers` を1件作成する。
-4. draft valuesから `exam_item_values` を作成する。
-5. `exam_item_values` の正規化・バリデーションを実行または既存normalize処理へ接続する。
-6. draftを `APPLIED` に更新し、`applied_exam_ledger_id` を保持する。
-7. audit logを残す。
+1. draft状態を再確認する。
+2. `exam_ledgers` を1件作成する。
+3. draft valuesから `exam_item_values` を作成する。
+4. draftを `APPLIED` に更新し、`applied_exam_ledger_id` を保持する。
+5. draft audit logを残す。
 
 `exam_ledgers` への主な設定:
 
@@ -327,7 +325,7 @@ caseから選択した場合:
 - `subscriber_match_status`
 - `subscriber_match_method = 'manual_entry'`
 - `xml_export_status = 'PENDING'`
-- `merge_status = 'PENDING'`
+- `merge_status = 'SOURCE_SINGLE'`
 
 `exam_item_values` への主な設定:
 
@@ -346,7 +344,20 @@ caseから選択した場合:
 - `method_code`
 - `method_name`
 - `occurrence_no`
-- `value_source_role = 'MANUAL_PRIMARY'` または既存role定義に合わせる
+- `source_ledger_type = exam_ledgers.source_type`
+- `source_ledger_id = exam_ledgers.exam_ledger_id`
+- `value_source_role = 'PRIMARY'`
+- `normalize_status = 'OK'`
+- `normalize_reason = 'MANUAL_ENTRY'`
+- `validation_status = 'VALID'`
+
+実装上の入口:
+
+- 画面: `/manual-exam-entry-drafts` の `本データ反映` ボタン。
+- API: `POST /api/manual-exam-entry-drafts/{draft_id}/apply`
+- 権限: `manual_exam_entry.manage`
+- 反映対象: `draft_status IN ('DRAFT', 'READY', 'ERROR')` かつ入力値が1件以上あるdraft。
+- 反映後: `draft_status = 'APPLIED'` とし、同じdraftの再反映を禁止する。
 
 二重反映防止:
 
@@ -363,10 +374,11 @@ caseから選択した場合:
 - 戻し操作は通常の個人case一覧には置かない。caseは正式ledgerから作られる派生物であり、戻し判断の責務はledger側に寄せる。
 - 戻し後は `03_01`〜`03_04` 相当のcase再生成・case値再作成・caseチェックを再実行する。
 
-初期推奨:
+初期実装:
 
-- DB書き込み失敗時はrollbackし、draftは `ERROR` に更新する。
-- 再実行する場合は、画面で `ERROR -> READY` に戻す操作を挟む。
+- DB書き込み失敗時はrollbackし、draft状態は変更しない。
+- 失敗内容は画面エラーとして返す。
+- `ERROR -> READY` の明示操作は後続とする。
 
 ## チェック処理への接続
 
@@ -382,7 +394,7 @@ caseから選択した場合:
 
 画面上では、本データ反映完了後に以下を案内する。
 
-> 本データへ反映しました。出力caseへ反映するには、健診結果処理実行の step4〜7 を実行してください。
+> 本データへ反映しました。出力caseへ反映するには、健診結果処理実行の step5〜7 を実行してください。
 
 画面の番号表記に合わせる場合:
 
@@ -473,8 +485,8 @@ Migration:
 - 仮登録リスト
 - 手入力画面での仮登録読み込み
 - 仮登録削除
-- 本データ反映 後続
-- 本反映後の処理実行案内 後続
+- 本データ反映
+- 本反映後の処理実行案内
 
 実装済みの画面構成:
 
@@ -488,8 +500,9 @@ Migration:
 未実装:
 
 - `READY` 化する登録前チェック。
-- 仮登録から正式な手入力sourceを作る本データ反映。
-- 本データ反映後のstep再実行案内。
+- ページ離脱時の未保存警告。
+- `ERROR -> READY` の明示操作。
+- `03_00`〜`03_04` が手入力sourceを期待どおり処理するかの試走確認。
 
 ### 手入力画面の実装済み仕様
 
@@ -526,15 +539,8 @@ Migration:
 
 ### スクリプト
 
-新規候補:
-
-- `scripts/from_medical/script_lib/manual_exam_entry_apply.py`
-  - draftから `exam_ledgers` / `exam_item_values` を作る処理。
-- `scripts/from_medical/dev_tools/apply_manual_exam_entry_drafts.py`
-  - 画面が未完成でもCLIで本反映できる入口。
-
-画面からは `script_lib` を直接呼ぶより、共通関数化した処理を `main.py` から呼ぶ。
-長時間処理になる場合は、既存の処理実行画面と同様にjob化する。
+初期実装では、画面API内の共通関数からdraftを本データ反映する。
+処理が重くなった場合は、後続で `script_lib` へ分離し、既存の処理実行画面と同様にjob化する。
 
 ### 既存step
 
@@ -609,18 +615,40 @@ Migration:
    - `基本情報不足`
 7. 仮登録リスト表示 済
 8. 仮登録削除 済
+9. 仮登録から本データ反映 済
+10. 本反映後の処理実行案内 済
+
+未実装:
+
+- `READY` 化する登録前チェック。
+- ページ離脱時の未保存警告。
+- `ERROR -> READY` の明示操作。
+- `03_00`〜`03_04` が手入力sourceを期待どおり処理するかの試走確認。
+
+### 本データ反映の実装済み仕様
+
+- `manual_exam_entry.manage` を持つ利用者だけが本データ反映できる。
+- 反映前に画面内モーダルで確認する。ブラウザ標準confirmは使わない。
+- 入力値が0件のdraftは反映できない。
+- 反映時に `exam_ledgers.source_type` を `PAPER` または `MANUAL` にする。
+- `entry_purpose = PAPER_ONLY` は `PAPER`、それ以外は `MANUAL` とする。
+- `exam_item_values` は手入力済み値だけを作成する。
+- 手入力値は `normalize_status = OK`、`normalize_reason = MANUAL_ENTRY`、`validation_status = VALID` とする。
+- `manual_exam_entry_drafts.applied_exam_ledger_id` で正式ledgerへ辿れる。
+- 反映完了メッセージでは `ledger id` と入力値件数を表示する。
+
+後続:
+
 9. ページ離脱時の未保存警告を追加 後続
 10. `登録チェックして仮登録` を追加 後続
    - 直前保存
    - バリデーション
    - NG時は該当項目へ戻す
    - OK時は `READY`
-11. 本データ反映処理 後続
-12. `03_00` が手入力sourceを対象にすることを確認/修正 後続
-13. `03_01` が手入力sourceからcaseを作ることを確認/修正 後続
-14. `03_02` が手入力sourceを採用値候補に入れることを確認/修正 後続
-15. `03_04` で法定チェック・特定健診チェックへ反映 後続
-16. 画面上で本反映後にstep再実行を案内 後続
+11. `03_00` が手入力sourceを対象にすることを確認/修正 後続
+12. `03_01` が手入力sourceからcaseを作ることを確認/修正 後続
+13. `03_02` が手入力sourceを採用値候補に入れることを確認/修正 後続
+14. `03_04` で法定チェック・特定健診チェックへ反映 後続
 
 ## この設計で守ること
 

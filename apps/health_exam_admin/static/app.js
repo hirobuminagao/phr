@@ -1845,6 +1845,10 @@
     const draftDeleteLabel = document.querySelector("[data-manual-draft-delete-label]");
     const draftDeleteConfirmButton = document.querySelector("[data-manual-draft-delete-confirm]");
     let activeDraftDeleteButton = null;
+    const draftApplyModal = document.querySelector("#manual-draft-apply-confirm-modal");
+    const draftApplyLabel = document.querySelector("[data-manual-draft-apply-label]");
+    const draftApplyConfirmButton = document.querySelector("[data-manual-draft-apply-confirm]");
+    let activeDraftApplyButton = null;
 
     const toggleManualDraftNewActions = () => {
       if (!draftNewActions) return;
@@ -1999,6 +2003,50 @@
       }
     };
 
+    const openManualDraftApplyModal = (button) => {
+      const draftId = button.getAttribute("data-draft-id") || "";
+      const label = button.getAttribute("data-draft-label") || `draft ${draftId}`;
+      const valueCount = button.getAttribute("data-value-count") || "0";
+      if (!draftId) return;
+      activeDraftApplyButton = button;
+      if (draftApplyLabel) draftApplyLabel.textContent = `${label} / draft ${draftId} / 入力値 ${valueCount}件`;
+      if (draftApplyConfirmButton) {
+        draftApplyConfirmButton.disabled = false;
+        draftApplyConfirmButton.textContent = "本データ反映する";
+      }
+      if (draftApplyModal) {
+        draftApplyModal.hidden = false;
+        document.body.classList.add("has-open-modal");
+        draftApplyConfirmButton?.focus();
+      }
+    };
+
+    const applyManualDraft = async () => {
+      const button = activeDraftApplyButton;
+      if (!button) return;
+      const draftId = button.getAttribute("data-draft-id") || "";
+      if (!draftId) return;
+      const originalText = button.textContent || "本データ反映";
+      button.disabled = true;
+      button.textContent = "反映中";
+      if (draftApplyConfirmButton) {
+        draftApplyConfirmButton.disabled = true;
+        draftApplyConfirmButton.textContent = "反映中";
+      }
+      try {
+        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(draftId)}/apply`, {});
+        reloadDraftListWithMessage(payload.message || "本データ反映しました。");
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = originalText;
+        if (draftApplyConfirmButton) {
+          draftApplyConfirmButton.disabled = false;
+          draftApplyConfirmButton.textContent = "本データ反映する";
+        }
+        window.alert(`本データ反映でエラーが発生しました。${error?.message || ""}`);
+      }
+    };
+
     const createManualDraftFromPerson = async (item, button) => {
       const originalText = button?.textContent || "";
       if (button) {
@@ -2065,6 +2113,10 @@
       button.addEventListener("click", () => openManualDraftDeleteModal(button));
     }
     draftDeleteConfirmButton?.addEventListener("click", deleteManualDraft);
+    for (const button of document.querySelectorAll("[data-manual-draft-apply]")) {
+      button.addEventListener("click", () => openManualDraftApplyModal(button));
+    }
+    draftApplyConfirmButton?.addEventListener("click", applyManualDraft);
 
     const setDraftPersonMessage = (message) => {
       manualDraftPersonResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;

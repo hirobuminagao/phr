@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 import json
 import logging
 import re
@@ -82,6 +83,16 @@ SESSION_COOKIE_NAME = "phr_app_session"
 CSRF_COOKIE_NAME = "phr_app_csrf"
 CSRF_FIELD_NAME = "_csrf_token"
 ARTICLE44_GROUP_CODE = "v2_2026_ARTICLE44_CHECK_ITEMS"
+CDA_SECTION_CODE_SYSTEM = "1.2.392.200119.6.1010"
+CDA_SECTION_NAMES = {
+    "01010": "特定健診・問診結果セクション",
+    "01020": "広域連合保健事業セクション",
+    "01030": "労働安全衛生法健診結果セクション",
+    "01040": "学校保健安全法健診結果セクション",
+    "01060": "がん検診セクション",
+    "01090": "肝炎検診セクション",
+    "01990": "任意追加項目セクション",
+}
 BUSINESS_SETTINGS_VIEW_PERMISSION = "business_settings.view"
 BUSINESS_SETTINGS_PERMISSION = "business_settings.manage"
 SYSTEM_SETTINGS_PERMISSION = "users.manage"
@@ -8133,6 +8144,365 @@ def delete_manual_exam_entry_draft(cur: Any, *, draft_id: int) -> dict[str, Any]
     return before
 
 
+def manual_exam_entry_section_name(section_code: Any) -> str | None:
+    code = str(section_code or "").strip()
+    if not code:
+        return None
+    return CDA_SECTION_NAMES.get(code)
+
+
+def manual_exam_entry_source_type(entry_purpose: Any) -> str:
+    purpose = str(entry_purpose or "").strip().upper()
+    if purpose == "PAPER_ONLY":
+        return "PAPER"
+    return "MANUAL"
+
+
+def manual_exam_entry_identity_from_draft(draft: Mapping[str, Any]) -> dict[str, Any]:
+    result = {
+        "person_id_custom": _manual_text(draft.get("person_id_custom")),
+        "identity_hash": None,
+        "reason": None,
+    }
+    if not all(
+        _manual_text(draft.get(key))
+        for key in (
+            "insurer_number",
+            "insurance_symbol",
+            "insurance_number",
+            "name_kana",
+            "birthdate",
+            "gender_code",
+        )
+    ):
+        result["reason"] = "identity source fields incomplete"
+        return result
+    bundle = generate_identity_bundle(
+        birthdate=draft.get("birthdate"),
+        insurer_number_raw=draft.get("insurer_number"),
+        insurance_symbol_raw=draft.get("insurance_symbol"),
+        insurance_number_raw=draft.get("insurance_number"),
+        name_kana_full_raw=draft.get("name_kana"),
+        gender_code=draft.get("gender_code"),
+    )
+    result["person_id_custom"] = bundle.get("person_id_custom") or result["person_id_custom"]
+    result["identity_hash"] = bundle.get("identity_hash")
+    result["reason"] = None if bundle.get("ok") else str(bundle.get("reason") or "identity generation failed")
+    return result
+
+
+def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> dict[str, Any]:
+    draft = load_manual_exam_entry_draft_by_id(cur, draft_id)
+    if draft is None:
+        raise ValueError("draft_not_found")
+    if str(draft.get("draft_status") or "DRAFT").upper() == "APPLIED" or draft.get("applied_exam_ledger_id"):
+        raise ValueError("draft_already_applied")
+
+    values = [
+        value
+        for value in draft.get("values", [])
+        if int(value.get("include_flag") or 0) == 1
+        and (_manual_text(value.get("raw_value")) or _manual_text(value.get("code_value")))
+    ]
+    if not values:
+        raise ValueError("draft_has_no_values")
+
+    event_id = _optional_int(draft.get("event_id")) or 2
+    source_type = manual_exam_entry_source_type(draft.get("entry_purpose"))
+    row_payload = {
+        "source": "MANUAL_EXAM_ENTRY_DRAFT",
+        "manual_exam_entry_draft_id": draft_id,
+        "entry_purpose": draft.get("entry_purpose"),
+        "value_count": len(values),
+    }
+    row_sha256 = hashlib.sha256(f"manual_exam_entry_draft:{draft_id}".encode("utf-8")).hexdigest()
+    identity = manual_exam_entry_identity_from_draft(draft)
+    person_id_custom = identity.get("person_id_custom") or _manual_text(draft.get("person_id_custom"))
+    identity_hash = identity.get("identity_hash")
+    match_status = "MANUAL_CONFIRMED" if draft.get("subscriber_id") else "MANUAL_ENTRY"
+    match_reason = "manual exam entry draft applied"
+    if identity.get("reason"):
+        match_reason = f"{match_reason}; {identity['reason']}"
+
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_ledgers (
+          event_id,
+          source_type,
+          row_sha256,
+          raw_row_json,
+          subscriber_id,
+          hia_subscriber_id,
+          identity_hash,
+          person_id_custom,
+          subscriber_match_status,
+          subscriber_match_method,
+          subscriber_match_reason,
+          document_id,
+          facility_document_id,
+          insurer_number,
+          exam_facility_id,
+          facility_code,
+          facility_name,
+          exam_date,
+          name_full_raw,
+          name_kana_raw,
+          name_kana_match,
+          name_kana_export_value,
+          name_kana_export_source,
+          name_kana_export_reason,
+          insurance_symbol_raw,
+          insurance_symbol_match,
+          insurance_symbol_export_value,
+          insurance_symbol_export_source,
+          insurance_symbol_export_reason,
+          insurance_number_raw,
+          insurance_number_match,
+          insurance_number_export_value,
+          insurance_number_export_source,
+          insurance_number_export_reason,
+          insurance_branch_number_raw,
+          insurance_branch_number_match,
+          birthdate,
+          gender_code,
+          gender_raw,
+          basic_info_status,
+          basic_info_reason,
+          exam_item_status,
+          exam_item_count,
+          exam_item_error_count,
+          exam_item_reason,
+          xml_status,
+          xml_reason,
+          row_status,
+          row_reason,
+          check_status,
+          xml_export_status,
+          merge_status,
+          merge_reason,
+          source_created_at,
+          source_updated_at
+        ) VALUES (
+          %s, %s, %s, CAST(%s AS JSON),
+          %s, %s, %s, %s,
+          %s, %s, %s,
+          %s, %s, %s,
+          %s, %s, %s, %s,
+          %s, %s, %s, %s, 'MANUAL_ENTRY', 'manual exam entry draft applied',
+          %s, %s, %s, 'MANUAL_ENTRY', 'manual exam entry draft applied',
+          %s, %s, %s, 'MANUAL_ENTRY', 'manual exam entry draft applied',
+          %s, %s,
+          %s, %s, %s,
+          'READY', 'manual exam entry draft applied',
+          'READY', %s, 0, 'manual exam entry values applied',
+          'READY', 'manual exam entry source',
+          'READY', 'manual exam entry draft applied',
+          'PENDING',
+          'PENDING',
+          'SOURCE_SINGLE',
+          'manual exam entry source',
+          CURRENT_TIMESTAMP(3),
+          CURRENT_TIMESTAMP(3)
+        )
+        """,
+        (
+            event_id,
+            source_type,
+            row_sha256,
+            json.dumps(row_payload, ensure_ascii=False, default=manual_exam_json_default),
+            _optional_int(draft.get("subscriber_id")),
+            _manual_text(draft.get("hia_subscriber_id")),
+            identity_hash,
+            person_id_custom,
+            match_status,
+            "manual_exam_entry",
+            match_reason,
+            f"manual-draft-{draft_id}",
+            _manual_text(draft.get("facility_document_id")),
+            _manual_text(draft.get("insurer_number")),
+            _optional_int(draft.get("exam_facility_id")),
+            _manual_text(draft.get("facility_code")),
+            _manual_text(draft.get("facility_name")),
+            _manual_date_text(draft.get("exam_date")),
+            _manual_text(draft.get("name_full")),
+            _manual_text(draft.get("name_kana")),
+            _manual_text(draft.get("name_kana")),
+            _manual_text(draft.get("name_kana")),
+            _manual_text(draft.get("insurance_symbol")),
+            _manual_text(draft.get("insurance_symbol")),
+            _manual_text(draft.get("insurance_symbol")),
+            _manual_text(draft.get("insurance_number")),
+            _manual_text(draft.get("insurance_number")),
+            _manual_text(draft.get("insurance_number")),
+            _manual_text(draft.get("insurance_branch_number")),
+            _manual_text(draft.get("insurance_branch_number")),
+            _manual_date_text(draft.get("birthdate")),
+            _manual_text(draft.get("gender_code")),
+            _manual_text(draft.get("gender_code")),
+            len(values),
+        ),
+    )
+    exam_ledger_id = int(cur.lastrowid)
+
+    rows: list[tuple[Any, ...]] = []
+    for value in values:
+        namecode = _manual_text(value.get("namecode")) or ""
+        cur.execute(
+            f"""
+            SELECT
+              item_name,
+              xml_value_type,
+              result_code_oid,
+              display_unit,
+              ucum_unit,
+              xml_method_code,
+              cda_section_code_default,
+              identity_item_code,
+              jun_no
+            FROM {qname(dev_db())}.exam_item_master
+            WHERE namecode = %s
+            LIMIT 1
+            """,
+            (namecode,),
+        )
+        master = cur.fetchone() or {}
+        section_code = _manual_text(master.get("cda_section_code_default"))
+        raw_value_type = _manual_text(value.get("xml_value_type")) or _manual_text(master.get("xml_value_type")) or "ST"
+        code_system = (
+            _manual_text(value.get("code_system"))
+            or (_manual_text(master.get("result_code_oid")) if raw_value_type.upper() in {"CD", "CO"} else None)
+        )
+        code_value = _manual_text(value.get("code_value"))
+        code_display = _manual_text(value.get("code_display"))
+        raw_value = _manual_text(value.get("raw_value")) or code_value
+        normalized_value = _manual_text(value.get("normalized_value")) or raw_value
+        rows.append(
+            (
+                event_id,
+                source_type,
+                exam_ledger_id,
+                _optional_int(draft.get("subscriber_id")),
+                _manual_text(draft.get("hia_subscriber_id")),
+                namecode,
+                section_code,
+                CDA_SECTION_CODE_SYSTEM if section_code else None,
+                manual_exam_entry_section_name(section_code),
+                _optional_int(value.get("occurrence_no")) or 1,
+                raw_value,
+                raw_value_type,
+                _manual_text(value.get("display_unit")) or _manual_text(master.get("display_unit")),
+                normalized_value,
+                _manual_text(value.get("ucum_unit")) or _manual_text(master.get("ucum_unit")) or _manual_text(value.get("display_unit")),
+                code_system,
+                code_value,
+                code_display,
+                _manual_text(value.get("namecode_display_name")) or _manual_text(master.get("item_name")),
+                _manual_text(value.get("identity_item_code")) or _manual_text(master.get("identity_item_code")),
+                _optional_int(master.get("jun_no")),
+                source_type,
+                exam_ledger_id,
+                "PRIMARY",
+            )
+        )
+
+    cur.executemany(
+        f"""
+        INSERT INTO {qname(health_db())}.exam_item_values (
+          event_id,
+          ledger_type,
+          ledger_id,
+          subscriber_id,
+          hia_subscriber_id,
+          namecode,
+          section_code,
+          section_code_system,
+          section_name,
+          occurrence_no,
+          raw_value,
+          raw_value_type,
+          raw_unit,
+          normalized_value,
+          normalized_unit,
+          code_system,
+          code_value,
+          code_display,
+          namecode_display_name,
+          identity_item_code,
+          jun_no,
+          normalize_status,
+          normalize_reason,
+          validation_status,
+          validation_reason,
+          source_ledger_type,
+          source_ledger_id,
+          value_source_role,
+          extracted_at,
+          normalized_at
+        ) VALUES (
+          %s, %s, %s, %s, %s,
+          %s, %s, %s, %s, %s,
+          %s, %s, %s, %s, %s,
+          %s, %s, %s, %s, %s,
+          %s,
+          'OK',
+          'MANUAL_ENTRY',
+          'VALID',
+          NULL,
+          %s, %s, %s,
+          CURRENT_TIMESTAMP(3),
+          CURRENT_TIMESTAMP(3)
+        )
+        """,
+        rows,
+    )
+
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.manual_exam_entry_drafts
+           SET draft_status = 'APPLIED',
+               applied_by_app_user_id = %s,
+               applied_at = CURRENT_TIMESTAMP(3),
+               applied_exam_ledger_id = %s,
+               updated_by_app_user_id = %s
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (user_id, exam_ledger_id, user_id, draft_id),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_audit_logs (
+          manual_exam_entry_draft_id,
+          event_id,
+          action_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          changed_by_app_user_id
+        ) VALUES (
+          %s,
+          %s,
+          'APPLY_TO_EXAM_LEDGER',
+          'exam_ledger',
+          NULL,
+          %s,
+          'ADMIN_UI',
+          %s
+        )
+        """,
+        (
+            draft_id,
+            event_id,
+            json.dumps(
+                {"exam_ledger_id": exam_ledger_id, "value_count": len(rows), "source_type": source_type},
+                ensure_ascii=False,
+            ),
+            user_id,
+        ),
+    )
+    return {"exam_ledger_id": exam_ledger_id, "value_count": len(rows), "source_type": source_type}
+
+
 def update_manual_exam_entry_draft_from_basic(
     cur: Any,
     *,
@@ -8962,6 +9332,55 @@ async def delete_manual_exam_entry_draft_api(draft_id: int, request: Request) ->
             conn.rollback()
             raise
     return JSONResponse({"message": f"draft {draft_id} の仮登録を削除しました。"})
+
+
+@app.post("/api/manual-exam-entry-drafts/{draft_id}/apply")
+async def apply_manual_exam_entry_draft_api(draft_id: int, request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_manage_manual_exam_entry(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            for table_name in (
+                "manual_exam_entry_drafts",
+                "manual_exam_entry_draft_values",
+                "manual_exam_entry_draft_audit_logs",
+                "exam_ledgers",
+                "exam_item_values",
+            ):
+                if not manual_exam_entry_table_exists(cur, health_db(), table_name):
+                    return JSONResponse({"message": f"{table_name} テーブルが未適用です。"}, status_code=400)
+            try:
+                result = apply_manual_exam_entry_draft(
+                    cur,
+                    draft_id=draft_id,
+                    user_id=int(user["app_user_id"]),
+                )
+            except ValueError as exc:
+                error_code = str(exc)
+                if error_code == "draft_already_applied":
+                    return JSONResponse({"message": "この仮登録はすでに本データ反映済みです。"}, status_code=400)
+                if error_code == "draft_has_no_values":
+                    return JSONResponse({"message": "入力済みの検査値がないため本データ反映できません。"}, status_code=400)
+                return JSONResponse({"message": "対象の仮登録が見つかりません。"}, status_code=404)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse(
+        {
+            "message": (
+                f"draft {draft_id} を本データ反映しました。"
+                f" ledger {result['exam_ledger_id']} / {result['value_count']}件"
+            ),
+            **result,
+        }
+    )
 
 
 @app.post("/api/manual-exam-entry-drafts/save")

@@ -211,6 +211,16 @@
                 {% if draft.exam_export_case_id %}
                   <a class="ghost-button compact-action-button" href="/exam-export-cases/{{ draft.exam_export_case_id }}">case</a>
                 {% endif %}
+                {% if can_manage_manual_entry and status in ['DRAFT', 'READY', 'ERROR'] and draft.value_count > 0 %}
+                  <button
+                    type="button"
+                    class="primary-button compact-action-button"
+                    data-manual-draft-apply
+                    data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                    data-draft-label="{{ draft.name_kana or draft.name_full or ('draft ' ~ draft.manual_exam_entry_draft_id) }}"
+                    data-value-count="{{ draft.value_count }}"
+                  >本データ反映</button>
+                {% endif %}
                 {% if can_manage_manual_entry and status != 'APPLIED' %}
                   <button
                     type="button"
@@ -250,6 +260,28 @@
       <div class="edit-modal__actions manual-entry-modal-actions">
         <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
         <button type="button" class="danger-button" data-manual-draft-delete-confirm>削除する</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="manual-draft-apply-confirm-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel manual-draft-delete-modal" role="dialog" aria-modal="true" aria-labelledby="manual-draft-apply-confirm-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">APPLY DRAFT</p>
+          <h2 id="manual-draft-apply-confirm-title">本データに反映します</h2>
+          <p class="subtle">仮登録から正式な手入力sourceを作成します。反映後はAPPLIEDとなり、仮登録削除はできません。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="status-panel">
+        <strong data-manual-draft-apply-label>draft -</strong>
+        <p class="subtle">反映後は、健診結果処理のstep5〜7を再実行してください。</p>
+      </div>
+      <div class="edit-modal__actions manual-entry-modal-actions">
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="button" class="primary-button" data-manual-draft-apply-confirm>本データ反映する</button>
       </div>
     </section>
   </div>
