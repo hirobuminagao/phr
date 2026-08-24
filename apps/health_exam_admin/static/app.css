@@ -1484,6 +1484,12 @@ a.home-menu-card.is-navigating {
   box-shadow: 0 22px 60px rgba(31, 41, 51, 0.25);
 }
 
+.manual-draft-delete-modal {
+  width: min(560px, calc(100vw - 32px));
+  margin: 50vh auto 0;
+  transform: translateY(-50%);
+}
+
 .edit-modal__head {
   display: flex;
   align-items: flex-start;
