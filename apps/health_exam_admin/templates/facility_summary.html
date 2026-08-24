@@ -132,9 +132,9 @@
           <tr>
             <th rowspan="2" data-sort-index="0" data-sort-type="text"><button type="button" class="table-sort-button">健診機関</button></th>
             <th colspan="4">受領ファイル</th>
-            <th colspan="4">取込チェック</th>
+            <th colspan="5">取込チェック</th>
             <th colspan="6">人単位チェック</th>
-            <th rowspan="2" data-sort-index="15" data-sort-type="number"><button type="button" class="table-sort-button">値エラー / 上位項目</button></th>
+            <th rowspan="2" data-sort-index="16" data-sort-type="number"><button type="button" class="table-sort-button">値エラー / 上位項目</button></th>
             <th rowspan="2">遷移</th>
           </tr>
           <tr>
@@ -145,13 +145,14 @@
             <th data-sort-index="5" data-sort-type="number"><button type="button" class="table-sort-button">OK</button></th>
             <th data-sort-index="6" data-sort-type="number"><button type="button" class="table-sort-button">NG</button></th>
             <th data-sort-index="7" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
-            <th data-sort-index="8" data-sort-type="number"><button type="button" class="table-sort-button">加入者</button></th>
-            <th data-sort-index="9" data-sort-type="number"><button type="button" class="table-sort-button">法定NG数</button></th>
-            <th data-sort-index="10" data-sort-type="percent"><button type="button" class="table-sort-button">法定NG率</button></th>
-            <th data-sort-index="11" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
-            <th data-sort-index="12" data-sort-type="number"><button type="button" class="table-sort-button">特定NG数</button></th>
-            <th data-sort-index="13" data-sort-type="percent"><button type="button" class="table-sort-button">特定NG率</button></th>
-            <th data-sort-index="14" data-sort-type="number"><button type="button" class="table-sort-button">特定対象数</button></th>
+            <th data-sort-index="8" data-sort-type="number"><button type="button" class="table-sort-button">手入力</button></th>
+            <th data-sort-index="9" data-sort-type="number"><button type="button" class="table-sort-button">加入者</button></th>
+            <th data-sort-index="10" data-sort-type="number"><button type="button" class="table-sort-button">法定NG数</button></th>
+            <th data-sort-index="11" data-sort-type="percent"><button type="button" class="table-sort-button">法定NG率</button></th>
+            <th data-sort-index="12" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
+            <th data-sort-index="13" data-sort-type="number"><button type="button" class="table-sort-button">特定NG数</button></th>
+            <th data-sort-index="14" data-sort-type="percent"><button type="button" class="table-sort-button">特定NG率</button></th>
+            <th data-sort-index="15" data-sort-type="number"><button type="button" class="table-sort-button">特定対象数</button></th>
           </tr>
         </thead>
         <tbody>
@@ -169,6 +170,7 @@
             <td class="numeric-cell" data-sort-value="{{ row.source_ok_count }}">{{ row.source_ok_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.source_ng_count }}">{{ row.source_ng_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.source_count }}"><strong>{{ row.source_count }}</strong></td>
+            <td class="numeric-cell" data-sort-value="{{ row.manual_source_count }}">{{ row.manual_source_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.subscriber_match_issue_count }}">{{ row.subscriber_match_issue_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.legal_ng_count }}">{{ row.legal_ng_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.legal_ng_rate }}">{{ row.legal_ng_rate }}</td>
@@ -202,7 +204,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="17">表示対象の健診機関はありません。</td>
+            <td colspan="18">表示対象の健診機関はありません。</td>
           </tr>
           {% endfor %}
         </tbody>
