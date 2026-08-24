@@ -284,6 +284,10 @@ button[type="submit"]:disabled {
   overflow-x: hidden;
 }
 
+.facility-detail-page {
+  overflow-x: visible;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3087,8 +3091,8 @@ a.home-menu-card.is-navigating {
 
 .facility-detail-target-bar {
   position: sticky;
-  top: 0;
-  z-index: 20;
+  top: 8px;
+  z-index: 60;
   margin: -4px 0 16px;
   padding: 14px 18px;
   border: 1px solid var(--line);
