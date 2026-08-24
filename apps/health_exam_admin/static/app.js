@@ -1172,6 +1172,8 @@
   }
 
   const manualSubscriberResults = document.querySelector("[data-manual-entry-subscriber-results]");
+  let refreshManualEntryFilledCount = () => 0;
+  let scheduleManualEntryDraftSave = () => {};
   if (manualSubscriberResults) {
     const searchButton = document.querySelector("[data-manual-entry-subscriber-search]");
     const applyButton = document.querySelector("[data-manual-entry-subscriber-apply]");
@@ -1205,6 +1207,12 @@
     const manualPersonFloatHia = document.querySelector("[data-manual-entry-float-hia]");
     const manualPersonFloatInsurance = document.querySelector("[data-manual-entry-float-insurance]");
     const manualPersonFloatVisit = document.querySelector("[data-manual-entry-float-visit]");
+    const manualPersonFloatDraft = document.querySelector("[data-manual-entry-float-draft]");
+    const manualEntryFilledCount = document.querySelector("[data-manual-entry-filled-count]");
+    const manualEntryDraftSaveStatus = document.querySelector("[data-manual-entry-draft-save-status]");
+    const manualEntryDraftSaveButton = document.querySelector("[data-manual-entry-draft-save]");
+    let currentManualDraftId = "";
+    let manualEntrySaveTimer = null;
 
     const setValue = (selector, value) => {
       const input = document.querySelector(selector);
@@ -1230,16 +1238,145 @@
       const insuranceText = [symbol, number].filter(Boolean).join("-");
       const branchText = branch ? `-${branch}` : "";
       if (manualPersonFloatName) manualPersonFloatName.textContent = displayName;
+      if (manualPersonFloatDraft) manualPersonFloatDraft.textContent = currentManualDraftId ? `draft ${currentManualDraftId}` : "draft -";
       if (manualPersonFloatHia) manualPersonFloatHia.textContent = hiaId ? `HIA ${hiaId}` : "HIA -";
       if (manualPersonFloatInsurance) manualPersonFloatInsurance.textContent = insuranceText ? `記号番号 ${insuranceText}${branchText}` : "記号番号 -";
       if (manualPersonFloatVisit) manualPersonFloatVisit.textContent = facility || examDate ? `${facility || "施設-"} / ${examDate || "受診日-"}` : "施設/受診日 -";
       manualPersonFloat.classList.toggle("is-empty", displayName === "未選択" && !hiaId && !insuranceText && !facility && !examDate);
     };
 
+    const collectManualEntryBasic = () => ({
+      event_id: document.querySelector("select[name='event_id']")?.value || "2",
+      entry_purpose: document.querySelector("select[name='entry_purpose']")?.value || "PAPER_ONLY",
+      exam_export_case_id: selectedManualCaseId || "",
+      subscriber_id: document.querySelector("#manual-entry-subscriber-id-input")?.value?.trim() || "",
+      hia_subscriber_id: document.querySelector("#manual-entry-hia-subscriber-id-input")?.value?.trim() || "",
+      insurance_symbol: document.querySelector("#manual-entry-insurance-symbol-input")?.value?.trim() || "",
+      insurance_number: document.querySelector("#manual-entry-insurance-number-input")?.value?.trim() || "",
+      insurance_branch_number: document.querySelector("#manual-entry-insurance-branch-input")?.value?.trim() || "",
+      name_full: document.querySelector("#manual-entry-name-full-input")?.value?.trim() || "",
+      name_kana: document.querySelector("#manual-entry-name-kana-input")?.value?.trim() || "",
+      birthdate: document.querySelector("#manual-entry-birthdate-input")?.value?.trim() || "",
+      gender_code: document.querySelector("#manual-entry-gender-input")?.value?.trim() || "",
+      facility_code: document.querySelector("#manual-entry-facility-input")?.value?.trim() || "",
+      facility_name: document.querySelector("#manual-entry-facility-name-input")?.value?.trim() || "",
+      facility_document_id: document.querySelector("input[name='facility_document_id']")?.value?.trim() || "",
+      exam_date: document.querySelector("#manual-entry-exam-date-input")?.value?.trim() || "",
+    });
+
+    const collectManualEntryValues = () => {
+      const values = [];
+      for (const input of document.querySelectorAll(".manual-entry-value-input")) {
+        const rawValue = input.value?.trim() || "";
+        if (!rawValue) continue;
+        const row = input.closest("[data-manual-entry-item-row]");
+        if (!row) continue;
+        const codeSelect = input.closest(".manual-entry-value-control")?.querySelector("[data-manual-code-select]");
+        const selectedOption = codeSelect?.selectedOptions?.[0];
+        const methodSelect = row.querySelector(".manual-entry-method-select");
+        const methodOption = methodSelect?.selectedOptions?.[0];
+        values.push({
+          namecode: row.getAttribute("data-namecode") || "",
+          namecode_display_name: row.getAttribute("data-item-name") || "",
+          identity_item_code: row.getAttribute("data-identity-item-code") || "",
+          identity_item_name: row.getAttribute("data-identity-item-name") || "",
+          xml_value_type: row.getAttribute("data-xml-value-type") || "",
+          raw_value: rawValue,
+          normalized_value: rawValue,
+          code_system: row.getAttribute("data-code-system") || "",
+          code_value: row.getAttribute("data-xml-value-type") === "CD" ? rawValue : "",
+          code_display: selectedOption && selectedOption.value ? selectedOption.textContent?.trim() || "" : "",
+          display_unit: row.getAttribute("data-display-unit") || "",
+          ucum_unit: row.getAttribute("data-ucum-unit") || "",
+          method_code: methodSelect?.value || row.getAttribute("data-method-code") || "",
+          method_name: methodOption?.textContent?.trim() || row.getAttribute("data-method-name") || "",
+          occurrence_no: 1,
+        });
+      }
+      return values;
+    };
+
+    refreshManualEntryFilledCount = () => {
+      const count = collectManualEntryValues().length;
+      if (manualEntryFilledCount) manualEntryFilledCount.textContent = String(count);
+      return count;
+    };
+
+    const setManualEntrySaveStatus = (text, className = "status-muted") => {
+      if (!manualEntryDraftSaveStatus) return;
+      manualEntryDraftSaveStatus.textContent = text;
+      manualEntryDraftSaveStatus.className = `status-pill ${className}`;
+    };
+
+    const saveManualEntryDraft = async ({ silent = false, allowEmpty = false } = {}) => {
+      const values = collectManualEntryValues();
+      refreshManualEntryFilledCount();
+      if (!values.length && !allowEmpty) {
+        if (!silent) setManualEntrySaveStatus("入力値なし", "status-warning");
+        return;
+      }
+      const basic = collectManualEntryBasic();
+      const basicHasValue = ["facility_code", "facility_name", "exam_date", "hia_subscriber_id", "insurance_symbol", "insurance_number", "name_full", "name_kana"]
+        .some((key) => String(basic[key] || "").trim() !== "");
+      if (!basicHasValue) {
+        if (!silent) setManualEntrySaveStatus("基本情報不足", "status-warning");
+        return;
+      }
+      setManualEntrySaveStatus("保存中", "status-pending");
+      if (manualEntryDraftSaveButton) manualEntryDraftSaveButton.disabled = true;
+      try {
+        const payload = await postJson("/api/manual-exam-entry-drafts/save", {
+          draft_id: currentManualDraftId,
+          basic,
+          values,
+        });
+        currentManualDraftId = String(payload.draft_id || currentManualDraftId || "");
+        setManualEntrySaveStatus(`保存済 ${payload.value_count || values.length}件`, "status-ready");
+        updateManualPersonFloat();
+      } catch (error) {
+        setManualEntrySaveStatus("保存エラー", "status-danger");
+        if (!silent) window.alert(`下書き保存でエラーが発生しました。${error?.message || ""}`);
+      } finally {
+        if (manualEntryDraftSaveButton) manualEntryDraftSaveButton.disabled = false;
+      }
+    };
+
+    scheduleManualEntryDraftSave = () => {
+      refreshManualEntryFilledCount();
+      if (manualEntrySaveTimer) window.clearTimeout(manualEntrySaveTimer);
+      manualEntrySaveTimer = window.setTimeout(() => {
+        saveManualEntryDraft({ silent: true });
+      }, 900);
+    };
+
+    const applyManualEntryDraftValues = (values) => {
+      if (!Array.isArray(values) || !values.length) return;
+      for (const value of values) {
+        const rows = Array.from(document.querySelectorAll(`[data-manual-entry-item-row][data-namecode="${CSS.escape(String(value.namecode || ""))}"]`));
+        const row = rows.find((candidate) => {
+          const methodSelect = candidate.querySelector(".manual-entry-method-select");
+          return !value.method_code || !methodSelect || methodSelect.value === value.method_code;
+        }) || rows[0];
+        if (!row) continue;
+        const input = row.querySelector(".manual-entry-value-input");
+        if (!input) continue;
+        input.value = value.raw_value || value.normalized_value || value.code_value || "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      refreshManualEntryFilledCount();
+    };
+
     for (const input of document.querySelectorAll(".manual-entry-form input, .manual-entry-form select, .manual-entry-form textarea")) {
-      input.addEventListener("input", updateManualPersonFloat);
-      input.addEventListener("change", updateManualPersonFloat);
+      input.addEventListener("input", () => {
+        updateManualPersonFloat();
+        refreshManualEntryFilledCount();
+      });
+      input.addEventListener("change", () => {
+        updateManualPersonFloat();
+        refreshManualEntryFilledCount();
+      });
     }
+    manualEntryDraftSaveButton?.addEventListener("click", () => saveManualEntryDraft({ silent: false }));
 
     const setManualSubscriberMessage = (message) => {
       manualSubscriberResults.innerHTML = `<tr><td colspan="4">${escapeHtml(message)}</td></tr>`;
@@ -1289,6 +1426,8 @@
         if (selectedCasePanel) selectedCasePanel.hidden = true;
         if (casePanel) casePanel.hidden = true;
         setManualSubscriberSelected(null);
+        currentManualDraftId = "";
+        setManualEntrySaveStatus("未保存", "status-muted");
         updateManualPersonFloat();
       });
     }
@@ -1305,6 +1444,12 @@
         }
         for (const checkbox of document.querySelectorAll("input[name^='include_']")) {
           checkbox.checked = false;
+        }
+        refreshManualEntryFilledCount();
+        if (currentManualDraftId) {
+          saveManualEntryDraft({ silent: true, allowEmpty: true });
+        } else {
+          setManualEntrySaveStatus("未保存", "status-muted");
         }
       });
     }
@@ -1625,6 +1770,7 @@
         draft = null;
       }
       if (!draft || !draft.manual_exam_entry_draft_id) return;
+      currentManualDraftId = String(draft.manual_exam_entry_draft_id || "");
       if (draft.event_id) setValue("select[name='event_id']", draft.event_id);
       const person = {
         subscriber_id: draft.subscriber_id || "",
@@ -1657,10 +1803,13 @@
       }
       const purpose = document.querySelector("select[name='entry_purpose']");
       if (purpose && draft.entry_purpose) purpose.value = draft.entry_purpose;
+      applyManualEntryDraftValues(draft.values || []);
+      setManualEntrySaveStatus("下書き読込", "status-ready");
       updateManualPersonFloat();
     };
     applyManualEntryInitialDraft();
     updateManualPersonFloat();
+    refreshManualEntryFilledCount();
   }
 
   const manualDraftPersonResults = document.querySelector("[data-manual-draft-person-results]");
@@ -2105,7 +2254,10 @@
     };
 
     for (const input of manualValueInputs) {
-      input.addEventListener("input", () => refreshManualMethodGroup(input.dataset.manualMethodGroup || ""));
+      input.addEventListener("input", () => {
+        refreshManualMethodGroup(input.dataset.manualMethodGroup || "");
+        scheduleManualEntryDraftSave();
+      });
       refreshManualMethodGroup(input.dataset.manualMethodGroup || "");
     }
 
@@ -2115,6 +2267,7 @@
         if (!input || !select.value) return;
         input.value = select.value;
         input.dispatchEvent(new Event("input", { bubbles: true }));
+        scheduleManualEntryDraftSave();
       });
     }
   }

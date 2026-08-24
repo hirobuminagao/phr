@@ -11,7 +11,7 @@ import sys
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, quote, urlencode
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -7675,7 +7675,42 @@ def load_manual_exam_entry_draft_by_id(cur: Any, draft_id: int) -> dict[str, Any
         (draft_id,),
     )
     row = cur.fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    draft = dict(row)
+    if manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_draft_values"):
+        cur.execute(
+            f"""
+            SELECT
+              manual_exam_entry_draft_value_id,
+              namecode,
+              namecode_display_name,
+              identity_item_code,
+              identity_item_name,
+              xml_value_type,
+              raw_value,
+              normalized_value,
+              code_system,
+              code_value,
+              code_display,
+              display_unit,
+              ucum_unit,
+              method_code,
+              method_name,
+              occurrence_no,
+              include_flag,
+              input_status,
+              note
+            FROM {qname(health_db())}.manual_exam_entry_draft_values
+            WHERE manual_exam_entry_draft_id = %s
+            ORDER BY manual_exam_entry_draft_value_id
+            """,
+            (draft_id,),
+        )
+        draft["values"] = [dict(value_row) for value_row in cur.fetchall()]
+    else:
+        draft["values"] = []
+    return draft
 
 
 def manual_exam_json_default(value: Any) -> str:
@@ -7897,6 +7932,212 @@ def delete_manual_exam_entry_draft(cur: Any, *, draft_id: int) -> dict[str, Any]
         (draft_id,),
     )
     return before
+
+
+def update_manual_exam_entry_draft_from_basic(
+    cur: Any,
+    *,
+    draft_id: int,
+    event_id: int,
+    basic: Mapping[str, Any],
+    user_id: int,
+) -> None:
+    before = load_manual_exam_entry_draft_by_id(cur, draft_id)
+    if before is None:
+        raise ValueError("draft_not_found")
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.manual_exam_entry_drafts
+           SET event_id = %s,
+               entry_purpose = %s,
+               exam_export_case_id = %s,
+               subscriber_id = %s,
+               hia_subscriber_id = %s,
+               person_id_custom = %s,
+               insurer_number = %s,
+               insurance_symbol = %s,
+               insurance_number = %s,
+               insurance_branch_number = %s,
+               name_full = %s,
+               name_kana = %s,
+               birthdate = %s,
+               gender_code = %s,
+               facility_code = %s,
+               facility_name = %s,
+               facility_document_id = %s,
+               exam_date = %s,
+               updated_by_app_user_id = %s
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (
+            event_id,
+            _manual_text(basic.get("entry_purpose")) or "PAPER_ONLY",
+            _optional_int(basic.get("exam_export_case_id")),
+            _optional_int(basic.get("subscriber_id")),
+            _manual_text(basic.get("hia_subscriber_id")),
+            _manual_text(basic.get("person_id_custom")),
+            _manual_text(basic.get("insurer_number")),
+            _manual_text(basic.get("insurance_symbol")),
+            _manual_text(basic.get("insurance_number")),
+            _manual_text(basic.get("insurance_branch_number")),
+            _manual_text(basic.get("name_full")),
+            _manual_text(basic.get("name_kana")),
+            _manual_date_text(basic.get("birthdate")),
+            _manual_text(basic.get("gender_code") or basic.get("gender_label") or basic.get("gender")),
+            _manual_text(basic.get("facility_code")),
+            _manual_text(basic.get("facility_name")),
+            _manual_text(basic.get("facility_document_id")),
+            _manual_date_text(basic.get("exam_date")),
+            user_id,
+            draft_id,
+        ),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_audit_logs (
+          manual_exam_entry_draft_id,
+          event_id,
+          action_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          changed_by_app_user_id
+        ) VALUES (
+          %s,
+          %s,
+          'UPDATE_DRAFT_BASIC',
+          'draft_basic',
+          %s,
+          %s,
+          'ADMIN_UI',
+          %s
+        )
+        """,
+        (
+            draft_id,
+            event_id,
+            json.dumps(before, ensure_ascii=False, default=manual_exam_json_default),
+            json.dumps(basic, ensure_ascii=False, default=manual_exam_json_default),
+            user_id,
+        ),
+    )
+
+
+def replace_manual_exam_entry_draft_values(
+    cur: Any,
+    *,
+    draft_id: int,
+    event_id: int,
+    values: Sequence[Mapping[str, Any]],
+    user_id: int,
+) -> int:
+    cur.execute(
+        f"""
+        DELETE FROM {qname(health_db())}.manual_exam_entry_draft_values
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (draft_id,),
+    )
+    rows: list[tuple[Any, ...]] = []
+    for value in values:
+        raw_value = _manual_text(value.get("raw_value"))
+        code_value = _manual_text(value.get("code_value"))
+        if not raw_value and not code_value:
+            continue
+        rows.append(
+            (
+                draft_id,
+                _manual_text(value.get("namecode")) or "",
+                _manual_text(value.get("namecode_display_name")),
+                _manual_text(value.get("identity_item_code")),
+                _manual_text(value.get("identity_item_name")),
+                _manual_text(value.get("xml_value_type")),
+                raw_value or code_value,
+                _manual_text(value.get("normalized_value")) or raw_value or code_value,
+                _manual_text(value.get("code_system")),
+                code_value,
+                _manual_text(value.get("code_display")),
+                _manual_text(value.get("display_unit")),
+                _manual_text(value.get("ucum_unit")),
+                _manual_text(value.get("method_code")),
+                _manual_text(value.get("method_name")),
+                _optional_int(value.get("occurrence_no")) or 1,
+                1,
+                "DRAFT",
+                _manual_text(value.get("note")),
+                user_id,
+            )
+        )
+    if rows:
+        cur.executemany(
+            f"""
+            INSERT INTO {qname(health_db())}.manual_exam_entry_draft_values (
+              manual_exam_entry_draft_id,
+              namecode,
+              namecode_display_name,
+              identity_item_code,
+              identity_item_name,
+              xml_value_type,
+              raw_value,
+              normalized_value,
+              code_system,
+              code_value,
+              code_display,
+              display_unit,
+              ucum_unit,
+              method_code,
+              method_name,
+              occurrence_no,
+              include_flag,
+              input_status,
+              note,
+              updated_by_app_user_id
+            ) VALUES (
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            """,
+            rows,
+        )
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.manual_exam_entry_drafts
+           SET updated_by_app_user_id = %s
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (user_id, draft_id),
+    )
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_audit_logs (
+          manual_exam_entry_draft_id,
+          event_id,
+          action_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          changed_by_app_user_id
+        ) VALUES (
+          %s,
+          %s,
+          'SAVE_VALUES',
+          'draft_values',
+          NULL,
+          %s,
+          'ADMIN_UI',
+          %s
+        )
+        """,
+        (
+            draft_id,
+            event_id,
+            json.dumps({"value_count": len(rows)}, ensure_ascii=False),
+            user_id,
+        ),
+    )
+    return len(rows)
 
 
 def summarize_manual_exam_entry_drafts(rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -8523,6 +8764,82 @@ async def delete_manual_exam_entry_draft_api(draft_id: int, request: Request) ->
             raise
     label = before.get("name_kana") or before.get("name_full") or f"draft {draft_id}"
     return JSONResponse({"message": f"{label} の仮登録を削除しました。"})
+
+
+@app.post("/api/manual-exam-entry-drafts/save")
+async def save_manual_exam_entry_draft_api(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        return JSONResponse({"message": "保存内容がありません。"}, status_code=400)
+    basic = payload.get("basic") if isinstance(payload.get("basic"), dict) else {}
+    values = payload.get("values") if isinstance(payload.get("values"), list) else []
+    draft_id = _optional_int(payload.get("draft_id"))
+    event_id = _optional_int(basic.get("event_id")) or 2
+    if not values and draft_id is None:
+        return JSONResponse({"message": "入力された検査値がありません。"}, status_code=400)
+    basic_has_value = any(
+        _manual_text(basic.get(key))
+        for key in (
+            "facility_code",
+            "facility_name",
+            "exam_date",
+            "hia_subscriber_id",
+            "insurance_symbol",
+            "insurance_number",
+            "name_full",
+            "name_kana",
+        )
+    )
+    if not basic_has_value:
+        return JSONResponse({"message": "下書き保存には基本情報が必要です。"}, status_code=400)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
+                return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
+            if draft_id is None:
+                draft_id = insert_manual_exam_entry_draft(
+                    cur,
+                    event_id=event_id,
+                    entry_purpose=_manual_text(basic.get("entry_purpose")) or "PAPER_ONLY",
+                    action_code="CREATE_FROM_MANUAL_ENTRY",
+                    source_payload=basic,
+                    user_id=int(user["app_user_id"]),
+                )
+            else:
+                update_manual_exam_entry_draft_from_basic(
+                    cur,
+                    draft_id=draft_id,
+                    event_id=event_id,
+                    basic=basic,
+                    user_id=int(user["app_user_id"]),
+                )
+            value_count = replace_manual_exam_entry_draft_values(
+                cur,
+                draft_id=draft_id,
+                event_id=event_id,
+                values=values,
+                user_id=int(user["app_user_id"]),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse(
+        {
+            "draft_id": draft_id,
+            "value_count": value_count,
+            "message": f"draft {draft_id} に {value_count}件を下書き保存しました。",
+        }
+    )
 
 
 @app.get("/health")

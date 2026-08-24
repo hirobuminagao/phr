@@ -30,7 +30,7 @@
     <div class="manual-entry-floating-item-results" data-manual-entry-floating-item-results hidden></div>
   </div>
   <div class="manual-entry-floating-actions">
-    <button type="button" class="primary-button" disabled title="保存処理は次ステップで接続します">source作成</button>
+    <button type="button" class="primary-button" data-manual-entry-draft-save>下書き保存</button>
     <button type="button" class="ghost-button manual-entry-floating-clear-button" data-manual-entry-values-clear>入力値クリア</button>
   </div>
   <div class="floating-category-head manual-entry-category-toggle-head" role="button" tabindex="0" aria-label="カテゴリ一覧を開く" aria-expanded="false" data-manual-entry-floating-category-toggle>
@@ -52,6 +52,7 @@
     <strong data-manual-entry-float-name>未選択</strong>
   </div>
   <div class="manual-entry-person-float__body">
+    <span data-manual-entry-float-draft>draft -</span>
     <span data-manual-entry-float-hia>HIA -</span>
     <span data-manual-entry-float-insurance>記号番号 -</span>
     <span data-manual-entry-float-visit>施設/受診日 -</span>
@@ -116,9 +117,10 @@
           {% else %}
             <span class="status-pill status-pending">保存未接続</span>
           {% endif %}
+          <span class="status-pill status-muted" data-manual-entry-draft-save-status>未保存</span>
           <button type="button" class="ghost-button compact-action-button" data-manual-entry-basic-clear>基本情報クリア</button>
         </div>
-        <p class="subtle">紙のみ、またはXML/CSVの補足として、手入力sourceを作るための入力画面です。現時点では画面確認用で、保存処理は次ステップで接続します。</p>
+        <p class="subtle">紙のみ、またはXML/CSVの補足として、手入力sourceを作るための入力画面です。基本情報が入っていれば、検査値入力時に仮登録へ下書き保存します。</p>
       </div>
     </div>
 
@@ -493,7 +495,11 @@
     <div class="section-heading">
       <div>
         <h2>検査項目入力</h2>
-        <p class="subtle">exam_item_master {{ item_count }}項目を表示します。同じ項目で検査方法が複数ある場合は、入力した方法以外を自動で無効化します。</p>
+        <p class="subtle">
+          exam_item_master
+          <span data-manual-entry-filled-count>0</span>/{{ item_count }}項目を表示します。
+          同じ項目で検査方法が複数ある場合は、入力した方法以外を自動で無効化します。
+        </p>
       </div>
       <label class="manual-entry-item-search">
         <span>項目検索</span>
@@ -547,6 +553,13 @@
                 data-item-name="{{ item.item_name }}"
                 data-namecode="{{ item.namecode }}"
                 data-category-name="{{ item.category_name or group.category_name }}"
+                data-xml-value-type="{{ item.xml_value_type or '' }}"
+                data-code-system="{{ item.result_code_oid or '' }}"
+                data-display-unit="{{ item.display_unit or '' }}"
+                data-ucum-unit="{{ item.ucum_unit or '' }}"
+                data-method-code="{{ item.xml_method_code or '' }}"
+                data-method-name="{{ item.method_name or '' }}"
+                data-identity-item-code="{{ item.identity_item_code or '' }}"
                 data-identity-item-name="{{ item.identity_item_name or '' }}"
                 {% if item.manual_blood_time_item %}data-manual-blood-time-row{% endif %}
                 {% if item.manual_random_time_required_trigger %}data-manual-random-time-row{% endif %}
