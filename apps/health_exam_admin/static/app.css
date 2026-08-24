@@ -326,6 +326,20 @@ button[type="submit"]:disabled {
   box-shadow: 0 0 0 3px rgba(0, 132, 94, 0.18);
 }
 
+.status-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--panel);
+}
+
+.status-panel--success {
+  border-color: #b9decf;
+  background: #ecf9f4;
+  color: #10664f;
+}
+
 .summary-card {
   display: grid;
   gap: 6px;

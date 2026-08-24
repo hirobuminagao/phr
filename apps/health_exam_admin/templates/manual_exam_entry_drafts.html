@@ -28,6 +28,11 @@
       </div>
     </section>
   {% endif %}
+  {% if message %}
+    <section class="status-panel status-panel--success">
+      <strong>{{ message }}</strong>
+    </section>
+  {% endif %}
 
   <section class="summary-grid manual-draft-summary-grid">
     <div class="summary-card">
@@ -61,22 +66,22 @@
     <div class="section-heading">
       <div>
         <h2>新規登録</h2>
-        <p class="subtle">人、または既存caseを選択して仮登録IDを発行し、手入力画面へ進む流れにします。</p>
+          <p class="subtle">人、または既存caseを選択した時点で仮登録IDを発行し、一覧から手入力画面へ進みます。</p>
       </div>
     </div>
     <div class="home-menu-grid">
       <button type="button" class="home-menu-card home-menu-card-button" data-modal-open="manual-draft-person-picker-modal">
         <span class="status-pill status-ready">新規</span>
         <div>
-          <strong>人を選んで新規</strong>
-          <small>加入者検索から対象者を選び、情報ありの新規入力画面を開く</small>
+          <strong>人を選んで仮登録</strong>
+          <small>加入者検索から対象者を選び、仮登録リストへ追加する</small>
         </div>
       </button>
       <button type="button" class="home-menu-card home-menu-card-button" data-modal-open="manual-draft-case-picker-modal">
         <span class="status-pill status-ready">補足</span>
         <div>
-          <strong>caseを選んで新規</strong>
-          <small>既存caseを選び、健診機関・人・受診日を反映した補足入力を始める</small>
+          <strong>caseを選んで仮登録</strong>
+          <small>既存caseを選び、補足入力用の仮登録リストへ追加する</small>
         </div>
       </button>
     </div>
@@ -171,8 +176,8 @@
       <div class="edit-modal__head">
         <div>
           <p class="eyebrow">加入者検索</p>
-          <h2 id="manual-draft-person-picker-title">人を選んで新規作成</h2>
-          <p class="subtle">加入者を選択して、基本情報が入った手入力画面を開きます。</p>
+          <h2 id="manual-draft-person-picker-title">人を選んで仮登録</h2>
+          <p class="subtle">加入者を選択すると仮登録レコードを作成し、一覧に表示します。</p>
         </div>
         <button type="button" class="ghost-button" data-modal-close>閉じる</button>
       </div>
@@ -212,7 +217,7 @@
               <th>加入者</th>
               <th>保険証</th>
               <th>HIA / case</th>
-              <th>開始</th>
+              <th>追加</th>
             </tr>
           </thead>
           <tbody data-manual-draft-person-results>
@@ -234,8 +239,8 @@
       <div class="edit-modal__head">
         <div>
           <p class="eyebrow">CASE SEARCH</p>
-          <h2 id="manual-draft-case-picker-title">caseを選んで新規作成</h2>
-          <p class="subtle">既存caseを起点に、補足入力用の手入力画面を開きます。</p>
+          <h2 id="manual-draft-case-picker-title">caseを選んで仮登録</h2>
+          <p class="subtle">既存caseを起点に、補足入力用の仮登録レコードを作成します。</p>
         </div>
         <div class="case-filter-head-actions">
           <label class="case-filter-event-control">
@@ -311,7 +316,7 @@
               <th>健診機関 / 受診日</th>
               <th>source</th>
               <th>チェック / 出力</th>
-              <th>開始</th>
+              <th>追加</th>
             </tr>
           </thead>
           <tbody data-manual-draft-case-results>

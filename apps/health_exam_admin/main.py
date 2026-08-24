@@ -8,7 +8,7 @@ import secrets
 import string
 import subprocess
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
@@ -7640,6 +7640,177 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200) -> list[dic
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_manual_exam_entry_draft_by_id(cur: Any, draft_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          manual_exam_entry_draft_id,
+          event_id,
+          draft_status,
+          entry_purpose,
+          exam_export_case_id,
+          subscriber_id,
+          hia_subscriber_id,
+          person_id_custom,
+          insurer_number,
+          insurance_symbol,
+          insurance_number,
+          insurance_branch_number,
+          name_full,
+          name_kana,
+          birthdate,
+          gender_code,
+          exam_facility_id,
+          facility_code,
+          facility_name,
+          facility_document_id,
+          exam_date,
+          note,
+          created_at,
+          updated_at
+        FROM {qname(health_db())}.manual_exam_entry_drafts
+        WHERE manual_exam_entry_draft_id = %s
+        LIMIT 1
+        """,
+        (draft_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def manual_exam_json_default(value: Any) -> str:
+    if isinstance(value, (date, datetime, Decimal)):
+        return str(value)
+    return str(value)
+
+
+def _manual_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _manual_date_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = normalize_date_to_ymd_and_compact(text, purpose="manual_exam_entry")
+    return normalized.get("field_norm") or text
+
+
+def insert_manual_exam_entry_draft(
+    cur: Any,
+    *,
+    event_id: int,
+    entry_purpose: str,
+    action_code: str,
+    source_payload: Mapping[str, Any],
+    user_id: int,
+) -> int:
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_drafts (
+          event_id,
+          draft_status,
+          entry_purpose,
+          exam_export_case_id,
+          subscriber_id,
+          hia_subscriber_id,
+          person_id_custom,
+          insurer_number,
+          insurance_symbol,
+          insurance_number,
+          insurance_branch_number,
+          name_full,
+          name_kana,
+          birthdate,
+          gender_code,
+          facility_code,
+          facility_name,
+          facility_document_id,
+          exam_date,
+          created_by_app_user_id,
+          updated_by_app_user_id
+        ) VALUES (
+          %s,
+          'DRAFT',
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s,
+          %s
+        )
+        """,
+        (
+            event_id,
+            entry_purpose,
+            _optional_int(source_payload.get("exam_export_case_id") or source_payload.get("case_id")),
+            _optional_int(source_payload.get("subscriber_id")),
+            _manual_text(source_payload.get("hia_subscriber_id")),
+            _manual_text(source_payload.get("person_id_custom")),
+            _manual_text(source_payload.get("insurer_number")),
+            _manual_text(source_payload.get("insurance_symbol")),
+            _manual_text(source_payload.get("insurance_number")),
+            _manual_text(source_payload.get("insurance_branch_number")),
+            _manual_text(source_payload.get("name_full")),
+            _manual_text(source_payload.get("name_kana")),
+            _manual_date_text(source_payload.get("birthdate") or source_payload.get("birth")),
+            _manual_text(source_payload.get("gender_code") or source_payload.get("gender_label")),
+            _manual_text(source_payload.get("facility_code")),
+            _manual_text(source_payload.get("facility_name")),
+            _manual_text(source_payload.get("facility_document_id")),
+            _manual_date_text(source_payload.get("exam_date")),
+            user_id,
+            user_id,
+        ),
+    )
+    draft_id = int(cur.lastrowid)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.manual_exam_entry_draft_audit_logs (
+          manual_exam_entry_draft_id,
+          event_id,
+          action_code,
+          field_name,
+          old_value,
+          new_value,
+          source,
+          changed_by_app_user_id
+        ) VALUES (
+          %s,
+          %s,
+          %s,
+          'draft',
+          NULL,
+          %s,
+          'ADMIN_UI',
+          %s
+        )
+        """,
+        (
+            draft_id,
+            event_id,
+            action_code,
+            json.dumps(source_payload, ensure_ascii=False, default=manual_exam_json_default),
+            user_id,
+        ),
+    )
+    return draft_id
+
+
 def summarize_manual_exam_entry_drafts(rows: list[dict[str, Any]]) -> dict[str, int]:
     summary = {
         "total": len(rows),
@@ -8111,6 +8282,88 @@ def manual_exam_entry_case_candidates(request: Request) -> Response:
     return JSONResponse({"items": items})
 
 
+@app.post("/api/manual-exam-entry-drafts/from-person")
+async def create_manual_exam_entry_draft_from_person(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    payload = await request.json()
+    person = payload.get("person") if isinstance(payload, dict) else None
+    if not isinstance(person, dict):
+        return JSONResponse({"message": "加入者情報がありません。"}, status_code=400)
+    event_id = _optional_int(payload.get("event_id") or person.get("event_id")) or 2
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
+                return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
+            draft_id = insert_manual_exam_entry_draft(
+                cur,
+                event_id=event_id,
+                entry_purpose="PAPER_ONLY",
+                action_code="CREATE_FROM_PERSON",
+                source_payload=person,
+                user_id=int(user["app_user_id"]),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse(
+        {
+            "draft_id": draft_id,
+            "redirect_url": f"/manual-exam-entry?draft_id={draft_id}",
+            "message": f"仮登録 draft {draft_id} を作成しました。",
+        }
+    )
+
+
+@app.post("/api/manual-exam-entry-drafts/from-case")
+async def create_manual_exam_entry_draft_from_case(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    payload = await request.json()
+    case = payload.get("case") if isinstance(payload, dict) else None
+    if not isinstance(case, dict):
+        return JSONResponse({"message": "case情報がありません。"}, status_code=400)
+    event_id = _optional_int(payload.get("event_id") or case.get("event_id")) or 2
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
+                return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
+            draft_id = insert_manual_exam_entry_draft(
+                cur,
+                event_id=event_id,
+                entry_purpose="SUPPLEMENT",
+                action_code="CREATE_FROM_CASE",
+                source_payload=case,
+                user_id=int(user["app_user_id"]),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse(
+        {
+            "draft_id": draft_id,
+            "redirect_url": f"/manual-exam-entry?draft_id={draft_id}",
+            "message": f"仮登録 draft {draft_id} を作成しました。",
+        }
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -8133,12 +8386,16 @@ def manual_exam_entry(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     params = load_mysql_base_params(db_prefix())
+    initial_draft: dict[str, Any] | None = None
+    draft_id = _optional_int(request.query_params.get("draft_id"))
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
             folder_aliases = load_received_folder_alias_rows(cur)
             item_rows = load_manual_exam_entry_items(cur)
+            if draft_id is not None and manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
+                initial_draft = load_manual_exam_entry_draft_by_id(cur, draft_id)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -8152,8 +8409,14 @@ def manual_exam_entry(request: Request) -> Response:
             "folder_aliases": folder_aliases,
             "item_groups": group_manual_exam_entry_items(item_rows),
             "item_count": len(item_rows),
+            "initial_draft": initial_draft,
+            "initial_draft_json": json.dumps(
+                initial_draft or {},
+                ensure_ascii=False,
+                default=manual_exam_json_default,
+            ).replace("</", "<\\/"),
             "filters": {
-                "event_id": request.query_params.get("event_id", "2"),
+                "event_id": str((initial_draft or {}).get("event_id") or request.query_params.get("event_id", "2")),
             },
         },
     )
@@ -8190,6 +8453,7 @@ def manual_exam_entry_drafts(request: Request) -> Response:
             "schema_ready": schema_ready,
             "draft_rows": draft_rows,
             "summary": summary,
+            "message": request.query_params.get("message", ""),
         },
     )
 

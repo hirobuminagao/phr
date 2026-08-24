@@ -420,11 +420,11 @@ case単位:
 
 DDL:
 
-- `sql/ddl/health_exam_result/0250_health_exam_result__manual_exam_entry_drafts.sql` 候補
+- `sql/ddl/health_exam_result/0250_health_exam_result__manual_exam_entry_drafts.sql`
 
 Migration:
 
-- `sql/migrations/health_exam_result/202608xx_001_health_exam_result_create_manual_exam_entry_drafts.sql` 候補
+- `sql/migrations/health_exam_result/20260824_001_health_exam_result_create_manual_exam_entry_drafts.sql`
 
 既存テーブル追加検討:
 
@@ -444,9 +444,11 @@ Migration:
 
 - `/manual-exam-entry-drafts` を「健診結果仮登録リスト」とする。
 - HOMEからは手入力画面へ直接入るより先に、仮登録リストへ入る導線を置く。
-- 新規登録は、仮登録リスト上で「人を選んで新規」または「caseを選んで新規」を選び、仮登録IDを発行してから手入力画面へ遷移する。
+- 新規登録は、仮登録リスト上で「人を選んで仮登録」または「caseを選んで仮登録」を選ぶ。
 - 人/caseの選択は遷移先の手入力画面ではなく、仮登録リスト画面上のモーダルで行う。
-- 選択後は、加入者・case・健診機関・受診日などを持った「情報あり新規」として手入力画面を開く。
+- 選択した時点で `manual_exam_entry_drafts` にレコードを作成し、仮登録リストへ表示する。
+- 手入力画面へは、仮登録リスト行の `入力へ` から `draft_id` 指定で遷移する。
+- 手入力画面は `draft_id` の基本情報を読み込み、加入者・case・健診機関・受診日などを反映する。
 - リストは人ごとに表示し、登録者、更新者、入力値数、反映状態を確認できるようにする。
 - DDL/migration未適用環境では、画面は表示しつつ「仮登録テーブル未適用」として落ちないようにする。
 - `apps/health_exam_admin/static/app.js`
@@ -537,19 +539,21 @@ Migration:
 
 ## 実装順
 
-1. DDL/migration作成
+1. DDL/migration作成 済
    - `manual_exam_entry_drafts`
    - `manual_exam_entry_draft_values`
    - `manual_exam_entry_draft_audit_logs`
-2. 手入力画面に `下書き保存` を接続
-3. 下書き作成後の自動保存APIを接続
-4. 保存状態表示を追加
+2. 仮登録リストで人/case選択時にdraftを作成 済
+3. 仮登録リストから `draft_id` で手入力画面を開く 済
+4. 手入力画面に `下書き保存` を接続
+5. 下書き作成後の自動保存APIを接続
+6. 保存状態表示を追加
    - `保存済み HH:MM`
    - `未保存あり`
    - `保存中`
    - `保存失敗`
-5. ページ離脱時の未保存警告を追加
-6. `登録チェックして仮登録` を追加
+7. ページ離脱時の未保存警告を追加
+8. `登録チェックして仮登録` を追加
    - 直前保存
    - バリデーション
    - NG時は該当項目へ戻す

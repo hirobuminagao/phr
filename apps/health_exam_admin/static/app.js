@@ -68,6 +68,31 @@
     }
     return payload || {};
   };
+  const postJson = async (url, data) => {
+    const token = cookieValue("phr_app_csrf");
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(token ? { "x-csrf-token": token } : {}),
+      },
+      body: JSON.stringify(data || {}),
+    });
+    let payload = null;
+    let bodyText = "";
+    try {
+      bodyText = await response.text();
+      payload = bodyText ? JSON.parse(bodyText) : null;
+    } catch (_error) {
+      payload = null;
+    }
+    if (!response.ok) {
+      const detail = payload?.message || payload?.detail || bodyText.slice(0, 160);
+      throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+    }
+    return payload || {};
+  };
   const filters = new Map();
   const processingOverlay = document.querySelector("[data-processing-overlay]");
   const processingTitle = document.querySelector("[data-processing-overlay-title]");
@@ -1289,6 +1314,7 @@
       setValue("#manual-entry-facility-input", item.facility_code);
       setValue("#manual-entry-facility-name-input", item.facility_name);
       setValue("#manual-entry-case-search-facility", item.facility_code);
+      setValue("input[name='facility_document_id']", item.facility_document_id);
       setValue("#manual-entry-exam-date-input", item.exam_date);
       const purpose = document.querySelector("select[name='entry_purpose']");
       if (purpose) purpose.value = "SUPPLEMENT";
@@ -1589,6 +1615,51 @@
       document.querySelector("#manual-entry-basic")?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
     applyManualEntryInitialParams();
+    const applyManualEntryInitialDraft = () => {
+      const node = document.querySelector("#manual-entry-initial-draft-json");
+      if (!node || !node.textContent.trim()) return;
+      let draft = null;
+      try {
+        draft = JSON.parse(node.textContent);
+      } catch (_error) {
+        draft = null;
+      }
+      if (!draft || !draft.manual_exam_entry_draft_id) return;
+      if (draft.event_id) setValue("select[name='event_id']", draft.event_id);
+      const person = {
+        subscriber_id: draft.subscriber_id || "",
+        hia_subscriber_id: draft.hia_subscriber_id || "",
+        name_full: draft.name_full || "",
+        name_kana: draft.name_kana || "",
+        insurance_symbol: draft.insurance_symbol || "",
+        insurance_number: draft.insurance_number || "",
+        insurance_branch_number: draft.insurance_branch_number || "",
+        birth: draft.birthdate || "",
+        gender_label: draft.gender_code || "",
+      };
+      if (draft.exam_export_case_id) {
+        fillManualEntryFromCase({
+          ...person,
+          exam_export_case_id: draft.exam_export_case_id,
+          facility_code: draft.facility_code || "",
+          facility_name: draft.facility_name || "",
+          facility_document_id: draft.facility_document_id || "",
+          exam_date: draft.exam_date || "",
+          source_mode: "MANUAL_DRAFT",
+          export_readiness_status: draft.draft_status || "DRAFT",
+        });
+      } else {
+        fillManualEntryFromPerson(person);
+        setValue("#manual-entry-facility-input", draft.facility_code || "");
+        setValue("#manual-entry-facility-name-input", draft.facility_name || "");
+        setValue("input[name='facility_document_id']", draft.facility_document_id || "");
+        setValue("#manual-entry-exam-date-input", draft.exam_date || "");
+      }
+      const purpose = document.querySelector("select[name='entry_purpose']");
+      if (purpose && draft.entry_purpose) purpose.value = draft.entry_purpose;
+      updateManualPersonFloat();
+    };
+    applyManualEntryInitialDraft();
     updateManualPersonFloat();
   }
 
@@ -1611,63 +1682,52 @@
     const draftCaseLimit = document.querySelector("#manual-draft-case-limit");
     const draftCaseResults = document.querySelector("[data-manual-draft-case-results]");
 
-    const manualEntryUrl = (params) => {
+    const reloadDraftListWithMessage = (message) => {
       const query = new URLSearchParams();
-      for (const [key, value] of Object.entries(params)) {
-        if (value !== undefined && value !== null && String(value) !== "") {
-          query.set(key, String(value));
-        }
+      if (message) query.set("message", message);
+      window.location.href = `/manual-exam-entry-drafts${query.toString() ? `?${query.toString()}` : ""}`;
+    };
+
+    const createManualDraftFromPerson = async (item, button) => {
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "作成中";
       }
-      return `/manual-exam-entry?${query.toString()}`;
+      try {
+        const payload = await postJson("/api/manual-exam-entry-drafts/from-person", {
+          event_id: draftPersonEvent?.value || "2",
+          person: item,
+        });
+        reloadDraftListWithMessage(payload.message || "仮登録を作成しました。");
+      } catch (error) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "仮登録に追加";
+        }
+        setDraftPersonMessage(`仮登録作成でエラーが発生しました。${error?.message || ""}`);
+      }
     };
 
-    const startManualEntryFromPerson = (item) => {
-      window.location.href = manualEntryUrl({
-        manual_new: "person",
-        event_id: draftPersonEvent?.value || "2",
-        subscriber_id: item.subscriber_id,
-        hia_subscriber_id: item.hia_subscriber_id,
-        person_id_custom: item.person_id_custom,
-        name_full: item.name_full,
-        name_kana: item.name_kana,
-        insurance_symbol: item.insurance_symbol,
-        insurance_number: item.insurance_number,
-        insurance_branch_number: item.insurance_branch_number,
-        birthdate: item.birth || item.birthdate,
-        gender_label: item.gender_label,
-      });
-    };
-
-    const startManualEntryFromCase = (item) => {
-      window.location.href = manualEntryUrl({
-        manual_new: "case",
-        event_id: item.event_id || draftCaseEvent?.value || "2",
-        case_id: item.exam_export_case_id,
-        subscriber_id: item.subscriber_id,
-        hia_subscriber_id: item.hia_subscriber_id,
-        person_id_custom: item.person_id_custom,
-        name_full: item.name_full,
-        name_kana: item.name_kana,
-        insurance_symbol: item.insurance_symbol,
-        insurance_number: item.insurance_number,
-        insurance_branch_number: item.insurance_branch_number,
-        birthdate: item.birthdate,
-        gender_label: item.gender_label,
-        facility_code: item.facility_code,
-        facility_name: item.facility_name,
-        exam_date: item.exam_date,
-        source_mode: item.source_mode,
-        export_readiness_status: item.export_readiness_status,
-        legal_check_result: item.legal_check_result,
-        legal_reason_summary: item.legal_reason_summary,
-        specific_check_result: item.specific_check_result,
-        specific_reason_summary: item.specific_reason_summary,
-        source_count: item.source_count,
-        xml_count: item.xml_count,
-        csv_count: item.csv_count,
-        paper_count: item.paper_count,
-        case_value_count: item.case_value_count,
-      });
+    const createManualDraftFromCase = async (item, button) => {
+      const originalText = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "作成中";
+      }
+      try {
+        const payload = await postJson("/api/manual-exam-entry-drafts/from-case", {
+          event_id: item.event_id || draftCaseEvent?.value || "2",
+          case: item,
+        });
+        reloadDraftListWithMessage(payload.message || "仮登録を作成しました。");
+      } catch (error) {
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || "仮登録に追加";
+        }
+        setDraftCaseMessage(`仮登録作成でエラーが発生しました。${error?.message || ""}`);
+      }
     };
 
     const setDraftPersonMessage = (message) => {
@@ -1703,10 +1763,10 @@
             <strong>${escapeHtml(hia)}</strong>
             <small>case ${escapeHtml(item.candidate_case_count || "0")}件</small>
           </td>
-          <td><button type="button" class="primary-button compact-action-button" data-manual-draft-person-start>入力開始</button></td>
+          <td><button type="button" class="primary-button compact-action-button" data-manual-draft-person-start>仮登録に追加</button></td>
         `;
-        row.addEventListener("dblclick", () => startManualEntryFromPerson(item));
-        row.querySelector("[data-manual-draft-person-start]")?.addEventListener("click", () => startManualEntryFromPerson(item));
+        row.addEventListener("dblclick", () => createManualDraftFromPerson(item, row.querySelector("[data-manual-draft-person-start]")));
+        row.querySelector("[data-manual-draft-person-start]")?.addEventListener("click", (event) => createManualDraftFromPerson(item, event.currentTarget));
         manualDraftPersonResults.appendChild(row);
       }
     };
@@ -1740,10 +1800,10 @@
             <strong>法定 ${escapeHtml(legal)}</strong>
             <small>特定 ${escapeHtml(specific)} / 出力 ${escapeHtml(item.export_readiness_status || "-")}</small>
           </td>
-          <td><button type="button" class="primary-button compact-action-button" data-manual-draft-case-start>入力開始</button></td>
+          <td><button type="button" class="primary-button compact-action-button" data-manual-draft-case-start>仮登録に追加</button></td>
         `;
-        row.addEventListener("dblclick", () => startManualEntryFromCase(item));
-        row.querySelector("[data-manual-draft-case-start]")?.addEventListener("click", () => startManualEntryFromCase(item));
+        row.addEventListener("dblclick", () => createManualDraftFromCase(item, row.querySelector("[data-manual-draft-case-start]")));
+        row.querySelector("[data-manual-draft-case-start]")?.addEventListener("click", (event) => createManualDraftFromCase(item, event.currentTarget));
         draftCaseResults.appendChild(row);
       }
     };

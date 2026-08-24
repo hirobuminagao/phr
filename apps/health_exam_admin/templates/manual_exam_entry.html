@@ -5,6 +5,9 @@
   <div>
     <p class="eyebrow">MANUAL EXAM ENTRY</p>
     <h1>健診結果手入力</h1>
+    {% if initial_draft %}
+      <p class="subtle">仮登録 draft {{ initial_draft.manual_exam_entry_draft_id }} から入力しています。</p>
+    {% endif %}
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/manual-exam-entry-drafts">仮登録リスト</a>
@@ -108,7 +111,11 @@
       <div>
         <div class="manual-entry-heading-inline">
           <h2>入力sourceの基本情報</h2>
-          <span class="status-pill status-pending">保存未接続</span>
+          {% if initial_draft %}
+            <span class="status-pill status-ready">draft {{ initial_draft.manual_exam_entry_draft_id }}</span>
+          {% else %}
+            <span class="status-pill status-pending">保存未接続</span>
+          {% endif %}
           <button type="button" class="ghost-button compact-action-button" data-manual-entry-basic-clear>基本情報クリア</button>
         </div>
         <p class="subtle">紙のみ、またはXML/CSVの補足として、手入力sourceを作るための入力画面です。現時点では画面確認用で、保存処理は次ステップで接続します。</p>
@@ -643,4 +650,5 @@
     </div>
   </section>
 </main>
+<script id="manual-entry-initial-draft-json" type="application/json">{{ initial_draft_json | safe }}</script>
 {% endblock %}
