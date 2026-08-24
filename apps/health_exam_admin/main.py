@@ -7825,14 +7825,19 @@ def manual_exam_entry_column_exists(cur: Any, schema_name: str, table_name: str,
 def manual_exam_entry_existing_columns(cur: Any, schema_name: str, table_name: str) -> set[str]:
     cur.execute(
         """
-        SELECT column_name
+        SELECT column_name AS column_name
         FROM information_schema.columns
         WHERE table_schema = %s
           AND table_name = %s
         """,
         (schema_name, table_name),
     )
-    return {str(row.get("column_name") or "") for row in cur.fetchall()}
+    columns: set[str] = set()
+    for row in cur.fetchall():
+        value = row.get("column_name") or row.get("COLUMN_NAME")
+        if value:
+            columns.add(str(value))
+    return columns
 
 
 def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filter: str = "") -> list[dict[str, Any]]:
