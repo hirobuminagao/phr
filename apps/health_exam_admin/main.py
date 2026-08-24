@@ -1148,6 +1148,23 @@ def normalize_specific_check_result(status: str | None, reason: str | None = Non
     return "UNDETERMINABLE"
 
 
+def specific_check_result_sql(alias: str = "ecr") -> str:
+    """Normalize DB specific check status while keeping old summary fallback."""
+
+    return f"""
+    CASE
+      WHEN {alias}.specific_check_result = 'OK'
+       AND COALESCE({alias}.specific_reason_summary, '') LIKE '対象外:%'
+        THEN 'NOT_APPLICABLE'
+      WHEN COALESCE({alias}.specific_check_result, '') IN ('OK', 'NG', 'NOT_APPLICABLE', 'UNDETERMINABLE', 'PENDING')
+        THEN COALESCE({alias}.specific_check_result, 'PENDING')
+      WHEN {alias}.specific_check_result IS NULL OR {alias}.specific_check_result = ''
+        THEN 'PENDING'
+      ELSE 'UNDETERMINABLE'
+    END
+    """
+
+
 def check_result_status_class(status: str | None) -> str:
     classes = {
         "OK": "status-ready",
@@ -5218,36 +5235,8 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
         where_parts.append("COALESCE(ecr.legal_check_result, 'PENDING') = %s")
         params.append(legal_check_result)
     if specific_check_result:
-        if specific_check_result == "PENDING":
-            where_parts.append("(ecr.specific_check_result IS NULL OR ecr.specific_check_result = 'PENDING')")
-        elif specific_check_result == "NOT_APPLICABLE":
-            where_parts.append(
-                """
-                (
-                  ecr.specific_check_result = 'NOT_APPLICABLE'
-                  OR (
-                    ecr.specific_check_result = 'OK'
-                    AND ecr.specific_reason_summary LIKE %s
-                  )
-                )
-                """
-            )
-            params.append("対象外:%")
-        elif specific_check_result == "UNDETERMINABLE":
-            where_parts.append(
-                """
-                (
-                  ecr.specific_check_result = 'UNDETERMINABLE'
-                  OR (
-                    ecr.specific_check_result IS NOT NULL
-                    AND ecr.specific_check_result NOT IN ('OK', 'NG', 'PENDING', 'NOT_APPLICABLE', 'UNDETERMINABLE')
-                  )
-                )
-                """
-            )
-        else:
-            where_parts.append("ecr.specific_check_result = %s")
-            params.append(specific_check_result)
+        where_parts.append(f"({specific_check_result_sql('ecr')}) = %s")
+        params.append(specific_check_result)
     if export_readiness_status:
         where_parts.append("eec.export_readiness_status = %s")
         params.append(export_readiness_status)
@@ -6674,10 +6663,10 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') = 'OK' THEN 1 ELSE 0 END) AS legal_ok_count,
           SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') = 'NG' THEN 1 ELSE 0 END) AS legal_ng_count,
           SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') NOT IN ('OK', 'NG') THEN 1 ELSE 0 END) AS legal_pending_count,
-          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'OK' AND COALESCE(ecr.specific_reason_summary, '') = '' THEN 1 ELSE 0 END) AS specific_ok_count,
-          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'NG' THEN 1 ELSE 0 END) AS specific_ng_count,
-          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') = 'NOT_APPLICABLE' OR COALESCE(ecr.specific_reason_summary, '') LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_not_applicable_count,
-          SUM(CASE WHEN COALESCE(ecr.specific_check_result, 'PENDING') NOT IN ('OK', 'NG', 'NOT_APPLICABLE') AND COALESCE(ecr.specific_reason_summary, '') NOT LIKE '対象外:%' THEN 1 ELSE 0 END) AS specific_pending_count
+          SUM(CASE WHEN ({specific_check_result_sql('ecr')}) = 'OK' THEN 1 ELSE 0 END) AS specific_ok_count,
+          SUM(CASE WHEN ({specific_check_result_sql('ecr')}) = 'NG' THEN 1 ELSE 0 END) AS specific_ng_count,
+          SUM(CASE WHEN ({specific_check_result_sql('ecr')}) = 'NOT_APPLICABLE' THEN 1 ELSE 0 END) AS specific_not_applicable_count,
+          SUM(CASE WHEN ({specific_check_result_sql('ecr')}) IN ('PENDING', 'UNDETERMINABLE') THEN 1 ELSE 0 END) AS specific_pending_count
         FROM {qname(health_db())}.exam_export_cases AS eec
         LEFT JOIN (
           SELECT r1.*
