@@ -517,6 +517,8 @@ Migration:
 - `source_type IN ('PAPER', 'MANUAL')` の正式ledgerを対象にする。
 - `manual_exam_entry_drafts.applied_exam_ledger_id` でdraftとの紐づきを表示する。
 - 1行で、正式 `exam_item_values` 件数、draft値件数、case source件数、case採用値件数、出力リスト掲載件数を確認できる。
+- draftの作成者、更新者、正式反映者を表示し、作業担当者単位で絞り込める。
+- 作業担当者による絞り込みは、作成者・更新者・正式反映者のいずれかに一致するものを対象にする。
 - 画面上では「戻し候補」または「要確認」を表示する。
 - 初期版では巻き戻し実行ボタンは置かず、安全条件の見える化までとする。
 - この画面の個人情報閲覧は監査ログに記録する。

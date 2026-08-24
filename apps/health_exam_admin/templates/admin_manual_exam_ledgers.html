@@ -39,6 +39,17 @@
         <span>キーワード</span>
         <input name="q" value="{{ filters.q or '' }}" autocomplete="off" placeholder="ledger / draft / HIA ID / カナ / 健診機関">
       </label>
+      <label>
+        <span>作業担当</span>
+        <select name="worker_user_id">
+          <option value="">全員</option>
+          {% for worker in worker_options %}
+          <option value="{{ worker.app_user_id }}" {% if filters.worker_user_id|string == worker.app_user_id|string %}selected{% endif %}>
+            {{ worker.display_name or worker.employee_no or ("user " ~ worker.app_user_id) }}{% if worker.employee_no %} / {{ worker.employee_no }}{% endif %}{% if not worker.is_active %} / 無効{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
       <fieldset class="filter-condition-block">
         <legend>draft状態</legend>
         <div class="filter-toggle-group">
@@ -81,6 +92,7 @@
             <th>ledger / draft</th>
             <th>受診者</th>
             <th>健診機関</th>
+            <th>作業担当</th>
             <th>値</th>
             <th>case・出力</th>
             <th>戻し判断</th>
@@ -116,6 +128,11 @@
               <small>document {{ row.facility_document_id or "-" }}</small>
             </td>
             <td>
+              <strong>作成 {{ row.draft_created_by_name or "-" }}</strong>
+              <small>更新 {{ row.draft_updated_by_name or "-" }}</small>
+              <small>反映 {{ row.draft_applied_by_name or "-" }}</small>
+            </td>
+            <td>
               <strong>正式 {{ row.item_value_count or 0 }}</strong>
               <small>draft {{ row.draft_value_count or 0 }}</small>
               <small>値エラー {{ row.exam_item_error_count or 0 }}</small>
@@ -145,7 +162,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="7">手入力由来ledgerはありません。</td>
+            <td colspan="8">手入力由来ledgerはありません。</td>
           </tr>
           {% endfor %}
         </tbody>

@@ -502,6 +502,27 @@ def load_admin_user_rows(cur: Any, *, filters: dict[str, str] | None = None) -> 
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_app_user_options(cur: Any) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        SELECT
+          app_user_id,
+          employee_no,
+          display_name,
+          display_name_kana,
+          department_name,
+          is_active,
+          approval_status
+        FROM app_users
+        ORDER BY
+          CASE WHEN approval_status = 'APPROVED' AND is_active = 1 THEN 0 ELSE 1 END,
+          COALESCE(display_name_kana, display_name, employee_no),
+          app_user_id
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_manageable_roles(cur: Any) -> list[dict[str, Any]]:
     cur.execute(
         """
@@ -4180,6 +4201,7 @@ def load_admin_manual_exam_ledger_rows(
     event_id = filters.get("event_id", "").strip()
     draft_status = filters.get("draft_status", "").strip().upper()
     apply_state = filters.get("apply_state", "").strip().upper()
+    worker_user_id = filters.get("worker_user_id", "").strip()
     query = filters.get("q", "").strip()
     if event_id:
         where_parts.append("el.event_id = %s")
@@ -4191,6 +4213,17 @@ def load_admin_manual_exam_ledger_rows(
         where_parts.append("d.manual_exam_entry_draft_id IS NOT NULL")
     elif apply_state == "NO_DRAFT_LINK":
         where_parts.append("d.manual_exam_entry_draft_id IS NULL")
+    if worker_user_id:
+        where_parts.append(
+            """
+            (
+              d.created_by_app_user_id = %s
+              OR d.updated_by_app_user_id = %s
+              OR d.applied_by_app_user_id = %s
+            )
+            """
+        )
+        params.extend([worker_user_id, worker_user_id, worker_user_id])
     if query:
         like = f"%{query}%"
         where_parts.append(
@@ -4244,12 +4277,16 @@ def load_admin_manual_exam_ledger_rows(
           d.draft_status,
           d.entry_purpose,
           d.applied_at,
+          d.created_by_app_user_id,
+          d.updated_by_app_user_id,
+          d.applied_by_app_user_id,
           COALESCE(dv.value_count, 0) AS draft_value_count,
           COALESCE(eiv.item_value_count, 0) AS item_value_count,
           COALESCE(src.case_source_count, 0) AS case_source_count,
           COALESCE(adopted.adopted_value_count, 0) AS adopted_value_count,
           COALESCE(listed.list_case_count, 0) AS list_case_count,
           COALESCE(cu.display_name, cu.employee_no, CONCAT('user ', d.created_by_app_user_id)) AS draft_created_by_name,
+          COALESCE(uu.display_name, uu.employee_no, CONCAT('user ', d.updated_by_app_user_id)) AS draft_updated_by_name,
           COALESCE(au.display_name, au.employee_no, CONCAT('user ', d.applied_by_app_user_id)) AS draft_applied_by_name
         FROM {qname(health_db())}.exam_ledgers AS el
         LEFT JOIN {qname(health_db())}.manual_exam_entry_drafts AS d
@@ -4289,6 +4326,8 @@ def load_admin_manual_exam_ledger_rows(
           ON listed.source_exam_ledger_id = el.exam_ledger_id
         LEFT JOIN {qname(app_db())}.app_users AS cu
           ON cu.app_user_id = d.created_by_app_user_id
+        LEFT JOIN {qname(app_db())}.app_users AS uu
+          ON uu.app_user_id = d.updated_by_app_user_id
         LEFT JOIN {qname(app_db())}.app_users AS au
           ON au.app_user_id = d.applied_by_app_user_id
         {where_sql}
@@ -9453,6 +9492,7 @@ def admin_manual_exam_ledgers(request: Request) -> Response:
     filters = {
         "event_id": request.query_params.get("event_id", "2"),
         "q": request.query_params.get("q", ""),
+        "worker_user_id": request.query_params.get("worker_user_id", ""),
         "draft_status": request.query_params.get("draft_status", ""),
         "apply_state": request.query_params.get("apply_state", ""),
         "limit": request.query_params.get("limit", "200"),
@@ -9463,6 +9503,7 @@ def admin_manual_exam_ledgers(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
+            worker_options = load_app_user_options(cur)
             rows = load_admin_manual_exam_ledger_rows(cur, filters=filters, limit=limit)
             if audit_enabled(cur):
                 for row in rows:
@@ -9496,6 +9537,7 @@ def admin_manual_exam_ledgers(request: Request) -> Response:
             "filters": filters,
             "limit": limit,
             "event_options": event_options,
+            "worker_options": worker_options,
         },
     )
 

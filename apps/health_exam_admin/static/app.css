@@ -1549,28 +1549,32 @@ a.home-menu-card.is-navigating {
 }
 
 .admin-manual-ledger-table th:nth-child(1) {
-  width: 14%;
+  width: 12%;
 }
 
 .admin-manual-ledger-table th:nth-child(2) {
-  width: 22%;
+  width: 20%;
 }
 
 .admin-manual-ledger-table th:nth-child(3) {
-  width: 18%;
+  width: 15%;
 }
 
-.admin-manual-ledger-table th:nth-child(4),
-.admin-manual-ledger-table th:nth-child(5) {
+.admin-manual-ledger-table th:nth-child(4) {
+  width: 14%;
+}
+
+.admin-manual-ledger-table th:nth-child(5),
+.admin-manual-ledger-table th:nth-child(6) {
   width: 11%;
 }
 
-.admin-manual-ledger-table th:nth-child(6) {
-  width: 16%;
+.admin-manual-ledger-table th:nth-child(7) {
+  width: 12%;
 }
 
-.admin-manual-ledger-table th:nth-child(7) {
-  width: 8%;
+.admin-manual-ledger-table th:nth-child(8) {
+  width: 5%;
 }
 
 .text-link-button {
