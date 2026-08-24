@@ -1574,7 +1574,27 @@ a.home-menu-card.is-navigating {
 }
 
 .admin-manual-ledger-table th:nth-child(8) {
-  width: 5%;
+  width: 7%;
+}
+
+.admin-manual-ledger-table th:nth-child(9) {
+  width: 6%;
+}
+
+.admin-manual-ledger-table td:nth-child(8),
+.admin-manual-ledger-table td:nth-child(9) {
+  text-align: center;
+}
+
+.admin-manual-ledger-table td:nth-child(8) .inline-action-stack {
+  justify-content: center;
+}
+
+.admin-manual-ledger-table td:nth-child(8) .compact-action-button,
+.admin-manual-ledger-table td:nth-child(9) .compact-action-button {
+  min-width: 56px;
+  max-width: 100%;
+  padding-inline: 8px;
 }
 
 .text-link-button {
