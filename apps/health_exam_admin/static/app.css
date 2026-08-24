@@ -1553,7 +1553,7 @@ a.home-menu-card.is-navigating {
 }
 
 .admin-manual-ledger-table th:nth-child(2) {
-  width: 17%;
+  width: 16%;
 }
 
 .admin-manual-ledger-table th:nth-child(3) {
@@ -1570,19 +1570,14 @@ a.home-menu-card.is-navigating {
 }
 
 .admin-manual-ledger-table th:nth-child(7) {
-  width: 11%;
+  width: 20%;
 }
 
 .admin-manual-ledger-table th:nth-child(8) {
-  width: 10%;
+  width: 12%;
 }
 
-.admin-manual-ledger-table th:nth-child(9) {
-  width: 10%;
-}
-
-.admin-manual-ledger-table td:nth-child(8),
-.admin-manual-ledger-table td:nth-child(9) {
+.admin-manual-ledger-table td:nth-child(8) {
   text-align: center;
 }
 
@@ -1590,12 +1585,28 @@ a.home-menu-card.is-navigating {
   justify-content: center;
 }
 
-.admin-manual-ledger-table td:nth-child(8) .compact-action-button,
-.admin-manual-ledger-table td:nth-child(9) .compact-action-button {
+.admin-manual-ledger-table td:nth-child(8) .compact-action-button {
   min-width: 0;
   max-width: 100%;
-  width: 100%;
+  width: auto;
   padding-inline: 8px;
+}
+
+.admin-manual-ledger-actions {
+  align-items: stretch;
+}
+
+.admin-manual-ledger-actions .compact-action-button {
+  flex: 1 1 58px;
+}
+
+.admin-manual-ledger-revert-action {
+  margin-top: 8px;
+}
+
+.admin-manual-ledger-revert-action .compact-action-button {
+  min-width: 72px;
+  width: auto;
 }
 
 .text-link-button {

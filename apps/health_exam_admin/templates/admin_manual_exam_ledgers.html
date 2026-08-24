@@ -104,7 +104,6 @@
             <th>case・出力</th>
             <th>戻し判断</th>
             <th>確認</th>
-            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -163,33 +162,33 @@
               <span class="status-pill status-ready">候補</span>
               <small>draftへ戻せます</small>
               {% endif %}
+              <div class="inline-action-stack admin-manual-ledger-revert-action">
+                {% if not blocked_reason and row.row_status != "REVERTED_TO_DRAFT" %}
+                <button
+                  class="danger-button compact-action-button"
+                  type="button"
+                  data-manual-ledger-revert-open
+                  data-ledger-id="{{ row.exam_ledger_id }}"
+                  data-draft-id="{{ row.manual_exam_entry_draft_id }}"
+                  data-value-count="{{ row.item_value_count or 0 }}"
+                >戻す</button>
+                {% else %}
+                <button class="ghost-button compact-action-button" type="button" disabled>戻す</button>
+                {% endif %}
+              </div>
             </td>
             <td>
-              <div class="inline-action-stack">
+              <div class="inline-action-stack admin-manual-ledger-actions">
                 <a class="ghost-button compact-action-button" href="/exam-ledgers/{{ row.exam_ledger_id }}">ledger</a>
                 {% if has_draft %}
                 <a class="ghost-button compact-action-button" href="/manual-exam-entry?draft_id={{ row.manual_exam_entry_draft_id }}">draft</a>
                 {% endif %}
               </div>
             </td>
-            <td>
-              {% if not blocked_reason and row.row_status != "REVERTED_TO_DRAFT" %}
-              <button
-                class="danger-button compact-action-button"
-                type="button"
-                data-manual-ledger-revert-open
-                data-ledger-id="{{ row.exam_ledger_id }}"
-                data-draft-id="{{ row.manual_exam_entry_draft_id }}"
-                data-value-count="{{ row.item_value_count or 0 }}"
-              >戻す</button>
-              {% else %}
-              <button class="ghost-button compact-action-button" type="button" disabled>戻す</button>
-              {% endif %}
-            </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="9">手入力由来ledgerはありません。</td>
+            <td colspan="8">手入力由来ledgerはありません。</td>
           </tr>
           {% endfor %}
         </tbody>
