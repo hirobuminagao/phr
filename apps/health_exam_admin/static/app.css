@@ -1540,6 +1540,27 @@ a.home-menu-card.is-navigating {
   pointer-events: none;
 }
 
+.manual-draft-list-table th:first-child,
+.manual-draft-list-table td:first-child {
+  width: 92px;
+  max-width: 92px;
+}
+
+.manual-draft-list-table th:last-child,
+.manual-draft-list-table td:last-child {
+  width: 132px;
+  max-width: 132px;
+}
+
+.manual-draft-list-table td:last-child {
+  white-space: nowrap;
+}
+
+.manual-draft-list-table td:last-child .compact-action-button {
+  min-width: 56px;
+  padding-inline: 8px;
+}
+
 .active-filter-summary {
   cursor: pointer;
 }
