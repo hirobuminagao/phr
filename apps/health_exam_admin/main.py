@@ -7883,6 +7883,22 @@ def update_manual_exam_entry_draft_basic_info(
     )
 
 
+def delete_manual_exam_entry_draft(cur: Any, *, draft_id: int) -> dict[str, Any]:
+    before = load_manual_exam_entry_draft_by_id(cur, draft_id)
+    if before is None:
+        raise ValueError("draft_not_found")
+    if str(before.get("draft_status") or "DRAFT").upper() == "APPLIED":
+        raise ValueError("draft_already_applied")
+    cur.execute(
+        f"""
+        DELETE FROM {qname(health_db())}.manual_exam_entry_drafts
+         WHERE manual_exam_entry_draft_id = %s
+        """,
+        (draft_id,),
+    )
+    return before
+
+
 def summarize_manual_exam_entry_drafts(rows: list[dict[str, Any]]) -> dict[str, int]:
     summary = {
         "total": len(rows),
@@ -8479,6 +8495,34 @@ async def update_manual_exam_entry_draft_basic_info_api(draft_id: int, request: 
             conn.rollback()
             raise
     return JSONResponse({"message": f"draft {draft_id} の基本情報を更新しました。"})
+
+
+@app.post("/api/manual-exam-entry-drafts/{draft_id}/delete")
+async def delete_manual_exam_entry_draft_api(draft_id: int, request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not has_any_permission(user, ("export_lists.edit", "users.manage")):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
+                return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
+            try:
+                before = delete_manual_exam_entry_draft(cur, draft_id=draft_id)
+            except ValueError as exc:
+                if str(exc) == "draft_already_applied":
+                    return JSONResponse({"message": "本データ反映済みの仮登録は削除できません。"}, status_code=400)
+                return JSONResponse({"message": "対象の仮登録が見つかりません。"}, status_code=404)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    label = before.get("name_kana") or before.get("name_full") or f"draft {draft_id}"
+    return JSONResponse({"message": f"{label} の仮登録を削除しました。"})
 
 
 @app.get("/health")

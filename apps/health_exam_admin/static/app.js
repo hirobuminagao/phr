@@ -1797,6 +1797,24 @@
       await updateDraftBasicInfo(draftTargetFromElement(toggle), { examDate: nextDate });
     };
 
+    const deleteManualDraft = async (button) => {
+      const draftId = button.getAttribute("data-draft-id") || "";
+      const label = button.getAttribute("data-draft-label") || `draft ${draftId}`;
+      if (!draftId) return;
+      if (!window.confirm(`${label} の仮登録を削除します。よろしいですか？`)) return;
+      const originalText = button.textContent || "削除";
+      button.disabled = true;
+      button.textContent = "削除中";
+      try {
+        const payload = await postJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(draftId)}/delete`, {});
+        reloadDraftListWithMessage(payload.message || "仮登録を削除しました。");
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = originalText;
+        window.alert(`仮登録削除でエラーが発生しました。${error?.message || ""}`);
+      }
+    };
+
     const createManualDraftFromPerson = async (item, button) => {
       const originalText = button?.textContent || "";
       if (button) {
@@ -1858,6 +1876,9 @@
       input.addEventListener("change", () => {
         updateDraftDateFromInput(input);
       });
+    }
+    for (const button of document.querySelectorAll("[data-manual-draft-delete]")) {
+      button.addEventListener("click", () => deleteManualDraft(button));
     }
 
     const setDraftPersonMessage = (message) => {

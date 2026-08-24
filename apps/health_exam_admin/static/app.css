@@ -1583,8 +1583,8 @@ a.home-menu-card.is-navigating {
 
 .manual-draft-list-table th:last-child,
 .manual-draft-list-table td:last-child {
-  width: 124px;
-  max-width: 124px;
+  width: 180px;
+  max-width: 180px;
 }
 
 .manual-draft-list-table td:last-child {
@@ -1593,8 +1593,8 @@ a.home-menu-card.is-navigating {
 
 .manual-draft-list-table td:nth-child(4) .compact-action-button,
 .manual-draft-list-table td:last-child .compact-action-button {
-  min-width: 56px;
-  padding-inline: 8px;
+  min-width: 50px;
+  padding-inline: 7px;
 }
 
 .active-filter-summary {
