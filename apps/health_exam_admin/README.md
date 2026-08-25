@@ -51,6 +51,7 @@ Codexに「m4ローカルのサイトを起動して」と依頼された場合�
 - DB接続情報は `scripts/.env` を `--env-file` でコンテナへ渡す。
 - `scripts/.env` はgit管理しない。
 - コンテナ内からホスト側MySQLへ接続するため、起動時に `PHR_DB_HOST=host.docker.internal` を上書きする。
+- `dev_phr.event.result_root_path` に入っている受領ルートは、Docker内からも同じパスで見えるようにマウントする。
 - 管理画面は `http://127.0.0.1:8011/login` で開く。
 
 起動手順:
@@ -83,9 +84,13 @@ docker run -d \
   --env-file scripts/.env \
   -e PHR_DB_HOST=host.docker.internal \
   -e PHR_ADMIN_HOST=0.0.0.0 \
+  -v /Users/hiro/work/phr/tests/fixtures/from_medical_event2:/Users/hiro/work/phr/tests/fixtures/from_medical_event2 \
   -p 8011:8011 \
   phr-health-exam-admin:latest
 ```
+
+`result_root_path` を別の実フォルダへ変えた場合は、`-v` の左側と右側をそのパスに合わせる。  
+例: DBに `/Users/hiro/work/phr/tests/fixtures/from_medical_event2` が入っているなら、Docker起動時も同じ `/Users/hiro/work/phr/tests/fixtures/from_medical_event2` として見えるようにする。
 
 起動確認:
 
@@ -115,6 +120,7 @@ http://127.0.0.1:8011/login
 - `--reload` はm4 Docker起動では使わない。ソース変更後は再ビルドしてコンテナを起動し直す。
 - `scripts/.env` は `.dockerignore` でイメージに入らないため、必ず `--env-file scripts/.env` を付ける。
 - Docker内で `PHR_DB_HOST=localhost` にすると管理画面コンテナ自身を見に行く。m4では `host.docker.internal` を使う。
+- `result_root_path` の実フォルダを `-v` でマウントしないと、画面は見えても `01スキャン` から受領フォルダが見えない。
 
 ## Docker起動（一般例）
 
