@@ -27,6 +27,7 @@ from __future__ import annotations
 DEV_PHR = "dev_phr"
 WORK_OTHER = "work_other"
 PHR_MASTER = "phr_master"
+CSV_MAPPING_LAB = "csv_mapping_lab"
 
 
 # v1.1.0: 利用可能schema一覧
@@ -35,4 +36,5 @@ ALL_SCHEMAS: tuple[str, ...] = (
     DEV_PHR,
     WORK_OTHER,
     PHR_MASTER,
+    CSV_MAPPING_LAB,
 )

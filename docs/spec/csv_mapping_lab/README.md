@@ -24,6 +24,49 @@
 
 初版では、LLM連携、候補ランキング、seed自動生成履歴はテーブル分割しない。必要になった段階で追加する。
 
+## 同じ形式の再解析
+
+同じ健診機関で同じヘッダー構造のCSVを追加で解析する場合は、別フォーマットとして増やすより、既存解析にサンプル値と値分布を追加して育てる運用を基本にする。
+
+判定キー:
+
+- `facility_code`
+- `header_sha256`
+- `encoding`
+- `delimiter`
+- `header_row_no`
+- `data_start_row_no`
+
+同じ形式と判断できる場合:
+
+- `analysis_files` には解析履歴としてファイル単位の行を残す。
+- `analysis_columns` はファイルごとに作る。
+- 画面や集計では、同じ `facility_code` + `header_sha256` の列を束ね、サンプル値や出現値の追加分を確認できるようにする。
+- 将来的には「代表解析」または「形式グループ」を追加し、複数ファイルのサンプル値を統合表示できるようにする。
+
+現在のCLIは、同一ファイルSHAの再解析を `--replace-source-sha` で入れ替えできる。次の改修では、同一施設・同一ヘッダーの追加解析を「履歴追加」として扱う。
+
+## 候補推定
+
+候補推定は、列ヘッダーと値の特徴から、作業者が見る前の初期候補を入れる補助機能。
+
+現時点のCLIでは以下を行う。
+
+- ヘッダー名をNFKC正規化し、空白を除去して比較する。
+- `社員番号`、`保険証記号`、`カナ氏名`、`生年月日` などの明示的なヘッダーは `LEDGER_FIELD` 候補にする。
+- `身長`、`体重`、`HbA1c`、`eGFR` などの明示的なヘッダーは `EXAM_ITEM_VALUE` 候補にする。
+- `安静心電図1`、`胸部X線1`、`他覚症状(1)` のような連番所見は、限定的にST候補にする。
+- `判定`、`疑い`、`実施理由` を含む列は、所見本文と混ざりやすいため部分一致候補から外す。
+
+候補推定は確定ではない。最終判断は `decision_status` と `decision_note` に作業者が記録する。
+
+今後の候補推定候補:
+
+- `exam_item_master` の表示名、namecode、OID情報との照合。
+- 既存 `csv_exam_result_mapping_rules` の過去判断との照合。
+- 値の型、単位、周辺列を含めた候補。
+- ローカルLLMによる候補メモ生成。
+
 ## テーブル
 
 ### `analysis_files`
@@ -156,3 +199,46 @@ CSVの1列ごとの解析結果を表す子テーブル。
 
 - `sql/ddl/csv_mapping_lab/0010_csv_mapping_lab__analysis_files.sql`
 - `sql/ddl/csv_mapping_lab/0020_csv_mapping_lab__analysis_columns.sql`
+
+## 初回CLI
+
+CSVを読み込み、`analysis_files` と `analysis_columns` に登録する。
+
+- `scripts/csv_mapping_lab/analyze_csv.py`
+
+例:
+
+```bash
+python3 scripts/csv_mapping_lab/analyze_csv.py \
+  /path/to/sample.csv \
+  --facility-code 0110119070 \
+  --facility-name 円山クリニック \
+  --created-by operator
+```
+
+確認だけ行いDBに登録しない場合:
+
+```bash
+python3 scripts/csv_mapping_lab/analyze_csv.py /path/to/sample.csv --dry-run
+```
+
+同じCSVを再解析して古い解析を置き換える場合:
+
+```bash
+python3 scripts/csv_mapping_lab/analyze_csv.py /path/to/sample.csv --replace-source-sha
+```
+
+## 簡易画面
+
+次の段階で、解析用の簡易画面を追加する。
+
+初版画面:
+
+- CSVアップロードまたは配置済みファイルパス指定。
+- 解析実行。
+- 解析ファイル一覧。
+- 解析結果の列一覧。
+- 列ごとのサンプル値、型、空欄率、候補項目、解析メモ表示。
+- 列ごとの `ADOPT` / `IGNORE` / `NEEDS_CONFIRMATION` / `DEFERRED` 更新。
+
+画面はPHR本番処理のstepには混ぜない。CSVマッピング解析支援の入口として、独立した画面にする。
