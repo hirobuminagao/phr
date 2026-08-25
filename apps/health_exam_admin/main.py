@@ -12120,6 +12120,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
         cur = dict_cursor(conn)
         event_options = load_event_options(cur)
         csv_format_options = load_csv_format_options(cur)
+        facility_rows = load_facility_master_admin_rows(cur, limit=2000)
         cur.close()
     return templates.TemplateResponse(
         "admin_folder_alias_new.html",
@@ -12128,6 +12129,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
             "user": user,
             "event_options": event_options,
             "csv_format_options": csv_format_options,
+            "facility_rows": facility_rows,
             "source_mode_options": source_mode_options(),
             "prefill": {
                 "event_id": request.query_params.get("event_id", ""),

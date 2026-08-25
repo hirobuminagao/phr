@@ -821,6 +821,29 @@
     row.addEventListener("click", () => selectAliasFacility(row));
   }
 
+  const normalizeFolderAliasName = (value) => String(value || "")
+    .trim()
+    .replace(/[\\\/]+/g, "_")
+    .replace(/[\s　]+/g, "_")
+    .replace(/_+/g, "_");
+  for (const srcInput of document.querySelectorAll("[data-folder-alias-src]")) {
+    const form = srcInput.closest("form");
+    const normInput = form?.querySelector("[data-folder-alias-norm]");
+    if (!normInput) continue;
+    let previousGenerated = normalizeFolderAliasName(srcInput.value);
+    if (!normInput.value) {
+      normInput.value = previousGenerated;
+    }
+    srcInput.addEventListener("input", () => {
+      const nextGenerated = normalizeFolderAliasName(srcInput.value);
+      const currentNorm = String(normInput.value || "").trim();
+      if (!currentNorm || currentNorm === previousGenerated) {
+        normInput.value = nextGenerated;
+      }
+      previousGenerated = nextGenerated;
+    });
+  }
+
   const closeMonthPickers = (except = null) => {
     for (const popover of document.querySelectorAll("[data-month-picker-popover]")) {
       if (except && popover === except) continue;

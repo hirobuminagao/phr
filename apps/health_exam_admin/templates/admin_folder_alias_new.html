@@ -38,15 +38,19 @@
       </label>
       <label class="form-wide-field">
         <span>実フォルダ名 <i class="required-mark">必須</i></span>
-        <input name="src_folder_raw" value="{{ prefill.src_folder_raw or '' }}" required placeholder="例: 1310438796_ヒロオカクリニック" autofocus>
+        <input name="src_folder_raw" value="{{ prefill.src_folder_raw or '' }}" required placeholder="例: 1310438796_ヒロオカクリニック" autofocus data-folder-alias-src>
       </label>
       <label>
         <span>正規化後名</span>
-        <input name="dst_folder_norm" value="{{ prefill.dst_folder_norm or '' }}" placeholder="空なら実フォルダ名と同じ">
+        <input name="dst_folder_norm" value="{{ prefill.dst_folder_norm or '' }}" placeholder="空なら実フォルダ名から自動生成" data-folder-alias-norm>
       </label>
       <label>
         <span>紐づく健診機関ID/コード</span>
-        <input name="exam_facility_selector" placeholder="例: 1310438796">
+        <div class="inline-picker-field">
+          <input id="new-alias-facility-selector" name="exam_facility_selector" placeholder="例: 1310438796">
+          <button type="button" class="ghost-button" data-alias-facility-picker-open data-target-input="new-alias-facility-selector" data-modal-open="alias-facility-picker-modal">候補から選ぶ</button>
+        </div>
+        <small>健診機関名・コード・住所で検索して、マスタから紐づけます。</small>
       </label>
       <div class="form-wide-field source-kind-picker" data-source-kind-picker data-current-mode="UNKNOWN">
         <span>想定受領モード</span>
@@ -99,5 +103,52 @@
       </div>
     </form>
   </section>
+
+  <div id="alias-facility-picker-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="alias-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">Facility Picker</p>
+          <h2 id="alias-facility-picker-title">紐づく健診機関を選ぶ</h2>
+          <p class="subtle">受領フォルダに、健診機関マスタのコードを設定します。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>
+          <span>候補検索</span>
+          <input data-live-filter-input="#alias-facility-picker-table" data-modal-focus placeholder="健診機関名 / コード / 住所">
+        </label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="alias-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>所在地</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for facility in facility_rows %}
+            <tr data-alias-facility-row data-facility-code="{{ facility.exam_facility_code or facility.exam_facility_id }}" data-filter-text="{{ facility.exam_facility_code }} {{ facility.exam_facility_name }} {{ facility.exam_facility_display_name }} {{ facility.address }} {{ facility.postal_code }} {{ facility.phone_number }}">
+              <td>
+                <strong>{{ facility.exam_facility_display_name or facility.exam_facility_name }}</strong>
+                <small>{{ facility.exam_facility_code or facility.exam_facility_id }}</small>
+              </td>
+              <td>
+                <small>{{ facility.postal_code or "" }} {{ facility.address or "" }}</small>
+              </td>
+              <td>
+                <button type="button" class="ghost-button compact-action-button" data-alias-facility-select data-facility-code="{{ facility.exam_facility_code or facility.exam_facility_id }}">選択</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 </main>
 {% endblock %}

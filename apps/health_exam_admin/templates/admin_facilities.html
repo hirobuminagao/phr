@@ -139,11 +139,11 @@
                     </label>
                     <label class="form-wide-field">
                       <span>実フォルダ名</span>
-                      <input name="src_folder_raw" value="{{ alias.src_folder_raw or '' }}" required>
+                      <input name="src_folder_raw" value="{{ alias.src_folder_raw or '' }}" required data-folder-alias-src>
                     </label>
                     <label class="form-wide-field">
                       <span>正規化後名</span>
-                      <input name="dst_folder_norm" value="{{ alias.dst_folder_norm or '' }}">
+                      <input name="dst_folder_norm" value="{{ alias.dst_folder_norm or '' }}" data-folder-alias-norm>
                     </label>
                     <label>
                       <span>健診機関ID/コード</span>
