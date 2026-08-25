@@ -11474,6 +11474,18 @@ async def upload_csv_mapping_lab(
     )
 
 
+def csv_mapping_prompt_range_label(form: Mapping[str, str]) -> str:
+    column_start = parse_positive_int(str(form.get("column_start") or ""), default=0, maximum=999999)
+    column_end = parse_positive_int(str(form.get("column_end") or ""), default=0, maximum=999999)
+    if column_start and column_end:
+        return f"{column_start}-{column_end}"
+    if column_start:
+        return f"{column_start}-last"
+    if column_end:
+        return f"1-{column_end}"
+    return "all"
+
+
 def build_csv_mapping_prompt_from_form(form: Mapping[str, str]) -> tuple[int, str]:
     analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
     if not analysis_file_id:
@@ -11539,7 +11551,7 @@ async def download_csv_mapping_lab_prompt(request: Request) -> Response:
         archive.writestr("REGULATION.md", regulation_text)
         archive.writestr("analysis_prompt.json", prompt_json + "\n")
     zip_buffer.seek(0)
-    file_name = f"csv_mapping_prompt_{analysis_file_id}.zip"
+    file_name = f"csv_mapping_prompt_{analysis_file_id}_{csv_mapping_prompt_range_label(form)}.zip"
     headers = {
         "Content-Disposition": f'attachment; filename="{file_name}"',
         "X-Content-Type-Options": "nosniff",

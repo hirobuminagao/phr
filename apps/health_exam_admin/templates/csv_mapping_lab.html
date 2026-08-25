@@ -167,6 +167,21 @@
       </div>
     </form>
 
+    <div class="csv-mapping-ai-instruction">
+      <div class="section-heading">
+        <div>
+          <h3>AIへの依頼文</h3>
+          <p class="subtle">ダウンロードしたZIPを添付して、この文章をそのまま渡します。</p>
+        </div>
+        <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-mapping-ai-instruction-text">コピー</button>
+      </div>
+      <textarea id="csv-mapping-ai-instruction-text" readonly spellcheck="false">添付ZIPを解析してください。
+ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysis_prompt.json の列マッピング候補を作ってください。
+
+返却は REGULATION.md の返却形式に従って、JSONだけにしてください。
+Markdown説明、コードフェンス、補足文章は不要です。</textarea>
+    </div>
+
     {% if prompt_json %}
     <div class="csv-mapping-prompt-output">
       <div class="section-heading">

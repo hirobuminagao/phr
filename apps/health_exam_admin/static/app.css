@@ -3592,6 +3592,20 @@ a.home-menu-card.is-navigating {
   margin-top: 20px;
 }
 
+.csv-mapping-ai-instruction {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.csv-mapping-ai-instruction textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .csv-mapping-prompt-output textarea {
   width: 100%;
   min-height: 420px;
