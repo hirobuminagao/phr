@@ -289,6 +289,7 @@
 	                  data-latest-case-id="{{ candidate.latest_case_id or '' }}"
 	                  data-case-count="{{ candidate.event_case_count or 0 }}"
 	                >
+	                <span class="person-selection-choice-badge" aria-hidden="true">未選択</span>
 	                <span>
 	                  <strong>{{ candidate.name_kana_full or candidate.name_full or "-" }}</strong>
 	                  <small>subscriber {{ candidate.subscriber_id }} / HIA {{ candidate.hia_subscriber_id or "-" }} / case {{ candidate.latest_case_id or "-" }}</small>

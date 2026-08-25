@@ -1432,6 +1432,7 @@ a.home-menu-card.is-navigating {
 .person-selection-result-table {
   min-width: 1680px;
   table-layout: fixed;
+  border-collapse: collapse;
 }
 
 .person-selection-col-row {
@@ -1472,8 +1473,7 @@ a.home-menu-card.is-navigating {
 .person-selection-candidate {
   display: grid;
   gap: 3px;
-  padding: 8px 0;
-  border-bottom: 1px dashed #d7e2ef;
+  padding: 6px 0;
 }
 
 .person-selection-candidate:last-child {
@@ -1483,7 +1483,7 @@ a.home-menu-card.is-navigating {
 .selectable-candidate {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   padding: 10px 12px;
   border: 1px solid #d7e2ef;
   border-radius: 8px;
@@ -1496,25 +1496,63 @@ a.home-menu-card.is-navigating {
 }
 
 .selectable-candidate input {
-  inline-size: 18px;
-  block-size: 18px;
-  margin: 0;
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.selectable-candidate span {
+.person-selection-choice-badge {
+  min-width: 70px;
+  padding: 4px 8px;
+  border: 1px solid #bfd0e3;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #5b6b7d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.selectable-candidate > span:last-child {
   display: grid;
   grid-template-columns: minmax(120px, 0.9fr) minmax(160px, 1fr);
   gap: 3px 12px;
   align-items: center;
 }
 
-.selectable-candidate span strong {
+.selectable-candidate > span:last-child strong {
   grid-row: span 2;
 }
 
-.selectable-candidate span small {
+.selectable-candidate > span:last-child small {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.selectable-candidate:has(input:checked) {
+  border-color: #168768;
+  background: #e9f7f3;
+  box-shadow: inset 0 0 0 1px #168768;
+}
+
+.selectable-candidate:has(input:checked) .person-selection-choice-badge {
+  border-color: #168768;
+  background: #168768;
+  color: #fff;
+}
+
+.selectable-candidate:has(input:checked) .person-selection-choice-badge::before {
+  content: "選択中";
+}
+
+.selectable-candidate:has(input:checked) .person-selection-choice-badge {
+  font-size: 0;
+}
+
+.selectable-candidate:has(input:checked) .person-selection-choice-badge::before {
+  font-size: 0.78rem;
 }
 
 .selectable-candidate.is-added {
@@ -1811,6 +1849,17 @@ a.home-menu-card.is-navigating {
 .compact-action-button {
   min-width: 74px;
   padding-inline: 12px;
+}
+
+.inline-input-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-action input {
+  min-width: 0;
 }
 
 .inline-action-stack {

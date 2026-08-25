@@ -77,7 +77,7 @@
         </label>
         <label>
           <span>event</span>
-          <input name="event_id" value="{{ prefill.event_id or '' }}" inputmode="numeric">
+          <input id="external-feedback-event-id" name="event_id" value="{{ prefill.event_id or '' }}" inputmode="numeric">
         </label>
       </div>
 
@@ -90,9 +90,12 @@
           <span>HIA ZIP ID</span>
           <input name="xml_export_zip_id" value="{{ prefill.xml_export_zip_id or '' }}" inputmode="numeric">
         </label>
-        <label>
+        <label class="input-with-action">
           <span>HIA member ID</span>
-          <input name="xml_export_member_id" value="{{ prefill.xml_export_member_id or '' }}" inputmode="numeric">
+          <span class="inline-input-action">
+            <input id="external-feedback-member-id" name="xml_export_member_id" value="{{ prefill.xml_export_member_id or '' }}" inputmode="numeric">
+            <button type="button" class="ghost-button compact-action-button" data-modal-open="external-feedback-member-picker-modal">検索</button>
+          </span>
         </label>
         <label>
           <span>case ID</span>
@@ -189,6 +192,60 @@
         <button type="submit">外部指摘を登録</button>
       </div>
     </form>
+
+    <div id="external-feedback-member-picker-modal" class="edit-modal" hidden>
+      <div class="edit-modal__backdrop" data-modal-close></div>
+      <section class="edit-modal__panel export-facility-modal manual-entry-subscriber-modal" role="dialog" aria-modal="true" aria-labelledby="external-feedback-member-picker-title">
+        <div class="edit-modal__head">
+          <div>
+            <p class="eyebrow">HIA MEMBER</p>
+            <h2 id="external-feedback-member-picker-title">HIA memberを選択</h2>
+          </div>
+          <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+        </div>
+        <div class="manual-entry-subscriber-search">
+          <label>
+            キーワード
+            <input id="external-feedback-member-search-q" autocomplete="off" placeholder="HIA ID / 氏名 / XML / ZIP">
+          </label>
+          <label>
+            氏名カナ
+            <input id="external-feedback-member-search-kana" autocomplete="off" placeholder="カナ">
+          </label>
+          <label>
+            member ID
+            <input id="external-feedback-member-search-member-id" inputmode="numeric" autocomplete="off">
+          </label>
+          <label>
+            case ID
+            <input id="external-feedback-member-search-case-id" inputmode="numeric" autocomplete="off">
+          </label>
+          <button type="button" class="primary-button" data-external-feedback-member-search>検索</button>
+        </div>
+        <div class="table-panel export-facility-picker-table-panel">
+          <table class="data-table compact-table manual-entry-subscriber-table">
+            <thead>
+              <tr>
+                <th>HIA member</th>
+                <th>加入者</th>
+                <th>ZIP / XML</th>
+                <th>case</th>
+                <th>選択</th>
+              </tr>
+            </thead>
+            <tbody data-external-feedback-member-results>
+              <tr data-external-feedback-member-empty>
+                <td colspan="5">条件を入力して検索してください。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="edit-modal__foot manual-entry-modal-actions">
+          <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+          <button type="button" class="primary-button disabled" data-external-feedback-member-apply disabled>選択</button>
+        </div>
+      </section>
+    </div>
   </section>
   {% endif %}
 

@@ -2873,4 +2873,115 @@
       jumpToManualEntryRow(itemRows[rowIndex]);
     });
   }
+
+  const externalFeedbackMemberResults = document.querySelector("[data-external-feedback-member-results]");
+  if (externalFeedbackMemberResults) {
+    const searchButton = document.querySelector("[data-external-feedback-member-search]");
+    const applyButton = document.querySelector("[data-external-feedback-member-apply]");
+    const emptyRow = externalFeedbackMemberResults.querySelector("[data-external-feedback-member-empty]");
+    let selectedMember = null;
+
+    const setExternalFeedbackMemberMessage = (message) => {
+      externalFeedbackMemberResults.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
+    };
+
+    const setSelectedExternalFeedbackMember = (member) => {
+      selectedMember = member;
+      for (const row of externalFeedbackMemberResults.querySelectorAll("[data-external-feedback-member-row]")) {
+        const isSelected = selectedMember && row.dataset.memberId === String(selectedMember.xml_export_member_id || "");
+        row.classList.toggle("is-selected", Boolean(isSelected));
+        const button = row.querySelector("[data-external-feedback-member-pick]");
+        if (button) {
+          button.textContent = isSelected ? "選択中" : "選ぶ";
+          button.classList.toggle("is-active", Boolean(isSelected));
+        }
+      }
+      if (applyButton) {
+        applyButton.disabled = !selectedMember;
+        applyButton.classList.toggle("disabled", !selectedMember);
+      }
+    };
+
+    const renderExternalFeedbackMemberRows = (items) => {
+      externalFeedbackMemberResults.innerHTML = "";
+      if (!items.length) {
+        if (emptyRow) {
+          externalFeedbackMemberResults.appendChild(emptyRow);
+          emptyRow.hidden = false;
+          emptyRow.querySelector("td").textContent = "一致するHIA memberはありません。";
+        } else {
+          setExternalFeedbackMemberMessage("一致するHIA memberはありません。");
+        }
+        setSelectedExternalFeedbackMember(null);
+        return;
+      }
+      for (const item of items) {
+        const row = document.createElement("tr");
+        row.setAttribute("data-external-feedback-member-row", "true");
+        row.dataset.memberId = String(item.xml_export_member_id || "");
+        const person = `${item.name_kana || "-"} / ${item.name_full || "-"}`;
+        const insurance = `${item.insurance_symbol || "-"}-${item.insurance_number || "-"}`;
+        row.innerHTML = `
+          <td><strong>${escapeHtml(item.xml_export_member_id || "-")}</strong><small>zip ${escapeHtml(item.xml_export_zip_id || "-")} / list ${escapeHtml(item.xml_export_list_id || "-")}</small></td>
+          <td><strong>${escapeHtml(person)}</strong><small>HIA ${escapeHtml(item.hia_subscriber_id || "-")} / subscriber ${escapeHtml(item.subscriber_id || "-")}</small><small>${escapeHtml(insurance)} / ${escapeHtml(item.exam_date || "-")}</small></td>
+          <td><strong>${escapeHtml(item.zip_file_name || "-")}</strong><small>${escapeHtml(item.person_xml_file_name || "-")}</small><small>${escapeHtml(item.facility_name || "-")}</small></td>
+          <td><strong>case ${escapeHtml(item.exam_export_case_id || "-")}</strong><small>出力 ${escapeHtml(item.export_readiness_status || "-")} / XML ${escapeHtml(item.xml_export_status || "-")}</small><small>HIA ${escapeHtml(item.hia_upload_status || "-")}</small></td>
+          <td><button type="button" class="ghost-button compact-action-button" data-external-feedback-member-pick>選ぶ</button></td>
+        `;
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("button")) {
+            event.preventDefault();
+          }
+          setSelectedExternalFeedbackMember(item);
+        });
+        row.querySelector("[data-external-feedback-member-pick]")?.addEventListener("click", (event) => {
+          event.preventDefault();
+          setSelectedExternalFeedbackMember(item);
+        });
+        externalFeedbackMemberResults.appendChild(row);
+      }
+      setSelectedExternalFeedbackMember(null);
+    };
+
+    searchButton?.addEventListener("click", async () => {
+      const params = new URLSearchParams({
+        event_id: document.querySelector("#external-feedback-event-id")?.value?.trim() || "",
+        q: document.querySelector("#external-feedback-member-search-q")?.value?.trim() || "",
+        name_kana: document.querySelector("#external-feedback-member-search-kana")?.value?.trim() || "",
+        xml_export_member_id: document.querySelector("#external-feedback-member-search-member-id")?.value?.trim() || "",
+        exam_export_case_id: document.querySelector("#external-feedback-member-search-case-id")?.value?.trim() || "",
+      });
+      setExternalFeedbackMemberMessage("検索中です...");
+      try {
+        const payload = await fetchJson(`/api/external-feedback/hia-members?${params.toString()}`);
+        renderExternalFeedbackMemberRows(payload.items || []);
+      } catch (error) {
+        setExternalFeedbackMemberMessage(`検索でエラーが発生しました。${error.message || ""}`);
+      }
+    });
+
+    for (const input of document.querySelectorAll("#external-feedback-member-picker-modal input")) {
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        searchButton?.click();
+      });
+    }
+
+    applyButton?.addEventListener("click", () => {
+      if (!selectedMember) return;
+      const setValue = (selector, value) => {
+        const input = document.querySelector(selector);
+        if (input) input.value = value || "";
+      };
+      setValue("#external-feedback-member-id", selectedMember.xml_export_member_id);
+      setValue("input[name='xml_export_zip_id']", selectedMember.xml_export_zip_id);
+      setValue("input[name='xml_export_list_id']", selectedMember.xml_export_list_id);
+      setValue("#external-feedback-event-id", selectedMember.event_id);
+      setValue("input[name='exam_export_case_id']", selectedMember.exam_export_case_id);
+      setValue("input[name='source_xml_file_name']", selectedMember.person_xml_file_name);
+      setValue("input[name='source_zip_file_name']", selectedMember.zip_file_name);
+      document.querySelector("#external-feedback-member-picker-modal [data-modal-close]")?.click();
+    });
+  }
 })();

@@ -2356,6 +2356,89 @@ def load_hia_upload_member_prefill(cur: Any, *, xml_export_member_id: int) -> di
     return dict(row) if row else None
 
 
+def search_hia_upload_members_for_feedback(
+    cur: Any,
+    *,
+    event_id: int | None,
+    query: str,
+    name_kana: str,
+    xml_export_member_id: int | None,
+    exam_export_case_id: int | None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    if event_id:
+        where_parts.append("zem.event_id = %s")
+        params.append(event_id)
+    if xml_export_member_id:
+        where_parts.append("zem.xml_export_member_id = %s")
+        params.append(xml_export_member_id)
+    if exam_export_case_id:
+        where_parts.append("eec.exam_export_case_id = %s")
+        params.append(exam_export_case_id)
+    if name_kana:
+        where_parts.append("eec.name_kana_export_value LIKE %s")
+        params.append(f"%{name_kana}%")
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """
+            (
+              zem.hia_subscriber_id LIKE %s
+              OR eec.name_kana_export_value LIKE %s
+              OR eec.name_full_raw LIKE %s
+              OR zem.person_xml_file_name LIKE %s
+              OR zez.zip_file_name LIKE %s
+              OR zez.facility_name LIKE %s
+            )
+            """
+        )
+        params.extend([like, like, like, like, like, like])
+    if not where_parts:
+        return []
+    params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          zem.xml_export_member_id,
+          zem.xml_export_zip_id,
+          zez.xml_export_list_id,
+          zem.event_id,
+          zem.ledger_type,
+          zem.ledger_id,
+          zem.subscriber_id,
+          zem.hia_subscriber_id,
+          zem.person_xml_file_name,
+          zem.hia_upload_status,
+          zem.hia_upload_error_code,
+          zem.hia_upload_error_message,
+          zez.zip_file_name,
+          zez.facility_code,
+          zez.facility_name,
+          eec.exam_export_case_id,
+          eec.name_kana_export_value,
+          eec.name_full_raw,
+          eec.insurance_symbol_export_value,
+          eec.insurance_number_export_value,
+          eec.exam_date,
+          eec.export_readiness_status,
+          eec.xml_export_status
+        FROM {qname(health_db())}.xml_export_members AS zem
+        INNER JOIN {qname(health_db())}.xml_export_zips AS zez
+          ON zez.xml_export_zip_id = zem.xml_export_zip_id
+        LEFT JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON zem.ledger_type = 'CASE'
+         AND zem.ledger_id = eec.exam_export_case_id
+        WHERE {" AND ".join(where_parts)}
+        ORDER BY zem.xml_export_member_id DESC
+        LIMIT %s
+        """,
+        tuple(params),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_external_feedback_page_data(cur: Any, *, query_params: Mapping[str, Any]) -> dict[str, Any]:
     prefill: dict[str, Any] = {
         "feedback_source": str(query_params.get("feedback_source") or "HIA_UPLOAD"),
@@ -10817,6 +10900,65 @@ def external_feedback_work(request: Request) -> Response:
             **page_data,
         },
     )
+
+
+@app.get("/api/external-feedback/hia-members")
+def external_feedback_hia_members(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"items": []}, status_code=401)
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return JSONResponse({"items": []}, status_code=403)
+
+    event_id = _optional_int(request.query_params.get("event_id"))
+    query = request.query_params.get("q", "").strip()
+    name_kana = request.query_params.get("name_kana", "").strip()
+    xml_export_member_id = _optional_int(request.query_params.get("xml_export_member_id"))
+    exam_export_case_id = _optional_int(request.query_params.get("exam_export_case_id"))
+    if not any((query, name_kana, xml_export_member_id, exam_export_case_id)):
+        return JSONResponse({"items": []})
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        rows = search_hia_upload_members_for_feedback(
+            cur,
+            event_id=event_id,
+            query=query,
+            name_kana=name_kana,
+            xml_export_member_id=xml_export_member_id,
+            exam_export_case_id=exam_export_case_id,
+            limit=50,
+        )
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        items.append(
+            {
+                "xml_export_member_id": row.get("xml_export_member_id"),
+                "xml_export_zip_id": row.get("xml_export_zip_id"),
+                "xml_export_list_id": row.get("xml_export_list_id"),
+                "event_id": row.get("event_id"),
+                "exam_export_case_id": row.get("exam_export_case_id"),
+                "subscriber_id": row.get("subscriber_id"),
+                "hia_subscriber_id": row.get("hia_subscriber_id"),
+                "name_kana": row.get("name_kana_export_value"),
+                "name_full": row.get("name_full_raw"),
+                "insurance_symbol": row.get("insurance_symbol_export_value"),
+                "insurance_number": row.get("insurance_number_export_value"),
+                "exam_date": str(row.get("exam_date") or ""),
+                "facility_code": row.get("facility_code"),
+                "facility_name": row.get("facility_name"),
+                "person_xml_file_name": row.get("person_xml_file_name"),
+                "zip_file_name": row.get("zip_file_name"),
+                "hia_upload_status": row.get("hia_upload_status"),
+                "hia_upload_error_code": row.get("hia_upload_error_code"),
+                "hia_upload_error_message": row.get("hia_upload_error_message"),
+                "export_readiness_status": row.get("export_readiness_status"),
+                "xml_export_status": row.get("xml_export_status"),
+            }
+        )
+    return JSONResponse({"items": items})
 
 
 @app.post("/external-feedback", response_class=HTMLResponse)
