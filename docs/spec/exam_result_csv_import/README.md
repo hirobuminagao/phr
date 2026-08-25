@@ -42,6 +42,9 @@
   - 実装画面ではなく、入力粒度確認用のサンプルとして扱う。
 - `21_mapping_rule_structure_examples.md`
   - 画面モックの内容を `csv_exam_result_mapping_rules` / `csv_exam_result_mapping_conditions` の候補データとして見える化する。
+- `csv_mapping/README.md`
+  - 健診機関ごとのCSVマッピング解析結果と、既存施設別レビュー資料への入口。
+  - 今後のCSVマッピング解析メモはこの配下を起点に整理する。
 - `22_exam_item_concept_group_initial_set_draft.md`
   - CSVテンプレート登録で候補 `namecode` を探しやすくするための上位グループ初期案。
   - 全検査の医学分類ではなく、CSVで迷いやすい項目の登録支援レイヤーとして扱う。
