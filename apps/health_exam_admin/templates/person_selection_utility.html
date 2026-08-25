@@ -226,6 +226,15 @@
 	    </div>
 	    <div class="table-panel">
 	      <table class="data-table person-selection-result-table">
+	        <colgroup>
+	          <col class="person-selection-col-row">
+	          <col class="person-selection-col-status">
+	          <col class="person-selection-col-parsed">
+	          <col class="person-selection-col-key">
+	          <col class="person-selection-col-candidates">
+	          <col class="person-selection-col-case">
+	          <col class="person-selection-col-raw">
+	        </colgroup>
 	        <thead>
 	          <tr>
 	            <th>行</th>
@@ -282,9 +291,8 @@
 	                >
 	                <span>
 	                  <strong>{{ candidate.name_kana_full or candidate.name_full or "-" }}</strong>
-	                <small>subscriber {{ candidate.subscriber_id }} / HIA {{ candidate.hia_subscriber_id or "-" }}</small>
-	                <small>{{ candidate.insurance_symbol_match or candidate.insurance_symbol or "-" }}-{{ candidate.insurance_number_match or candidate.insurance_number or "-" }} / {{ gender_code_label(candidate.gender_code) }} / {{ candidate.birth or "-" }}</small>
-	                <small>社員 {{ candidate.employee_code or "-" }} / case {{ candidate.latest_case_id or "-" }} / {{ candidate.relationship_name or "-" }}</small>
+	                  <small>subscriber {{ candidate.subscriber_id }} / HIA {{ candidate.hia_subscriber_id or "-" }} / case {{ candidate.latest_case_id or "-" }}</small>
+	                  <small>{{ candidate.insurance_symbol_match or candidate.insurance_symbol or "-" }}-{{ candidate.insurance_number_match or candidate.insurance_number or "-" }} / {{ gender_code_label(candidate.gender_code) }} / {{ candidate.birth or "-" }} / 社員 {{ candidate.employee_code or "-" }} / {{ candidate.relationship_name or "-" }}</small>
 	                </span>
 	              </label>
               {% else %}

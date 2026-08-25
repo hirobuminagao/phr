@@ -1430,13 +1430,43 @@ a.home-menu-card.is-navigating {
 }
 
 .person-selection-result-table {
-  min-width: 1500px;
+  min-width: 1680px;
+  table-layout: fixed;
+}
+
+.person-selection-col-row {
+  width: 56px;
+}
+
+.person-selection-col-status {
+  width: 230px;
+}
+
+.person-selection-col-parsed {
+  width: 230px;
+}
+
+.person-selection-col-key {
+  width: 220px;
+}
+
+.person-selection-col-candidates {
+  width: 520px;
+}
+
+.person-selection-col-case {
+  width: 210px;
+}
+
+.person-selection-col-raw {
+  width: 230px;
 }
 
 .person-selection-result-table code {
   display: block;
-  max-width: 260px;
+  max-width: 100%;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .person-selection-candidate {
@@ -1452,9 +1482,9 @@ a.home-menu-card.is-navigating {
 
 .selectable-candidate {
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   gap: 8px;
-  padding: 8px;
+  padding: 10px 12px;
   border: 1px solid #d7e2ef;
   border-radius: 8px;
   background: #fff;
@@ -1466,12 +1496,25 @@ a.home-menu-card.is-navigating {
 }
 
 .selectable-candidate input {
-  margin-top: 3px;
+  inline-size: 18px;
+  block-size: 18px;
+  margin: 0;
 }
 
 .selectable-candidate span {
   display: grid;
-  gap: 3px;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(160px, 1fr);
+  gap: 3px 12px;
+  align-items: center;
+}
+
+.selectable-candidate span strong {
+  grid-row: span 2;
+}
+
+.selectable-candidate span small {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .selectable-candidate.is-added {
