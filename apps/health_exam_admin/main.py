@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import os
 import hashlib
 import json
@@ -20,7 +21,7 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qs, quote, urlencode
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from mysql.connector import IntegrityError
@@ -11533,18 +11534,20 @@ async def download_csv_mapping_lab_prompt(request: Request) -> Response:
     except Exception as exc:
         return RedirectResponse(f"/utilities/csv-mapping-lab?error={quote(str(exc))}", status_code=303)
     regulation_text = CSV_MAPPING_LAB_REGULATION_PATH.read_text(encoding="utf-8")
-    zip_path = Path(tempfile.gettempdir()) / f"csv_mapping_prompt_{analysis_file_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("REGULATION.md", regulation_text)
         archive.writestr("analysis_prompt.json", prompt_json + "\n")
+    zip_buffer.seek(0)
+    file_name = f"csv_mapping_prompt_{analysis_file_id}.zip"
     headers = {
-        "Content-Disposition": f'attachment; filename="csv_mapping_prompt_{analysis_file_id}.zip"',
+        "Content-Disposition": f'attachment; filename="{file_name}"',
+        "X-Content-Type-Options": "nosniff",
     }
-    return FileResponse(
-        zip_path,
+    return StreamingResponse(
+        zip_buffer,
         media_type="application/zip",
         headers=headers,
-        background=BackgroundTask(lambda path: Path(path).unlink(missing_ok=True), str(zip_path)),
     )
 
 
