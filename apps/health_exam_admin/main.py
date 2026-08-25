@@ -1276,6 +1276,56 @@ templates.env.globals["external_feedback_status_label"] = external_feedback_stat
 templates.env.globals["external_feedback_source_label"] = external_feedback_source_label
 templates.env.globals["external_feedback_category_label"] = external_feedback_category_label
 
+PREFECTURE_OPTIONS = [
+    "北海道",
+    "青森県",
+    "岩手県",
+    "宮城県",
+    "秋田県",
+    "山形県",
+    "福島県",
+    "茨城県",
+    "栃木県",
+    "群馬県",
+    "埼玉県",
+    "千葉県",
+    "東京都",
+    "神奈川県",
+    "新潟県",
+    "富山県",
+    "石川県",
+    "福井県",
+    "山梨県",
+    "長野県",
+    "岐阜県",
+    "静岡県",
+    "愛知県",
+    "三重県",
+    "滋賀県",
+    "京都府",
+    "大阪府",
+    "兵庫県",
+    "奈良県",
+    "和歌山県",
+    "鳥取県",
+    "島根県",
+    "岡山県",
+    "広島県",
+    "山口県",
+    "徳島県",
+    "香川県",
+    "愛媛県",
+    "高知県",
+    "福岡県",
+    "佐賀県",
+    "長崎県",
+    "熊本県",
+    "大分県",
+    "宮崎県",
+    "鹿児島県",
+    "沖縄県",
+]
+
 
 FUND_DELIVERY_CONFIG_PATH = REPO_ROOT / "scripts" / "hia" / "config" / "fund_delivery.yml"
 HIA_EXPORT_DIR = REPO_ROOT / "data" / "hia_export"
@@ -3640,11 +3690,16 @@ def facility_master_search_where(
     keyword: str | None = None,
     code: str | None = None,
     code_match: str = "exact",
+    prefecture: str | None = None,
 ) -> tuple[str, list[Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
     keyword = (keyword or "").strip()
     code = (code or "").strip()
+    prefecture = (prefecture or "").strip()
+    if prefecture:
+        where_parts.append("address LIKE %s")
+        params.append(f"{prefecture}%")
     if code:
         code_operator = "LIKE" if code_match == "partial" else "="
         code_value = f"%{code}%" if code_match == "partial" else code
@@ -3679,8 +3734,14 @@ def count_facility_master_admin_rows(
     keyword: str | None = None,
     code: str | None = None,
     code_match: str = "exact",
+    prefecture: str | None = None,
 ) -> int:
-    where_sql, params = facility_master_search_where(keyword=keyword, code=code, code_match=code_match)
+    where_sql, params = facility_master_search_where(
+        keyword=keyword,
+        code=code,
+        code_match=code_match,
+        prefecture=prefecture,
+    )
     cur.execute(
         f"""
         SELECT COUNT(*) AS cnt
@@ -3700,8 +3761,14 @@ def load_facility_master_admin_rows(
     keyword: str | None = None,
     code: str | None = None,
     code_match: str = "exact",
+    prefecture: str | None = None,
 ) -> list[dict[str, Any]]:
-    where_sql, params = facility_master_search_where(keyword=keyword, code=code, code_match=code_match)
+    where_sql, params = facility_master_search_where(
+        keyword=keyword,
+        code=code,
+        code_match=code_match,
+        prefecture=prefecture,
+    )
     cur.execute(
         f"""
         SELECT
@@ -3738,18 +3805,34 @@ def search_facility_master(request: Request) -> Response:
         return JSONResponse({"items": []}, status_code=403)
     code = request.query_params.get("code", "").strip()
     keyword = request.query_params.get("q", "").strip()
+    prefecture = request.query_params.get("prefecture", "").strip()
     code_match = request.query_params.get("code_match", "").strip()
     if code_match == "partial" and code and len(code) < 2:
         return JSONResponse({"items": [], "message": "コードは2桁以上で検索してください。"})
     if code_match != "partial":
         code_match = "exact"
-    if not code and not keyword:
+    if prefecture and prefecture not in PREFECTURE_OPTIONS:
+        prefecture = ""
+    if not code and not keyword and not prefecture:
         return JSONResponse({"items": []})
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
-        total_count = count_facility_master_admin_rows(cur, keyword=keyword, code=code, code_match=code_match)
-        rows = load_facility_master_admin_rows(cur, limit=50, keyword=keyword, code=code, code_match=code_match)
+        total_count = count_facility_master_admin_rows(
+            cur,
+            keyword=keyword,
+            code=code,
+            code_match=code_match,
+            prefecture=prefecture,
+        )
+        rows = load_facility_master_admin_rows(
+            cur,
+            limit=50,
+            keyword=keyword,
+            code=code,
+            code_match=code_match,
+            prefecture=prefecture,
+        )
         cur.close()
     return JSONResponse(
         {
@@ -12035,6 +12118,7 @@ def admin_folder_aliases(request: Request) -> Response:
             "alias_rows": alias_rows,
             "csv_format_options": csv_format_options,
             "source_mode_options": source_mode_options(),
+            "prefecture_options": PREFECTURE_OPTIONS,
             "filters": {
                 "q": request.query_params.get("q", ""),
             },
@@ -12056,12 +12140,16 @@ def admin_facility_master(request: Request) -> Response:
         cur = dict_cursor(conn)
         facility_keyword = request.query_params.get("q", "").strip()
         facility_code = request.query_params.get("code", "").strip()
+        facility_prefecture = request.query_params.get("prefecture", "").strip()
+        if facility_prefecture and facility_prefecture not in PREFECTURE_OPTIONS:
+            facility_prefecture = ""
         try:
             facility_rows = load_facility_master_admin_rows(
                 cur,
-                limit=2000 if facility_keyword or facility_code else 500,
+                limit=2000 if facility_keyword or facility_code or facility_prefecture else 500,
                 keyword=facility_keyword,
                 code=facility_code,
+                prefecture=facility_prefecture,
             )
             conn.commit()
         except Exception:
@@ -12073,7 +12161,8 @@ def admin_facility_master(request: Request) -> Response:
             "request": request,
             "user": user,
             "facility_rows": facility_rows,
-            "filters": {"q": facility_keyword, "code": facility_code},
+            "filters": {"q": facility_keyword, "code": facility_code, "prefecture": facility_prefecture},
+            "prefecture_options": PREFECTURE_OPTIONS,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -12247,6 +12336,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
             "event_options": event_options,
             "csv_format_options": csv_format_options,
             "source_mode_options": source_mode_options(),
+            "prefecture_options": PREFECTURE_OPTIONS,
             "prefill": {
                 "event_id": request.query_params.get("event_id", ""),
                 "src_folder_raw": request.query_params.get("src_folder_raw", ""),

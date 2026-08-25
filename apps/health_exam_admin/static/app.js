@@ -844,13 +844,15 @@
   };
   for (const modal of document.querySelectorAll("#alias-facility-picker-modal")) {
     const codeInput = modal.querySelector("[data-alias-facility-search-code]");
+    const prefectureInput = modal.querySelector("[data-alias-facility-search-prefecture]");
     const keywordInput = modal.querySelector("[data-alias-facility-search-keyword]");
     const searchButton = modal.querySelector("[data-alias-facility-search]");
     const resultsBody = modal.querySelector("[data-alias-facility-results]");
     const runSearch = async () => {
       const code = String(codeInput?.value || "").trim();
+      const prefecture = String(prefectureInput?.value || "").trim();
       const keyword = String(keywordInput?.value || "").trim();
-      if (!code && !keyword) {
+      if (!code && !prefecture && !keyword) {
         renderAliasFacilityResults(resultsBody, []);
         return;
       }
@@ -865,6 +867,7 @@
           params.set("code", code);
           params.set("code_match", "partial");
         }
+        if (prefecture) params.set("prefecture", prefecture);
         if (keyword) params.set("q", keyword);
         const payload = await fetchJson(`/admin/facility-master/search?${params.toString()}`);
         renderAliasFacilityResults(resultsBody, payload.items || [], payload);
@@ -873,7 +876,7 @@
       }
     };
     searchButton?.addEventListener("click", runSearch);
-    for (const input of [codeInput, keywordInput]) {
+    for (const input of [codeInput, prefectureInput, keywordInput]) {
       input?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           event.preventDefault();

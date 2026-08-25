@@ -36,6 +36,15 @@
         <input name="code" value="{{ filters.code or '' }}" placeholder="健診機関コード / 医療機関コード">
       </label>
       <label>
+        <span>都道府県</span>
+        <select name="prefecture">
+          <option value="">すべて</option>
+          {% for prefecture in prefecture_options %}
+          <option value="{{ prefecture }}" {% if filters.prefecture == prefecture %}selected{% endif %}>{{ prefecture }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
         <span>キーワード</span>
         <input name="q" value="{{ filters.q or '' }}" data-live-filter-input="#facility-master-table" placeholder="名称 / 住所 / メモ">
       </label>

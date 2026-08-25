@@ -121,6 +121,15 @@
           <input data-alias-facility-search-code data-modal-focus placeholder="健診機関コード / 医療機関コード">
         </label>
         <label>
+          <span>都道府県</span>
+          <select data-alias-facility-search-prefecture>
+            <option value="">すべて</option>
+            {% for prefecture in prefecture_options %}
+            <option value="{{ prefecture }}">{{ prefecture }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
           <span>キーワード</span>
           <input data-alias-facility-search-keyword placeholder="名称 / 住所">
         </label>
