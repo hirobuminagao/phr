@@ -32,17 +32,17 @@
         <span>イベント <i class="required-mark">必須</i></span>
         <select name="event_id" required>
           {% for event in event_options %}
-          <option value="{{ event.event_id }}">{{ event.event_name or event.event_id }} / {{ event.insurer_number }}</option>
+          <option value="{{ event.event_id }}" {% if prefill.event_id|string == event.event_id|string %}selected{% endif %}>{{ event.event_name or event.event_id }} / {{ event.insurer_number }}</option>
           {% endfor %}
         </select>
       </label>
       <label class="form-wide-field">
         <span>実フォルダ名 <i class="required-mark">必須</i></span>
-        <input name="src_folder_raw" required placeholder="例: 1310438796_ヒロオカクリニック" autofocus>
+        <input name="src_folder_raw" value="{{ prefill.src_folder_raw or '' }}" required placeholder="例: 1310438796_ヒロオカクリニック" autofocus>
       </label>
       <label>
         <span>正規化後名</span>
-        <input name="dst_folder_norm" placeholder="空なら実フォルダ名と同じ">
+        <input name="dst_folder_norm" value="{{ prefill.dst_folder_norm or '' }}" placeholder="空なら実フォルダ名と同じ">
       </label>
       <label>
         <span>紐づく健診機関ID/コード</span>
@@ -80,7 +80,7 @@
       </label>
       <label class="form-wide-field">
         <span>メモ</span>
-        <textarea name="note" rows="3"></textarea>
+        <textarea name="note" rows="3">{{ prefill.note or '' }}</textarea>
       </label>
       <div class="form-section alias-switches">
         <label class="binary-switch switch-off">

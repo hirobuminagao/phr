@@ -78,6 +78,48 @@
     </form>
   </section>
 
+  {% if unknown_scan_folders %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>scanで見つかった未登録フォルダ</h2>
+        <p class="subtle">受領フォルダaliasに未登録のため、scan時点で取り込み対象にできなかったフォルダです。必要なものはaliasに登録してから再スキャンします。</p>
+      </div>
+      <span class="status-pill status-pending">{{ unknown_scan_folders|length }}件</span>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>イベント</th>
+            <th>未登録フォルダ</th>
+            <th>scan</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for folder in unknown_scan_folders %}
+          <tr>
+            <td><strong>event {{ folder.event_id or "-" }}</strong></td>
+            <td>
+              <strong>{{ folder.src_folder_raw or "-" }}</strong>
+              <small>表示用: 実際のパスは画面には出していません</small>
+            </td>
+            <td>
+              <strong>run {{ folder.run_id or "-" }}</strong>
+              <small>{{ folder.finished_at or folder.started_at or "-" }} / {{ folder.occurrence_count }}回</small>
+            </td>
+            <td>
+              <a class="ghost-button compact-action-button" href="/admin/folder-aliases/new?event_id={{ folder.event_id|urlencode }}&src_folder_raw={{ folder.src_folder_raw|urlencode }}&dst_folder_norm={{ folder.src_folder_raw|urlencode }}&note={{ ('scan UNKNOWN_MEDICAL_FOLDER run ' ~ (folder.run_id or '-'))|urlencode }}">aliasに登録</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="panel">
     <div class="section-heading">
       <div>

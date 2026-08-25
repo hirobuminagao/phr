@@ -4125,6 +4125,52 @@ def normalize_folder_alias_form(cur: Any, form: dict[str, str]) -> dict[str, Any
     }
 
 
+def scan_folder_name_from_path(path_text: str | None) -> str:
+    text = str(path_text or "").strip().rstrip("/\\")
+    if not text:
+        return ""
+    return re.split(r"[\\/]+", text)[-1]
+
+
+def load_unknown_scan_folder_rows(cur: Any, *, event_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    where_parts = [
+        "ee.phase = 'SCAN_FILES'",
+        "ee.error_code = 'UNKNOWN_MEDICAL_FOLDER'",
+    ]
+    params: list[Any] = []
+    if event_id:
+        where_parts.append("er.input_base = %s")
+        params.append(f"event_id={event_id}")
+    params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          MAX(ee.error_id) AS error_id,
+          MAX(ee.run_id) AS run_id,
+          MAX(er.started_at) AS started_at,
+          MAX(er.finished_at) AS finished_at,
+          er.input_base,
+          ee.field_value,
+          COUNT(*) AS occurrence_count
+        FROM {qname(health_db())}.etl_errors AS ee
+        JOIN {qname(health_db())}.etl_runs AS er
+          ON er.run_id = ee.run_id
+        WHERE {" AND ".join(where_parts)}
+        GROUP BY er.input_base, ee.field_value
+        ORDER BY MAX(ee.error_id) DESC
+        LIMIT %s
+        """,
+        tuple(params),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        input_base = str(row.get("input_base") or "")
+        match = re.search(r"event_id=(\d+)", input_base)
+        row["event_id"] = match.group(1) if match else event_id
+        row["src_folder_raw"] = scan_folder_name_from_path(str(row.get("field_value") or ""))
+    return rows
+
+
 def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
@@ -10813,6 +10859,7 @@ def file_receipts(request: Request) -> Response:
         try:
             event_options = load_event_options(cur)
             rows = load_file_receipt_rows(cur, filters=filters, limit=limit)
+            unknown_scan_folders = load_unknown_scan_folder_rows(cur, event_id=filters["event_id"])
             conn.commit()
         except Exception:
             conn.rollback()
@@ -10826,6 +10873,7 @@ def file_receipts(request: Request) -> Response:
             "filters": filters,
             "limit": limit,
             "event_options": event_options,
+            "unknown_scan_folders": unknown_scan_folders,
         },
     )
 
@@ -12077,6 +12125,12 @@ def new_admin_folder_alias_form(request: Request) -> Response:
             "event_options": event_options,
             "csv_format_options": csv_format_options,
             "source_mode_options": source_mode_options(),
+            "prefill": {
+                "event_id": request.query_params.get("event_id", ""),
+                "src_folder_raw": request.query_params.get("src_folder_raw", ""),
+                "dst_folder_norm": request.query_params.get("dst_folder_norm", ""),
+                "note": request.query_params.get("note", ""),
+            },
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
