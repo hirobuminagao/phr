@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% set title = "健診機関サマリー詳細" %}
+{% macro help_button(help_id, title, body, right=False) -%}
+  <span class="inline-help">
+    <button type="button" class="help-icon-button" data-help-toggle="{{ help_id }}" aria-expanded="false" aria-label="{{ title }}の説明">?</button>
+    <span id="{{ help_id }}" class="help-popover{% if right %} help-popover-right{% endif %}" hidden>
+      <strong>{{ title }}</strong>
+      <p>{{ body }}</p>
+    </span>
+  </span>
+{%- endmacro %}
 {% block body %}
 <header class="topbar">
   <div>
@@ -78,27 +87,27 @@
 
   <section class="summary-grid facility-summary-grid">
     <div class="summary-card">
-      <span>受領ファイル</span>
+      <span>受領ファイル {{ help_button("help-detail-file-total", "受領ファイル", "この健診機関のfile_receipts件数です。受診月で絞っている場合は、その月に該当する分だけを表示します。") }}</span>
       <strong>{{ detail.summary.file_total }}</strong>
       <small>月別集計</small>
     </div>
     <div class="summary-card">
-      <span>source</span>
+      <span>source {{ help_button("help-detail-source-total", "source", "この健診機関でexam_ledgersに取り込まれたsource件数です。case作成前の取込単位です。") }}</span>
       <strong>{{ detail.summary.source_total }}</strong>
       <small>取込済みledger</small>
     </div>
     <div class="summary-card">
-      <span>source NG</span>
+      <span>source NG {{ help_button("help-detail-source-ng", "source NG", "取込sourceのうち、check_statusがOKではない件数です。ファイルまたは行単位の取込不備を見るための数です。") }}</span>
       <strong>{{ detail.summary.source_ng_total }}</strong>
       <small>ファイル/行単位</small>
     </div>
     <div class="summary-card">
-      <span>加入者</span>
+      <span>加入者 {{ help_button("help-detail-subscriber", "加入者", "加入者突合で要確認になっているsource件数です。氏名・記号番号・HIA IDなどの付け合わせ確認に使います。") }}</span>
       <strong>{{ detail.summary.subscriber_issue_total }}</strong>
       <small>突合要確認</small>
     </div>
     <div class="summary-card">
-      <span>値エラー</span>
+      <span>値エラー {{ help_button("help-detail-item-error", "値エラー", "exam_item_valuesでnormalizeまたはvalidationがOK/VALIDではない値の件数です。", True) }}</span>
       <strong>{{ detail.summary.item_error_total }}</strong>
       <small>normalize/validation</small>
     </div>
@@ -116,11 +125,11 @@
         <thead>
           <tr>
             <th>受診月</th>
-            <th>受領ファイル</th>
-            <th>source</th>
-            <th>source OK</th>
-            <th>source NG</th>
-            <th>加入者</th>
+            <th><span class="table-help-heading">受領ファイル {{ help_button("help-detail-month-file", "受領ファイル", "その受診月に紐づく受領ファイル数です。") }}</span></th>
+            <th><span class="table-help-heading">source {{ help_button("help-detail-month-source", "source", "その受診月に取り込まれたexam_ledgers件数です。") }}</span></th>
+            <th><span class="table-help-heading">source OK {{ help_button("help-detail-month-source-ok", "source OK", "その受診月のsourceのうち、取込チェックがOKの件数です。") }}</span></th>
+            <th><span class="table-help-heading">source NG {{ help_button("help-detail-month-source-ng", "source NG", "その受診月のsourceのうち、取込チェックがOKではない件数です。") }}</span></th>
+            <th><span class="table-help-heading">加入者 {{ help_button("help-detail-month-subscriber", "加入者", "その受診月のsourceのうち、加入者突合で要確認になっている件数です。", True) }}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -155,7 +164,7 @@
             <th>種別</th>
             <th>ファイル</th>
             <th>状態</th>
-            <th>OK/NG/ALL</th>
+            <th><span class="table-help-heading">OK/NG/ALL {{ help_button("help-detail-file-source-count", "OK/NG/ALL", "受領ファイル内のsource件数です。OK、NG、合計の順で表示します。", True) }}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -187,7 +196,12 @@
       </div>
       <div class="table-panel">
         <table class="data-table compact-table">
-          <thead><tr><th>理由</th><th>件数</th></tr></thead>
+          <thead>
+            <tr>
+              <th><span class="table-help-heading">理由 {{ help_button("help-detail-source-ng-reason", "source NG理由", "exam_ledgers.check_reasonを同じ理由ごとにまとめています。ファイル/行として取込が成立しなかった原因を見るための一覧です。") }}</span></th>
+              <th><span class="table-help-heading">件数 {{ help_button("help-detail-source-ng-count", "source NG件数", "同じsource NG理由に該当するexam_ledgersの件数です。", True) }}</span></th>
+            </tr>
+          </thead>
           <tbody>
             {% for row in detail.source_ng_reasons %}
             <tr><td>{{ row.reason }}</td><td>{{ row.cnt }}</td></tr>
@@ -208,7 +222,14 @@
       </div>
       <div class="table-panel">
         <table class="data-table compact-table">
-          <thead><tr><th>項目</th><th>状態</th><th>理由</th><th>件数</th></tr></thead>
+          <thead>
+            <tr>
+              <th><span class="table-help-heading">項目 {{ help_button("help-detail-item-error-item", "項目", "normalize/validationでエラーになった検査項目です。項目名とnamecodeを表示します。") }}</span></th>
+              <th><span class="table-help-heading">状態 {{ help_button("help-detail-item-error-status", "状態", "normalize_status / validation_status の組み合わせです。値の正規化と検証のどちらで落ちたかを確認します。") }}</span></th>
+              <th><span class="table-help-heading">理由 {{ help_button("help-detail-item-error-reason", "理由", "normalize_reasonまたはvalidation_reasonです。値変換エラー、型不一致、未定義コードなどの原因を表示します。") }}</span></th>
+              <th><span class="table-help-heading">件数 {{ help_button("help-detail-item-error-count", "値エラー件数", "同じ項目・状態・理由に該当するexam_item_valuesの件数です。", True) }}</span></th>
+            </tr>
+          </thead>
           <tbody>
             {% for row in detail.item_error_rows %}
             <tr>
@@ -237,10 +258,10 @@
       <table class="data-table compact-table">
         <thead>
           <tr>
-            <th>法定</th>
-            <th>特定</th>
-            <th>理由</th>
-            <th>件数</th>
+            <th><span class="table-help-heading">法定 {{ help_button("help-detail-case-legal", "法定", "case単位の法定チェック結果です。exam_check_resultsの法定チェック結果を元にしています。") }}</span></th>
+            <th><span class="table-help-heading">特定 {{ help_button("help-detail-case-specific", "特定", "case単位の特定健診チェック結果です。対象外は対象外として扱い、NG件数の母数から外します。") }}</span></th>
+            <th><span class="table-help-heading">理由 {{ help_button("help-detail-case-reason", "理由", "法定/特定健診チェックで不足や確認対象になった理由の要約です。同じ理由のcaseをまとめています。") }}</span></th>
+            <th><span class="table-help-heading">件数 {{ help_button("help-detail-case-count", "case件数", "同じ法定結果・特定結果・理由に該当するexam_export_casesの件数です。", True) }}</span></th>
           </tr>
         </thead>
         <tbody>

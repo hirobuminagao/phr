@@ -2926,6 +2926,20 @@ a.home-menu-card.is-navigating {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.inline-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.summary-card .inline-help {
+  margin-inline-start: 4px;
 }
 
 .help-icon-button {
@@ -2941,6 +2955,7 @@ a.home-menu-card.is-navigating {
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
+  line-height: 1;
 }
 
 .help-icon-button:hover,
@@ -3231,6 +3246,11 @@ a.home-menu-card.is-navigating {
   width: 100%;
 }
 
+.table-help-heading .table-sort-button {
+  width: auto;
+  min-width: 0;
+}
+
 .table-sort-button::after {
   align-items: center;
   background: #fff;
@@ -3330,11 +3350,25 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   min-width: 124px;
 }
 
-.facility-summary-name-cell strong {
+.facility-summary-name-cell strong,
+.facility-name-detail-link {
   font-size: 13px;
   line-height: 1.35;
   white-space: normal;
   word-break: normal;
+}
+
+.facility-name-detail-link {
+  color: var(--ink);
+  font-weight: 900;
+  text-decoration: underline;
+  text-decoration-color: #b9c8d8;
+  text-underline-offset: 3px;
+}
+
+.facility-name-detail-link:hover {
+  color: var(--accent-dark);
+  text-decoration-color: var(--accent);
 }
 
 .facility-summary-name-cell small,

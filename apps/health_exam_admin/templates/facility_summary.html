@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% set title = "健診機関サマリー" %}
+{% macro help_button(help_id, title, body, right=False) -%}
+  <span class="inline-help">
+    <button type="button" class="help-icon-button" data-help-toggle="{{ help_id }}" aria-expanded="false" aria-label="{{ title }}の説明">?</button>
+    <span id="{{ help_id }}" class="help-popover{% if right %} help-popover-right{% endif %}" hidden>
+      <strong>{{ title }}</strong>
+      <p>{{ body }}</p>
+    </span>
+  </span>
+{%- endmacro %}
 {% block body %}
 <header class="topbar">
   <div>
@@ -83,37 +92,37 @@
 
   <section class="summary-grid facility-summary-grid">
     <div class="summary-card">
-      <span>健診機関</span>
+      <span>健診機関 {{ help_button("help-card-facility-count", "健診機関", "現在の絞り込み条件で表示している健診機関数です。") }}</span>
       <strong>{{ summary.facility_count }}</strong>
       <small>表示中</small>
     </div>
     <div class="summary-card">
-      <span>受領ファイル</span>
+      <span>受領ファイル {{ help_button("help-card-file-total", "受領ファイル", "file_receiptsを元にした受領ファイル数です。XML、CSV、ZIPを合算しています。") }}</span>
       <strong>{{ summary.file_total }}</strong>
       <small>XML/CSV/ZIP</small>
     </div>
     <div class="summary-card">
-      <span>source</span>
+      <span>source {{ help_button("help-card-source-total", "source", "exam_ledgersに取り込まれた受領結果の件数です。XMLの人単位、CSV行、手入力ledgerなど、case作成前のsource単位です。") }}</span>
       <strong>{{ summary.source_total }}</strong>
       <small>取込済みledger</small>
     </div>
     <div class="summary-card">
-      <span>case</span>
+      <span>case {{ help_button("help-card-case-total", "case", "exam_export_casesの件数です。XML/CSV/手入力sourceを人単位に付け合わせた後の単位です。") }}</span>
       <strong>{{ summary.case_total }}</strong>
       <small>人単位</small>
     </div>
     <div class="summary-card">
-      <span>法定NG</span>
+      <span>法定NG {{ help_button("help-card-legal-ng", "法定NG", "case単位の法定チェック結果がNGの件数です。母数はcaseです。") }}</span>
       <strong>{{ summary.legal_ng_total }}</strong>
       <small>case単位</small>
     </div>
     <div class="summary-card">
-      <span>特定NG</span>
+      <span>特定NG {{ help_button("help-card-specific-ng", "特定NG", "case単位の特定健診チェック結果がNGの件数です。対象外はNG数とNG率の母数に含めません。") }}</span>
       <strong>{{ summary.specific_ng_total }}</strong>
       <small>case単位</small>
     </div>
     <div class="summary-card">
-      <span>値エラー</span>
+      <span>値エラー {{ help_button("help-card-item-error", "値エラー", "exam_item_valuesでnormalizeまたはvalidationがOK/VALIDではない値の件数です。法定・特定の不足チェックとは別の、値そのものの取込エラーです。", True) }}</span>
       <strong>{{ summary.item_error_total }}</strong>
       <small>normalize/validation</small>
     </div>
@@ -130,11 +139,11 @@
       <table id="facility-summary-table" class="data-table facility-summary-table" data-empty-message="一致する健診機関はありません。" data-sortable-table>
         <thead>
           <tr>
-            <th rowspan="2" data-sort-index="0" data-sort-type="text"><button type="button" class="table-sort-button">健診機関</button></th>
-            <th colspan="4">受領ファイル</th>
-            <th colspan="5">取込チェック</th>
-            <th colspan="6">人単位チェック</th>
-            <th rowspan="2" data-sort-index="16" data-sort-type="number"><button type="button" class="table-sort-button">値エラー / 上位項目</button></th>
+            <th rowspan="2" data-sort-index="0" data-sort-type="text"><span class="table-help-heading"><button type="button" class="table-sort-button">健診機関</button>{{ help_button("help-th-facility", "健診機関", "exam_facility_idまたは健診機関コードでまとめています。受領設定はフォルダalias側の想定受領方式です。") }}</span></th>
+            <th colspan="4"><span class="table-help-heading">受領ファイル {{ help_button("help-th-files", "受領ファイル", "file_receiptsのファイル数です。XML、CSV、ZIPと、その合計ALLを表示します。") }}</span></th>
+            <th colspan="5"><span class="table-help-heading">取込チェック {{ help_button("help-th-source", "取込チェック", "exam_ledgersのsource単位です。OK/NG/ALLは取込結果、手入力は手入力で作成したsource数、加入者は突合要確認の件数です。") }}</span></th>
+            <th colspan="6"><span class="table-help-heading">人単位チェック {{ help_button("help-th-case", "人単位チェック", "exam_export_casesのcase単位です。法定/特定健診のチェック結果と、特定健診の対象者数を表示します。") }}</span></th>
+            <th rowspan="2" data-sort-index="16" data-sort-type="number"><span class="table-help-heading"><button type="button" class="table-sort-button">値エラー / 上位項目</button>{{ help_button("help-th-item-error", "値エラー / 上位項目", "normalize/validationで落ちたexam_item_valuesの件数と、件数が多い項目を表示します。", True) }}</span></th>
             <th rowspan="2">遷移</th>
           </tr>
           <tr>
@@ -160,7 +169,7 @@
           {% set facility_q = row.facility_filter_value or row.facility_name or row.facility_code or '' %}
           <tr data-filter-text="{{ row.facility_code or '' }} {{ row.facility_name or '' }} {{ row.expected_source_mode or '' }} {{ row.expected_source_mode_label or '' }} {{ row.receipt_source_mode_label or '' }} {{ row.facility_source_mode_summary or '' }}">
             <td class="facility-summary-name-cell" data-sort-value="{{ row.facility_name or '' }}">
-              <strong class="line-clamp-2" title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</strong>
+              <a class="facility-name-detail-link line-clamp-2" href="/facility-summary/detail?event_id={{ row.event_id }}&facility_code={{ (row.facility_code or '')|url_quote }}&exam_month={{ filters.exam_month|url_quote }}" title="{{ row.facility_name or '' }}">{{ row.facility_name or "未設定" }}</a>
               <small>{{ row.facility_code or "コードなし" }} / {{ row.facility_source_mode_summary or "受領設定なし" }}</small>
             </td>
             <td class="numeric-cell" data-sort-value="{{ row.xml_file_count }}">{{ row.xml_file_count }}</td>
