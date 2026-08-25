@@ -3465,6 +3465,12 @@ a.home-menu-card.is-navigating {
   display: block;
 }
 
+.data-table .table-message-row td {
+  background: #f6f9fb;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .clickable-table-row {
   cursor: pointer;
 }

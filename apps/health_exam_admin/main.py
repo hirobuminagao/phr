@@ -3635,14 +3635,12 @@ def load_alias_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[s
     return [dict(row) for row in cur.fetchall()]
 
 
-def load_facility_master_admin_rows(
-    cur: Any,
+def facility_master_search_where(
     *,
-    limit: int = 500,
     keyword: str | None = None,
     code: str | None = None,
     code_match: str = "exact",
-) -> list[dict[str, Any]]:
+) -> tuple[str, list[Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
     keyword = (keyword or "").strip()
@@ -3672,6 +3670,38 @@ def load_facility_master_admin_rows(
         )
         params.extend([like] * 6)
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    return where_sql, params
+
+
+def count_facility_master_admin_rows(
+    cur: Any,
+    *,
+    keyword: str | None = None,
+    code: str | None = None,
+    code_match: str = "exact",
+) -> int:
+    where_sql, params = facility_master_search_where(keyword=keyword, code=code, code_match=code_match)
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS cnt
+        FROM {qname(master_db())}.exam_facilities
+        {where_sql}
+        """,
+        params,
+    )
+    row = cur.fetchone() or {}
+    return int(row.get("cnt") or 0)
+
+
+def load_facility_master_admin_rows(
+    cur: Any,
+    *,
+    limit: int = 500,
+    keyword: str | None = None,
+    code: str | None = None,
+    code_match: str = "exact",
+) -> list[dict[str, Any]]:
+    where_sql, params = facility_master_search_where(keyword=keyword, code=code, code_match=code_match)
     cur.execute(
         f"""
         SELECT
@@ -3718,10 +3748,14 @@ def search_facility_master(request: Request) -> Response:
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
+        total_count = count_facility_master_admin_rows(cur, keyword=keyword, code=code, code_match=code_match)
         rows = load_facility_master_admin_rows(cur, limit=50, keyword=keyword, code=code, code_match=code_match)
         cur.close()
     return JSONResponse(
         {
+            "total_count": total_count,
+            "limit": 50,
+            "has_more": total_count > 50,
             "items": [
                 {
                     "exam_facility_id": row.get("exam_facility_id"),

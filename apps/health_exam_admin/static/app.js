@@ -811,13 +811,19 @@
     closeModal(element.closest(".edit-modal"));
     aliasFacilityTargetInput.focus();
   };
-  const renderAliasFacilityResults = (tbody, items) => {
+  const renderAliasFacilityResults = (tbody, items, meta = {}) => {
     if (!tbody) return;
+    const totalCount = Number(meta.total_count || 0);
+    const limit = Number(meta.limit || 50);
+    const hasMore = Boolean(meta.has_more);
+    const summaryHtml = totalCount
+      ? `<tr class="table-message-row"><td colspan="3">該当 ${escapeHtml(totalCount)} 件。${hasMore ? `${escapeHtml(limit)}件まで表示しています。コードや名称で絞り込んでください。` : `${escapeHtml(items.length)}件を表示しています。`}</td></tr>`
+      : "";
     if (!items.length) {
       tbody.innerHTML = '<tr><td colspan="3">一致する健診機関はありません。</td></tr>';
       return;
     }
-    tbody.innerHTML = items.map((item) => {
+    tbody.innerHTML = summaryHtml + items.map((item) => {
       const code = item.exam_facility_code || item.exam_facility_id || "";
       const name = item.exam_facility_display_name || item.exam_facility_name || "名称未設定";
       const address = [item.postal_code || "", item.address || ""].filter(Boolean).join(" ");
@@ -861,7 +867,7 @@
         }
         if (keyword) params.set("q", keyword);
         const payload = await fetchJson(`/admin/facility-master/search?${params.toString()}`);
-        renderAliasFacilityResults(resultsBody, payload.items || []);
+        renderAliasFacilityResults(resultsBody, payload.items || [], payload);
       } catch (error) {
         if (resultsBody) resultsBody.innerHTML = `<tr><td colspan="3">検索でエラーが発生しました。${escapeHtml(error.message || "")}</td></tr>`;
       }
