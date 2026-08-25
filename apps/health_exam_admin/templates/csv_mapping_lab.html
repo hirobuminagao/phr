@@ -7,6 +7,9 @@
     <h1>健診結果CSVマッピング解析</h1>
   </div>
   <nav class="top-actions">
+    {% if selected_file_id %}
+    <a class="ghost-button" href="/utilities/csv-mapping-lab">解析一覧へ戻る</a>
+    {% endif %}
     <a class="ghost-button" href="/">HOME</a>
     <form method="post" action="/logout">
       <button class="ghost-button" type="submit">ログアウト</button>
@@ -126,6 +129,7 @@
         <h2>AI確認用JSONを作る</h2>
         <p class="subtle">列数が多いCSVは、100から150列くらいに分けて渡すとレビューしやすいです。</p>
       </div>
+      <a class="ghost-button compact-action-button" href="/utilities/csv-mapping-lab">解析一覧へ戻る</a>
     </div>
     <form method="post" action="/utilities/csv-mapping-lab/prompt" class="form-grid csv-mapping-prompt-form">
       <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
