@@ -1072,6 +1072,19 @@ a.home-menu-card.is-navigating {
   font-weight: 800;
 }
 
+.csv-mapping-sticky-heading {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  margin: -18px -18px 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #d5e0ea;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
 .narrow-page {
   max-width: 880px;
 }

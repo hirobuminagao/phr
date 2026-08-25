@@ -50,10 +50,10 @@ VALUES
   ('facility', '0110119070', 'normalized_header_exact', 121, 240, '体脂肪率', '体脂肪率', 'EMPTY', 'IGNORE', NULL, NULL, 'IGNORE', 0.8000, 'seed: maruyama 121-240 empty optional display column', 'seed', 'seed'),
   ('facility', '0110119070', 'normalized_header_exact', 121, 240, '肥満度所見', '肥満度所見', 'EMPTY', 'IGNORE', NULL, NULL, 'IGNORE', 0.8000, 'seed: maruyama 121-240 empty optional display column', 'seed', 'seed'),
 
-  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '１０００Ｈｚ右', '1000HZ右', 'NUMERIC', 'EXAM_ITEM_VALUE', '9D100163100000011', NULL, 'DIRECT', 0.9000, 'seed: maruyama 121-240 hearing threshold', 'seed', 'seed'),
-  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '４０００Ｈｚ右', '4000HZ右', 'NUMERIC', 'EXAM_ITEM_VALUE', '9D100163200000011', NULL, 'DIRECT', 0.9000, 'seed: maruyama 121-240 hearing threshold', 'seed', 'seed'),
-  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '１０００Ｈｚ左', '1000HZ左', 'NUMERIC', 'EXAM_ITEM_VALUE', '9D100163500000011', NULL, 'DIRECT', 0.9000, 'seed: maruyama 121-240 hearing threshold', 'seed', 'seed'),
-  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '４０００Ｈｚ左', '4000HZ左', 'NUMERIC', 'EXAM_ITEM_VALUE', '9D100163600000011', NULL, 'DIRECT', 0.9000, 'seed: maruyama 121-240 hearing threshold', 'seed', 'seed'),
+  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '１０００Ｈｚ右', '1000HZ右', 'NUMERIC', 'REVIEW', NULL, NULL, 'NEEDS_CONFIRMATION', 0.7000, 'seed: maruyama 121-240 hearing threshold requires CD conversion rule', 'seed', 'seed'),
+  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '４０００Ｈｚ右', '4000HZ右', 'NUMERIC', 'REVIEW', NULL, NULL, 'NEEDS_CONFIRMATION', 0.7000, 'seed: maruyama 121-240 hearing threshold requires CD conversion rule', 'seed', 'seed'),
+  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '１０００Ｈｚ左', '1000HZ左', 'NUMERIC', 'REVIEW', NULL, NULL, 'NEEDS_CONFIRMATION', 0.7000, 'seed: maruyama 121-240 hearing threshold requires CD conversion rule', 'seed', 'seed'),
+  ('facility', '0110119070', 'normalized_header_exact', 121, 240, '４０００Ｈｚ左', '4000HZ左', 'NUMERIC', 'REVIEW', NULL, NULL, 'NEEDS_CONFIRMATION', 0.7000, 'seed: maruyama 121-240 hearing threshold requires CD conversion rule', 'seed', 'seed'),
   ('facility', '0110119070', 'normalized_header_exact', 121, 240, '聴力検査判定', '聴力検査判定', 'CODE', 'REVIEW', NULL, NULL, 'NEEDS_CONFIRMATION', 0.7000, 'seed: maruyama 121-240 department judgement; not a direct item value', 'seed', 'seed'),
   ('facility', '0110119070', 'header_contains', 121, 240, '所見有無', '所見有無', 'CODE', 'REVIEW', NULL, NULL, 'NEEDS_CONFIRMATION', 0.7000, 'seed: maruyama 121-240 hearing judgement helper; confirm source handling', 'seed', 'seed'),
 
