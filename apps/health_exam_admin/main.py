@@ -19,6 +19,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from mysql.connector import IntegrityError
 from starlette.background import BackgroundTask
 
 from scripts.lib.db.config import load_mysql_base_params
@@ -4363,7 +4364,30 @@ def load_unknown_scan_folder_rows(cur: Any, *, event_id: str, limit: int = 50) -
         match = re.search(r"event_id=(\d+)", input_base)
         row["event_id"] = match.group(1) if match else event_id
         row["src_folder_raw"] = scan_folder_name_from_path(str(row.get("field_value") or ""))
-    return rows
+    folder_names = sorted({str(row.get("src_folder_raw") or "").strip() for row in rows if row.get("src_folder_raw")})
+    event_ids = sorted({str(row.get("event_id") or "").strip() for row in rows if row.get("event_id")})
+    if not folder_names or not event_ids:
+        return rows
+    event_placeholders = ", ".join(["%s"] * len(event_ids))
+    folder_placeholders = ", ".join(["%s"] * len(folder_names))
+    cur.execute(
+        f"""
+        SELECT event_id, src_folder_raw
+          FROM {qname(master_db())}.medical_folder_aliases
+         WHERE event_id IN ({event_placeholders})
+           AND src_folder_raw IN ({folder_placeholders})
+        """,
+        tuple([int(value) for value in event_ids] + folder_names),
+    )
+    registered = {
+        (str(row.get("event_id") or ""), str(row.get("src_folder_raw") or "").strip())
+        for row in cur.fetchall()
+    }
+    return [
+        row
+        for row in rows
+        if (str(row.get("event_id") or ""), str(row.get("src_folder_raw") or "").strip()) not in registered
+    ]
 
 
 def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
@@ -12403,6 +12427,12 @@ async def create_admin_folder_alias(request: Request) -> Response:
         except ValueError as exc:
             conn.rollback()
             return RedirectResponse(f"/admin/folder-aliases/new?error={quote(str(exc))}", status_code=303)
+        except IntegrityError as exc:
+            conn.rollback()
+            if getattr(exc, "errno", None) == 1062 and "uq_medical_folder_aliases_event_src" in str(exc):
+                message = "同じイベントに同じ実フォルダ名の受領フォルダが既にあります。一覧の編集から更新してください。"
+                return RedirectResponse(f"/admin/folder-aliases?error={quote(message)}", status_code=303)
+            raise
         except Exception:
             conn.rollback()
             raise
