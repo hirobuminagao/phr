@@ -3532,8 +3532,18 @@ a.home-menu-card.is-navigating {
 
 .csv-mapping-rule-details summary {
   cursor: pointer;
+  display: grid;
+  gap: 2px;
   font-weight: 800;
   color: var(--green);
+}
+
+.csv-mapping-rule-details summary small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .csv-mapping-rule-form {

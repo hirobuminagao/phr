@@ -237,7 +237,10 @@
             <td><small>{{ column.sample_values_json }}</small></td>
             <td>
               <details class="csv-mapping-rule-details">
-                <summary>追加</summary>
+                <summary>
+                  <span>ルール追加</span>
+                  <small>{{ column.candidate_target_kind or "対象選択" }} / {{ column.candidate_namecode or column.candidate_ledger_field or "-" }}</small>
+                </summary>
                 <form method="post" action="/utilities/csv-mapping-lab/rules/create" class="csv-mapping-rule-form">
                   <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
                   <input type="hidden" name="column_no" value="{{ column.column_no }}">
