@@ -811,14 +811,74 @@
     closeModal(element.closest(".edit-modal"));
     aliasFacilityTargetInput.focus();
   };
-  for (const button of document.querySelectorAll("[data-alias-facility-select]")) {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      selectAliasFacility(button);
+  const renderAliasFacilityResults = (tbody, items) => {
+    if (!tbody) return;
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="3">一致する健診機関はありません。</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map((item) => {
+      const code = item.exam_facility_code || item.exam_facility_id || "";
+      const name = item.exam_facility_display_name || item.exam_facility_name || "名称未設定";
+      const address = [item.postal_code || "", item.address || ""].filter(Boolean).join(" ");
+      const related = item.medical_institution_code && item.medical_institution_code !== code
+        ? `医療機関 ${escapeHtml(item.medical_institution_code)}`
+        : "";
+      return `
+        <tr data-alias-facility-row data-facility-code="${escapeHtml(code)}">
+          <td>
+            <strong>${escapeHtml(name)}</strong>
+            <small>${escapeHtml(code)}${related ? ` / ${related}` : ""}</small>
+          </td>
+          <td><small>${escapeHtml(address)}</small></td>
+          <td><button type="button" class="ghost-button compact-action-button" data-alias-facility-select data-facility-code="${escapeHtml(code)}">選択</button></td>
+        </tr>
+      `;
+    }).join("");
+  };
+  for (const modal of document.querySelectorAll("#alias-facility-picker-modal")) {
+    const codeInput = modal.querySelector("[data-alias-facility-search-code]");
+    const keywordInput = modal.querySelector("[data-alias-facility-search-keyword]");
+    const searchButton = modal.querySelector("[data-alias-facility-search]");
+    const resultsBody = modal.querySelector("[data-alias-facility-results]");
+    const runSearch = async () => {
+      const code = String(codeInput?.value || "").trim();
+      const keyword = String(keywordInput?.value || "").trim();
+      if (!code && !keyword) {
+        renderAliasFacilityResults(resultsBody, []);
+        return;
+      }
+      if (resultsBody) resultsBody.innerHTML = '<tr><td colspan="3">検索しています...</td></tr>';
+      try {
+        const params = new URLSearchParams();
+        if (code) params.set("code", code);
+        if (keyword) params.set("q", keyword);
+        const payload = await fetchJson(`/admin/facility-master/search?${params.toString()}`);
+        renderAliasFacilityResults(resultsBody, payload.items || []);
+      } catch (error) {
+        if (resultsBody) resultsBody.innerHTML = `<tr><td colspan="3">検索でエラーが発生しました。${escapeHtml(error.message || "")}</td></tr>`;
+      }
+    };
+    searchButton?.addEventListener("click", runSearch);
+    for (const input of [codeInput, keywordInput]) {
+      input?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          runSearch();
+        }
+      });
+    }
+    resultsBody?.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const select = target?.closest("[data-alias-facility-select]");
+      const row = target?.closest("[data-alias-facility-row]");
+      if (select) {
+        event.stopPropagation();
+        selectAliasFacility(select);
+      } else if (row) {
+        selectAliasFacility(row);
+      }
     });
-  }
-  for (const row of document.querySelectorAll("[data-alias-facility-row]")) {
-    row.addEventListener("click", () => selectAliasFacility(row));
   }
 
   const normalizeFolderAliasName = (value) => String(value || "")

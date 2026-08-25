@@ -3696,6 +3696,42 @@ def load_facility_master_admin_rows(
     return [dict(row) for row in cur.fetchall()]
 
 
+@app.get("/admin/facility-master/search", response_class=JSONResponse)
+def search_facility_master(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"items": []}, status_code=401)
+    if not can_view_business_settings(user):
+        return JSONResponse({"items": []}, status_code=403)
+    code = request.query_params.get("code", "").strip()
+    keyword = request.query_params.get("q", "").strip()
+    if not code and not keyword:
+        return JSONResponse({"items": []})
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        rows = load_facility_master_admin_rows(cur, limit=50, keyword=keyword, code=code)
+        cur.close()
+    return JSONResponse(
+        {
+            "items": [
+                {
+                    "exam_facility_id": row.get("exam_facility_id"),
+                    "exam_facility_code": row.get("exam_facility_code"),
+                    "medical_institution_code": row.get("medical_institution_code"),
+                    "exam_facility_name": row.get("exam_facility_name"),
+                    "exam_facility_display_name": row.get("exam_facility_display_name"),
+                    "postal_code": row.get("postal_code"),
+                    "address": row.get("address"),
+                    "phone_number": row.get("phone_number"),
+                    "is_active": row.get("is_active"),
+                }
+                for row in rows
+            ],
+        }
+    )
+
+
 def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str, Any]]:
     cur.execute(
         f"""
@@ -11937,7 +11973,6 @@ def admin_folder_aliases(request: Request) -> Response:
             event_options = load_event_options(cur)
             alias_facility_rows = load_alias_facility_admin_rows(cur)
             alias_rows = load_folder_alias_admin_rows(cur)
-            facility_rows = load_facility_master_admin_rows(cur, limit=60000)
             csv_format_options = load_csv_format_options(cur)
             alias_count_by_event: dict[str, int] = {}
             for row in alias_rows:
@@ -11956,7 +11991,6 @@ def admin_folder_aliases(request: Request) -> Response:
             "alias_count_by_event": alias_count_by_event,
             "alias_facility_rows": alias_facility_rows,
             "alias_rows": alias_rows,
-            "facility_rows": facility_rows,
             "csv_format_options": csv_format_options,
             "source_mode_options": source_mode_options(),
             "filters": {
@@ -12162,7 +12196,6 @@ def new_admin_folder_alias_form(request: Request) -> Response:
         cur = dict_cursor(conn)
         event_options = load_event_options(cur)
         csv_format_options = load_csv_format_options(cur)
-        facility_rows = load_facility_master_admin_rows(cur, limit=60000)
         cur.close()
     return templates.TemplateResponse(
         "admin_folder_alias_new.html",
@@ -12171,7 +12204,6 @@ def new_admin_folder_alias_form(request: Request) -> Response:
             "user": user,
             "event_options": event_options,
             "csv_format_options": csv_format_options,
-            "facility_rows": facility_rows,
             "source_mode_options": source_mode_options(),
             "prefill": {
                 "event_id": request.query_params.get("event_id", ""),

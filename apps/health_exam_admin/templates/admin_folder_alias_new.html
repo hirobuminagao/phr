@@ -117,9 +117,14 @@
       </div>
       <div class="export-facility-search">
         <label>
-          <span>候補検索</span>
-          <input data-live-filter-input="#alias-facility-picker-table" data-modal-focus placeholder="健診機関名 / コード / 住所">
+          <span>コード</span>
+          <input data-alias-facility-search-code data-modal-focus placeholder="健診機関コード / 医療機関コード">
         </label>
+        <label>
+          <span>キーワード</span>
+          <input data-alias-facility-search-keyword placeholder="名称 / 住所">
+        </label>
+        <button type="button" class="primary-button" data-alias-facility-search>検索</button>
       </div>
       <div class="table-panel export-facility-picker-table-panel">
         <table id="alias-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
@@ -130,21 +135,10 @@
               <th>操作</th>
             </tr>
           </thead>
-          <tbody>
-            {% for facility in facility_rows %}
-            <tr data-alias-facility-row data-facility-code="{{ facility.exam_facility_code or facility.exam_facility_id }}" data-filter-text="{{ facility.exam_facility_code }} {{ facility.exam_facility_name }} {{ facility.exam_facility_display_name }} {{ facility.address }} {{ facility.postal_code }} {{ facility.phone_number }}">
-              <td>
-                <strong>{{ facility.exam_facility_display_name or facility.exam_facility_name }}</strong>
-                <small>{{ facility.exam_facility_code or facility.exam_facility_id }}</small>
-              </td>
-              <td>
-                <small>{{ facility.postal_code or "" }} {{ facility.address or "" }}</small>
-              </td>
-              <td>
-                <button type="button" class="ghost-button compact-action-button" data-alias-facility-select data-facility-code="{{ facility.exam_facility_code or facility.exam_facility_id }}">選択</button>
-              </td>
+          <tbody data-alias-facility-results>
+            <tr>
+              <td colspan="3">コードまたはキーワードで検索してください。</td>
             </tr>
-            {% endfor %}
           </tbody>
         </table>
       </div>
