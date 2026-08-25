@@ -122,12 +122,12 @@
         </label>
         <label>
           <span>都道府県</span>
-          <select data-alias-facility-search-prefecture>
-            <option value="">すべて</option>
+          <input data-alias-facility-search-prefecture list="alias-facility-new-prefectures" placeholder="例: 大阪府">
+          <datalist id="alias-facility-new-prefectures">
             {% for prefecture in prefecture_options %}
-            <option value="{{ prefecture }}">{{ prefecture }}</option>
+            <option value="{{ prefecture }}"></option>
             {% endfor %}
-          </select>
+          </datalist>
         </label>
         <label>
           <span>キーワード</span>
