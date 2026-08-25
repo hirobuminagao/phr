@@ -848,7 +848,23 @@
     const keywordInput = modal.querySelector("[data-alias-facility-search-keyword]");
     const searchButton = modal.querySelector("[data-alias-facility-search]");
     const resultsBody = modal.querySelector("[data-alias-facility-results]");
+    let isComposingPrefecture = false;
+    const completePrefectureIfUnique = () => {
+      if (!prefectureInput || isComposingPrefecture) return;
+      const value = String(prefectureInput.value || "").trim();
+      if (!value) return;
+      const listId = prefectureInput.getAttribute("list");
+      const options = listId
+        ? Array.from(document.getElementById(listId)?.querySelectorAll("option") || [])
+          .map((option) => String(option.value || "").trim())
+          .filter(Boolean)
+        : [];
+      if (options.includes(value)) return;
+      const matches = options.filter((option) => option.startsWith(value));
+      if (matches.length === 1) prefectureInput.value = matches[0];
+    };
     const runSearch = async () => {
+      completePrefectureIfUnique();
       const code = String(codeInput?.value || "").trim();
       const prefecture = String(prefectureInput?.value || "").trim();
       const keyword = String(keywordInput?.value || "").trim();
@@ -876,6 +892,15 @@
       }
     };
     searchButton?.addEventListener("click", runSearch);
+    prefectureInput?.addEventListener("compositionstart", () => {
+      isComposingPrefecture = true;
+    });
+    prefectureInput?.addEventListener("compositionend", () => {
+      isComposingPrefecture = false;
+      completePrefectureIfUnique();
+    });
+    prefectureInput?.addEventListener("input", completePrefectureIfUnique);
+    prefectureInput?.addEventListener("blur", completePrefectureIfUnique);
     for (const input of [codeInput, prefectureInput, keywordInput]) {
       input?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
