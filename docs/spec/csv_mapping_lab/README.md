@@ -174,6 +174,7 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - `facility_code`: `scope=facility` の時の健診機関コード。
 - `event_id`: `scope=event` の時のイベントID。初期画面では未使用。
 - `condition_type`: `header_exact` / `normalized_header_exact` / `header_contains` / `sensitive_category`。
+- `column_no_min` / `column_no_max`: 解析済み範囲だけに閉じるための列番制約。NULLなら制限なし。
 - `header_pattern`: 元ヘッダー条件。
 - `normalized_header_pattern`: 正規化ヘッダー条件。
 - `value_type`: `NUMERIC` / `DATE` / `CODE` / `TEXT` / `MIXED` など。NULLなら型不問。
@@ -205,6 +206,7 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - 複数ルールが近いスコアで別targetを返した場合は `REVIEW` に寄せる。
 - ルール適用結果は `analysis_columns.candidate_*` と `csv_mapping_rule_hits` に残す。
 - 画面から列ヘッダーを元にした初期ルールを登録できる。
+- CSV全体を見ていない段階のseedは、必ず `column_no_min` / `column_no_max` で解析済み範囲に閉じる。
 
 初期のルール登録は、作業者が画面で選んで保存する。Codexによるルール候補作成は次段階で、候補を `csv_mapping_rule_suggestions` のような別テーブルに受ける想定。
 
@@ -290,6 +292,7 @@ Codexへ渡す時は、画面またはCLIで作ったJSONを使う。
 - `sql/ddl/csv_mapping_lab/0010_csv_mapping_lab__analysis_files.sql`
 - `sql/ddl/csv_mapping_lab/0020_csv_mapping_lab__analysis_columns.sql`
 - `sql/ddl/csv_mapping_lab/0030_csv_mapping_lab__mapping_rules.sql`
+- `sql/migrations/csv_mapping_lab/20260825_001_csv_mapping_lab_add_rule_column_range.sql`
 
 ## 初回CLI
 

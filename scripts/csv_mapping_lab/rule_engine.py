@@ -78,6 +78,13 @@ def load_analysis_columns(cur: Any, *, lab_db: str, analysis_file_id: int) -> li
 
 
 def rule_matches(rule: dict[str, Any], column: dict[str, Any]) -> tuple[bool, str]:
+    column_no = int(column.get("column_no") or 0)
+    column_no_min = rule.get("column_no_min")
+    column_no_max = rule.get("column_no_max")
+    if column_no_min is not None and column_no < int(column_no_min):
+        return False, ""
+    if column_no_max is not None and column_no > int(column_no_max):
+        return False, ""
     if rule.get("value_type") and rule.get("value_type") != column.get("inferred_value_type"):
         return False, ""
     if rule.get("sensitive_category"):

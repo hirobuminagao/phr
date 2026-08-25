@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS `csv_mapping_lab`.`csv_mapping_rules` (
   `facility_code` varchar(32) DEFAULT NULL COMMENT 'scope=facility の健診機関コード',
   `event_id` bigint unsigned DEFAULT NULL COMMENT 'scope=event のイベントID',
   `condition_type` varchar(32) NOT NULL DEFAULT 'normalized_header_exact' COMMENT 'header_exact/normalized_header_exact/header_contains/sensitive_category',
+  `column_no_min` int DEFAULT NULL COMMENT 'この列番以上にだけ適用。NULLなら制限なし',
+  `column_no_max` int DEFAULT NULL COMMENT 'この列番以下にだけ適用。NULLなら制限なし',
   `header_pattern` varchar(255) DEFAULT NULL COMMENT 'ヘッダー条件',
   `normalized_header_pattern` varchar(255) DEFAULT NULL COMMENT '正規化ヘッダー条件',
   `value_type` varchar(32) DEFAULT NULL COMMENT 'NUMERIC/DATE/CODE/TEXT/MIXEDなど。NULLなら型不問',
@@ -26,6 +28,7 @@ CREATE TABLE IF NOT EXISTS `csv_mapping_lab`.`csv_mapping_rules` (
 
   PRIMARY KEY (`rule_id`),
   KEY `idx_csv_mapping_rules_scope` (`scope`, `facility_code`, `event_id`, `active`),
+  KEY `idx_csv_mapping_rules_column_range` (`column_no_min`, `column_no_max`),
   KEY `idx_csv_mapping_rules_header` (`condition_type`, `normalized_header_pattern`),
   KEY `idx_csv_mapping_rules_target_namecode` (`target_namecode`),
   KEY `idx_csv_mapping_rules_target_ledger_field` (`target_ledger_field`),

@@ -11652,12 +11652,12 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
             cur.execute(
                 f"""
                 INSERT INTO {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules` (
-                  `scope`, `facility_code`, `event_id`, `condition_type`, `header_pattern`,
+                  `scope`, `facility_code`, `event_id`, `condition_type`, `column_no_min`, `column_no_max`, `header_pattern`,
                   `normalized_header_pattern`, `value_type`, `target_kind`, `target_namecode`,
                   `target_ledger_field`, `mapping_strategy`, `confidence`, `reason`,
                   `created_by`, `updated_by`
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.9000, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, NULL, NULL, %s, %s, %s, %s, %s, %s, %s, 0.9000, %s, %s, %s)
                 """,
                 (
                     scope,
