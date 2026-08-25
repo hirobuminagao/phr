@@ -1206,6 +1206,142 @@ a.home-menu-card.is-navigating {
   font-size: 1rem;
 }
 
+.person-selection-column-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.person-selection-column-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.person-selection-column-editor-head strong,
+.person-selection-column-editor-head small {
+  display: block;
+}
+
+.person-selection-column-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.person-column-editing-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 10px;
+  border: 1px solid #0f8a68;
+  border-radius: 999px;
+  background: #e9f8f2;
+  color: #0b6f54;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.person-selection-column-editor [data-person-column-done] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.person-selection-column-editor [data-person-column-done]:hover {
+  background: var(--accent-dark);
+  color: #fff;
+}
+
+.person-selection-column-cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.person-column-card {
+  display: grid;
+  gap: 6px;
+  min-height: 88px;
+  padding: 10px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.person-column-card [data-person-column-open] {
+  display: none;
+}
+
+.person-selection-column-editor[data-column-mode="assign"] .person-column-card [data-person-column-open] {
+  display: inline-flex;
+}
+
+.person-column-card.is-unused {
+  background: #f8fafc;
+}
+
+.person-column-card.is-reorderable {
+  cursor: grab;
+}
+
+.person-column-card.is-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.person-column-card-order {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.person-column-card strong {
+  color: #1f2933;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.person-column-picker-modal {
+  max-width: 760px;
+}
+
+.person-column-picker-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 52vh;
+  overflow: auto;
+  padding: 16px;
+}
+
+.person-column-picker-option {
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  min-height: 46px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2933;
+  font-weight: 800;
+  text-align: left;
+}
+
+.person-column-picker-option small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.person-column-picker-option:hover,
+.person-column-picker-option.is-selected {
+  border-color: var(--accent);
+  background: #eef8f5;
+  color: var(--accent-dark);
+}
+
 .person-selection-columns {
   display: grid;
   grid-template-columns: repeat(6, minmax(130px, 1fr));
@@ -4162,6 +4298,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
   .person-selection-columns {
     grid-template-columns: repeat(3, minmax(120px, 1fr));
+  }
+
+  .person-selection-column-cards,
+  .person-column-picker-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .person-selection-mode {

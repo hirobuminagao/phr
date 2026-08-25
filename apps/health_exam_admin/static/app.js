@@ -1089,6 +1089,175 @@
     setEmptyVisible();
   }
 
+  const personColumnEditor = document.querySelector("[data-person-column-editor]");
+  if (personColumnEditor) {
+    const cardsContainer = personColumnEditor.querySelector("[data-person-column-cards]");
+    const assignButton = personColumnEditor.querySelector("[data-person-column-mode='assign']");
+    const reorderButton = personColumnEditor.querySelector("[data-person-column-mode='reorder']");
+    const doneButton = personColumnEditor.querySelector("[data-person-column-done]");
+    const editingStatus = personColumnEditor.querySelector("[data-person-column-editing-status]");
+    const picker = document.getElementById("person-column-picker-modal");
+    const pickerTarget = picker?.querySelector("[data-person-column-picker-target]");
+    const pickerApply = picker?.querySelector("[data-person-column-picker-apply]");
+    let editMode = "";
+    let activeCard = null;
+    let selectedOption = null;
+    let draggedCard = null;
+
+    const syncColumnNames = () => {
+      const cards = Array.from(personColumnEditor.querySelectorAll("[data-person-column-card]"));
+      cards.forEach((card, index) => {
+        const input = card.querySelector("[data-person-column-input]");
+        const order = card.querySelector(".person-column-card-order");
+        card.dataset.columnIndex = String(index);
+        if (input) input.name = `col_${index}`;
+        if (order) order.textContent = `${index + 1}列目`;
+      });
+    };
+
+    const setColumnEditMode = (mode) => {
+      editMode = mode;
+      personColumnEditor.dataset.columnMode = mode;
+      assignButton?.classList.toggle("is-active", mode === "assign");
+      reorderButton?.classList.toggle("is-active", mode === "reorder");
+      if (doneButton) doneButton.hidden = !mode;
+      if (editingStatus) {
+        editingStatus.hidden = !mode;
+        editingStatus.textContent = mode === "assign" ? "項目編集中" : mode === "reorder" ? "入れ替え編集中" : "";
+      }
+      for (const card of personColumnEditor.querySelectorAll("[data-person-column-card]")) {
+        const selectButton = card.querySelector("[data-person-column-open]");
+        const isAssign = mode === "assign";
+        const isReorder = mode === "reorder";
+        if (selectButton) selectButton.hidden = !isAssign;
+        card.draggable = isReorder;
+        card.classList.toggle("is-reorderable", isReorder);
+      }
+    };
+
+    const closePicker = () => {
+      if (picker) picker.hidden = true;
+      activeCard = null;
+      selectedOption = null;
+      for (const option of picker?.querySelectorAll("[data-person-column-option]") || []) {
+        option.classList.remove("is-selected");
+      }
+    };
+
+    const openPicker = (card) => {
+      activeCard = card;
+      selectedOption = null;
+      const index = Number(card.dataset.columnIndex || "0") + 1;
+      if (pickerTarget) pickerTarget.textContent = `${index}列目に割り当てる項目を選びます。`;
+      const currentValue = card.querySelector("[data-person-column-input]")?.value || "";
+      for (const option of picker?.querySelectorAll("[data-person-column-option]") || []) {
+        const selected = option.dataset.value === currentValue;
+        const optionValue = option.dataset.value || "";
+        const usage = option.querySelector("[data-person-column-option-usage]");
+        if (usage) {
+          const usedColumns = optionValue
+            ? Array.from(personColumnEditor.querySelectorAll("[data-person-column-card]"))
+              .map((columnCard, columnIndex) => (
+                (columnCard.querySelector("[data-person-column-input]")?.value || "") === optionValue
+                  ? `${columnIndex + 1}列目`
+                  : ""
+              ))
+              .filter(Boolean)
+            : [];
+          usage.textContent = usedColumns.length ? `現在 ${usedColumns.join(" / ")}` : "";
+        }
+        option.classList.toggle("is-selected", selected);
+        if (selected) selectedOption = option;
+      }
+      if (picker) picker.hidden = false;
+    };
+
+    assignButton?.addEventListener("click", () => setColumnEditMode(editMode === "assign" ? "" : "assign"));
+    reorderButton?.addEventListener("click", () => setColumnEditMode(editMode === "reorder" ? "" : "reorder"));
+    doneButton?.addEventListener("click", () => setColumnEditMode(""));
+
+    personColumnEditor.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const openButton = target?.closest("[data-person-column-open]");
+      if (!openButton) return;
+      const card = openButton.closest("[data-person-column-card]");
+      if (card) openPicker(card);
+    });
+
+    picker?.querySelector("[data-person-column-picker-close]")?.addEventListener("click", closePicker);
+    picker?.querySelector("[data-person-column-picker-cancel]")?.addEventListener("click", closePicker);
+    picker?.addEventListener("click", (event) => {
+      if (event.target === picker) closePicker();
+    });
+    for (const option of picker?.querySelectorAll("[data-person-column-option]") || []) {
+      option.addEventListener("click", () => {
+        selectedOption = option;
+        for (const peer of picker.querySelectorAll("[data-person-column-option]")) {
+          peer.classList.toggle("is-selected", peer === option);
+        }
+      });
+    }
+    pickerApply?.addEventListener("click", () => {
+      if (!activeCard || !selectedOption) return;
+      const input = activeCard.querySelector("[data-person-column-input]");
+      const label = activeCard.querySelector("[data-person-column-label]");
+      const nextValue = selectedOption.dataset.value || "";
+      const nextLabel = selectedOption.dataset.label || "未使用";
+      const currentValue = input?.value || "";
+      const currentLabel = label?.textContent || "未使用";
+      if (nextValue) {
+        const duplicateCard = Array.from(personColumnEditor.querySelectorAll("[data-person-column-card]")).find((card) => {
+          if (card === activeCard) return false;
+          return (card.querySelector("[data-person-column-input]")?.value || "") === nextValue;
+        });
+        if (duplicateCard) {
+          const duplicateInput = duplicateCard.querySelector("[data-person-column-input]");
+          const duplicateLabel = duplicateCard.querySelector("[data-person-column-label]");
+          if (duplicateInput) duplicateInput.value = currentValue;
+          if (duplicateLabel) duplicateLabel.textContent = currentLabel;
+          duplicateCard.classList.toggle("is-unused", !currentValue);
+        }
+      }
+      if (input) input.value = nextValue;
+      if (label) label.textContent = nextLabel;
+      activeCard.classList.toggle("is-unused", !nextValue);
+      closePicker();
+    });
+
+    cardsContainer?.addEventListener("dragstart", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      draggedCard = target?.closest("[data-person-column-card]");
+      if (!draggedCard || editMode !== "reorder") {
+        event.preventDefault();
+        return;
+      }
+      draggedCard.classList.add("is-dragging");
+      event.dataTransfer.effectAllowed = "move";
+    });
+    cardsContainer?.addEventListener("dragend", () => {
+      draggedCard?.classList.remove("is-dragging");
+      draggedCard = null;
+      syncColumnNames();
+    });
+    cardsContainer?.addEventListener("dragover", (event) => {
+      if (!draggedCard || editMode !== "reorder") return;
+      event.preventDefault();
+      const eventTarget = event.target instanceof Element ? event.target : null;
+      const target = eventTarget?.closest("[data-person-column-card]");
+      if (!target || target === draggedCard) return;
+      const rect = target.getBoundingClientRect();
+      const after = event.clientY > rect.top + rect.height / 2 || event.clientX > rect.left + rect.width / 2;
+      cardsContainer.insertBefore(draggedCard, after ? target.nextSibling : target);
+    });
+
+    syncColumnNames();
+    for (const card of personColumnEditor.querySelectorAll("[data-person-column-card]")) {
+      const input = card.querySelector("[data-person-column-input]");
+      card.classList.toggle("is-unused", !input?.value);
+    }
+    setColumnEditMode("");
+  }
+
   const manualFacilityInput = document.querySelector("#manual-entry-facility-input");
   if (manualFacilityInput) {
     const manualFacilityNameInput = document.querySelector("#manual-entry-facility-name-input");
