@@ -12,6 +12,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import zipfile
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -112,6 +113,7 @@ from scripts.phr_app.script_lib.app_auth import (
 
 APP_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = APP_ROOT.parents[1]
+CSV_MAPPING_LAB_REGULATION_PATH = REPO_ROOT / "docs" / "spec" / "csv_mapping_lab" / "ai_mapping_exchange_regulation.md"
 LOGGER = logging.getLogger("health_exam_admin")
 SESSION_COOKIE_NAME = "phr_app_session"
 CSRF_COOKIE_NAME = "phr_app_csrf"
@@ -11530,10 +11532,20 @@ async def download_csv_mapping_lab_prompt(request: Request) -> Response:
         analysis_file_id, prompt_json = build_csv_mapping_prompt_from_form(form)
     except Exception as exc:
         return RedirectResponse(f"/utilities/csv-mapping-lab?error={quote(str(exc))}", status_code=303)
+    regulation_text = CSV_MAPPING_LAB_REGULATION_PATH.read_text(encoding="utf-8")
+    zip_path = Path(tempfile.gettempdir()) / f"csv_mapping_prompt_{analysis_file_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("REGULATION.md", regulation_text)
+        archive.writestr("analysis_prompt.json", prompt_json + "\n")
     headers = {
-        "Content-Disposition": f'attachment; filename="csv_mapping_prompt_{analysis_file_id}.json"',
+        "Content-Disposition": f'attachment; filename="csv_mapping_prompt_{analysis_file_id}.zip"',
     }
-    return Response(content=prompt_json + "\n", media_type="application/json; charset=utf-8", headers=headers)
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        headers=headers,
+        background=BackgroundTask(lambda path: Path(path).unlink(missing_ok=True), str(zip_path)),
+    )
 
 
 @app.get("/utilities/person-selection", response_class=HTMLResponse)
