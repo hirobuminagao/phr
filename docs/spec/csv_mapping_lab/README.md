@@ -229,18 +229,15 @@ CSVの1列ごとの解析結果を表す子テーブル。
 Codexへ渡す時は、画面またはCLIで作ったJSONを使う。
 
 - 小さめの範囲なら、画面の「JSON表示」からコピーしてチャットへ貼る。
-- 100から150列程度に分ける場合は、開始列/終了列を指定してJSONを作る。
-- 全列や大きいJSONは「AI投入ZIPをダウンロード」で保存し、そのZIPを添付するか、保存パスをCodexへ伝える。
+- 120列程度に分ける場合は、開始列/終了列を指定してJSONを作る。
+- 全列や大きいJSONは「Codex確認ZIPをダウンロード」で保存し、そのZIPを添付するか、保存パスをCodexへ伝える。
 - 実CSV全体を貼るより、解析済みJSONを渡す方が、列番、ヘッダー、サンプル値、型、周辺列を安定して見られる。
 - 個人特定系の列は初期では除外する。必要な時だけ「個人系ヒント列も含める」を使う。
-- ZIPには `REGULATION.md` と `analysis_prompt.json` を入れる。AIにはZIPを解析させれば、毎回レギュレーションを説明し直さなくてよい。
+- ZIPには `REGULATION.md` と `analysis_prompt.json` を入れる。CodexにはZIPを解析させれば、毎回レギュレーションを説明し直さなくてよい。
 
-AI投入時は、目的に応じてプロンプトモードを切り替える。
+軽量AI向けの仕分けモードは廃止する。現時点では、健診結果のマスタや既存ルールを正しく参照できないAIに任せると、存在しない `namecode` やヘッダーと無関係な候補が混ざるリスクが高い。
 
-- 軽量仕分け: Sparkなど軽めのAI向け。自信が高い列だけ候補を出し、難しい列は `REVIEW` / `NEEDS_CONFIRMATION` へ逃がす。
-- 詳細解析: REVIEW列、所見、問診、判定、検査方法違い、関連列の整理向け。関連列や判断理由も確認する。
-
-ZIP内の `analysis_prompt.json` には `prompt_mode` を入れる。`REGULATION.md` にも今回の解析モードを追記して同梱する。
+運用は、120列前後の範囲に区切ってCodexへ渡し、CodexがDB、DDL、seed、既存コードを確認しながら候補を返す形を標準にする。
 
 ## DDL
 
@@ -276,7 +273,7 @@ python3 scripts/csv_mapping_lab/analyze_csv.py /path/to/sample.csv --dry-run
 python3 scripts/csv_mapping_lab/analyze_csv.py /path/to/sample.csv --replace-source-sha
 ```
 
-AI投入用JSONを出力する場合:
+Codex確認用JSONを出力する場合:
 
 ```bash
 python3 scripts/csv_mapping_lab/export_llm_prompt.py 3 \

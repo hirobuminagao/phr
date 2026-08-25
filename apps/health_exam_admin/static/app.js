@@ -352,24 +352,6 @@
     input?.addEventListener("change", () => updateCheckboxChoiceCard(card));
   }
 
-  const updateCsvMappingPromptMode = () => {
-    const checked = document.querySelector(".csv-mapping-mode-group input[type='radio']:checked");
-    const mode = checked?.value || "triage";
-    const output = document.querySelector("#csv-mapping-ai-instruction-text");
-    const source = document.querySelector(`#csv-mapping-ai-instruction-${mode}`);
-    if (output && source) output.value = source.value;
-    const group = checked?.closest(".csv-mapping-mode-group");
-    for (const card of group?.querySelectorAll(".choice-card") || []) {
-      const input = card.querySelector("input[type='radio']");
-      card.classList.toggle("is-selected", Boolean(input?.checked));
-    }
-  };
-
-  for (const radio of document.querySelectorAll(".csv-mapping-mode-group input[type='radio']")) {
-    radio.addEventListener("change", updateCsvMappingPromptMode);
-  }
-  updateCsvMappingPromptMode();
-
   const parseSortValue = (cell, type) => {
     const raw = String(cell?.dataset.sortValue ?? cell?.textContent ?? "").trim();
     if (type === "number" || type === "percent") {

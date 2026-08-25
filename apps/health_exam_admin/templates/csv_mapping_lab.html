@@ -126,24 +126,13 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>AI確認用JSONを作る</h2>
-        <p class="subtle">列数が多いCSVは、100から150列くらいに分けて渡すとレビューしやすいです。</p>
+        <h2>Codex確認用JSONを作る</h2>
+        <p class="subtle">列数が多いCSVは、120列くらいに分けて渡すとレビューしやすいです。</p>
       </div>
       <a class="ghost-button compact-action-button" href="/utilities/csv-mapping-lab">解析一覧へ戻る</a>
     </div>
     <form method="post" action="/utilities/csv-mapping-lab/prompt" class="form-grid csv-mapping-prompt-form">
       <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
-      <div class="csv-mapping-mode-group">
-        {% for mode_code, mode in prompt_modes.items() %}
-        <label class="choice-card csv-mapping-mode-card{% if (prompt_form.prompt_mode or 'triage') == mode_code %} is-selected{% endif %}">
-          <input type="radio" name="prompt_mode" value="{{ mode_code }}" {% if (prompt_form.prompt_mode or 'triage') == mode_code %}checked{% endif %}>
-          <span>
-            <strong>{{ mode.label }}</strong>
-            <small>{{ mode.description }}</small>
-          </span>
-        </label>
-        {% endfor %}
-      </div>
       <label>
         <span>開始列</span>
         <input type="number" name="column_start" value="{{ prompt_form.column_start or '' }}" min="1" placeholder="1">
@@ -160,7 +149,7 @@
         <input type="checkbox" name="only_unreviewed" value="1" {% if prompt_form.only_unreviewed == "1" %}checked{% endif %}>
         <span>
           <strong>未レビューのみ</strong>
-          <small>まだ人が判断していない列だけをAI投入JSONに含めます。</small>
+          <small>まだ人が判断していない列だけをCodex確認JSONに含めます。</small>
         </span>
         <b>{{ "ON" if prompt_form.only_unreviewed == "1" else "OFF" }}</b>
       </label>
@@ -168,27 +157,25 @@
         <input type="checkbox" name="include_sensitive" value="1" {% if prompt_form.include_sensitive == "1" %}checked{% endif %}>
         <span>
           <strong>個人系ヒント列も含める</strong>
-          <small>氏名、保険証番号、生年月日などに見える列もAI投入JSONへ含めます。保存値はサンプル化済みです。</small>
+          <small>氏名、保険証番号、生年月日などに見える列もCodex確認JSONへ含めます。保存値はサンプル化済みです。</small>
         </span>
         <b>{{ "ON" if prompt_form.include_sensitive == "1" else "OFF" }}</b>
       </label>
       <div class="form-actions">
         <button type="submit">JSON表示</button>
-        <button type="submit" formaction="/utilities/csv-mapping-lab/prompt/download" formmethod="post">AI投入ZIPをダウンロード</button>
+        <button type="submit" formaction="/utilities/csv-mapping-lab/prompt/download" formmethod="post">Codex確認ZIPをダウンロード</button>
       </div>
     </form>
 
     <div class="csv-mapping-ai-instruction">
       <div class="section-heading">
         <div>
-          <h3>AIへの依頼文</h3>
+          <h3>Codexへの依頼文</h3>
           <p class="subtle">ダウンロードしたZIPを添付して、この文章をそのまま渡します。</p>
         </div>
         <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-mapping-ai-instruction-text">コピー</button>
       </div>
       <textarea id="csv-mapping-ai-instruction-text" readonly spellcheck="false">{{ ai_instruction_text }}</textarea>
-      <textarea id="csv-mapping-ai-instruction-triage" hidden readonly>{{ prompt_modes.triage.instruction }}</textarea>
-      <textarea id="csv-mapping-ai-instruction-analysis" hidden readonly>{{ prompt_modes.analysis.instruction }}</textarea>
     </div>
 
     {% if prompt_json %}
