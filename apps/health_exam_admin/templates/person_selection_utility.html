@@ -25,11 +25,11 @@
 
     <form method="post" action="/utilities/person-selection" class="person-selection-form">
       <div class="person-selection-mode">
-        <label class="choice-card">
+        <label class="choice-card{% if form.input_mode == "single" %} is-selected{% endif %}">
           <input type="radio" name="input_mode" value="single" {% if form.input_mode == "single" %}checked{% endif %}>
           <span><strong>一人ずつ追加</strong><small>検索して候補を出し、選んだ人を作業リストへ追加します。</small></span>
         </label>
-        <label class="choice-card">
+        <label class="choice-card{% if form.input_mode != "single" %} is-selected{% endif %}">
           <input type="radio" name="input_mode" value="bulk" {% if form.input_mode != "single" %}checked{% endif %}>
           <span><strong>複数まとめて追加</strong><small>Excel貼り付けや区切り文字で複数人を解析します。</small></span>
         </label>

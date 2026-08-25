@@ -1126,28 +1126,70 @@ a.home-menu-card.is-navigating {
 .choice-card {
   display: flex;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
+  min-height: 84px;
   padding: 14px 16px;
   border: 1px solid #cbd7e6;
   border-radius: 8px;
   background: #fff;
+  cursor: pointer;
+  overflow: hidden;
 }
 
 .choice-card input {
-  margin-top: 5px;
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .choice-card span {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .choice-card strong {
   color: #1f2933;
+  font-size: 16px;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .choice-card small {
   color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.choice-card::before {
+  content: "";
+  inline-size: 18px;
+  block-size: 18px;
+  flex: 0 0 auto;
+  border: 2px solid #9aabbc;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: inset 0 0 0 4px #fff;
+}
+
+.choice-card.is-selected {
+  border-color: var(--accent);
+  background: #eef8f5;
+  box-shadow: 0 0 0 1px rgba(20, 132, 100, 0.18);
+}
+
+.choice-card.is-selected::before {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.choice-card:hover {
+  border-color: var(--accent);
 }
 
 .person-selection-subpanel {

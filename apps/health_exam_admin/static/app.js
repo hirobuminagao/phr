@@ -319,6 +319,16 @@
     });
   }
 
+  for (const radio of document.querySelectorAll(".person-selection-mode input[type='radio']")) {
+    radio.addEventListener("change", () => {
+      const group = radio.closest(".person-selection-mode");
+      for (const card of group?.querySelectorAll(".choice-card") || []) {
+        const input = card.querySelector("input[type='radio']");
+        card.classList.toggle("is-selected", Boolean(input?.checked));
+      }
+    });
+  }
+
   const parseSortValue = (cell, type) => {
     const raw = String(cell?.dataset.sortValue ?? cell?.textContent ?? "").trim();
     if (type === "number" || type === "percent") {
