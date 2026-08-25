@@ -235,6 +235,13 @@ Codexへ渡す時は、画面またはCLIで作ったJSONを使う。
 - 個人特定系の列は初期では除外する。必要な時だけ「個人系ヒント列も含める」を使う。
 - ZIPには `REGULATION.md` と `analysis_prompt.json` を入れる。AIにはZIPを解析させれば、毎回レギュレーションを説明し直さなくてよい。
 
+AI投入時は、目的に応じてプロンプトモードを切り替える。
+
+- 軽量仕分け: Sparkなど軽めのAI向け。自信が高い列だけ候補を出し、難しい列は `REVIEW` / `NEEDS_CONFIRMATION` へ逃がす。
+- 詳細解析: REVIEW列、所見、問診、判定、検査方法違い、関連列の整理向け。関連列や判断理由も確認する。
+
+ZIP内の `analysis_prompt.json` には `prompt_mode` を入れる。`REGULATION.md` にも今回の解析モードを追記して同梱する。
+
 ## DDL
 
 - `sql/ddl/csv_mapping_lab/0010_csv_mapping_lab__analysis_files.sql`

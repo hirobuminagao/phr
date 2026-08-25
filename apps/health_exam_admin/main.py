@@ -115,6 +115,34 @@ from scripts.phr_app.script_lib.app_auth import (
 APP_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = APP_ROOT.parents[1]
 CSV_MAPPING_LAB_REGULATION_PATH = REPO_ROOT / "docs" / "spec" / "csv_mapping_lab" / "ai_mapping_exchange_regulation.md"
+CSV_MAPPING_AI_PROMPT_MODES = {
+    "triage": {
+        "label": "軽量仕分け",
+        "description": "Sparkなど軽めのAI向け。自信が高い列だけ候補を出し、難しい列はREVIEWへ逃がします。",
+        "instruction": """添付ZIPを解析してください。
+ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysis_prompt.json の列マッピング候補を作ってください。
+
+今回は軽量仕分けモードです。
+自信が高い列だけ候補を出してください。
+判断が難しい列、関連列の確認が必要な列、意味が曖昧な列は REVIEW または NEEDS_CONFIRMATION にしてください。
+
+返却は REGULATION.md の返却形式に従って、JSONだけにしてください。
+Markdown説明、コードフェンス、補足文章は不要です。""",
+    },
+    "analysis": {
+        "label": "詳細解析",
+        "description": "REVIEW列や所見・問診などを詰める向け。関連列や判断理由も確認します。",
+        "instruction": """添付ZIPを解析してください。
+ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysis_prompt.json の列マッピング候補を作ってください。
+
+今回は詳細解析モードです。
+各列のヘッダー、サンプル値、型、周辺列を確認し、関連列がある場合は related_column_nos に入れてください。
+所見、問診、判定、検査方法違い、左右別、連番列は、安易にDIRECTにせず、必要に応じて MULTI_COLUMN_JOIN / METHOD_SELECTION / NEEDS_CONFIRMATION を使ってください。
+
+返却は REGULATION.md の返却形式に従って、JSONだけにしてください。
+Markdown説明、コードフェンス、補足文章は不要です。""",
+    },
+}
 LOGGER = logging.getLogger("health_exam_admin")
 SESSION_COOKIE_NAME = "phr_app_session"
 CSRF_COOKIE_NAME = "phr_app_csrf"
@@ -11363,15 +11391,21 @@ def csv_mapping_lab_default_context(
         "selected_file_id": selected_file_id,
         "columns": columns,
         "prompt_json": prompt_json,
-        "prompt_form": prompt_form
+            "prompt_form": prompt_form
         or {
             "analysis_file_id": selected_file_id or "",
+            "prompt_mode": "triage",
             "column_start": "",
             "column_end": "",
             "only_unreviewed": "",
             "include_sensitive": "",
             "nearby_window": "3",
         },
+        "prompt_modes": CSV_MAPPING_AI_PROMPT_MODES,
+        "ai_instruction_text": CSV_MAPPING_AI_PROMPT_MODES.get(
+            str((prompt_form or {}).get("prompt_mode") or "triage"),
+            CSV_MAPPING_AI_PROMPT_MODES["triage"],
+        )["instruction"],
     }
 
 
@@ -11506,6 +11540,13 @@ def build_csv_mapping_prompt_from_form(form: Mapping[str, str]) -> tuple[int, st
         file_row, columns = fetch_csv_mapping_analysis(conn, lab_db=CSV_MAPPING_LAB, analysis_file_id=analysis_file_id)
     selected_columns = filter_csv_mapping_columns(columns, args=args)
     prompt = build_csv_mapping_prompt(file_row, columns, selected_columns, args=args)
+    prompt_mode = str(form.get("prompt_mode") or "triage")
+    mode = CSV_MAPPING_AI_PROMPT_MODES.get(prompt_mode, CSV_MAPPING_AI_PROMPT_MODES["triage"])
+    prompt["prompt_mode"] = {
+        "code": prompt_mode if prompt_mode in CSV_MAPPING_AI_PROMPT_MODES else "triage",
+        "label": mode["label"],
+        "description": mode["description"],
+    }
     return analysis_file_id, json.dumps(prompt, ensure_ascii=False, indent=2, default=csv_mapping_json_default)
 
 
@@ -11546,6 +11587,9 @@ async def download_csv_mapping_lab_prompt(request: Request) -> Response:
     except Exception as exc:
         return RedirectResponse(f"/utilities/csv-mapping-lab?error={quote(str(exc))}", status_code=303)
     regulation_text = CSV_MAPPING_LAB_REGULATION_PATH.read_text(encoding="utf-8")
+    prompt_mode = str(form.get("prompt_mode") or "triage")
+    mode = CSV_MAPPING_AI_PROMPT_MODES.get(prompt_mode, CSV_MAPPING_AI_PROMPT_MODES["triage"])
+    regulation_text = f"{regulation_text}\n\n## 今回の解析モード\n\n- モード: {mode['label']}\n- 方針: {mode['description']}\n"
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("REGULATION.md", regulation_text)

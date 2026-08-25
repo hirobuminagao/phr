@@ -133,6 +133,17 @@
     </div>
     <form method="post" action="/utilities/csv-mapping-lab/prompt" class="form-grid csv-mapping-prompt-form">
       <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+      <div class="csv-mapping-mode-group">
+        {% for mode_code, mode in prompt_modes.items() %}
+        <label class="choice-card csv-mapping-mode-card{% if (prompt_form.prompt_mode or 'triage') == mode_code %} is-selected{% endif %}">
+          <input type="radio" name="prompt_mode" value="{{ mode_code }}" {% if (prompt_form.prompt_mode or 'triage') == mode_code %}checked{% endif %}>
+          <span>
+            <strong>{{ mode.label }}</strong>
+            <small>{{ mode.description }}</small>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
       <label>
         <span>開始列</span>
         <input type="number" name="column_start" value="{{ prompt_form.column_start or '' }}" min="1" placeholder="1">
@@ -175,11 +186,9 @@
         </div>
         <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-mapping-ai-instruction-text">コピー</button>
       </div>
-      <textarea id="csv-mapping-ai-instruction-text" readonly spellcheck="false">添付ZIPを解析してください。
-ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysis_prompt.json の列マッピング候補を作ってください。
-
-返却は REGULATION.md の返却形式に従って、JSONだけにしてください。
-Markdown説明、コードフェンス、補足文章は不要です。</textarea>
+      <textarea id="csv-mapping-ai-instruction-text" readonly spellcheck="false">{{ ai_instruction_text }}</textarea>
+      <textarea id="csv-mapping-ai-instruction-triage" hidden readonly>{{ prompt_modes.triage.instruction }}</textarea>
+      <textarea id="csv-mapping-ai-instruction-analysis" hidden readonly>{{ prompt_modes.analysis.instruction }}</textarea>
     </div>
 
     {% if prompt_json %}
