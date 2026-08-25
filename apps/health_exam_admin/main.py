@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import os
 import hashlib
 import json
 import logging
 import re
 import secrets
+import shutil
 import string
 import subprocess
 import sys
+import tempfile
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -22,7 +25,9 @@ from fastapi.templating import Jinja2Templates
 from mysql.connector import IntegrityError
 from starlette.background import BackgroundTask
 
+from scripts.lib.csv.csv_loader import load_csv_result
 from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.schemas import CSV_MAPPING_LAB
 from scripts.lib.db.lookup.event import get_event_year
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.etl.metrics import RunMetrics
@@ -53,6 +58,13 @@ from scripts.from_medical.script_lib.specific_health_checker import (
     aggregate_specific_result_with_details,
 )
 from scripts.from_medical.script_lib.specific_health_required_namecodes import fetch_specific_health_required_namecodes
+from scripts.csv_mapping_lab.analyze_csv import insert_analysis as insert_csv_mapping_analysis
+from scripts.csv_mapping_lab.export_llm_prompt import (
+    build_prompt as build_csv_mapping_prompt,
+    fetch_analysis as fetch_csv_mapping_analysis,
+    filter_columns as filter_csv_mapping_columns,
+    json_default as csv_mapping_json_default,
+)
 from scripts.hia.script_lib.config_loader import config_bool, config_value, load_yaml_config
 from scripts.hia.script_lib.fund_delivery_list_builder import (
     FundDeliveryListConfig,
@@ -11267,6 +11279,256 @@ async def create_external_feedback(request: Request) -> Response:
         f"/external-feedback?message={quote(f'外部指摘を登録しました。report={report_id} item={item_id}')}",
         status_code=303,
     )
+
+
+def load_csv_mapping_lab_files(cur: Any, *, limit: int = 50) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          `analysis_file_id`, `source_file_name`, `facility_code`, `facility_name`,
+          `encoding`, `row_count`, `column_count`, `parse_status`, `analysis_status`,
+          `created_at`, `updated_at`
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_files`
+        ORDER BY `analysis_file_id` DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_csv_mapping_lab_summary(cur: Any) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS file_count,
+          COALESCE(SUM(`column_count`), 0) AS column_count,
+          COALESCE(SUM(`row_count`), 0) AS row_count
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_files`
+        """
+    )
+    row = cur.fetchone() or {}
+    return {
+        "file_count": int(row.get("file_count") or 0),
+        "column_count": int(row.get("column_count") or 0),
+        "row_count": int(row.get("row_count") or 0),
+    }
+
+
+def load_csv_mapping_lab_columns(cur: Any, *, analysis_file_id: int, limit: int = 120) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          `column_no`, `header_name`, `normalized_header_name`, `inferred_value_type`,
+          `inferred_format`, `blank_count`, `non_blank_count`, `sensitive_hint`,
+          `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`,
+          `candidate_confidence`, `sample_values_json`
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+        WHERE `analysis_file_id` = %s
+        ORDER BY `column_no`
+        LIMIT %s
+        """,
+        (analysis_file_id, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def csv_mapping_lab_default_context(
+    request: Request,
+    user: Mapping[str, Any],
+    *,
+    message: str | None = None,
+    error: str | None = None,
+    selected_file_id: int | None = None,
+    prompt_json: str | None = None,
+    prompt_form: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        files = load_csv_mapping_lab_files(cur)
+        summary = load_csv_mapping_lab_summary(cur)
+        columns = load_csv_mapping_lab_columns(cur, analysis_file_id=selected_file_id) if selected_file_id else []
+        cur.close()
+    return {
+        "request": request,
+        "user": user,
+        "message": message,
+        "error": error,
+        "summary": summary,
+        "files": files,
+        "selected_file_id": selected_file_id,
+        "columns": columns,
+        "prompt_json": prompt_json,
+        "prompt_form": prompt_form
+        or {
+            "analysis_file_id": selected_file_id or "",
+            "column_start": "",
+            "column_end": "",
+            "only_unreviewed": "",
+            "include_sensitive": "",
+            "nearby_window": "3",
+        },
+    }
+
+
+@app.get("/utilities/csv-mapping-lab", response_class=HTMLResponse)
+def csv_mapping_lab(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    selected_file_id = parse_positive_int(request.query_params.get("analysis_file_id"), default=0, maximum=999999999)
+    return templates.TemplateResponse(
+        "csv_mapping_lab.html",
+        csv_mapping_lab_default_context(
+            request,
+            user,
+            message=request.query_params.get("message"),
+            error=request.query_params.get("error"),
+            selected_file_id=selected_file_id or None,
+        ),
+    )
+
+
+@app.post("/utilities/csv-mapping-lab/upload", response_class=HTMLResponse)
+async def upload_csv_mapping_lab(
+    request: Request,
+    csv_file: UploadFile = File(...),
+    facility_code: str = Form(""),
+    facility_name: str = Form(""),
+    header_row_no: int = Form(1),
+    data_start_row_no: int = Form(2),
+    encoding: str = Form(""),
+    replace_source_sha: str | None = Form(None),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    safe_name = Path(csv_file.filename or "upload.csv").name
+    if not safe_name.lower().endswith(".csv"):
+        return RedirectResponse("/utilities/csv-mapping-lab?error=CSVファイルを選択してください。", status_code=303)
+    upload_dir = Path(tempfile.gettempdir()) / "csv_mapping_lab_uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_path = upload_dir / f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_name}"
+    with upload_path.open("wb") as out:
+        shutil.copyfileobj(csv_file.file, out)
+
+    args = argparse.Namespace(
+        csv_path=str(upload_path),
+        facility_code=facility_code.strip() or None,
+        facility_name=facility_name.strip() or None,
+        source_folder_name=None,
+        header_row_no=max(1, min(int(header_row_no or 1), 20)),
+        data_start_row_no=max(1, min(int(data_start_row_no or 2), 50)),
+        encoding=encoding.strip() or None,
+        delimiter=",",
+        quote_char='"',
+        sample_limit=20,
+        db_prefix=db_prefix(),
+        lab_db=CSV_MAPPING_LAB,
+        created_by=str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or ""),
+        memo=None,
+        replace_source_sha=bool(replace_source_sha),
+        dry_run=False,
+    )
+    try:
+        csv_result = load_csv_result(
+            str(upload_path),
+            header_count=args.header_row_no,
+            delimiter=args.delimiter,
+            encoding=args.encoding,
+            quote_char=args.quote_char,
+            active_header_row_no=args.header_row_no,
+            data_start_row_no=args.data_start_row_no,
+        )
+        parse_status = "OK"
+        parse_error = None
+        expected_columns = len(csv_result.header_set.normalized_columns)
+        row_widths = {len(row) for row in csv_result.rows}
+        if any(width != expected_columns for width in row_widths):
+            parse_status = "WARNING"
+            parse_error = f"列数が揃っていません: header={expected_columns}, row_widths={sorted(row_widths)[:10]}"
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=False) as conn:
+            analysis_file_id = insert_csv_mapping_analysis(
+                conn,
+                args=args,
+                csv_result=csv_result,
+                parse_status=parse_status,
+                parse_error=parse_error,
+            )
+            conn.commit()
+    except Exception as exc:
+        return RedirectResponse(f"/utilities/csv-mapping-lab?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse(
+        f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&message={quote('CSVを解析しました。')}",
+        status_code=303,
+    )
+
+
+def build_csv_mapping_prompt_from_form(form: Mapping[str, str]) -> tuple[int, str]:
+    analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
+    if not analysis_file_id:
+        raise ValueError("解析ファイルを選択してください。")
+    args = argparse.Namespace(
+        analysis_file_id=analysis_file_id,
+        db_prefix=db_prefix(),
+        lab_db=CSV_MAPPING_LAB,
+        output=None,
+        column_start=parse_positive_int(str(form.get("column_start") or ""), default=0, maximum=999999) or None,
+        column_end=parse_positive_int(str(form.get("column_end") or ""), default=0, maximum=999999) or None,
+        only_unreviewed=str(form.get("only_unreviewed") or "") == "1",
+        include_sensitive=str(form.get("include_sensitive") or "") == "1",
+        nearby_window=parse_positive_int(str(form.get("nearby_window") or "3"), default=3, maximum=10),
+    )
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=True) as conn:
+        file_row, columns = fetch_csv_mapping_analysis(conn, lab_db=CSV_MAPPING_LAB, analysis_file_id=analysis_file_id)
+    selected_columns = filter_csv_mapping_columns(columns, args=args)
+    prompt = build_csv_mapping_prompt(file_row, columns, selected_columns, args=args)
+    return analysis_file_id, json.dumps(prompt, ensure_ascii=False, indent=2, default=csv_mapping_json_default)
+
+
+@app.post("/utilities/csv-mapping-lab/prompt", response_class=HTMLResponse)
+async def preview_csv_mapping_lab_prompt(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    try:
+        analysis_file_id, prompt_json = build_csv_mapping_prompt_from_form(form)
+        error = None
+    except Exception as exc:
+        analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
+        prompt_json = None
+        error = str(exc)
+    return templates.TemplateResponse(
+        "csv_mapping_lab.html",
+        csv_mapping_lab_default_context(
+            request,
+            user,
+            error=error,
+            selected_file_id=analysis_file_id or None,
+            prompt_json=prompt_json,
+            prompt_form=dict(form),
+        ),
+    )
+
+
+@app.post("/utilities/csv-mapping-lab/prompt/download")
+async def download_csv_mapping_lab_prompt(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    try:
+        analysis_file_id, prompt_json = build_csv_mapping_prompt_from_form(form)
+    except Exception as exc:
+        return RedirectResponse(f"/utilities/csv-mapping-lab?error={quote(str(exc))}", status_code=303)
+    headers = {
+        "Content-Disposition": f'attachment; filename="csv_mapping_prompt_{analysis_file_id}.json"',
+    }
+    return Response(content=prompt_json + "\n", media_type="application/json; charset=utf-8", headers=headers)
 
 
 @app.get("/utilities/person-selection", response_class=HTMLResponse)

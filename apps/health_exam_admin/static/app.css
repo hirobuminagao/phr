@@ -3514,6 +3514,54 @@ a.home-menu-card.is-navigating {
   font-weight: 700;
 }
 
+.csv-mapping-upload-form,
+.csv-mapping-prompt-form {
+  align-items: end;
+}
+
+.csv-mapping-file-table th:nth-child(1),
+.csv-mapping-file-table td:nth-child(1) {
+  width: 80px;
+}
+
+.csv-mapping-file-table th:nth-child(4),
+.csv-mapping-file-table td:nth-child(4),
+.csv-mapping-file-table th:nth-child(5),
+.csv-mapping-file-table td:nth-child(5),
+.csv-mapping-file-table th:nth-child(6),
+.csv-mapping-file-table td:nth-child(6) {
+  width: 130px;
+}
+
+.csv-mapping-file-table tr.is-selected-row td {
+  background: #edf8f4;
+}
+
+.csv-mapping-column-table th:nth-child(1),
+.csv-mapping-column-table td:nth-child(1) {
+  width: 64px;
+}
+
+.csv-mapping-column-table th:nth-child(3),
+.csv-mapping-column-table td:nth-child(3),
+.csv-mapping-column-table th:nth-child(4),
+.csv-mapping-column-table td:nth-child(4) {
+  width: 170px;
+}
+
+.csv-mapping-prompt-output {
+  margin-top: 20px;
+}
+
+.csv-mapping-prompt-output textarea {
+  width: 100%;
+  min-height: 420px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .clickable-table-row {
   cursor: pointer;
 }

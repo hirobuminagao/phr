@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% set title = "健診結果CSVマッピング解析" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Utility</p>
+    <h1>健診結果CSVマッピング解析</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page export-page csv-mapping-lab-page">
+  {% if message %}
+  <section class="status-panel status-panel--success">{{ message }}</section>
+  {% endif %}
+  {% if error %}
+  <section class="status-panel status-panel--danger">{{ error }}</section>
+  {% endif %}
+
+  <section class="summary-grid">
+    <div class="summary-card"><span>解析ファイル</span><strong>{{ summary.file_count }}</strong><small>登録済み</small></div>
+    <div class="summary-card"><span>列数</span><strong>{{ summary.column_count }}</strong><small>解析済み</small></div>
+    <div class="summary-card"><span>行数</span><strong>{{ summary.row_count }}</strong><small>サンプル合計</small></div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>CSVをアップロードして解析</h2>
+        <p class="subtle">ヘッダー、サンプル値、型、機械候補をDBに保存します。実データ登録ではなく、マッピング下準備用です。</p>
+      </div>
+    </div>
+    <form method="post" action="/utilities/csv-mapping-lab/upload" enctype="multipart/form-data" class="form-grid csv-mapping-upload-form">
+      <label>
+        <span>CSVファイル</span>
+        <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      </label>
+      <label>
+        <span>健診機関コード</span>
+        <input name="facility_code" placeholder="0110119070">
+      </label>
+      <label>
+        <span>健診機関名</span>
+        <input name="facility_name" placeholder="円山クリニック">
+      </label>
+      <label>
+        <span>文字コード</span>
+        <input name="encoding" placeholder="空なら自動判定">
+      </label>
+      <label>
+        <span>ヘッダー行</span>
+        <input type="number" name="header_row_no" value="1" min="1" max="20">
+      </label>
+      <label>
+        <span>データ開始行</span>
+        <input type="number" name="data_start_row_no" value="2" min="1" max="50">
+      </label>
+      <label class="checkbox-line">
+        <input type="checkbox" name="replace_source_sha" value="1" checked>
+        <span>同じファイルは置き換える</span>
+      </label>
+      <div class="form-actions">
+        <button type="submit">解析する</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>解析済みファイル</h2>
+        <p class="subtle">列の内容を確認して、AIに渡すJSONの対象を選びます。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table csv-mapping-file-table">
+        <thead>
+          <tr>
+            <th>解析ID</th>
+            <th>ファイル</th>
+            <th>健診機関</th>
+            <th>行/列</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for file in files %}
+          <tr class="{% if selected_file_id == file.analysis_file_id %}is-selected-row{% endif %}">
+            <td><strong>{{ file.analysis_file_id }}</strong></td>
+            <td>
+              <strong>{{ file.source_file_name }}</strong>
+              <small>{{ file.encoding or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ file.facility_name or "-" }}</strong>
+              <small>{{ file.facility_code or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ file.row_count or 0 }} / {{ file.column_count or 0 }}</strong>
+              <small>行 / 列</small>
+            </td>
+            <td>
+              <span class="status-pill status-ready">{{ file.parse_status }}</span>
+              <small>{{ file.analysis_status }}</small>
+            </td>
+            <td><a class="ghost-button compact-action-button" href="/utilities/csv-mapping-lab?analysis_file_id={{ file.analysis_file_id }}">選択</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">解析済みファイルはまだありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if selected_file_id %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>AI確認用JSONを作る</h2>
+        <p class="subtle">列数が多いCSVは、100から150列くらいに分けて渡すとレビューしやすいです。</p>
+      </div>
+    </div>
+    <form method="post" action="/utilities/csv-mapping-lab/prompt" class="form-grid csv-mapping-prompt-form">
+      <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+      <label>
+        <span>開始列</span>
+        <input type="number" name="column_start" value="{{ prompt_form.column_start or '' }}" min="1" placeholder="1">
+      </label>
+      <label>
+        <span>終了列</span>
+        <input type="number" name="column_end" value="{{ prompt_form.column_end or '' }}" min="1" placeholder="120">
+      </label>
+      <label>
+        <span>前後列</span>
+        <input type="number" name="nearby_window" value="{{ prompt_form.nearby_window or '3' }}" min="0" max="10">
+      </label>
+      <label class="checkbox-line">
+        <input type="checkbox" name="only_unreviewed" value="1" {% if prompt_form.only_unreviewed == "1" %}checked{% endif %}>
+        <span>未レビューのみ</span>
+      </label>
+      <label class="checkbox-line">
+        <input type="checkbox" name="include_sensitive" value="1" {% if prompt_form.include_sensitive == "1" %}checked{% endif %}>
+        <span>個人系ヒント列も含める</span>
+      </label>
+      <div class="form-actions">
+        <button type="submit">JSON表示</button>
+        <button type="submit" formaction="/utilities/csv-mapping-lab/prompt/download">ダウンロード</button>
+      </div>
+    </form>
+
+    {% if prompt_json %}
+    <div class="csv-mapping-prompt-output">
+      <div class="section-heading">
+        <div>
+          <h3>今回のJSON</h3>
+          <p class="subtle">このままコピーするか、ダウンロードしたJSONをCodexに添付してください。</p>
+        </div>
+        <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-mapping-prompt-json">コピー</button>
+      </div>
+      <textarea id="csv-mapping-prompt-json" readonly spellcheck="false">{{ prompt_json }}</textarea>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>列プレビュー</h2>
+        <p class="subtle">先頭120列まで表示しています。全体確認はJSON出力で範囲を切って見ます。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table csv-mapping-column-table">
+        <thead>
+          <tr>
+            <th>列</th>
+            <th>ヘッダー</th>
+            <th>型</th>
+            <th>候補</th>
+            <th>サンプル</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for column in columns %}
+          <tr>
+            <td><strong>{{ column.column_no }}</strong></td>
+            <td>
+              <strong>{{ column.header_name or "-" }}</strong>
+              <small>{{ column.normalized_header_name or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ column.inferred_value_type or "-" }}</strong>
+              <small>{{ column.non_blank_count or 0 }}件 / sensitive {{ "あり" if column.sensitive_hint else "なし" }}</small>
+            </td>
+            <td>
+              <strong>{{ column.candidate_target_kind or "-" }}</strong>
+              <small>{{ column.candidate_namecode or column.candidate_ledger_field or "-" }}</small>
+            </td>
+            <td><small>{{ column.sample_values_json }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">列プレビューはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
