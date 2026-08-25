@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY apps /app/apps
 COPY scripts /app/scripts
+COPY docs /app/docs
 
 EXPOSE 8011
 
