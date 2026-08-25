@@ -145,13 +145,21 @@
         <span>前後列</span>
         <input type="number" name="nearby_window" value="{{ prompt_form.nearby_window or '3' }}" min="0" max="10">
       </label>
-      <label class="checkbox-line">
+      <label class="choice-card csv-mapping-option-card{% if prompt_form.only_unreviewed == "1" %} is-selected{% endif %}" data-checkbox-choice-card>
         <input type="checkbox" name="only_unreviewed" value="1" {% if prompt_form.only_unreviewed == "1" %}checked{% endif %}>
-        <span>未レビューのみ</span>
+        <span>
+          <strong>未レビューのみ</strong>
+          <small>まだ人が判断していない列だけをAI投入JSONに含めます。</small>
+        </span>
+        <b>{{ "ON" if prompt_form.only_unreviewed == "1" else "OFF" }}</b>
       </label>
-      <label class="checkbox-line">
+      <label class="choice-card csv-mapping-option-card{% if prompt_form.include_sensitive == "1" %} is-selected{% endif %}" data-checkbox-choice-card>
         <input type="checkbox" name="include_sensitive" value="1" {% if prompt_form.include_sensitive == "1" %}checked{% endif %}>
-        <span>個人系ヒント列も含める</span>
+        <span>
+          <strong>個人系ヒント列も含める</strong>
+          <small>氏名、保険証番号、生年月日などに見える列もAI投入JSONへ含めます。保存値はサンプル化済みです。</small>
+        </span>
+        <b>{{ "ON" if prompt_form.include_sensitive == "1" else "OFF" }}</b>
       </label>
       <div class="form-actions">
         <button type="submit">JSON表示</button>

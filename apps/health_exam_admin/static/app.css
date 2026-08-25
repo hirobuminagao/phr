@@ -3519,6 +3519,26 @@ a.home-menu-card.is-navigating {
   align-items: end;
 }
 
+.csv-mapping-option-card {
+  align-items: flex-start;
+  min-height: 112px;
+}
+
+.csv-mapping-option-card b {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef2f6;
+  color: #526171;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.csv-mapping-option-card.is-selected b {
+  background: #128263;
+  color: #fff;
+}
+
 .csv-mapping-file-table th:nth-child(1),
 .csv-mapping-file-table td:nth-child(1) {
   width: 80px;

@@ -338,6 +338,20 @@
   }
   updatePersonSelectionInputPanels();
 
+  const updateCheckboxChoiceCard = (card) => {
+    const input = card.querySelector("input[type='checkbox']");
+    const badge = card.querySelector("b");
+    const checked = Boolean(input?.checked);
+    card.classList.toggle("is-selected", checked);
+    if (badge) badge.textContent = checked ? "ON" : "OFF";
+  };
+
+  for (const card of document.querySelectorAll("[data-checkbox-choice-card]")) {
+    const input = card.querySelector("input[type='checkbox']");
+    updateCheckboxChoiceCard(card);
+    input?.addEventListener("change", () => updateCheckboxChoiceCard(card));
+  }
+
   const parseSortValue = (cell, type) => {
     const raw = String(cell?.dataset.sortValue ?? cell?.textContent ?? "").trim();
     if (type === "number" || type === "percent") {
