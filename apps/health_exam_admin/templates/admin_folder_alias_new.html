@@ -115,12 +115,12 @@
         </div>
         <button type="button" class="ghost-button" data-modal-close>閉じる</button>
       </div>
-      <div class="export-facility-search">
-        <label>
+      <div class="export-facility-search alias-facility-search">
+        <label class="alias-facility-search__code">
           <span>コード</span>
           <input data-alias-facility-search-code data-modal-focus placeholder="健診機関コード / 医療機関コード">
         </label>
-        <label>
+        <label class="alias-facility-search__prefecture">
           <span>都道府県</span>
           <input data-alias-facility-search-prefecture list="alias-facility-new-prefectures" placeholder="例: 大阪府">
           <datalist id="alias-facility-new-prefectures">
@@ -129,7 +129,7 @@
             {% endfor %}
           </datalist>
         </label>
-        <label>
+        <label class="alias-facility-search__keyword">
           <span>キーワード</span>
           <input data-alias-facility-search-keyword placeholder="名称 / 住所">
         </label>

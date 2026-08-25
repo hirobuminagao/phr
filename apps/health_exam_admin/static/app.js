@@ -796,10 +796,29 @@
   }
 
   let aliasFacilityTargetInput = null;
+  const codeFromFolderAliasName = (folderName) => {
+    const firstPart = String(folderName || "").trim().split("_")[0]?.trim() || "";
+    return /^[0-9A-Za-z-]{2,}$/.test(firstPart) ? firstPart : "";
+  };
   for (const button of document.querySelectorAll("[data-alias-facility-picker-open]")) {
     button.addEventListener("click", () => {
       const targetId = button.getAttribute("data-target-input") || "";
       aliasFacilityTargetInput = targetId ? document.getElementById(targetId) : null;
+      const form = button.closest("form");
+      const folderInput = form?.querySelector("[data-folder-alias-src]");
+      const code = codeFromFolderAliasName(folderInput?.value);
+      const modal = document.getElementById(button.getAttribute("data-modal-open") || "");
+      if (!code || !modal) return;
+      window.setTimeout(() => {
+        const codeInput = modal.querySelector("[data-alias-facility-search-code]");
+        const prefectureInput = modal.querySelector("[data-alias-facility-search-prefecture]");
+        const keywordInput = modal.querySelector("[data-alias-facility-search-keyword]");
+        const searchButton = modal.querySelector("[data-alias-facility-search]");
+        if (codeInput) codeInput.value = code;
+        if (prefectureInput) prefectureInput.value = "";
+        if (keywordInput) keywordInput.value = "";
+        searchButton?.click();
+      }, 0);
     });
   }
   const selectAliasFacility = (element) => {

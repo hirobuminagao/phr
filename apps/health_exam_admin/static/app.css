@@ -2369,6 +2369,49 @@ a.home-menu-card.is-navigating {
   margin-bottom: 14px;
 }
 
+.export-facility-search > .primary-button {
+  align-self: end;
+  margin-left: 8px;
+}
+
+.alias-facility-search {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(140px, 180px) minmax(280px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.alias-facility-search label {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.alias-facility-search label span {
+  white-space: nowrap;
+}
+
+.alias-facility-search__keyword {
+  min-width: 280px;
+}
+
+@media (max-width: 760px) {
+  .alias-facility-search {
+    grid-template-columns: 1fr;
+  }
+
+  .alias-facility-search__keyword {
+    min-width: 0;
+  }
+
+  .alias-facility-search label {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 #manual-draft-facility-picker-table th:last-child,
 #manual-draft-facility-picker-table td:last-child {
   width: 74px;
