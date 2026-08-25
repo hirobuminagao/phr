@@ -3635,7 +3635,26 @@ def load_alias_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[s
     return [dict(row) for row in cur.fetchall()]
 
 
-def load_facility_master_admin_rows(cur: Any, *, limit: int = 500) -> list[dict[str, Any]]:
+def load_facility_master_admin_rows(cur: Any, *, limit: int = 500, keyword: str | None = None) -> list[dict[str, Any]]:
+    where_sql = ""
+    params: list[Any] = []
+    keyword = (keyword or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        where_sql = """
+        WHERE (
+          exam_facility_code LIKE %s
+          OR exam_facility_name LIKE %s
+          OR exam_facility_display_name LIKE %s
+          OR medical_institution_code LIKE %s
+          OR reservation_system_medical_institution_code LIKE %s
+          OR postal_code LIKE %s
+          OR address LIKE %s
+          OR phone_number LIKE %s
+          OR note LIKE %s
+        )
+        """
+        params.extend([like] * 9)
     cur.execute(
         f"""
         SELECT
@@ -3654,10 +3673,11 @@ def load_facility_master_admin_rows(cur: Any, *, limit: int = 500) -> list[dict[
           is_active,
           updated_at
         FROM {qname(master_db())}.exam_facilities
+        {where_sql}
         ORDER BY is_active DESC, exam_facility_code IS NULL, exam_facility_code, exam_facility_name
         LIMIT %s
         """,
-        (limit,),
+        [*params, limit],
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -11903,7 +11923,7 @@ def admin_folder_aliases(request: Request) -> Response:
             event_options = load_event_options(cur)
             alias_facility_rows = load_alias_facility_admin_rows(cur)
             alias_rows = load_folder_alias_admin_rows(cur)
-            facility_rows = load_facility_master_admin_rows(cur, limit=2000)
+            facility_rows = load_facility_master_admin_rows(cur, limit=60000)
             csv_format_options = load_csv_format_options(cur)
             alias_count_by_event: dict[str, int] = {}
             for row in alias_rows:
@@ -11944,8 +11964,13 @@ def admin_facility_master(request: Request) -> Response:
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
+        facility_keyword = request.query_params.get("q", "").strip()
         try:
-            facility_rows = load_facility_master_admin_rows(cur)
+            facility_rows = load_facility_master_admin_rows(
+                cur,
+                limit=2000 if facility_keyword else 500,
+                keyword=facility_keyword,
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -11956,6 +11981,7 @@ def admin_facility_master(request: Request) -> Response:
             "request": request,
             "user": user,
             "facility_rows": facility_rows,
+            "filters": {"q": facility_keyword},
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -12120,7 +12146,7 @@ def new_admin_folder_alias_form(request: Request) -> Response:
         cur = dict_cursor(conn)
         event_options = load_event_options(cur)
         csv_format_options = load_csv_format_options(cur)
-        facility_rows = load_facility_master_admin_rows(cur, limit=2000)
+        facility_rows = load_facility_master_admin_rows(cur, limit=60000)
         cur.close()
     return templates.TemplateResponse(
         "admin_folder_alias_new.html",
