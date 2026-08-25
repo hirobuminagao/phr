@@ -66,7 +66,7 @@
         </label>
       </div>
 
-      <section class="person-selection-subpanel">
+      <section class="person-selection-subpanel" data-person-input-panel="single">
 	        <h3>一人ずつ追加</h3>
 	        <p class="subtle">条件を入力して検索します。候補表示後に、全員または選択した人だけを作業リストへ追加します。</p>
         <div class="form-grid four-columns">
@@ -113,7 +113,7 @@
         </div>
       </section>
 
-      <section class="person-selection-subpanel">
+      <section class="person-selection-subpanel" data-person-input-panel="bulk">
         <h3>複数まとめて追加</h3>
       <div class="switch-row">
         <span>先頭行</span>
@@ -126,12 +126,10 @@
       <div class="person-selection-column-editor" data-person-column-editor>
         <div class="person-selection-column-editor-head">
           <div>
-            <div class="person-selection-column-title-row">
-              <strong>列割当</strong>
-              <span class="person-column-editing-status" data-person-column-editing-status hidden></span>
-            </div>
+            <strong>列割当</strong>
             <small>貼り付けた列に、どの項目が入っているかを指定します。</small>
           </div>
+          <span class="person-column-editing-status" data-person-column-editing-status hidden></span>
           <div class="button-row">
             <button type="button" class="ghost-button compact-action-button" data-person-column-mode="assign">項目編集</button>
             <button type="button" class="ghost-button compact-action-button" data-person-column-mode="reorder">入れ替え</button>

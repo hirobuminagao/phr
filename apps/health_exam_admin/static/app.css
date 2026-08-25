@@ -1212,9 +1212,9 @@ a.home-menu-card.is-navigating {
 }
 
 .person-selection-column-editor-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 14px;
 }
 
@@ -1223,23 +1223,27 @@ a.home-menu-card.is-navigating {
   display: block;
 }
 
-.person-selection-column-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .person-column-editing-status {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 3px 10px;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 148px;
+  padding: 6px 16px;
   border: 1px solid #0f8a68;
   border-radius: 999px;
   background: #e9f8f2;
   color: #0b6f54;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 900;
+}
+
+.person-column-editing-status[hidden] {
+  display: none !important;
+}
+
+.person-selection-column-editor-head > .button-row {
+  justify-content: flex-end;
 }
 
 .person-selection-column-editor [data-person-column-done] {
@@ -1305,6 +1309,27 @@ a.home-menu-card.is-navigating {
 
 .person-column-picker-modal {
   max-width: 760px;
+}
+
+.person-column-picker-modal .edit-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.person-column-picker-modal .edit-modal__header > div {
+  min-width: 0;
+}
+
+.person-column-picker-modal .edit-modal__header > button {
+  flex: 0 0 auto;
+}
+
+.person-column-picker-modal .edit-modal__footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
 }
 
 .person-column-picker-options {
@@ -4303,6 +4328,14 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   .person-selection-column-cards,
   .person-column-picker-options {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .person-selection-column-editor-head {
+    grid-template-columns: 1fr;
+  }
+
+  .person-selection-column-editor-head > .button-row {
+    justify-content: flex-start;
   }
 
   .person-selection-mode {

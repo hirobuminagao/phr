@@ -319,6 +319,13 @@
     });
   }
 
+  const updatePersonSelectionInputPanels = () => {
+    const selectedMode = document.querySelector(".person-selection-mode input[type='radio']:checked")?.value || "bulk";
+    for (const panel of document.querySelectorAll("[data-person-input-panel]")) {
+      panel.hidden = panel.getAttribute("data-person-input-panel") !== selectedMode;
+    }
+  };
+
   for (const radio of document.querySelectorAll(".person-selection-mode input[type='radio']")) {
     radio.addEventListener("change", () => {
       const group = radio.closest(".person-selection-mode");
@@ -326,8 +333,10 @@
         const input = card.querySelector("input[type='radio']");
         card.classList.toggle("is-selected", Boolean(input?.checked));
       }
+      updatePersonSelectionInputPanels();
     });
   }
+  updatePersonSelectionInputPanels();
 
   const parseSortValue = (cell, type) => {
     const raw = String(cell?.dataset.sortValue ?? cell?.textContent ?? "").trim();
