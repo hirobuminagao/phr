@@ -1201,6 +1201,10 @@ a.home-menu-card.is-navigating {
   background: #f8fafc;
 }
 
+.person-selection-subpanel[hidden] {
+  display: none !important;
+}
+
 .person-selection-subpanel h3 {
   margin: 0;
   font-size: 1rem;
