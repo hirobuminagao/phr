@@ -4329,6 +4329,7 @@ def scan_folder_name_from_path(path_text: str | None) -> str:
 
 
 def load_unknown_scan_folder_rows(cur: Any, *, event_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    excluded_folder_names = {"xml作成_出力履歴"}
     where_parts = [
         "ee.phase = 'SCAN_FILES'",
         "ee.error_code = 'UNKNOWN_MEDICAL_FOLDER'",
@@ -4337,6 +4338,9 @@ def load_unknown_scan_folder_rows(cur: Any, *, event_id: str, limit: int = 50) -
     if event_id:
         where_parts.append("er.input_base = %s")
         params.append(f"event_id={event_id}")
+    for folder_name in excluded_folder_names:
+        where_parts.append("ee.field_value NOT LIKE %s")
+        params.append(f"%{folder_name}%")
     params.append(limit)
     cur.execute(
         f"""
@@ -4364,6 +4368,7 @@ def load_unknown_scan_folder_rows(cur: Any, *, event_id: str, limit: int = 50) -
         match = re.search(r"event_id=(\d+)", input_base)
         row["event_id"] = match.group(1) if match else event_id
         row["src_folder_raw"] = scan_folder_name_from_path(str(row.get("field_value") or ""))
+    rows = [row for row in rows if str(row.get("src_folder_raw") or "").strip() not in excluded_folder_names]
     folder_names = sorted({str(row.get("src_folder_raw") or "").strip() for row in rows if row.get("src_folder_raw")})
     event_ids = sorted({str(row.get("event_id") or "").strip() for row in rows if row.get("event_id")})
     if not folder_names or not event_ids:
