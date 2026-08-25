@@ -29,6 +29,7 @@
     <div class="summary-card"><span>解析ファイル</span><strong>{{ summary.file_count }}</strong><small>登録済み</small></div>
     <div class="summary-card"><span>列数</span><strong>{{ summary.column_count }}</strong><small>解析済み</small></div>
     <div class="summary-card"><span>行数</span><strong>{{ summary.row_count }}</strong><small>サンプル合計</small></div>
+    <div class="summary-card"><span>ルール</span><strong>{{ rule_summary.active_rule_count }}</strong><small>有効 / 全{{ rule_summary.rule_count }}</small></div>
   </section>
 
   <section class="panel">
@@ -196,8 +197,12 @@
     <div class="section-heading">
       <div>
         <h2>列プレビュー</h2>
-        <p class="subtle">先頭120列まで表示しています。全体確認はJSON出力で範囲を切って見ます。</p>
+        <p class="subtle">先頭120列まで表示しています。ルールで機械候補を付け、人が確認する列を減らします。</p>
       </div>
+      <form method="post" action="/utilities/csv-mapping-lab/rules/reapply">
+        <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+        <button type="submit" class="ghost-button compact-action-button">ルール再適用</button>
+      </form>
     </div>
     <div class="table-panel">
       <table class="data-table csv-mapping-column-table">
@@ -206,8 +211,9 @@
             <th>列</th>
             <th>ヘッダー</th>
             <th>型</th>
-            <th>候補</th>
+            <th>機械判定</th>
             <th>サンプル</th>
+            <th>ルール化</th>
           </tr>
         </thead>
         <tbody>
@@ -225,11 +231,56 @@
             <td>
               <strong>{{ column.candidate_target_kind or "-" }}</strong>
               <small>{{ column.candidate_namecode or column.candidate_ledger_field or "-" }}</small>
+              <small>score {{ column.candidate_confidence or "-" }} / hit {{ column.rule_hit_count or 0 }}</small>
+              <small>{{ column.analysis_note or "-" }}</small>
             </td>
             <td><small>{{ column.sample_values_json }}</small></td>
+            <td>
+              <details class="csv-mapping-rule-details">
+                <summary>追加</summary>
+                <form method="post" action="/utilities/csv-mapping-lab/rules/create" class="csv-mapping-rule-form">
+                  <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+                  <input type="hidden" name="column_no" value="{{ column.column_no }}">
+                  <label>
+                    <span>範囲</span>
+                    <select name="scope">
+                      <option value="facility" selected>この健診機関</option>
+                      <option value="global">共通</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>条件</span>
+                    <select name="condition_type">
+                      <option value="normalized_header_exact" selected>正規化一致</option>
+                      <option value="header_exact">完全一致</option>
+                      <option value="header_contains">部分一致</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>対象</span>
+                    <select name="target_kind">
+                      <option value="">選択</option>
+                      <option value="LEDGER_FIELD" {% if column.candidate_target_kind == "LEDGER_FIELD" %}selected{% endif %}>基本情報</option>
+                      <option value="EXAM_ITEM_VALUE" {% if column.candidate_target_kind == "EXAM_ITEM_VALUE" %}selected{% endif %}>検査項目</option>
+                      <option value="IGNORE" {% if column.candidate_target_kind == "IGNORE" %}selected{% endif %}>未使用</option>
+                      <option value="REVIEW" {% if column.candidate_target_kind == "REVIEW" %}selected{% endif %}>要確認</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>namecode</span>
+                    <input name="target_namecode" value="{{ column.candidate_namecode or '' }}" placeholder="9N...">
+                  </label>
+                  <label>
+                    <span>ledger field</span>
+                    <input name="target_ledger_field" value="{{ column.candidate_ledger_field or '' }}" placeholder="name_kana_raw">
+                  </label>
+                  <button type="submit" class="compact-action-button">保存</button>
+                </form>
+              </details>
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="5">列プレビューはありません。</td></tr>
+          <tr><td colspan="6">列プレビューはありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>

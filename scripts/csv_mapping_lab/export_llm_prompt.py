@@ -87,7 +87,42 @@ def fetch_analysis(conn: Any, *, lab_db: str, analysis_file_id: int) -> tuple[di
         (analysis_file_id,),
     )
     columns = [dict(row) for row in cur.fetchall()]
+    hits_by_column_id: dict[int, list[dict[str, Any]]] = {}
+    try:
+        cur.execute(
+            f"""
+            SELECT
+              `hit`.`analysis_column_id`,
+              `hit`.`rule_id`,
+              `hit`.`score`,
+              `hit`.`reason`,
+              `rule`.`scope`,
+              `rule`.`condition_type`,
+              `rule`.`header_pattern`,
+              `rule`.`target_kind`,
+              `rule`.`target_namecode`,
+              `rule`.`target_ledger_field`,
+              `rule`.`mapping_strategy`
+            FROM {qname(lab_db)}.`csv_mapping_rule_hits` AS `hit`
+            INNER JOIN {qname(lab_db)}.`csv_mapping_rules` AS `rule`
+              ON `rule`.`rule_id` = `hit`.`rule_id`
+            WHERE `hit`.`analysis_column_id` IN (
+              SELECT `analysis_column_id`
+              FROM {qname(lab_db)}.`analysis_columns`
+              WHERE `analysis_file_id` = %s
+            )
+            ORDER BY `hit`.`analysis_column_id`, `hit`.`score` DESC
+            """,
+            (analysis_file_id,),
+        )
+        for row in cur.fetchall():
+            hit = dict(row)
+            hits_by_column_id.setdefault(int(hit["analysis_column_id"]), []).append(hit)
+    except Exception:
+        hits_by_column_id = {}
     cur.close()
+    for column in columns:
+        column["rule_hits"] = hits_by_column_id.get(int(column["analysis_column_id"]), [])
     return dict(file_row), columns
 
 
@@ -156,6 +191,21 @@ def compact_column(column: dict[str, Any], *, all_columns_by_no: dict[int, dict[
             "seed_exported": bool(column.get("seed_exported")),
         },
         "analysis_note": column.get("analysis_note"),
+        "rule_hits": [
+            {
+                "rule_id": hit.get("rule_id"),
+                "score": hit.get("score"),
+                "scope": hit.get("scope"),
+                "condition_type": hit.get("condition_type"),
+                "header_pattern": hit.get("header_pattern"),
+                "target_kind": hit.get("target_kind"),
+                "target_namecode": hit.get("target_namecode"),
+                "target_ledger_field": hit.get("target_ledger_field"),
+                "mapping_strategy": hit.get("mapping_strategy"),
+                "reason": hit.get("reason"),
+            }
+            for hit in column.get("rule_hits", [])
+        ],
         "related_column_nos": decode_json_value(column.get("related_column_nos_json")) or [],
         "value_profile": decode_json_value(column.get("value_profile_json")) or {},
     }
@@ -200,6 +250,7 @@ def build_prompt(file_row: dict[str, Any], columns: list[dict[str, Any]], select
             "mapping_strategies": ["DIRECT", "MULTI_COLUMN_JOIN", "DERIVED_CODE", "METHOD_SELECTION", "IGNORE", "NEEDS_CONFIRMATION"],
             "notes": [
                 "Prefer exact meaning over superficial header similarity.",
+                "Use rule_hits as prior knowledge, but do not treat it as final when header/value evidence conflicts.",
                 "Do not map facility judgement columns as exam values unless the target meaning is clear.",
                 "For fasting/random triglyceride or glucose, mark NEEDS_CONFIRMATION when no discriminator exists.",
                 "For repeated findings, suggest related columns and whether to join or keep separate.",

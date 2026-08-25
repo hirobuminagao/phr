@@ -60,13 +60,14 @@ from scripts.from_medical.script_lib.specific_health_checker import (
     aggregate_specific_result_with_details,
 )
 from scripts.from_medical.script_lib.specific_health_required_namecodes import fetch_specific_health_required_namecodes
-from scripts.csv_mapping_lab.analyze_csv import insert_analysis as insert_csv_mapping_analysis
+from scripts.csv_mapping_lab.analyze_csv import insert_analysis as insert_csv_mapping_analysis, normalize_header
 from scripts.csv_mapping_lab.export_llm_prompt import (
     build_prompt as build_csv_mapping_prompt,
     fetch_analysis as fetch_csv_mapping_analysis,
     filter_columns as filter_csv_mapping_columns,
     json_default as csv_mapping_json_default,
 )
+from scripts.csv_mapping_lab.rule_engine import apply_rules_to_analysis
 from scripts.hia.script_lib.config_loader import config_bool, config_value, load_yaml_config
 from scripts.hia.script_lib.fund_delivery_list_builder import (
     FundDeliveryListConfig,
@@ -11311,6 +11312,19 @@ def load_csv_mapping_lab_files(cur: Any, *, limit: int = 50) -> list[dict[str, A
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_csv_mapping_lab_file(cur: Any, *, analysis_file_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT *
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_files`
+        WHERE `analysis_file_id` = %s
+        """,
+        (analysis_file_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
 def load_csv_mapping_lab_summary(cur: Any) -> dict[str, int]:
     cur.execute(
         f"""
@@ -11330,21 +11344,62 @@ def load_csv_mapping_lab_summary(cur: Any) -> dict[str, int]:
 
 
 def load_csv_mapping_lab_columns(cur: Any, *, analysis_file_id: int, limit: int = 120) -> list[dict[str, Any]]:
-    cur.execute(
-        f"""
-        SELECT
-          `column_no`, `header_name`, `normalized_header_name`, `inferred_value_type`,
-          `inferred_format`, `blank_count`, `non_blank_count`, `sensitive_hint`,
-          `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`,
-          `candidate_confidence`, `sample_values_json`
-        FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
-        WHERE `analysis_file_id` = %s
-        ORDER BY `column_no`
-        LIMIT %s
-        """,
-        (analysis_file_id, limit),
-    )
+    try:
+        cur.execute(
+            f"""
+            SELECT
+              `analysis_column_id`, `column_no`, `header_name`, `normalized_header_name`, `inferred_value_type`,
+              `inferred_format`, `blank_count`, `non_blank_count`, `sensitive_hint`,
+              `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`,
+              `candidate_confidence`, `analysis_note`, `decision_status`, `sample_values_json`,
+              (
+                SELECT COUNT(*)
+                FROM {qname(CSV_MAPPING_LAB)}.`csv_mapping_rule_hits` AS `hit`
+                WHERE `hit`.`analysis_column_id` = `analysis_columns`.`analysis_column_id`
+              ) AS `rule_hit_count`
+            FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns` AS `analysis_columns`
+            WHERE `analysis_columns`.`analysis_file_id` = %s
+            ORDER BY `column_no`
+            LIMIT %s
+            """,
+            (analysis_file_id, limit),
+        )
+    except Exception:
+        cur.execute(
+            f"""
+            SELECT
+              `analysis_column_id`, `column_no`, `header_name`, `normalized_header_name`, `inferred_value_type`,
+              `inferred_format`, `blank_count`, `non_blank_count`, `sensitive_hint`,
+              `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`,
+              `candidate_confidence`, `analysis_note`, `decision_status`, `sample_values_json`,
+              0 AS `rule_hit_count`
+            FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+            WHERE `analysis_file_id` = %s
+            ORDER BY `column_no`
+            LIMIT %s
+            """,
+            (analysis_file_id, limit),
+        )
     return [dict(row) for row in cur.fetchall()]
+
+
+def load_csv_mapping_lab_rule_summary(cur: Any) -> dict[str, int]:
+    try:
+        cur.execute(
+            f"""
+            SELECT
+              COUNT(*) AS rule_count,
+              COALESCE(SUM(CASE WHEN `active` = 1 THEN 1 ELSE 0 END), 0) AS active_rule_count
+            FROM {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules`
+            """
+        )
+    except Exception:
+        return {"rule_count": 0, "active_rule_count": 0}
+    row = cur.fetchone() or {}
+    return {
+        "rule_count": int(row.get("rule_count") or 0),
+        "active_rule_count": int(row.get("active_rule_count") or 0),
+    }
 
 
 def csv_mapping_lab_default_context(
@@ -11362,7 +11417,9 @@ def csv_mapping_lab_default_context(
         cur = dict_cursor(conn)
         files = load_csv_mapping_lab_files(cur)
         summary = load_csv_mapping_lab_summary(cur)
+        rule_summary = load_csv_mapping_lab_rule_summary(cur)
         columns = load_csv_mapping_lab_columns(cur, analysis_file_id=selected_file_id) if selected_file_id else []
+        selected_file = load_csv_mapping_lab_file(cur, analysis_file_id=selected_file_id) if selected_file_id else None
         cur.close()
     return {
         "request": request,
@@ -11370,7 +11427,9 @@ def csv_mapping_lab_default_context(
         "message": message,
         "error": error,
         "summary": summary,
+        "rule_summary": rule_summary,
         "files": files,
+        "selected_file": selected_file,
         "selected_file_id": selected_file_id,
         "columns": columns,
         "prompt_json": prompt_json,
@@ -11472,6 +11531,15 @@ async def upload_csv_mapping_lab(
                 parse_status=parse_status,
                 parse_error=parse_error,
             )
+            try:
+                apply_rules_to_analysis(
+                    conn,
+                    lab_db=CSV_MAPPING_LAB,
+                    analysis_file_id=analysis_file_id,
+                    facility_code=facility_code.strip() or None,
+                )
+            except Exception as exc:
+                LOGGER.warning("failed to apply csv mapping rules: %s", exc)
             conn.commit()
     except Exception as exc:
         return RedirectResponse(f"/utilities/csv-mapping-lab?error={quote(str(exc))}", status_code=303)
@@ -11482,6 +11550,146 @@ async def upload_csv_mapping_lab(
             LOGGER.warning("failed to delete csv mapping lab upload: %s", upload_path)
     return RedirectResponse(
         f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&message={quote('CSVを解析しました。')}",
+        status_code=303,
+    )
+
+
+@app.post("/utilities/csv-mapping-lab/rules/reapply")
+async def reapply_csv_mapping_lab_rules(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
+    if not analysis_file_id:
+        return RedirectResponse("/utilities/csv-mapping-lab?error=解析ファイルを選択してください。", status_code=303)
+    try:
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            file_row = load_csv_mapping_lab_file(cur, analysis_file_id=analysis_file_id)
+            if not file_row:
+                raise ValueError("解析ファイルが見つかりません。")
+            result = apply_rules_to_analysis(
+                conn,
+                lab_db=CSV_MAPPING_LAB,
+                analysis_file_id=analysis_file_id,
+                facility_code=file_row.get("facility_code"),
+            )
+            conn.commit()
+    except Exception as exc:
+        return RedirectResponse(
+            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote(str(exc))}",
+            status_code=303,
+        )
+    message = f"ルールを再適用しました。rules={result['rules']} hits={result['hits']} applied={result['applied_columns']}"
+    return RedirectResponse(
+        f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&message={quote(message)}",
+        status_code=303,
+    )
+
+
+@app.post("/utilities/csv-mapping-lab/rules/create")
+async def create_csv_mapping_lab_rule(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
+    column_no = parse_positive_int(str(form.get("column_no") or ""), default=0, maximum=999999)
+    if not analysis_file_id or not column_no:
+        return RedirectResponse("/utilities/csv-mapping-lab?error=解析列を選択してください。", status_code=303)
+    scope = str(form.get("scope") or "facility")
+    if scope not in {"global", "facility", "event"}:
+        scope = "facility"
+    condition_type = str(form.get("condition_type") or "normalized_header_exact")
+    if condition_type not in {"header_exact", "normalized_header_exact", "header_contains"}:
+        condition_type = "normalized_header_exact"
+    target_kind = str(form.get("target_kind") or "")
+    if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE", "REVIEW"}:
+        return RedirectResponse(
+            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote('target kindを選択してください。')}",
+            status_code=303,
+        )
+    target_namecode = str(form.get("target_namecode") or "").strip() or None
+    target_ledger_field = str(form.get("target_ledger_field") or "").strip() or None
+    if target_kind == "EXAM_ITEM_VALUE" and not target_namecode:
+        return RedirectResponse(
+            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote('namecodeを入力してください。')}",
+            status_code=303,
+        )
+    if target_kind == "LEDGER_FIELD" and not target_ledger_field:
+        return RedirectResponse(
+            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote('ledger fieldを入力してください。')}",
+            status_code=303,
+        )
+    if target_kind != "EXAM_ITEM_VALUE":
+        target_namecode = None
+    if target_kind != "LEDGER_FIELD":
+        target_ledger_field = None
+    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "NEEDS_CONFIRMATION" if target_kind == "REVIEW" else "DIRECT"
+    actor = str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or "")
+    try:
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            file_row = load_csv_mapping_lab_file(cur, analysis_file_id=analysis_file_id)
+            if not file_row:
+                raise ValueError("解析ファイルが見つかりません。")
+            cur.execute(
+                f"""
+                SELECT `header_name`, `normalized_header_name`, `inferred_value_type`
+                FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+                WHERE `analysis_file_id` = %s AND `column_no` = %s
+                """,
+                (analysis_file_id, column_no),
+            )
+            column = cur.fetchone()
+            if not column:
+                raise ValueError("解析列が見つかりません。")
+            header_name = str(column.get("header_name") or "")
+            normalized_header = str(column.get("normalized_header_name") or normalize_header(header_name) or "")
+            cur.execute(
+                f"""
+                INSERT INTO {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules` (
+                  `scope`, `facility_code`, `event_id`, `condition_type`, `header_pattern`,
+                  `normalized_header_pattern`, `value_type`, `target_kind`, `target_namecode`,
+                  `target_ledger_field`, `mapping_strategy`, `confidence`, `reason`,
+                  `created_by`, `updated_by`
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0.9000, %s, %s, %s)
+                """,
+                (
+                    scope,
+                    file_row.get("facility_code") if scope == "facility" else None,
+                    file_row.get("event_id") if scope == "event" else None,
+                    condition_type,
+                    header_name,
+                    normalized_header,
+                    column.get("inferred_value_type"),
+                    target_kind,
+                    target_namecode,
+                    target_ledger_field,
+                    mapping_strategy,
+                    f"解析ID {analysis_file_id} 列 {column_no} から作成",
+                    actor,
+                    actor,
+                ),
+            )
+            apply_rules_to_analysis(
+                conn,
+                lab_db=CSV_MAPPING_LAB,
+                analysis_file_id=analysis_file_id,
+                facility_code=file_row.get("facility_code"),
+            )
+            conn.commit()
+    except Exception as exc:
+        return RedirectResponse(
+            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote(str(exc))}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&message={quote('ルールを追加して再適用しました。')}",
         status_code=303,
     )
 

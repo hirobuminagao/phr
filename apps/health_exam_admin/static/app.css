@@ -3526,6 +3526,42 @@ a.home-menu-card.is-navigating {
   gap: 10px;
 }
 
+.csv-mapping-rule-details {
+  min-width: 220px;
+}
+
+.csv-mapping-rule-details summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--green);
+}
+
+.csv-mapping-rule-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.csv-mapping-rule-form label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.csv-mapping-rule-form label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.csv-mapping-rule-form input,
+.csv-mapping-rule-form select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
 .csv-mapping-option-card::before {
   inline-size: 14px;
   block-size: 14px;

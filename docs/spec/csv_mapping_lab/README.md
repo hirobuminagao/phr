@@ -163,6 +163,51 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - `seed_target`: seed化対象か。
 - `seed_exported`: seedへ反映済みか。
 
+### `csv_mapping_rules`
+
+再利用するマッピングルール本体。
+
+主な項目:
+
+- `rule_id`: ルールID。
+- `scope`: `global` / `facility` / `event`。
+- `facility_code`: `scope=facility` の時の健診機関コード。
+- `event_id`: `scope=event` の時のイベントID。初期画面では未使用。
+- `condition_type`: `header_exact` / `normalized_header_exact` / `header_contains` / `sensitive_category`。
+- `header_pattern`: 元ヘッダー条件。
+- `normalized_header_pattern`: 正規化ヘッダー条件。
+- `value_type`: `NUMERIC` / `DATE` / `CODE` / `TEXT` / `MIXED` など。NULLなら型不問。
+- `sensitive_category`: 個人系カテゴリ。NULLなら不問。
+- `target_kind`: `LEDGER_FIELD` / `EXAM_ITEM_VALUE` / `IGNORE` / `REVIEW`。
+- `target_namecode`: 検査項目値へ寄せる場合の `namecode`。
+- `target_ledger_field`: 基本情報へ寄せる場合のledger field。
+- `mapping_strategy`: `DIRECT` / `MULTI_COLUMN_JOIN` / `DERIVED_CODE` / `METHOD_SELECTION` / `IGNORE` / `NEEDS_CONFIRMATION`。
+- `confidence`: ルール信頼度。
+- `reason`: ルール根拠。
+- `active`: 有効フラグ。
+
+### `csv_mapping_rule_hits`
+
+解析列にどのルールが当たったかを記録する。
+
+主な項目:
+
+- `analysis_column_id`: 対象の解析列。
+- `rule_id`: ヒットしたルール。
+- `score`: 適用スコア。
+- `reason`: ヒット理由。
+
+## ルール辞書の適用
+
+- CSVアップロード直後に、登録済みルールを自動適用する。
+- 画面から「ルール再適用」もできる。
+- `decision_status` が `UNREVIEWED` の列だけ機械候補を書き換える。
+- 複数ルールが近いスコアで別targetを返した場合は `REVIEW` に寄せる。
+- ルール適用結果は `analysis_columns.candidate_*` と `csv_mapping_rule_hits` に残す。
+- 画面から列ヘッダーを元にした初期ルールを登録できる。
+
+初期のルール登録は、作業者が画面で選んで保存する。Codexによるルール候補作成は次段階で、候補を `csv_mapping_rule_suggestions` のような別テーブルに受ける想定。
+
 ## 初版で分けないもの
 
 以下は初版ではJSONやメモに入れ、運用で必要性が見えたら別テーブル化する。
@@ -212,6 +257,7 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - 推定型。
 - 周辺列。
 - 既知の `exam_item_master` 候補。
+- 登録済みルールのヒット結果。
 
 返す候補:
 
@@ -222,9 +268,9 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - `analysis_note`
 - `needs_human_review`
 
-最終判断は必ず作業者が行い、LLM出力をそのままseed化しない。
+最終判断は必ず作業者が行い、Codex出力をそのままseed化しない。
 
-初版では、LLMへ直接POSTしない。`analysis_file_id` からJSONを出力し、そのJSONをAIに渡して候補JSONを返す流れにする。
+初版では、Codexへ直接POSTしない。`analysis_file_id` からJSONを出力し、そのJSONをCodexに渡して候補JSONを返す流れにする。
 
 Codexへ渡す時は、画面またはCLIで作ったJSONを使う。
 
@@ -243,6 +289,7 @@ Codexへ渡す時は、画面またはCLIで作ったJSONを使う。
 
 - `sql/ddl/csv_mapping_lab/0010_csv_mapping_lab__analysis_files.sql`
 - `sql/ddl/csv_mapping_lab/0020_csv_mapping_lab__analysis_columns.sql`
+- `sql/ddl/csv_mapping_lab/0030_csv_mapping_lab__mapping_rules.sql`
 
 ## 初回CLI
 
