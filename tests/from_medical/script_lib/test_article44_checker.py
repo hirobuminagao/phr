@@ -158,8 +158,8 @@ def base_value_map() -> ValueMap:
         checker.NC_RIGHT_VISION_CORRECTED: not_found_pq(),
         checker.NC_LEFT_VISION_CORRECTED: not_found_pq(),
         checker.NC_HEARING_RIGHT_1000HZ: cd("1"),
-        checker.NC_HEARING_LEFT_1000HZ: cd("1"),
         checker.NC_HEARING_RIGHT_4000HZ: cd("1"),
+        checker.NC_HEARING_LEFT_1000HZ: cd("1"),
         checker.NC_HEARING_LEFT_4000HZ: cd("1"),
         checker.NC_HEARING_CONVERSATION: not_found_st(),
         checker.NC_CHEST_XRAY_RESULT_1: cd("1"),
@@ -516,15 +516,15 @@ def test_vision_returns_invalid_for_invalid_candidate() -> None:
 
 def hearing_map(
     right_1000hz: CDValue,
-    left_1000hz: CDValue,
     right_4000hz: CDValue,
+    left_1000hz: CDValue,
     left_4000hz: CDValue,
     conversation: STValue,
 ) -> ValueMap:
     return {
         checker.NC_HEARING_RIGHT_1000HZ: right_1000hz,
-        checker.NC_HEARING_LEFT_1000HZ: left_1000hz,
         checker.NC_HEARING_RIGHT_4000HZ: right_4000hz,
+        checker.NC_HEARING_LEFT_1000HZ: left_1000hz,
         checker.NC_HEARING_LEFT_4000HZ: left_4000hz,
         checker.NC_HEARING_CONVERSATION: conversation,
     }
@@ -887,4 +887,3 @@ def test_article44_checkers_registration_contract() -> None:
     assert all(callable(checker_func) for checker_func in checker.ARTICLE44_CHECKERS.values())
     for detail_no, checker_func in checker.ARTICLE44_CHECKERS.items():
         assert detail_no[:4] in checker_func.__name__
-
