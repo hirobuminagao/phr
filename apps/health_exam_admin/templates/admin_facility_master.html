@@ -32,8 +32,12 @@
     </div>
     <form class="filter-card compact-filter" method="get" action="/admin/facility-master">
       <label>
+        <span>コード</span>
+        <input name="code" value="{{ filters.code or '' }}" placeholder="健診機関コード / 医療機関コード">
+      </label>
+      <label>
         <span>キーワード</span>
-        <input name="q" value="{{ filters.q or '' }}" data-live-filter-input="#facility-master-table" placeholder="コード / 名称 / 住所 / メモ">
+        <input name="q" value="{{ filters.q or '' }}" data-live-filter-input="#facility-master-table" placeholder="名称 / 住所 / メモ">
       </label>
       <div class="filter-actions">
         <button type="submit">検索</button>

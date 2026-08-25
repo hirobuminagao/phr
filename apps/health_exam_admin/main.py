@@ -3635,26 +3635,40 @@ def load_alias_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[s
     return [dict(row) for row in cur.fetchall()]
 
 
-def load_facility_master_admin_rows(cur: Any, *, limit: int = 500, keyword: str | None = None) -> list[dict[str, Any]]:
-    where_sql = ""
+def load_facility_master_admin_rows(
+    cur: Any,
+    *,
+    limit: int = 500,
+    keyword: str | None = None,
+    code: str | None = None,
+) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
     params: list[Any] = []
     keyword = (keyword or "").strip()
+    code = (code or "").strip()
+    if code:
+        where_parts.append(
+            """(
+              exam_facility_code = %s
+              OR medical_institution_code = %s
+              OR reservation_system_medical_institution_code = %s
+            )"""
+        )
+        params.extend([code, code, code])
     if keyword:
         like = f"%{keyword}%"
-        where_sql = """
-        WHERE (
-          exam_facility_code LIKE %s
-          OR exam_facility_name LIKE %s
+        where_parts.append(
+            """(
+          exam_facility_name LIKE %s
           OR exam_facility_display_name LIKE %s
-          OR medical_institution_code LIKE %s
-          OR reservation_system_medical_institution_code LIKE %s
           OR postal_code LIKE %s
           OR address LIKE %s
           OR phone_number LIKE %s
           OR note LIKE %s
+        )"""
         )
-        """
-        params.extend([like] * 9)
+        params.extend([like] * 6)
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur.execute(
         f"""
         SELECT
@@ -11965,11 +11979,13 @@ def admin_facility_master(request: Request) -> Response:
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         facility_keyword = request.query_params.get("q", "").strip()
+        facility_code = request.query_params.get("code", "").strip()
         try:
             facility_rows = load_facility_master_admin_rows(
                 cur,
-                limit=2000 if facility_keyword else 500,
+                limit=2000 if facility_keyword or facility_code else 500,
                 keyword=facility_keyword,
+                code=facility_code,
             )
             conn.commit()
         except Exception:
@@ -11981,7 +11997,7 @@ def admin_facility_master(request: Request) -> Response:
             "request": request,
             "user": user,
             "facility_rows": facility_rows,
-            "filters": {"q": facility_keyword},
+            "filters": {"q": facility_keyword, "code": facility_code},
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
