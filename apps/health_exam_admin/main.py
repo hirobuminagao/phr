@@ -11343,7 +11343,26 @@ def load_csv_mapping_lab_summary(cur: Any) -> dict[str, int]:
     }
 
 
-def load_csv_mapping_lab_columns(cur: Any, *, analysis_file_id: int, limit: int = 120) -> list[dict[str, Any]]:
+def load_csv_mapping_lab_column_count(cur: Any, *, analysis_file_id: int) -> int:
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS `column_count`
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+        WHERE `analysis_file_id` = %s
+        """,
+        (analysis_file_id,),
+    )
+    row = cur.fetchone() or {}
+    return int(row.get("column_count") or 0)
+
+
+def load_csv_mapping_lab_columns(
+    cur: Any,
+    *,
+    analysis_file_id: int,
+    limit: int = 120,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
     try:
         cur.execute(
             f"""
@@ -11360,9 +11379,9 @@ def load_csv_mapping_lab_columns(cur: Any, *, analysis_file_id: int, limit: int 
             FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns` AS `analysis_columns`
             WHERE `analysis_columns`.`analysis_file_id` = %s
             ORDER BY `column_no`
-            LIMIT %s
+            LIMIT %s OFFSET %s
             """,
-            (analysis_file_id, limit),
+            (analysis_file_id, limit, offset),
         )
     except Exception:
         cur.execute(
@@ -11376,9 +11395,9 @@ def load_csv_mapping_lab_columns(cur: Any, *, analysis_file_id: int, limit: int 
             FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
             WHERE `analysis_file_id` = %s
             ORDER BY `column_no`
-            LIMIT %s
+            LIMIT %s OFFSET %s
             """,
-            (analysis_file_id, limit),
+            (analysis_file_id, limit, offset),
         )
     return [dict(row) for row in cur.fetchall()]
 
@@ -11409,17 +11428,35 @@ def csv_mapping_lab_default_context(
     message: str | None = None,
     error: str | None = None,
     selected_file_id: int | None = None,
+    column_page: int = 1,
     prompt_json: str | None = None,
     prompt_form: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    column_page_size = 120
+    column_page = max(1, column_page)
+    column_offset = (column_page - 1) * column_page_size
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=True) as conn:
         cur = dict_cursor(conn)
         files = load_csv_mapping_lab_files(cur)
         summary = load_csv_mapping_lab_summary(cur)
         rule_summary = load_csv_mapping_lab_rule_summary(cur)
-        columns = load_csv_mapping_lab_columns(cur, analysis_file_id=selected_file_id) if selected_file_id else []
         selected_file = load_csv_mapping_lab_file(cur, analysis_file_id=selected_file_id) if selected_file_id else None
+        column_count = load_csv_mapping_lab_column_count(cur, analysis_file_id=selected_file_id) if selected_file_id else 0
+        max_column_page = max(1, ((column_count - 1) // column_page_size) + 1) if column_count else 1
+        if column_page > max_column_page:
+            column_page = max_column_page
+            column_offset = (column_page - 1) * column_page_size
+        columns = (
+            load_csv_mapping_lab_columns(
+                cur,
+                analysis_file_id=selected_file_id,
+                limit=column_page_size,
+                offset=column_offset,
+            )
+            if selected_file_id
+            else []
+        )
         cur.close()
     return {
         "request": request,
@@ -11432,6 +11469,16 @@ def csv_mapping_lab_default_context(
         "selected_file": selected_file,
         "selected_file_id": selected_file_id,
         "columns": columns,
+        "column_pagination": {
+            "page": column_page,
+            "page_size": column_page_size,
+            "total": column_count,
+            "max_page": max_column_page,
+            "start": column_offset + 1 if column_count else 0,
+            "end": min(column_offset + column_page_size, column_count),
+            "prev_page": column_page - 1 if column_page > 1 else None,
+            "next_page": column_page + 1 if column_page < max_column_page else None,
+        },
         "prompt_json": prompt_json,
         "prompt_form": prompt_form
         or {
@@ -11452,6 +11499,7 @@ def csv_mapping_lab(request: Request) -> Response:
     if isinstance(user, RedirectResponse):
         return user
     selected_file_id = parse_positive_int(request.query_params.get("analysis_file_id"), default=0, maximum=999999999)
+    column_page = parse_positive_int(request.query_params.get("column_page"), default=1, maximum=999999)
     return templates.TemplateResponse(
         "csv_mapping_lab.html",
         csv_mapping_lab_default_context(
@@ -11460,6 +11508,7 @@ def csv_mapping_lab(request: Request) -> Response:
             message=request.query_params.get("message"),
             error=request.query_params.get("error"),
             selected_file_id=selected_file_id or None,
+            column_page=column_page or 1,
         ),
     )
 

@@ -1055,6 +1055,23 @@ a.home-menu-card.is-navigating {
   pointer-events: none;
 }
 
+.csv-mapping-column-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.pagination-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .narrow-page {
   max-width: 880px;
 }

@@ -197,12 +197,19 @@
     <div class="section-heading">
       <div>
         <h2>列プレビュー</h2>
-        <p class="subtle">先頭120列まで表示しています。ルールで機械候補を付け、人が確認する列を減らします。</p>
+        <p class="subtle">解析済みの列を120列ずつ表示しています。ルールで機械候補を付け、人が確認する列を減らします。</p>
       </div>
-      <form method="post" action="/utilities/csv-mapping-lab/rules/reapply">
-        <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
-        <button type="submit" class="ghost-button compact-action-button">ルール再適用</button>
-      </form>
+      <div class="csv-mapping-column-actions">
+        <div class="pagination-inline">
+          <span>{{ column_pagination.start }}-{{ column_pagination.end }} / {{ column_pagination.total }}列</span>
+          <a class="ghost-button compact-action-button{% if not column_pagination.prev_page %} is-disabled{% endif %}" href="{% if column_pagination.prev_page %}/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&column_page={{ column_pagination.prev_page }}{% else %}#{% endif %}">前へ</a>
+          <a class="ghost-button compact-action-button{% if not column_pagination.next_page %} is-disabled{% endif %}" href="{% if column_pagination.next_page %}/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&column_page={{ column_pagination.next_page }}{% else %}#{% endif %}">次へ</a>
+        </div>
+        <form method="post" action="/utilities/csv-mapping-lab/rules/reapply">
+          <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+          <button type="submit" class="ghost-button compact-action-button">ルール再適用</button>
+        </form>
+      </div>
     </div>
     <div class="table-panel">
       <table class="data-table csv-mapping-column-table">
