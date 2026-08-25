@@ -3641,20 +3641,23 @@ def load_facility_master_admin_rows(
     limit: int = 500,
     keyword: str | None = None,
     code: str | None = None,
+    code_match: str = "exact",
 ) -> list[dict[str, Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
     keyword = (keyword or "").strip()
     code = (code or "").strip()
     if code:
+        code_operator = "LIKE" if code_match == "partial" else "="
+        code_value = f"%{code}%" if code_match == "partial" else code
         where_parts.append(
-            """(
-              exam_facility_code = %s
-              OR medical_institution_code = %s
-              OR reservation_system_medical_institution_code = %s
+            f"""(
+              exam_facility_code {code_operator} %s
+              OR medical_institution_code {code_operator} %s
+              OR reservation_system_medical_institution_code {code_operator} %s
             )"""
         )
-        params.extend([code, code, code])
+        params.extend([code_value, code_value, code_value])
     if keyword:
         like = f"%{keyword}%"
         where_parts.append(
@@ -3705,12 +3708,17 @@ def search_facility_master(request: Request) -> Response:
         return JSONResponse({"items": []}, status_code=403)
     code = request.query_params.get("code", "").strip()
     keyword = request.query_params.get("q", "").strip()
+    code_match = request.query_params.get("code_match", "").strip()
+    if code_match == "partial" and code and len(code) < 2:
+        return JSONResponse({"items": [], "message": "コードは2桁以上で検索してください。"})
+    if code_match != "partial":
+        code_match = "exact"
     if not code and not keyword:
         return JSONResponse({"items": []})
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
-        rows = load_facility_master_admin_rows(cur, limit=50, keyword=keyword, code=code)
+        rows = load_facility_master_admin_rows(cur, limit=50, keyword=keyword, code=code, code_match=code_match)
         cur.close()
     return JSONResponse(
         {

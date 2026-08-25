@@ -848,10 +848,17 @@
         renderAliasFacilityResults(resultsBody, []);
         return;
       }
+      if (code && code.length < 2) {
+        if (resultsBody) resultsBody.innerHTML = '<tr><td colspan="3">コードは2桁以上で検索してください。</td></tr>';
+        return;
+      }
       if (resultsBody) resultsBody.innerHTML = '<tr><td colspan="3">検索しています...</td></tr>';
       try {
         const params = new URLSearchParams();
-        if (code) params.set("code", code);
+        if (code) {
+          params.set("code", code);
+          params.set("code_match", "partial");
+        }
         if (keyword) params.set("q", keyword);
         const payload = await fetchJson(`/admin/facility-master/search?${params.toString()}`);
         renderAliasFacilityResults(resultsBody, payload.items || []);
