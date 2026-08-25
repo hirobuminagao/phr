@@ -11460,6 +11460,11 @@ async def upload_csv_mapping_lab(
             conn.commit()
     except Exception as exc:
         return RedirectResponse(f"/utilities/csv-mapping-lab?error={quote(str(exc))}", status_code=303)
+    finally:
+        try:
+            upload_path.unlink(missing_ok=True)
+        except OSError:
+            LOGGER.warning("failed to delete csv mapping lab upload: %s", upload_path)
     return RedirectResponse(
         f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&message={quote('CSVを解析しました。')}",
         status_code=303,

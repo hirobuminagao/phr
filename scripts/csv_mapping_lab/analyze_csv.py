@@ -46,6 +46,62 @@ SENSITIVE_HEADER_KEYWORDS = (
     "郵便",
 )
 
+NAME_HEADER_KEYWORDS = (
+    "氏名",
+    "名前",
+    "受診者",
+    "被保険者",
+    "カナ",
+    "かな",
+    "フリガナ",
+    "ふりがな",
+)
+
+INSURANCE_ID_HEADER_KEYWORDS = (
+    "保険証",
+    "被保険者証",
+    "記号",
+    "番号",
+    "枝番",
+    "社員番号",
+    "職員番号",
+    "従業員番号",
+    "加入者id",
+    "加入者ID",
+    "hia",
+    "HIA",
+    "受診券",
+    "利用券",
+)
+
+DATE_OF_BIRTH_HEADER_KEYWORDS = (
+    "生年月日",
+    "誕生日",
+    "生年",
+)
+
+CONTACT_HEADER_KEYWORDS = (
+    "住所",
+    "電話",
+    "郵便",
+    "メール",
+    "mail",
+    "MAIL",
+)
+
+NAME_LEDGER_FIELDS = {"name_full_raw", "name_kana_raw"}
+INSURANCE_ID_LEDGER_FIELDS = {
+    "insurance_symbol_raw",
+    "insurance_number_raw",
+    "insurance_branch_number_raw",
+    "person_id_custom",
+}
+DATE_OF_BIRTH_LEDGER_FIELDS = {"birthdate"}
+CONTACT_LEDGER_FIELDS = {"address", "postal_code"}
+
+FULL_WIDTH_KANA_RE = re.compile(r"^[ァ-ヶー 　]+$")
+HALF_WIDTH_KANA_RE = re.compile(r"^[ｦ-ﾟｰ 　]+$")
+
 
 LEDGER_FIELD_HINTS = {
     "社員番号": "person_id_custom",
@@ -180,6 +236,95 @@ def normalize_header(value: str | None) -> str | None:
     return text.upper()
 
 
+def normalized_contains_any(text: str | None, keywords: tuple[str, ...]) -> bool:
+    normalized = normalize_header(text)
+    if not normalized:
+        return False
+    return any((normalize_header(keyword) or "") in normalized for keyword in keywords)
+
+
+def sensitive_category_for_column(header_name: str | None, ledger_field: str | None) -> str | None:
+    if ledger_field in NAME_LEDGER_FIELDS or normalized_contains_any(header_name, NAME_HEADER_KEYWORDS):
+        return "NAME"
+    if ledger_field in INSURANCE_ID_LEDGER_FIELDS or normalized_contains_any(header_name, INSURANCE_ID_HEADER_KEYWORDS):
+        return "INSURANCE_ID"
+    if ledger_field in DATE_OF_BIRTH_LEDGER_FIELDS or normalized_contains_any(header_name, DATE_OF_BIRTH_HEADER_KEYWORDS):
+        return "BIRTHDATE"
+    if ledger_field in CONTACT_LEDGER_FIELDS or normalized_contains_any(header_name, CONTACT_HEADER_KEYWORDS):
+        return "CONTACT"
+    if is_sensitive_header(header_name):
+        return "SENSITIVE"
+    return None
+
+
+def stable_number_for_value(value: str, *, length: int, offset: int = 0) -> str:
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    number = str(int(digest[offset : offset + 12], 16))
+    repeated = (number * ((length // len(number)) + 1))[:length]
+    if length > 1 and repeated[0] == "0":
+        repeated = "8" + repeated[1:]
+    return repeated
+
+
+def mask_digit_shape(value: str) -> str:
+    digit_offset = 0
+
+    def replace_digit(match: re.Match[str]) -> str:
+        nonlocal digit_offset
+        token = match.group(0)
+        masked = stable_number_for_value(value, length=len(token), offset=digit_offset)
+        digit_offset += 2
+        return masked
+
+    return re.sub(r"\d+", replace_digit, value)
+
+
+def mask_name_value(value: str) -> str:
+    if HALF_WIDTH_KANA_RE.match(value):
+        return "ｻﾝﾌﾟﾙ ﾀﾛｳ"
+    if FULL_WIDTH_KANA_RE.match(value):
+        return "サンプル タロウ"
+    if " " in value or "　" in value:
+        return "サンプル 太郎"
+    return "サンプル太郎"
+
+
+def mask_birthdate_value(value: str) -> str:
+    if re.fullmatch(r"\d{8}", value):
+        return "19750115"
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return "1975-01-15"
+    if re.fullmatch(r"\d{4}/\d{2}/\d{2}", value):
+        return "1975/01/15"
+    if re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", value):
+        return "1975.01.15"
+    if re.fullmatch(r"\d{4}-\d{2}", value):
+        return "1975-01"
+    if re.fullmatch(r"\d{4}/\d{2}", value):
+        return "1975/01"
+    return mask_digit_shape(value)
+
+
+def mask_contact_value(value: str) -> str:
+    if "@" in value:
+        return "sample@example.local"
+    if re.fullmatch(r"[0-9０-９〒\\-ー―‐ ]+", value):
+        return mask_digit_shape(value)
+    return "サンプル住所"
+
+
+def sanitize_sample_value(value: str, *, sensitive_category: str | None) -> str:
+    if not sensitive_category:
+        return value
+    if sensitive_category == "NAME":
+        return mask_name_value(value)
+    if sensitive_category == "BIRTHDATE":
+        return mask_birthdate_value(value)
+    if sensitive_category == "CONTACT":
+        return mask_contact_value(value)
+    return mask_digit_shape(value)
+
+
 def sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fp:
@@ -240,7 +385,13 @@ def looks_like_date(values: list[str]) -> str | None:
     return None
 
 
-def infer_profile(rows: list[list[str]], column_index: int, *, sample_limit: int) -> ColumnProfile:
+def infer_profile(
+    rows: list[list[str]],
+    column_index: int,
+    *,
+    sample_limit: int,
+    sensitive_category: str | None = None,
+) -> ColumnProfile:
     values: list[tuple[int, str]] = []
     blank_count = 0
     for row_offset, row in enumerate(rows, start=2):
@@ -255,8 +406,13 @@ def infer_profile(rows: list[list[str]], column_index: int, *, sample_limit: int
     non_blank_count = len(non_blank_values)
     total = blank_count + non_blank_count
     blank_rate = Decimal(blank_count) / Decimal(total) if total else Decimal("0")
-    counts = Counter(non_blank_values)
-    sample_values = list(dict.fromkeys(non_blank_values))[:sample_limit]
+    sanitized_non_blank_values = [
+        sanitize_sample_value(value, sensitive_category=sensitive_category)
+        for value in non_blank_values
+    ]
+    counts = Counter(sanitized_non_blank_values)
+    raw_counts = Counter(non_blank_values)
+    sample_values = list(dict.fromkeys(sanitized_non_blank_values))[:sample_limit]
     value_counts = [
         {"value": value, "count": count}
         for value, count in counts.most_common(sample_limit)
@@ -275,7 +431,7 @@ def infer_profile(rows: list[list[str]], column_index: int, *, sample_limit: int
     elif numeric_only:
         inferred_type = "NUMERIC"
         inferred_format = "integer" if all("." not in value for value in non_blank_values) else "decimal"
-    elif len(counts) <= min(20, max(3, non_blank_count)):
+    elif len(raw_counts) <= min(20, max(3, non_blank_count)):
         inferred_type = "CODE"
         inferred_format = None
     else:
@@ -290,7 +446,7 @@ def infer_profile(rows: list[list[str]], column_index: int, *, sample_limit: int
     return ColumnProfile(
         sample_values=sample_values,
         value_counts=value_counts,
-        distinct_value_count=len(counts),
+        distinct_value_count=len(raw_counts),
         blank_count=blank_count,
         non_blank_count=non_blank_count,
         blank_rate=blank_rate.quantize(Decimal("0.0001")),
@@ -306,7 +462,9 @@ def infer_profile(rows: list[list[str]], column_index: int, *, sample_limit: int
             "sample_limit": sample_limit,
             "numeric_only": numeric_only,
             "date_format": date_format,
-            "distinct_limited": len(counts) <= sample_limit,
+            "distinct_limited": len(raw_counts) <= sample_limit,
+            "sample_values_masked": bool(sensitive_category),
+            "sensitive_category": sensitive_category,
         },
     )
 
@@ -417,8 +575,14 @@ def insert_analysis(conn: Any, *, args: argparse.Namespace, csv_result: Any, par
     analysis_file_id = int(cur.lastrowid)
 
     for column in csv_result.header_set.normalized_columns:
-        profile = infer_profile(csv_result.rows, column.column_no - 1, sample_limit=args.sample_limit)
         target_kind, namecode, ledger_field, confidence = candidate_for_header(column.header_name)
+        sensitive_category = sensitive_category_for_column(column.header_name, ledger_field)
+        profile = infer_profile(
+            csv_result.rows,
+            column.column_no - 1,
+            sample_limit=args.sample_limit,
+            sensitive_category=sensitive_category,
+        )
         cur.execute(
             f"""
             INSERT INTO `{args.lab_db}`.`analysis_columns` (
@@ -459,7 +623,7 @@ def insert_analysis(conn: Any, *, args: argparse.Namespace, csv_result: Any, par
                 profile.last_non_blank_row_no,
                 profile.inferred_value_type,
                 profile.inferred_format,
-                1 if is_sensitive_header(column.header_name) else 0,
+                1 if sensitive_category else 0,
                 json.dumps(profile.value_profile, ensure_ascii=False, separators=(",", ":")),
                 target_kind,
                 namecode,
