@@ -10578,6 +10578,7 @@ def exam_processing(request: Request) -> Response:
             events = load_event_options(cur)
             recent_runs = load_recent_exam_processing_runs(cur, event_id=selected_event_id)
             running_runs = load_running_exam_processing_runs(cur, event_id=selected_event_id)
+            unknown_scan_folders = load_unknown_scan_folder_rows(cur, event_id=str(selected_event_id))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -10592,6 +10593,7 @@ def exam_processing(request: Request) -> Response:
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
             "running_runs": running_runs,
+            "unknown_scan_folders": unknown_scan_folders,
             "results": [],
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
@@ -10658,6 +10660,7 @@ async def run_exam_processing(request: Request) -> Response:
             events = load_event_options(cur)
             recent_runs = load_recent_exam_processing_runs(cur, event_id=event_id)
             running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
+            unknown_scan_folders = load_unknown_scan_folder_rows(cur, event_id=str(event_id))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -10674,6 +10677,7 @@ async def run_exam_processing(request: Request) -> Response:
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
             "running_runs": running_runs,
+            "unknown_scan_folders": unknown_scan_folders,
             "results": results,
             "message": f"{ok_count}件の処理が完了しました。",
             "error": f"{failed[0]['label']}で停止しました。" if failed else None,
