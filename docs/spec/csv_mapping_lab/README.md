@@ -172,7 +172,7 @@ CSVの1列ごとの解析結果を表す子テーブル。
 
 ## LLM連携の将来形
 
-ローカルLLMには、元CSV行全体ではなく、列単位の要約JSONを渡す。
+ローカルLLMや外部のAI作業には、元CSV行全体ではなく、列単位の要約JSONを渡す。
 
 渡す候補:
 
@@ -195,6 +195,8 @@ CSVの1列ごとの解析結果を表す子テーブル。
 
 最終判断は必ず作業者が行い、LLM出力をそのままseed化しない。
 
+初版では、LLMへ直接POSTしない。`analysis_file_id` からJSONを出力し、そのJSONをAIに渡して候補JSONを返す流れにする。
+
 ## DDL
 
 - `sql/ddl/csv_mapping_lab/0010_csv_mapping_lab__analysis_files.sql`
@@ -205,6 +207,7 @@ CSVの1列ごとの解析結果を表す子テーブル。
 CSVを読み込み、`analysis_files` と `analysis_columns` に登録する。
 
 - `scripts/csv_mapping_lab/analyze_csv.py`
+- `scripts/csv_mapping_lab/export_llm_prompt.py`
 
 例:
 
@@ -226,6 +229,22 @@ python3 scripts/csv_mapping_lab/analyze_csv.py /path/to/sample.csv --dry-run
 
 ```bash
 python3 scripts/csv_mapping_lab/analyze_csv.py /path/to/sample.csv --replace-source-sha
+```
+
+AI投入用JSONを出力する場合:
+
+```bash
+python3 scripts/csv_mapping_lab/export_llm_prompt.py 3 \
+  --output /tmp/maruyama_prompt.json
+```
+
+列範囲を絞る場合:
+
+```bash
+python3 scripts/csv_mapping_lab/export_llm_prompt.py 3 \
+  --column-start 1 \
+  --column-end 120 \
+  --output /tmp/maruyama_prompt_001_120.json
 ```
 
 ## 簡易画面
