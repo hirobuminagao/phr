@@ -352,6 +352,27 @@
     input?.addEventListener("change", () => updateCheckboxChoiceCard(card));
   }
 
+  const updateRadioChoiceCards = (name) => {
+    if (!name) return;
+    for (const input of document.querySelectorAll("input[type='radio']")) {
+      if (input.name !== name) continue;
+      const card = input.closest("[data-radio-choice-card]");
+      if (card) card.classList.toggle("is-selected", input.checked);
+    }
+  };
+
+  for (const card of document.querySelectorAll("[data-radio-choice-card]")) {
+    const input = card.querySelector("input[type='radio']");
+    if (!input) continue;
+    updateRadioChoiceCards(input.name);
+    card.addEventListener("click", () => {
+      input.checked = true;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      updateRadioChoiceCards(input.name);
+    });
+    input.addEventListener("change", () => updateRadioChoiceCards(input.name));
+  }
+
   const caseCsvForm = document.querySelector(".case-csv-download-form");
   if (caseCsvForm) {
     const storageKey = "phr.caseExportCsvPatterns.v1";
@@ -733,6 +754,56 @@
 
   for (const button of document.querySelectorAll("[data-modal-close]")) {
     button.addEventListener("click", () => closeModal(button.closest(".edit-modal")));
+  }
+
+  const csvMappingBulkModal = document.getElementById("csv-mapping-selected-bulk-modal");
+  const csvMappingBulkOpen = document.querySelector("[data-csv-mapping-bulk-open]");
+  const csvMappingSelectedCount = document.querySelector("[data-csv-mapping-selected-count]");
+  const csvMappingBulkSelectedLabel = document.querySelector("[data-csv-mapping-bulk-selected-label]");
+  const csvMappingBulkSelectedInputs = document.querySelector("[data-csv-mapping-bulk-selected-inputs]");
+  const csvMappingColumnCheckboxes = Array.from(document.querySelectorAll("[data-csv-mapping-column-checkbox]"));
+  const updateCsvMappingSelection = () => {
+    const selected = csvMappingColumnCheckboxes.filter((checkbox) => checkbox.checked);
+    if (csvMappingSelectedCount) csvMappingSelectedCount.textContent = String(selected.length);
+    if (csvMappingBulkSelectedLabel) csvMappingBulkSelectedLabel.textContent = `${selected.length}列`;
+    for (const checkbox of csvMappingColumnCheckboxes) {
+      const row = checkbox.closest("[data-csv-mapping-selectable-row]");
+      if (row) row.classList.toggle("is-selected", checkbox.checked);
+    }
+    if (csvMappingBulkOpen) {
+      csvMappingBulkOpen.classList.toggle("is-disabled", selected.length === 0);
+      csvMappingBulkOpen.disabled = selected.length === 0;
+    }
+    return selected;
+  };
+  if (csvMappingColumnCheckboxes.length) {
+    for (const checkbox of csvMappingColumnCheckboxes) {
+      checkbox.addEventListener("change", updateCsvMappingSelection);
+      const row = checkbox.closest("[data-csv-mapping-selectable-row]");
+      if (row) {
+        row.addEventListener("click", (event) => {
+          if (event.target.closest("button, a, input, select, textarea, label, summary, details, form")) return;
+          checkbox.checked = !checkbox.checked;
+          updateCsvMappingSelection();
+        });
+      }
+    }
+    updateCsvMappingSelection();
+  }
+  if (csvMappingBulkOpen && csvMappingBulkModal) {
+    csvMappingBulkOpen.addEventListener("click", () => {
+      const selected = updateCsvMappingSelection();
+      if (!selected.length) return;
+      if (csvMappingBulkSelectedInputs) {
+        csvMappingBulkSelectedInputs.innerHTML = selected
+          .map((checkbox) => `<input type="hidden" name="column_no" value="${escapeHtml(checkbox.value)}">`)
+          .join("");
+      }
+      csvMappingBulkModal.hidden = false;
+      document.body.classList.add("has-open-modal");
+      const firstInput = csvMappingBulkModal.querySelector("input[name='bulk_action']");
+      if (firstInput) firstInput.focus();
+    });
   }
 
   const csvLedgerFieldModal = document.getElementById("csv-mapping-ledger-field-modal");

@@ -289,6 +289,9 @@
       <a class="summary-card csv-mapping-filter-card{% if column_filters.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&candidate_target_kind=IGNORE">
         <span>未使用</span><strong>{{ column_status_summary.ignore_kind }}</strong><small>IGNORE候補</small>
       </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.ai_review_status == 'REVIEWED' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&ai_review_status=REVIEWED">
+        <span>AI済み</span><strong>{{ column_status_summary.ai_reviewed }}</strong><small>Codex判定済み</small>
+      </a>
     </div>
     <form method="get" action="/utilities/csv-mapping-lab" class="csv-mapping-column-filter-form" id="csv-mapping-column-filter-form">
       <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
@@ -334,6 +337,16 @@
         </select>
       </label>
       <label>
+        <span>AI判定</span>
+        <select name="ai_review_status">
+          <option value="">すべて</option>
+          <option value="NOT_REVIEWED" {% if column_filters.ai_review_status == "NOT_REVIEWED" %}selected{% endif %}>未</option>
+          <option value="REVIEWED" {% if column_filters.ai_review_status == "REVIEWED" %}selected{% endif %}>済</option>
+          <option value="SKIPPED" {% if column_filters.ai_review_status == "SKIPPED" %}selected{% endif %}>スキップ</option>
+          <option value="FAILED" {% if column_filters.ai_review_status == "FAILED" %}selected{% endif %}>失敗</option>
+        </select>
+      </label>
+      <label>
         <span>個人系</span>
         <select name="sensitive_hint">
           <option value="">すべて</option>
@@ -357,6 +370,7 @@
       </div>
       <div class="csv-mapping-column-actions">
         <button type="button" class="ghost-button compact-action-button" data-scroll-target="#csv-mapping-column-filter-form">絞り込みへ</button>
+        <button type="button" class="ghost-button compact-action-button" data-csv-mapping-bulk-open>一括処理 <span data-csv-mapping-selected-count>0</span></button>
         <div class="pagination-inline">
           <a class="ghost-button compact-action-button{% if not column_pagination.prev_page %} is-disabled{% endif %}" href="{% if column_pagination.prev_page %}/utilities/csv-mapping-lab?{{ column_filter_query }}&column_page={{ column_pagination.prev_page }}{% else %}#{% endif %}">前へ</a>
           <span>{{ column_pagination.page }} / {{ column_pagination.max_page }}</span>
@@ -379,6 +393,7 @@
       <table class="data-table csv-mapping-column-table">
         <thead>
           <tr>
+            <th>選択</th>
             <th>列</th>
             <th>ヘッダー</th>
             <th>型</th>
@@ -390,7 +405,13 @@
         </thead>
         <tbody>
           {% for column in columns %}
-          <tr>
+          <tr data-csv-mapping-selectable-row>
+            <td>
+              <label class="csv-mapping-row-select">
+                <input type="checkbox" value="{{ column.column_no }}" data-csv-mapping-column-checkbox>
+                <span>選択</span>
+              </label>
+            </td>
             <td><strong>{{ column.column_no }}</strong></td>
             <td>
               <strong>{{ column.header_name or "-" }}</strong>
@@ -411,6 +432,18 @@
               <span class="status-pill">保留</span>
               {% else %}
               <span class="status-pill status-muted">未確認</span>
+              {% endif %}
+              {% if column.ai_review_status == "REVIEWED" %}
+              <span class="status-pill status-ready">AI済</span>
+              {% elif column.ai_review_status == "SKIPPED" %}
+              <span class="status-pill status-muted">AIスキップ</span>
+              {% elif column.ai_review_status == "FAILED" %}
+              <span class="status-pill status-danger">AI失敗</span>
+              {% else %}
+              <span class="status-pill status-muted">AI未</span>
+              {% endif %}
+              {% if column.ai_review_note %}
+              <small>{{ column.ai_review_note }}</small>
               {% endif %}
               <small>{{ column.candidate_target_kind or "-" }}</small>
               <small>{{ column.candidate_namecode or column.candidate_ledger_field or "-" }}</small>
@@ -436,6 +469,11 @@
                 <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'LEDGER_FIELD' %} is-selected{% endif %}" data-csv-ledger-field-picker-open data-form-id="csv-mapping-rule-kind-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-ledger-field="{{ column.candidate_ledger_field or '' }}">基本</button>
                 <button type="submit" name="target_kind" value="IGNORE" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}">未使用</button>
                 <button type="submit" name="target_kind" value="REVIEW" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'REVIEW' %} is-selected{% endif %}">要確認</button>
+                <button
+                  type="submit"
+                  formaction="/utilities/csv-mapping-lab/candidates/accept"
+                  style="display:inline-flex;align-items:center;justify-content:center;min-width:64px;min-height:28px;margin:0;padding:4px 8px;border:1px solid #147d64;border-radius:6px;background:#147d64;color:#fff;font-size:12px;font-weight:900;line-height:1.1;opacity:1;visibility:visible;"
+                >機械OK</button>
               </form>
               <details class="csv-mapping-rule-details">
                 <summary>
@@ -484,7 +522,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="7">列プレビューはありません。</td></tr>
+          <tr><td colspan="8">列プレビューはありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -493,6 +531,52 @@
 
   {% endif %}
 </main>
+<div class="edit-modal" id="csv-mapping-selected-bulk-modal" hidden>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <div class="edit-modal__panel csv-mapping-selected-bulk-modal">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">BULK ACTION</p>
+        <h2>選択した列を一括処理</h2>
+        <p class="subtle"><span data-csv-mapping-bulk-selected-label>0列</span> に同じ処理を反映します。</p>
+      </div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+    <form method="post" action="/utilities/csv-mapping-lab/columns/bulk-action" class="csv-mapping-selected-bulk-form">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+      <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+      <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
+      <div data-csv-mapping-bulk-selected-inputs></div>
+      <div class="csv-mapping-bulk-action-choices">
+        <label class="choice-card csv-mapping-bulk-action-card" data-radio-choice-card>
+          <input type="radio" name="bulk_action" value="IGNORE" checked>
+          <span>
+            <strong>未使用</strong>
+            <small>選択列をCSV取込では使わない列として確定します。</small>
+          </span>
+        </label>
+        <label class="choice-card csv-mapping-bulk-action-card" data-radio-choice-card>
+          <input type="radio" name="bulk_action" value="REVIEW">
+          <span>
+            <strong>要確認</strong>
+            <small>選択列を人の追加確認が必要な列として残します。</small>
+          </span>
+        </label>
+        <label class="choice-card csv-mapping-bulk-action-card" data-radio-choice-card>
+          <input type="radio" name="bulk_action" value="MACHINE_ACCEPT">
+          <span>
+            <strong>機械OK</strong>
+            <small>選択列に入っている機械判定のnamecode / ledger fieldをそのまま採用します。</small>
+          </span>
+        </label>
+      </div>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="submit">反映</button>
+      </div>
+    </form>
+  </div>
+</div>
 <div class="edit-modal csv-mapping-ledger-field-modal" id="csv-mapping-ledger-field-modal" hidden>
   <div class="edit-modal__backdrop" data-modal-close></div>
   <div class="edit-modal__panel">

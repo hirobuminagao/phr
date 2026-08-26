@@ -119,13 +119,17 @@ REPO_ROOT = APP_ROOT.parents[1]
 CSV_MAPPING_LAB_REGULATION_PATH = REPO_ROOT / "docs" / "spec" / "csv_mapping_lab" / "ai_mapping_exchange_regulation.md"
 SYSTEM_SQL_EXPORT_ROOT = REPO_ROOT / "sql" / "system_exports"
 CSV_MAPPING_AI_INSTRUCTION = """添付ZIPを解析してください。
-ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysis_prompt.json の列マッピング候補を作ってください。
+ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysis_prompt.json の列マッピング候補をAIレビューしてください。
 
 各列のヘッダー、サンプル値、型、周辺列を確認し、関連列がある場合は related_column_nos に入れてください。
 所見、問診、判定、検査方法違い、左右別、連番列は、安易にDIRECTにせず、必要に応じて MULTI_COLUMN_JOIN / METHOD_SELECTION / NEEDS_CONFIRMATION を使ってください。
 
 候補namecodeは、analysis_prompt.json 内の既存候補または同梱された根拠から判断できるものだけにしてください。
 存在確認できないnamecodeは作らず、REVIEW または NEEDS_CONFIRMATION にしてください。
+
+返却JSONは suggestions ではなく updates を使ってください。
+ai_review_status は REVIEWED / SKIPPED / FAILED のいずれかにしてください。
+人の最終判断である decision_status は変更対象にしないでください。
 
 返却は REGULATION.md の返却形式に従って、JSONだけにしてください。
 Markdown説明、コードフェンス、補足文章は不要です。"""
@@ -11792,6 +11796,7 @@ def csv_mapping_lab_column_filter_from_query(query: Mapping[str, str]) -> dict[s
         "keyword": (query.get("keyword") or "").strip(),
         "has_namecode": (query.get("has_namecode") or "").strip(),
         "has_ledger_field": (query.get("has_ledger_field") or "").strip(),
+        "ai_review_status": (query.get("ai_review_status") or "").strip(),
         "sensitive_hint": (query.get("sensitive_hint") or "").strip(),
         "low_confidence": (query.get("low_confidence") or "").strip(),
     }
@@ -11834,6 +11839,10 @@ def build_csv_mapping_lab_column_where(
         clauses.append(f"`{alias}`.`candidate_ledger_field` IS NOT NULL AND `{alias}`.`candidate_ledger_field` <> ''")
     elif filters.get("has_ledger_field") == "0":
         clauses.append(f"(`{alias}`.`candidate_ledger_field` IS NULL OR `{alias}`.`candidate_ledger_field` = '')")
+    ai_review_status = filters.get("ai_review_status") or ""
+    if ai_review_status:
+        clauses.append(f"`{alias}`.`ai_review_status` = %s")
+        params.append(ai_review_status)
     if filters.get("sensitive_hint") == "1":
         clauses.append(f"`{alias}`.`sensitive_hint` = 1")
     elif filters.get("sensitive_hint") == "0":
@@ -11878,6 +11887,8 @@ def load_csv_mapping_lab_column_status_summary(
           COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'EXAM_ITEM_VALUE' THEN 1 ELSE 0 END), 0) AS exam_item,
           COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'LEDGER_FIELD' THEN 1 ELSE 0 END), 0) AS ledger_field,
           COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'IGNORE' THEN 1 ELSE 0 END), 0) AS ignore_kind,
+          COALESCE(SUM(CASE WHEN `ai_review_status` = 'REVIEWED' THEN 1 ELSE 0 END), 0) AS ai_reviewed,
+          COALESCE(SUM(CASE WHEN `ai_review_status` = 'FAILED' THEN 1 ELSE 0 END), 0) AS ai_failed,
           COALESCE(SUM(CASE WHEN `candidate_confidence` IS NULL OR `candidate_confidence` < 0.85 THEN 1 ELSE 0 END), 0) AS low_confidence
         FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
         WHERE `analysis_file_id` = %s
@@ -11885,7 +11896,10 @@ def load_csv_mapping_lab_column_status_summary(
         (analysis_file_id,),
     )
     row = cur.fetchone() or {}
-    return {key: int(row.get(key) or 0) for key in ("total", "unreviewed", "review", "exam_item", "ledger_field", "ignore_kind", "low_confidence")}
+    return {
+        key: int(row.get(key) or 0)
+        for key in ("total", "unreviewed", "review", "exam_item", "ledger_field", "ignore_kind", "ai_reviewed", "ai_failed", "low_confidence")
+    }
 
 
 def load_csv_mapping_lab_columns(
@@ -11906,6 +11920,7 @@ def load_csv_mapping_lab_columns(
               `inferred_format`, `blank_count`, `non_blank_count`, `sensitive_hint`,
               `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`,
               `candidate_confidence`, `analysis_note`, `decision_status`, `sample_values_json`,
+              `ai_review_status`, `ai_review_note`, `ai_reviewed_by`, `ai_reviewed_at`,
               (
                 SELECT COUNT(*)
                 FROM {qname(CSV_MAPPING_LAB)}.`csv_mapping_rule_hits` AS `hit`
@@ -11927,6 +11942,7 @@ def load_csv_mapping_lab_columns(
               `inferred_format`, `blank_count`, `non_blank_count`, `sensitive_hint`,
               `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`,
               `candidate_confidence`, `analysis_note`, `decision_status`, `sample_values_json`,
+              'NOT_REVIEWED' AS `ai_review_status`, NULL AS `ai_review_note`, NULL AS `ai_reviewed_by`, NULL AS `ai_reviewed_at`,
               0 AS `rule_hit_count`
             FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
             WHERE {where_sql}
@@ -11970,6 +11986,30 @@ def load_csv_mapping_lab_filtered_columns_for_bulk(
         LIMIT %s
         """,
         params + [maximum],
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_csv_mapping_lab_columns_by_numbers(
+    cur: Any,
+    *,
+    analysis_file_id: int,
+    column_numbers: Sequence[int],
+) -> list[dict[str, Any]]:
+    unique_numbers = sorted({int(number) for number in column_numbers if int(number) > 0})
+    if not unique_numbers:
+        return []
+    placeholders = ", ".join(["%s"] * len(unique_numbers))
+    cur.execute(
+        f"""
+        SELECT
+          `analysis_column_id`, `column_no`, `header_name`, `normalized_header_name`, `inferred_value_type`,
+          `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+        WHERE `analysis_file_id` = %s AND `column_no` IN ({placeholders})
+        ORDER BY `column_no`
+        """,
+        [analysis_file_id] + unique_numbers,
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -12840,6 +12880,307 @@ async def bulk_set_csv_mapping_lab_rules(request: Request) -> Response:
     label = "未使用" if target_kind == "IGNORE" else "要確認"
     return RedirectResponse(
         csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message=f"絞り込み結果 {len(columns)}列を{label}に設定しました。"),
+        status_code=303,
+    )
+
+
+@app.post("/utilities/csv-mapping-lab/columns/bulk-action")
+async def bulk_action_csv_mapping_lab_columns(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
+    action = str(form.get("bulk_action") or "")
+    raw_column_numbers = form.getlist("column_no") if hasattr(form, "getlist") else []
+    column_numbers = [
+        number
+        for number in (
+            parse_positive_int(str(raw or ""), default=0, maximum=999999)
+            for raw in raw_column_numbers
+        )
+        if number
+    ][:500]
+    if not analysis_file_id:
+        return RedirectResponse("/utilities/csv-mapping-lab?error=解析ファイルを選択してください。", status_code=303)
+    if not column_numbers:
+        return RedirectResponse(
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="一括処理する列を選択してください。"),
+            status_code=303,
+        )
+    if action not in {"IGNORE", "REVIEW", "MACHINE_ACCEPT"}:
+        return RedirectResponse(
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="一括処理の内容を選択してください。"),
+            status_code=303,
+        )
+    actor = str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or "")
+    try:
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            file_row = load_csv_mapping_lab_file(cur, analysis_file_id=analysis_file_id)
+            if not file_row:
+                raise ValueError("解析ファイルが見つかりません。")
+            columns = load_csv_mapping_lab_columns_by_numbers(cur, analysis_file_id=analysis_file_id, column_numbers=column_numbers)
+            if not columns:
+                raise ValueError("一括処理できる列がありません。")
+            processed = 0
+            skipped = 0
+            if action in {"IGNORE", "REVIEW"}:
+                target_kind = action
+                mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "NEEDS_CONFIRMATION"
+                distinct_rules: dict[tuple[str, str, str], dict[str, Any]] = {}
+                for column in columns:
+                    header_name = str(column.get("header_name") or "")
+                    normalized_header = str(column.get("normalized_header_name") or normalize_header(header_name) or "")
+                    value_type = str(column.get("inferred_value_type") or "")
+                    distinct_rules.setdefault(
+                        (header_name, normalized_header, value_type),
+                        {"header_name": header_name, "normalized_header": normalized_header, "value_type": value_type},
+                    )
+                for rule in distinct_rules.values():
+                    cur.execute(
+                        f"""
+                        INSERT INTO {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules` (
+                          `scope`, `facility_code`, `event_id`, `condition_type`, `column_no_min`, `column_no_max`,
+                          `header_pattern`, `normalized_header_pattern`, `value_type`, `target_kind`, `target_namecode`,
+                          `target_ledger_field`, `mapping_strategy`, `confidence`, `reason`, `created_by`, `updated_by`
+                        )
+                        VALUES ('facility', %s, NULL, 'normalized_header_exact', NULL, NULL, %s, %s, %s, %s, NULL, NULL, %s, 0.9000, %s, %s, %s)
+                        """,
+                        (
+                            file_row.get("facility_code"),
+                            rule["header_name"],
+                            rule["normalized_header"],
+                            rule["value_type"],
+                            target_kind,
+                            mapping_strategy,
+                            f"解析ID {analysis_file_id} の選択列から一括作成",
+                            actor,
+                            actor,
+                        ),
+                    )
+                placeholders = ", ".join(["%s"] * len(columns))
+                cur.execute(
+                    f"""
+                    UPDATE {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+                    SET
+                      `candidate_target_kind` = %s,
+                      `candidate_namecode` = NULL,
+                      `candidate_ledger_field` = NULL,
+                      `candidate_confidence` = 1.0000,
+                      `decision_status` = %s,
+                      `analysis_note` = %s
+                    WHERE `analysis_file_id` = %s AND `column_no` IN ({placeholders})
+                    """,
+                    [
+                        target_kind,
+                        csv_mapping_decision_status_for_target_kind(target_kind),
+                        f"manual selected bulk rule: 解析ID {analysis_file_id} の選択列から一括設定",
+                        analysis_file_id,
+                    ] + [int(column["column_no"]) for column in columns],
+                )
+                processed = len(columns)
+            else:
+                for column in columns:
+                    target_kind = str(column.get("candidate_target_kind") or "")
+                    target_namecode = str(column.get("candidate_namecode") or "").strip() or None
+                    target_ledger_field = str(column.get("candidate_ledger_field") or "").strip() or None
+                    if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE"}:
+                        skipped += 1
+                        continue
+                    if target_kind == "EXAM_ITEM_VALUE" and not target_namecode:
+                        skipped += 1
+                        continue
+                    if target_kind == "LEDGER_FIELD" and not target_ledger_field:
+                        skipped += 1
+                        continue
+                    if target_kind != "EXAM_ITEM_VALUE":
+                        target_namecode = None
+                    if target_kind != "LEDGER_FIELD":
+                        target_ledger_field = None
+                    header_name = str(column.get("header_name") or "")
+                    normalized_header = str(column.get("normalized_header_name") or normalize_header(header_name) or "")
+                    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "DIRECT"
+                    cur.execute(
+                        f"""
+                        INSERT INTO {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules` (
+                          `scope`, `facility_code`, `event_id`, `condition_type`, `column_no_min`, `column_no_max`,
+                          `header_pattern`, `normalized_header_pattern`, `value_type`, `target_kind`, `target_namecode`,
+                          `target_ledger_field`, `mapping_strategy`, `confidence`, `reason`, `created_by`, `updated_by`
+                        )
+                        VALUES ('facility', %s, NULL, 'normalized_header_exact', NULL, NULL, %s, %s, %s, %s, %s, %s, %s, 0.9500, %s, %s, %s)
+                        """,
+                        (
+                            file_row.get("facility_code"),
+                            header_name,
+                            normalized_header,
+                            column.get("inferred_value_type"),
+                            target_kind,
+                            target_namecode,
+                            target_ledger_field,
+                            mapping_strategy,
+                            f"機械判定を選択列から一括採用: 解析ID {analysis_file_id} 列 {column.get('column_no')}",
+                            actor,
+                            actor,
+                        ),
+                    )
+                    cur.execute(
+                        f"""
+                        UPDATE {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+                        SET
+                          `candidate_target_kind` = %s,
+                          `candidate_namecode` = %s,
+                          `candidate_ledger_field` = %s,
+                          `candidate_confidence` = 1.0000,
+                          `decision_status` = %s,
+                          `analysis_note` = %s
+                        WHERE `analysis_file_id` = %s AND `column_no` = %s
+                        """,
+                        (
+                            target_kind,
+                            target_namecode,
+                            target_ledger_field,
+                            csv_mapping_decision_status_for_target_kind(target_kind),
+                            f"machine candidate accepted by selected bulk: 解析ID {analysis_file_id} 列 {column.get('column_no')}",
+                            analysis_file_id,
+                            int(column["column_no"]),
+                        ),
+                    )
+                    processed += 1
+                if processed == 0:
+                    raise ValueError("採用できる機械判定が選択列にありません。")
+            conn.commit()
+    except Exception as exc:
+        return RedirectResponse(
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error=str(exc)),
+            status_code=303,
+        )
+    action_label = {"IGNORE": "未使用", "REVIEW": "要確認", "MACHINE_ACCEPT": "機械OK"}[action]
+    extra = f"（スキップ {skipped}列）" if skipped else ""
+    return RedirectResponse(
+        csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message=f"選択した{processed}列を{action_label}で一括処理しました。{extra}"),
+        status_code=303,
+    )
+
+
+@app.post("/utilities/csv-mapping-lab/candidates/accept")
+async def accept_csv_mapping_lab_candidate(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
+    column_no = parse_positive_int(str(form.get("column_no") or ""), default=0, maximum=999999)
+    if not analysis_file_id or not column_no:
+        return RedirectResponse("/utilities/csv-mapping-lab?error=解析列を選択してください。", status_code=303)
+    scope = str(form.get("scope") or "facility")
+    if scope not in {"global", "facility", "event"}:
+        scope = "facility"
+    condition_type = str(form.get("condition_type") or "normalized_header_exact")
+    if condition_type not in {"header_exact", "normalized_header_exact", "header_contains"}:
+        condition_type = "normalized_header_exact"
+    actor = str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or "")
+    try:
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            file_row = load_csv_mapping_lab_file(cur, analysis_file_id=analysis_file_id)
+            if not file_row:
+                raise ValueError("解析ファイルが見つかりません。")
+            cur.execute(
+                f"""
+                SELECT
+                  `header_name`, `normalized_header_name`, `inferred_value_type`,
+                  `candidate_target_kind`, `candidate_namecode`, `candidate_ledger_field`
+                FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+                WHERE `analysis_file_id` = %s AND `column_no` = %s
+                """,
+                (analysis_file_id, column_no),
+            )
+            column = cur.fetchone()
+            if not column:
+                raise ValueError("解析列が見つかりません。")
+            target_kind = str(column.get("candidate_target_kind") or "")
+            target_namecode = str(column.get("candidate_namecode") or "").strip() or None
+            target_ledger_field = str(column.get("candidate_ledger_field") or "").strip() or None
+            if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE"}:
+                raise ValueError("採用できる機械判定がありません。")
+            if target_kind == "EXAM_ITEM_VALUE" and not target_namecode:
+                raise ValueError("機械判定にnamecodeがありません。")
+            if target_kind == "LEDGER_FIELD" and not target_ledger_field:
+                raise ValueError("機械判定にledger fieldがありません。")
+            if target_kind != "EXAM_ITEM_VALUE":
+                target_namecode = None
+            if target_kind != "LEDGER_FIELD":
+                target_ledger_field = None
+            header_name = str(column.get("header_name") or "")
+            normalized_header = str(column.get("normalized_header_name") or normalize_header(header_name) or "")
+            mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "DIRECT"
+            decision_status = csv_mapping_decision_status_for_target_kind(target_kind)
+            cur.execute(
+                f"""
+                INSERT INTO {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules` (
+                  `scope`, `facility_code`, `event_id`, `condition_type`, `column_no_min`, `column_no_max`, `header_pattern`,
+                  `normalized_header_pattern`, `value_type`, `target_kind`, `target_namecode`,
+                  `target_ledger_field`, `mapping_strategy`, `confidence`, `reason`,
+                  `created_by`, `updated_by`
+                )
+                VALUES (%s, %s, %s, %s, NULL, NULL, %s, %s, %s, %s, %s, %s, %s, 0.9500, %s, %s, %s)
+                """,
+                (
+                    scope,
+                    file_row.get("facility_code") if scope == "facility" else None,
+                    file_row.get("event_id") if scope == "event" else None,
+                    condition_type,
+                    header_name,
+                    normalized_header,
+                    column.get("inferred_value_type"),
+                    target_kind,
+                    target_namecode,
+                    target_ledger_field,
+                    mapping_strategy,
+                    f"機械判定を採用: 解析ID {analysis_file_id} 列 {column_no}",
+                    actor,
+                    actor,
+                ),
+            )
+            apply_rules_to_analysis(
+                conn,
+                lab_db=CSV_MAPPING_LAB,
+                analysis_file_id=analysis_file_id,
+                facility_code=file_row.get("facility_code"),
+            )
+            cur.execute(
+                f"""
+                UPDATE {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+                SET
+                  `candidate_target_kind` = %s,
+                  `candidate_namecode` = %s,
+                  `candidate_ledger_field` = %s,
+                  `candidate_confidence` = 1.0000,
+                  `decision_status` = %s,
+                  `analysis_note` = %s
+                WHERE `analysis_file_id` = %s AND `column_no` = %s
+                """,
+                (
+                    target_kind,
+                    target_namecode,
+                    target_ledger_field,
+                    decision_status,
+                    f"machine candidate accepted: 解析ID {analysis_file_id} 列 {column_no}",
+                    analysis_file_id,
+                    column_no,
+                ),
+            )
+            conn.commit()
+    except Exception as exc:
+        return RedirectResponse(
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error=str(exc)),
+            status_code=303,
+        )
+    return RedirectResponse(
+        csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message="機械判定を採用しました。"),
         status_code=303,
     )
 

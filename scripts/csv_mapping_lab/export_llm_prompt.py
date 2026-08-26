@@ -184,6 +184,12 @@ def compact_column(column: dict[str, Any], *, all_columns_by_no: dict[int, dict[
             "ledger_field": column.get("candidate_ledger_field"),
             "confidence": column.get("candidate_confidence"),
         },
+        "ai_review": {
+            "status": column.get("ai_review_status") or "NOT_REVIEWED",
+            "note": column.get("ai_review_note"),
+            "reviewed_by": column.get("ai_reviewed_by"),
+            "reviewed_at": column.get("ai_reviewed_at"),
+        },
         "current_decision": {
             "status": column.get("decision_status"),
             "note": column.get("decision_note"),
@@ -218,7 +224,7 @@ def build_prompt(file_row: dict[str, Any], columns: list[dict[str, Any]], select
         for column in selected_columns
     ]
     return {
-        "task": "Suggest CSV mapping candidates for health exam result import. Return JSON only, following response_schema. Suggestions are drafts; human review is required before seed generation.",
+        "task": "Review CSV mapping candidates for health exam result import. Return JSON only, following response_schema. AI review updates are drafts; human review is required before seed generation.",
         "analysis_file": {
             "analysis_file_id": file_row.get("analysis_file_id"),
             "source_file_name": file_row.get("source_file_name"),
@@ -244,13 +250,18 @@ def build_prompt(file_row: dict[str, Any], columns: list[dict[str, Any]], select
             "total_column_count": len(columns),
         },
         "mapping_policy": {
+            "ai_review_is_not_final_decision": True,
             "final_decision_by_human": True,
             "do_not_emit_real_seed": True,
+            "do_not_set_current_decision_status": True,
             "target_kinds": ["LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE", "REVIEW"],
             "mapping_strategies": ["DIRECT", "MULTI_COLUMN_JOIN", "DERIVED_CODE", "METHOD_SELECTION", "IGNORE", "NEEDS_CONFIRMATION"],
+            "ai_review_statuses": ["REVIEWED", "SKIPPED", "FAILED"],
             "notes": [
                 "Prefer exact meaning over superficial header similarity.",
                 "Use rule_hits as prior knowledge, but do not treat it as final when header/value evidence conflicts.",
+                "Use machine_candidate as the current automatic guess. Keep it when correct, replace it when a better target is clear, or mark SKIPPED when judgment is not possible.",
+                "Do not change current_decision.status. Human operators will later choose ADOPT/IGNORE/REVIEW on the admin screen.",
                 "Do not map facility judgement columns as exam values unless the target meaning is clear.",
                 "For fasting/random triglyceride or glucose, mark NEEDS_CONFIRMATION when no discriminator exists.",
                 "For repeated findings, suggest related columns and whether to join or keep separate.",
@@ -259,19 +270,31 @@ def build_prompt(file_row: dict[str, Any], columns: list[dict[str, Any]], select
         "columns": compact_columns,
         "response_schema": {
             "analysis_file_id": "number",
-            "suggestions": [
+            "reviewed_by": "string, for example codex",
+            "updates": [
                 {
                     "column_no": "number",
-                    "target_kind": "LEDGER_FIELD | EXAM_ITEM_VALUE | IGNORE | REVIEW",
+                    "ai_review_status": "REVIEWED | SKIPPED | FAILED",
+                    "candidate_target_kind": "LEDGER_FIELD | EXAM_ITEM_VALUE | IGNORE | REVIEW | null",
                     "candidate_namecode": "string|null",
                     "candidate_ledger_field": "string|null",
                     "confidence": "0.0-1.0",
                     "mapping_strategy": "DIRECT | MULTI_COLUMN_JOIN | DERIVED_CODE | METHOD_SELECTION | IGNORE | NEEDS_CONFIRMATION",
                     "related_column_nos": ["number"],
-                    "reason": "short Japanese explanation",
+                    "ai_review_note": "short Japanese explanation for DB ai_review_note",
+                    "reason": "short Japanese explanation, can match ai_review_note",
                     "needs_human_review": "boolean",
                     "review_points": ["string"],
+                    "candidate_action": "KEEP_MACHINE | REPLACE_MACHINE | MARK_IGNORE | MARK_REVIEW | NO_CANDIDATE",
                 }
+            ],
+            "notes": [
+                "Use updates, not suggestions.",
+                "REVIEWED means AI checked the row and gives a usable candidate or explicit IGNORE/REVIEW candidate.",
+                "SKIPPED means AI intentionally leaves this row for human work because evidence is insufficient.",
+                "FAILED means AI could not process the row due to malformed data or another error.",
+                "candidate_namecode is required only when candidate_target_kind is EXAM_ITEM_VALUE.",
+                "candidate_ledger_field is required only when candidate_target_kind is LEDGER_FIELD.",
             ],
         },
     }

@@ -2,7 +2,7 @@
 
 ## 目的
 
-このZIPは、健診結果CSVの列解析結果をCodexに渡し、CSV取込マッピング候補を返してもらうためのものです。
+このZIPは、健診結果CSVの列解析結果をCodexに渡し、CSV取込マッピング候補をAIレビューして返してもらうためのものです。
 
 Codexは、同梱された `analysis_prompt.json` を読み、列ごとのマッピング候補をJSONだけで返してください。
 
@@ -13,9 +13,11 @@ ZIPには次のファイルが入ります。
 - `REGULATION.md`: このレギュレーション。
 - `analysis_prompt.json`: 解析済みCSV列情報と回答スキーマ。
 
-`analysis_prompt.json` には、実CSVそのものではなく、列番、ヘッダー、サンプル値、型、空欄数、周辺列、既存の機械候補などが入ります。
+`analysis_prompt.json` には、実CSVそのものではなく、列番、ヘッダー、サンプル値、型、空欄数、周辺列、既存の機械候補、AIレビュー状態、人の判断状態などが入ります。
 
 登録済みルールがヒットしている列には `rule_hits` が入ります。これは過去判断から作った機械候補の根拠ですが、最終判断ではありません。
+
+既存の `machine_candidate` は、管理画面が機械的に推定した現在の候補です。Codexはこの候補を点検し、正しければ維持、違っていれば置き換え、判断不能ならスキップしてください。
 
 ## 個人情報・機微情報の扱い
 
@@ -35,12 +37,15 @@ Codexは、各列について次を判断します。
 - 人間確認が必要な列か。
 - 関連列と組み合わせて扱うべき列か。
 
-Codexは、このZIPへの回答では最終seedを作成しません。候補を返すだけです。
+Codexは、このZIPへの回答では最終seedを作成しません。候補とAIレビュー状態を返すだけです。
+
+人の最終判断である `current_decision.status` は変更しません。AIレビューは、人が画面で最終判断する前の補助情報です。
 
 ## 判断方針
 
 - ヘッダー名だけで決めず、サンプル値、型、周辺列も確認してください。
 - `rule_hits` は優先的な判断材料として扱ってください。ただしヘッダーや値の実態と矛盾する場合は採用しないでください。
+- `machine_candidate` は現在の機械候補です。正しければ `KEEP_MACHINE`、修正するなら `REPLACE_MACHINE`、未使用に寄せるなら `MARK_IGNORE`、人確認に寄せるなら `MARK_REVIEW` を返してください。
 - 意味が曖昧な列は `REVIEW` または `NEEDS_CONFIRMATION` にしてください。
 - 健診結果値は、可能な限り既存の `namecode` に寄せてください。
 - `analysis_prompt.json` と参照可能な既存定義から確認できない `namecode` は作らないでください。
@@ -56,22 +61,34 @@ Codexは、このZIPへの回答では最終seedを作成しません。候補�
 ```json
 {
   "analysis_file_id": 3,
-  "suggestions": [
+  "reviewed_by": "codex",
+  "updates": [
     {
       "column_no": 151,
-      "target_kind": "EXAM_ITEM_VALUE",
+      "ai_review_status": "REVIEWED",
+      "candidate_target_kind": "EXAM_ITEM_VALUE",
       "candidate_namecode": "9N001000000000001",
       "candidate_ledger_field": null,
       "confidence": 0.95,
       "mapping_strategy": "DIRECT",
       "related_column_nos": [],
+      "ai_review_note": "ヘッダーが身長で、値も数値のため身長として扱えます。",
       "reason": "ヘッダーが身長で、値も数値のため。",
       "needs_human_review": false,
-      "review_points": []
+      "review_points": [],
+      "candidate_action": "KEEP_MACHINE"
     }
   ]
 }
 ```
+
+古い `suggestions` 形式は使わないでください。必ず `updates` で返してください。
+
+## `ai_review_status`
+
+- `REVIEWED`: AIとして確認済み。候補を提示する、または `IGNORE` / `REVIEW` として明示できる状態。
+- `SKIPPED`: 情報不足などでAIでは判断せず、人間に残す状態。
+- `FAILED`: 入力不備や処理上の問題で、その列をAIレビューできなかった状態。
 
 ## `target_kind`
 
@@ -79,6 +96,14 @@ Codexは、このZIPへの回答では最終seedを作成しません。候補�
 - `EXAM_ITEM_VALUE`: 身長、血圧、検査値、問診、所見など、健診結果値。
 - `IGNORE`: 取り込み不要。
 - `REVIEW`: AIでは判断しきれない。
+
+## `candidate_action`
+
+- `KEEP_MACHINE`: 既存の `machine_candidate` が妥当。
+- `REPLACE_MACHINE`: 既存の `machine_candidate` とは別の候補に置き換える。
+- `MARK_IGNORE`: 取り込み不要として候補化する。
+- `MARK_REVIEW`: 人間確認対象として候補化する。
+- `NO_CANDIDATE`: 候補を作らず、AIレビュー状態だけを返す。
 
 ## `mapping_strategy`
 
@@ -92,3 +117,5 @@ Codexは、このZIPへの回答では最終seedを作成しません。候補�
 ## 注意
 
 AIの回答は候補です。最終判断は作業者が管理画面で確認して確定します。
+
+AIの回答をDBへ反映する場合も、更新対象は `analysis_columns` のAIレビュー系カラムと機械候補系カラムまでです。人の確定状態である `decision_status` は、管理画面で人が操作したときだけ変更します。
