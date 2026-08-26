@@ -7453,6 +7453,32 @@ def load_facility_summary_detail(
     header = dict(cur.fetchone() or {})
     header["facility_code"] = header.get("facility_code") or facility_code
     header["expected_source_mode_label"] = source_mode_label(header.get("expected_source_mode"))
+    cur.execute(
+        f"""
+        SELECT
+          mfa.alias_id,
+          mfa.src_folder_raw,
+          mfa.dst_folder_norm,
+          mfa.expected_source_mode
+        FROM {qname(master_db())}.medical_folder_aliases AS mfa
+        LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        WHERE mfa.event_id = %s
+          AND mfa.is_active = 1
+          AND COALESCE(ef.exam_facility_code, SUBSTRING_INDEX(mfa.src_folder_raw, '_', 1)) = %s
+        ORDER BY mfa.updated_at DESC, mfa.alias_id DESC
+        LIMIT 1
+        """,
+        (event_id, facility_code),
+    )
+    alias_header = dict(cur.fetchone() or {})
+    header["alias_id"] = alias_header.get("alias_id")
+    header["src_folder_raw"] = alias_header.get("src_folder_raw")
+    header["dst_folder_norm"] = alias_header.get("dst_folder_norm")
+    header["facility_folder_copy_value"] = header.get("src_folder_raw") or header.get("dst_folder_norm")
+    if not header.get("expected_source_mode") and alias_header.get("expected_source_mode"):
+        header["expected_source_mode"] = alias_header.get("expected_source_mode")
+        header["expected_source_mode_label"] = source_mode_label(header.get("expected_source_mode"))
 
     cur.execute(
         f"""

@@ -4381,11 +4381,17 @@ a.home-menu-card.is-navigating {
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 8px 24px rgba(25, 47, 70, 0.08);
   backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.facility-detail-target-bar div {
+.facility-detail-target-main {
   display: grid;
   gap: 4px;
+  min-width: 260px;
 }
 
 .facility-detail-target-label {
@@ -4405,6 +4411,41 @@ a.home-menu-card.is-navigating {
   color: var(--muted);
   font-size: 14px;
   font-weight: 700;
+}
+
+.facility-detail-folder-copy {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 520px) auto;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.facility-detail-folder-copy span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.facility-detail-folder-copy code {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7fafc;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.facility-detail-folder-copy code.is-muted {
+  color: var(--muted);
+}
+
+.facility-detail-folder-copy small {
+  grid-column: 2 / 4;
 }
 
 .facility-summary-table {

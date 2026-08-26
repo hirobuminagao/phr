@@ -29,10 +29,22 @@
 
 <main class="page facility-detail-page">
   <section class="facility-detail-target-bar">
-    <div>
+    <div class="facility-detail-target-main">
       <span class="facility-detail-target-label">対象健診機関</span>
       <strong>{{ detail.header.facility_name or "健診機関" }}</strong>
       <small>{{ detail.header.facility_code or filters.facility_code or "コードなし" }} / {{ detail.header.expected_source_mode_label or "受領設定なし" }}</small>
+    </div>
+    <div class="facility-detail-folder-copy">
+      <span>受領フォルダ</span>
+      {% if detail.header.facility_folder_copy_value %}
+        <code id="facility-detail-folder-copy-text">{{ detail.header.facility_folder_copy_value }}</code>
+        <button type="button" class="ghost-button compact-action-button" data-copy-target="#facility-detail-folder-copy-text">コピー</button>
+        {% if detail.header.dst_folder_norm and detail.header.dst_folder_norm != detail.header.facility_folder_copy_value %}
+          <small>正規化後 {{ detail.header.dst_folder_norm }}</small>
+        {% endif %}
+      {% else %}
+        <code class="is-muted">alias未設定</code>
+      {% endif %}
     </div>
   </section>
 
