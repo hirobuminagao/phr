@@ -475,6 +475,8 @@
       button.addEventListener("click", () => {
         const index = Number(header.dataset.sortIndex || "0");
         const type = header.dataset.sortType || "text";
+        const secondaryIndex = header.dataset.sortSecondaryIndex ? Number(header.dataset.sortSecondaryIndex) : null;
+        const secondaryType = header.dataset.sortSecondaryType || "number";
         const currentDirection = header.dataset.sortDirection === "asc" ? "asc" : "desc";
         const nextDirection = currentDirection === "asc" ? "desc" : "asc";
         for (const other of headers) {
@@ -492,6 +494,15 @@
             compared = leftValue - rightValue;
           } else {
             compared = String(leftValue).localeCompare(String(rightValue), "ja");
+          }
+          if (compared === 0 && secondaryIndex !== null && Number.isFinite(secondaryIndex)) {
+            const leftSecondaryValue = parseSortValue(left.row.children[secondaryIndex], secondaryType);
+            const rightSecondaryValue = parseSortValue(right.row.children[secondaryIndex], secondaryType);
+            if (typeof leftSecondaryValue === "number" && typeof rightSecondaryValue === "number") {
+              compared = leftSecondaryValue - rightSecondaryValue;
+            } else {
+              compared = String(leftSecondaryValue).localeCompare(String(rightSecondaryValue), "ja");
+            }
           }
           if (compared === 0) compared = left.originalIndex - right.originalIndex;
           return nextDirection === "asc" ? compared : -compared;
