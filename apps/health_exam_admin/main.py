@@ -6400,13 +6400,6 @@ def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[
         key = (str(item.get("namecode") or ""), int(item.get("occurrence_no") or 1))
         candidates_by_item.setdefault(key, []).append(item)
 
-    def pick_candidate(candidates: list[dict[str, Any]], role: str) -> dict[str, Any] | None:
-        role_upper = role.upper()
-        for candidate in candidates:
-            if str(candidate.get("source_role") or "").upper() == role_upper:
-                return candidate
-        return None
-
     def compact_value(row: Mapping[str, Any] | None) -> str:
         if not row:
             return "-"
@@ -6420,16 +6413,30 @@ def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[
     for adopted in adopted_rows:
         key = (str(adopted.get("namecode") or ""), int(adopted.get("occurrence_no") or 1))
         candidates = candidates_by_item.get(key, [])
-        primary = pick_candidate(candidates, "PRIMARY")
-        supplement = pick_candidate(candidates, "SUPPLEMENT")
-        if primary is None and str(adopted.get("adopted_source_role") or "").upper() == "PRIMARY":
-            primary = adopted
-        if supplement is None and str(adopted.get("adopted_source_role") or "").upper() == "SUPPLEMENT":
-            supplement = adopted
-        adopted["primary_candidate"] = primary
-        adopted["supplement_candidate"] = supplement
-        adopted["primary_value_text"] = compact_value(primary)
-        adopted["supplement_value_text"] = compact_value(supplement)
+        adopted_source_item_id = adopted.get("source_exam_item_value_id")
+        if adopted_source_item_id is not None and not any(
+            str(candidate.get("source_exam_item_value_id") or "") == str(adopted_source_item_id)
+            for candidate in candidates
+        ):
+            adopted_candidate = dict(adopted)
+            adopted_candidate["source_role"] = adopted.get("adopted_source_role")
+            adopted_candidate["source_type"] = adopted.get("adopted_source_type")
+            adopted_candidate["source_exam_ledger_id"] = adopted.get("source_exam_ledger_id")
+            candidates = [adopted_candidate, *candidates]
+        source_slots = candidates[:3]
+        while len(source_slots) < 3:
+            source_slots.append({})
+        for index, candidate in enumerate(source_slots, start=1):
+            candidate["slot_no"] = index
+            candidate["value_text"] = compact_value(candidate)
+            candidate["is_adopted"] = bool(
+                adopted_source_item_id is not None
+                and str(candidate.get("source_exam_item_value_id") or "") == str(adopted_source_item_id)
+            )
+        adopted["source_slots"] = source_slots
+        adopted["candidate_values_text"] = " ".join(
+            str(candidate.get("value_text") or "") for candidate in source_slots if candidate
+        )
         adopted["adopted_value_text"] = compact_value(adopted)
         values.append(adopted)
     return values

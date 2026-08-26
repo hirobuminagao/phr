@@ -35,6 +35,7 @@ ETL_SOURCE = "FROM_MEDICAL"
 class BuildCaseConfig:
     event_id: int
     health_db: str
+    dev_db: str
     dry_run: bool
     limit_groups: int
 
@@ -79,6 +80,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-groups", type=int, default=0)
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
+    parser.add_argument("--dev-db", default="dev_phr")
     return parser.parse_args()
 
 
@@ -94,6 +96,7 @@ def validate_config(config: BuildCaseConfig) -> None:
     if config.limit_groups < 0:
         raise ValueError("limit_groups must be >= 0")
     qname(config.health_db)
+    qname(config.dev_db)
 
 
 def case_key(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -109,27 +112,88 @@ def case_key(row: dict[str, Any]) -> tuple[Any, ...]:
 def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, Any]]:
     cur.execute(
         f"""
-        SELECT *
-        FROM {qname(config.health_db)}.`exam_ledgers`
-        WHERE `event_id` = %s
-          AND `source_type` IN ('XML', 'CSV', 'PAPER', 'MANUAL')
-          AND COALESCE(`row_status`, '') <> 'REVERTED_TO_DRAFT'
-          AND `subscriber_id` IS NOT NULL
+        SELECT
+          el.*,
+          d.`exam_export_case_id` AS manual_exam_export_case_id,
+          COALESCE(
+            el.`subscriber_id`,
+            eec.`subscriber_id`,
+            (
+              SELECT s.`id`
+              FROM {qname(config.dev_db)}.`subscribers` AS s
+              WHERE el.`source_type` IN ('PAPER', 'MANUAL')
+                AND el.`hia_subscriber_id` IS NOT NULL
+                AND el.`hia_subscriber_id` <> ''
+                AND s.`hia_subscriber_id` = el.`hia_subscriber_id`
+              ORDER BY s.`id` DESC
+              LIMIT 1
+            ),
+            (
+              SELECT s.`id`
+              FROM {qname(config.dev_db)}.`subscribers` AS s
+              WHERE el.`source_type` IN ('PAPER', 'MANUAL')
+                AND el.`identity_hash` IS NOT NULL
+                AND el.`identity_hash` <> ''
+                AND s.`identity_hash` = el.`identity_hash`
+              ORDER BY s.`id` DESC
+              LIMIT 1
+            ),
+            (
+              SELECT s.`id`
+              FROM {qname(config.dev_db)}.`subscribers` AS s
+              WHERE el.`source_type` IN ('PAPER', 'MANUAL')
+                AND el.`person_id_custom` IS NOT NULL
+                AND el.`person_id_custom` <> ''
+                AND s.`person_id_custom` = el.`person_id_custom`
+                AND (
+                  el.`name_kana_match` IS NULL
+                  OR el.`name_kana_match` = ''
+                  OR s.`name_kana_full_match` = el.`name_kana_match`
+                )
+              ORDER BY s.`id` DESC
+              LIMIT 1
+            )
+          ) AS resolved_subscriber_id,
+          COALESCE(el.`exam_date`, eec.`exam_date`) AS resolved_exam_date,
+          COALESCE(el.`exam_facility_id`, eec.`exam_facility_id`) AS resolved_exam_facility_id,
+          COALESCE(el.`insurer_number`, eec.`insurer_number`) AS resolved_insurer_number,
+          COALESCE(el.`facility_code`, eec.`facility_code`) AS resolved_facility_code,
+          COALESCE(el.`facility_name`, eec.`facility_name`) AS resolved_facility_name
+        FROM {qname(config.health_db)}.`exam_ledgers` AS el
+        LEFT JOIN {qname(config.health_db)}.`manual_exam_entry_drafts` AS d
+          ON el.`source_type` IN ('PAPER', 'MANUAL')
+         AND CAST(d.`manual_exam_entry_draft_id` AS CHAR) = JSON_UNQUOTE(JSON_EXTRACT(el.`raw_row_json`, '$.manual_exam_entry_draft_id'))
+        LEFT JOIN {qname(config.health_db)}.`exam_export_cases` AS eec
+          ON eec.`exam_export_case_id` = d.`exam_export_case_id`
+        WHERE el.`event_id` = %s
+          AND el.`source_type` IN ('XML', 'CSV', 'PAPER', 'MANUAL')
+          AND COALESCE(el.`row_status`, '') <> 'REVERTED_TO_DRAFT'
           AND (
-            `subscriber_match_status` = 'MATCHED'
+            el.`subscriber_match_status` = 'MATCHED'
             OR (
-              `source_type` IN ('PAPER', 'MANUAL')
-              AND `subscriber_match_status` = 'MANUAL_ENTRY'
+              el.`source_type` IN ('PAPER', 'MANUAL')
+              AND el.`subscriber_match_status` IN ('MANUAL_ENTRY', 'MANUAL_CONFIRMED')
             )
           )
-          AND `exam_date` IS NOT NULL
-          AND `exam_facility_id` IS NOT NULL
-          AND `insurer_number` IS NOT NULL
-        ORDER BY `subscriber_id`, `exam_date`, `exam_facility_id`, `insurer_number`, `source_type`, `exam_ledger_id`
+        HAVING resolved_subscriber_id IS NOT NULL
+          AND resolved_exam_date IS NOT NULL
+          AND resolved_exam_facility_id IS NOT NULL
+          AND resolved_insurer_number IS NOT NULL
+        ORDER BY resolved_subscriber_id, resolved_exam_date, resolved_exam_facility_id, resolved_insurer_number, el.`source_type`, el.`exam_ledger_id`
         """,
         (config.event_id,),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        if row.get("subscriber_id") is None and row.get("resolved_subscriber_id") is not None:
+            row["subscriber_id"] = row["resolved_subscriber_id"]
+        if row.get("manual_exam_export_case_id"):
+            row["exam_date"] = row.get("resolved_exam_date")
+            row["exam_facility_id"] = row.get("resolved_exam_facility_id")
+            row["insurer_number"] = row.get("resolved_insurer_number")
+            row["facility_code"] = row.get("resolved_facility_code")
+            row["facility_name"] = row.get("resolved_facility_name")
+    return rows
 
 
 def select_groups(rows: Iterable[dict[str, Any]], limit: int) -> list[list[dict[str, Any]]]:
@@ -545,6 +609,7 @@ def main() -> int:
     config = BuildCaseConfig(
         event_id=args.event_id,
         health_db=args.health_db,
+        dev_db=args.dev_db,
         dry_run=bool(args.dry_run),
         limit_groups=int(args.limit_groups or 0),
     )

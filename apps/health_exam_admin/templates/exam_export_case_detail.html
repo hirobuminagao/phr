@@ -330,34 +330,28 @@
         <thead>
           <tr>
             <th>項目</th>
-            <th>PRIMARY</th>
-            <th>SUPPLEMENT</th>
+            <th>source 1</th>
+            <th>source 2</th>
+            <th>source 3</th>
             <th>採用</th>
             <th>理由</th>
           </tr>
         </thead>
         <tbody>
           {% for value in values %}
-          {% set primary = value.primary_candidate %}
-          {% set supplement = value.supplement_candidate %}
-          {% set adopted_role = (value.adopted_source_role or '')|upper %}
-          <tr data-filter-text="{{ value.item_name or '' }} {{ value.namecode or '' }} {{ value.code_value or '' }} {{ value.code_display or '' }} {{ value.primary_value_text or '' }} {{ value.supplement_value_text or '' }}">
+          <tr data-filter-text="{{ value.item_name or '' }} {{ value.namecode or '' }} {{ value.code_value or '' }} {{ value.code_display or '' }} {{ value.candidate_values_text or '' }}">
             <td>
               <strong>{{ value.item_name or "項目名なし" }}</strong>
               <small>{{ value.namecode }} / occurrence {{ value.occurrence_no }}</small>
             </td>
-            <td class="{{ 'adopted-source-cell' if adopted_role == 'PRIMARY' else '' }}">
-              <strong>{{ value.primary_value_text }}</strong>
-              <small>raw {{ primary.raw_value if primary and primary.raw_value is not none else "-" }}</small>
-              <small>{{ primary.source_type if primary else "-" }} / ledger {{ primary.source_exam_ledger_id if primary else "-" }} / item {{ primary.source_exam_item_value_id if primary else "-" }}</small>
-              <small>{{ primary.validation_status if primary else "" }} {{ primary.review_status if primary else "" }}</small>
+            {% for candidate in value.source_slots %}
+            <td class="{{ 'adopted-source-cell' if candidate.is_adopted else 'muted-source-cell' if not candidate.source_exam_item_value_id else '' }}">
+              <strong>{{ candidate.value_text or "-" }}</strong>
+              <small>{{ candidate.source_role or "-" }} / {{ candidate.source_type or "-" }}</small>
+              <small>ledger {{ candidate.source_exam_ledger_id or "-" }} / item {{ candidate.source_exam_item_value_id or "-" }}</small>
+              <small>{{ candidate.validation_status or "" }} {{ candidate.review_status or "" }}</small>
             </td>
-            <td class="{{ 'adopted-source-cell' if adopted_role == 'SUPPLEMENT' else '' }}">
-              <strong>{{ value.supplement_value_text }}</strong>
-              <small>raw {{ supplement.raw_value if supplement and supplement.raw_value is not none else "-" }}</small>
-              <small>{{ supplement.source_type if supplement else "-" }} / ledger {{ supplement.source_exam_ledger_id if supplement else "-" }} / item {{ supplement.source_exam_item_value_id if supplement else "-" }}</small>
-              <small>{{ supplement.validation_status if supplement else "" }} {{ supplement.review_status if supplement else "" }}</small>
-            </td>
+            {% endfor %}
             <td>
               <strong>{{ value.adopted_value_text }}</strong>
               <small>{{ value.code_value or value.normalized_unit or "-" }} {{ value.code_display or "" }} {{ value.normalized_unit or "" }}</small>

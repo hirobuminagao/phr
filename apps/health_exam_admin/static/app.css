@@ -6201,29 +6201,36 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .case-value-compare-table th:nth-child(1),
 .case-value-compare-table td:nth-child(1) {
-  width: 24%;
+  width: 20%;
 }
 
 .case-value-compare-table th:nth-child(2),
 .case-value-compare-table td:nth-child(2),
 .case-value-compare-table th:nth-child(3),
-.case-value-compare-table td:nth-child(3) {
-  width: 24%;
-}
-
+.case-value-compare-table td:nth-child(3),
 .case-value-compare-table th:nth-child(4),
 .case-value-compare-table td:nth-child(4) {
-  width: 18%;
+  width: 17%;
 }
 
 .case-value-compare-table th:nth-child(5),
 .case-value-compare-table td:nth-child(5) {
-  width: 10%;
+  width: 16%;
+}
+
+.case-value-compare-table th:nth-child(6),
+.case-value-compare-table td:nth-child(6) {
+  width: 13%;
 }
 
 .adopted-source-cell {
   background: #ecfdf5;
   box-shadow: inset 4px 0 0 #16845f;
+}
+
+.muted-source-cell {
+  background: #f8fafc;
+  color: #94a3b8;
 }
 
 .exam-item-filter-bar {
