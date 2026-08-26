@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import io
 import os
 import hashlib
@@ -191,6 +192,13 @@ WORK_PERMISSION_ITEMS = (
         "description": "表示=手入力draftの作成・更新、編集=削除や正式ledger管理を担当する",
         "view_codes": (MANUAL_EXAM_ENTRY_EDIT_PERMISSION,),
         "edit_codes": (MANUAL_EXAM_ENTRY_MANAGE_PERMISSION,),
+    },
+    {
+        "key": "case_csv_download",
+        "name": "case CSV出力",
+        "description": "個人case一覧の絞り込み結果を、加入者情報付きCSVとして出力する",
+        "view_codes": ("exam_export_cases.csv_download",),
+        "edit_codes": ("exam_export_cases.csv_download",),
     },
 )
 
@@ -5771,8 +5779,26 @@ def load_exam_export_case_rows(
           eec.name_kana_raw,
           eec.birthdate,
           eec.gender_code,
+          s.insurer_number AS subscriber_insurer_number,
+          s.insurance_symbol AS subscriber_insurance_symbol,
+          s.insurance_symbol_export AS subscriber_insurance_symbol_export,
+          s.insurance_number AS subscriber_insurance_number,
+          s.insurance_branchnumber AS subscriber_insurance_branchnumber,
+          s.birth AS subscriber_birth,
+          s.gender_code AS subscriber_gender_code,
+          s.name_kana_full AS subscriber_name_kana_full,
+          s.name_kanji_full AS subscriber_name_kanji_full,
+          s.person_id_custom AS subscriber_person_id_custom,
+          s.hia_subscriber_id AS subscriber_hia_subscriber_id,
+          s.insured_attribute_name,
           s.relationship_name,
+          s.qualification_acquired_date,
           s.qualification_lost_date,
+          s.employer_code,
+          s.department_code,
+          s.distribution_code,
+          s.employee_code,
+          s.connect_id,
           eec.source_mode,
           eec.case_status,
           eec.case_reason,
@@ -5851,6 +5877,179 @@ def load_exam_export_case_rows(
             row.get("specific_reason_summary"),
         )
     return rows
+
+
+EXAM_EXPORT_CASE_CSV_PERMISSION = "exam_export_cases.csv_download"
+
+EXAM_EXPORT_CASE_CSV_FIELD_GROUPS: list[dict[str, Any]] = [
+    {
+        "group": "case基本",
+        "fields": [
+            ("exam_export_case_id", "case_id"),
+            ("event_id", "event_id"),
+            ("subscriber_id", "case_subscriber_id"),
+            ("hia_subscriber_id", "case_hia_id"),
+            ("person_id_custom", "case_person_id_custom"),
+            ("subscriber_match_status", "突合状態"),
+            ("subscriber_match_reason", "突合理由"),
+        ],
+    },
+    {
+        "group": "受診者(case)",
+        "fields": [
+            ("name_kana_raw", "case氏名カナ"),
+            ("name_full_raw", "case氏名"),
+            ("birthdate", "case生年月日"),
+            ("gender_code", "case性別"),
+            ("insurer_number", "case保険者番号"),
+            ("insurance_symbol_raw", "case記号"),
+            ("insurance_symbol_export_value", "case記号_出力"),
+            ("insurance_number_raw", "case番号"),
+            ("insurance_number_export_value", "case番号_出力"),
+            ("insurance_branch_number_raw", "case枝番"),
+            ("insurance_branch_number_export_value", "case枝番_出力"),
+        ],
+    },
+    {
+        "group": "加入者(subscriber)",
+        "fields": [
+            ("subscriber_hia_subscriber_id", "加入者HIA ID"),
+            ("subscriber_person_id_custom", "加入者person_id_custom"),
+            ("subscriber_name_kana_full", "加入者氏名カナ"),
+            ("subscriber_name_kanji_full", "加入者氏名"),
+            ("subscriber_birth", "加入者生年月日"),
+            ("subscriber_gender_code", "加入者性別"),
+            ("subscriber_insurer_number", "加入者保険者番号"),
+            ("subscriber_insurance_symbol", "加入者記号"),
+            ("subscriber_insurance_symbol_export", "加入者記号_出力"),
+            ("subscriber_insurance_number", "加入者番号"),
+            ("subscriber_insurance_branchnumber", "加入者枝番"),
+            ("insured_attribute_name", "本人家族区分"),
+            ("relationship_name", "続柄"),
+            ("qualification_acquired_date", "資格取得日"),
+            ("qualification_lost_date", "資格喪失日"),
+            ("employer_code", "事業所コード"),
+            ("department_code", "部署コード"),
+            ("distribution_code", "配布コード"),
+            ("employee_code", "社員番号"),
+            ("connect_id", "connect_id"),
+        ],
+    },
+    {
+        "group": "受診",
+        "fields": [
+            ("exam_facility_id", "健診機関ID"),
+            ("facility_code", "健診機関コード"),
+            ("facility_name", "健診機関名"),
+            ("expected_source_mode", "想定受領方式"),
+            ("exam_date", "受診日"),
+            ("health_exam_report_category", "報告区分"),
+            ("program_code", "プログラムコード"),
+        ],
+    },
+    {
+        "group": "チェック/出力",
+        "fields": [
+            ("source_mode", "source"),
+            ("case_value_count", "採用値数"),
+            ("legal_check_result", "法定チェック"),
+            ("legal_reason_summary", "法定理由"),
+            ("specific_check_result_display", "特定健診チェック"),
+            ("specific_reason_summary", "特定健診理由"),
+            ("export_readiness_status", "出力可否"),
+            ("export_readiness_reason", "出力不可理由"),
+            ("xml_export_status", "XML出力状態"),
+            ("output_zip_file_name", "出力ZIP"),
+            ("output_xml_file_name", "出力XML"),
+            ("updated_at", "case更新日時"),
+        ],
+    },
+    {
+        "group": "source数",
+        "fields": [
+            ("source_count", "source数"),
+            ("xml_count", "XML数"),
+            ("csv_count", "CSV数"),
+            ("paper_count", "紙数"),
+        ],
+    },
+]
+
+EXAM_EXPORT_CASE_CSV_FIELD_LABELS: dict[str, str] = {
+    field: label
+    for group in EXAM_EXPORT_CASE_CSV_FIELD_GROUPS
+    for field, label in group["fields"]
+}
+
+EXAM_EXPORT_CASE_CSV_DEFAULT_FIELDS = [
+    "exam_export_case_id",
+    "event_id",
+    "subscriber_id",
+    "hia_subscriber_id",
+    "person_id_custom",
+    "subscriber_match_status",
+    "name_kana_raw",
+    "name_full_raw",
+    "birthdate",
+    "gender_code",
+    "insurer_number",
+    "insurance_symbol_raw",
+    "insurance_number_raw",
+    "insurance_branch_number_raw",
+    "subscriber_name_kana_full",
+    "subscriber_name_kanji_full",
+    "subscriber_birth",
+    "subscriber_gender_code",
+    "subscriber_insurance_symbol",
+    "subscriber_insurance_number",
+    "subscriber_insurance_branchnumber",
+    "relationship_name",
+    "qualification_lost_date",
+    "facility_code",
+    "facility_name",
+    "exam_date",
+    "source_mode",
+    "legal_check_result",
+    "legal_reason_summary",
+    "specific_check_result_display",
+    "specific_reason_summary",
+    "export_readiness_status",
+    "export_readiness_reason",
+    "output_zip_file_name",
+    "output_xml_file_name",
+]
+
+
+def can_download_exam_export_case_csv(user: Mapping[str, Any]) -> bool:
+    return has_any_permission(user, (EXAM_EXPORT_CASE_CSV_PERMISSION, SYSTEM_SETTINGS_PERMISSION))
+
+
+def normalize_exam_export_case_csv_fields(raw_fields: Sequence[str]) -> list[str]:
+    allowed = set(EXAM_EXPORT_CASE_CSV_FIELD_LABELS)
+    fields = [field for field in raw_fields if field in allowed]
+    if not fields:
+        fields = list(EXAM_EXPORT_CASE_CSV_DEFAULT_FIELDS)
+    return list(dict.fromkeys(fields))
+
+
+def csv_cell_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (date, datetime)):
+        return value.isoformat(sep=" ")
+    if isinstance(value, Decimal):
+        return str(value)
+    return str(value)
+
+
+def build_exam_export_case_csv(rows: Sequence[Mapping[str, Any]], fields: Sequence[str]) -> str:
+    output = io.StringIO()
+    output.write("\ufeff")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow([EXAM_EXPORT_CASE_CSV_FIELD_LABELS[field] for field in fields])
+    for row in rows:
+        writer.writerow([csv_cell_value(row.get(field)) for field in fields])
+    return output.getvalue()
 
 
 def build_exam_export_case_pagination(
@@ -14462,7 +14661,82 @@ def exam_export_cases(request: Request) -> Response:
             "folder_aliases": folder_aliases,
             "exam_month_options": exam_month_options,
             "selected_exam_months": split_filter_values(filters.get("exam_month")),
+            "can_download_csv": can_download_exam_export_case_csv(user),
+            "csv_field_groups": EXAM_EXPORT_CASE_CSV_FIELD_GROUPS,
+            "csv_default_fields": set(EXAM_EXPORT_CASE_CSV_DEFAULT_FIELDS),
         },
+    )
+
+
+@app.post("/exam-export-cases/download.csv")
+async def exam_export_cases_csv_download(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_download_exam_export_case_csv(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    filters = {
+        "event_id": str(form.get("event_id") or "2"),
+        "legal_check_result": str(form.get("legal_check_result") or ""),
+        "specific_check_result": str(form.get("specific_check_result") or ""),
+        "export_readiness_status": str(form.get("export_readiness_status") or ""),
+        "source_mode": str(form.get("source_mode") or ""),
+        "exam_month": str(form.get("exam_month") or ""),
+        "q": str(form.get("q") or ""),
+        "case_id": str(form.get("case_id") or ""),
+        "name_full": str(form.get("name_full") or ""),
+        "name_kana": str(form.get("name_kana") or ""),
+        "insurance_symbol": str(form.get("insurance_symbol") or ""),
+        "insurance_number": str(form.get("insurance_number") or ""),
+        "hia_subscriber_id": str(form.get("hia_subscriber_id") or ""),
+        "subscriber_id": str(form.get("subscriber_id") or ""),
+        "qualification_lost_status": str(form.get("qualification_lost_status") or ""),
+        "qualification_lost_date": str(form.get("qualification_lost_date") or ""),
+        "facility_q": str(form.get("facility_q") or ""),
+        "facility_codes": str(form.get("facility_codes") or ""),
+        "limit": "5000",
+        "page": "1",
+    }
+    fields = normalize_exam_export_case_csv_fields([str(value) for value in form.getlist("fields")])
+    export_limit = parse_positive_int(str(form.get("export_limit") or ""), default=30000, maximum=50000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            total_count = load_exam_export_case_count(cur, filters=filters)
+            rows = load_exam_export_case_rows(cur, filters=filters, limit=min(total_count, export_limit), offset=0)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="DOWNLOAD_EXAM_EXPORT_CASES_CSV",
+                    target_schema=health_db(),
+                    target_table="exam_export_cases",
+                    target_id=f"event_id={filters.get('event_id') or '-'}",
+                    after={
+                        "filters": {key: value for key, value in filters.items() if value and key not in {"limit", "page"}},
+                        "selected_fields": fields,
+                        "row_count": len(rows),
+                        "total_count": total_count,
+                        "export_limit": export_limit,
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+    csv_text = build_exam_export_case_csv(rows, fields)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    event_part = re.sub(r"[^0-9A-Za-z_-]+", "", filters.get("event_id") or "all") or "all"
+    filename = f"exam_export_cases_event{event_part}_{timestamp}.csv"
+    return StreamingResponse(
+        iter([csv_text.encode("utf-8")]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

@@ -228,6 +228,51 @@
     </section>
   </div>
 
+  {% if can_download_csv %}
+  <div id="case-csv-download-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel case-csv-download-modal-panel" role="dialog" aria-modal="true" aria-labelledby="case-csv-download-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">CASE CSV</p>
+          <h2 id="case-csv-download-title">case一覧をCSV出力</h2>
+          <p class="subtle">現在の絞り込み条件で、1caseを1行として出力します。加入者情報もsubscriber_idで付け合わせます。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <form method="post" action="/exam-export-cases/download.csv" class="case-csv-download-form">
+        <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+        {% for key, value in filters.items() %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}">
+        {% endfor %}
+        <div class="case-csv-download-scroll">
+          <label class="case-csv-limit-control">
+            <span>最大出力件数</span>
+            <input name="export_limit" value="30000" inputmode="numeric">
+          </label>
+          {% for group in csv_field_groups %}
+          <fieldset class="case-csv-field-group">
+            <legend>{{ group.group }}</legend>
+            <div class="case-csv-field-grid">
+              {% for field, label in group.fields %}
+              <label class="case-csv-field-option">
+                <input type="checkbox" name="fields" value="{{ field }}" {% if field in csv_default_fields %}checked{% endif %}>
+                <span>{{ label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+          {% endfor %}
+        </div>
+        <div class="edit-modal__actions">
+          <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+          <button type="submit">CSVをダウンロード</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  {% endif %}
+
   <div id="case-facility-picker-modal" class="edit-modal" hidden>
     <div class="edit-modal__backdrop" data-modal-close></div>
     <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="case-facility-picker-title">
@@ -341,6 +386,9 @@
         <h2>case一覧</h2>
         <p class="subtle">検索結果 {{ total_count }} 件中、{{ pagination.start }}-{{ pagination.end }} 件を表示しています。source欄は採用値の構成元で、基本はXML優先、CSVは不足補完です。</p>
       </div>
+      {% if can_download_csv %}
+      <button type="button" class="ghost-button" data-modal-open="case-csv-download-modal">CSV出力</button>
+      {% endif %}
     </div>
     <nav class="pagination-bar" aria-label="case一覧ページ切り替え">
       <div class="pagination-status">
