@@ -3719,6 +3719,7 @@ a.home-menu-card.is-navigating {
   grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(112px, 1fr)) auto auto;
   gap: 10px;
   margin: 10px 0 14px;
+  scroll-margin-top: 92px;
 }
 
 .csv-mapping-column-filter-form label {
@@ -3867,7 +3868,8 @@ a.home-menu-card.is-navigating {
 }
 
 .csv-mapping-exam-item-modal .edit-modal__panel {
-  max-width: min(1080px, calc(100vw - 40px));
+  width: min(1440px, calc(100vw - 40px));
+  max-width: none;
 }
 
 .csv-mapping-exam-item-search {
@@ -3880,11 +3882,18 @@ a.home-menu-card.is-navigating {
   width: 100%;
 }
 
+.csv-mapping-exam-item-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 1.35fr);
+  gap: 14px;
+  align-items: start;
+}
+
 .csv-mapping-exam-item-results {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
-  max-height: min(58vh, 620px);
+  max-height: min(62vh, 640px);
   overflow: auto;
   padding-right: 4px;
 }
@@ -3920,6 +3929,44 @@ a.home-menu-card.is-navigating {
   font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.csv-mapping-exam-item-selected {
+  margin-top: 0;
+  max-height: min(62vh, 640px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.csv-mapping-exam-item-selected-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.csv-mapping-exam-item-selected-head h3 {
+  margin: 6px 0 2px;
+  font-size: 18px;
+}
+
+.csv-mapping-exam-item-notes {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-weight: 700;
+  white-space: pre-wrap;
+}
+
+.csv-mapping-exam-item-norm {
+  margin-top: 12px;
+}
+
+.csv-mapping-exam-item-norm h4 {
+  margin: 0 0 8px;
 }
 
 .exam-item-master-filter {

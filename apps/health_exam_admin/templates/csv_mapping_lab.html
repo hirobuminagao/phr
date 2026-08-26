@@ -223,7 +223,7 @@
         <span>未使用</span><strong>{{ column_status_summary.ignore_kind }}</strong><small>IGNORE候補</small>
       </a>
     </div>
-    <form method="get" action="/utilities/csv-mapping-lab" class="csv-mapping-column-filter-form">
+    <form method="get" action="/utilities/csv-mapping-lab" class="csv-mapping-column-filter-form" id="csv-mapping-column-filter-form">
       <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
       <label>
         <span>ヘッダー/候補検索</span>
@@ -289,6 +289,7 @@
         <small>{{ column_pagination.start }}-{{ column_pagination.end }} / {{ column_pagination.total }}列{% if column_pagination.total != column_pagination.unfiltered_total %}（全{{ column_pagination.unfiltered_total }}列）{% endif %}</small>
       </div>
       <div class="csv-mapping-column-actions">
+        <button type="button" class="ghost-button compact-action-button" data-scroll-target="#csv-mapping-column-filter-form">絞り込みへ</button>
         <div class="pagination-inline">
           <a class="ghost-button compact-action-button{% if not column_pagination.prev_page %} is-disabled{% endif %}" href="{% if column_pagination.prev_page %}/utilities/csv-mapping-lab?{{ column_filter_query }}&column_page={{ column_pagination.prev_page }}{% else %}#{% endif %}">前へ</a>
           <span>{{ column_pagination.page }} / {{ column_pagination.max_page }}</span>
@@ -444,8 +445,17 @@
       <span>項目名 / namecode</span>
       <input data-csv-exam-item-search-input autocomplete="off" placeholder="聴力 / 9D... / 血圧">
     </label>
-    <div class="csv-mapping-exam-item-results" data-csv-exam-item-results>
-      <p class="subtle">検索すると候補が表示されます。</p>
+    <div class="csv-mapping-exam-item-layout">
+      <div class="csv-mapping-exam-item-results" data-csv-exam-item-results>
+        <p class="subtle">検索すると候補が表示されます。</p>
+      </div>
+      <div class="csv-mapping-exam-item-selected" data-csv-exam-item-selected hidden>
+        <p class="subtle">候補を選ぶと、ここに健診項目マスターの詳細を表示します。</p>
+      </div>
+    </div>
+    <div class="edit-modal__actions">
+      <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+      <button type="button" data-csv-exam-item-submit disabled>この検査項目で登録</button>
     </div>
   </div>
 </div>

@@ -12109,7 +12109,22 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
               `method_name`,
               `identity_item_code`,
               `identity_item_name`,
-              `result_code_oid`
+              `result_code_oid`,
+              `item_code_oid`,
+              `ucum_unit`,
+              `data_type_label`,
+              `xml_method_code`,
+              `value_method`,
+              `nullflavor_allowed`,
+              `notes`,
+              `kubun_no`,
+              `kubun_name`,
+              `jun_no`,
+              `annex2_exec_requirement`,
+              `annex2_legal_report_flag`,
+              `cda_section_code_default`,
+              `annex2_series_group_identifier`,
+              `annex2_series_group_relation_code`
             FROM {qname(dev_db())}.`exam_item_master`
             WHERE `namecode` IS NOT NULL
               AND `namecode` <> ''
@@ -12152,8 +12167,21 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
             ),
         )
         rows = [dict(row) for row in cur.fetchall()]
+        norm_variants_by_oid = load_norm_variants_by_oid(
+            cur,
+            [str(row.get("result_code_oid") or "") for row in rows],
+        )
         cur.close()
-    return JSONResponse({"items": rows})
+    for row in rows:
+        oid = str(row.get("result_code_oid") or "").strip()
+        norm_rows = norm_variants_by_oid.get(oid, []) if oid else []
+        row["standard_code_rows"] = [
+            json_safe_mapping(variant)
+            for variant in norm_rows
+            if int(variant.get("is_canonical") or 0) == 1 and int(variant.get("is_active") or 0) == 1
+        ]
+        row["norm_variant_rows"] = [json_safe_mapping(variant) for variant in norm_rows]
+    return JSONResponse({"items": [json_safe_mapping(row) for row in rows]})
 
 
 def exam_item_master_filters_from_query(query: Mapping[str, str]) -> dict[str, str]:

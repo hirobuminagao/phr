@@ -779,7 +779,11 @@
     const columnLabel = csvExamItemModal.querySelector("[data-csv-exam-item-column-label]");
     const searchInput = csvExamItemModal.querySelector("[data-csv-exam-item-search-input]");
     const results = csvExamItemModal.querySelector("[data-csv-exam-item-results]");
+    const selectedDetail = csvExamItemModal.querySelector("[data-csv-exam-item-selected]");
+    const submitButton = csvExamItemModal.querySelector("[data-csv-exam-item-submit]");
     let searchTimer = null;
+    let csvExamItemItems = [];
+    let csvExamItemSelectedNamecode = "";
 
     const submitExamItemRule = (namecode) => {
       if (!csvExamItemTargetForm || !namecode) return;
@@ -802,6 +806,80 @@
       csvExamItemTargetForm.submit();
     };
 
+    const renderExamItemSelectedDetail = (item) => {
+      if (!selectedDetail || !submitButton) return;
+      if (!item) {
+        selectedDetail.hidden = true;
+        selectedDetail.innerHTML = `<p class="subtle">候補を選ぶと、ここに健診項目マスターの詳細を表示します。</p>`;
+        submitButton.disabled = true;
+        return;
+      }
+      const standardRows = Array.isArray(item.standard_code_rows) ? item.standard_code_rows : [];
+      const variantRows = Array.isArray(item.norm_variant_rows) ? item.norm_variant_rows : [];
+      const detailRows = [
+        ["namecode", item.namecode],
+        ["項目名", item.item_name],
+        ["カテゴリ", item.category_name],
+        ["区分", [item.kubun_no, item.kubun_name].filter(Boolean).join(" / ")],
+        ["順番", item.jun_no],
+        ["識別項目", [item.identity_item_code, item.identity_item_name].filter(Boolean).join(" / ")],
+        ["XML値型", [item.xml_value_type, item.data_type_label].filter(Boolean).join(" / ")],
+        ["単位", [item.display_unit, item.ucum_unit].filter(Boolean).join(" / ")],
+        ["項目OID", item.item_code_oid],
+        ["結果OID", item.result_code_oid],
+        ["検査方法", [item.xml_method_code, item.method_name].filter(Boolean).join(" / ")],
+        ["値取得", item.value_method],
+        ["法定", item.annex2_legal_report_flag === 1 || item.annex2_legal_report_flag === "1" ? "対象" : "対象外"],
+        ["実施要件", item.annex2_exec_requirement],
+        ["NullFlavor", item.nullflavor_allowed === 1 || item.nullflavor_allowed === "1" ? "可" : "不可"],
+      ];
+      selectedDetail.hidden = false;
+      selectedDetail.innerHTML = `
+        <div class="csv-mapping-exam-item-selected-head">
+          <div>
+            <span class="status-pill">選択中</span>
+            <h3>${escapeHtml(item.item_name || item.namecode || "-")}</h3>
+            <small>${escapeHtml(item.namecode || "-")}</small>
+          </div>
+          <small>norm ${escapeHtml(String(standardRows.length))}標準 / ${escapeHtml(String(variantRows.length))}件</small>
+        </div>
+        <dl class="definition-grid">
+          ${detailRows.map(([label, value]) => `
+            <div>
+              <dt>${escapeHtml(label)}</dt>
+              <dd>${escapeHtml(value || "-")}</dd>
+            </div>
+          `).join("")}
+        </dl>
+        ${item.notes ? `<p class="csv-mapping-exam-item-notes">${escapeHtml(item.notes)}</p>` : ""}
+        <div class="csv-mapping-exam-item-norm">
+          <h4>標準コード</h4>
+          ${standardRows.length ? `
+            <table class="mini-table">
+              <thead><tr><th>code</th><th>表示</th><th>入力値</th></tr></thead>
+              <tbody>
+                ${standardRows.slice(0, 10).map((row) => `
+                  <tr>
+                    <td>${escapeHtml(row.normalized_code || "-")}</td>
+                    <td>${escapeHtml(row.display_name || "-")}</td>
+                    <td>${escapeHtml(row.raw_value_utf8 || "-")}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          ` : `<p class="subtle">標準コードはありません。</p>`}
+        </div>
+      `;
+      submitButton.disabled = false;
+    };
+
+    const selectExamItem = (namecode) => {
+      csvExamItemSelectedNamecode = namecode || "";
+      renderExamItemResults(csvExamItemItems);
+      const item = csvExamItemItems.find((candidate) => candidate.namecode === csvExamItemSelectedNamecode);
+      renderExamItemSelectedDetail(item);
+    };
+
     const renderExamItemResults = (items) => {
       if (!results) return;
       if (!items.length) {
@@ -809,7 +887,7 @@
         return;
       }
       results.innerHTML = items.map((item) => {
-        const selected = item.namecode === csvExamItemCurrentNamecode;
+        const selected = item.namecode === csvExamItemSelectedNamecode;
         const meta = [
           item.namecode,
           item.xml_value_type,
@@ -834,7 +912,15 @@
         const response = await fetch(`/api/csv-mapping-lab/exam-items?keyword=${encodeURIComponent(keyword)}`);
         if (!response.ok) throw new Error("search_failed");
         const payload = await response.json();
-        renderExamItemResults(Array.isArray(payload.items) ? payload.items : []);
+        csvExamItemItems = Array.isArray(payload.items) ? payload.items : [];
+        renderExamItemResults(csvExamItemItems);
+        const currentItem = csvExamItemItems.find((item) => item.namecode === csvExamItemCurrentNamecode);
+        renderExamItemSelectedDetail(csvExamItemSelectedNamecode ? csvExamItemItems.find((item) => item.namecode === csvExamItemSelectedNamecode) : currentItem);
+        if (!csvExamItemSelectedNamecode && currentItem) {
+          csvExamItemSelectedNamecode = currentItem.namecode;
+          renderExamItemResults(csvExamItemItems);
+          renderExamItemSelectedDetail(currentItem);
+        }
       } catch (error) {
         results.innerHTML = `<p class="subtle">検索でエラーが発生しました。</p>`;
       }
@@ -845,8 +931,11 @@
         csvExamItemTargetForm = document.getElementById(button.getAttribute("data-form-id") || "");
         if (!csvExamItemTargetForm) return;
         csvExamItemCurrentNamecode = button.getAttribute("data-current-namecode") || "";
+        csvExamItemSelectedNamecode = csvExamItemCurrentNamecode;
+        csvExamItemItems = [];
         if (columnLabel) columnLabel.textContent = `${button.getAttribute("data-column-no") || "-"}列目`;
         if (searchInput) searchInput.value = csvExamItemCurrentNamecode || button.getAttribute("data-header-name") || "";
+        renderExamItemSelectedDetail(null);
         csvExamItemModal.hidden = false;
         document.body.classList.add("has-open-modal");
         if (searchInput) searchInput.focus();
@@ -864,8 +953,11 @@
       results.addEventListener("click", (event) => {
         const option = event.target.closest("[data-csv-exam-item-namecode]");
         if (!option) return;
-        submitExamItemRule(option.getAttribute("data-csv-exam-item-namecode") || "");
+        selectExamItem(option.getAttribute("data-csv-exam-item-namecode") || "");
       });
+    }
+    if (submitButton) {
+      submitButton.addEventListener("click", () => submitExamItemRule(csvExamItemSelectedNamecode));
     }
   }
 
