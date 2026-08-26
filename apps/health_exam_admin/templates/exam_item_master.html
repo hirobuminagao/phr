@@ -164,8 +164,8 @@
         </div>
         <div class="exam-item-master-modal-actions">
           {% if can_copy_master_debug %}
-          <button type="button" class="ghost-button compact-action-button" data-copy-target="#exam-item-master-namecode-copy-{{ loop.index }}">namecodeコピー</button>
-          <button type="button" class="ghost-button compact-action-button" data-copy-target="#exam-item-master-oid-copy-{{ loop.index }}">OIDコピー</button>
+          <button type="button" class="ghost-button compact-action-button" data-copy-target="#exam-item-master-lookup-copy-{{ loop.index }}">調査キーコピー</button>
+          <button type="button" class="ghost-button compact-action-button" data-copy-target="#exam-item-master-detail-copy-{{ loop.index }}">詳細JSONコピー</button>
           {% endif %}
           <button type="button" class="ghost-button" data-modal-close>閉じる</button>
         </div>
@@ -173,8 +173,8 @@
 
       <div class="exam-item-master-modal-body">
         {% if can_copy_master_debug %}
-        <pre id="exam-item-master-namecode-copy-{{ loop.index }}" class="copy-payload-source" hidden>{{ item.namecode_copy_text }}</pre>
-        <pre id="exam-item-master-oid-copy-{{ loop.index }}" class="copy-payload-source" hidden>{{ item.oid_copy_text }}</pre>
+        <pre id="exam-item-master-lookup-copy-{{ loop.index }}" class="copy-payload-source" hidden>{{ item.lookup_copy_text }}</pre>
+        <pre id="exam-item-master-detail-copy-{{ loop.index }}" class="copy-payload-source" hidden>{{ item.detail_copy_text }}</pre>
         {% endif %}
         <section class="exam-item-master-modal-section">
           <h3>マスター情報</h3>

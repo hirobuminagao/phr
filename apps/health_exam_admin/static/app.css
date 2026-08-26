@@ -3986,30 +3986,53 @@ a.home-menu-card.is-navigating {
   align-items: stretch;
 }
 
-.master-sql-export-form .option-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: flex-start;
-  padding: 14px;
+.master-sql-export-form .master-sql-option-card {
+  display: block;
+  min-height: 96px;
+  padding: 16px 18px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.master-sql-export-form .option-card input {
-  margin-top: 3px;
+.master-sql-export-form .master-sql-option-card:hover,
+.master-sql-export-form .master-sql-option-card:has(input:focus-visible) {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(18, 130, 99, 0.12);
 }
 
-.master-sql-export-form .option-card strong,
-.master-sql-export-form .option-card small {
+.master-sql-export-form .master-sql-option-card:has(input:checked) {
+  border-color: var(--green);
+  background: #edf8f4;
+  box-shadow: inset 0 0 0 1px rgba(18, 130, 99, 0.2);
+}
+
+.master-sql-export-form .master-sql-option-card input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.master-sql-export-form .master-sql-option-card strong,
+.master-sql-export-form .master-sql-option-card small {
   display: block;
 }
 
-.master-sql-export-form .option-card small {
+.master-sql-export-form .master-sql-option-card strong {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.master-sql-export-form .master-sql-option-card small {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.45;
+  margin-top: 4px;
 }
 
 .csv-mapping-rule-form {

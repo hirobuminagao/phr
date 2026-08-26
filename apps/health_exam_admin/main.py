@@ -12097,7 +12097,42 @@ def json_safe_mapping(row: Mapping[str, Any]) -> dict[str, Any]:
     return {str(key): json_safe_value(value) for key, value in row.items()}
 
 
-def build_exam_item_master_copy_payload(
+def build_exam_item_master_lookup_copy_payload(item: Mapping[str, Any]) -> str:
+    payload = {
+        "debug_scope": "exam_item_lookup",
+        "source": "health_exam_admin.exam_item_master",
+        "namecode": item.get("namecode"),
+        "item_name": item.get("item_name"),
+        "identity_item_code": item.get("identity_item_code"),
+        "identity_item_name": item.get("identity_item_name"),
+        "xml_value_type": item.get("xml_value_type"),
+        "item_code_oid": item.get("item_code_oid"),
+        "result_code_oid": item.get("result_code_oid"),
+        "lookup": {
+            "master": {
+                "table": f"{dev_db()}.exam_item_master",
+                "where": {"namecode": item.get("namecode")},
+                "also_check": {"identity_item_code": item.get("identity_item_code")},
+            },
+            "values": {
+                "table": f"{health_db()}.exam_item_values",
+                "where": {"namecode": item.get("namecode")},
+            },
+            "cases": {
+                "table": f"{health_db()}.exam_export_cases",
+                "how": "exam_item_valuesからcase_id/ledger_id/event_idで突き合わせる",
+            },
+            "norm": {
+                "table": f"{master_db()}.norm_variants",
+                "where": {"result_code_oid": item.get("result_code_oid")},
+                "when": "result_code_oidがあるCD/CO系の値だけ確認する",
+            },
+        },
+    }
+    return json.dumps({key: json_safe_value(value) for key, value in payload.items()}, ensure_ascii=False, indent=2)
+
+
+def build_exam_item_master_detail_copy_payload(
     item: Mapping[str, Any],
     *,
     scope: str,
@@ -12133,6 +12168,43 @@ def build_exam_item_master_copy_payload(
     payload = {
         "copy_scope": scope,
         "source": "health_exam_admin.exam_item_master",
+        "lookup_keys": {
+            "namecode": item.get("namecode"),
+            "identity_item_code": item.get("identity_item_code"),
+            "result_code_oid": item.get("result_code_oid"),
+            "item_code_oid": item.get("item_code_oid"),
+            "xml_value_type": item.get("xml_value_type"),
+        },
+        "table_hints": [
+            {
+                "table": f"{dev_db()}.exam_item_master",
+                "purpose": "健診項目定義。namecode、値型、単位、法定出力、OID、同一性項目を確認する。",
+                "lookup": {
+                    "primary": {"namecode": item.get("namecode")},
+                    "related": {"identity_item_code": item.get("identity_item_code")},
+                    "oid": {
+                        "item_code_oid": item.get("item_code_oid"),
+                        "result_code_oid": item.get("result_code_oid"),
+                    },
+                },
+            },
+            {
+                "table": f"{master_db()}.norm_variants",
+                "purpose": "CD/COなど結果コードOIDを持つ値の標準コードとraw値の揺れ登録を確認する。",
+                "lookup": {"result_code_oid": item.get("result_code_oid")},
+                "note": "result_code_oidがnullのST/PQ項目では通常参照対象なし。",
+            },
+            {
+                "table": f"{health_db()}.exam_item_values",
+                "purpose": "取り込み後の値。実データ側でこのnamecodeにどんなraw/adopted値が入ったか確認する。",
+                "lookup": {"namecode": item.get("namecode")},
+            },
+            {
+                "table": f"{health_db()}.exam_export_cases",
+                "purpose": "case単位の採用・出力状態を確認する。個人やeventで絞ってからexam_item_valuesと突き合わせる。",
+                "lookup": {"related_item_namecode": item.get("namecode")},
+            },
+        ],
         "item": {key: json_safe_value(value) for key, value in item_payload.items()},
     }
     if scope == "namecode":
@@ -12190,8 +12262,8 @@ def exam_item_master_browser(request: Request) -> Response:
             for variant in row["norm_variant_rows"]
             if int(variant.get("is_canonical") or 0) == 1 and int(variant.get("is_active") or 0) == 1
         ]
-        row["namecode_copy_text"] = build_exam_item_master_copy_payload(row, scope="namecode")
-        row["oid_copy_text"] = build_exam_item_master_copy_payload(
+        row["lookup_copy_text"] = build_exam_item_master_lookup_copy_payload(row)
+        row["detail_copy_text"] = build_exam_item_master_detail_copy_payload(
             row,
             scope="result_code_oid",
             oid_peer_items=rows_by_oid.get(oid) or [row],

@@ -41,14 +41,14 @@
     </div>
     <form method="post" action="/admin/master-sql-export/norm-variants" class="form-grid master-sql-export-form">
       <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
-      <label class="option-card">
+      <label class="master-sql-option-card">
         <input type="radio" name="canonical_only" value="0" checked>
         <span>
           <strong>全件を出力</strong>
           <small>標準コードと揺れ登録をまとめて同期します。</small>
         </span>
       </label>
-      <label class="option-card">
+      <label class="master-sql-option-card">
         <input type="radio" name="canonical_only" value="1">
         <span>
           <strong>標準のみ出力</strong>
