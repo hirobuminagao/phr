@@ -12102,7 +12102,6 @@ CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS = [
     {"value": "exam_date", "label": "健診実施日", "hint": "受診日"},
     {"value": "facility_code", "label": "健診機関コード", "hint": "受領フォルダより行の値を優先したい場合"},
     {"value": "facility_name", "label": "健診機関名", "hint": "行に施設名がある場合"},
-    {"value": "person_id_custom", "label": "HIA加入者ID", "hint": "HIA側の加入者ID"},
     {"value": "health_exam_report_category", "label": "報告区分", "hint": "健診結果報告区分"},
     {"value": "program_code", "label": "プログラムコード", "hint": "コース/プログラムコード"},
     {"value": "postal_code", "label": "郵便番号", "hint": "受診者住所の郵便番号"},

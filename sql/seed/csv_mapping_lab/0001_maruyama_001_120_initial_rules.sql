@@ -11,7 +11,7 @@ INSERT INTO `csv_mapping_lab`.`csv_mapping_rules` (
   `mapping_strategy`, `confidence`, `reason`, `created_by`, `updated_by`
 )
 VALUES
-  ('facility', '0110119070', 'normalized_header_exact', 1, 120, '社員番号', '社員番号', 'EMPTY', 'LEDGER_FIELD', NULL, 'person_id_custom', 'DIRECT', 0.9500, 'seed: maruyama 001-120 basic ledger field', 'seed', 'seed'),
+  ('facility', '0110119070', 'normalized_header_exact', 1, 120, '社員番号', '社員番号', 'EMPTY', 'IGNORE', NULL, NULL, 'IGNORE', 0.9500, 'seed: maruyama 001-120 employee code is local admin column; not imported', 'seed', 'seed'),
   ('facility', '0110119070', 'normalized_header_exact', 1, 120, '保険証記号', '保険証記号', 'NUMERIC', 'LEDGER_FIELD', NULL, 'insurance_symbol_raw', 'DIRECT', 0.9500, 'seed: maruyama 001-120 basic ledger field', 'seed', 'seed'),
   ('facility', '0110119070', 'normalized_header_exact', 1, 120, '保険証番号', '保険証番号', 'NUMERIC', 'LEDGER_FIELD', NULL, 'insurance_number_raw', 'DIRECT', 0.9500, 'seed: maruyama 001-120 basic ledger field', 'seed', 'seed'),
   ('facility', '0110119070', 'normalized_header_exact', 1, 120, '受診日（西暦）', '受診日(西暦)', 'DATE', 'LEDGER_FIELD', NULL, 'exam_date', 'DIRECT', 0.9500, 'seed: maruyama 001-120 basic ledger field', 'seed', 'seed'),

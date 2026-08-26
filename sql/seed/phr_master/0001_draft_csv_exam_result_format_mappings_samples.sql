@@ -170,7 +170,7 @@ INSERT INTO `tmp_csv_exam_mapping_seed` (
 ('hirooka.basic.insurance_symbol_raw', 'HIROOKA', 'LEDGER_FIELD', 'insurance_symbol_raw', NULL, NULL, '保険記号', 1, 'VALUE', NULL, NULL, 0, 120, 'basic: insurance symbol'),
 ('hirooka.basic.insurance_number_raw', 'HIROOKA', 'LEDGER_FIELD', 'insurance_number_raw', NULL, NULL, '保険番号', 1, 'VALUE', NULL, NULL, 0, 130, 'basic: insurance number'),
 ('hirooka.basic.insurance_branch_number_raw', 'HIROOKA', 'LEDGER_FIELD', 'insurance_branch_number_raw', NULL, NULL, '保険枝番', 1, 'VALUE', NULL, NULL, 0, 140, 'basic: insurance branch number'),
-('hirooka.basic.person_id_custom', 'HIROOKA', 'LEDGER_FIELD', 'person_id_custom', NULL, NULL, '社員番号', 1, 'VALUE', NULL, NULL, 0, 150, 'basic: employee code'),
+('hirooka.basic.employee_code_ignore', 'HIROOKA', 'IGNORE', NULL, NULL, NULL, '社員番号', 1, 'VALUE', NULL, NULL, 0, 150, 'employee code is local admin column; not imported'),
 
 -- Hirooka exam item values. Facility-derived judgement columns are not mapped.
 ('hirooka.exam.height', 'HIROOKA', 'EXAM_ITEM_VALUE', NULL, '9N001000000000001', NULL, '身長', 1, 'VALUE', NULL, NULL, 1, 1000, 'height'),

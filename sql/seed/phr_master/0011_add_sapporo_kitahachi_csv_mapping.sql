@@ -131,7 +131,7 @@ INSERT INTO `tmp_sapporo_kitahachi_mapping_seed` (
 ('kitahachi.basic.insurer_number', 'LEDGER_FIELD', 'insurer_number', NULL, '保険者番号', NULL, 1, 80, 'basic: insurer number'),
 ('kitahachi.basic.insurance_symbol_raw', 'LEDGER_FIELD', 'insurance_symbol_raw', NULL, '保険記号', NULL, 0, 90, 'basic: insurance symbol'),
 ('kitahachi.basic.insurance_number_raw', 'LEDGER_FIELD', 'insurance_number_raw', NULL, '保険番号', NULL, 0, 100, 'basic: insurance number'),
-('kitahachi.basic.person_id_custom', 'LEDGER_FIELD', 'person_id_custom', NULL, '社員番号', NULL, 0, 110, 'basic: employee code'),
+('kitahachi.basic.employee_code_ignore', 'IGNORE', NULL, NULL, '社員番号', NULL, 0, 110, 'employee code is local admin column; not imported'),
 
 -- Common legal-check values.
 ('kitahachi.exam.height', 'EXAM_ITEM_VALUE', NULL, '9N001000000000001', '身長', NULL, 1, 1000, 'height'),

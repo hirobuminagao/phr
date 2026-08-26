@@ -910,6 +910,8 @@ def values_to_ledger_fields(extracted: list[ExtractedCsvRuleValue]) -> dict[str,
         rule = result.rule
         if rule.target_kind != "LEDGER_FIELD" or not rule.target_field:
             continue
+        if rule.target_field == "person_id_custom":
+            continue
         fields[rule.target_field] = result.values_by_role.get("VALUE")
     return fields
 

@@ -788,6 +788,7 @@
     let csvExamItemTargetForm = null;
     let csvExamItemCurrentNamecode = "";
     const columnLabel = csvExamItemModal.querySelector("[data-csv-exam-item-column-label]");
+    const sourceHeaderLabel = csvExamItemModal.querySelector("[data-csv-exam-item-source-header]");
     const searchInput = csvExamItemModal.querySelector("[data-csv-exam-item-search-input]");
     const results = csvExamItemModal.querySelector("[data-csv-exam-item-results]");
     const selectedDetail = csvExamItemModal.querySelector("[data-csv-exam-item-selected]");
@@ -968,7 +969,9 @@
         csvExamItemCurrentNamecode = button.getAttribute("data-current-namecode") || "";
         csvExamItemSelectedNamecode = csvExamItemCurrentNamecode;
         csvExamItemItems = [];
+        const sourceHeader = button.getAttribute("data-header-name") || "-";
         if (columnLabel) columnLabel.textContent = `${button.getAttribute("data-column-no") || "-"}列目`;
+        if (sourceHeaderLabel) sourceHeaderLabel.textContent = sourceHeader;
         if (searchInput) searchInput.value = csvExamItemCurrentNamecode || button.getAttribute("data-header-name") || "";
         renderExamItemSelectedDetail(null);
         csvExamItemModal.hidden = false;

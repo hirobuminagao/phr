@@ -113,7 +113,7 @@ INSERT INTO `tmp_maruyama_csv_exam_mapping_seed` (
   `seed_key`, `target_kind`, `target_field`, `target_namecode`,
   `header_name`, `raw_value_type`, `raw_unit`, `is_required`, `priority`, `note`
 ) VALUES
-  ('maruyama.basic.person_id_custom', 'LEDGER_FIELD', 'person_id_custom', NULL, '社員番号', NULL, NULL, 0, 10, 'basic: employee code'),
+  ('maruyama.basic.employee_code_ignore', 'IGNORE', NULL, NULL, '社員番号', NULL, NULL, 0, 10, 'employee code is local admin column; not imported'),
   ('maruyama.basic.insurance_symbol_raw', 'LEDGER_FIELD', 'insurance_symbol_raw', NULL, '保険証記号', NULL, NULL, 0, 20, 'basic: insurance symbol'),
   ('maruyama.basic.insurance_number_raw', 'LEDGER_FIELD', 'insurance_number_raw', NULL, '保険証番号', NULL, NULL, 0, 30, 'basic: insurance number'),
   ('maruyama.basic.exam_date', 'LEDGER_FIELD', 'exam_date', NULL, '受診日（西暦）', NULL, NULL, 1, 40, 'basic: exam date'),
@@ -240,4 +240,3 @@ WHERE `exam_facility_id` = @maruyama_exam_facility_id
 DROP TEMPORARY TABLE IF EXISTS `tmp_maruyama_csv_exam_mapping_seed`;
 
 COMMIT;
-

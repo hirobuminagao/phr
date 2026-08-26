@@ -424,6 +424,7 @@
             <td><small>{{ column.sample_values_json }}</small></td>
             <td>
               <form method="post" action="/utilities/csv-mapping-lab/rules/create" class="csv-mapping-rule-kind-form" id="csv-mapping-rule-kind-form-{{ column.column_no }}">
+                <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
                 <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
                 <input type="hidden" name="column_no" value="{{ column.column_no }}">
                 <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
@@ -442,6 +443,7 @@
                   <small>{{ column.candidate_target_kind or "対象選択" }} / {{ column.candidate_namecode or column.candidate_ledger_field or "-" }}</small>
                 </summary>
                 <form method="post" action="/utilities/csv-mapping-lab/rules/create" class="csv-mapping-rule-form" id="csv-mapping-rule-form-{{ column.column_no }}">
+                  <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
                   <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
                   <input type="hidden" name="column_no" value="{{ column.column_no }}">
                   <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
@@ -526,6 +528,10 @@
     </div>
     <div class="csv-mapping-exam-item-layout">
       <div class="csv-mapping-exam-item-picker-pane">
+        <div class="csv-mapping-exam-item-source-header">
+          <span>対象ヘッダー</span>
+          <strong data-csv-exam-item-source-header>-</strong>
+        </div>
         <label class="csv-mapping-exam-item-search">
           <span>項目名 / namecode</span>
           <input data-csv-exam-item-search-input autocomplete="off" placeholder="聴力 / 9D... / 血圧">

@@ -123,6 +123,15 @@ def score_for_rule(rule: dict[str, Any]) -> Decimal:
     return max(Decimal("0.0000"), min(Decimal("1.0000"), score)).quantize(Decimal("0.0001"))
 
 
+def is_disallowed_candidate(rule: dict[str, Any], column: dict[str, Any]) -> bool:
+    if str(rule.get("target_kind") or "") != "LEDGER_FIELD":
+        return False
+    if str(rule.get("target_ledger_field") or "") != "person_id_custom":
+        return False
+    header = normalize_header(column.get("header_name") or column.get("normalized_header_name") or "")
+    return "社員番号" in header or "社員コード" in header or "従業員番号" in header
+
+
 def target_key(hit: RuleHit) -> tuple[str, str | None, str | None]:
     return hit.target_kind, hit.target_namecode, hit.target_ledger_field
 
@@ -166,6 +175,8 @@ def apply_rules_to_analysis(
             continue
         hits: list[RuleHit] = []
         for rule in rules:
+            if is_disallowed_candidate(rule, column):
+                continue
             matched, reason = rule_matches(rule, column)
             if not matched:
                 continue

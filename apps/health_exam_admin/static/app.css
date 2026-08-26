@@ -3898,6 +3898,28 @@ a.home-menu-card.is-navigating {
   margin-bottom: 12px;
 }
 
+.csv-mapping-exam-item-source-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.csv-mapping-exam-item-source-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.csv-mapping-exam-item-source-header strong {
+  color: var(--ink);
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
 .csv-mapping-exam-item-search input {
   width: 100%;
 }
