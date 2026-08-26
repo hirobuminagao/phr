@@ -90,6 +90,10 @@ def qname(name: str) -> str:
     return f"`{name}`"
 
 
+def collated(column_sql: str) -> str:
+    return f"CONVERT({column_sql} USING utf8mb4) COLLATE utf8mb4_ja_0900_as_cs"
+
+
 def validate_config(config: BuildCaseConfig) -> None:
     if config.event_id <= 0:
         raise ValueError("event_id must be positive")
@@ -124,7 +128,7 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
               WHERE el.`source_type` IN ('PAPER', 'MANUAL')
                 AND el.`hia_subscriber_id` IS NOT NULL
                 AND el.`hia_subscriber_id` <> ''
-                AND s.`hia_subscriber_id` = el.`hia_subscriber_id`
+                AND {collated("s.`hia_subscriber_id`")} = {collated("el.`hia_subscriber_id`")}
               ORDER BY s.`id` DESC
               LIMIT 1
             ),
@@ -134,7 +138,7 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
               WHERE el.`source_type` IN ('PAPER', 'MANUAL')
                 AND el.`identity_hash` IS NOT NULL
                 AND el.`identity_hash` <> ''
-                AND s.`identity_hash` = el.`identity_hash`
+                AND {collated("s.`identity_hash`")} = {collated("el.`identity_hash`")}
               ORDER BY s.`id` DESC
               LIMIT 1
             ),
@@ -144,11 +148,11 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
               WHERE el.`source_type` IN ('PAPER', 'MANUAL')
                 AND el.`person_id_custom` IS NOT NULL
                 AND el.`person_id_custom` <> ''
-                AND s.`person_id_custom` = el.`person_id_custom`
+                AND {collated("s.`person_id_custom`")} = {collated("el.`person_id_custom`")}
                 AND (
                   el.`name_kana_match` IS NULL
                   OR el.`name_kana_match` = ''
-                  OR s.`name_kana_full_match` = el.`name_kana_match`
+                  OR {collated("s.`name_kana_full_match`")} = {collated("el.`name_kana_match`")}
                 )
               ORDER BY s.`id` DESC
               LIMIT 1
