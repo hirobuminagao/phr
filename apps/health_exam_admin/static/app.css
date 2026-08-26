@@ -3920,6 +3920,30 @@ a.home-menu-card.is-navigating {
   overflow-wrap: anywhere;
 }
 
+.csv-mapping-exam-item-type-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.csv-mapping-exam-item-type-filter button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.csv-mapping-exam-item-type-filter button.is-selected {
+  border-color: var(--accent);
+  background: #e7f7f1;
+  color: var(--accent-dark);
+}
+
 .csv-mapping-exam-item-search input {
   width: 100%;
 }

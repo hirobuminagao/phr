@@ -12148,6 +12148,9 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
     if isinstance(user, RedirectResponse):
         return user
     keyword = str(request.query_params.get("keyword") or "").strip()
+    value_type = str(request.query_params.get("value_type") or "").strip().upper()
+    if value_type not in {"PQ", "CD", "ST", "CO"}:
+        value_type = ""
     like = f"%{keyword}%"
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
@@ -12182,6 +12185,7 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
             FROM {qname(dev_db())}.`exam_item_master`
             WHERE `namecode` IS NOT NULL
               AND `namecode` <> ''
+              AND (%s = '' OR `xml_value_type` = %s)
               AND (
                 %s = ''
                 OR `namecode` LIKE %s
@@ -12207,6 +12211,8 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
             LIMIT 80
             """,
             (
+                value_type,
+                value_type,
                 keyword,
                 like,
                 like,

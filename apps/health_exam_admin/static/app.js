@@ -790,6 +790,7 @@
     const columnLabel = csvExamItemModal.querySelector("[data-csv-exam-item-column-label]");
     const sourceHeaderLabel = csvExamItemModal.querySelector("[data-csv-exam-item-source-header]");
     const searchInput = csvExamItemModal.querySelector("[data-csv-exam-item-search-input]");
+    const typeButtons = Array.from(csvExamItemModal.querySelectorAll("[data-csv-exam-item-type-filter]"));
     const results = csvExamItemModal.querySelector("[data-csv-exam-item-results]");
     const selectedDetail = csvExamItemModal.querySelector("[data-csv-exam-item-selected]");
     const submitButton = csvExamItemModal.querySelector("[data-csv-exam-item-submit]");
@@ -797,6 +798,7 @@
     let csvExamItemItems = [];
     let csvExamItemSelectedNamecode = "";
     let csvExamItemResultLimit = 80;
+    let csvExamItemValueType = "";
 
     const submitExamItemRule = (namecode) => {
       if (!csvExamItemTargetForm || !namecode) return;
@@ -944,7 +946,10 @@
       if (!results) return;
       results.innerHTML = `<p class="subtle">検索中...</p>`;
       try {
-        const response = await fetch(`/api/csv-mapping-lab/exam-items?keyword=${encodeURIComponent(keyword)}`);
+        const params = new URLSearchParams();
+        params.set("keyword", keyword);
+        if (csvExamItemValueType) params.set("value_type", csvExamItemValueType);
+        const response = await fetch(`/api/csv-mapping-lab/exam-items?${params.toString()}`);
         if (!response.ok) throw new Error("search_failed");
         const payload = await response.json();
         csvExamItemResultLimit = Number(payload.limit || 80);
@@ -969,6 +974,10 @@
         csvExamItemCurrentNamecode = button.getAttribute("data-current-namecode") || "";
         csvExamItemSelectedNamecode = csvExamItemCurrentNamecode;
         csvExamItemItems = [];
+        csvExamItemValueType = "";
+        typeButtons.forEach((typeButton) => {
+          typeButton.classList.toggle("is-selected", !typeButton.getAttribute("data-csv-exam-item-type-filter"));
+        });
         const sourceHeader = button.getAttribute("data-header-name") || "-";
         if (columnLabel) columnLabel.textContent = `${button.getAttribute("data-column-no") || "-"}列目`;
         if (sourceHeaderLabel) sourceHeaderLabel.textContent = sourceHeader;
@@ -987,6 +996,16 @@
         searchTimer = window.setTimeout(searchExamItems, 220);
       });
     }
+
+    typeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        csvExamItemValueType = String(button.getAttribute("data-csv-exam-item-type-filter") || "");
+        typeButtons.forEach((typeButton) => {
+          typeButton.classList.toggle("is-selected", typeButton === button);
+        });
+        searchExamItems();
+      });
+    });
     if (results) {
       results.addEventListener("click", (event) => {
         const option = event.target.closest("[data-csv-exam-item-namecode]");
