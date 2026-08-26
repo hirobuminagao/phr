@@ -115,7 +115,13 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
           AND `source_type` IN ('XML', 'CSV', 'PAPER', 'MANUAL')
           AND COALESCE(`row_status`, '') <> 'REVERTED_TO_DRAFT'
           AND `subscriber_id` IS NOT NULL
-          AND `subscriber_match_status` = 'MATCHED'
+          AND (
+            `subscriber_match_status` = 'MATCHED'
+            OR (
+              `source_type` IN ('PAPER', 'MANUAL')
+              AND `subscriber_match_status` = 'MANUAL_ENTRY'
+            )
+          )
           AND `exam_date` IS NOT NULL
           AND `exam_facility_id` IS NOT NULL
           AND `insurer_number` IS NOT NULL

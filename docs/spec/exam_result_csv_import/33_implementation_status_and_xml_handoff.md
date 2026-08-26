@@ -166,6 +166,7 @@ Current as of 2026-08-06.
 同一人物、同一健診日、同一健診機関、同一保険者のXML/CSV sourceは同じcaseへ束ねる。
 
 - `source_mode` は `XML_ONLY` / `CSV_ONLY` / `PAPER_ONLY` / `XML_CSV` / `CSV_PAPER` / `XML_PAPER` / `XML_CSV_PAPER` / `MULTI_SOURCE` 等を表す。
+- `PAPER` / `MANUAL` ledger は、正式反映後も `subscriber_match_status = MANUAL_ENTRY` のまま残る場合がある。`subscriber_id` が入っているものはcase生成候補に含め、CSV/XML sourceと同じ自然キーなら同一caseへ束ねる。
 - `exam_export_case_sources` は構成元 `exam_ledgers` を保持する。
 - `exam_export_case_values` はXML出力用の採用済み整値を保持する。raw証跡は採用元 `exam_item_values` へ戻って確認する。
 - 人が見る総合状態は `export_readiness_status` / `export_readiness_reason` を見る。
