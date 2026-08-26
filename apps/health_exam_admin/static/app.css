@@ -3811,6 +3811,14 @@ a.home-menu-card.is-navigating {
   align-items: end;
 }
 
+.exam-item-master-search-panel {
+  position: sticky;
+  top: 8px;
+  z-index: 18;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+}
+
 .exam-item-master-summary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
