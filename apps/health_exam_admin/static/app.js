@@ -784,6 +784,7 @@
     let searchTimer = null;
     let csvExamItemItems = [];
     let csvExamItemSelectedNamecode = "";
+    let csvExamItemResultLimit = 80;
 
     const submitExamItemRule = (namecode) => {
       if (!csvExamItemTargetForm || !namecode) return;
@@ -869,6 +870,25 @@
             </table>
           ` : `<p class="subtle">標準コードはありません。</p>`}
         </div>
+        <div class="csv-mapping-exam-item-norm">
+          <h4>norm登録</h4>
+          ${variantRows.length ? `
+            <table class="mini-table">
+              <thead><tr><th>入力値</th><th>正規code</th><th>表示</th><th>種別</th></tr></thead>
+              <tbody>
+                ${variantRows.slice(0, 18).map((row) => `
+                  <tr>
+                    <td>${escapeHtml(row.raw_value_utf8 || "-")}</td>
+                    <td>${escapeHtml(row.normalized_code || "-")}</td>
+                    <td>${escapeHtml(row.display_name || "-")}</td>
+                    <td>${row.is_canonical === 1 || row.is_canonical === "1" ? `<span class="status-pill status-ready">標準</span>` : `<span class="status-pill status-muted">揺れ</span>`}${row.is_active === 0 || row.is_active === "0" ? ` <span class="status-pill status-danger">無効</span>` : ""}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+            ${variantRows.length > 18 ? `<p class="subtle">先頭18件のみ表示しています。全${escapeHtml(String(variantRows.length))}件</p>` : ""}
+          ` : `<p class="subtle">norm登録はありません。</p>`}
+        </div>
       `;
       submitButton.disabled = false;
     };
@@ -886,6 +906,9 @@
         results.innerHTML = `<p class="subtle">候補はありません。</p>`;
         return;
       }
+      const limitMessage = items.length >= csvExamItemResultLimit
+        ? `<p class="subtle csv-mapping-exam-item-limit-note">${escapeHtml(String(csvExamItemResultLimit))}件まで表示しています。項目名やnamecodeでもう少し絞り込んでください。</p>`
+        : "";
       results.innerHTML = items.map((item) => {
         const selected = item.namecode === csvExamItemSelectedNamecode;
         const meta = [
@@ -901,7 +924,7 @@
             <span>${escapeHtml(item.category_name || "-")}${item.identity_item_name ? ` / ${escapeHtml(item.identity_item_name)}` : ""}</span>
           </button>
         `;
-      }).join("");
+      }).join("") + limitMessage;
     };
 
     const searchExamItems = async () => {
@@ -912,6 +935,7 @@
         const response = await fetch(`/api/csv-mapping-lab/exam-items?keyword=${encodeURIComponent(keyword)}`);
         if (!response.ok) throw new Error("search_failed");
         const payload = await response.json();
+        csvExamItemResultLimit = Number(payload.limit || 80);
         csvExamItemItems = Array.isArray(payload.items) ? payload.items : [];
         renderExamItemResults(csvExamItemItems);
         const currentItem = csvExamItemItems.find((item) => item.namecode === csvExamItemCurrentNamecode);

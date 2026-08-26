@@ -11894,6 +11894,16 @@ def load_csv_mapping_lab_columns(
     return [dict(row) for row in cur.fetchall()]
 
 
+def csv_mapping_decision_status_for_target_kind(target_kind: str) -> str:
+    if target_kind == "IGNORE":
+        return "IGNORE"
+    if target_kind == "REVIEW":
+        return "NEEDS_CONFIRMATION"
+    if target_kind in {"LEDGER_FIELD", "EXAM_ITEM_VALUE"}:
+        return "ADOPT"
+    return "UNREVIEWED"
+
+
 def load_csv_mapping_lab_filtered_columns_for_bulk(
     cur: Any,
     *,
@@ -12181,7 +12191,7 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
             if int(variant.get("is_canonical") or 0) == 1 and int(variant.get("is_active") or 0) == 1
         ]
         row["norm_variant_rows"] = [json_safe_mapping(variant) for variant in norm_rows]
-    return JSONResponse({"items": [json_safe_mapping(row) for row in rows]})
+    return JSONResponse({"items": [json_safe_mapping(row) for row in rows], "limit": 80})
 
 
 def exam_item_master_filters_from_query(query: Mapping[str, str]) -> dict[str, str]:
@@ -12761,10 +12771,15 @@ async def bulk_set_csv_mapping_lab_rules(request: Request) -> Response:
                   `candidate_namecode` = NULL,
                   `candidate_ledger_field` = NULL,
                   `candidate_confidence` = 1.0000,
+                  `decision_status` = %s,
                   `analysis_note` = %s
                 WHERE {where_sql}
                 """,
-                [target_kind, f"manual bulk rule: 解析ID {analysis_file_id} の絞り込み結果から一括設定"] + where_params,
+                [
+                    target_kind,
+                    csv_mapping_decision_status_for_target_kind(target_kind),
+                    f"manual bulk rule: 解析ID {analysis_file_id} の絞り込み結果から一括設定",
+                ] + where_params,
             )
             conn.commit()
     except Exception as exc:
@@ -12818,6 +12833,7 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
     if target_kind != "LEDGER_FIELD":
         target_ledger_field = None
     mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "NEEDS_CONFIRMATION" if target_kind == "REVIEW" else "DIRECT"
+    decision_status = csv_mapping_decision_status_for_target_kind(target_kind)
     actor = str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or "")
     try:
         params = load_mysql_base_params(db_prefix())
@@ -12880,6 +12896,7 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
                   `candidate_namecode` = %s,
                   `candidate_ledger_field` = %s,
                   `candidate_confidence` = 1.0000,
+                  `decision_status` = %s,
                   `analysis_note` = %s
                 WHERE `analysis_file_id` = %s AND `column_no` = %s
                 """,
@@ -12887,6 +12904,7 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
                     target_kind,
                     target_namecode,
                     target_ledger_field,
+                    decision_status,
                     f"manual rule: 解析ID {analysis_file_id} 列 {column_no} から作成",
                     analysis_file_id,
                     column_no,

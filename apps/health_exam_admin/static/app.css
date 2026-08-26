@@ -3884,14 +3884,18 @@ a.home-menu-card.is-navigating {
 
 .csv-mapping-exam-item-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 1.35fr);
+  grid-template-columns: minmax(320px, 420px) minmax(560px, 1fr);
   gap: 14px;
   align-items: start;
 }
 
+.csv-mapping-exam-item-picker-pane {
+  min-width: 0;
+}
+
 .csv-mapping-exam-item-results {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
   max-height: min(62vh, 640px);
   overflow: auto;
@@ -3963,6 +3967,7 @@ a.home-menu-card.is-navigating {
 
 .csv-mapping-exam-item-norm {
   margin-top: 12px;
+  overflow-x: auto;
 }
 
 .csv-mapping-exam-item-norm h4 {
@@ -4280,10 +4285,15 @@ a.home-menu-card.is-navigating {
 }
 
 .csv-mapping-column-table th:nth-child(3),
-.csv-mapping-column-table td:nth-child(3),
+.csv-mapping-column-table td:nth-child(3) {
+  width: 140px;
+}
+
 .csv-mapping-column-table th:nth-child(4),
-.csv-mapping-column-table td:nth-child(4) {
-  width: 170px;
+.csv-mapping-column-table td:nth-child(4),
+.csv-mapping-column-table th:nth-child(5),
+.csv-mapping-column-table td:nth-child(5) {
+  width: 155px;
 }
 
 .csv-mapping-prompt-output {

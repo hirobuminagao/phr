@@ -315,6 +315,7 @@
             <th>列</th>
             <th>ヘッダー</th>
             <th>型</th>
+            <th>人判断</th>
             <th>機械判定</th>
             <th>サンプル</th>
             <th>ルール化</th>
@@ -331,6 +332,21 @@
             <td>
               <strong>{{ column.inferred_value_type or "-" }}</strong>
               <small>{{ column.non_blank_count or 0 }}件 / sensitive {{ "あり" if column.sensitive_hint else "なし" }}</small>
+            </td>
+            <td>
+              {% if column.decision_status == "ADOPT" %}
+              <span class="status-pill status-ready">採用</span>
+              {% elif column.decision_status == "IGNORE" %}
+              <span class="status-pill status-muted">無視</span>
+              {% elif column.decision_status == "NEEDS_CONFIRMATION" %}
+              <span class="status-pill status-warning">施設確認</span>
+              {% elif column.decision_status == "DEFERRED" %}
+              <span class="status-pill">保留</span>
+              {% else %}
+              <span class="status-pill status-muted">未確認</span>
+              {% endif %}
+              <small>{{ column.candidate_target_kind or "-" }}</small>
+              <small>{{ column.candidate_namecode or column.candidate_ledger_field or "-" }}</small>
             </td>
             <td>
               <strong>{{ column.candidate_target_kind or "-" }}</strong>
@@ -399,7 +415,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6">列プレビューはありません。</td></tr>
+          <tr><td colspan="7">列プレビューはありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -441,13 +457,15 @@
       </div>
       <button type="button" class="ghost-button" data-modal-close>閉じる</button>
     </div>
-    <label class="csv-mapping-exam-item-search">
-      <span>項目名 / namecode</span>
-      <input data-csv-exam-item-search-input autocomplete="off" placeholder="聴力 / 9D... / 血圧">
-    </label>
     <div class="csv-mapping-exam-item-layout">
-      <div class="csv-mapping-exam-item-results" data-csv-exam-item-results>
-        <p class="subtle">検索すると候補が表示されます。</p>
+      <div class="csv-mapping-exam-item-picker-pane">
+        <label class="csv-mapping-exam-item-search">
+          <span>項目名 / namecode</span>
+          <input data-csv-exam-item-search-input autocomplete="off" placeholder="聴力 / 9D... / 血圧">
+        </label>
+        <div class="csv-mapping-exam-item-results" data-csv-exam-item-results>
+          <p class="subtle">検索すると候補が表示されます。</p>
+        </div>
       </div>
       <div class="csv-mapping-exam-item-selected" data-csv-exam-item-selected hidden>
         <p class="subtle">候補を選ぶと、ここに健診項目マスターの詳細を表示します。</p>
