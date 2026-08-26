@@ -5779,6 +5779,11 @@ def load_exam_export_case_rows(
           eec.name_kana_raw,
           eec.birthdate,
           eec.gender_code,
+          hds.status AS hia_dashboard_status,
+          hds.medical_institution AS hia_dashboard_medical_institution,
+          hds.reservation_date AS hia_dashboard_reservation_date,
+          hds.exam_date AS hia_dashboard_exam_date,
+          hds.course_name AS hia_dashboard_course_name,
           s.insurer_number AS subscriber_insurer_number,
           s.insurance_symbol AS subscriber_insurance_symbol,
           s.insurance_symbol_export AS subscriber_insurance_symbol_export,
@@ -5841,6 +5846,23 @@ def load_exam_export_case_rows(
           ON ecr.exam_export_case_id = eec.exam_export_case_id
         LEFT JOIN {qname(dev_db())}.subscribers AS s
           ON s.id = eec.subscriber_id
+        LEFT JOIN (
+          SELECT *
+          FROM (
+            SELECT
+              hds1.*,
+              ROW_NUMBER() OVER (
+                PARTITION BY hds1.hia_subscriber_id
+                ORDER BY hds1.updated_at DESC, hds1.hia_dashboard_person_id DESC
+              ) AS dashboard_rank
+            FROM {qname(work_other_db())}.hia_dashboard_status AS hds1
+            WHERE hds1.is_active = 1
+              AND hds1.hia_subscriber_id IS NOT NULL
+              AND hds1.hia_subscriber_id <> ''
+          ) AS ranked_dashboard
+          WHERE ranked_dashboard.dashboard_rank = 1
+        ) AS hds
+          ON hds.hia_subscriber_id = COALESCE(NULLIF(eec.hia_subscriber_id, ''), s.hia_subscriber_id)
         LEFT JOIN (
           SELECT
             exam_export_case_id,
@@ -5945,6 +5967,16 @@ EXAM_EXPORT_CASE_CSV_FIELD_GROUPS: list[dict[str, Any]] = [
             ("exam_date", "受診日"),
             ("health_exam_report_category", "報告区分"),
             ("program_code", "プログラムコード"),
+        ],
+    },
+    {
+        "group": "ダッシュボード",
+        "fields": [
+            ("hia_dashboard_status", "ダッシュボード状態"),
+            ("hia_dashboard_medical_institution", "ダッシュボード病院名"),
+            ("hia_dashboard_reservation_date", "ダッシュボード予約日"),
+            ("hia_dashboard_exam_date", "ダッシュボード受診日"),
+            ("hia_dashboard_course_name", "ダッシュボードコース名"),
         ],
     },
     {
