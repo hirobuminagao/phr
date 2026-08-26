@@ -3446,12 +3446,25 @@ a.home-menu-card.is-navigating {
   margin-inline-start: 4px;
 }
 
+.inline-help-hover .help-popover {
+  display: none;
+}
+
+.inline-help-hover:hover .help-popover,
+.inline-help-hover:focus-within .help-popover {
+  display: block;
+}
+
 .help-icon-button {
   inline-size: 24px;
   block-size: 24px;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  aspect-ratio: 1 / 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   border: 1px solid #b9c5d2;
   border-radius: 999px;
   background: #fff;
@@ -3460,11 +3473,14 @@ a.home-menu-card.is-navigating {
   font-weight: 900;
   cursor: pointer;
   line-height: 1;
+  appearance: none;
 }
 
 .help-icon-button:hover,
 .help-cell:hover .help-icon-button,
 .help-cell:focus-within .help-icon-button,
+.inline-help-hover:hover .help-icon-button,
+.inline-help-hover:focus-within .help-icon-button,
 .help-icon-button[aria-expanded="true"] {
   border-color: var(--accent);
   background: #eef8f5;

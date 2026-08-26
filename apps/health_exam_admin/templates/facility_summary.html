@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% set title = "健診機関サマリー" %}
 {% macro help_button(help_id, title, body, right=False) -%}
-  <span class="inline-help">
-    <button type="button" class="help-icon-button" data-help-toggle="{{ help_id }}" aria-expanded="false" aria-label="{{ title }}の説明">?</button>
-    <span id="{{ help_id }}" class="help-popover{% if right %} help-popover-right{% endif %}" hidden>
+  <span class="inline-help inline-help-hover">
+    <button type="button" class="help-icon-button" data-help-hover="{{ help_id }}" aria-label="{{ title }}の説明">?</button>
+    <span id="{{ help_id }}" class="help-popover{% if right %} help-popover-right{% endif %}">
       <strong>{{ title }}</strong>
       <p>{{ body }}</p>
     </span>
