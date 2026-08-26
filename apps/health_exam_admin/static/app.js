@@ -762,6 +762,12 @@
   const csvMappingBulkSelectedLabel = document.querySelector("[data-csv-mapping-bulk-selected-label]");
   const csvMappingBulkSelectedInputs = document.querySelector("[data-csv-mapping-bulk-selected-inputs]");
   const csvMappingColumnCheckboxes = Array.from(document.querySelectorAll("[data-csv-mapping-column-checkbox]"));
+  const fillCsvMappingBulkSelectedInputs = (selected) => {
+    if (!csvMappingBulkSelectedInputs) return;
+    csvMappingBulkSelectedInputs.innerHTML = selected
+      .map((checkbox) => `<input type="hidden" name="column_no" value="${escapeHtml(checkbox.value)}">`)
+      .join("");
+  };
   const updateCsvMappingSelection = () => {
     const selected = csvMappingColumnCheckboxes.filter((checkbox) => checkbox.checked);
     if (csvMappingSelectedCount) csvMappingSelectedCount.textContent = String(selected.length);
@@ -794,15 +800,19 @@
     csvMappingBulkOpen.addEventListener("click", () => {
       const selected = updateCsvMappingSelection();
       if (!selected.length) return;
-      if (csvMappingBulkSelectedInputs) {
-        csvMappingBulkSelectedInputs.innerHTML = selected
-          .map((checkbox) => `<input type="hidden" name="column_no" value="${escapeHtml(checkbox.value)}">`)
-          .join("");
-      }
+      fillCsvMappingBulkSelectedInputs(selected);
       csvMappingBulkModal.hidden = false;
       document.body.classList.add("has-open-modal");
       const firstInput = csvMappingBulkModal.querySelector("input[name='bulk_action']");
       if (firstInput) firstInput.focus();
+    });
+    const csvMappingBulkForm = csvMappingBulkModal.querySelector(".csv-mapping-selected-bulk-form");
+    csvMappingBulkForm?.addEventListener("submit", (event) => {
+      const selected = updateCsvMappingSelection();
+      fillCsvMappingBulkSelectedInputs(selected);
+      if (!selected.length) {
+        event.preventDefault();
+      }
     });
   }
 

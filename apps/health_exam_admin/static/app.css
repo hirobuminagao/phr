@@ -2395,7 +2395,7 @@ a.home-menu-card.is-navigating {
 }
 
 .case-csv-field-option:has(input:checked) {
-  border-color: var(--green);
+  border-color: var(--accent);
   background: #edf8f4;
 }
 
@@ -3730,7 +3730,7 @@ a.home-menu-card.is-navigating {
 }
 
 .csv-mapping-filter-card.is-selected {
-  border-color: var(--green);
+  border-color: var(--accent);
   background: #edf8f4;
 }
 
@@ -3808,7 +3808,7 @@ a.home-menu-card.is-navigating {
 .csv-mapping-row-select input {
   width: 18px;
   height: 18px;
-  accent-color: var(--green);
+  accent-color: var(--accent);
 }
 
 .csv-mapping-column-table tr[data-csv-mapping-selectable-row] {
@@ -3879,7 +3879,7 @@ a.home-menu-card.is-navigating {
 }
 
 .csv-mapping-bulk-action-card input {
-  accent-color: var(--green);
+  accent-color: var(--accent);
 }
 
 .csv-mapping-bulk-action-card strong,
@@ -3920,27 +3920,82 @@ a.home-menu-card.is-navigating {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 56px;
   min-height: 28px;
   padding: 4px 8px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  background: #fff;
-  color: var(--text);
+  background: var(--accent);
+  color: #fff;
   font-size: 12px;
   font-weight: 800;
   line-height: 1.1;
   cursor: pointer;
+  box-shadow: none;
+  opacity: 1;
+  visibility: visible;
+  text-indent: 0;
+  white-space: nowrap;
 }
 
 .csv-mapping-rule-kind-button[type="submit"] {
   padding: 4px 8px;
 }
 
-.csv-mapping-rule-kind-button:hover,
+.csv-mapping-rule-kind-button span {
+  display: inline;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  opacity: 1;
+  visibility: visible;
+}
+
+.csv-mapping-rule-kind-button:hover {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+  color: #fff;
+}
+
 .csv-mapping-rule-kind-button.is-selected {
-  border-color: var(--green);
-  background: #edf8f4;
-  color: var(--green);
+  border-color: var(--accent-dark);
+  background: var(--accent);
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.72),
+    0 0 0 1px rgba(20, 132, 100, 0.18);
+}
+
+.csv-mapping-rule-kind-button.is-selected:hover {
+  background: var(--accent-dark);
+  color: #fff;
+}
+
+.csv-mapping-rule-kind-form .csv-mapping-rule-action-button,
+.csv-mapping-rule-kind-row .csv-mapping-rule-action-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 56px !important;
+  min-height: 28px !important;
+  padding: 4px 8px !important;
+  border: 1px solid var(--accent) !important;
+  border-radius: 6px !important;
+  background: var(--accent) !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 1.1 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.csv-mapping-rule-kind-form .csv-mapping-rule-action-button.is-selected,
+.csv-mapping-rule-kind-row .csv-mapping-rule-action-button.is-selected {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.72),
+    0 0 0 1px rgba(20, 132, 100, 0.18) !important;
 }
 
 .csv-mapping-rule-details summary {
@@ -3948,7 +4003,7 @@ a.home-menu-card.is-navigating {
   display: grid;
   gap: 2px;
   font-weight: 800;
-  color: var(--green);
+  color: var(--accent);
 }
 
 .csv-mapping-rule-details summary small {
@@ -3984,7 +4039,7 @@ a.home-menu-card.is-navigating {
 
 .csv-mapping-ledger-field-option:hover,
 .csv-mapping-ledger-field-option.is-selected {
-  border-color: var(--green);
+  border-color: var(--accent);
   background: #edf8f4;
 }
 
@@ -4127,7 +4182,7 @@ a.home-menu-card.is-navigating {
 
 .csv-mapping-exam-item-option:hover,
 .csv-mapping-exam-item-option.is-selected {
-  border-color: var(--green);
+  border-color: var(--accent);
   background: #edf8f4;
 }
 
@@ -4377,12 +4432,12 @@ a.home-menu-card.is-navigating {
 
 .master-sql-export-form .master-sql-option-card:hover,
 .master-sql-export-form .master-sql-option-card:has(input:focus-visible) {
-  border-color: var(--green);
+  border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(18, 130, 99, 0.12);
 }
 
 .master-sql-export-form .master-sql-option-card:has(input:checked) {
-  border-color: var(--green);
+  border-color: var(--accent);
   background: #edf8f4;
   box-shadow: inset 0 0 0 1px rgba(18, 130, 99, 0.2);
 }
@@ -4843,6 +4898,16 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .status-danger {
   background: var(--danger-bg);
   color: var(--danger-text);
+}
+
+.status-action-needed {
+  background: #ffe9e6;
+  color: #a0271d;
+}
+
+.status-watch {
+  background: #eaf3ff;
+  color: #1f5f9a;
 }
 
 .status-ok {
@@ -5941,7 +6006,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .basic-info-correction-accordion[open] .summary-action {
   background: #e8f6f1;
-  border-color: var(--green);
+  border-color: var(--accent);
   color: var(--green-dark);
 }
 

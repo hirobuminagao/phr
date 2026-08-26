@@ -34,6 +34,7 @@ Codexは、各列について次を判断します。
 - 基本情報として取り込む列か。
 - 健診結果値として取り込む列か。
 - 使わない列か。
+- 今は取り込まないが、将来値が入ったら確認したい監視列か。
 - 人間確認が必要な列か。
 - 関連列と組み合わせて扱うべき列か。
 
@@ -45,8 +46,10 @@ Codexは、このZIPへの回答では最終seedを作成しません。候補�
 
 - ヘッダー名だけで決めず、サンプル値、型、周辺列も確認してください。
 - `rule_hits` は優先的な判断材料として扱ってください。ただしヘッダーや値の実態と矛盾する場合は採用しないでください。
-- `machine_candidate` は現在の機械候補です。正しければ `KEEP_MACHINE`、修正するなら `REPLACE_MACHINE`、未使用に寄せるなら `MARK_IGNORE`、人確認に寄せるなら `MARK_REVIEW` を返してください。
+- `machine_candidate` は現在の機械候補です。正しければ `KEEP_MACHINE`、修正するなら `REPLACE_MACHINE`、未使用に寄せるなら `MARK_IGNORE`、監視に寄せるなら `MARK_WATCH`、人確認に寄せるなら `MARK_REVIEW` を返してください。
 - 意味が曖昧な列は `REVIEW` または `NEEDS_CONFIRMATION` にしてください。
+- ヘッダーとして意味があるが今回の取込対象にはしない列で、将来値が入ったら気づきたいものは `WATCH` / `WATCH_IF_PRESENT` にしてください。
+- サンプル値が空、または `non_blank_count` が0という理由だけで `IGNORE` にしないでください。
 - 健診結果値は、可能な限り既存の `namecode` に寄せてください。
 - `analysis_prompt.json` と参照可能な既存定義から確認できない `namecode` は作らないでください。
 - 基本情報は、`candidate_ledger_field` に寄せてください。
@@ -96,12 +99,14 @@ Codexは、このZIPへの回答では最終seedを作成しません。候補�
 - `EXAM_ITEM_VALUE`: 身長、血圧、検査値、問診、所見など、健診結果値。
 - `IGNORE`: 取り込み不要。
 - `REVIEW`: AIでは判断しきれない。
+- `WATCH`: 今は取り込まないが、将来この列に値が入ったら確認したい。
 
 ## `candidate_action`
 
 - `KEEP_MACHINE`: 既存の `machine_candidate` が妥当。
 - `REPLACE_MACHINE`: 既存の `machine_candidate` とは別の候補に置き換える。
 - `MARK_IGNORE`: 取り込み不要として候補化する。
+- `MARK_WATCH`: 監視対象として候補化する。
 - `MARK_REVIEW`: 人間確認対象として候補化する。
 - `NO_CANDIDATE`: 候補を作らず、AIレビュー状態だけを返す。
 
@@ -113,6 +118,7 @@ Codexは、このZIPへの回答では最終seedを作成しません。候補�
 - `METHOD_SELECTION`: 検査方法や条件によって対象namecodeが変わる。
 - `IGNORE`: 取り込み不要。
 - `NEEDS_CONFIRMATION`: 健診機関や仕様確認が必要。
+- `WATCH_IF_PRESENT`: 今は取り込まないが、将来非空値が出たら確認する。
 
 ## 注意
 

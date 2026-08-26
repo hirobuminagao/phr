@@ -14,10 +14,10 @@ CREATE TABLE IF NOT EXISTS `csv_mapping_lab`.`csv_mapping_rules` (
   `normalized_header_pattern` varchar(255) DEFAULT NULL COMMENT '正規化ヘッダー条件',
   `value_type` varchar(32) DEFAULT NULL COMMENT 'NUMERIC/DATE/CODE/TEXT/MIXEDなど。NULLなら型不問',
   `sensitive_category` varchar(32) DEFAULT NULL COMMENT '個人系カテゴリ。NULLなら不問',
-  `target_kind` varchar(64) NOT NULL COMMENT 'LEDGER_FIELD/EXAM_ITEM_VALUE/IGNORE/REVIEW',
+  `target_kind` varchar(64) NOT NULL COMMENT 'LEDGER_FIELD/EXAM_ITEM_VALUE/IGNORE/REVIEW/WATCH',
   `target_namecode` char(17) DEFAULT NULL COMMENT 'target_kind=EXAM_ITEM_VALUE のnamecode',
   `target_ledger_field` varchar(64) DEFAULT NULL COMMENT 'target_kind=LEDGER_FIELD のledger field',
-  `mapping_strategy` varchar(64) NOT NULL DEFAULT 'DIRECT' COMMENT 'DIRECT/MULTI_COLUMN_JOIN/DERIVED_CODE/METHOD_SELECTION/IGNORE/NEEDS_CONFIRMATION',
+  `mapping_strategy` varchar(64) NOT NULL DEFAULT 'DIRECT' COMMENT 'DIRECT/MULTI_COLUMN_JOIN/DERIVED_CODE/METHOD_SELECTION/IGNORE/NEEDS_CONFIRMATION/WATCH_IF_PRESENT',
   `confidence` decimal(5,4) NOT NULL DEFAULT 0.9000 COMMENT 'ルール信頼度',
   `reason` text DEFAULT NULL COMMENT 'ルール根拠',
   `active` tinyint(1) NOT NULL DEFAULT 1 COMMENT '有効フラグ',
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS `csv_mapping_lab`.`csv_mapping_rules` (
   KEY `idx_csv_mapping_rules_target_namecode` (`target_namecode`),
   KEY `idx_csv_mapping_rules_target_ledger_field` (`target_ledger_field`),
   CONSTRAINT `chk_csv_mapping_rules_scope` CHECK (`scope` IN ('global', 'facility', 'event')),
-  CONSTRAINT `chk_csv_mapping_rules_target` CHECK (`target_kind` IN ('LEDGER_FIELD', 'EXAM_ITEM_VALUE', 'IGNORE', 'REVIEW'))
+  CONSTRAINT `chk_csv_mapping_rules_target` CHECK (`target_kind` IN ('LEDGER_FIELD', 'EXAM_ITEM_VALUE', 'IGNORE', 'REVIEW', 'WATCH'))
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

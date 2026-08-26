@@ -123,6 +123,8 @@ ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysi
 
 各列のヘッダー、サンプル値、型、周辺列を確認し、関連列がある場合は related_column_nos に入れてください。
 所見、問診、判定、検査方法違い、左右別、連番列は、安易にDIRECTにせず、必要に応じて MULTI_COLUMN_JOIN / METHOD_SELECTION / NEEDS_CONFIRMATION を使ってください。
+ヘッダーとして意味があるが今回の取込対象にはしない列で、将来値が入ったら気づきたいものは WATCH / WATCH_IF_PRESENT にしてください。
+サンプル値が空、または non_blank_count が0という理由だけで IGNORE にしないでください。
 
 候補namecodeは、analysis_prompt.json 内の既存候補または同梱された根拠から判断できるものだけにしてください。
 存在確認できないnamecodeは作らず、REVIEW または NEEDS_CONFIRMATION にしてください。
@@ -6082,8 +6084,10 @@ def normalize_exam_export_case_csv_fields(raw_fields: Sequence[str]) -> list[str
 def csv_cell_value(value: Any) -> str:
     if value is None:
         return ""
-    if isinstance(value, (date, datetime)):
+    if isinstance(value, datetime):
         return value.isoformat(sep=" ")
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, Decimal):
         return str(value)
     return str(value)
@@ -11887,6 +11891,8 @@ def load_csv_mapping_lab_column_status_summary(
           COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'EXAM_ITEM_VALUE' THEN 1 ELSE 0 END), 0) AS exam_item,
           COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'LEDGER_FIELD' THEN 1 ELSE 0 END), 0) AS ledger_field,
           COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'IGNORE' THEN 1 ELSE 0 END), 0) AS ignore_kind,
+          COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'WATCH' THEN 1 ELSE 0 END), 0) AS watch,
+          COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'WATCH' AND `non_blank_count` > 0 THEN 1 ELSE 0 END), 0) AS watch_hit,
           COALESCE(SUM(CASE WHEN `ai_review_status` = 'REVIEWED' THEN 1 ELSE 0 END), 0) AS ai_reviewed,
           COALESCE(SUM(CASE WHEN `ai_review_status` = 'FAILED' THEN 1 ELSE 0 END), 0) AS ai_failed,
           COALESCE(SUM(CASE WHEN `candidate_confidence` IS NULL OR `candidate_confidence` < 0.85 THEN 1 ELSE 0 END), 0) AS low_confidence
@@ -11898,7 +11904,7 @@ def load_csv_mapping_lab_column_status_summary(
     row = cur.fetchone() or {}
     return {
         key: int(row.get(key) or 0)
-        for key in ("total", "unreviewed", "review", "exam_item", "ledger_field", "ignore_kind", "ai_reviewed", "ai_failed", "low_confidence")
+        for key in ("total", "unreviewed", "review", "exam_item", "ledger_field", "ignore_kind", "watch", "watch_hit", "ai_reviewed", "ai_failed", "low_confidence")
     }
 
 
@@ -11959,6 +11965,8 @@ def csv_mapping_decision_status_for_target_kind(target_kind: str) -> str:
         return "IGNORE"
     if target_kind == "REVIEW":
         return "NEEDS_CONFIRMATION"
+    if target_kind == "WATCH":
+        return "WATCH"
     if target_kind in {"LEDGER_FIELD", "EXAM_ITEM_VALUE"}:
         return "ADOPT"
     return "UNREVIEWED"
@@ -12070,7 +12078,19 @@ def csv_mapping_lab_default_context(
         column_status_summary = (
             load_csv_mapping_lab_column_status_summary(cur, analysis_file_id=selected_file_id)
             if selected_file_id
-            else {"total": 0, "unreviewed": 0, "review": 0, "exam_item": 0, "ledger_field": 0, "ignore_kind": 0, "low_confidence": 0}
+            else {
+                "total": 0,
+                "unreviewed": 0,
+                "review": 0,
+                "exam_item": 0,
+                "ledger_field": 0,
+                "ignore_kind": 0,
+                "watch": 0,
+                "watch_hit": 0,
+                "ai_reviewed": 0,
+                "ai_failed": 0,
+                "low_confidence": 0,
+            }
         )
         max_column_page = max(1, ((column_count - 1) // column_page_size) + 1) if column_count else 1
         if column_page > max_column_page:
@@ -12798,9 +12818,9 @@ async def bulk_set_csv_mapping_lab_rules(request: Request) -> Response:
     target_kind = str(form.get("target_kind") or "")
     if not analysis_file_id:
         return RedirectResponse("/utilities/csv-mapping-lab?error=解析ファイルを選択してください。", status_code=303)
-    if target_kind not in {"IGNORE", "REVIEW"}:
+    if target_kind not in {"IGNORE", "REVIEW", "WATCH"}:
         return RedirectResponse(
-            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="一括設定できるのは未使用/要確認だけです。"),
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="一括設定できるのは未使用/要確認/監視だけです。"),
             status_code=303,
         )
     return_query = {
@@ -12809,7 +12829,7 @@ async def bulk_set_csv_mapping_lab_rules(request: Request) -> Response:
         if values
     }
     filters = csv_mapping_lab_column_filter_from_query(return_query)
-    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "NEEDS_CONFIRMATION"
+    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "WATCH_IF_PRESENT" if target_kind == "WATCH" else "NEEDS_CONFIRMATION"
     actor = str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or "")
     try:
         params = load_mysql_base_params(db_prefix())
@@ -12877,7 +12897,7 @@ async def bulk_set_csv_mapping_lab_rules(request: Request) -> Response:
             csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error=str(exc)),
             status_code=303,
         )
-    label = "未使用" if target_kind == "IGNORE" else "要確認"
+    label = "未使用" if target_kind == "IGNORE" else "監視" if target_kind == "WATCH" else "要確認"
     return RedirectResponse(
         csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message=f"絞り込み結果 {len(columns)}列を{label}に設定しました。"),
         status_code=303,
@@ -12889,10 +12909,11 @@ async def bulk_action_csv_mapping_lab_columns(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    form = await read_form(request)
+    raw_form = await request.form()
+    form = {key: str(value) for key, value in raw_form.multi_items()}
     analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
     action = str(form.get("bulk_action") or "")
-    raw_column_numbers = form.getlist("column_no") if hasattr(form, "getlist") else []
+    raw_column_numbers = raw_form.getlist("column_no")
     column_numbers = [
         number
         for number in (
@@ -12908,7 +12929,7 @@ async def bulk_action_csv_mapping_lab_columns(request: Request) -> Response:
             csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="一括処理する列を選択してください。"),
             status_code=303,
         )
-    if action not in {"IGNORE", "REVIEW", "MACHINE_ACCEPT"}:
+    if action not in {"IGNORE", "REVIEW", "WATCH", "MACHINE_ACCEPT"}:
         return RedirectResponse(
             csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="一括処理の内容を選択してください。"),
             status_code=303,
@@ -12926,9 +12947,9 @@ async def bulk_action_csv_mapping_lab_columns(request: Request) -> Response:
                 raise ValueError("一括処理できる列がありません。")
             processed = 0
             skipped = 0
-            if action in {"IGNORE", "REVIEW"}:
+            if action in {"IGNORE", "REVIEW", "WATCH"}:
                 target_kind = action
-                mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "NEEDS_CONFIRMATION"
+                mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "WATCH_IF_PRESENT" if target_kind == "WATCH" else "NEEDS_CONFIRMATION"
                 distinct_rules: dict[tuple[str, str, str], dict[str, Any]] = {}
                 for column in columns:
                     header_name = str(column.get("header_name") or "")
@@ -12986,7 +13007,7 @@ async def bulk_action_csv_mapping_lab_columns(request: Request) -> Response:
                     target_kind = str(column.get("candidate_target_kind") or "")
                     target_namecode = str(column.get("candidate_namecode") or "").strip() or None
                     target_ledger_field = str(column.get("candidate_ledger_field") or "").strip() or None
-                    if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE"}:
+                    if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE", "WATCH"}:
                         skipped += 1
                         continue
                     if target_kind == "EXAM_ITEM_VALUE" and not target_namecode:
@@ -13001,7 +13022,7 @@ async def bulk_action_csv_mapping_lab_columns(request: Request) -> Response:
                         target_ledger_field = None
                     header_name = str(column.get("header_name") or "")
                     normalized_header = str(column.get("normalized_header_name") or normalize_header(header_name) or "")
-                    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "DIRECT"
+                    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "WATCH_IF_PRESENT" if target_kind == "WATCH" else "DIRECT"
                     cur.execute(
                         f"""
                         INSERT INTO {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules` (
@@ -13056,7 +13077,7 @@ async def bulk_action_csv_mapping_lab_columns(request: Request) -> Response:
             csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error=str(exc)),
             status_code=303,
         )
-    action_label = {"IGNORE": "未使用", "REVIEW": "要確認", "MACHINE_ACCEPT": "機械OK"}[action]
+    action_label = {"IGNORE": "未使用", "REVIEW": "要確認", "WATCH": "監視", "MACHINE_ACCEPT": "機械OK"}[action]
     extra = f"（スキップ {skipped}列）" if skipped else ""
     return RedirectResponse(
         csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message=f"選択した{processed}列を{action_label}で一括処理しました。{extra}"),
@@ -13104,7 +13125,7 @@ async def accept_csv_mapping_lab_candidate(request: Request) -> Response:
             target_kind = str(column.get("candidate_target_kind") or "")
             target_namecode = str(column.get("candidate_namecode") or "").strip() or None
             target_ledger_field = str(column.get("candidate_ledger_field") or "").strip() or None
-            if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE"}:
+            if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE", "WATCH"}:
                 raise ValueError("採用できる機械判定がありません。")
             if target_kind == "EXAM_ITEM_VALUE" and not target_namecode:
                 raise ValueError("機械判定にnamecodeがありません。")
@@ -13116,7 +13137,7 @@ async def accept_csv_mapping_lab_candidate(request: Request) -> Response:
                 target_ledger_field = None
             header_name = str(column.get("header_name") or "")
             normalized_header = str(column.get("normalized_header_name") or normalize_header(header_name) or "")
-            mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "DIRECT"
+            mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "WATCH_IF_PRESENT" if target_kind == "WATCH" else "DIRECT"
             decision_status = csv_mapping_decision_status_for_target_kind(target_kind)
             cur.execute(
                 f"""
@@ -13202,7 +13223,7 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
     if condition_type not in {"header_exact", "normalized_header_exact", "header_contains"}:
         condition_type = "normalized_header_exact"
     target_kind = str(form.get("target_kind") or "")
-    if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE", "REVIEW"}:
+    if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE", "REVIEW", "WATCH"}:
         return RedirectResponse(
             csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="target kindを選択してください。"),
             status_code=303,
@@ -13223,7 +13244,7 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
         target_namecode = None
     if target_kind != "LEDGER_FIELD":
         target_ledger_field = None
-    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "NEEDS_CONFIRMATION" if target_kind == "REVIEW" else "DIRECT"
+    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "WATCH_IF_PRESENT" if target_kind == "WATCH" else "NEEDS_CONFIRMATION" if target_kind == "REVIEW" else "DIRECT"
     decision_status = csv_mapping_decision_status_for_target_kind(target_kind)
     actor = str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or "")
     try:

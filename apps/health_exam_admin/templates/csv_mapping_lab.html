@@ -289,6 +289,9 @@
       <a class="summary-card csv-mapping-filter-card{% if column_filters.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&candidate_target_kind=IGNORE">
         <span>未使用</span><strong>{{ column_status_summary.ignore_kind }}</strong><small>IGNORE候補</small>
       </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.candidate_target_kind == 'WATCH' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&candidate_target_kind=WATCH">
+        <span>監視</span><strong>{{ column_status_summary.watch }}</strong><small>値あり {{ column_status_summary.watch_hit }}</small>
+      </a>
       <a class="summary-card csv-mapping-filter-card{% if column_filters.ai_review_status == 'REVIEWED' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&ai_review_status=REVIEWED">
         <span>AI済み</span><strong>{{ column_status_summary.ai_reviewed }}</strong><small>Codex判定済み</small>
       </a>
@@ -307,6 +310,7 @@
           <option value="ADOPT" {% if column_filters.decision_status == "ADOPT" %}selected{% endif %}>採用</option>
           <option value="IGNORE" {% if column_filters.decision_status == "IGNORE" %}selected{% endif %}>無視</option>
           <option value="NEEDS_CONFIRMATION" {% if column_filters.decision_status == "NEEDS_CONFIRMATION" %}selected{% endif %}>施設確認</option>
+          <option value="WATCH" {% if column_filters.decision_status == "WATCH" %}selected{% endif %}>監視</option>
           <option value="DEFERRED" {% if column_filters.decision_status == "DEFERRED" %}selected{% endif %}>保留</option>
         </select>
       </label>
@@ -318,6 +322,7 @@
           <option value="EXAM_ITEM_VALUE" {% if column_filters.candidate_target_kind == "EXAM_ITEM_VALUE" %}selected{% endif %}>検査項目</option>
           <option value="IGNORE" {% if column_filters.candidate_target_kind == "IGNORE" %}selected{% endif %}>未使用</option>
           <option value="REVIEW" {% if column_filters.candidate_target_kind == "REVIEW" %}selected{% endif %}>要確認</option>
+          <option value="WATCH" {% if column_filters.candidate_target_kind == "WATCH" %}selected{% endif %}>監視</option>
         </select>
       </label>
       <label>
@@ -386,6 +391,7 @@
           <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
           <button type="submit" name="target_kind" value="IGNORE" class="ghost-button compact-action-button">絞り込みを未使用</button>
           <button type="submit" name="target_kind" value="REVIEW" class="ghost-button compact-action-button">絞り込みを要確認</button>
+          <button type="submit" name="target_kind" value="WATCH" class="ghost-button compact-action-button">絞り込みを監視</button>
         </form>
       </div>
     </div>
@@ -408,7 +414,7 @@
           <tr data-csv-mapping-selectable-row>
             <td>
               <label class="csv-mapping-row-select">
-                <input type="checkbox" value="{{ column.column_no }}" data-csv-mapping-column-checkbox>
+                <input type="checkbox" name="column_no" value="{{ column.column_no }}" form="csv-mapping-selected-bulk-form" data-csv-mapping-column-checkbox>
                 <span>選択</span>
               </label>
             </td>
@@ -428,10 +434,12 @@
               <span class="status-pill status-muted">無視</span>
               {% elif column.decision_status == "NEEDS_CONFIRMATION" %}
               <span class="status-pill status-warning">施設確認</span>
+              {% elif column.decision_status == "WATCH" %}
+              <span class="status-pill {{ 'status-warning' if (column.non_blank_count or 0) > 0 else 'status-watch' }}">監視</span>
               {% elif column.decision_status == "DEFERRED" %}
               <span class="status-pill">保留</span>
               {% else %}
-              <span class="status-pill status-muted">未確認</span>
+              <span class="status-pill status-action-needed">未確認</span>
               {% endif %}
               {% if column.ai_review_status == "REVIEWED" %}
               <span class="status-pill status-ready">AI済</span>
@@ -465,10 +473,11 @@
                 <input type="hidden" name="condition_type" value="normalized_header_exact">
                 <input type="hidden" name="target_namecode" value="{{ column.candidate_namecode or '' }}">
                 <input type="hidden" name="target_ledger_field" value="{{ column.candidate_ledger_field or '' }}">
-                <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'EXAM_ITEM_VALUE' %} is-selected{% endif %}" data-csv-exam-item-picker-open data-form-id="csv-mapping-rule-kind-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-namecode="{{ column.candidate_namecode or '' }}" data-header-name="{{ column.header_name or '' }}">検査</button>
-                <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'LEDGER_FIELD' %} is-selected{% endif %}" data-csv-ledger-field-picker-open data-form-id="csv-mapping-rule-kind-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-ledger-field="{{ column.candidate_ledger_field or '' }}">基本</button>
-                <button type="submit" name="target_kind" value="IGNORE" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}">未使用</button>
-                <button type="submit" name="target_kind" value="REVIEW" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'REVIEW' %} is-selected{% endif %}">要確認</button>
+                <button type="button" class="csv-mapping-rule-kind-button csv-mapping-rule-action-button{% if column.candidate_target_kind == 'EXAM_ITEM_VALUE' %} is-selected{% endif %}" data-csv-exam-item-picker-open data-form-id="csv-mapping-rule-kind-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-namecode="{{ column.candidate_namecode or '' }}" data-header-name="{{ column.header_name or '' }}"><span>検査</span></button>
+                <button type="button" class="csv-mapping-rule-kind-button csv-mapping-rule-action-button{% if column.candidate_target_kind == 'LEDGER_FIELD' %} is-selected{% endif %}" data-csv-ledger-field-picker-open data-form-id="csv-mapping-rule-kind-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-ledger-field="{{ column.candidate_ledger_field or '' }}"><span>基本</span></button>
+                <button type="submit" name="target_kind" value="IGNORE" class="csv-mapping-rule-kind-button csv-mapping-rule-action-button{% if column.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}"><span>未使用</span></button>
+                <button type="submit" name="target_kind" value="REVIEW" class="csv-mapping-rule-kind-button csv-mapping-rule-action-button{% if column.candidate_target_kind == 'REVIEW' %} is-selected{% endif %}"><span>要確認</span></button>
+                <button type="submit" name="target_kind" value="WATCH" class="csv-mapping-rule-kind-button csv-mapping-rule-action-button{% if column.candidate_target_kind == 'WATCH' %} is-selected{% endif %}"><span>監視</span></button>
                 <button
                   type="submit"
                   formaction="/utilities/csv-mapping-lab/candidates/accept"
@@ -507,6 +516,7 @@
                       <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'LEDGER_FIELD' %} is-selected{% endif %}" data-csv-ledger-field-picker-open data-form-id="csv-mapping-rule-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-ledger-field="{{ column.candidate_ledger_field or '' }}">基本情報</button>
                       <button type="submit" name="target_kind" value="IGNORE" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}">未使用</button>
                       <button type="submit" name="target_kind" value="REVIEW" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'REVIEW' %} is-selected{% endif %}">要確認</button>
+                      <button type="submit" name="target_kind" value="WATCH" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'WATCH' %} is-selected{% endif %}">監視</button>
                     </div>
                   </label>
                   <label>
@@ -542,7 +552,7 @@
       </div>
       <button type="button" class="ghost-button" data-modal-close>閉じる</button>
     </div>
-    <form method="post" action="/utilities/csv-mapping-lab/columns/bulk-action" class="csv-mapping-selected-bulk-form">
+    <form method="post" action="/utilities/csv-mapping-lab/columns/bulk-action" class="csv-mapping-selected-bulk-form" id="csv-mapping-selected-bulk-form">
       <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
       <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
       <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
@@ -560,6 +570,13 @@
           <span>
             <strong>要確認</strong>
             <small>選択列を人の追加確認が必要な列として残します。</small>
+          </span>
+        </label>
+        <label class="choice-card csv-mapping-bulk-action-card" data-radio-choice-card>
+          <input type="radio" name="bulk_action" value="WATCH">
+          <span>
+            <strong>監視</strong>
+            <small>今は取り込まず、値が入った時に確認したい列として残します。</small>
           </span>
         </label>
         <label class="choice-card csv-mapping-bulk-action-card" data-radio-choice-card>

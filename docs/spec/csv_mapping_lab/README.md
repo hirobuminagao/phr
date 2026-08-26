@@ -106,12 +106,13 @@ CSVマッピングラボは、全列を眺めるだけではなく、機械判�
 2. 登録済みルールを自動適用する。
 3. `REVIEW` / `NEEDS_CONFIRMATION` / 低confidenceの列だけに絞る。
 4. 作業者が採用、無視、保留、施設確認を判断する。
-5. 判断できた列をルール化し、次回以降の機械判定に回す。
+5. 今は取り込まないが将来値が入ったら確認したい列は、`WATCH` にする。
+6. 判断できた列をルール化し、次回以降の機械判定に回す。
 
 画面上で優先する絞り込み:
 
-- 判定状態: `UNREVIEWED` / `ADOPT` / `IGNORE` / `NEEDS_CONFIRMATION` / `DEFERRED`。
-- 機械候補: `LEDGER_FIELD` / `EXAM_ITEM_VALUE` / `IGNORE` / `REVIEW`。
+- 判定状態: `UNREVIEWED` / `ADOPT` / `IGNORE` / `NEEDS_CONFIRMATION` / `DEFERRED` / `WATCH`。
+- 機械候補: `LEDGER_FIELD` / `EXAM_ITEM_VALUE` / `IGNORE` / `REVIEW` / `WATCH`。
 - confidence: 低いもの、または閾値未満。
 - ヘッダー検索: `聴力`、`判定`、`尿` など。
 - namecodeあり/なし。
@@ -126,6 +127,7 @@ CSVマッピングラボは、全列を眺めるだけではなく、機械判�
 - 自動採用候補。
 - `REVIEW`。
 - `IGNORE`。
+- `WATCH`。
 - 検査値候補。
 - ledger候補。
 
@@ -215,11 +217,11 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - `sensitive_hint`: 氏名、記号番号、生年月日など、個人特定情報っぽい列の印。
 - `value_profile_json`: 型推定やLLM投入用の補助プロファイル。
 - `related_column_nos_json`: 関連しそうな列番JSON。
-- `candidate_target_kind`: `LEDGER_FIELD` / `EXAM_ITEM_VALUE` / `IGNORE` / `REVIEW` など。
+- `candidate_target_kind`: `LEDGER_FIELD` / `EXAM_ITEM_VALUE` / `IGNORE` / `REVIEW` / `WATCH` など。
 - `candidate_namecode`: 検査項目候補。
 - `candidate_ledger_field`: 基本情報候補。
 - `candidate_confidence`: 機械候補またはLLM候補の信頼度。
-- `decision_status`: `UNREVIEWED` / `ADOPT` / `IGNORE` / `NEEDS_CONFIRMATION` / `DEFERRED`。
+- `decision_status`: `UNREVIEWED` / `ADOPT` / `IGNORE` / `NEEDS_CONFIRMATION` / `DEFERRED` / `WATCH`。
 - `decision_note`: 最終判断のメモ。
 - `seed_target`: seed化対象か。
 - `seed_exported`: seedへ反映済みか。
@@ -240,10 +242,10 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - `normalized_header_pattern`: 正規化ヘッダー条件。
 - `value_type`: `NUMERIC` / `DATE` / `CODE` / `TEXT` / `MIXED` など。NULLなら型不問。
 - `sensitive_category`: 個人系カテゴリ。NULLなら不問。
-- `target_kind`: `LEDGER_FIELD` / `EXAM_ITEM_VALUE` / `IGNORE` / `REVIEW`。
+- `target_kind`: `LEDGER_FIELD` / `EXAM_ITEM_VALUE` / `IGNORE` / `REVIEW` / `WATCH`。
 - `target_namecode`: 検査項目値へ寄せる場合の `namecode`。
 - `target_ledger_field`: 基本情報へ寄せる場合のledger field。
-- `mapping_strategy`: `DIRECT` / `MULTI_COLUMN_JOIN` / `DERIVED_CODE` / `METHOD_SELECTION` / `IGNORE` / `NEEDS_CONFIRMATION`。
+- `mapping_strategy`: `DIRECT` / `MULTI_COLUMN_JOIN` / `DERIVED_CODE` / `METHOD_SELECTION` / `IGNORE` / `NEEDS_CONFIRMATION` / `WATCH_IF_PRESENT`。
 - `confidence`: ルール信頼度。
 - `reason`: ルール根拠。
 - `active`: 有効フラグ。
@@ -306,6 +308,14 @@ CSVの1列ごとの解析結果を表す子テーブル。
 - `IGNORE`: 使わない。
 - `NEEDS_CONFIRMATION`: 健診機関や仕様確認が必要。
 - `DEFERRED`: 今回は見送る。
+- `WATCH`: 今は取り込まない。ただし次回以降のCSVで値が入ったら確認したい。
+
+`IGNORE` と `WATCH` は分けて扱う。
+
+- `IGNORE`: ヘッダーの意味として取り込み対象外、または重複・ノイズとして見てよい列。
+- `WATCH`: ヘッダーとして意味はあるが、現時点ではマッピングしない列。将来的に非空値が出た場合に、CSV取込前の注意点として拾いたい。
+
+初版では `WATCH` はCSVマッピング解析側だけの状態であり、本番CSVインポートのアラート処理にはまだ接続しない。将来、CSVインポート側へマッピング状態を反映するときは、`WATCH_IF_PRESENT` ルールにヒットした列の非空値を検知し、取込前警告へ出す。
 
 ## LLM連携の将来形
 
