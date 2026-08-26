@@ -12086,6 +12086,7 @@ def csv_mapping_lab_default_context(
         },
         "ai_instruction_text": CSV_MAPPING_AI_INSTRUCTION,
         "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
+        "prefecture_options": PREFECTURE_OPTIONS,
     }
 
 

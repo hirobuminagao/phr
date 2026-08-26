@@ -3698,6 +3698,10 @@ a.home-menu-card.is-navigating {
   align-items: end;
 }
 
+.csv-mapping-drop-zone {
+  grid-column: 1 / -1;
+}
+
 .csv-mapping-filter-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));

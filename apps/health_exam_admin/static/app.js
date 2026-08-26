@@ -1184,6 +1184,7 @@
   }
 
   let aliasFacilityTargetInput = null;
+  let aliasFacilityTargetNameInput = null;
   const codeFromFolderAliasName = (folderName) => {
     const firstPart = String(folderName || "").trim().split("_")[0]?.trim() || "";
     return /^[0-9A-Za-z-]{2,}$/.test(firstPart) ? firstPart : "";
@@ -1191,7 +1192,9 @@
   for (const button of document.querySelectorAll("[data-alias-facility-picker-open]")) {
     button.addEventListener("click", () => {
       const targetId = button.getAttribute("data-target-input") || "";
+      const targetNameId = button.getAttribute("data-target-name-input") || "";
       aliasFacilityTargetInput = targetId ? document.getElementById(targetId) : null;
+      aliasFacilityTargetNameInput = targetNameId ? document.getElementById(targetNameId) : null;
       const form = button.closest("form");
       const folderInput = form?.querySelector("[data-folder-alias-src]");
       const code = codeFromFolderAliasName(folderInput?.value);
@@ -1212,9 +1215,14 @@
   const selectAliasFacility = (element) => {
     if (!aliasFacilityTargetInput || !(element instanceof Element)) return;
     const code = String(element.getAttribute("data-facility-code") || "").trim();
+    const name = String(element.getAttribute("data-facility-name") || "").trim();
     if (!code) return;
     aliasFacilityTargetInput.value = code;
     aliasFacilityTargetInput.dispatchEvent(new Event("input", { bubbles: true }));
+    if (aliasFacilityTargetNameInput && name) {
+      aliasFacilityTargetNameInput.value = name;
+      aliasFacilityTargetNameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
     closeModal(element.closest(".edit-modal"));
     aliasFacilityTargetInput.focus();
   };
@@ -1238,18 +1246,18 @@
         ? `医療機関 ${escapeHtml(item.medical_institution_code)}`
         : "";
       return `
-        <tr data-alias-facility-row data-facility-code="${escapeHtml(code)}">
+        <tr data-alias-facility-row data-facility-code="${escapeHtml(code)}" data-facility-name="${escapeHtml(name)}">
           <td>
             <strong>${escapeHtml(name)}</strong>
             <small>${escapeHtml(code)}${related ? ` / ${related}` : ""}</small>
           </td>
           <td><small>${escapeHtml(address)}</small></td>
-          <td><button type="button" class="ghost-button compact-action-button" data-alias-facility-select data-facility-code="${escapeHtml(code)}">選択</button></td>
+          <td><button type="button" class="ghost-button compact-action-button" data-alias-facility-select data-facility-code="${escapeHtml(code)}" data-facility-name="${escapeHtml(name)}">選択</button></td>
         </tr>
       `;
     }).join("");
   };
-  for (const modal of document.querySelectorAll("#alias-facility-picker-modal")) {
+  for (const modal of document.querySelectorAll("[data-alias-facility-picker-modal]")) {
     const codeInput = modal.querySelector("[data-alias-facility-search-code]");
     const prefectureInput = modal.querySelector("[data-alias-facility-search-prefecture]");
     const keywordInput = modal.querySelector("[data-alias-facility-search-keyword]");

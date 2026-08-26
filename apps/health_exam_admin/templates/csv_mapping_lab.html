@@ -40,17 +40,34 @@
       </div>
     </div>
     <form method="post" action="/utilities/csv-mapping-lab/upload" enctype="multipart/form-data" class="form-grid csv-mapping-upload-form">
-      <label>
-        <span>CSVファイル</span>
-        <input type="file" name="csv_file" accept=".csv,text/csv" required>
-      </label>
+      <div class="xml-drop-zone csv-mapping-drop-zone" data-file-drop-zone>
+        <label>
+          <span>CSVファイル</span>
+          <input type="file" name="csv_file" accept=".csv,text/csv" required data-file-drop-input>
+          <span class="file-picker-button">ファイルを選択</span>
+        </label>
+        <div class="xml-drop-message">
+          <strong>ここにCSVをドロップ</strong>
+          <small data-file-drop-name>またはクリックしてファイルを選択</small>
+        </div>
+      </div>
       <label>
         <span>健診機関コード</span>
-        <input name="facility_code" placeholder="0110119070">
+        <span class="input-with-button">
+          <input id="csv-mapping-facility-code-input" name="facility_code" placeholder="0110119070">
+          <button
+            type="button"
+            class="ghost-button compact-action-button"
+            data-alias-facility-picker-open
+            data-target-input="csv-mapping-facility-code-input"
+            data-target-name-input="csv-mapping-facility-name-input"
+            data-modal-open="csv-mapping-facility-picker-modal"
+          >選択</button>
+        </span>
       </label>
       <label>
         <span>健診機関名</span>
-        <input name="facility_name" placeholder="円山クリニック">
+        <input id="csv-mapping-facility-name-input" name="facility_name" placeholder="円山クリニック">
       </label>
       <label>
         <span>文字コード</span>
@@ -73,6 +90,56 @@
       </div>
     </form>
   </section>
+
+  <div id="csv-mapping-facility-picker-modal" class="edit-modal" hidden data-alias-facility-picker-modal>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="csv-mapping-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">Facility Picker</p>
+          <h2 id="csv-mapping-facility-picker-title">健診機関マスタから選ぶ</h2>
+          <p class="subtle">解析するCSVの健診機関コードと名称を、健診機関マスタから反映します。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search alias-facility-search">
+        <label class="alias-facility-search__code">
+          <span>コード</span>
+          <input data-alias-facility-search-code data-modal-focus placeholder="健診機関コード / 医療機関コード">
+        </label>
+        <label class="alias-facility-search__prefecture">
+          <span>都道府県</span>
+          <input data-alias-facility-search-prefecture list="csv-mapping-facility-prefectures" placeholder="東京都">
+          <datalist id="csv-mapping-facility-prefectures">
+            {% for prefecture in prefecture_options %}
+            <option value="{{ prefecture }}"></option>
+            {% endfor %}
+          </datalist>
+        </label>
+        <label class="alias-facility-search__keyword">
+          <span>キーワード</span>
+          <input data-alias-facility-search-keyword placeholder="名称 / 住所">
+        </label>
+        <button type="button" class="primary-button" data-alias-facility-search>検索</button>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="csv-mapping-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>所在地</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody data-alias-facility-results>
+            <tr>
+              <td colspan="3">コードまたはキーワードで検索してください。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
   <section class="panel">
     <div class="section-heading">
