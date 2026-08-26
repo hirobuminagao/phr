@@ -162,10 +162,20 @@
           <h2 id="exam-item-master-detail-title-{{ loop.index }}">{{ item.item_name }}</h2>
           <p class="subtle">{{ item.namecode }}{% if item.method_name %} / {{ item.method_name }}{% endif %}</p>
         </div>
-        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+        <div class="exam-item-master-modal-actions">
+          {% if can_copy_master_debug %}
+          <button type="button" class="ghost-button compact-action-button" data-copy-target="#exam-item-master-namecode-copy-{{ loop.index }}">namecodeコピー</button>
+          <button type="button" class="ghost-button compact-action-button" data-copy-target="#exam-item-master-oid-copy-{{ loop.index }}">OIDコピー</button>
+          {% endif %}
+          <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+        </div>
       </div>
 
       <div class="exam-item-master-modal-body">
+        {% if can_copy_master_debug %}
+        <pre id="exam-item-master-namecode-copy-{{ loop.index }}" class="copy-payload-source" hidden>{{ item.namecode_copy_text }}</pre>
+        <pre id="exam-item-master-oid-copy-{{ loop.index }}" class="copy-payload-source" hidden>{{ item.oid_copy_text }}</pre>
+        {% endif %}
         <section class="exam-item-master-modal-section">
           <h3>マスター情報</h3>
           <dl class="definition-grid">

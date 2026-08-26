@@ -3876,10 +3876,21 @@ a.home-menu-card.is-navigating {
   position: sticky;
   top: 0;
   z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin: 0;
   padding: 20px 22px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
+}
+
+.exam-item-master-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .exam-item-master-modal-body {

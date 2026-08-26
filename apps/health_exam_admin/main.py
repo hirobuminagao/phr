@@ -12085,6 +12085,80 @@ def load_norm_variant_summary(cur: Any) -> dict[str, int]:
     }
 
 
+def json_safe_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return value
+
+
+def json_safe_mapping(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {str(key): json_safe_value(value) for key, value in row.items()}
+
+
+def build_exam_item_master_copy_payload(
+    item: Mapping[str, Any],
+    *,
+    scope: str,
+    oid_peer_items: Sequence[Mapping[str, Any]] | None = None,
+) -> str:
+    norm_rows = [json_safe_mapping(row) for row in item.get("norm_variant_rows", [])]
+    standard_rows = [row for row in norm_rows if int(row.get("is_canonical") or 0) == 1 and int(row.get("is_active") or 0) == 1]
+    item_payload = {
+        "namecode": item.get("namecode"),
+        "item_name": item.get("item_name"),
+        "category_name": item.get("category_name"),
+        "kubun_no": item.get("kubun_no"),
+        "kubun_name": item.get("kubun_name"),
+        "jun_no": item.get("jun_no"),
+        "identity_item_code": item.get("identity_item_code"),
+        "identity_item_name": item.get("identity_item_name"),
+        "xml_value_type": item.get("xml_value_type"),
+        "data_type_label": item.get("data_type_label"),
+        "display_unit": item.get("display_unit"),
+        "ucum_unit": item.get("ucum_unit"),
+        "value_method": item.get("value_method"),
+        "nullflavor_allowed": item.get("nullflavor_allowed"),
+        "item_code_oid": item.get("item_code_oid"),
+        "result_code_oid": item.get("result_code_oid"),
+        "xml_method_code": item.get("xml_method_code"),
+        "cda_section_code_default": item.get("cda_section_code_default"),
+        "annex2_legal_report_flag": item.get("annex2_legal_report_flag"),
+        "annex2_exec_requirement": item.get("annex2_exec_requirement"),
+        "annex2_series_group_identifier": item.get("annex2_series_group_identifier"),
+        "annex2_series_group_relation_code": item.get("annex2_series_group_relation_code"),
+        "notes": item.get("notes"),
+    }
+    payload = {
+        "copy_scope": scope,
+        "source": "health_exam_admin.exam_item_master",
+        "item": {key: json_safe_value(value) for key, value in item_payload.items()},
+    }
+    if scope == "namecode":
+        payload["norm"] = {
+            "standard_codes": standard_rows,
+            "variants": norm_rows,
+        }
+    else:
+        payload["result_code_oid"] = item.get("result_code_oid")
+        payload["items_sharing_result_code_oid"] = [
+            {
+                "namecode": peer.get("namecode"),
+                "item_name": peer.get("item_name"),
+                "xml_value_type": peer.get("xml_value_type"),
+                "display_unit": peer.get("display_unit"),
+                "method_name": peer.get("method_name"),
+            }
+            for peer in (oid_peer_items or [item])
+        ]
+        payload["norm"] = {
+            "standard_codes": standard_rows,
+            "variants": norm_rows,
+        }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 @app.get("/utilities/exam-item-master", response_class=HTMLResponse)
 def exam_item_master_browser(request: Request) -> Response:
     user = require_user(request)
@@ -12102,6 +12176,12 @@ def exam_item_master_browser(request: Request) -> Response:
         norm_variant_summary = load_norm_variant_summary(cur)
         cur.close()
 
+    rows_by_oid: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        oid = str(row.get("result_code_oid") or "").strip()
+        if oid:
+            rows_by_oid.setdefault(oid, []).append(row)
+
     for row in rows:
         oid = str(row.get("result_code_oid") or "").strip()
         row["norm_variant_rows"] = norm_variants_by_oid.get(oid, [])
@@ -12110,6 +12190,12 @@ def exam_item_master_browser(request: Request) -> Response:
             for variant in row["norm_variant_rows"]
             if int(variant.get("is_canonical") or 0) == 1 and int(variant.get("is_active") or 0) == 1
         ]
+        row["namecode_copy_text"] = build_exam_item_master_copy_payload(row, scope="namecode")
+        row["oid_copy_text"] = build_exam_item_master_copy_payload(
+            row,
+            scope="result_code_oid",
+            oid_peer_items=rows_by_oid.get(oid) or [row],
+        )
 
     return templates.TemplateResponse(
         "exam_item_master.html",
@@ -12121,6 +12207,7 @@ def exam_item_master_browser(request: Request) -> Response:
             "categories": categories,
             "row_limit": 200,
             "norm_variant_summary": norm_variant_summary,
+            "can_copy_master_debug": can_manage_business_settings(user),
         },
     )
 
