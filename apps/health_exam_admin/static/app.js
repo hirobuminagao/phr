@@ -352,6 +352,108 @@
     input?.addEventListener("change", () => updateCheckboxChoiceCard(card));
   }
 
+  const caseCsvForm = document.querySelector(".case-csv-download-form");
+  if (caseCsvForm) {
+    const storageKey = "phr.caseExportCsvPatterns.v1";
+    const fieldInputs = Array.from(caseCsvForm.querySelectorAll("input[name='fields']"));
+    const patternSelect = caseCsvForm.querySelector("[data-case-csv-pattern-select]");
+    const patternNameInput = caseCsvForm.querySelector("[data-case-csv-pattern-name]");
+    const message = caseCsvForm.querySelector("[data-case-csv-pattern-message]");
+    const defaultFields = fieldInputs.filter((input) => input.defaultChecked).map((input) => input.value);
+
+    const setMessage = (text) => {
+      if (!message) return;
+      message.textContent = text || "";
+    };
+    const loadPatterns = () => {
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(storageKey) || "{}");
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return {};
+      }
+    };
+    const savePatterns = (patterns) => {
+      window.localStorage.setItem(storageKey, JSON.stringify(patterns));
+    };
+    const renderPatternOptions = () => {
+      if (!patternSelect) return;
+      const selected = patternSelect.value;
+      const patterns = loadPatterns();
+      patternSelect.innerHTML = '<option value="">保存パターンを選択</option>';
+      for (const name of Object.keys(patterns).sort((a, b) => a.localeCompare(b, "ja"))) {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = `${name} (${(patterns[name] || []).length}項目)`;
+        patternSelect.appendChild(option);
+      }
+      if (selected && patterns[selected]) patternSelect.value = selected;
+    };
+    const setCheckedFields = (fields) => {
+      const values = new Set(fields || []);
+      for (const input of fieldInputs) {
+        input.checked = values.has(input.value);
+      }
+    };
+    const currentFields = () => fieldInputs.filter((input) => input.checked).map((input) => input.value);
+
+    renderPatternOptions();
+    caseCsvForm.querySelector("[data-case-csv-check-all-off]")?.addEventListener("click", () => {
+      setCheckedFields([]);
+      setMessage("全項目をOFFにしました。");
+    });
+    caseCsvForm.querySelector("[data-case-csv-check-default]")?.addEventListener("click", () => {
+      setCheckedFields(defaultFields);
+      setMessage("初期値に戻しました。");
+    });
+    caseCsvForm.querySelector("[data-case-csv-pattern-save]")?.addEventListener("click", () => {
+      const name = String(patternNameInput?.value || patternSelect?.value || "").trim();
+      if (!name) {
+        setMessage("パターン名を入力してください。");
+        return;
+      }
+      const fields = currentFields();
+      if (!fields.length) {
+        setMessage("登録する項目を1つ以上選択してください。");
+        return;
+      }
+      const patterns = loadPatterns();
+      patterns[name] = fields;
+      savePatterns(patterns);
+      renderPatternOptions();
+      if (patternSelect) patternSelect.value = name;
+      setMessage(`「${name}」を登録しました。`);
+    });
+    caseCsvForm.querySelector("[data-case-csv-pattern-apply]")?.addEventListener("click", () => {
+      const name = String(patternSelect?.value || "").trim();
+      const patterns = loadPatterns();
+      if (!name || !patterns[name]) {
+        setMessage("呼び出すパターンを選択してください。");
+        return;
+      }
+      setCheckedFields(patterns[name]);
+      if (patternNameInput) patternNameInput.value = name;
+      setMessage(`「${name}」を呼び出しました。`);
+    });
+    caseCsvForm.querySelector("[data-case-csv-pattern-delete]")?.addEventListener("click", () => {
+      const name = String(patternSelect?.value || "").trim();
+      const patterns = loadPatterns();
+      if (!name || !patterns[name]) {
+        setMessage("削除するパターンを選択してください。");
+        return;
+      }
+      delete patterns[name];
+      savePatterns(patterns);
+      if (patternNameInput?.value === name) patternNameInput.value = "";
+      renderPatternOptions();
+      setMessage(`「${name}」を削除しました。`);
+    });
+    patternSelect?.addEventListener("change", () => {
+      if (patternNameInput && patternSelect.value) patternNameInput.value = patternSelect.value;
+      setMessage("");
+    });
+  }
+
   const parseSortValue = (cell, type) => {
     const raw = String(cell?.dataset.sortValue ?? cell?.textContent ?? "").trim();
     if (type === "number" || type === "percent") {

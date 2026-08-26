@@ -246,10 +246,32 @@
         <input type="hidden" name="{{ key }}" value="{{ value }}">
         {% endfor %}
         <div class="case-csv-download-scroll">
-          <label class="case-csv-limit-control">
-            <span>最大出力件数</span>
-            <input name="export_limit" value="30000" inputmode="numeric">
-          </label>
+          <section class="case-csv-pattern-panel">
+            <div class="case-csv-pattern-grid">
+              <label class="case-csv-limit-control">
+                <span>最大出力件数</span>
+                <input name="export_limit" value="30000" inputmode="numeric">
+              </label>
+              <label>
+                <span>パターン</span>
+                <select data-case-csv-pattern-select>
+                  <option value="">保存パターンを選択</option>
+                </select>
+              </label>
+              <label>
+                <span>パターン名</span>
+                <input data-case-csv-pattern-name autocomplete="off" placeholder="例: 突合確認用">
+              </label>
+            </div>
+            <div class="case-csv-pattern-actions">
+              <button type="button" class="ghost-button compact-action-button" data-case-csv-pattern-apply>呼び出し</button>
+              <button type="button" class="ghost-button compact-action-button" data-case-csv-pattern-save>登録</button>
+              <button type="button" class="ghost-button compact-action-button" data-case-csv-pattern-delete>削除</button>
+              <button type="button" class="ghost-button compact-action-button" data-case-csv-check-default>初期値</button>
+              <button type="button" class="ghost-button compact-action-button" data-case-csv-check-all-off>全OFF</button>
+            </div>
+            <p class="subtle" data-case-csv-pattern-message></p>
+          </section>
           {% for group in csv_field_groups %}
           <fieldset class="case-csv-field-group">
             <legend>{{ group.group }}</legend>
