@@ -194,20 +194,116 @@
   </section>
 
   <section class="panel">
-    <div class="section-heading csv-mapping-sticky-heading">
+    <div class="section-heading">
       <div>
         <h2>列プレビュー</h2>
-        <p class="subtle">解析済みの列を120列ずつ表示しています。ルールで機械候補を付け、人が確認する列を減らします。</p>
+        <p class="subtle">解析済みの列を120列ずつ表示しています。REVIEWや未確認だけに絞って、判断待ちの列を減らします。</p>
+      </div>
+    </div>
+    <div class="csv-mapping-filter-summary">
+      <a class="summary-card csv-mapping-filter-card{% if not column_filter_active %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}">
+        <span>全列</span><strong>{{ column_status_summary.total }}</strong><small>フィルタ解除</small>
+      </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.decision_status == 'UNREVIEWED' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&decision_status=UNREVIEWED">
+        <span>未確認</span><strong>{{ column_status_summary.unreviewed }}</strong><small>人の判断前</small>
+      </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.candidate_target_kind == 'REVIEW' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&candidate_target_kind=REVIEW">
+        <span>REVIEW</span><strong>{{ column_status_summary.review }}</strong><small>要確認</small>
+      </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.low_confidence == '1' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&low_confidence=1">
+        <span>低confidence</span><strong>{{ column_status_summary.low_confidence }}</strong><small>0.85未満</small>
+      </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.candidate_target_kind == 'EXAM_ITEM_VALUE' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&candidate_target_kind=EXAM_ITEM_VALUE">
+        <span>検査値</span><strong>{{ column_status_summary.exam_item }}</strong><small>item_values候補</small>
+      </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.candidate_target_kind == 'LEDGER_FIELD' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&candidate_target_kind=LEDGER_FIELD">
+        <span>基本情報</span><strong>{{ column_status_summary.ledger_field }}</strong><small>ledger候補</small>
+      </a>
+      <a class="summary-card csv-mapping-filter-card{% if column_filters.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&candidate_target_kind=IGNORE">
+        <span>未使用</span><strong>{{ column_status_summary.ignore_kind }}</strong><small>IGNORE候補</small>
+      </a>
+    </div>
+    <form method="get" action="/utilities/csv-mapping-lab" class="csv-mapping-column-filter-form">
+      <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+      <label>
+        <span>ヘッダー/候補検索</span>
+        <input name="keyword" value="{{ column_filters.keyword }}" placeholder="聴力 / namecode / ledger field">
+      </label>
+      <label>
+        <span>判定状態</span>
+        <select name="decision_status">
+          <option value="">すべて</option>
+          <option value="UNREVIEWED" {% if column_filters.decision_status == "UNREVIEWED" %}selected{% endif %}>未確認</option>
+          <option value="ADOPT" {% if column_filters.decision_status == "ADOPT" %}selected{% endif %}>採用</option>
+          <option value="IGNORE" {% if column_filters.decision_status == "IGNORE" %}selected{% endif %}>無視</option>
+          <option value="NEEDS_CONFIRMATION" {% if column_filters.decision_status == "NEEDS_CONFIRMATION" %}selected{% endif %}>施設確認</option>
+          <option value="DEFERRED" {% if column_filters.decision_status == "DEFERRED" %}selected{% endif %}>保留</option>
+        </select>
+      </label>
+      <label>
+        <span>機械候補</span>
+        <select name="candidate_target_kind">
+          <option value="">すべて</option>
+          <option value="LEDGER_FIELD" {% if column_filters.candidate_target_kind == "LEDGER_FIELD" %}selected{% endif %}>基本情報</option>
+          <option value="EXAM_ITEM_VALUE" {% if column_filters.candidate_target_kind == "EXAM_ITEM_VALUE" %}selected{% endif %}>検査項目</option>
+          <option value="IGNORE" {% if column_filters.candidate_target_kind == "IGNORE" %}selected{% endif %}>未使用</option>
+          <option value="REVIEW" {% if column_filters.candidate_target_kind == "REVIEW" %}selected{% endif %}>要確認</option>
+        </select>
+      </label>
+      <label>
+        <span>namecode</span>
+        <select name="has_namecode">
+          <option value="">すべて</option>
+          <option value="1" {% if column_filters.has_namecode == "1" %}selected{% endif %}>あり</option>
+          <option value="0" {% if column_filters.has_namecode == "0" %}selected{% endif %}>なし</option>
+        </select>
+      </label>
+      <label>
+        <span>ledger field</span>
+        <select name="has_ledger_field">
+          <option value="">すべて</option>
+          <option value="1" {% if column_filters.has_ledger_field == "1" %}selected{% endif %}>あり</option>
+          <option value="0" {% if column_filters.has_ledger_field == "0" %}selected{% endif %}>なし</option>
+        </select>
+      </label>
+      <label>
+        <span>個人系</span>
+        <select name="sensitive_hint">
+          <option value="">すべて</option>
+          <option value="1" {% if column_filters.sensitive_hint == "1" %}selected{% endif %}>あり</option>
+          <option value="0" {% if column_filters.sensitive_hint == "0" %}selected{% endif %}>なし</option>
+        </select>
+      </label>
+      <label class="checkbox-line">
+        <input type="checkbox" name="low_confidence" value="1" {% if column_filters.low_confidence == "1" %}checked{% endif %}>
+        <span>低confidence</span>
+      </label>
+      <div class="form-actions">
+        <button type="submit">絞り込み</button>
+        <a class="ghost-button" href="/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}">クリア</a>
+      </div>
+    </form>
+    <div class="csv-mapping-column-sticky-toolbar">
+      <div>
+        <strong>列プレビュー</strong>
+        <small>{{ column_pagination.start }}-{{ column_pagination.end }} / {{ column_pagination.total }}列{% if column_pagination.total != column_pagination.unfiltered_total %}（全{{ column_pagination.unfiltered_total }}列）{% endif %}</small>
       </div>
       <div class="csv-mapping-column-actions">
         <div class="pagination-inline">
-          <span>{{ column_pagination.start }}-{{ column_pagination.end }} / {{ column_pagination.total }}列</span>
-          <a class="ghost-button compact-action-button{% if not column_pagination.prev_page %} is-disabled{% endif %}" href="{% if column_pagination.prev_page %}/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&column_page={{ column_pagination.prev_page }}{% else %}#{% endif %}">前へ</a>
-          <a class="ghost-button compact-action-button{% if not column_pagination.next_page %} is-disabled{% endif %}" href="{% if column_pagination.next_page %}/utilities/csv-mapping-lab?analysis_file_id={{ selected_file_id }}&column_page={{ column_pagination.next_page }}{% else %}#{% endif %}">次へ</a>
+          <a class="ghost-button compact-action-button{% if not column_pagination.prev_page %} is-disabled{% endif %}" href="{% if column_pagination.prev_page %}/utilities/csv-mapping-lab?{{ column_filter_query }}&column_page={{ column_pagination.prev_page }}{% else %}#{% endif %}">前へ</a>
+          <span>{{ column_pagination.page }} / {{ column_pagination.max_page }}</span>
+          <a class="ghost-button compact-action-button{% if not column_pagination.next_page %} is-disabled{% endif %}" href="{% if column_pagination.next_page %}/utilities/csv-mapping-lab?{{ column_filter_query }}&column_page={{ column_pagination.next_page }}{% else %}#{% endif %}">次へ</a>
         </div>
         <form method="post" action="/utilities/csv-mapping-lab/rules/reapply">
           <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+          <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
           <button type="submit" class="ghost-button compact-action-button">ルール再適用</button>
+        </form>
+        <form method="post" action="/utilities/csv-mapping-lab/rules/bulk-set" class="csv-mapping-bulk-rule-form">
+          <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+          <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
+          <button type="submit" name="target_kind" value="IGNORE" class="ghost-button compact-action-button">絞り込みを未使用</button>
+          <button type="submit" name="target_kind" value="REVIEW" class="ghost-button compact-action-button">絞り込みを要確認</button>
         </form>
       </div>
     </div>
@@ -243,14 +339,28 @@
             </td>
             <td><small>{{ column.sample_values_json }}</small></td>
             <td>
+              <form method="post" action="/utilities/csv-mapping-lab/rules/create" class="csv-mapping-rule-kind-form" id="csv-mapping-rule-kind-form-{{ column.column_no }}">
+                <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
+                <input type="hidden" name="column_no" value="{{ column.column_no }}">
+                <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
+                <input type="hidden" name="scope" value="facility">
+                <input type="hidden" name="condition_type" value="normalized_header_exact">
+                <input type="hidden" name="target_namecode" value="{{ column.candidate_namecode or '' }}">
+                <input type="hidden" name="target_ledger_field" value="{{ column.candidate_ledger_field or '' }}">
+                <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'EXAM_ITEM_VALUE' %} is-selected{% endif %}" data-csv-exam-item-picker-open data-form-id="csv-mapping-rule-kind-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-namecode="{{ column.candidate_namecode or '' }}" data-header-name="{{ column.header_name or '' }}">検査</button>
+                <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'LEDGER_FIELD' %} is-selected{% endif %}" data-csv-ledger-field-picker-open data-form-id="csv-mapping-rule-kind-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-ledger-field="{{ column.candidate_ledger_field or '' }}">基本</button>
+                <button type="submit" name="target_kind" value="IGNORE" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}">未使用</button>
+                <button type="submit" name="target_kind" value="REVIEW" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'REVIEW' %} is-selected{% endif %}">要確認</button>
+              </form>
               <details class="csv-mapping-rule-details">
                 <summary>
                   <span>ルール追加</span>
                   <small>{{ column.candidate_target_kind or "対象選択" }} / {{ column.candidate_namecode or column.candidate_ledger_field or "-" }}</small>
                 </summary>
-                <form method="post" action="/utilities/csv-mapping-lab/rules/create" class="csv-mapping-rule-form">
+                <form method="post" action="/utilities/csv-mapping-lab/rules/create" class="csv-mapping-rule-form" id="csv-mapping-rule-form-{{ column.column_no }}">
                   <input type="hidden" name="analysis_file_id" value="{{ selected_file_id }}">
                   <input type="hidden" name="column_no" value="{{ column.column_no }}">
+                  <input type="hidden" name="return_query" value="{{ column_filter_query }}&column_page={{ column_pagination.page }}">
                   <label>
                     <span>範囲</span>
                     <select name="scope">
@@ -268,13 +378,12 @@
                   </label>
                   <label>
                     <span>対象</span>
-                    <select name="target_kind">
-                      <option value="">選択</option>
-                      <option value="LEDGER_FIELD" {% if column.candidate_target_kind == "LEDGER_FIELD" %}selected{% endif %}>基本情報</option>
-                      <option value="EXAM_ITEM_VALUE" {% if column.candidate_target_kind == "EXAM_ITEM_VALUE" %}selected{% endif %}>検査項目</option>
-                      <option value="IGNORE" {% if column.candidate_target_kind == "IGNORE" %}selected{% endif %}>未使用</option>
-                      <option value="REVIEW" {% if column.candidate_target_kind == "REVIEW" %}selected{% endif %}>要確認</option>
-                    </select>
+                    <div class="csv-mapping-rule-kind-row">
+                      <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'EXAM_ITEM_VALUE' %} is-selected{% endif %}" data-csv-exam-item-picker-open data-form-id="csv-mapping-rule-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-namecode="{{ column.candidate_namecode or '' }}" data-header-name="{{ column.header_name or '' }}">検査項目</button>
+                      <button type="button" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'LEDGER_FIELD' %} is-selected{% endif %}" data-csv-ledger-field-picker-open data-form-id="csv-mapping-rule-form-{{ column.column_no }}" data-column-no="{{ column.column_no }}" data-current-ledger-field="{{ column.candidate_ledger_field or '' }}">基本情報</button>
+                      <button type="submit" name="target_kind" value="IGNORE" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'IGNORE' %} is-selected{% endif %}">未使用</button>
+                      <button type="submit" name="target_kind" value="REVIEW" class="csv-mapping-rule-kind-button{% if column.candidate_target_kind == 'REVIEW' %} is-selected{% endif %}">要確認</button>
+                    </div>
                   </label>
                   <label>
                     <span>namecode</span>
@@ -284,7 +393,6 @@
                     <span>ledger field</span>
                     <input name="target_ledger_field" value="{{ column.candidate_ledger_field or '' }}" placeholder="name_kana_raw">
                   </label>
-                  <button type="submit" class="compact-action-button">保存</button>
                 </form>
               </details>
             </td>
@@ -299,4 +407,46 @@
 
   {% endif %}
 </main>
+<div class="edit-modal csv-mapping-ledger-field-modal" id="csv-mapping-ledger-field-modal" hidden>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <div class="edit-modal__panel">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">LEDGER FIELD</p>
+        <h2>基本情報の項目を選択</h2>
+        <p class="subtle"><span data-csv-ledger-field-column-label>選択中の列</span> をどの基本情報として扱うか選びます。</p>
+      </div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+    <div class="csv-mapping-ledger-field-grid">
+      {% for option in ledger_field_options %}
+      <button type="button" class="csv-mapping-ledger-field-option" data-csv-ledger-field-value="{{ option.value }}">
+        <strong>{{ option.label }}</strong>
+        <small>{{ option.value }}</small>
+        <span>{{ option.hint }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+<div class="edit-modal csv-mapping-exam-item-modal" id="csv-mapping-exam-item-modal" hidden>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <div class="edit-modal__panel">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">EXAM ITEM</p>
+        <h2>検査項目を選択</h2>
+        <p class="subtle"><span data-csv-exam-item-column-label>選択中の列</span> をどのnamecodeとして扱うか選びます。</p>
+      </div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+    <label class="csv-mapping-exam-item-search">
+      <span>項目名 / namecode</span>
+      <input data-csv-exam-item-search-input autocomplete="off" placeholder="聴力 / 9D... / 血圧">
+    </label>
+    <div class="csv-mapping-exam-item-results" data-csv-exam-item-results>
+      <p class="subtle">検索すると候補が表示されます。</p>
+    </div>
+  </div>
+</div>
 {% endblock %}

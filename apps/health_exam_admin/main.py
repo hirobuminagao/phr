@@ -116,6 +116,7 @@ from scripts.phr_app.script_lib.app_auth import (
 APP_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = APP_ROOT.parents[1]
 CSV_MAPPING_LAB_REGULATION_PATH = REPO_ROOT / "docs" / "spec" / "csv_mapping_lab" / "ai_mapping_exchange_regulation.md"
+SYSTEM_SQL_EXPORT_ROOT = REPO_ROOT / "sql" / "system_exports"
 CSV_MAPPING_AI_INSTRUCTION = """添付ZIPを解析してください。
 ZIP内の REGULATION.md を必ず読んで、そのルールに従って analysis_prompt.json の列マッピング候補を作ってください。
 
@@ -11092,6 +11093,159 @@ async def admin_stop_etl_run(request: Request, run_id: int) -> Response:
     )
 
 
+def sql_literal(value: Any) -> str:
+    if value is None:
+        return "NULL"
+    if isinstance(value, (int, float, Decimal)):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return "'" + str(value).replace("'", "''") + "'"
+    text = str(value)
+    return "'" + text.replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+def load_norm_variants_for_sql_export(cur: Any, *, canonical_only: bool) -> list[dict[str, Any]]:
+    where = "WHERE is_canonical = 1" if canonical_only else ""
+    cur.execute(
+        f"""
+        SELECT
+          result_code_oid,
+          raw_token_norm,
+          raw_value_utf8,
+          normalized_code,
+          code_system,
+          display_name,
+          is_canonical,
+          priority,
+          is_active,
+          note
+        FROM {qname(master_db())}.norm_variants
+        {where}
+        ORDER BY result_code_oid, is_canonical DESC, priority, normalized_code, raw_value_utf8
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def build_norm_variants_upsert_sql(rows: Sequence[Mapping[str, Any]], *, source_label: str, canonical_only: bool) -> str:
+    columns = [
+        "result_code_oid",
+        "raw_token_norm",
+        "raw_value_utf8",
+        "normalized_code",
+        "code_system",
+        "display_name",
+        "is_canonical",
+        "priority",
+        "is_active",
+        "note",
+    ]
+    lines = [
+        "-- System export: phr_master.norm_variants",
+        f"-- source: {source_label}",
+        f"-- exported_at: {datetime.now().isoformat(timespec='seconds')}",
+        f"-- scope: {'canonical_only' if canonical_only else 'all_rows'}",
+        "-- sync key: UNIQUE(result_code_oid, raw_value_utf8)",
+        "",
+        "INSERT INTO `phr_master`.`norm_variants` (",
+        "  " + ",\n  ".join(f"`{column}`" for column in columns),
+        ") VALUES",
+    ]
+    value_lines = []
+    for row in rows:
+        values = ", ".join(sql_literal(row.get(column)) for column in columns)
+        value_lines.append(f"  ({values})")
+    lines.append(",\n".join(value_lines))
+    lines.extend(
+        [
+            "ON DUPLICATE KEY UPDATE",
+            "  `raw_token_norm` = VALUES(`raw_token_norm`),",
+            "  `normalized_code` = VALUES(`normalized_code`),",
+            "  `code_system` = VALUES(`code_system`),",
+            "  `display_name` = VALUES(`display_name`),",
+            "  `is_canonical` = VALUES(`is_canonical`),",
+            "  `priority` = VALUES(`priority`),",
+            "  `is_active` = VALUES(`is_active`),",
+            "  `note` = VALUES(`note`),",
+            "  `updated_at` = CURRENT_TIMESTAMP(6);",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+@app.get("/admin/master-sql-export", response_class=HTMLResponse)
+def admin_master_sql_export(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, (BUSINESS_SETTINGS_PERMISSION, SYSTEM_SETTINGS_PERMISSION)):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=master_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        summary = load_norm_variant_summary(cur)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_master_sql_export.html",
+        {
+            "request": request,
+            "user": user,
+            "summary": summary,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/master-sql-export/norm-variants")
+async def admin_export_norm_variants_sql(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, (BUSINESS_SETTINGS_PERMISSION, SYSTEM_SETTINGS_PERMISSION)):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    canonical_only = str(form.get("canonical_only") or "") == "1"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=master_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            rows = load_norm_variants_for_sql_export(cur, canonical_only=canonical_only)
+            if not rows:
+                raise ValueError("出力対象のnorm_variantsがありません。")
+            source_label = f"{user.get('employee_no') or '-'}:{user.get('display_name') or '-'}"
+            sql_text = build_norm_variants_upsert_sql(rows, source_label=source_label, canonical_only=canonical_only)
+            export_dir = SYSTEM_SQL_EXPORT_ROOT / "phr_master"
+            export_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            scope = "canonical" if canonical_only else "all"
+            export_path = export_dir / f"{timestamp}_phr_master_norm_variants_{scope}_upsert.sql"
+            export_path.write_text(sql_text, encoding="utf-8")
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="EXPORT_MASTER_SQL_NORM_VARIANTS",
+                    target_schema=master_db(),
+                    target_table="norm_variants",
+                    target_id=str(export_path),
+                    after={"row_count": len(rows), "canonical_only": canonical_only, "path": str(export_path)},
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+    return FileResponse(
+        export_path,
+        media_type="application/sql",
+        filename=export_path.name,
+    )
+
+
 @app.get("/file-receipts", response_class=HTMLResponse)
 def file_receipts(request: Request) -> Response:
     user = require_user(request)
@@ -11356,13 +11510,119 @@ def load_csv_mapping_lab_column_count(cur: Any, *, analysis_file_id: int) -> int
     return int(row.get("column_count") or 0)
 
 
+def csv_mapping_lab_column_filter_from_query(query: Mapping[str, str]) -> dict[str, str]:
+    return {
+        "decision_status": (query.get("decision_status") or "").strip(),
+        "candidate_target_kind": (query.get("candidate_target_kind") or "").strip(),
+        "keyword": (query.get("keyword") or "").strip(),
+        "has_namecode": (query.get("has_namecode") or "").strip(),
+        "has_ledger_field": (query.get("has_ledger_field") or "").strip(),
+        "sensitive_hint": (query.get("sensitive_hint") or "").strip(),
+        "low_confidence": (query.get("low_confidence") or "").strip(),
+    }
+
+
+def build_csv_mapping_lab_column_where(
+    *,
+    analysis_file_id: int,
+    filters: Mapping[str, str],
+    alias: str = "analysis_columns",
+) -> tuple[str, list[Any]]:
+    clauses = [f"`{alias}`.`analysis_file_id` = %s"]
+    params: list[Any] = [analysis_file_id]
+    decision_status = filters.get("decision_status") or ""
+    if decision_status:
+        clauses.append(f"`{alias}`.`decision_status` = %s")
+        params.append(decision_status)
+    candidate_target_kind = filters.get("candidate_target_kind") or ""
+    if candidate_target_kind:
+        clauses.append(f"`{alias}`.`candidate_target_kind` = %s")
+        params.append(candidate_target_kind)
+    keyword = filters.get("keyword") or ""
+    if keyword:
+        like = f"%{keyword}%"
+        clauses.append(
+            "("
+            f"`{alias}`.`header_name` LIKE %s OR "
+            f"`{alias}`.`normalized_header_name` LIKE %s OR "
+            f"`{alias}`.`analysis_note` LIKE %s OR "
+            f"`{alias}`.`candidate_namecode` LIKE %s OR "
+            f"`{alias}`.`candidate_ledger_field` LIKE %s"
+            ")"
+        )
+        params.extend([like, like, like, like, like])
+    if filters.get("has_namecode") == "1":
+        clauses.append(f"`{alias}`.`candidate_namecode` IS NOT NULL AND `{alias}`.`candidate_namecode` <> ''")
+    elif filters.get("has_namecode") == "0":
+        clauses.append(f"(`{alias}`.`candidate_namecode` IS NULL OR `{alias}`.`candidate_namecode` = '')")
+    if filters.get("has_ledger_field") == "1":
+        clauses.append(f"`{alias}`.`candidate_ledger_field` IS NOT NULL AND `{alias}`.`candidate_ledger_field` <> ''")
+    elif filters.get("has_ledger_field") == "0":
+        clauses.append(f"(`{alias}`.`candidate_ledger_field` IS NULL OR `{alias}`.`candidate_ledger_field` = '')")
+    if filters.get("sensitive_hint") == "1":
+        clauses.append(f"`{alias}`.`sensitive_hint` = 1")
+    elif filters.get("sensitive_hint") == "0":
+        clauses.append(f"(`{alias}`.`sensitive_hint` IS NULL OR `{alias}`.`sensitive_hint` = 0)")
+    if filters.get("low_confidence") == "1":
+        clauses.append(
+            f"(`{alias}`.`candidate_confidence` IS NULL OR `{alias}`.`candidate_confidence` < 0.85)"
+        )
+    return " AND ".join(clauses), params
+
+
+def load_csv_mapping_lab_filtered_column_count(
+    cur: Any,
+    *,
+    analysis_file_id: int,
+    filters: Mapping[str, str],
+) -> int:
+    where_sql, params = build_csv_mapping_lab_column_where(analysis_file_id=analysis_file_id, filters=filters)
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS `column_count`
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns` AS `analysis_columns`
+        WHERE {where_sql}
+        """,
+        params,
+    )
+    row = cur.fetchone() or {}
+    return int(row.get("column_count") or 0)
+
+
+def load_csv_mapping_lab_column_status_summary(
+    cur: Any,
+    *,
+    analysis_file_id: int,
+) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS total,
+          COALESCE(SUM(CASE WHEN `decision_status` = 'UNREVIEWED' THEN 1 ELSE 0 END), 0) AS unreviewed,
+          COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'REVIEW' THEN 1 ELSE 0 END), 0) AS review,
+          COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'EXAM_ITEM_VALUE' THEN 1 ELSE 0 END), 0) AS exam_item,
+          COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'LEDGER_FIELD' THEN 1 ELSE 0 END), 0) AS ledger_field,
+          COALESCE(SUM(CASE WHEN `candidate_target_kind` = 'IGNORE' THEN 1 ELSE 0 END), 0) AS ignore_kind,
+          COALESCE(SUM(CASE WHEN `candidate_confidence` IS NULL OR `candidate_confidence` < 0.85 THEN 1 ELSE 0 END), 0) AS low_confidence
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+        WHERE `analysis_file_id` = %s
+        """,
+        (analysis_file_id,),
+    )
+    row = cur.fetchone() or {}
+    return {key: int(row.get(key) or 0) for key in ("total", "unreviewed", "review", "exam_item", "ledger_field", "ignore_kind", "low_confidence")}
+
+
 def load_csv_mapping_lab_columns(
     cur: Any,
     *,
     analysis_file_id: int,
+    filters: Mapping[str, str] | None = None,
     limit: int = 120,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
+    filters = filters or {}
+    where_sql, params = build_csv_mapping_lab_column_where(analysis_file_id=analysis_file_id, filters=filters)
     try:
         cur.execute(
             f"""
@@ -11377,13 +11637,14 @@ def load_csv_mapping_lab_columns(
                 WHERE `hit`.`analysis_column_id` = `analysis_columns`.`analysis_column_id`
               ) AS `rule_hit_count`
             FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns` AS `analysis_columns`
-            WHERE `analysis_columns`.`analysis_file_id` = %s
+            WHERE {where_sql}
             ORDER BY `column_no`
             LIMIT %s OFFSET %s
             """,
-            (analysis_file_id, limit, offset),
+            params + [limit, offset],
         )
     except Exception:
+        where_sql, params = build_csv_mapping_lab_column_where(analysis_file_id=analysis_file_id, filters=filters)
         cur.execute(
             f"""
             SELECT
@@ -11393,12 +11654,38 @@ def load_csv_mapping_lab_columns(
               `candidate_confidence`, `analysis_note`, `decision_status`, `sample_values_json`,
               0 AS `rule_hit_count`
             FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns`
-            WHERE `analysis_file_id` = %s
+            WHERE {where_sql}
             ORDER BY `column_no`
             LIMIT %s OFFSET %s
             """,
-            (analysis_file_id, limit, offset),
+            params + [limit, offset],
         )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_csv_mapping_lab_filtered_columns_for_bulk(
+    cur: Any,
+    *,
+    analysis_file_id: int,
+    filters: Mapping[str, str],
+    maximum: int = 5000,
+) -> list[dict[str, Any]]:
+    where_sql, params = build_csv_mapping_lab_column_where(analysis_file_id=analysis_file_id, filters=filters)
+    cur.execute(
+        f"""
+        SELECT
+          `analysis_column_id`,
+          `column_no`,
+          `header_name`,
+          `normalized_header_name`,
+          `inferred_value_type`
+        FROM {qname(CSV_MAPPING_LAB)}.`analysis_columns` AS `analysis_columns`
+        WHERE {where_sql}
+        ORDER BY `column_no`
+        LIMIT %s
+        """,
+        params + [maximum],
+    )
     return [dict(row) for row in cur.fetchall()]
 
 
@@ -11434,6 +11721,13 @@ def csv_mapping_lab_default_context(
 ) -> dict[str, Any]:
     column_page_size = 120
     column_page = max(1, column_page)
+    column_filters = csv_mapping_lab_column_filter_from_query(request.query_params)
+    column_query_params = {
+        "analysis_file_id": str(selected_file_id or ""),
+        **{key: value for key, value in column_filters.items() if value},
+    }
+    column_filter_query = urlencode(column_query_params)
+    column_filter_active = any(column_filters.values())
     column_offset = (column_page - 1) * column_page_size
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=True) as conn:
@@ -11442,7 +11736,17 @@ def csv_mapping_lab_default_context(
         summary = load_csv_mapping_lab_summary(cur)
         rule_summary = load_csv_mapping_lab_rule_summary(cur)
         selected_file = load_csv_mapping_lab_file(cur, analysis_file_id=selected_file_id) if selected_file_id else None
-        column_count = load_csv_mapping_lab_column_count(cur, analysis_file_id=selected_file_id) if selected_file_id else 0
+        total_column_count = load_csv_mapping_lab_column_count(cur, analysis_file_id=selected_file_id) if selected_file_id else 0
+        column_count = (
+            load_csv_mapping_lab_filtered_column_count(cur, analysis_file_id=selected_file_id, filters=column_filters)
+            if selected_file_id
+            else 0
+        )
+        column_status_summary = (
+            load_csv_mapping_lab_column_status_summary(cur, analysis_file_id=selected_file_id)
+            if selected_file_id
+            else {"total": 0, "unreviewed": 0, "review": 0, "exam_item": 0, "ledger_field": 0, "ignore_kind": 0, "low_confidence": 0}
+        )
         max_column_page = max(1, ((column_count - 1) // column_page_size) + 1) if column_count else 1
         if column_page > max_column_page:
             column_page = max_column_page
@@ -11451,6 +11755,7 @@ def csv_mapping_lab_default_context(
             load_csv_mapping_lab_columns(
                 cur,
                 analysis_file_id=selected_file_id,
+                filters=column_filters,
                 limit=column_page_size,
                 offset=column_offset,
             )
@@ -11469,10 +11774,15 @@ def csv_mapping_lab_default_context(
         "selected_file": selected_file,
         "selected_file_id": selected_file_id,
         "columns": columns,
+        "column_filters": column_filters,
+        "column_filter_active": column_filter_active,
+        "column_filter_query": column_filter_query,
+        "column_status_summary": column_status_summary,
         "column_pagination": {
             "page": column_page,
             "page_size": column_page_size,
             "total": column_count,
+            "unfiltered_total": total_column_count,
             "max_page": max_column_page,
             "start": column_offset + 1 if column_count else 0,
             "end": min(column_offset + column_page_size, column_count),
@@ -11490,7 +11800,329 @@ def csv_mapping_lab_default_context(
             "nearby_window": "3",
         },
         "ai_instruction_text": CSV_MAPPING_AI_INSTRUCTION,
+        "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
     }
+
+
+CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS = [
+    {"value": "insurer_number", "label": "保険者番号", "hint": "event側で固定できない場合の保険者番号"},
+    {"value": "insurance_symbol_raw", "label": "記号", "hint": "保険証記号"},
+    {"value": "insurance_number_raw", "label": "番号", "hint": "保険証番号"},
+    {"value": "insurance_branch_number_raw", "label": "枝番", "hint": "保険証枝番"},
+    {"value": "name_full_raw", "label": "氏名", "hint": "漢字などの氏名"},
+    {"value": "name_kana_raw", "label": "氏名かな", "hint": "カナ氏名"},
+    {"value": "birthdate", "label": "生年月日", "hint": "YYYY-MM-DDへ正規化される値"},
+    {"value": "gender_raw", "label": "性別", "hint": "男/女/1/2など"},
+    {"value": "exam_date", "label": "健診実施日", "hint": "受診日"},
+    {"value": "facility_code", "label": "健診機関コード", "hint": "受領フォルダより行の値を優先したい場合"},
+    {"value": "facility_name", "label": "健診機関名", "hint": "行に施設名がある場合"},
+    {"value": "person_id_custom", "label": "HIA加入者ID", "hint": "HIA側の加入者ID"},
+    {"value": "health_exam_report_category", "label": "報告区分", "hint": "健診結果報告区分"},
+    {"value": "program_code", "label": "プログラムコード", "hint": "コース/プログラムコード"},
+    {"value": "postal_code", "label": "郵便番号", "hint": "受診者住所の郵便番号"},
+    {"value": "address", "label": "住所", "hint": "受診者住所"},
+]
+
+
+CSV_MAPPING_LAB_RETURN_QUERY_KEYS = {
+    "analysis_file_id",
+    "column_page",
+    "decision_status",
+    "candidate_target_kind",
+    "keyword",
+    "has_namecode",
+    "has_ledger_field",
+    "sensitive_hint",
+    "low_confidence",
+}
+
+
+def csv_mapping_lab_return_url(
+    form: Mapping[str, str],
+    *,
+    analysis_file_id: int,
+    message: str | None = None,
+    error: str | None = None,
+) -> str:
+    params: dict[str, str] = {"analysis_file_id": str(analysis_file_id)}
+    raw_return_query = str(form.get("return_query") or "")
+    for key, values in parse_qs(raw_return_query, keep_blank_values=False).items():
+        if key in CSV_MAPPING_LAB_RETURN_QUERY_KEYS and values:
+            params[key] = values[0]
+    params["analysis_file_id"] = str(analysis_file_id)
+    if message:
+        params["message"] = message
+    if error:
+        params["error"] = error
+    return f"/utilities/csv-mapping-lab?{urlencode(params)}"
+
+
+@app.get("/api/csv-mapping-lab/exam-items")
+def api_csv_mapping_lab_exam_items(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    keyword = str(request.query_params.get("keyword") or "").strip()
+    like = f"%{keyword}%"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            f"""
+            SELECT
+              `namecode`,
+              `item_name`,
+              `category_name`,
+              `xml_value_type`,
+              `display_unit`,
+              `method_name`,
+              `identity_item_code`,
+              `identity_item_name`,
+              `result_code_oid`
+            FROM {qname(dev_db())}.`exam_item_master`
+            WHERE `namecode` IS NOT NULL
+              AND `namecode` <> ''
+              AND (
+                %s = ''
+                OR `namecode` LIKE %s
+                OR `item_name` LIKE %s
+                OR `category_name` LIKE %s
+                OR `identity_item_code` LIKE %s
+                OR `identity_item_name` LIKE %s
+                OR `method_name` LIKE %s
+              )
+            ORDER BY
+              CASE
+                WHEN `namecode` = %s THEN 0
+                WHEN `item_name` = %s THEN 1
+                WHEN `namecode` LIKE %s THEN 2
+                WHEN `item_name` LIKE %s THEN 3
+                ELSE 4
+              END,
+              COALESCE(`kubun_no`, 999999),
+              COALESCE(`jun_no`, 999999),
+              COALESCE(`category_name`, ''),
+              COALESCE(`identity_item_code`, `namecode`),
+              `namecode`
+            LIMIT 80
+            """,
+            (
+                keyword,
+                like,
+                like,
+                like,
+                like,
+                like,
+                like,
+                keyword,
+                keyword,
+                f"{keyword}%",
+                f"{keyword}%",
+            ),
+        )
+        rows = [dict(row) for row in cur.fetchall()]
+        cur.close()
+    return JSONResponse({"items": rows})
+
+
+def exam_item_master_filters_from_query(query: Mapping[str, str]) -> dict[str, str]:
+    return {
+        "keyword": str(query.get("keyword") or "").strip(),
+        "result_code_oid": str(query.get("result_code_oid") or "").strip(),
+        "xml_value_type": str(query.get("xml_value_type") or "").strip().upper(),
+        "category_name": str(query.get("category_name") or "").strip(),
+        "legal_report": str(query.get("legal_report") or "").strip(),
+    }
+
+
+def load_exam_item_master_categories(cur: Any) -> list[str]:
+    cur.execute(
+        f"""
+        SELECT DISTINCT category_name
+        FROM {qname(dev_db())}.exam_item_master
+        WHERE category_name IS NOT NULL
+          AND category_name <> ''
+        ORDER BY category_name
+        """
+    )
+    return [str(row.get("category_name") or "") for row in cur.fetchall() if row.get("category_name")]
+
+
+def load_exam_item_master_rows(cur: Any, filters: Mapping[str, str], *, limit: int = 200) -> list[dict[str, Any]]:
+    where = ["1 = 1"]
+    params: list[Any] = []
+    keyword = str(filters.get("keyword") or "").strip()
+    if keyword:
+        like = f"%{keyword}%"
+        where.append(
+            """(
+              namecode LIKE %s
+              OR item_name LIKE %s
+              OR category_name LIKE %s
+              OR identity_item_code LIKE %s
+              OR identity_item_name LIKE %s
+              OR method_name LIKE %s
+              OR result_code_oid LIKE %s
+              OR notes LIKE %s
+            )"""
+        )
+        params.extend([like] * 8)
+
+    result_code_oid = str(filters.get("result_code_oid") or "").strip()
+    if result_code_oid:
+        where.append("result_code_oid LIKE %s")
+        params.append(f"%{result_code_oid}%")
+
+    xml_value_type = str(filters.get("xml_value_type") or "").strip().upper()
+    if xml_value_type in {"PQ", "CD", "CO", "ST"}:
+        where.append("xml_value_type = %s")
+        params.append(xml_value_type)
+
+    category_name = str(filters.get("category_name") or "").strip()
+    if category_name:
+        where.append("category_name = %s")
+        params.append(category_name)
+
+    legal_report = str(filters.get("legal_report") or "").strip()
+    if legal_report in {"1", "0"}:
+        where.append("annex2_legal_report_flag = %s")
+        params.append(int(legal_report))
+
+    params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          namecode,
+          item_name,
+          xml_value_type,
+          item_code_oid,
+          result_code_oid,
+          display_unit,
+          ucum_unit,
+          method_name,
+          category_name,
+          data_type_label,
+          xml_method_code,
+          value_method,
+          nullflavor_allowed,
+          notes,
+          kubun_no,
+          kubun_name,
+          jun_no,
+          identity_item_code,
+          identity_item_name,
+          annex2_exec_requirement,
+          annex2_legal_report_flag,
+          cda_section_code_default,
+          annex2_series_group_identifier,
+          annex2_series_group_relation_code
+        FROM {qname(dev_db())}.exam_item_master
+        WHERE {" AND ".join(where)}
+        ORDER BY
+          COALESCE(kubun_no, 999999),
+          COALESCE(jun_no, 999999),
+          COALESCE(category_name, ''),
+          COALESCE(identity_item_code, namecode),
+          namecode
+        LIMIT %s
+        """,
+        tuple(params),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_norm_variants_by_oid(cur: Any, result_code_oids: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
+    oids = [oid for oid in dict.fromkeys(str(oid or "").strip() for oid in result_code_oids) if oid]
+    if not oids:
+        return {}
+    placeholders = ", ".join(["%s"] * len(oids))
+    cur.execute(
+        f"""
+        SELECT
+          result_code_oid,
+          raw_value_utf8,
+          normalized_code,
+          code_system,
+          display_name,
+          is_canonical,
+          priority,
+          is_active,
+          note
+        FROM {qname(master_db())}.norm_variants
+        WHERE result_code_oid IN ({placeholders})
+        ORDER BY result_code_oid, is_canonical DESC, priority, normalized_code, raw_value_utf8
+        LIMIT 2000
+        """,
+        tuple(oids),
+    )
+    variants: dict[str, list[dict[str, Any]]] = {}
+    for row in cur.fetchall():
+        item = dict(row)
+        oid = str(item.get("result_code_oid") or "").strip()
+        if oid:
+            variants.setdefault(oid, []).append(item)
+    return variants
+
+
+def load_norm_variant_summary(cur: Any) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS variant_count,
+          COALESCE(SUM(CASE WHEN is_canonical = 1 THEN 1 ELSE 0 END), 0) AS canonical_count,
+          COUNT(DISTINCT result_code_oid) AS oid_count,
+          COUNT(DISTINCT CASE WHEN is_canonical = 1 THEN result_code_oid END) AS canonical_oid_count
+        FROM {qname(master_db())}.norm_variants
+        WHERE is_active = 1
+        """
+    )
+    row = cur.fetchone() or {}
+    return {
+        "variant_count": int(row.get("variant_count") or 0),
+        "canonical_count": int(row.get("canonical_count") or 0),
+        "oid_count": int(row.get("oid_count") or 0),
+        "canonical_oid_count": int(row.get("canonical_oid_count") or 0),
+    }
+
+
+@app.get("/utilities/exam-item-master", response_class=HTMLResponse)
+def exam_item_master_browser(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    filters = exam_item_master_filters_from_query(request.query_params)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        rows = load_exam_item_master_rows(cur, filters)
+        categories = load_exam_item_master_categories(cur)
+        result_code_oids = [str(row.get("result_code_oid") or "").strip() for row in rows]
+        norm_variants_by_oid = load_norm_variants_by_oid(cur, result_code_oids)
+        norm_variant_summary = load_norm_variant_summary(cur)
+        cur.close()
+
+    for row in rows:
+        oid = str(row.get("result_code_oid") or "").strip()
+        row["norm_variant_rows"] = norm_variants_by_oid.get(oid, [])
+        row["standard_code_rows"] = [
+            variant
+            for variant in row["norm_variant_rows"]
+            if int(variant.get("is_canonical") or 0) == 1 and int(variant.get("is_active") or 0) == 1
+        ]
+
+    return templates.TemplateResponse(
+        "exam_item_master.html",
+        {
+            "request": request,
+            "user": user,
+            "filters": filters,
+            "rows": rows,
+            "categories": categories,
+            "row_limit": 200,
+            "norm_variant_summary": norm_variant_summary,
+        },
+    )
 
 
 @app.get("/utilities/csv-mapping-lab", response_class=HTMLResponse)
@@ -11628,12 +12260,103 @@ async def reapply_csv_mapping_lab_rules(request: Request) -> Response:
             conn.commit()
     except Exception as exc:
         return RedirectResponse(
-            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote(str(exc))}",
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error=str(exc)),
             status_code=303,
         )
     message = f"ルールを再適用しました。rules={result['rules']} hits={result['hits']} applied={result['applied_columns']}"
     return RedirectResponse(
-        f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&message={quote(message)}",
+        csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message=message),
+        status_code=303,
+    )
+
+
+@app.post("/utilities/csv-mapping-lab/rules/bulk-set")
+async def bulk_set_csv_mapping_lab_rules(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    form = await read_form(request)
+    analysis_file_id = parse_positive_int(str(form.get("analysis_file_id") or ""), default=0, maximum=999999999)
+    target_kind = str(form.get("target_kind") or "")
+    if not analysis_file_id:
+        return RedirectResponse("/utilities/csv-mapping-lab?error=解析ファイルを選択してください。", status_code=303)
+    if target_kind not in {"IGNORE", "REVIEW"}:
+        return RedirectResponse(
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="一括設定できるのは未使用/要確認だけです。"),
+            status_code=303,
+        )
+    return_query = {
+        key: values[0]
+        for key, values in parse_qs(str(form.get("return_query") or ""), keep_blank_values=False).items()
+        if values
+    }
+    filters = csv_mapping_lab_column_filter_from_query(return_query)
+    mapping_strategy = "IGNORE" if target_kind == "IGNORE" else "NEEDS_CONFIRMATION"
+    actor = str(user.get("display_name") or user.get("employee_no") or user.get("app_user_id") or "")
+    try:
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=CSV_MAPPING_LAB, autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            file_row = load_csv_mapping_lab_file(cur, analysis_file_id=analysis_file_id)
+            if not file_row:
+                raise ValueError("解析ファイルが見つかりません。")
+            columns = load_csv_mapping_lab_filtered_columns_for_bulk(cur, analysis_file_id=analysis_file_id, filters=filters)
+            if not columns:
+                raise ValueError("一括設定できる列がありません。")
+            distinct_rules: dict[tuple[str, str, str], dict[str, Any]] = {}
+            for column in columns:
+                header_name = str(column.get("header_name") or "")
+                normalized_header = str(column.get("normalized_header_name") or normalize_header(header_name) or "")
+                value_type = str(column.get("inferred_value_type") or "")
+                distinct_rules.setdefault(
+                    (header_name, normalized_header, value_type),
+                    {"header_name": header_name, "normalized_header": normalized_header, "value_type": value_type},
+                )
+            for rule in distinct_rules.values():
+                cur.execute(
+                    f"""
+                    INSERT INTO {qname(CSV_MAPPING_LAB)}.`csv_mapping_rules` (
+                      `scope`, `facility_code`, `event_id`, `condition_type`, `column_no_min`, `column_no_max`,
+                      `header_pattern`, `normalized_header_pattern`, `value_type`, `target_kind`, `target_namecode`,
+                      `target_ledger_field`, `mapping_strategy`, `confidence`, `reason`, `created_by`, `updated_by`
+                    )
+                    VALUES ('facility', %s, NULL, 'normalized_header_exact', NULL, NULL, %s, %s, %s, %s, NULL, NULL, %s, 0.9000, %s, %s, %s)
+                    """,
+                    (
+                        file_row.get("facility_code"),
+                        rule["header_name"],
+                        rule["normalized_header"],
+                        rule["value_type"],
+                        target_kind,
+                        mapping_strategy,
+                        f"解析ID {analysis_file_id} の絞り込み結果から一括作成",
+                        actor,
+                        actor,
+                    ),
+                )
+            where_sql, where_params = build_csv_mapping_lab_column_where(analysis_file_id=analysis_file_id, filters=filters)
+            cur.execute(
+                f"""
+                UPDATE {qname(CSV_MAPPING_LAB)}.`analysis_columns` AS `analysis_columns`
+                SET
+                  `candidate_target_kind` = %s,
+                  `candidate_namecode` = NULL,
+                  `candidate_ledger_field` = NULL,
+                  `candidate_confidence` = 1.0000,
+                  `analysis_note` = %s
+                WHERE {where_sql}
+                """,
+                [target_kind, f"manual bulk rule: 解析ID {analysis_file_id} の絞り込み結果から一括設定"] + where_params,
+            )
+            conn.commit()
+    except Exception as exc:
+        return RedirectResponse(
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error=str(exc)),
+            status_code=303,
+        )
+    label = "未使用" if target_kind == "IGNORE" else "要確認"
+    return RedirectResponse(
+        csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message=f"絞り込み結果 {len(columns)}列を{label}に設定しました。"),
         status_code=303,
     )
 
@@ -11657,19 +12380,19 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
     target_kind = str(form.get("target_kind") or "")
     if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE", "IGNORE", "REVIEW"}:
         return RedirectResponse(
-            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote('target kindを選択してください。')}",
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="target kindを選択してください。"),
             status_code=303,
         )
     target_namecode = str(form.get("target_namecode") or "").strip() or None
     target_ledger_field = str(form.get("target_ledger_field") or "").strip() or None
     if target_kind == "EXAM_ITEM_VALUE" and not target_namecode:
         return RedirectResponse(
-            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote('namecodeを入力してください。')}",
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="namecodeを入力してください。"),
             status_code=303,
         )
     if target_kind == "LEDGER_FIELD" and not target_ledger_field:
         return RedirectResponse(
-            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote('ledger fieldを入力してください。')}",
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error="ledger fieldを入力してください。"),
             status_code=303,
         )
     if target_kind != "EXAM_ITEM_VALUE":
@@ -11731,14 +12454,34 @@ async def create_csv_mapping_lab_rule(request: Request) -> Response:
                 analysis_file_id=analysis_file_id,
                 facility_code=file_row.get("facility_code"),
             )
+            cur.execute(
+                f"""
+                UPDATE {qname(CSV_MAPPING_LAB)}.`analysis_columns`
+                SET
+                  `candidate_target_kind` = %s,
+                  `candidate_namecode` = %s,
+                  `candidate_ledger_field` = %s,
+                  `candidate_confidence` = 1.0000,
+                  `analysis_note` = %s
+                WHERE `analysis_file_id` = %s AND `column_no` = %s
+                """,
+                (
+                    target_kind,
+                    target_namecode,
+                    target_ledger_field,
+                    f"manual rule: 解析ID {analysis_file_id} 列 {column_no} から作成",
+                    analysis_file_id,
+                    column_no,
+                ),
+            )
             conn.commit()
     except Exception as exc:
         return RedirectResponse(
-            f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&error={quote(str(exc))}",
+            csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, error=str(exc)),
             status_code=303,
         )
     return RedirectResponse(
-        f"/utilities/csv-mapping-lab?analysis_file_id={analysis_file_id}&message={quote('ルールを追加して再適用しました。')}",
+        csv_mapping_lab_return_url(form, analysis_file_id=analysis_file_id, message="ルールを追加して再適用しました。"),
         status_code=303,
     )
 

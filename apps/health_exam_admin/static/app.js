@@ -622,6 +622,151 @@
     button.addEventListener("click", () => closeModal(button.closest(".edit-modal")));
   }
 
+  const csvLedgerFieldModal = document.getElementById("csv-mapping-ledger-field-modal");
+  if (csvLedgerFieldModal) {
+    let csvLedgerFieldTargetForm = null;
+    const columnLabel = csvLedgerFieldModal.querySelector("[data-csv-ledger-field-column-label]");
+    const options = Array.from(csvLedgerFieldModal.querySelectorAll("[data-csv-ledger-field-value]"));
+    const openLedgerFieldModal = (button) => {
+      csvLedgerFieldTargetForm = document.getElementById(button.getAttribute("data-form-id") || "");
+      if (!csvLedgerFieldTargetForm) return;
+      const currentField = button.getAttribute("data-current-ledger-field") || "";
+      if (columnLabel) columnLabel.textContent = `${button.getAttribute("data-column-no") || "-"}列目`;
+      for (const option of options) {
+        option.classList.toggle("is-selected", option.getAttribute("data-csv-ledger-field-value") === currentField);
+      }
+      csvLedgerFieldModal.hidden = false;
+      document.body.classList.add("has-open-modal");
+      const firstOption = csvLedgerFieldModal.querySelector("[data-csv-ledger-field-value]");
+      if (firstOption) firstOption.focus();
+    };
+
+    for (const button of document.querySelectorAll("[data-csv-ledger-field-picker-open]")) {
+      button.addEventListener("click", () => openLedgerFieldModal(button));
+    }
+
+    for (const option of options) {
+      option.addEventListener("click", () => {
+        if (!csvLedgerFieldTargetForm) return;
+        const field = option.getAttribute("data-csv-ledger-field-value") || "";
+        let targetKind = csvLedgerFieldTargetForm.querySelector('input[name="target_kind"]');
+        if (!targetKind) {
+          targetKind = document.createElement("input");
+          targetKind.type = "hidden";
+          targetKind.name = "target_kind";
+          csvLedgerFieldTargetForm.appendChild(targetKind);
+        }
+        targetKind.value = "LEDGER_FIELD";
+        let ledgerField = csvLedgerFieldTargetForm.querySelector('input[name="target_ledger_field"]');
+        if (!ledgerField) {
+          ledgerField = document.createElement("input");
+          ledgerField.type = "hidden";
+          ledgerField.name = "target_ledger_field";
+          csvLedgerFieldTargetForm.appendChild(ledgerField);
+        }
+        ledgerField.value = field;
+        csvLedgerFieldTargetForm.submit();
+      });
+    }
+  }
+
+  const csvExamItemModal = document.getElementById("csv-mapping-exam-item-modal");
+  if (csvExamItemModal) {
+    let csvExamItemTargetForm = null;
+    let csvExamItemCurrentNamecode = "";
+    const columnLabel = csvExamItemModal.querySelector("[data-csv-exam-item-column-label]");
+    const searchInput = csvExamItemModal.querySelector("[data-csv-exam-item-search-input]");
+    const results = csvExamItemModal.querySelector("[data-csv-exam-item-results]");
+    let searchTimer = null;
+
+    const submitExamItemRule = (namecode) => {
+      if (!csvExamItemTargetForm || !namecode) return;
+      let targetKind = csvExamItemTargetForm.querySelector('input[name="target_kind"]');
+      if (!targetKind) {
+        targetKind = document.createElement("input");
+        targetKind.type = "hidden";
+        targetKind.name = "target_kind";
+        csvExamItemTargetForm.appendChild(targetKind);
+      }
+      targetKind.value = "EXAM_ITEM_VALUE";
+      let targetNamecode = csvExamItemTargetForm.querySelector('input[name="target_namecode"]');
+      if (!targetNamecode) {
+        targetNamecode = document.createElement("input");
+        targetNamecode.type = "hidden";
+        targetNamecode.name = "target_namecode";
+        csvExamItemTargetForm.appendChild(targetNamecode);
+      }
+      targetNamecode.value = namecode;
+      csvExamItemTargetForm.submit();
+    };
+
+    const renderExamItemResults = (items) => {
+      if (!results) return;
+      if (!items.length) {
+        results.innerHTML = `<p class="subtle">候補はありません。</p>`;
+        return;
+      }
+      results.innerHTML = items.map((item) => {
+        const selected = item.namecode === csvExamItemCurrentNamecode;
+        const meta = [
+          item.namecode,
+          item.xml_value_type,
+          item.display_unit,
+          item.method_name,
+        ].filter(Boolean).join(" / ");
+        return `
+          <button type="button" class="csv-mapping-exam-item-option${selected ? " is-selected" : ""}" data-csv-exam-item-namecode="${escapeHtml(item.namecode)}">
+            <strong>${escapeHtml(item.item_name || item.namecode)}</strong>
+            <small>${escapeHtml(meta || "-")}</small>
+            <span>${escapeHtml(item.category_name || "-")}${item.identity_item_name ? ` / ${escapeHtml(item.identity_item_name)}` : ""}</span>
+          </button>
+        `;
+      }).join("");
+    };
+
+    const searchExamItems = async () => {
+      const keyword = String(searchInput?.value || "").trim();
+      if (!results) return;
+      results.innerHTML = `<p class="subtle">検索中...</p>`;
+      try {
+        const response = await fetch(`/api/csv-mapping-lab/exam-items?keyword=${encodeURIComponent(keyword)}`);
+        if (!response.ok) throw new Error("search_failed");
+        const payload = await response.json();
+        renderExamItemResults(Array.isArray(payload.items) ? payload.items : []);
+      } catch (error) {
+        results.innerHTML = `<p class="subtle">検索でエラーが発生しました。</p>`;
+      }
+    };
+
+    for (const button of document.querySelectorAll("[data-csv-exam-item-picker-open]")) {
+      button.addEventListener("click", () => {
+        csvExamItemTargetForm = document.getElementById(button.getAttribute("data-form-id") || "");
+        if (!csvExamItemTargetForm) return;
+        csvExamItemCurrentNamecode = button.getAttribute("data-current-namecode") || "";
+        if (columnLabel) columnLabel.textContent = `${button.getAttribute("data-column-no") || "-"}列目`;
+        if (searchInput) searchInput.value = csvExamItemCurrentNamecode || button.getAttribute("data-header-name") || "";
+        csvExamItemModal.hidden = false;
+        document.body.classList.add("has-open-modal");
+        if (searchInput) searchInput.focus();
+        searchExamItems();
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        window.clearTimeout(searchTimer);
+        searchTimer = window.setTimeout(searchExamItems, 220);
+      });
+    }
+    if (results) {
+      results.addEventListener("click", (event) => {
+        const option = event.target.closest("[data-csv-exam-item-namecode]");
+        if (!option) return;
+        submitExamItemRule(option.getAttribute("data-csv-exam-item-namecode") || "");
+      });
+    }
+  }
+
   const facilityCodesInput = document.getElementById("facility-codes-input");
   const facilityCodesSummary = document.getElementById("facility-codes-summary");
   const facilityCodeValues = () => {

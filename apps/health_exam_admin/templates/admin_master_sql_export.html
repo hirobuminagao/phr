@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% set title = "マスターSQL出力" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>マスターSQL出力</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/utilities/exam-item-master">健診項目マスター確認</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page narrow-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="summary-grid">
+    <div class="summary-card">
+      <span>norm登録</span>
+      <strong>{{ summary.variant_count }}</strong>
+      <small>{{ summary.oid_count }} OID</small>
+    </div>
+    <div class="summary-card">
+      <span>norm標準</span>
+      <strong>{{ summary.canonical_count }}</strong>
+      <small>{{ summary.canonical_oid_count }} OID</small>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>norm_variants</h2>
+        <p class="subtle">実行環境の標準コードとraw値の揺れ登録を、他環境へ反映するためのUPSERT SQLとして出力します。</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/master-sql-export/norm-variants" class="form-grid master-sql-export-form">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+      <label class="option-card">
+        <input type="radio" name="canonical_only" value="0" checked>
+        <span>
+          <strong>全件を出力</strong>
+          <small>標準コードと揺れ登録をまとめて同期します。</small>
+        </span>
+      </label>
+      <label class="option-card">
+        <input type="radio" name="canonical_only" value="1">
+        <span>
+          <strong>標準のみ出力</strong>
+          <small>is_canonical=1だけを同期します。差分確認や最低限の復元向けです。</small>
+        </span>
+      </label>
+      <div class="form-actions">
+        <button type="submit">SQLを出力</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>出力先</h2>
+    <p class="subtle">サーバ側には <code>sql/system_exports/phr_master/</code> に保存し、同じSQLをダウンロードします。</p>
+  </section>
+</main>
+{% endblock %}

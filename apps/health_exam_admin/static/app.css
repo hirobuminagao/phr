@@ -288,6 +288,10 @@ button[type="submit"]:disabled {
   overflow-x: visible;
 }
 
+.csv-mapping-lab-page {
+  overflow-x: visible;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1058,8 +1062,16 @@ a.home-menu-card.is-navigating {
 .csv-mapping-column-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.csv-mapping-bulk-rule-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .pagination-inline {
@@ -1072,16 +1084,20 @@ a.home-menu-card.is-navigating {
   font-weight: 800;
 }
 
-.csv-mapping-sticky-heading {
+.csv-mapping-sticky-heading,
+.csv-mapping-column-sticky-toolbar {
   position: sticky;
-  top: 0;
+  top: 8px;
   z-index: 20;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+.csv-mapping-sticky-heading {
   display: flex;
   align-items: center;
   margin: -18px -18px 14px;
   padding: 14px 18px;
   border-bottom: 1px solid #d5e0ea;
-  background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
@@ -3545,8 +3561,93 @@ a.home-menu-card.is-navigating {
 }
 
 .csv-mapping-upload-form,
-.csv-mapping-prompt-form {
+.csv-mapping-prompt-form,
+.csv-mapping-column-filter-form {
   align-items: end;
+}
+
+.csv-mapping-filter-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.csv-mapping-filter-card {
+  min-height: 72px;
+  padding: 10px 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.csv-mapping-filter-card span {
+  font-size: 12px;
+}
+
+.csv-mapping-filter-card strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.csv-mapping-filter-card small {
+  font-size: 11px;
+}
+
+.csv-mapping-filter-card.is-selected {
+  border-color: var(--green);
+  background: #edf8f4;
+}
+
+.csv-mapping-column-filter-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(112px, 1fr)) auto auto;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.csv-mapping-column-filter-form label {
+  min-width: 0;
+}
+
+.csv-mapping-column-filter-form input,
+.csv-mapping-column-filter-form select {
+  width: 100%;
+}
+
+.csv-mapping-column-filter-form .checkbox-line {
+  align-self: end;
+  min-height: 44px;
+}
+
+.csv-mapping-column-filter-form .form-actions {
+  align-self: end;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin: 0;
+}
+
+.csv-mapping-column-sticky-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -8px 10px;
+  padding: 10px 8px;
+  border-top: 1px solid #d5e0ea;
+  border-bottom: 1px solid #d5e0ea;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+.csv-mapping-column-sticky-toolbar strong,
+.csv-mapping-column-sticky-toolbar small {
+  display: block;
+}
+
+.csv-mapping-column-sticky-toolbar small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .csv-mapping-option-card {
@@ -3558,6 +3659,37 @@ a.home-menu-card.is-navigating {
 
 .csv-mapping-rule-details {
   min-width: 220px;
+}
+
+.csv-mapping-rule-kind-form,
+.csv-mapping-rule-kind-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.csv-mapping-rule-kind-form {
+  margin-bottom: 6px;
+}
+
+.csv-mapping-rule-kind-button {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.csv-mapping-rule-kind-button:hover,
+.csv-mapping-rule-kind-button.is-selected {
+  border-color: var(--green);
+  background: #edf8f4;
+  color: var(--green);
 }
 
 .csv-mapping-rule-details summary {
@@ -3574,6 +3706,291 @@ a.home-menu-card.is-navigating {
   font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.csv-mapping-ledger-field-modal .edit-modal__panel {
+  max-width: min(960px, calc(100vw - 40px));
+}
+
+.csv-mapping-ledger-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.csv-mapping-ledger-field-option {
+  display: grid;
+  gap: 3px;
+  min-height: 82px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.csv-mapping-ledger-field-option:hover,
+.csv-mapping-ledger-field-option.is-selected {
+  border-color: var(--green);
+  background: #edf8f4;
+}
+
+.csv-mapping-ledger-field-option strong {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.csv-mapping-ledger-field-option small,
+.csv-mapping-ledger-field-option span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.csv-mapping-exam-item-modal .edit-modal__panel {
+  max-width: min(1080px, calc(100vw - 40px));
+}
+
+.csv-mapping-exam-item-search {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.csv-mapping-exam-item-search input {
+  width: 100%;
+}
+
+.csv-mapping-exam-item-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  max-height: min(58vh, 620px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.csv-mapping-exam-item-option {
+  display: grid;
+  gap: 4px;
+  min-height: 90px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.csv-mapping-exam-item-option:hover,
+.csv-mapping-exam-item-option.is-selected {
+  border-color: var(--green);
+  background: #edf8f4;
+}
+
+.csv-mapping-exam-item-option strong {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.csv-mapping-exam-item-option small,
+.csv-mapping-exam-item-option span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.exam-item-master-filter {
+  grid-template-columns: minmax(280px, 2fr) minmax(220px, 1.4fr) minmax(120px, 0.7fr) minmax(180px, 1fr) minmax(130px, 0.7fr) auto;
+  align-items: end;
+}
+
+.exam-item-master-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.summary-card--ok {
+  border-color: #b9decf;
+  background: #ecf9f4;
+}
+
+.summary-card--warn {
+  border-color: #e7b5b5;
+  background: #fff1f1;
+}
+
+.exam-item-master-diff-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.exam-item-master-diff-list small {
+  overflow-wrap: anywhere;
+}
+
+.exam-item-master-table {
+  min-width: 1180px;
+}
+
+.exam-item-master-page .table-panel {
+  overflow-x: auto;
+}
+
+.exam-item-master-table th:nth-child(1) {
+  width: 24%;
+}
+
+.exam-item-master-table th:nth-child(2) {
+  width: 20%;
+}
+
+.exam-item-master-table th:nth-child(3) {
+  width: 14%;
+}
+
+.exam-item-master-table th:nth-child(4) {
+  width: 21%;
+}
+
+.exam-item-master-table th:nth-child(5) {
+  width: 10%;
+}
+
+.exam-item-master-table th:nth-child(6) {
+  width: 11%;
+}
+
+.exam-item-master-detail-modal .edit-modal__panel {
+  width: min(1240px, calc(100vw - 32px));
+  padding: 0;
+}
+
+.exam-item-master-detail-modal .edit-modal__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.exam-item-master-modal-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px 22px 22px;
+}
+
+.exam-item-master-modal-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fbfd;
+}
+
+.exam-item-master-modal-section h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.definition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.definition-grid div {
+  min-width: 0;
+}
+
+.definition-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.definition-grid dd {
+  margin: 2px 0 0;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.exam-item-master-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.exam-item-master-detail-grid section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8fbfd;
+}
+
+.exam-item-master-detail-grid h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.mini-table th,
+.mini-table td {
+  border-bottom: 1px solid #d9e3ec;
+  padding: 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.exam-item-master-notes {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.master-sql-export-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: stretch;
+}
+
+.master-sql-export-form .option-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.master-sql-export-form .option-card input {
+  margin-top: 3px;
+}
+
+.master-sql-export-form .option-card strong,
+.master-sql-export-form .option-card small {
+  display: block;
+}
+
+.master-sql-export-form .option-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .csv-mapping-rule-form {
@@ -3689,6 +4106,21 @@ a.home-menu-card.is-navigating {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.5;
+}
+
+@media (max-width: 1200px) {
+  .csv-mapping-column-filter-form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .exam-item-master-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .csv-mapping-column-sticky-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .clickable-table-row {

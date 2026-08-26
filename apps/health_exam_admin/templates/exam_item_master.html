@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% set title = "健診項目マスター確認" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Master</p>
+    <h1>健診項目マスター確認</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/utilities/csv-mapping-lab">CSVマッピング解析</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page export-page exam-item-master-page">
+  <section class="summary-grid exam-item-master-summary">
+    <div class="summary-card">
+      <span>norm登録</span>
+      <strong>{{ norm_variant_summary.variant_count }}</strong>
+      <small>{{ norm_variant_summary.oid_count }} OID</small>
+    </div>
+    <div class="summary-card">
+      <span>norm標準</span>
+      <strong>{{ norm_variant_summary.canonical_count }}</strong>
+      <small>{{ norm_variant_summary.canonical_oid_count }} OID</small>
+    </div>
+    <div class="summary-card summary-card--ok">
+      <span>標準の扱い</span>
+      <strong>DB</strong>
+      <small>is_canonical=1を標準コードとして表示</small>
+    </div>
+  </section>
+
+  <section class="status-panel status-panel--success">
+    標準コードはnorm登録の標準フラグから表示しています。raw値の揺れも同じnorm登録側で確認します。
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>検索</h2>
+        <p class="subtle">namecode、項目名、同一性項目、結果コードOID、標準コード、norm登録をまとめて確認します。</p>
+      </div>
+    </div>
+    <form method="get" action="/utilities/exam-item-master" class="form-grid exam-item-master-filter">
+      <label>
+        <span>キーワード</span>
+        <input name="keyword" value="{{ filters.keyword }}" placeholder="聴力 / 9N / 1.2.392">
+      </label>
+      <label>
+        <span>結果OID</span>
+        <input name="result_code_oid" value="{{ filters.result_code_oid }}" placeholder="1.2.392.200119.6.2130">
+      </label>
+      <label>
+        <span>値型</span>
+        <select name="xml_value_type">
+          <option value="">すべて</option>
+          {% for value_type in ["PQ", "CD", "CO", "ST"] %}
+          <option value="{{ value_type }}" {% if filters.xml_value_type == value_type %}selected{% endif %}>{{ value_type }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>カテゴリ</span>
+        <select name="category_name">
+          <option value="">すべて</option>
+          {% for category in categories %}
+          <option value="{{ category }}" {% if filters.category_name == category %}selected{% endif %}>{{ category }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>法定出力</span>
+        <select name="legal_report">
+          <option value="">すべて</option>
+          <option value="1" {% if filters.legal_report == "1" %}selected{% endif %}>対象</option>
+          <option value="0" {% if filters.legal_report == "0" %}selected{% endif %}>対象外</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/utilities/exam-item-master">クリア</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>検索結果</h2>
+        <p class="subtle">{{ rows|length }}件表示中。最大{{ row_limit }}件まで表示します。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table exam-item-master-table">
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>分類</th>
+            <th>値</th>
+            <th>コード体系</th>
+            <th>出力</th>
+            <th>詳細</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in rows %}
+          <tr>
+            <td>
+              <strong>{{ item.item_name }}</strong>
+              <small>{{ item.namecode }}</small>
+              {% if item.method_name %}<small>{{ item.method_name }}</small>{% endif %}
+            </td>
+            <td>
+              <strong>{{ item.category_name or "-" }}</strong>
+              <small>{{ item.kubun_name or "-" }}{% if item.jun_no %} / 順{{ item.jun_no }}{% endif %}</small>
+              <small>{{ item.identity_item_code or "-" }} / {{ item.identity_item_name or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.xml_value_type or "-" }}</strong>
+              <small>単位 {{ item.display_unit or "-" }} / UCUM {{ item.ucum_unit or "-" }}</small>
+              <small>value {{ item.value_method or "-" }}</small>
+            </td>
+            <td>
+              <strong>結果コードOID: {{ item.result_code_oid or "-" }}</strong>
+              <small>項目コードOID: {{ item.item_code_oid or "-" }}</small>
+              <small>検査方法コード: {{ item.xml_method_code or "-" }}</small>
+            </td>
+            <td>
+              {% if item.annex2_legal_report_flag == 1 %}
+              <span class="status-pill status-ready">法定</span>
+              {% elif item.annex2_legal_report_flag == 0 %}
+              <span class="status-pill status-muted">任意</span>
+              {% else %}
+              <span class="status-pill">未設定</span>
+              {% endif %}
+              <small>{{ item.annex2_exec_requirement or "-" }}</small>
+              <small>section {{ item.cda_section_code_default or "-" }}</small>
+            </td>
+            <td>
+              <button type="button" class="ghost-button compact-action-button" data-modal-open="exam-item-master-detail-{{ loop.index }}">詳細</button>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6">該当する健診項目はありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% for item in rows %}
+  <div id="exam-item-master-detail-{{ loop.index }}" class="edit-modal exam-item-master-detail-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel" role="dialog" aria-modal="true" aria-labelledby="exam-item-master-detail-title-{{ loop.index }}">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">EXAM ITEM</p>
+          <h2 id="exam-item-master-detail-title-{{ loop.index }}">{{ item.item_name }}</h2>
+          <p class="subtle">{{ item.namecode }}{% if item.method_name %} / {{ item.method_name }}{% endif %}</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+
+      <div class="exam-item-master-modal-body">
+        <section class="exam-item-master-modal-section">
+          <h3>マスター情報</h3>
+          <dl class="definition-grid">
+            <div><dt>分類</dt><dd>{{ item.category_name or "-" }} / {{ item.kubun_name or "-" }}</dd></div>
+            <div><dt>同一性項目</dt><dd>{{ item.identity_item_code or "-" }} / {{ item.identity_item_name or "-" }}</dd></div>
+            <div><dt>値型</dt><dd>{{ item.xml_value_type or "-" }} / {{ item.data_type_label or "-" }}</dd></div>
+            <div><dt>単位</dt><dd>{{ item.display_unit or "-" }} / UCUM {{ item.ucum_unit or "-" }}</dd></div>
+            <div><dt>値取得</dt><dd>{{ item.value_method or "-" }}</dd></div>
+            <div><dt>nullFlavor</dt><dd>{% if item.nullflavor_allowed == 1 %}許可{% elif item.nullflavor_allowed == 0 %}不可{% else %}-{% endif %}</dd></div>
+            <div><dt>項目コードOID</dt><dd>{{ item.item_code_oid or "-" }}</dd></div>
+            <div><dt>結果コードOID</dt><dd>{{ item.result_code_oid or "-" }}</dd></div>
+            <div><dt>検査方法コード</dt><dd>{{ item.xml_method_code or "-" }}</dd></div>
+            <div><dt>CDAセクション</dt><dd>{{ item.cda_section_code_default or "-" }}</dd></div>
+            <div><dt>法定出力</dt><dd>{% if item.annex2_legal_report_flag == 1 %}対象{% elif item.annex2_legal_report_flag == 0 %}対象外{% else %}未設定{% endif %} / {{ item.annex2_exec_requirement or "-" }}</dd></div>
+            <div><dt>一連検査</dt><dd>{{ item.annex2_series_group_identifier or "-" }} / {{ item.annex2_series_group_relation_code or "-" }}</dd></div>
+          </dl>
+        </section>
+
+        <div class="exam-item-master-detail-grid">
+          <section>
+            <h3>標準コード</h3>
+            <p class="subtle">結果コードOIDに紐づく標準の結果コードです。</p>
+            {% if item.standard_code_rows %}
+            <table class="mini-table">
+              <thead><tr><th>code</th><th>表示</th><th>入力値</th></tr></thead>
+              <tbody>
+                {% for code in item.standard_code_rows %}
+                <tr>
+                  <td>{{ code.normalized_code or "-" }}</td>
+                  <td>{{ code.display_name or "-" }}</td>
+                  <td>{{ code.raw_value_utf8 or "-" }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="subtle">標準コードはありません。</p>
+            {% endif %}
+          </section>
+          <section>
+            <h3>norm登録</h3>
+            <p class="subtle">raw値を標準codeへ寄せる登録です。標準はis_canonical=1の値です。</p>
+            {% if item.norm_variant_rows %}
+            <table class="mini-table">
+              <thead><tr><th>入力値</th><th>正規code</th><th>表示</th><th>種別</th></tr></thead>
+              <tbody>
+                {% for variant in item.norm_variant_rows %}
+                <tr>
+                  <td>{{ variant.raw_value_utf8 or "-" }}</td>
+                  <td>{{ variant.normalized_code or "-" }}</td>
+                  <td>{{ variant.display_name or "-" }}</td>
+                  <td>
+                    {% if variant.is_canonical %}
+                    <span class="status-pill status-ready">標準</span>
+                    {% else %}
+                    <span class="status-pill status-muted">揺れ</span>
+                    {% endif %}
+                    {% if not variant.is_active %}<span class="status-pill status-danger">無効</span>{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="subtle">norm登録はありません。</p>
+            {% endif %}
+          </section>
+        </div>
+
+        <section class="exam-item-master-modal-section">
+          <h3>補足</h3>
+          <p class="subtle">{{ item.notes or "-" }}</p>
+        </section>
+      </div>
+    </section>
+  </div>
+  {% endfor %}
+</main>
+{% endblock %}
