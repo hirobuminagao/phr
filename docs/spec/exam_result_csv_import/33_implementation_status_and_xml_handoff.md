@@ -165,7 +165,7 @@ Current as of 2026-08-06.
 `exam_export_cases` は、人単位の1回分XML出力候補である。
 同一人物、同一健診日、同一健診機関、同一保険者のXML/CSV sourceは同じcaseへ束ねる。
 
-- `source_mode` は `XML_ONLY` / `CSV_ONLY` / `XML_CSV` / `MULTI_SOURCE` 等を表す。
+- `source_mode` は `XML_ONLY` / `CSV_ONLY` / `PAPER_ONLY` / `XML_CSV` / `CSV_PAPER` / `XML_PAPER` / `XML_CSV_PAPER` / `MULTI_SOURCE` 等を表す。
 - `exam_export_case_sources` は構成元 `exam_ledgers` を保持する。
 - `exam_export_case_values` はXML出力用の採用済み整値を保持する。raw証跡は採用元 `exam_item_values` へ戻って確認する。
 - 人が見る総合状態は `export_readiness_status` / `export_readiness_reason` を見る。

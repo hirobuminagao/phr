@@ -42,7 +42,7 @@ CREATE TABLE `health_exam_result`.`exam_export_cases` (
   `exam_facility_postal_code` varchar(16) DEFAULT NULL,
   `exam_facility_address` varchar(255) DEFAULT NULL,
   `exam_facility_phone_number` varchar(32) DEFAULT NULL,
-  `source_mode` varchar(32) NOT NULL DEFAULT 'UNKNOWN' COMMENT 'XML_ONLY/CSV_ONLY/XML_CSV/MULTI_SOURCE等',
+  `source_mode` varchar(32) NOT NULL DEFAULT 'UNKNOWN' COMMENT 'XML_ONLY/CSV_ONLY/PAPER_ONLY/XML_CSV/CSV_PAPER/XML_PAPER/XML_CSV_PAPER/MULTI_SOURCE等',
   `case_status` varchar(32) NOT NULL DEFAULT 'PENDING',
   `case_reason` text DEFAULT NULL,
   `merge_status` varchar(32) NOT NULL DEFAULT 'PENDING',

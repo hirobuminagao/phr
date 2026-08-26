@@ -161,8 +161,14 @@ def source_mode(group: list[dict[str, Any]]) -> str:
         return "PAPER_ONLY"
     if xml_count == 1 and csv_count == 1 and paper_count == 0:
         return "XML_CSV"
+    if xml_count == 0 and csv_count == 1 and paper_count == 1:
+        return "CSV_PAPER"
+    if xml_count == 1 and csv_count == 0 and paper_count == 1:
+        return "XML_PAPER"
+    if xml_count == 1 and csv_count == 1 and paper_count == 1:
+        return "XML_CSV_PAPER"
     if paper_count >= 1:
-        return "WITH_MANUAL_SOURCE"
+        return "MULTI_WITH_PAPER"
     return "MULTI_SOURCE"
 
 
@@ -172,8 +178,14 @@ def merge_status(group: list[dict[str, Any]]) -> tuple[str, str | None]:
         return "SOURCE_SINGLE", mode
     if mode == "XML_CSV":
         return "READY", "XML primary with CSV supplement candidate"
-    if mode == "WITH_MANUAL_SOURCE":
-        return "READY", "manual source supplement candidate"
+    if mode == "CSV_PAPER":
+        return "READY", "CSV primary with paper supplement candidate"
+    if mode == "XML_PAPER":
+        return "READY", "XML primary with paper supplement candidate"
+    if mode == "XML_CSV_PAPER":
+        return "READY", "XML primary with CSV and paper supplement candidates"
+    if mode == "MULTI_WITH_PAPER":
+        return "READY", "multiple source ledgers with paper supplement candidate"
     return "REVIEW_REQUIRED", "multiple source ledgers require manual review"
 
 
