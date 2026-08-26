@@ -4364,6 +4364,17 @@ def scan_folder_name_from_path(path_text: str | None) -> str:
     return re.split(r"[\\/]+", text)[-1]
 
 
+def join_display_path(root_path: str | None, child_name: str | None) -> str:
+    root = str(root_path or "").strip().rstrip("/\\")
+    child = str(child_name or "").strip().strip("/\\")
+    if not root:
+        return child
+    if not child:
+        return root
+    separator = "\\" if "\\" in root and "/" not in root else "/"
+    return f"{root}{separator}{child}"
+
+
 def load_unknown_scan_folder_rows(cur: Any, *, event_id: str, limit: int = 50) -> list[dict[str, Any]]:
     excluded_folder_names = {"xml作成_出力履歴"}
     where_parts = [
@@ -7434,12 +7445,15 @@ def load_facility_summary_detail(
         SELECT
           COALESCE(MAX(fr.facility_name), MAX(el.facility_name), MAX(ef.exam_facility_display_name), MAX(ef.exam_facility_name)) AS facility_name,
           COALESCE(MAX(fr.facility_code), MAX(el.facility_code), MAX(ef.exam_facility_code)) AS facility_code,
-          MAX(mfa.expected_source_mode) AS expected_source_mode
+          MAX(mfa.expected_source_mode) AS expected_source_mode,
+          MAX(ev.result_root_path) AS result_root_path
         FROM {qname(health_db())}.file_receipts AS fr
         LEFT JOIN {qname(health_db())}.exam_ledgers AS el
           ON el.file_receipt_id = fr.id
         LEFT JOIN {qname(master_db())}.exam_facilities AS ef
           ON ef.exam_facility_code = fr.facility_code
+        LEFT JOIN {qname(dev_db())}.event AS ev
+          ON ev.event_id = fr.event_id
         LEFT JOIN (
 {alias_source_mode_by_facility_code_sql()}
         ) AS mfa
@@ -7475,7 +7489,11 @@ def load_facility_summary_detail(
     header["alias_id"] = alias_header.get("alias_id")
     header["src_folder_raw"] = alias_header.get("src_folder_raw")
     header["dst_folder_norm"] = alias_header.get("dst_folder_norm")
-    header["facility_folder_copy_value"] = header.get("src_folder_raw") or header.get("dst_folder_norm")
+    header["facility_folder_name"] = header.get("src_folder_raw") or header.get("dst_folder_norm")
+    header["facility_folder_copy_value"] = join_display_path(
+        header.get("result_root_path"),
+        header.get("facility_folder_name"),
+    )
     if not header.get("expected_source_mode") and alias_header.get("expected_source_mode"):
         header["expected_source_mode"] = alias_header.get("expected_source_mode")
         header["expected_source_mode_label"] = source_mode_label(header.get("expected_source_mode"))

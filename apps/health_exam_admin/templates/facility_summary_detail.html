@@ -35,11 +35,14 @@
       <small>{{ detail.header.facility_code or filters.facility_code or "コードなし" }} / {{ detail.header.expected_source_mode_label or "受領設定なし" }}</small>
     </div>
     <div class="facility-detail-folder-copy">
-      <span>受領フォルダ</span>
+      <span>受領フォルダパス</span>
       {% if detail.header.facility_folder_copy_value %}
         <code id="facility-detail-folder-copy-text">{{ detail.header.facility_folder_copy_value }}</code>
         <button type="button" class="ghost-button compact-action-button" data-copy-target="#facility-detail-folder-copy-text">コピー</button>
-        {% if detail.header.dst_folder_norm and detail.header.dst_folder_norm != detail.header.facility_folder_copy_value %}
+        {% if detail.header.facility_folder_name %}
+          <small>フォルダ名 {{ detail.header.facility_folder_name }}</small>
+        {% endif %}
+        {% if detail.header.dst_folder_norm and detail.header.dst_folder_norm != detail.header.facility_folder_name %}
           <small>正規化後 {{ detail.header.dst_folder_norm }}</small>
         {% endif %}
       {% else %}
