@@ -42,6 +42,8 @@ YYYYMMDD_NNN_<facility_slug>.sql
 | `0005_add_heartcross_appended_postal_address_mapping.sql` | ハートクロスの住所/郵便番号追加マッピング |
 | `0006_add_murakami_iin_paper_csv_mapping.sql` | 村上医院の紙/CSVマッピング |
 | `0011_add_sapporo_kitahachi_csv_mapping.sql` | 札幌北八条系CSVマッピング |
+| `0016_add_oroku_questionnaire_mapping.sql` | 小禄病院の特定健診問診マッピング追加 |
+| `0017_add_oroku_questionnaire_runtime_variants.sql` | 小禄病院問診の表記揺れ追加 |
 
 `norm_variants` 追加seedもCSV取込に関係するが、値辞書の性質が強いため、必要に応じてこのREADMEから参照する。
 

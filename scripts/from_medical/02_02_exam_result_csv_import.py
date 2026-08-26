@@ -83,6 +83,7 @@ class ImportConfig:
     dry_run: bool
     limit: int
     include_imported: bool
+    file_receipt_id: int | None
 
 
 @dataclass
@@ -122,6 +123,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event-id", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--file-receipt-id", type=int, default=None)
     parser.add_argument("--include-imported", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_EXAM_RESULT_DB)
@@ -331,6 +333,9 @@ def fetch_csv_file_receipts(cur: Any, *, config: ImportConfig) -> list[dict[str,
     if config.event_id is not None:
         where.append("event_id = %s")
         params.append(config.event_id)
+    if config.file_receipt_id is not None:
+        where.append("id = %s")
+        params.append(config.file_receipt_id)
     limit_sql = ""
     if config.limit:
         limit_sql = "LIMIT %s"
@@ -1228,6 +1233,7 @@ def main() -> int:
         dry_run=bool(args.dry_run),
         limit=int(args.limit or 0),
         include_imported=bool(args.include_imported),
+        file_receipt_id=args.file_receipt_id,
     )
     params = load_mysql_base_params(args.db_prefix)
     with connect_ctx(params, database=config.health_db, autocommit=False) as conn:

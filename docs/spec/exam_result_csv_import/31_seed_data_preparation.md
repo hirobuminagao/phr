@@ -29,6 +29,8 @@ Implemented and expanded.
 14. `0013_add_exam_result_source_values.sql`
 15. `0014_add_murakami_runtime_variants.sql`
 16. `0015_fix_result_code_variant_code_systems.sql`
+17. `0016_add_oroku_questionnaire_mapping.sql`
+18. `0017_add_oroku_questionnaire_runtime_variants.sql`
 
 既に `0000` から `0003` を適用済みの環境でも、旧export辞書を未投入の場合は `0008` を追加適用する。
 `0004` 以降は実装・検証で増えた差分seedであり、実行環境の最終適用済み地点に応じて追加適用する。
@@ -63,6 +65,10 @@ Implemented and expanded.
 
 `0015_fix_result_code_variant_code_systems.sql` は、実行環境へ適用してよい `phr_master.norm_variants` の安定補正seedである。対象は、陽性/陰性OID `1.2.392.200119.6.2100` と尿定性OID `1.2.392.200119.6.2102` の `code_system` 欠落補正、およびカッコ付き `+` / `-` など実運用で必要なaliasである。
 匿名化済みnormalizeエラーfixtureを保存する `health_exam_result.exam_item_value_normalize_error_fixtures` と、そのimportスクリプトはm4検証・辞書整備用であり、実行環境には適用しない。
+
+`0016_add_oroku_questionnaire_mapping.sql` は、小禄病院の結合済みCSV `OROKU_2026_05_JOINED_PATTERN_C_V1` に特定健診問診の列99-119を追加するseedである。列120 `22生活改善指導利用` は4期XML出力対象外として、このseedでは追加しない。
+
+`0017_add_oroku_questionnaire_runtime_variants.sql` は、`0016` 反映後の小禄CSV再取込で残った問診表記揺れを追加するseedである。対象は飲酒頻度、飲酒量、生活習慣改善、咀嚼の全角数字・表記差分である。
 
 `dev_phr.exam_item_master` の任意項目追加は、正式に採用したものだけ `sql/migrations/dev_phr/20260805_001_dev_phr_add_optional_exam_item_master_from_normalize_errors.sql` のような実行環境向けmigrationで行う。m4でfixture CSVを検証して作った追加候補は `sql/dev_tools/candidates/add_optional_exam_item_master_from_fixtures_v2_candidate.sql` に置き、実行環境にはそのまま適用しない。
 対象候補は、CSV/XML健診結果で実際に出現し、検査結果として受け止めるべき血清アミラーゼ、BUN、尿pH、尿定性、便潜血、標準体重、婦人科細胞診、腫瘍マーカー、BNP/NT-proBNP、骨密度、胃がんリスク検査などである。
