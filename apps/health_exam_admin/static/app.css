@@ -292,6 +292,10 @@ button[type="submit"]:disabled {
   overflow-x: visible;
 }
 
+.csv-header-template-page {
+  overflow-x: visible;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6370,11 +6374,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-header-unmatched-drawer {
   position: sticky;
-  top: 84px;
+  top: 132px;
   width: auto;
   display: grid;
   gap: 10px;
-  max-height: calc(100vh - 110px);
+  max-height: calc(100vh - 156px);
   padding: 12px;
   overflow: auto;
   border: 1px solid #d7e2ef;
