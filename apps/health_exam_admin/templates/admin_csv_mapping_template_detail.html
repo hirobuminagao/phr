@@ -59,14 +59,14 @@
 	    <div class="filter-card compact-filter">
 	      <label>
 	        <span>キーワード</span>
-	        <input data-live-filter-input="#csv-template-header-table" placeholder="列 / ヘッダー / context / rule">
+	        <input data-live-filter-input="#csv-template-header-table" placeholder="CSV列番 / ヘッダー / context / rule">
 	      </label>
 	    </div>
 	    <div class="table-wrap">
 	      <table id="csv-template-header-table" class="data-table compact-table" data-empty-message="一致するヘッダーはありません。">
 	        <thead>
 	          <tr>
-	            <th>列</th>
+	            <th>CSV列番</th>
 	            <th>ヘッダー</th>
 	            <th>context</th>
 	            <th>出現</th>
@@ -240,6 +240,7 @@
           <tr>
             <th>rule</th>
             <th>条件</th>
+            <th>CSV列番</th>
             <th>場所</th>
             <th>期待値</th>
             <th>状態</th>
@@ -256,6 +257,7 @@
               <strong>{{ condition.condition_type }}</strong>
               <small>group {{ condition.condition_group_no }} / priority {{ condition.priority }}</small>
             </td>
+            <td><strong>{{ condition.column_no or "-" }}</strong></td>
             <td>
               <strong>{{ condition.header_name or ("列 " ~ condition.column_no if condition.column_no else "-") }}</strong>
               <small>{{ condition.locator_type or "-" }} / {{ condition.source_role or "-" }}</small>
@@ -270,7 +272,7 @@
             <td><span class="status-pill {{ 'status-ready' if condition.is_active else 'status-muted' }}">{{ '有効' if condition.is_active else '無効' }}</span></td>
           </tr>
           {% else %}
-          <tr><td colspan="5" class="empty-state">条件はありません。</td></tr>
+          <tr><td colspan="6" class="empty-state">条件はありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>
