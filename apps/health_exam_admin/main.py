@@ -4877,7 +4877,6 @@ def attach_csv_header_neighbors(columns: list[dict[str, Any]], *, neighbor_count
 def build_csv_mapping_header_compare(uploaded_columns: list[dict[str, Any]], registered_columns: list[dict[str, Any]]) -> dict[str, Any]:
     registered_by_exact: dict[tuple[str, str, int], dict[str, Any]] = {}
     registered_by_normalized: dict[tuple[str, int], list[dict[str, Any]]] = {}
-    registered_by_column: dict[int, dict[str, Any]] = {}
     for column in registered_columns:
         column_no = _optional_int(column.get("column_no")) or 0
         context = str(column.get("context") or column.get("header_context") or "").strip()
@@ -4886,11 +4885,10 @@ def build_csv_mapping_header_compare(uploaded_columns: list[dict[str, Any]], reg
         normalized = normalize_header(name) or ""
         registered_by_exact[(context, name, occurrence)] = column
         registered_by_normalized.setdefault((normalized, occurrence), []).append(column)
-        if column_no:
-            registered_by_column[column_no] = column
 
-    matched_registered_columns: set[int] = set()
-    rows: list[dict[str, Any]] = []
+    matched_by_registered_column: dict[int, dict[str, Any]] = {}
+    match_type_by_registered_column: dict[int, str] = {}
+    unmatched_uploads: list[dict[str, Any]] = []
     for upload in uploaded_columns:
         column_no = _optional_int(upload.get("column_no")) or 0
         context = str(upload.get("context") or "").strip()
@@ -4905,42 +4903,33 @@ def build_csv_mapping_header_compare(uploaded_columns: list[dict[str, Any]], reg
                 matched = normalized_matches[0]
                 match_type = "NORMALIZED"
         if not matched:
-            by_column = registered_by_column.get(column_no)
-            if by_column:
-                matched = by_column
-                match_type = "COLUMN_NO"
-        if matched:
-            matched_no = _optional_int(matched.get("column_no")) or 0
-            if matched_no:
-                matched_registered_columns.add(matched_no)
-            status = "MATCH" if match_type in ("EXACT", "NORMALIZED") else "COLUMN_ONLY"
+            unmatched_uploads.append(upload)
+            continue
+        matched_no = _optional_int(matched.get("column_no")) or 0
+        if matched_no and matched_no not in matched_by_registered_column:
+            matched_by_registered_column[matched_no] = upload
+            match_type_by_registered_column[matched_no] = match_type
         else:
-            status = "UPLOAD_ONLY"
+            unmatched_uploads.append(upload)
+
+    rows: list[dict[str, Any]] = []
+    for column in registered_columns:
+        column_no = _optional_int(column.get("column_no")) or 0
+        uploaded = matched_by_registered_column.get(column_no)
         rows.append(
             {
-                "uploaded": upload,
-                "registered": matched,
-                "status": status,
-                "match_type": match_type if matched else "-",
+                "uploaded": uploaded,
+                "registered": column,
+                "status": "MATCH" if uploaded else "REGISTERED_ONLY",
+                "match_type": match_type_by_registered_column.get(column_no, "-") if uploaded else "-",
             }
         )
-
-    missing_rows = [
-        {
-            "uploaded": None,
-            "registered": column,
-            "status": "REGISTERED_ONLY",
-            "match_type": "-",
-        }
-        for column in registered_columns
-        if (_optional_int(column.get("column_no")) or 0) not in matched_registered_columns
-    ]
-    rows.extend(missing_rows)
     return {
         "rows": rows,
+        "unmatched_uploads": unmatched_uploads,
         "matched_count": sum(1 for row in rows if row["status"] == "MATCH"),
-        "column_only_count": sum(1 for row in rows if row["status"] == "COLUMN_ONLY"),
-        "upload_only_count": sum(1 for row in rows if row["status"] == "UPLOAD_ONLY"),
+        "column_only_count": 0,
+        "upload_only_count": len(unmatched_uploads),
         "registered_only_count": sum(1 for row in rows if row["status"] == "REGISTERED_ONLY"),
     }
 

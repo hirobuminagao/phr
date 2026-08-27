@@ -6361,6 +6361,51 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   gap: 10px;
 }
 
+.csv-header-compare-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 14px;
+  align-items: start;
+}
+
+.csv-header-unmatched-drawer {
+  position: sticky;
+  top: 84px;
+  display: grid;
+  gap: 10px;
+  max-height: calc(100vh - 110px);
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.csv-header-unmatched-drawer.is-focused {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+.csv-header-unmatched-drawer__head {
+  display: grid;
+  gap: 2px;
+}
+
+.csv-header-unmatched-drawer__head strong {
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.csv-header-unmatched-drawer__head small {
+  color: #607086;
+  font-weight: 800;
+}
+
+.csv-header-unmatched-list {
+  display: grid;
+  gap: 8px;
+}
+
 .csv-template-header-card,
 .csv-header-compare-card {
   display: grid;
@@ -6497,6 +6542,10 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-header-upload-card {
   cursor: grab;
   user-select: none;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
 }
 
 .csv-header-upload-card:active {

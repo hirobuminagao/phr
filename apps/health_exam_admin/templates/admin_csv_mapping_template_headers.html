@@ -74,7 +74,7 @@
       <div class="button-row">
         <button type="button" class="csv-header-status-filter status-ready" data-header-status-filter="MATCH">一致 {{ compare_result.matched_count }}件</button>
         <button type="button" class="csv-header-status-filter status-pending" data-header-status-filter="COLUMN_ONLY">列番のみ {{ compare_result.column_only_count }}件</button>
-        <button type="button" class="csv-header-status-filter status-danger" data-header-status-filter="UPLOAD_ONLY">追加 {{ compare_result.upload_only_count }}件</button>
+        <button type="button" class="csv-header-status-filter status-danger" data-header-status-filter="UPLOAD_ONLY">未合致 {{ compare_result.upload_only_count }}件</button>
         <button type="button" class="csv-header-status-filter status-muted" data-header-status-filter="REGISTERED_ONLY">欠落 {{ compare_result.registered_only_count }}件</button>
         <button type="button" class="csv-header-status-filter status-neutral is-active" data-header-status-filter="">全件</button>
       </div>
@@ -85,52 +85,73 @@
         <input data-live-filter-input="#csv-header-compare-list" placeholder="列番 / ヘッダー / context / 状態">
       </label>
     </div>
-    <div id="csv-header-compare-list" class="csv-header-compare-list csv-header-align-list" data-empty-message="一致する比較結果はありません。">
-      {% for row in compare_result.rows %}
-      {% set uploaded = row.uploaded %}
-      {% set registered = row.registered %}
-      <article class="csv-header-compare-card status-{{ row.status|lower }}" data-header-align-row data-header-status="{{ row.status }}" data-filter-text="{{ row.status }} {{ row.match_type }} {% if uploaded %}{{ uploaded.column_no }} {{ uploaded.name }} {{ uploaded.context }} {{ uploaded.context_summary }}{% endif %} {% if registered %}{{ registered.column_no }} {{ registered.name or registered.header_name }} {{ registered.context or registered.header_context }} {{ registered.context_summary }}{% endif %}">
-        <div class="csv-header-compare-status">
-          <span class="status-pill {{ 'status-ready' if row.status == 'MATCH' else 'status-pending' if row.status == 'COLUMN_ONLY' else 'status-danger' if row.status == 'UPLOAD_ONLY' else 'status-muted' }}">
-            {{ '一致' if row.status == 'MATCH' else '列番のみ' if row.status == 'COLUMN_ONLY' else 'アップロードのみ' if row.status == 'UPLOAD_ONLY' else '基準のみ' }}
-          </span>
-          <small>{{ row.match_type }}</small>
+    <div class="csv-header-compare-workspace">
+      <div id="csv-header-compare-list" class="csv-header-compare-list csv-header-align-list" data-empty-message="一致する比較結果はありません。">
+        {% for row in compare_result.rows %}
+        {% set uploaded = row.uploaded %}
+        {% set registered = row.registered %}
+        <article class="csv-header-compare-card status-{{ row.status|lower }}" data-header-align-row data-header-status="{{ row.status }}" data-filter-text="{{ row.status }} {{ row.match_type }} {% if uploaded %}{{ uploaded.column_no }} {{ uploaded.name }} {{ uploaded.context }} {{ uploaded.context_summary }}{% endif %} {% if registered %}{{ registered.column_no }} {{ registered.name or registered.header_name }} {{ registered.context or registered.header_context }} {{ registered.context_summary }}{% endif %}">
+          <div class="csv-header-compare-status">
+            <span class="status-pill {{ 'status-ready' if row.status == 'MATCH' else 'status-pending' if row.status == 'COLUMN_ONLY' else 'status-danger' if row.status == 'UPLOAD_ONLY' else 'status-muted' }}">
+              {{ '一致' if row.status == 'MATCH' else '列番のみ' if row.status == 'COLUMN_ONLY' else 'アップロードのみ' if row.status == 'UPLOAD_ONLY' else '基準のみ' }}
+            </span>
+            <small>{{ row.match_type }}</small>
+          </div>
+          <div class="csv-header-side csv-header-base-side">
+            <small>登録済み基準ヘッダー</small>
+            {% if registered %}
+            <strong>{{ registered.column_no }}列目 {{ registered.name or registered.header_name or "-" }}</strong>
+            <span>{{ registered.context_summary }}</span>
+            {% if registered.mapped_rules %}<span>rule: {{ registered.mapped_rules|join(', ') }}</span>{% endif %}
+            {% else %}
+            <strong>-</strong>
+            <span>登録済み基準に対応列なし</span>
+            {% endif %}
+          </div>
+          <div class="csv-header-side csv-header-upload-side" data-header-drop-slot data-selected-upload-column="{{ uploaded.column_no if uploaded else '' }}">
+            <small>アップロードヘッダー</small>
+            {% if uploaded %}
+            <div class="csv-header-upload-card" draggable="true" data-upload-column="{{ uploaded.column_no }}">
+              <strong>{{ uploaded.column_no }}列目 {{ uploaded.name or "-" }}</strong>
+              <span>{{ uploaded.context_summary }}</span>
+            </div>
+            {% else %}
+            <div class="csv-header-upload-empty">未割当</div>
+            {% endif %}
+          </div>
+          <div class="csv-header-manual-match">
+            <button type="button" class="ghost-button compact-action-button" data-header-picker-open>選択</button>
+            <select name="manual_match_{{ loop.index }}" data-header-align-select hidden>
+                <option value="">未選択</option>
+                {% for option_row in compare_result.rows %}
+                {% if option_row.uploaded %}
+                <option value="{{ option_row.uploaded.column_no }}" {% if uploaded and option_row.uploaded.column_no == uploaded.column_no %}selected{% endif %}>{{ option_row.uploaded.column_no }}列目 {{ option_row.uploaded.name or "-" }}</option>
+                {% endif %}
+                {% endfor %}
+                {% for upload in compare_result.unmatched_uploads %}
+                <option value="{{ upload.column_no }}">{{ upload.column_no }}列目 {{ upload.name or "-" }}</option>
+                {% endfor %}
+            </select>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      <aside class="csv-header-unmatched-drawer" data-header-unmatched-drawer>
+        <div class="csv-header-unmatched-drawer__head">
+          <strong>未合致アップロードヘッダー</strong>
+          <small>ここから基準行へドラッグ</small>
         </div>
-        <div class="csv-header-side csv-header-base-side">
-          <small>登録済み基準ヘッダー</small>
-          {% if registered %}
-          <strong>{{ registered.column_no }}列目 {{ registered.name or registered.header_name or "-" }}</strong>
-          <span>{{ registered.context_summary }}</span>
-          {% if registered.mapped_rules %}<span>rule: {{ registered.mapped_rules|join(', ') }}</span>{% endif %}
-          {% else %}
-          <strong>-</strong>
-          <span>登録済み基準に対応列なし</span>
-          {% endif %}
-        </div>
-        <div class="csv-header-side csv-header-upload-side" data-header-drop-slot data-selected-upload-column="{{ uploaded.column_no if uploaded else '' }}">
-          <small>アップロードヘッダー</small>
-          {% if uploaded %}
-          <div class="csv-header-upload-card" draggable="true" data-upload-column="{{ uploaded.column_no }}">
-            <strong>{{ uploaded.column_no }}列目 {{ uploaded.name or "-" }}</strong>
-            <span>{{ uploaded.context_summary }}</span>
+        <div class="csv-header-unmatched-list" data-header-drawer-list>
+          {% for upload in compare_result.unmatched_uploads %}
+          <div class="csv-header-upload-card" draggable="true" data-upload-column="{{ upload.column_no }}">
+            <strong>{{ upload.column_no }}列目 {{ upload.name or "-" }}</strong>
+            <span>{{ upload.context_summary }}</span>
           </div>
           {% else %}
-          <div class="csv-header-upload-empty">未割当</div>
-          {% endif %}
+          <div class="csv-header-upload-empty">未合致はありません</div>
+          {% endfor %}
         </div>
-        <div class="csv-header-manual-match">
-          <button type="button" class="ghost-button compact-action-button" data-header-picker-open>選択</button>
-          <select name="manual_match_{{ loop.index }}" data-header-align-select hidden>
-              <option value="">未選択</option>
-              {% for option_row in compare_result.rows %}
-              {% if option_row.uploaded %}
-              <option value="{{ option_row.uploaded.column_no }}" {% if uploaded and option_row.uploaded.column_no == uploaded.column_no %}selected{% endif %}>{{ option_row.uploaded.column_no }}列目 {{ option_row.uploaded.name or "-" }}</option>
-              {% endif %}
-              {% endfor %}
-          </select>
-        </div>
-      </article>
-      {% endfor %}
+      </aside>
     </div>
   </section>
   <div id="csv-header-picker-modal" class="edit-modal csv-header-picker-modal" hidden>
@@ -162,6 +183,13 @@
           <span>{{ option_row.uploaded.context_summary }}</span>
         </button>
         {% endif %}
+        {% endfor %}
+        {% for upload in compare_result.unmatched_uploads %}
+        <button type="button" class="csv-header-picker-card" data-header-picker-card data-upload-column="{{ upload.column_no }}" data-filter-text="{{ upload.column_no }} {{ upload.name }} {{ upload.context }} {{ upload.context_summary }}">
+          <small>{{ upload.column_no }}列目</small>
+          <strong>{{ upload.name or "-" }}</strong>
+          <span>{{ upload.context_summary }}</span>
+        </button>
         {% endfor %}
       </div>
     </section>
@@ -213,15 +241,18 @@
   const pickerFilter = pickerModal ? pickerModal.querySelector("[data-header-picker-filter]") : null;
   const keywordInput = document.querySelector('[data-live-filter-input="#csv-header-compare-list"]');
   const statusFilterButtons = Array.from(document.querySelectorAll("[data-header-status-filter]"));
+  const drawer = document.querySelector("[data-header-unmatched-drawer]");
+  const drawerList = document.querySelector("[data-header-drawer-list]");
 
   const applyCompareFilters = () => {
     const keyword = (keywordInput?.value || "").trim().toLowerCase();
     for (const row of list.querySelectorAll("[data-header-align-row]")) {
-      const statusOk = !activeStatusFilter || row.dataset.headerStatus === activeStatusFilter;
+      const statusOk = !activeStatusFilter || activeStatusFilter === "UPLOAD_ONLY" || row.dataset.headerStatus === activeStatusFilter;
       const text = (row.dataset.filterText || row.textContent || "").toLowerCase();
       const keywordOk = !keyword || text.includes(keyword);
       row.hidden = !(statusOk && keywordOk);
     }
+    drawer?.classList.toggle("is-focused", activeStatusFilter === "UPLOAD_ONLY");
   };
 
   for (const button of statusFilterButtons) {
@@ -279,19 +310,39 @@
     slot.querySelectorAll(".csv-header-upload-empty").forEach((node) => node.remove());
   };
 
+  const syncDrawerEmpty = () => {
+    if (!drawerList) return;
+    const hasCard = Boolean(drawerList.querySelector("[data-upload-column]"));
+    const existing = drawerList.querySelector(".csv-header-upload-empty");
+    if (hasCard) {
+      existing?.remove();
+      return;
+    }
+    if (!existing) {
+      const empty = document.createElement("div");
+      empty.className = "csv-header-upload-empty";
+      empty.textContent = "未合致はありません";
+      drawerList.appendChild(empty);
+    }
+  };
+
   const swapIntoSlot = (sourceCard, targetSlot) => {
     if (!sourceCard || !targetSlot) return;
     const sourceSlot = sourceCard.closest("[data-header-drop-slot]");
-    if (!sourceSlot || sourceSlot === targetSlot) return;
+    const sourceDrawer = sourceCard.closest("[data-header-drawer-list]");
+    const sourceContainer = sourceSlot || sourceDrawer;
+    if (!sourceContainer || sourceContainer === targetSlot) return;
     const targetCard = targetSlot.querySelector("[data-upload-column]");
-    removeEmpty(sourceSlot);
+    if (sourceSlot) removeEmpty(sourceSlot);
+    if (sourceDrawer) syncDrawerEmpty();
     removeEmpty(targetSlot);
     if (targetCard) {
-      sourceSlot.appendChild(targetCard);
+      sourceContainer.appendChild(targetCard);
     }
     targetSlot.appendChild(sourceCard);
-    syncSlot(sourceSlot);
+    if (sourceSlot) syncSlot(sourceSlot);
     syncSlot(targetSlot);
+    syncDrawerEmpty();
   };
 
   list.addEventListener("dragstart", (event) => {
@@ -304,6 +355,21 @@
   });
 
   list.addEventListener("dragend", () => {
+    if (draggedCard) draggedCard.classList.remove("is-dragging");
+    draggedCard = null;
+    list.querySelectorAll(".is-drop-target").forEach((node) => node.classList.remove("is-drop-target"));
+  });
+
+  drawerList?.addEventListener("dragstart", (event) => {
+    const card = event.target.closest("[data-upload-column]");
+    if (!card) return;
+    draggedCard = card;
+    card.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", card.dataset.uploadColumn || "");
+  });
+
+  drawerList?.addEventListener("dragend", () => {
     if (draggedCard) draggedCard.classList.remove("is-dragging");
     draggedCard = null;
     list.querySelectorAll(".is-drop-target").forEach((node) => node.classList.remove("is-drop-target"));
@@ -334,7 +400,7 @@
     if (!select) return;
     const row = select.closest("[data-header-align-row]");
     const targetSlot = row ? row.querySelector("[data-header-drop-slot]") : null;
-    const selectedCard = list.querySelector(`[data-upload-column="${CSS.escape(select.value)}"]`);
+    const selectedCard = document.querySelector(`.csv-header-upload-card[data-upload-column="${CSS.escape(select.value)}"]`);
     if (selectedCard && targetSlot) {
       swapIntoSlot(selectedCard, targetSlot);
     } else if (!select.value && targetSlot) {
@@ -367,7 +433,7 @@
       closePicker();
       return;
     }
-    const selectedCard = list.querySelector(`[data-upload-column="${CSS.escape(uploadColumn)}"]`);
+    const selectedCard = document.querySelector(`.csv-header-upload-card[data-upload-column="${CSS.escape(uploadColumn)}"]`);
     if (selectedCard) {
       swapIntoSlot(selectedCard, targetSlot);
     }
