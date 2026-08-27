@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">Support</p>
     <h1>厚労省フォーマットZIP作成サポート</h1>
-    <p class="subtle">XML提出用ZIPで迷いやすい、ルートフォルダと中身の置き方を確認します。</p>
+    <p class="subtle">XML提出用ZIPで迷いやすい、厚生労働省フォーマットのルートフォルダ名と中身の置き方を確認します。</p>
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/hia/xml-zip-check">XML ZIPチェック</a>
@@ -18,25 +18,25 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>ZIPの作り方</h2>
-        <p class="subtle">ZIPを開いた直下に、提出対象のフォルダまたはXMLファイルが見える状態にします。</p>
+        <h2>ルートフォルダ</h2>
+        <p class="subtle">ZIP直下には、厚生労働省フォーマットのルートフォルダを1つ置きます。XMLやXSDをZIP直下へ直接置かない形です。</p>
       </div>
     </div>
     <div class="summary-grid">
       <div class="summary-card">
         <span class="status-pill status-ready">推奨</span>
-        <strong>提出単位のフォルダを選んでZIP化</strong>
-        <small>フォルダの親や作業用ディレクトリを含めないようにします。</small>
+        <strong>ルートフォルダごとZIP化</strong>
+        <small>ZIPを開いた直下に `健診機関コード_保険者番号_作成日+連番_1` のフォルダが見える状態にします。</small>
       </div>
       <div class="summary-card">
         <span class="status-pill status-pending">確認</span>
-        <strong>ZIP直下に余計な階層を作らない</strong>
-        <small>Downloads、xml作成_出力履歴、日付フォルダなどが直下に入っていないか見ます。</small>
+        <strong>DATA / XSD / ix08を確認</strong>
+        <small>ルートフォルダの中に `DATA`、`XSD`、`ix08_V08.xml` があることを確認します。</small>
       </div>
       <div class="summary-card">
         <span class="status-pill status-muted">避ける</span>
-        <strong>作業ルートごとZIP化しない</strong>
-        <small>受領フォルダ全体や履歴フォルダ全体をまとめると、提出先で読み取れない原因になります。</small>
+        <strong>親フォルダを含めない</strong>
+        <small>`03_健診結果（アップロードデータ）`、日付フォルダ、作業フォルダをZIP直下に出さないようにします。</small>
       </div>
     </div>
   </section>
@@ -44,39 +44,39 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>基本構造</h2>
-        <p class="subtle">ZIPの中を開いた時に、提出対象だけが見える形にします。</p>
+        <h2>作成ルール</h2>
+        <p class="subtle">このシステムの出力では、ルートフォルダ名と個人XML名を次の規則で作ります。</p>
       </div>
     </div>
     <div class="table-panel">
       <table class="data-table compact-table">
         <thead>
           <tr>
-            <th>確認箇所</th>
-            <th>OK</th>
-            <th>NG</th>
+            <th>項目</th>
+            <th>作り方</th>
+            <th>例</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>ZIP直下</strong></td>
-            <td>提出用フォルダ、またはXMLファイルが直接見える</td>
-            <td>作業フォルダ、Downloads、履歴フォルダが先に見える</td>
+            <td><strong>ルートフォルダ名</strong></td>
+            <td>健診機関コード_保険者番号_作成日8桁+分割連番_1</td>
+            <td>0110119070_06139463_202608270_1</td>
           </tr>
           <tr>
-            <td><strong>ルートフォルダ</strong></td>
-            <td>提出する単位のフォルダだけをルートにする</td>
-            <td>受領ルートや複数の関係ない健診機関フォルダを含める</td>
+            <td><strong>ZIPファイル名</strong></td>
+            <td>ルートフォルダ名に `.zip` を付ける</td>
+            <td>0110119070_06139463_202608270_1.zip</td>
           </tr>
           <tr>
-            <td><strong>対象ファイル</strong></td>
-            <td>XML作成で出力された提出対象ファイルだけを含める</td>
-            <td>CSV、元XML、ログ、作業メモ、別日付の出力を混ぜる</td>
+            <td><strong>個人XML名</strong></td>
+            <td>h + 健診機関コード + 作成日8桁 + 分割連番 + 1 + 6桁連番 + .xml</td>
+            <td>h01101190702026082701000001.xml</td>
           </tr>
           <tr>
-            <td><strong>再ZIP</strong></td>
-            <td>解凍後に対象フォルダを選び直してZIP化する</td>
-            <td>ZIPファイルを含むフォルダごとさらにZIP化する</td>
+            <td><strong>ix08</strong></td>
+            <td>ルートフォルダ直下に `ix08_V08.xml` を置く</td>
+            <td>0110119070_06139463_202608270_1/ix08_V08.xml</td>
           </tr>
         </tbody>
       </table>
@@ -86,35 +86,40 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>例</h2>
-        <p class="subtle">FinderやエクスプローラーでZIPを開いた時の見え方です。</p>
+        <h2>フォルダ構成</h2>
+        <p class="subtle">FinderやエクスプローラーでZIPを開いた時、最初にルートフォルダが1つ見える状態にします。</p>
       </div>
     </div>
     <div class="detail-grid">
       <article class="detail-card">
         <span class="status-pill status-ready">OK</span>
-        <h3>提出フォルダを直接ZIP化</h3>
-        <pre class="code-block">提出用.zip
-└─ XML提出フォルダ
-   ├─ XXXXX.xml
-   └─ YYYYY.xml</pre>
+        <h3>厚労省フォーマット</h3>
+        <pre class="code-block">0110119070_06139463_202608270_1.zip
+└─ 0110119070_06139463_202608270_1
+   ├─ DATA
+   │  ├─ h01101190702026082701000001.xml
+   │  └─ h01101190702026082701000002.xml
+   ├─ XSD
+   │  └─ *.xsd
+   └─ ix08_V08.xml</pre>
       </article>
       <article class="detail-card">
         <span class="status-pill status-danger">NG</span>
-        <h3>作業ルートごとZIP化</h3>
-        <pre class="code-block">提出用.zip
-└─ xml作成_出力履歴
+        <h3>親フォルダが入っている</h3>
+        <pre class="code-block">0110119070_06139463_202608270_1.zip
+└─ 03_健診結果（アップロードデータ）
    └─ 2026-08-27
-      └─ XML提出フォルダ
-         ├─ XXXXX.xml
-         └─ YYYYY.xml</pre>
+      └─ 0110119070_06139463_202608270_1
+         ├─ DATA
+         ├─ XSD
+         └─ ix08_V08.xml</pre>
       </article>
       <article class="detail-card">
         <span class="status-pill status-danger">NG</span>
         <h3>ZIPの二重包み</h3>
-        <pre class="code-block">提出用.zip
+        <pre class="code-block">upload.zip
 └─ 作業フォルダ
-   └─ XML提出フォルダ.zip</pre>
+   └─ 0110119070_06139463_202608270_1.zip</pre>
       </article>
     </div>
   </section>
@@ -123,15 +128,16 @@
     <div class="section-heading">
       <div>
         <h2>提出前チェック</h2>
-        <p class="subtle">迷ったらZIPを一度開いて、直下の見え方を確認します。</p>
+        <p class="subtle">迷ったらZIPを一度開いて、直下の見え方とルートフォルダ名を確認します。</p>
       </div>
     </div>
     <ol class="support-steps">
       <li>作成したZIPを開く。</li>
-      <li>直下に作業用の親フォルダが入っていないか見る。</li>
-      <li>提出対象ではないCSV、ログ、メモ、古い出力が混ざっていないか見る。</li>
-      <li>この画面のOK例と同じ階層なら提出候補にする。</li>
-      <li>不安な場合は「XML ZIPチェック」で中身を確認する。</li>
+      <li>ZIP直下に `健診機関コード_保険者番号_作成日+連番_1` のルートフォルダが1つだけあるか見る。</li>
+      <li>ルートフォルダ直下に `DATA`、`XSD`、`ix08_V08.xml` があるか見る。</li>
+      <li>`DATA` の中に個人XMLが入っているか見る。</li>
+      <li>`03_健診結果（アップロードデータ）`、日付フォルダ、作業フォルダ、別ZIPが混ざっていないか見る。</li>
+      <li>不安な場合は「XML ZIPチェック」で構成を確認する。</li>
     </ol>
   </section>
 </main>
