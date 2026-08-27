@@ -6374,7 +6374,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-header-compare-card {
-  grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr) minmax(240px, 300px);
   align-items: start;
 }
 
@@ -6409,6 +6409,104 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-header-manual-match select {
   width: 100%;
+}
+
+.csv-header-base-side,
+.csv-header-upload-side {
+  min-height: 88px;
+  padding: 10px 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.csv-header-base-side {
+  border-left: 4px solid #64748b;
+}
+
+.csv-header-upload-side {
+  border-left: 4px solid #16845f;
+}
+
+.csv-header-upload-card {
+  cursor: grab;
+  user-select: none;
+}
+
+.csv-header-upload-card:active {
+  cursor: grabbing;
+}
+
+.csv-header-upload-card.is-dragging {
+  opacity: 0.45;
+}
+
+.csv-header-upload-empty {
+  display: grid;
+  place-items: center;
+  min-height: 56px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-weight: 800;
+}
+
+.csv-header-upload-side.is-drop-target {
+  outline: 3px solid rgba(22, 132, 95, 0.24);
+  outline-offset: 2px;
+  background: #ecfdf5;
+}
+
+.csv-header-picker-modal .edit-modal__panel {
+  width: min(1180px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.csv-header-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.csv-header-picker-card {
+  display: grid;
+  gap: 5px;
+  min-height: 98px;
+  padding: 12px 14px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+}
+
+.csv-header-picker-card:hover,
+.csv-header-picker-card:focus {
+  border-color: #16845f;
+  background: #ecfdf5;
+  outline: none;
+}
+
+.csv-header-picker-card small,
+.csv-header-picker-card span {
+  display: block;
+  color: #607086;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.csv-header-picker-card strong {
+  display: block;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.csv-header-picker-card.is-empty-option {
+  border-style: dashed;
+  background: #f8fafc;
 }
 
 .adopted-source-cell {

@@ -83,53 +83,87 @@
         <input data-live-filter-input="#csv-header-compare-list" placeholder="列番 / ヘッダー / context / 状態">
       </label>
     </div>
-    <div id="csv-header-compare-list" class="csv-header-compare-list" data-empty-message="一致する比較結果はありません。">
+    <div id="csv-header-compare-list" class="csv-header-compare-list csv-header-align-list" data-empty-message="一致する比較結果はありません。">
       {% for row in compare_result.rows %}
       {% set uploaded = row.uploaded %}
       {% set registered = row.registered %}
-      <article class="csv-header-compare-card status-{{ row.status|lower }}" data-filter-text="{{ row.status }} {{ row.match_type }} {% if uploaded %}{{ uploaded.column_no }} {{ uploaded.name }} {{ uploaded.context }} {{ uploaded.context_summary }}{% endif %} {% if registered %}{{ registered.column_no }} {{ registered.name or registered.header_name }} {{ registered.context or registered.header_context }} {{ registered.context_summary }}{% endif %}">
+      <article class="csv-header-compare-card status-{{ row.status|lower }}" data-header-align-row data-filter-text="{{ row.status }} {{ row.match_type }} {% if uploaded %}{{ uploaded.column_no }} {{ uploaded.name }} {{ uploaded.context }} {{ uploaded.context_summary }}{% endif %} {% if registered %}{{ registered.column_no }} {{ registered.name or registered.header_name }} {{ registered.context or registered.header_context }} {{ registered.context_summary }}{% endif %}">
         <div class="csv-header-compare-status">
           <span class="status-pill {{ 'status-ready' if row.status == 'MATCH' else 'status-pending' if row.status == 'COLUMN_ONLY' else 'status-danger' if row.status == 'UPLOAD_ONLY' else 'status-muted' }}">
             {{ '一致' if row.status == 'MATCH' else '列番のみ' if row.status == 'COLUMN_ONLY' else 'アップロードのみ' if row.status == 'UPLOAD_ONLY' else '基準のみ' }}
           </span>
           <small>{{ row.match_type }}</small>
         </div>
-        <div class="csv-header-side">
-          <small>アップロードCSV</small>
-          {% if uploaded %}
-          <strong>{{ uploaded.column_no }}列目 {{ uploaded.name or "-" }}</strong>
-          <span>{{ uploaded.context_summary }}</span>
-          {% else %}
-          <strong>-</strong>
-          <span>アップロード側に対応列なし</span>
-          {% endif %}
-        </div>
-        <div class="csv-header-side">
-          <small>テンプレート基準</small>
+        <div class="csv-header-side csv-header-base-side">
+          <small>登録済み基準ヘッダー</small>
           {% if registered %}
           <strong>{{ registered.column_no }}列目 {{ registered.name or registered.header_name or "-" }}</strong>
           <span>{{ registered.context_summary }}</span>
           {% if registered.mapped_rules %}<span>rule: {{ registered.mapped_rules|join(', ') }}</span>{% endif %}
           {% else %}
           <strong>-</strong>
-          <span>基準側に対応列なし</span>
+          <span>登録済み基準に対応列なし</span>
+          {% endif %}
+        </div>
+        <div class="csv-header-side csv-header-upload-side" data-header-drop-slot data-selected-upload-column="{{ uploaded.column_no if uploaded else '' }}">
+          <small>アップロードヘッダー</small>
+          {% if uploaded %}
+          <div class="csv-header-upload-card" draggable="true" data-upload-column="{{ uploaded.column_no }}">
+            <strong>{{ uploaded.column_no }}列目 {{ uploaded.name or "-" }}</strong>
+            <span>{{ uploaded.context_summary }}</span>
+          </div>
+          {% else %}
+          <div class="csv-header-upload-empty">未割当</div>
           {% endif %}
         </div>
         <div class="csv-header-manual-match">
-          <label>
-            <span>手動対応先</span>
-            <select name="manual_match_{{ loop.index }}">
+          <button type="button" class="ghost-button compact-action-button" data-header-picker-open>選択</button>
+          <select name="manual_match_{{ loop.index }}" data-header-align-select hidden>
               <option value="">未選択</option>
-              {% for base in header_columns %}
-              <option value="{{ base.column_no }}" {% if registered and base.column_no == registered.column_no %}selected{% endif %}>{{ base.column_no }}列目 {{ base.name or base.header_name or "-" }}</option>
+              {% for option_row in compare_result.rows %}
+              {% if option_row.uploaded %}
+              <option value="{{ option_row.uploaded.column_no }}" {% if uploaded and option_row.uploaded.column_no == uploaded.column_no %}selected{% endif %}>{{ option_row.uploaded.column_no }}列目 {{ option_row.uploaded.name or "-" }}</option>
+              {% endif %}
               {% endfor %}
-            </select>
-          </label>
+          </select>
         </div>
       </article>
       {% endfor %}
     </div>
   </section>
+  <div id="csv-header-picker-modal" class="edit-modal csv-header-picker-modal" hidden>
+    <section class="edit-modal__panel" role="dialog" aria-modal="true" aria-labelledby="csv-header-picker-title">
+      <header class="edit-modal__head">
+        <div>
+          <p class="eyebrow">UPLOAD HEADER</p>
+          <h2 id="csv-header-picker-title">アップロードヘッダーを選択</h2>
+          <p class="subtle" data-header-picker-target>対応させるアップロード列を選びます。</p>
+        </div>
+        <button type="button" class="ghost-button compact-action-button" data-header-picker-close>閉じる</button>
+      </header>
+      <div class="filter-card compact-filter">
+        <label>
+          <span>キーワード</span>
+          <input data-header-picker-filter placeholder="列番 / ヘッダー / context">
+        </label>
+      </div>
+      <div class="csv-header-picker-grid" data-header-picker-grid>
+        <button type="button" class="csv-header-picker-card is-empty-option" data-header-picker-card data-upload-column="" data-filter-text="未選択 解除">
+          <strong>未選択</strong>
+          <span>この基準列からアップロード列を外します。</span>
+        </button>
+        {% for option_row in compare_result.rows %}
+        {% if option_row.uploaded %}
+        <button type="button" class="csv-header-picker-card" data-header-picker-card data-upload-column="{{ option_row.uploaded.column_no }}" data-filter-text="{{ option_row.uploaded.column_no }} {{ option_row.uploaded.name }} {{ option_row.uploaded.context }} {{ option_row.uploaded.context_summary }}">
+          <small>{{ option_row.uploaded.column_no }}列目</small>
+          <strong>{{ option_row.uploaded.name or "-" }}</strong>
+          <span>{{ option_row.uploaded.context_summary }}</span>
+        </button>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+  </div>
   {% endif %}
 
   <section class="panel">
@@ -164,4 +198,163 @@
   </section>
   {% endif %}
 </main>
+<script>
+(() => {
+  const list = document.querySelector("[data-empty-message].csv-header-align-list");
+  if (!list) return;
+
+  let draggedCard = null;
+  let activePickerRow = null;
+  const pickerModal = document.getElementById("csv-header-picker-modal");
+  const pickerTarget = pickerModal ? pickerModal.querySelector("[data-header-picker-target]") : null;
+  const pickerFilter = pickerModal ? pickerModal.querySelector("[data-header-picker-filter]") : null;
+
+  const syncSlot = (slot) => {
+    const card = slot.querySelector("[data-upload-column]");
+    const value = card ? card.dataset.uploadColumn : "";
+    slot.dataset.selectedUploadColumn = value;
+    const row = slot.closest("[data-header-align-row]");
+    const select = row ? row.querySelector("[data-header-align-select]") : null;
+    if (select) select.value = value;
+    if (!card && !slot.querySelector(".csv-header-upload-empty")) {
+      const empty = document.createElement("div");
+      empty.className = "csv-header-upload-empty";
+      empty.textContent = "未割当";
+      slot.appendChild(empty);
+    }
+  };
+
+  const closePicker = () => {
+    if (!pickerModal) return;
+    pickerModal.hidden = true;
+    document.body.classList.remove("has-open-modal");
+    activePickerRow = null;
+  };
+
+  const openPicker = (row) => {
+    if (!pickerModal || !row) return;
+    activePickerRow = row;
+    const base = row.querySelector(".csv-header-base-side strong");
+    if (pickerTarget) {
+      pickerTarget.textContent = base ? `${base.textContent} に対応させるアップロード列を選びます。` : "対応させるアップロード列を選びます。";
+    }
+    if (pickerFilter) {
+      pickerFilter.value = "";
+      pickerModal.querySelectorAll("[data-header-picker-card]").forEach((card) => {
+        card.hidden = false;
+      });
+    }
+    pickerModal.hidden = false;
+    document.body.classList.add("has-open-modal");
+    pickerFilter?.focus();
+  };
+
+  const removeEmpty = (slot) => {
+    slot.querySelectorAll(".csv-header-upload-empty").forEach((node) => node.remove());
+  };
+
+  const swapIntoSlot = (sourceCard, targetSlot) => {
+    if (!sourceCard || !targetSlot) return;
+    const sourceSlot = sourceCard.closest("[data-header-drop-slot]");
+    if (!sourceSlot || sourceSlot === targetSlot) return;
+    const targetCard = targetSlot.querySelector("[data-upload-column]");
+    removeEmpty(sourceSlot);
+    removeEmpty(targetSlot);
+    if (targetCard) {
+      sourceSlot.appendChild(targetCard);
+    }
+    targetSlot.appendChild(sourceCard);
+    syncSlot(sourceSlot);
+    syncSlot(targetSlot);
+  };
+
+  list.addEventListener("dragstart", (event) => {
+    const card = event.target.closest("[data-upload-column]");
+    if (!card) return;
+    draggedCard = card;
+    card.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", card.dataset.uploadColumn || "");
+  });
+
+  list.addEventListener("dragend", () => {
+    if (draggedCard) draggedCard.classList.remove("is-dragging");
+    draggedCard = null;
+    list.querySelectorAll(".is-drop-target").forEach((node) => node.classList.remove("is-drop-target"));
+  });
+
+  list.addEventListener("dragover", (event) => {
+    const slot = event.target.closest("[data-header-drop-slot]");
+    if (!slot) return;
+    event.preventDefault();
+    slot.classList.add("is-drop-target");
+  });
+
+  list.addEventListener("dragleave", (event) => {
+    const slot = event.target.closest("[data-header-drop-slot]");
+    if (slot) slot.classList.remove("is-drop-target");
+  });
+
+  list.addEventListener("drop", (event) => {
+    const slot = event.target.closest("[data-header-drop-slot]");
+    if (!slot || !draggedCard) return;
+    event.preventDefault();
+    slot.classList.remove("is-drop-target");
+    swapIntoSlot(draggedCard, slot);
+  });
+
+  list.addEventListener("change", (event) => {
+    const select = event.target.closest("[data-header-align-select]");
+    if (!select) return;
+    const row = select.closest("[data-header-align-row]");
+    const targetSlot = row ? row.querySelector("[data-header-drop-slot]") : null;
+    const selectedCard = list.querySelector(`[data-upload-column="${CSS.escape(select.value)}"]`);
+    if (selectedCard && targetSlot) {
+      swapIntoSlot(selectedCard, targetSlot);
+    } else if (!select.value && targetSlot) {
+      const card = targetSlot.querySelector("[data-upload-column]");
+      if (card) card.remove();
+      syncSlot(targetSlot);
+    }
+  });
+
+  list.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-header-picker-open]");
+    if (!button) return;
+    openPicker(button.closest("[data-header-align-row]"));
+  });
+
+  pickerModal?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-header-picker-close]")) {
+      closePicker();
+      return;
+    }
+    const card = event.target.closest("[data-header-picker-card]");
+    if (!card || !activePickerRow) return;
+    const targetSlot = activePickerRow.querySelector("[data-header-drop-slot]");
+    if (!targetSlot) return;
+    const uploadColumn = card.dataset.uploadColumn || "";
+    if (!uploadColumn) {
+      const current = targetSlot.querySelector("[data-upload-column]");
+      if (current) current.remove();
+      syncSlot(targetSlot);
+      closePicker();
+      return;
+    }
+    const selectedCard = list.querySelector(`[data-upload-column="${CSS.escape(uploadColumn)}"]`);
+    if (selectedCard) {
+      swapIntoSlot(selectedCard, targetSlot);
+    }
+    closePicker();
+  });
+
+  pickerFilter?.addEventListener("input", () => {
+    const keyword = pickerFilter.value.trim().toLowerCase();
+    pickerModal.querySelectorAll("[data-header-picker-card]").forEach((card) => {
+      const text = (card.dataset.filterText || card.textContent || "").toLowerCase();
+      card.hidden = keyword ? !text.includes(keyword) : false;
+    });
+  });
+})();
+</script>
 {% endblock %}
