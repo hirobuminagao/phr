@@ -194,7 +194,8 @@
     const table = tableSelector ? document.querySelector(tableSelector) : null;
     if (!table) continue;
 
-    const rows = Array.from(table.querySelectorAll("tbody tr[data-filter-text]"));
+    const tbody = table.querySelector("tbody");
+    const rows = Array.from(tbody ? table.querySelectorAll("tbody tr[data-filter-text]") : table.querySelectorAll("[data-filter-text]"));
     const tableFilters = {
       keywordInput: input,
       toggleGroups: new Map(),
@@ -203,13 +204,21 @@
     };
     filters.set(tableSelector, tableFilters);
     const emptyMessage = table.dataset.emptyMessage || "一致する行はありません。";
-    const emptyRow = document.createElement("tr");
+    let emptyRow;
+    if (tbody) {
+      emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = table.querySelectorAll("thead th").length || 1;
+      emptyCell.textContent = emptyMessage;
+      emptyRow.appendChild(emptyCell);
+      tbody.appendChild(emptyRow);
+    } else {
+      emptyRow = document.createElement("div");
+      emptyRow.className = "empty-state";
+      emptyRow.textContent = emptyMessage;
+      table.appendChild(emptyRow);
+    }
     emptyRow.hidden = true;
-    const emptyCell = document.createElement("td");
-    emptyCell.colSpan = table.querySelectorAll("thead th").length || 1;
-    emptyCell.textContent = emptyMessage;
-    emptyRow.appendChild(emptyCell);
-    table.querySelector("tbody").appendChild(emptyRow);
 
     const applyFilter = () => {
       const keyword = normalize(input.value);

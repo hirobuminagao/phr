@@ -4672,6 +4672,57 @@ def enrich_csv_mapping_template_rules_with_conditions(
         )
 
 
+def build_csv_mapping_template_target_groups(rules: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+    group_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for rule in rules:
+        target_kind = str(rule.get("target_kind") or "-")
+        target_code = str(
+            rule.get("target_namecode")
+            or rule.get("target_field")
+            or rule.get("target_identity_item_code")
+            or "-"
+        )
+        key = (target_kind, target_code)
+        if key not in group_by_key:
+            group = {
+                "target_kind": target_kind,
+                "target_code": target_code,
+                "target_item_name": rule.get("target_item_name"),
+                "target_category_name": rule.get("target_category_name"),
+                "target_resolution_type": rule.get("target_resolution_type"),
+                "selection_mode": rule.get("selection_mode"),
+                "rows": [],
+            }
+            group_by_key[key] = group
+            groups.append(group)
+
+        value_source_type = str(rule.get("value_source_type") or "-")
+        fixed_value = str(rule.get("fixed_value") or "").strip()
+        if value_source_type.upper() == "FIXED":
+            registered_value = fixed_value or "-"
+        else:
+            registered_value = rule.get("value_condition_summary") or rule.get("condition_header_names") or "-"
+
+        group_by_key[key]["rows"].append(
+            {
+                "rule_key": rule.get("rule_key"),
+                "rule_id": rule.get("csv_exam_result_mapping_rule_id"),
+                "priority": rule.get("priority"),
+                "source_columns": rule.get("value_condition_summary") or rule.get("condition_header_names") or "-",
+                "condition_summary": rule.get("rule_condition_summary") or "-",
+                "registered_value": registered_value,
+                "value_source_type": value_source_type,
+                "note": rule.get("note"),
+                "is_active": rule.get("is_active"),
+                "is_required": rule.get("is_required"),
+            }
+        )
+
+    return groups
+
+
 def build_csv_mapping_template_header_columns(
     template: Mapping[str, Any],
     conditions: list[Mapping[str, Any]],
@@ -15276,11 +15327,13 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
                 rules = load_csv_mapping_template_rules(cur, csv_format_version_id=csv_format_version_id)
                 conditions = load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
                 enrich_csv_mapping_template_rules_with_conditions(rules, conditions)
+                target_groups = build_csv_mapping_template_target_groups(rules)
                 header_columns = build_csv_mapping_template_header_columns(template, conditions)
             else:
                 summaries = []
                 rules = []
                 conditions = []
+                target_groups = []
                 header_columns = []
             conn.commit()
         except Exception:
@@ -15310,6 +15363,7 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "summaries": summaries,
             "rules": rules,
             "conditions": conditions,
+            "target_groups": target_groups,
             "header_columns": header_columns,
             "mapped_header_count": sum(1 for column in header_columns if column.get("is_mapped")),
             "unmapped_header_count": sum(1 for column in header_columns if not column.get("is_mapped")),

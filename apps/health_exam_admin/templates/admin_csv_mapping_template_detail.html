@@ -164,6 +164,72 @@
   <section class="panel">
     <div class="section-heading">
       <div>
+        <h2>取り込み先別ビュー</h2>
+        <p class="subtle">取り込み先ごとに、CSVのどの値を見て、どの値を登録するかを確認します。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ target_groups|length }}項目</span>
+    </div>
+    <div class="filter-card compact-filter">
+      <label>
+        <span>キーワード</span>
+        <input data-live-filter-input="#csv-template-target-group-list" placeholder="取り込み先 / ヘッダー / 登録値 / 条件">
+      </label>
+    </div>
+    <div id="csv-template-target-group-list" class="csv-template-target-groups" data-empty-message="一致する取り込み先はありません。">
+      {% for group in target_groups %}
+      <article class="csv-template-target-group" data-filter-text="{{ group.target_kind }} {{ group.target_code }} {{ group.target_item_name or '' }} {{ group.target_category_name or '' }} {% for row in group.rows %}{{ row.rule_key }} {{ row.source_columns }} {{ row.condition_summary }} {{ row.registered_value }} {{ row.note or '' }} {% endfor %}">
+        <div class="csv-template-target-group-head">
+          <div>
+            <span class="status-pill status-neutral">{{ group.target_kind }}</span>
+            <strong>{{ group.target_item_name or group.target_code }}</strong>
+            <small>{{ group.target_code }}{% if group.target_category_name %} / {{ group.target_category_name }}{% endif %}</small>
+          </div>
+          <small>{{ group.target_resolution_type }} / {{ group.selection_mode }} / {{ group.rows|length }}ルール</small>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table compact-table csv-template-target-branch-table">
+            <thead>
+              <tr>
+                <th>CSVを見る列</th>
+                <th>条件</th>
+                <th>登録値</th>
+                <th>補足</th>
+                <th>状態</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in group.rows %}
+              <tr>
+                <td><strong>{{ row.source_columns }}</strong></td>
+                <td><small title="{{ row.condition_summary }}">{{ row.condition_summary }}</small></td>
+                <td>
+                  <strong>{{ row.registered_value }}</strong>
+                  <small>{{ row.value_source_type }}</small>
+                </td>
+                <td>
+                  <strong>{{ row.rule_key }}</strong>
+                  <small>ID {{ row.rule_id }} / priority {{ row.priority }}</small>
+                  {% if row.note %}<small>{{ row.note }}</small>{% endif %}
+                </td>
+                <td>
+                  <span class="status-pill {{ 'status-ready' if row.is_active else 'status-muted' }}">{{ '有効' if row.is_active else '無効' }}</span>
+                  {% if row.is_required %}<span class="status-pill status-pending">必須</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
+      {% else %}
+      <div class="empty-state">取り込み先はありません。</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
         <h2>ルール一覧</h2>
         <p class="subtle">どの列を、どのledger項目または健診項目へ入れるかの定義です。</p>
       </div>
