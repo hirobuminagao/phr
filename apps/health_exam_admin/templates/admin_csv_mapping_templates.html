@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% set title = "CSVマッピングテンプレート" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>CSVマッピングテンプレート</h1>
+    <p class="subtle">健診機関ごとのCSV取込テンプレート、ルール数、利用状況を確認します。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/folder-aliases">受領フォルダ管理</a>
+    <a class="ghost-button" href="/admin/facility-master">健診機関マスタ</a>
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>テンプレート一覧</h2>
+        <p class="subtle">編集はまだ行わず、現在DBに入っているテンプレート情報を確認します。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ rows|length }}件</span>
+    </div>
+    <form class="filter-card compact-filter" method="get" action="/admin/csv-mapping-templates">
+      <label>
+        <span>キーワード</span>
+        <input name="q" value="{{ filters.q or '' }}" data-live-filter-input="#csv-template-table" placeholder="健診機関名 / コード / mapping_version">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="/admin/csv-mapping-templates">クリア</a>
+      </div>
+    </form>
+    <div class="table-panel">
+      <table id="csv-template-table" class="data-table admin-master-table" data-empty-message="一致するCSVテンプレートはありません。">
+        <thead>
+          <tr>
+            <th>テンプレート</th>
+            <th>健診機関</th>
+            <th>ヘッダー/形式</th>
+            <th>ルール</th>
+            <th>利用状況</th>
+            <th>状態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr data-filter-text="{{ row.mapping_version }} {{ row.format_name or '' }} {{ row.exam_facility_code or '' }} {{ row.medical_institution_code or '' }} {{ row.exam_facility_name or '' }} {{ row.exam_facility_display_name or '' }} {{ row.header_hash_status or '' }} {{ row.header_mismatch_policy or '' }}">
+            <td>
+              <strong>{{ row.mapping_version }}</strong>
+              <small>ID {{ row.csv_format_version_id }}{% if row.format_name %} / {{ row.format_name }}{% endif %}</small>
+            </td>
+            <td>
+              <strong>{{ row.exam_facility_display_name or row.exam_facility_name or "未設定" }}</strong>
+              <small>{{ row.exam_facility_code or "-" }} / 医療 {{ row.medical_institution_code or "-" }}</small>
+            </td>
+            <td>
+              <span class="status-pill status-neutral">{{ row.header_structure_type }}</span>
+              <small>{{ row.character_encoding }} / data {{ row.data_start_row_no }}行目〜</small>
+              <small>{{ row.header_hash_status }} / {{ row.header_mismatch_policy }}</small>
+            </td>
+            <td>
+              <strong>{{ row.active_rule_count }} / {{ row.rule_count }}</strong>
+              <small>条件 {{ row.condition_count }}</small>
+            </td>
+            <td>
+              <strong>受領 {{ row.receipt_count }}</strong>
+              <small>ledger {{ row.ledger_count }}</small>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if row.is_active else 'status-muted' }}">{{ '有効' if row.is_active else '無効' }}</span>
+              {% if row.is_default_for_facility %}<span class="status-pill status-pending">施設default</span>{% endif %}
+              <small>更新 {{ row.updated_at }}</small>
+            </td>
+            <td>
+              <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}">詳細</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty-state">CSVテンプレートはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

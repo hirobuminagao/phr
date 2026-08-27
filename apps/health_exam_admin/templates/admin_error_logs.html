@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% set title = "画面エラー一覧" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>画面エラー一覧</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/audit-logs">監査ログ</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel table-panel">
+    <table class="data-table audit-table">
+      <thead>
+        <tr>
+          <th>日時</th>
+          <th>ログID</th>
+          <th>画面</th>
+          <th>利用者</th>
+          <th>例外</th>
+          <th>状態</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.created_at }}</td>
+          <td><a href="/admin/error-logs/{{ row.log_id }}">{{ row.log_id }}</a></td>
+          <td>
+            <strong>{{ row.method }} {{ row.path }}</strong>
+            {% if row.query_string %}<small>?{{ row.query_string }}</small>{% endif %}
+          </td>
+          <td>
+            <strong>{{ row.employee_no or "-" }}</strong>
+            <small>{{ row.client_ip or "" }}</small>
+          </td>
+          <td>
+            <strong>{{ row.exception_type }}</strong>
+            <small>{{ row.exception_message }}</small>
+          </td>
+          <td>
+            {% if row.resolved_at %}
+            <span class="status-pill status-ready">対応済み</span>
+            {% else %}
+            <span class="status-pill status-pending">未対応</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6">画面エラーはまだありません。</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</main>
+{% endblock %}

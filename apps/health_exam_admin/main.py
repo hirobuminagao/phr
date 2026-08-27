@@ -14,6 +14,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import traceback
 import zipfile
 from datetime import date, datetime
 from decimal import Decimal
@@ -482,6 +483,30 @@ def require_user(request: Request) -> dict[str, Any] | RedirectResponse:
     return user
 
 
+@app.exception_handler(Exception)
+async def unhandled_app_exception(request: Request, exc: Exception) -> Response:
+    log_id = generate_app_error_log_id()
+    user: dict[str, Any] | None = None
+    try:
+        user = current_user(request)
+    except Exception:
+        user = None
+    try:
+        log_unhandled_app_error(request, exc, log_id=log_id, user=user)
+    except Exception:
+        LOGGER.exception("failed to persist app error log log_id=%s", log_id)
+    LOGGER.exception("unhandled app error log_id=%s path=%s", log_id, request.url.path)
+    return templates.TemplateResponse(
+        "internal_error.html",
+        {
+            "request": request,
+            "user": user,
+            "log_id": log_id,
+        },
+        status_code=500,
+    )
+
+
 def generate_temporary_password(length: int = 12) -> str:
     alphabet = string.ascii_letters + string.digits
     while True:
@@ -930,6 +955,107 @@ def load_audit_log_rows(cur: Any, *, limit: int = 100) -> list[dict[str, Any]]:
         (limit,),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def generate_app_error_log_id() -> str:
+    return f"ERR-{datetime.now().strftime('%Y%m%d%H%M%S')}-{secrets.token_hex(3)}"
+
+
+def log_unhandled_app_error(request: Request, exc: Exception, *, log_id: str, user: dict[str, Any] | None) -> None:
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                f"""
+                INSERT INTO {qname(app_db())}.app_error_logs (
+                  log_id,
+                  status_code,
+                  method,
+                  path,
+                  query_string,
+                  app_user_id,
+                  employee_no,
+                  client_ip,
+                  user_agent,
+                  exception_type,
+                  exception_message,
+                  traceback_text
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    log_id,
+                    500,
+                    request.method,
+                    request.url.path,
+                    request.url.query,
+                    None if not user else user.get("app_user_id"),
+                    None if not user else user.get("employee_no"),
+                    client_ip(request),
+                    request.headers.get("user-agent"),
+                    type(exc).__name__,
+                    str(exc)[:2000],
+                    "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[:60000],
+                ),
+            )
+        finally:
+            cur.close()
+
+
+def load_app_error_log_rows(cur: Any, *, limit: int = 200) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          app_error_log_id,
+          log_id,
+          status_code,
+          method,
+          path,
+          query_string,
+          employee_no,
+          client_ip,
+          exception_type,
+          exception_message,
+          resolved_at,
+          created_at
+        FROM {qname(app_db())}.app_error_logs
+        ORDER BY app_error_log_id DESC
+        LIMIT %s
+        """,
+        (limit,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_app_error_log_detail(cur: Any, *, log_id: str) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          app_error_log_id,
+          log_id,
+          status_code,
+          method,
+          path,
+          query_string,
+          app_user_id,
+          employee_no,
+          client_ip,
+          user_agent,
+          exception_type,
+          exception_message,
+          traceback_text,
+          admin_note,
+          resolved_at,
+          created_at
+        FROM {qname(app_db())}.app_error_logs
+        WHERE log_id = %s
+        LIMIT 1
+        """,
+        (log_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
 
 
 def upsert_app_setting(
@@ -2163,6 +2289,12 @@ def search_person_selection_subscribers(
     if not where_parts:
         return [], ""
 
+    subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
+    subscriber_name_full_expr = "s.name_kanji_full" if "name_kanji_full" in subscriber_columns else "s.name_full_match"
+    subscriber_select = lambda column, alias=None: (
+        f"s.{column} AS {alias or column}" if column in subscriber_columns else f"NULL AS {alias or column}"
+    )
+    subscriber_group = lambda column: f"s.{column}" if column in subscriber_columns else "NULL"
     cur.execute(
         f"""
         SELECT
@@ -2170,7 +2302,7 @@ def search_person_selection_subscribers(
           s.hia_subscriber_id,
           s.person_id_custom,
           s.identity_hash,
-          s.name_kanji_full AS name_full,
+          {subscriber_name_full_expr} AS name_full,
           s.name_kana_full,
           s.name_kana_full_match,
           s.birth,
@@ -2180,9 +2312,9 @@ def search_person_selection_subscribers(
           s.insurance_number,
           s.insurance_number_match,
           s.insurance_branchnumber,
-          s.employee_code,
-          s.relationship_name,
-          s.qualification_lost_date,
+          {subscriber_select("employee_code")},
+          {subscriber_select("relationship_name")},
+          {subscriber_select("qualification_lost_date")},
           COUNT(eec.exam_export_case_id) AS event_case_count,
           MAX(eec.exam_export_case_id) AS latest_case_id
         FROM {qname(dev_db())}.subscribers AS s
@@ -2195,7 +2327,7 @@ def search_person_selection_subscribers(
           s.hia_subscriber_id,
           s.person_id_custom,
           s.identity_hash,
-          s.name_kanji_full,
+          {subscriber_name_full_expr},
           s.name_kana_full,
           s.name_kana_full_match,
           s.birth,
@@ -2205,14 +2337,14 @@ def search_person_selection_subscribers(
           s.insurance_number,
           s.insurance_number_match,
           s.insurance_branchnumber,
-          s.employee_code,
-          s.relationship_name,
-          s.qualification_lost_date
+          {subscriber_group("employee_code")},
+          {subscriber_group("relationship_name")},
+          {subscriber_group("qualification_lost_date")}
         ORDER BY event_case_count DESC, s.id DESC
         LIMIT %s
         """,
-	        (event_id, *params, limit),
-	    )
+        (event_id, *params, limit),
+    )
     return [dict(item) for item in cur.fetchall()], "+".join(matched_parts)
 
 
@@ -4166,6 +4298,218 @@ def load_csv_format_options(cur: Any, *, limit: int = 500) -> list[dict[str, Any
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_csv_mapping_template_rows(cur: Any, *, keyword: str = "", limit: int = 500) -> list[dict[str, Any]]:
+    where_parts = ["1=1"]
+    params: list[Any] = []
+    if keyword:
+        like = f"%{keyword}%"
+        where_parts.append(
+            """
+            (
+              cfv.`mapping_version` LIKE %s
+              OR cfv.`format_name` LIKE %s
+              OR cfv.`note` LIKE %s
+              OR ef.`exam_facility_code` LIKE %s
+              OR ef.`medical_institution_code` LIKE %s
+              OR ef.`exam_facility_name` LIKE %s
+              OR ef.`exam_facility_display_name` LIKE %s
+            )
+            """
+        )
+        params.extend([like, like, like, like, like, like, like])
+    where_sql = " AND ".join(where_parts)
+    cur.execute(
+        f"""
+        SELECT
+          cfv.`csv_format_version_id`,
+          cfv.`exam_facility_id`,
+          cfv.`mapping_version`,
+          cfv.`file_type`,
+          cfv.`format_name`,
+          cfv.`has_header`,
+          cfv.`header_mode`,
+          cfv.`header_structure_type`,
+          cfv.`data_start_row_no`,
+          cfv.`header_hash_status`,
+          cfv.`header_mismatch_policy`,
+          cfv.`character_encoding`,
+          cfv.`delimiter`,
+          cfv.`is_default_for_facility`,
+          cfv.`is_active`,
+          cfv.`valid_from`,
+          cfv.`valid_to`,
+          cfv.`updated_at`,
+          ef.`exam_facility_code`,
+          ef.`medical_institution_code`,
+          ef.`exam_facility_name`,
+          ef.`exam_facility_display_name`,
+          COALESCE(rule_counts.`rule_count`, 0) AS `rule_count`,
+          COALESCE(rule_counts.`active_rule_count`, 0) AS `active_rule_count`,
+          COALESCE(rule_counts.`condition_count`, 0) AS `condition_count`,
+          COALESCE(receipt_counts.`receipt_count`, 0) AS `receipt_count`,
+          COALESCE(ledger_counts.`ledger_count`, 0) AS `ledger_count`
+        FROM {qname(master_db())}.`csv_format_versions` AS cfv
+        LEFT JOIN {qname(master_db())}.`exam_facilities` AS ef
+          ON ef.`exam_facility_id` = cfv.`exam_facility_id`
+        LEFT JOIN (
+          SELECT
+            r.`csv_format_version_id`,
+            COUNT(*) AS `rule_count`,
+            SUM(CASE WHEN r.`is_active` = 1 THEN 1 ELSE 0 END) AS `active_rule_count`,
+            COUNT(c.`csv_exam_result_mapping_condition_id`) AS `condition_count`
+          FROM {qname(master_db())}.`csv_exam_result_mapping_rules` AS r
+          LEFT JOIN {qname(master_db())}.`csv_exam_result_mapping_conditions` AS c
+            ON c.`csv_exam_result_mapping_rule_id` = r.`csv_exam_result_mapping_rule_id`
+          GROUP BY r.`csv_format_version_id`
+        ) AS rule_counts
+          ON rule_counts.`csv_format_version_id` = cfv.`csv_format_version_id`
+        LEFT JOIN (
+          SELECT `matched_csv_format_version_id`, COUNT(*) AS `receipt_count`
+          FROM {qname(health_db())}.`file_receipts`
+          WHERE `matched_csv_format_version_id` IS NOT NULL
+          GROUP BY `matched_csv_format_version_id`
+        ) AS receipt_counts
+          ON receipt_counts.`matched_csv_format_version_id` = cfv.`csv_format_version_id`
+        LEFT JOIN (
+          SELECT `mapping_version`, COUNT(*) AS `ledger_count`
+          FROM {qname(health_db())}.`exam_ledgers`
+          WHERE `source_type` = 'CSV'
+            AND `mapping_version` IS NOT NULL
+          GROUP BY `mapping_version`
+        ) AS ledger_counts
+          ON ledger_counts.`mapping_version` = cfv.`mapping_version`
+        WHERE {where_sql}
+        ORDER BY cfv.`is_active` DESC, cfv.`is_default_for_facility` DESC, ef.`exam_facility_code`, cfv.`mapping_version`
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_csv_mapping_template_detail(cur: Any, *, csv_format_version_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          cfv.*,
+          ef.`exam_facility_code`,
+          ef.`medical_institution_code`,
+          ef.`exam_facility_name`,
+          ef.`exam_facility_display_name`,
+          ef.`address` AS `exam_facility_address`,
+          ef.`phone_number` AS `exam_facility_phone_number`
+        FROM {qname(master_db())}.`csv_format_versions` AS cfv
+        LEFT JOIN {qname(master_db())}.`exam_facilities` AS ef
+          ON ef.`exam_facility_id` = cfv.`exam_facility_id`
+        WHERE cfv.`csv_format_version_id` = %s
+        """,
+        (csv_format_version_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_csv_mapping_template_rule_summary(cur: Any, *, csv_format_version_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          r.`target_kind`,
+          r.`target_resolution_type`,
+          r.`selection_mode`,
+          COUNT(*) AS `rule_count`,
+          SUM(CASE WHEN r.`is_active` = 1 THEN 1 ELSE 0 END) AS `active_rule_count`,
+          SUM(CASE WHEN r.`is_required` = 1 THEN 1 ELSE 0 END) AS `required_rule_count`,
+          COUNT(c.`csv_exam_result_mapping_condition_id`) AS `condition_count`
+        FROM {qname(master_db())}.`csv_exam_result_mapping_rules` AS r
+        LEFT JOIN {qname(master_db())}.`csv_exam_result_mapping_conditions` AS c
+          ON c.`csv_exam_result_mapping_rule_id` = r.`csv_exam_result_mapping_rule_id`
+        WHERE r.`csv_format_version_id` = %s
+        GROUP BY r.`target_kind`, r.`target_resolution_type`, r.`selection_mode`
+        ORDER BY r.`target_kind`, r.`target_resolution_type`, r.`selection_mode`
+        """,
+        (csv_format_version_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, limit: int = 1000) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          r.`csv_exam_result_mapping_rule_id`,
+          r.`rule_key`,
+          r.`target_kind`,
+          r.`target_resolution_type`,
+          r.`selection_mode`,
+          r.`selection_group_code`,
+          r.`target_namecode`,
+          eim.`item_name` AS `target_item_name`,
+          eim.`category_name` AS `target_category_name`,
+          r.`target_identity_item_code`,
+          r.`target_field`,
+          r.`method_structure_type`,
+          r.`value_source_type`,
+          r.`fixed_value`,
+          r.`value_join_separator`,
+          r.`value_exclude_values`,
+          r.`raw_value_type`,
+          r.`raw_unit`,
+          r.`is_required`,
+          r.`priority`,
+          r.`note`,
+          r.`is_active`,
+          COUNT(c.`csv_exam_result_mapping_condition_id`) AS `condition_count`
+        FROM {qname(master_db())}.`csv_exam_result_mapping_rules` AS r
+        LEFT JOIN {qname(master_db())}.`csv_exam_result_mapping_conditions` AS c
+          ON c.`csv_exam_result_mapping_rule_id` = r.`csv_exam_result_mapping_rule_id`
+        LEFT JOIN {qname(dev_db())}.`exam_item_master` AS eim
+          ON eim.`namecode` = r.`target_namecode`
+        WHERE r.`csv_format_version_id` = %s
+        GROUP BY r.`csv_exam_result_mapping_rule_id`
+        ORDER BY r.`is_active` DESC, r.`priority`, r.`rule_key`
+        LIMIT %s
+        """,
+        (csv_format_version_id, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_csv_mapping_template_conditions(cur: Any, *, csv_format_version_id: int, limit: int = 2000) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          c.`csv_exam_result_mapping_condition_id`,
+          c.`csv_exam_result_mapping_rule_id`,
+          r.`rule_key`,
+          r.`target_kind`,
+          r.`target_namecode`,
+          r.`target_field`,
+          c.`condition_group_no`,
+          c.`condition_type`,
+          c.`locator_type`,
+          c.`header_context`,
+          c.`header_name`,
+          c.`header_occurrence`,
+          c.`column_no`,
+          c.`operator`,
+          c.`expected_value`,
+          c.`expected_value_normalized`,
+          c.`source_role`,
+          c.`priority`,
+          c.`note`,
+          c.`is_active`
+        FROM {qname(master_db())}.`csv_exam_result_mapping_conditions` AS c
+        JOIN {qname(master_db())}.`csv_exam_result_mapping_rules` AS r
+          ON r.`csv_exam_result_mapping_rule_id` = c.`csv_exam_result_mapping_rule_id`
+        WHERE r.`csv_format_version_id` = %s
+        ORDER BY r.`priority`, r.`rule_key`, c.`condition_group_no`, c.`priority`, c.`csv_exam_result_mapping_condition_id`
+        LIMIT %s
+        """,
+        (csv_format_version_id, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def source_mode_label(value: Any) -> str:
     labels = {
         "UNKNOWN": "未設定",
@@ -5030,6 +5374,11 @@ def load_subscriber_match_candidate_rows(
     candidate_filters = candidate_filters or {}
     if ledger is None and not query.strip() and not any(str(v or "").strip() for v in candidate_filters.values()):
         return []
+    subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
+    subscriber_name_full_expr = "s.name_kanji_full" if "name_kanji_full" in subscriber_columns else "s.name_full_match"
+    subscriber_select = lambda column, alias=None: (
+        f"s.{column} AS {alias or column}" if column in subscriber_columns else f"NULL AS {alias or column}"
+    )
     where_parts: list[str] = []
     filter_parts: list[str] = []
     params: list[Any] = []
@@ -5070,12 +5419,12 @@ def load_subscriber_match_candidate_rows(
             (
               s.hia_subscriber_id LIKE %s
               OR s.person_id_custom LIKE %s
-              OR s.name_kanji_full LIKE %s
+              OR {subscriber_name_full_expr} LIKE %s
               OR s.name_kana_full LIKE %s
               OR s.name_kana_full_match LIKE %s
               OR s.insurance_number LIKE %s
               OR s.insurance_number_match LIKE %s
-              OR s.employee_code LIKE %s
+              OR {("s.employee_code" if "employee_code" in subscriber_columns else "''")} LIKE %s
             )
             """
         )
@@ -5125,12 +5474,12 @@ def load_subscriber_match_candidate_rows(
           s.insurance_branchnumber,
           s.name_kana_full,
           s.name_kana_full_match,
-          s.name_kanji_full,
+          {subscriber_name_full_expr} AS name_kanji_full,
           s.birth,
           s.gender_code,
-          s.relationship_name,
-          s.qualification_lost_date,
-          s.employee_code,
+          {subscriber_select("relationship_name")},
+          {subscriber_select("qualification_lost_date")},
+          {subscriber_select("employee_code")},
           a.postal_code AS subscriber_postal_code,
           a.address_line AS subscriber_address_line,
           a.building AS subscriber_building,
@@ -5769,6 +6118,11 @@ def load_exam_export_case_rows(
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     where_sql, params = build_exam_export_case_where(filters)
+    subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
+    subscriber_name_full_expr = "s.name_kanji_full" if "name_kanji_full" in subscriber_columns else "s.name_full_match"
+    subscriber_select = lambda column, alias=None: (
+        f"s.{column} AS {alias or column}" if column in subscriber_columns else f"NULL AS {alias or column}"
+    )
     cur.execute(
         f"""
         SELECT
@@ -5809,18 +6163,18 @@ def load_exam_export_case_rows(
           s.birth AS subscriber_birth,
           s.gender_code AS subscriber_gender_code,
           s.name_kana_full AS subscriber_name_kana_full,
-          s.name_kanji_full AS subscriber_name_kanji_full,
+          {subscriber_name_full_expr} AS subscriber_name_kanji_full,
           s.person_id_custom AS subscriber_person_id_custom,
           s.hia_subscriber_id AS subscriber_hia_subscriber_id,
-          s.insured_attribute_name,
-          s.relationship_name,
-          s.qualification_acquired_date,
-          s.qualification_lost_date,
-          s.employer_code,
-          s.department_code,
-          s.distribution_code,
-          s.employee_code,
-          s.connect_id,
+          {subscriber_select("insured_attribute_name")},
+          {subscriber_select("relationship_name")},
+          {subscriber_select("qualification_acquired_date")},
+          {subscriber_select("qualification_lost_date")},
+          {subscriber_select("employer_code")},
+          {subscriber_select("department_code")},
+          {subscriber_select("distribution_code")},
+          {subscriber_select("employee_code")},
+          {subscriber_select("connect_id")},
           eec.source_mode,
           eec.case_status,
           eec.case_reason,
@@ -14466,6 +14820,90 @@ def admin_facility_master(request: Request) -> Response:
     )
 
 
+@app.get("/admin/csv-mapping-templates", response_class=HTMLResponse)
+def admin_csv_mapping_templates(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    keyword = request.query_params.get("q", "").strip()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            rows = load_csv_mapping_template_rows(cur, keyword=keyword, limit=1000)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_csv_mapping_templates.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "filters": {"q": keyword},
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.get("/admin/csv-mapping-templates/{csv_format_version_id}", response_class=HTMLResponse)
+def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if template:
+                summaries = load_csv_mapping_template_rule_summary(cur, csv_format_version_id=csv_format_version_id)
+                rules = load_csv_mapping_template_rules(cur, csv_format_version_id=csv_format_version_id)
+                conditions = load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
+            else:
+                summaries = []
+                rules = []
+                conditions = []
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if not template:
+        return templates.TemplateResponse(
+            "admin_csv_mapping_template_detail.html",
+            {
+                "request": request,
+                "user": user,
+                "template": None,
+                "summaries": [],
+                "rules": [],
+                "conditions": [],
+                "message": None,
+                "error": f"csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。",
+            },
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        "admin_csv_mapping_template_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "template": template,
+            "summaries": summaries,
+            "rules": rules,
+            "conditions": conditions,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
 @app.get("/admin/facilities/new", response_class=HTMLResponse)
 def new_admin_facility_form(request: Request) -> Response:
     user = require_user(request)
@@ -16338,6 +16776,64 @@ def audit_logs(request: Request) -> Response:
             "request": request,
             "user": user,
             "rows": rows,
+        },
+    )
+
+
+@app.get("/admin/error-logs", response_class=HTMLResponse)
+def admin_error_logs(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        rows = load_app_error_log_rows(cur)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_error_logs.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+        },
+    )
+
+
+@app.get("/admin/error-logs/{log_id}", response_class=HTMLResponse)
+def admin_error_log_detail(request: Request, log_id: str) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        row = load_app_error_log_detail(cur, log_id=log_id)
+        cur.close()
+    if not row:
+        return templates.TemplateResponse(
+            "admin_error_log_detail.html",
+            {
+                "request": request,
+                "user": user,
+                "row": None,
+                "error": f"{log_id} のエラーログが見つかりません。",
+            },
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        "admin_error_log_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "row": row,
+            "error": None,
         },
     )
 

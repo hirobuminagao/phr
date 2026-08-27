@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% set title = "エラーが発生しました" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Internal Error</p>
+    <h1>エラーが発生しました</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">HOME</a>
+    {% if user and "users.manage" in user.permissions %}
+    <a class="ghost-button" href="/admin/error-logs">エラー一覧</a>
+    {% endif %}
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel">
+    <h2>画面を表示できませんでした</h2>
+    <p class="subtle">詳細は管理者用のエラー一覧に記録されています。</p>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <span>ログID</span>
+        <strong>{{ log_id }}</strong>
+        <small>問い合わせや調査時はこのIDを使います。</small>
+      </div>
+    </div>
+    <div class="form-actions">
+      <a class="ghost-button" href="/">HOMEへ戻る</a>
+      {% if user and "users.manage" in user.permissions %}
+      <a class="primary-button" href="/admin/error-logs/{{ log_id }}">このエラーを見る</a>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% set title = "画面エラー詳細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1>画面エラー詳細</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/error-logs">一覧へ戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout">
+      <button class="ghost-button" type="submit">ログアウト</button>
+    </form>
+  </nav>
+</header>
+
+<main class="page">
+  {% if error %}
+  <section class="panel">
+    <p class="error-text">{{ error }}</p>
+  </section>
+  {% else %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>{{ row.log_id }}</h2>
+        <p class="subtle">{{ row.created_at }} / {{ row.method }} {{ row.path }}</p>
+      </div>
+      {% if row.resolved_at %}
+      <span class="status-pill status-ready">対応済み</span>
+      {% else %}
+      <span class="status-pill status-pending">未対応</span>
+      {% endif %}
+    </div>
+    <div class="metric-grid">
+      <div class="metric-card"><span>例外</span><strong>{{ row.exception_type }}</strong><small>{{ row.exception_message }}</small></div>
+      <div class="metric-card"><span>利用者</span><strong>{{ row.employee_no or "-" }}</strong><small>user_id {{ row.app_user_id or "-" }}</small></div>
+      <div class="metric-card"><span>IP</span><strong>{{ row.client_ip or "-" }}</strong><small>{{ row.user_agent or "" }}</small></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>リクエスト</h2>
+    <table class="data-table">
+      <tbody>
+        <tr><th>path</th><td>{{ row.path }}</td></tr>
+        <tr><th>query</th><td>{{ row.query_string or "" }}</td></tr>
+        <tr><th>status</th><td>{{ row.status_code }}</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>トレース</h2>
+    <pre class="log-pre">{{ row.traceback_text or "" }}</pre>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

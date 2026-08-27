@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% set title = "CSVマッピングテンプレート詳細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">CSV Mapping Template</p>
+    <h1>CSVマッピングテンプレート詳細</h1>
+    {% if template %}
+    <p class="subtle">{{ template.mapping_version }} / {{ template.exam_facility_display_name or template.exam_facility_name or "健診機関未設定" }}</p>
+    {% endif %}
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/csv-mapping-templates">一覧へ戻る</a>
+    <a class="ghost-button" href="/admin/folder-aliases">受領フォルダ管理</a>
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  {% if template %}
+  <section class="summary-grid csv-template-summary-grid">
+    <article class="summary-card">
+      <small>テンプレート</small>
+      <strong>{{ template.mapping_version }}</strong>
+      <span>{{ template.format_name or "-" }}</span>
+    </article>
+    <article class="summary-card">
+      <small>健診機関</small>
+      <strong>{{ template.exam_facility_display_name or template.exam_facility_name or "未設定" }}</strong>
+      <span>{{ template.exam_facility_code or "-" }} / 医療 {{ template.medical_institution_code or "-" }}</span>
+    </article>
+    <article class="summary-card">
+      <small>ヘッダー</small>
+      <strong>{{ template.header_structure_type }}</strong>
+      <span>{{ template.header_hash_status }} / {{ template.header_mismatch_policy }}</span>
+    </article>
+    <article class="summary-card">
+      <small>読込</small>
+      <strong>{{ template.character_encoding }}</strong>
+      <span>data {{ template.data_start_row_no }}行目〜 / delimiter {{ template.delimiter }}</span>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>基本設定</h2>
+        <p class="subtle">CSVフォーマットとしての読込設定です。</p>
+      </div>
+      <div class="button-row">
+        <span class="status-pill {{ 'status-ready' if template.is_active else 'status-muted' }}">{{ '有効' if template.is_active else '無効' }}</span>
+        {% if template.is_default_for_facility %}<span class="status-pill status-pending">施設default</span>{% endif %}
+      </div>
+    </div>
+    <div class="detail-grid">
+      <div><span>ID</span><strong>{{ template.csv_format_version_id }}</strong><small>facility {{ template.exam_facility_id }}</small></div>
+      <div><span>ヘッダーモード</span><strong>{{ template.header_mode }}</strong><small>{{ template.header_context_rule or "-" }}</small></div>
+      <div><span>有効期間</span><strong>{{ template.valid_from or "-" }}</strong><small>〜 {{ template.valid_to or "-" }}</small></div>
+      <div><span>文字コード</span><strong>{{ template.character_encoding }}</strong><small>{{ template.encoding_fallback_policy }}</small></div>
+      <div><span>重複行</span><strong>{{ template.duplicate_row_policy }}</strong><small>basic不足: {{ template.missing_basic_info_policy }}</small></div>
+      <div class="detail-grid-wide"><span>メモ</span><strong>{{ template.note or "-" }}</strong><small>更新 {{ template.updated_at }}</small></div>
+    </div>
+    {% if template.header_snapshot_json %}
+    <details class="run-result-card csv-template-json-preview">
+      <summary>
+        <strong>ヘッダースナップショット</strong>
+        <small>header_sha256 {{ template.header_sha256 or "-" }}</small>
+      </summary>
+      <pre>{{ template.header_snapshot_json }}</pre>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>ルール種別サマリ</h2>
+        <p class="subtle">target_kind / 解決方法ごとの件数です。</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>target</th>
+            <th>解決</th>
+            <th>選択</th>
+            <th>ルール</th>
+            <th>必須</th>
+            <th>条件</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for summary in summaries %}
+          <tr>
+            <td><strong>{{ summary.target_kind }}</strong></td>
+            <td>{{ summary.target_resolution_type }}</td>
+            <td>{{ summary.selection_mode }}</td>
+            <td>{{ summary.active_rule_count }} / {{ summary.rule_count }}</td>
+            <td>{{ summary.required_rule_count }}</td>
+            <td>{{ summary.condition_count }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty-state">ルールはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>ルール一覧</h2>
+        <p class="subtle">どの列を、どのledger項目または健診項目へ入れるかの定義です。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ rules|length }}件</span>
+    </div>
+    <div class="filter-card compact-filter">
+      <label>
+        <span>キーワード</span>
+        <input data-live-filter-input="#csv-template-rule-table" placeholder="rule_key / namecode / 項目名 / field">
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table id="csv-template-rule-table" class="data-table compact-table csv-template-rule-table" data-empty-message="一致するルールはありません。">
+        <thead>
+          <tr>
+            <th>rule</th>
+            <th>target</th>
+            <th>値</th>
+            <th>条件数</th>
+            <th>状態</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rule in rules %}
+          <tr data-filter-text="{{ rule.rule_key }} {{ rule.target_kind }} {{ rule.target_namecode or '' }} {{ rule.target_item_name or '' }} {{ rule.target_field or '' }} {{ rule.target_identity_item_code or '' }} {{ rule.note or '' }}">
+            <td>
+              <strong>{{ rule.rule_key }}</strong>
+              <small>ID {{ rule.csv_exam_result_mapping_rule_id }} / priority {{ rule.priority }}</small>
+            </td>
+            <td>
+              <span class="status-pill status-neutral">{{ rule.target_kind }}</span>
+              <strong>{{ rule.target_namecode or rule.target_field or rule.target_identity_item_code or "-" }}</strong>
+              {% if rule.target_item_name %}<small>{{ rule.target_item_name }} / {{ rule.target_category_name or "-" }}</small>{% endif %}
+              <small>{{ rule.target_resolution_type }} / {{ rule.selection_mode }}</small>
+            </td>
+            <td>
+              <strong>{{ rule.value_source_type }}</strong>
+              <small>raw {{ rule.raw_value_type or "-" }}{% if rule.raw_unit %} / {{ rule.raw_unit }}{% endif %}</small>
+              {% if rule.fixed_value %}<small>固定値: {{ rule.fixed_value }}</small>{% endif %}
+              {% if rule.value_exclude_values %}<small>除外: {{ rule.value_exclude_values }}</small>{% endif %}
+              {% if rule.note %}<small>{{ rule.note }}</small>{% endif %}
+            </td>
+            <td>{{ rule.condition_count }}</td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if rule.is_active else 'status-muted' }}">{{ '有効' if rule.is_active else '無効' }}</span>
+              {% if rule.is_required %}<span class="status-pill status-pending">必須</span>{% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty-state">ルールはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>条件一覧</h2>
+        <p class="subtle">ルールが参照するヘッダー名、列番号、値条件です。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ conditions|length }}件</span>
+    </div>
+    <div class="filter-card compact-filter">
+      <label>
+        <span>キーワード</span>
+        <input data-live-filter-input="#csv-template-condition-table" placeholder="ヘッダー / rule_key / 条件値">
+      </label>
+    </div>
+    <div class="table-wrap">
+      <table id="csv-template-condition-table" class="data-table compact-table csv-template-condition-table" data-empty-message="一致する条件はありません。">
+        <thead>
+          <tr>
+            <th>rule</th>
+            <th>条件</th>
+            <th>場所</th>
+            <th>期待値</th>
+            <th>状態</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for condition in conditions %}
+          <tr data-filter-text="{{ condition.rule_key }} {{ condition.condition_type }} {{ condition.locator_type or '' }} {{ condition.header_context or '' }} {{ condition.header_name or '' }} {{ condition.column_no or '' }} {{ condition.expected_value or '' }} {{ condition.expected_value_normalized or '' }} {{ condition.note or '' }}">
+            <td>
+              <strong>{{ condition.rule_key }}</strong>
+              <small>{{ condition.target_kind }} / {{ condition.target_namecode or condition.target_field or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ condition.condition_type }}</strong>
+              <small>group {{ condition.condition_group_no }} / priority {{ condition.priority }}</small>
+            </td>
+            <td>
+              <strong>{{ condition.header_name or ("列 " ~ condition.column_no if condition.column_no else "-") }}</strong>
+              <small>{{ condition.locator_type or "-" }} / {{ condition.source_role or "-" }}</small>
+              {% if condition.header_context %}<small>{{ condition.header_context }}</small>{% endif %}
+            </td>
+            <td>
+              <strong>{{ condition.operator or "-" }}</strong>
+              <small>{{ condition.expected_value or "-" }}</small>
+              {% if condition.expected_value_normalized %}<small>norm {{ condition.expected_value_normalized }}</small>{% endif %}
+              {% if condition.note %}<small>{{ condition.note }}</small>{% endif %}
+            </td>
+            <td><span class="status-pill {{ 'status-ready' if condition.is_active else 'status-muted' }}">{{ '有効' if condition.is_active else '無効' }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty-state">条件はありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
