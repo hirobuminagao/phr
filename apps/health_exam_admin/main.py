@@ -13539,21 +13539,21 @@ def load_exam_item_master_rows(cur: Any, filters: Mapping[str, str], *, limit: i
         like = f"%{keyword}%"
         where.append(
             """(
-              namecode LIKE %s
-              OR item_name LIKE %s
-              OR category_name LIKE %s
-              OR identity_item_code LIKE %s
-              OR identity_item_name LIKE %s
-              OR method_name LIKE %s
-              OR result_code_oid LIKE %s
-              OR notes LIKE %s
+              CONVERT(namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE %s
+              OR item_name COLLATE utf8mb4_unicode_ci LIKE %s
+              OR category_name COLLATE utf8mb4_unicode_ci LIKE %s
+              OR CONVERT(identity_item_code USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE %s
+              OR identity_item_name COLLATE utf8mb4_unicode_ci LIKE %s
+              OR method_name COLLATE utf8mb4_unicode_ci LIKE %s
+              OR CONVERT(result_code_oid USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE %s
+              OR notes COLLATE utf8mb4_unicode_ci LIKE %s
             )"""
         )
         params.extend([like] * 8)
 
     result_code_oid = str(filters.get("result_code_oid") or "").strip()
     if result_code_oid:
-        where.append("result_code_oid LIKE %s")
+        where.append("CONVERT(result_code_oid USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE %s")
         params.append(f"%{result_code_oid}%")
 
     xml_value_type = str(filters.get("xml_value_type") or "").strip().upper()
