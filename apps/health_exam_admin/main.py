@@ -4510,6 +4510,69 @@ def load_csv_mapping_template_conditions(cur: Any, *, csv_format_version_id: int
     return [dict(row) for row in cur.fetchall()]
 
 
+def build_csv_mapping_template_header_columns(
+    template: Mapping[str, Any],
+    conditions: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    snapshot_raw = template.get("header_snapshot_json")
+    if not snapshot_raw:
+        return []
+    if isinstance(snapshot_raw, str):
+        try:
+            snapshot = json.loads(snapshot_raw)
+        except json.JSONDecodeError:
+            return []
+    elif isinstance(snapshot_raw, Mapping):
+        snapshot = snapshot_raw
+    else:
+        return []
+
+    normalized_columns = snapshot.get("normalized_columns")
+    if not isinstance(normalized_columns, list):
+        return []
+
+    mapped_by_column: dict[int, list[str]] = {}
+    mapped_by_header: dict[tuple[str, str, int], list[str]] = {}
+    for condition in conditions:
+        if not condition.get("is_active"):
+            continue
+        rule_key = str(condition.get("rule_key") or "-")
+        column_no = _optional_int(condition.get("column_no"))
+        if column_no:
+            mapped_by_column.setdefault(column_no, []).append(rule_key)
+        header_name = str(condition.get("header_name") or "").strip()
+        if header_name:
+            header_context = str(condition.get("header_context") or "").strip()
+            occurrence = _optional_int(condition.get("header_occurrence")) or 1
+            mapped_by_header.setdefault((header_context, header_name, occurrence), []).append(rule_key)
+
+    rows: list[dict[str, Any]] = []
+    for column in normalized_columns:
+        if not isinstance(column, Mapping):
+            continue
+        column_no = _optional_int(column.get("column_no"))
+        if not column_no:
+            continue
+        context = str(column.get("context") or "").strip()
+        name = str(column.get("name") or column.get("header_name") or "").strip()
+        occurrence = _optional_int(column.get("occurrence")) or 1
+        mapped_rules = [
+            *mapped_by_column.get(column_no, []),
+            *mapped_by_header.get((context, name, occurrence), []),
+        ]
+        rows.append(
+            {
+                "column_no": column_no,
+                "context": context,
+                "name": name,
+                "occurrence": occurrence,
+                "mapped_rules": sorted(set(mapped_rules)),
+                "is_mapped": bool(mapped_rules),
+            }
+        )
+    return rows
+
+
 def source_mode_label(value: Any) -> str:
     labels = {
         "UNKNOWN": "未設定",
@@ -15050,10 +15113,12 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
                 summaries = load_csv_mapping_template_rule_summary(cur, csv_format_version_id=csv_format_version_id)
                 rules = load_csv_mapping_template_rules(cur, csv_format_version_id=csv_format_version_id)
                 conditions = load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
+                header_columns = build_csv_mapping_template_header_columns(template, conditions)
             else:
                 summaries = []
                 rules = []
                 conditions = []
+                header_columns = []
             conn.commit()
         except Exception:
             conn.rollback()
@@ -15082,6 +15147,9 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "summaries": summaries,
             "rules": rules,
             "conditions": conditions,
+            "header_columns": header_columns,
+            "mapped_header_count": sum(1 for column in header_columns if column.get("is_mapped")),
+            "unmapped_header_count": sum(1 for column in header_columns if not column.get("is_mapped")),
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },

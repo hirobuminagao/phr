@@ -42,11 +42,61 @@
       <strong>{{ template.character_encoding }}</strong>
       <span>data {{ template.data_start_row_no }}行目〜 / delimiter {{ template.delimiter }}</span>
     </article>
-  </section>
+	  </section>
 
-  <section class="panel">
-    <div class="section-heading">
-      <div>
+	  {% if header_columns %}
+	  <section class="panel">
+	    <div class="section-heading">
+	      <div>
+	        <h2>ヘッダー一覧</h2>
+	        <p class="subtle">テンプレートに保存されている全ヘッダーと、マッピング条件で使われているかを確認します。</p>
+	      </div>
+	      <div class="button-row">
+	        <span class="status-pill status-ready">使用 {{ mapped_header_count }}件</span>
+	        <span class="status-pill status-muted">未使用 {{ unmapped_header_count }}件</span>
+	      </div>
+	    </div>
+	    <div class="filter-card compact-filter">
+	      <label>
+	        <span>キーワード</span>
+	        <input data-live-filter-input="#csv-template-header-table" placeholder="列 / ヘッダー / context / rule">
+	      </label>
+	    </div>
+	    <div class="table-wrap">
+	      <table id="csv-template-header-table" class="data-table compact-table" data-empty-message="一致するヘッダーはありません。">
+	        <thead>
+	          <tr>
+	            <th>列</th>
+	            <th>ヘッダー</th>
+	            <th>context</th>
+	            <th>出現</th>
+	            <th>使用</th>
+	          </tr>
+	        </thead>
+	        <tbody>
+	          {% for column in header_columns %}
+	          <tr data-filter-text="{{ column.column_no }} {{ column.name }} {{ column.context }} {{ column.occurrence }} {{ column.mapped_rules|join(' ') }} {{ '使用' if column.is_mapped else '未使用' }}">
+	            <td><strong>{{ column.column_no }}</strong></td>
+	            <td><strong>{{ column.name or "-" }}</strong></td>
+	            <td>{{ column.context or "-" }}</td>
+	            <td>{{ column.occurrence }}</td>
+	            <td>
+	              <span class="status-pill {{ 'status-ready' if column.is_mapped else 'status-muted' }}">{{ '使用' if column.is_mapped else '未使用' }}</span>
+	              {% if column.mapped_rules %}
+	              <small>{{ column.mapped_rules|join(', ') }}</small>
+	              {% endif %}
+	            </td>
+	          </tr>
+	          {% endfor %}
+	        </tbody>
+	      </table>
+	    </div>
+	  </section>
+	  {% endif %}
+
+	  <section class="panel">
+	    <div class="section-heading">
+	      <div>
         <h2>基本設定</h2>
         <p class="subtle">CSVフォーマットとしての読込設定です。</p>
       </div>
