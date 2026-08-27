@@ -144,7 +144,7 @@
                     <label>
                       <span>健診機関ID/コード</span>
                       <div class="inline-picker-field">
-                        <input id="alias-facility-selector-{{ alias.alias_id }}" name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.exam_facility_id or '' }}" placeholder="健診機関コードを入力">
+                        <input id="alias-facility-selector-{{ alias.alias_id }}" name="exam_facility_selector" value="{{ alias.exam_facility_code or alias.medical_institution_code or alias.reservation_system_medical_institution_code or alias.exam_facility_id or '' }}" placeholder="健診機関コードを入力">
                         <button type="button" class="ghost-button" data-alias-facility-picker-open data-target-input="alias-facility-selector-{{ alias.alias_id }}" data-modal-open="alias-facility-picker-modal">候補から選ぶ</button>
                       </div>
                       <small>未確定を直す場合は、健診機関コードまたは候補から選択して更新します。</small>
@@ -250,13 +250,14 @@
           <thead>
             <tr>
               <th>健診機関</th>
+              <th>ID/コード</th>
               <th>所在地</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody data-alias-facility-results>
             <tr>
-              <td colspan="3">コードまたはキーワードで検索してください。</td>
+              <td colspan="4">コードまたはキーワードで検索してください。</td>
             </tr>
           </tbody>
         </table>

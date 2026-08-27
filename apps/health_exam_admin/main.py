@@ -4019,6 +4019,9 @@ def search_facility_master(request: Request) -> Response:
                     "exam_facility_id": row.get("exam_facility_id"),
                     "exam_facility_code": row.get("exam_facility_code"),
                     "medical_institution_code": row.get("medical_institution_code"),
+                    "reservation_system_medical_institution_code": row.get(
+                        "reservation_system_medical_institution_code"
+                    ),
                     "exam_facility_name": row.get("exam_facility_name"),
                     "exam_facility_display_name": row.get("exam_facility_display_name"),
                     "postal_code": row.get("postal_code"),
@@ -4046,6 +4049,8 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
           mfa.expected_source_mode,
           mfa.csv_format_version_id,
           ef.exam_facility_code,
+          ef.medical_institution_code,
+          ef.reservation_system_medical_institution_code,
           ef.exam_facility_name,
           ef.exam_facility_display_name,
           cfv.mapping_version AS csv_mapping_version,
@@ -5132,9 +5137,11 @@ def resolve_exam_facility_selector(cur: Any, selector: str | None) -> int | None
         SELECT exam_facility_id
         FROM {qname(master_db())}.exam_facilities
         WHERE exam_facility_code = %s
+           OR medical_institution_code = %s
+           OR reservation_system_medical_institution_code = %s
         LIMIT 1
         """,
-        (text,),
+        (text, text, text),
     )
     row = cur.fetchone()
     if row:
@@ -16117,6 +16124,18 @@ async def update_admin_folder_alias(request: Request, alias_id: int) -> Response
         cur = dict_cursor(conn)
         try:
             values = normalize_folder_alias_form(cur, form)
+            if values["exam_facility_id"] is None:
+                cur.execute(
+                    f"""
+                    SELECT exam_facility_id
+                    FROM {qname(master_db())}.medical_folder_aliases
+                    WHERE alias_id = %s
+                    LIMIT 1
+                    """,
+                    (alias_id,),
+                )
+                current_alias = cur.fetchone() or {}
+                values["exam_facility_id"] = current_alias.get("exam_facility_id")
             cur.execute(
                 f"""
                 UPDATE {qname(master_db())}.medical_folder_aliases
