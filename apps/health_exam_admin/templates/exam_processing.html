@@ -145,11 +145,11 @@
           {% for run in running_runs %}
           <tr>
             <td><a href="/exam-processing/runs/{{ run.run_id }}">run {{ run.run_id }}</a></td>
-            <td><strong>{{ run.phase }}</strong><small>{{ "dry-run" if run.dry_run else "本実行" }}</small></td>
+            <td><strong title="{{ run.phase }}">{{ run.phase }}</strong><small>{{ "dry-run" if run.dry_run else "本実行" }}</small></td>
             <td>{{ run.started_at }}</td>
             <td>{{ run.running_minutes or 0 }}分</td>
             <td>{{ run.rows_seen }} / 更新{{ run.rows_updated }} / 追加{{ run.rows_inserted }} / skip{{ run.rows_skipped }}</td>
-            <td><small>{{ run.notes or "" }}</small></td>
+            <td><small title="{{ run.notes or '' }}">{{ run.notes or "" }}</small></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -254,12 +254,12 @@
           {% for run in recent_runs %}
           <tr>
             <td><a href="/exam-processing/runs/{{ run.run_id }}">run {{ run.run_id }}</a></td>
-            <td><strong>{{ run.phase }}</strong><small>{{ "dry-run" if run.dry_run else "本実行" }}</small></td>
+            <td><strong title="{{ run.phase }}">{{ run.phase }}</strong><small>{{ "dry-run" if run.dry_run else "本実行" }}</small></td>
             <td><span class="status-pill {{ 'status-ready' if run.status == 'success' else 'status-danger' if run.status == 'failed' else 'status-pending' }}">{{ run.status }}</span></td>
             <td>{{ run.started_at }}</td>
             <td>{{ run.rows_seen }} / 更新{{ run.rows_updated }} / 追加{{ run.rows_inserted }} / skip{{ run.rows_skipped }}</td>
             <td>{{ run.errors }}</td>
-            <td><small>{{ run.notes or "" }}</small></td>
+            <td><small title="{{ run.notes or '' }}">{{ run.notes or "" }}</small></td>
           </tr>
           {% else %}
           <tr><td colspan="7" class="empty-state">実行履歴はまだありません。</td></tr>
