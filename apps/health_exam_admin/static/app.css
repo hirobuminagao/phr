@@ -6374,11 +6374,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-header-unmatched-drawer {
   position: sticky;
-  top: 132px;
+  top: 84px;
   width: auto;
   display: grid;
   gap: 10px;
-  max-height: calc(100vh - 156px);
+  max-height: calc(100vh - 110px);
   padding: 12px;
   overflow: auto;
   border: 1px solid #d7e2ef;
