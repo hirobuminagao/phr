@@ -4053,6 +4053,10 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
           ef.reservation_system_medical_institution_code,
           ef.exam_facility_name,
           ef.exam_facility_display_name,
+          ef_by_folder.exam_facility_id AS folder_code_exam_facility_id,
+          ef_by_folder.exam_facility_code AS folder_code_exam_facility_code,
+          ef_by_folder.medical_institution_code AS folder_code_medical_institution_code,
+          ef_by_folder.exam_facility_name AS folder_code_exam_facility_name,
           cfv.mapping_version AS csv_mapping_version,
           cfv.format_name AS csv_format_name,
           cfv.is_active AS csv_format_is_active,
@@ -4065,6 +4069,8 @@ def load_folder_alias_admin_rows(cur: Any, *, limit: int = 400) -> list[dict[str
         FROM {qname(master_db())}.medical_folder_aliases mfa
         LEFT JOIN {qname(master_db())}.exam_facilities ef
           ON ef.exam_facility_id = mfa.exam_facility_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef_by_folder
+          ON ef_by_folder.medical_institution_code = SUBSTRING_INDEX(mfa.src_folder_raw, '_', 1)
         LEFT JOIN {qname(master_db())}.csv_format_versions cfv
           ON cfv.csv_format_version_id = mfa.csv_format_version_id
         LEFT JOIN (

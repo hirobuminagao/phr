@@ -79,7 +79,7 @@
         </thead>
         <tbody>
           {% for alias in alias_rows %}
-          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.expected_source_mode_label }} {{ alias.csv_mapping_version }} {{ alias.csv_format_name }} {{ alias.receipt_source_mode_label }} {{ alias.note }}" data-event-id="{{ alias.event_id }}" data-source-kinds="{{ alias.source_mode_filter_tokens }}" data-csv-template="{{ 'HAS' if alias.csv_format_version_id else 'NONE' }}">
+          <tr data-filter-text="{{ alias.event_id }} {{ alias.event_name }} {{ alias.src_folder_raw }} {{ alias.dst_folder_norm }} {{ alias.exam_facility_id }} {{ alias.exam_facility_code }} {{ alias.medical_institution_code }} {{ alias.folder_code_exam_facility_id }} {{ alias.folder_code_exam_facility_code }} {{ alias.folder_code_medical_institution_code }} {{ alias.exam_facility_name }} {{ alias.exam_facility_display_name }} {{ alias.expected_source_mode_label }} {{ alias.csv_mapping_version }} {{ alias.csv_format_name }} {{ alias.receipt_source_mode_label }} {{ alias.note }}" data-event-id="{{ alias.event_id }}" data-source-kinds="{{ alias.source_mode_filter_tokens }}" data-csv-template="{{ 'HAS' if alias.csv_format_version_id else 'NONE' }}">
             <td>
               <strong>{{ alias.event_name or alias.event_id }}</strong>
               <small>event_id {{ alias.event_id }} / alias_id {{ alias.alias_id }}</small>
@@ -90,7 +90,15 @@
             </td>
             <td>
               <strong>{{ alias.exam_facility_display_name or alias.exam_facility_name or '未確定' }}</strong>
-              {% if alias.exam_facility_code %}<small>{{ alias.exam_facility_code }}</small>{% endif %}
+              <small>alias施設ID: {{ alias.exam_facility_id or '-' }}</small>
+              {% if alias.exam_facility_code or alias.medical_institution_code %}
+              <small>解決先: 内部ID {{ alias.exam_facility_id }} / 健診 {{ alias.exam_facility_code or '-' }} / 医療 {{ alias.medical_institution_code or '-' }}</small>
+              {% elif alias.folder_code_exam_facility_id %}
+              <small class="warning-text">未解決。フォルダコード候補: 内部ID {{ alias.folder_code_exam_facility_id }} / 健診 {{ alias.folder_code_exam_facility_code or '-' }} / 医療 {{ alias.folder_code_medical_institution_code or '-' }}</small>
+              <small>{{ alias.folder_code_exam_facility_name or '' }}</small>
+              {% else %}
+              <small class="warning-text">未解決。フォルダコード候補なし</small>
+              {% endif %}
               {% if alias.note %}<small>メモ: {{ alias.note }}</small>{% endif %}
             </td>
             <td>
