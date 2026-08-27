@@ -6954,7 +6954,12 @@ def load_exam_export_case_sources(cur: Any, *, exam_export_case_id: int) -> list
     return [dict(row) for row in cur.fetchall()]
 
 
-def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[dict[str, Any]]:
+def load_exam_export_case_values(
+    cur: Any,
+    *,
+    exam_export_case_id: int,
+    source_headers: Sequence[Mapping[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     cur.execute(
         f"""
         SELECT
@@ -7008,6 +7013,8 @@ def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[
           src.source_priority,
           src.source_exam_ledger_id,
           el.facility_name AS source_facility_name,
+          COALESCE(fr.file_name, el.xml_file_name, el.mapping_version) AS source_file_name,
+          fr.relative_path AS source_relative_path,
           COALESCE(eiv.namecode_display_name, eim.item_name, eiv.namecode) AS item_name
         FROM {qname(health_db())}.exam_export_case_sources AS src
         INNER JOIN {qname(health_db())}.exam_item_values AS eiv
@@ -7017,6 +7024,8 @@ def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[
           ON eim.namecode = eiv.namecode
         LEFT JOIN {qname(health_db())}.exam_ledgers AS el
           ON el.exam_ledger_id = src.source_exam_ledger_id
+        LEFT JOIN {qname(health_db())}.file_receipts AS fr
+          ON fr.id = src.file_receipt_id
         WHERE src.exam_export_case_id = %s
           AND src.source_status = 'ACTIVE'
           AND eiv.namecode IS NOT NULL
@@ -7053,9 +7062,38 @@ def load_exam_export_case_values(cur: Any, *, exam_export_case_id: int) -> list[
             adopted_candidate["source_type"] = adopted.get("adopted_source_type")
             adopted_candidate["source_exam_ledger_id"] = adopted.get("source_exam_ledger_id")
             candidates = [adopted_candidate, *candidates]
-        source_slots = candidates[:3]
-        while len(source_slots) < 3:
-            source_slots.append({})
+
+        source_slots: list[dict[str, Any]] = []
+        if source_headers:
+            for source in source_headers[:3]:
+                source_exam_ledger_id = source.get("source_exam_ledger_id")
+                matched = next(
+                    (
+                        candidate
+                        for candidate in candidates
+                        if str(candidate.get("source_exam_ledger_id") or "") == str(source_exam_ledger_id or "")
+                    ),
+                    None,
+                )
+                if matched:
+                    source_slots.append(matched)
+                else:
+                    source_slots.append(
+                        {
+                            "source_role": source.get("source_role"),
+                            "source_type": source.get("source_type"),
+                            "source_exam_ledger_id": source_exam_ledger_id,
+                            "source_file_name": source.get("file_name")
+                            or source.get("xml_file_name")
+                            or source.get("mapping_version"),
+                            "source_relative_path": source.get("relative_path"),
+                        }
+                    )
+        else:
+            source_slots = candidates[:3]
+            while len(source_slots) < 3:
+                source_slots.append({})
+
         for index, candidate in enumerate(source_slots, start=1):
             candidate["slot_no"] = index
             candidate["value_text"] = compact_value(candidate)
@@ -16267,7 +16305,14 @@ def exam_export_case_detail(request: Request, exam_export_case_id: int) -> Respo
                 conn.commit()
                 return RedirectResponse("/exam-export-cases?error=caseが見つかりません。", status_code=303)
             sources = load_exam_export_case_sources(cur, exam_export_case_id=exam_export_case_id)
-            values = load_exam_export_case_values(cur, exam_export_case_id=exam_export_case_id)
+            source_headers = sources[:3]
+            while len(source_headers) < 3:
+                source_headers.append({})
+            values = load_exam_export_case_values(
+                cur,
+                exam_export_case_id=exam_export_case_id,
+                source_headers=source_headers,
+            )
             placeholders = load_exam_export_case_placeholders(cur, exam_export_case_id=exam_export_case_id)
             check_rows = load_exam_export_case_check_rows(cur, exam_export_case_id=exam_export_case_id)
             basic_info_corrections = load_exam_case_basic_info_corrections(
@@ -16303,6 +16348,7 @@ def exam_export_case_detail(request: Request, exam_export_case_id: int) -> Respo
             "user": user,
             "case": case,
             "sources": sources,
+            "source_headers": source_headers,
             "values": values,
             "placeholders": placeholders,
             "check_rows": check_rows,

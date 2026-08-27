@@ -6268,26 +6268,37 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .case-value-compare-table th:nth-child(1),
 .case-value-compare-table td:nth-child(1) {
-  width: 20%;
+  width: 18%;
 }
 
 .case-value-compare-table th:nth-child(2),
-.case-value-compare-table td:nth-child(2),
+.case-value-compare-table td:nth-child(2) {
+  width: 16%;
+}
+
 .case-value-compare-table th:nth-child(3),
 .case-value-compare-table td:nth-child(3),
 .case-value-compare-table th:nth-child(4),
-.case-value-compare-table td:nth-child(4) {
-  width: 17%;
-}
-
+.case-value-compare-table td:nth-child(4),
 .case-value-compare-table th:nth-child(5),
 .case-value-compare-table td:nth-child(5) {
-  width: 16%;
+  width: 15%;
 }
 
 .case-value-compare-table th:nth-child(6),
 .case-value-compare-table td:nth-child(6) {
-  width: 13%;
+  width: 21%;
+}
+
+.case-source-head-title {
+  display: block;
+  font-weight: 900;
+  color: #1f2937;
+}
+
+.case-adopted-value-cell {
+  background: #fff7ed;
+  box-shadow: inset 4px 0 0 #f59e0b;
 }
 
 .adopted-source-cell {

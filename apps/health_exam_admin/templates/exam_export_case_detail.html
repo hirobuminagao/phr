@@ -330,10 +330,14 @@
         <thead>
           <tr>
             <th>項目</th>
-            <th>source 1</th>
-            <th>source 2</th>
-            <th>source 3</th>
             <th>採用</th>
+            {% for source in source_headers %}
+            <th>
+              <span class="case-source-head-title">source {{ loop.index }}</span>
+              <small>{{ source.source_type or "-" }}</small>
+              <small>{{ source.file_name or source.xml_file_name or source.mapping_version or "-" }}</small>
+            </th>
+            {% endfor %}
             <th>理由</th>
           </tr>
         </thead>
@@ -344,19 +348,20 @@
               <strong>{{ value.item_name or "項目名なし" }}</strong>
               <small>{{ value.namecode }} / occurrence {{ value.occurrence_no }}</small>
             </td>
-            {% for candidate in value.source_slots %}
-            <td class="{{ 'adopted-source-cell' if candidate.is_adopted else 'muted-source-cell' if not candidate.source_exam_item_value_id else '' }}">
-              <strong>{{ candidate.value_text or "-" }}</strong>
-              <small>{{ candidate.source_role or "-" }} / {{ candidate.source_type or "-" }}</small>
-              <small>ledger {{ candidate.source_exam_ledger_id or "-" }} / item {{ candidate.source_exam_item_value_id or "-" }}</small>
-              <small>{{ candidate.validation_status or "" }} {{ candidate.review_status or "" }}</small>
-            </td>
-            {% endfor %}
-            <td>
+            <td class="case-adopted-value-cell">
               <strong>{{ value.adopted_value_text }}</strong>
               <small>{{ value.code_value or value.normalized_unit or "-" }} {{ value.code_display or "" }} {{ value.normalized_unit or "" }}</small>
               <small>判定 {{ value.interpretation_code or "" }} {{ value.interpretation_name or "" }}</small>
             </td>
+            {% for candidate in value.source_slots %}
+            <td class="{{ 'adopted-source-cell' if candidate.is_adopted else 'muted-source-cell' if not candidate.source_exam_item_value_id else '' }}">
+              <strong>{{ candidate.value_text or "-" }}</strong>
+              <small>{{ candidate.source_role or "-" }} / {{ candidate.source_type or "-" }}</small>
+              <small>{{ candidate.source_file_name or "-" }}</small>
+              <small>ledger {{ candidate.source_exam_ledger_id or "-" }} / item {{ candidate.source_exam_item_value_id or "-" }}</small>
+              <small>{{ candidate.validation_status or "" }} {{ candidate.review_status or "" }}</small>
+            </td>
+            {% endfor %}
             <td>
               <strong>{{ value.adopted_source_role or "-" }}</strong>
               <small>{{ value.adopted_reason or "" }}</small>
@@ -364,7 +369,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="5">採用値はありません。</td>
+            <td colspan="6">採用値はありません。</td>
           </tr>
           {% endfor %}
         </tbody>
