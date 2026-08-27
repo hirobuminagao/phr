@@ -5818,6 +5818,35 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   grid-column: 1 / -1;
 }
 
+.definition-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.definition-list dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.definition-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.log-pre {
+  max-height: 320px;
+  margin: 8px 0 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
 .subscriber-match-workspace {
   display: grid;
   grid-template-columns: minmax(300px, 0.7fr) minmax(760px, 1.7fr);

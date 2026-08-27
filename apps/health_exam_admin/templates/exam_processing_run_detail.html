@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% set title = "実行履歴詳細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Exam Processing Log</p>
+    <h1>実行履歴詳細</h1>
+    <p class="subtle">処理実行ログと、紐づくエラーを確認します。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/exam-processing">処理実行へ戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}
+  <div class="alert alert-success">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  {% if run %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>run {{ run.run_id }}</h2>
+        <p class="subtle">{{ run.phase }} / {{ run.source or "-" }}</p>
+      </div>
+      <span class="status-pill {{ 'status-ready' if run.status == 'success' else 'status-danger' if run.status == 'failed' else 'status-pending' }}">{{ run.status }}</span>
+    </div>
+
+    <div class="summary-grid">
+      <article class="summary-card">
+        <small>実行モード</small>
+        <strong>{{ "dry-run" if run.dry_run else "本実行" }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>開始</small>
+        <strong>{{ run.started_at or "-" }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>終了</small>
+        <strong>{{ run.finished_at or "-" }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>DB</small>
+        <strong>{{ run.db_schema or "-" }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>ファイル</small>
+        <strong>{{ run.files }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>件数</small>
+        <strong>{{ run.rows_seen }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>追加</small>
+        <strong>{{ run.rows_inserted }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>更新</small>
+        <strong>{{ run.rows_updated }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>skip</small>
+        <strong>{{ run.rows_skipped }}</strong>
+      </article>
+      <article class="summary-card">
+        <small>エラー</small>
+        <strong>{{ run.errors }}</strong>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>入力とメモ</h2>
+        <p class="subtle">実行条件とスクリプト側の出力メモです。</p>
+      </div>
+    </div>
+    <div class="detail-grid two-columns">
+      <div>
+        <h3>入力</h3>
+        <dl class="definition-list">
+          <dt>input_base</dt>
+          <dd>{{ run.input_base or "-" }}</dd>
+          <dt>input_file</dt>
+          <dd>{{ run.input_file or "-" }}</dd>
+          <dt>db_path</dt>
+          <dd>{{ run.db_path or "-" }}</dd>
+          <dt>insurer_number</dt>
+          <dd>{{ run.insurer_number or "-" }}</dd>
+          <dt>limit</dt>
+          <dd>{{ run.limit_rows or "-" }}</dd>
+        </dl>
+      </div>
+      <div>
+        <h3>メモ</h3>
+        <pre class="log-pre">{{ run.notes or "(なし)" }}</pre>
+        {% if run.admin_note %}
+        <h3>管理メモ</h3>
+        <pre class="log-pre">{{ run.admin_note }}</pre>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>エラー詳細</h2>
+        <p class="subtle">このrunに紐づく `etl_errors` です。最大500件まで表示します。</p>
+      </div>
+      <span class="status-pill {{ 'status-danger' if errors else 'status-neutral' }}">{{ errors|length }}件</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>日時</th>
+            <th>対象</th>
+            <th>項目</th>
+            <th>エラー</th>
+            <th>値</th>
+            <th>メッセージ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in errors %}
+          <tr>
+            <td>{{ item.error_id }}</td>
+            <td>{{ item.created_at }}</td>
+            <td>
+              <strong>{{ item.src_file or item.source or "-" }}</strong>
+              <small>row {{ item.src_row_no or "-" }} / line {{ item.src_line_no or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ item.field or "-" }}</strong>
+              <small>{{ item.person_id_custom or "" }}</small>
+            </td>
+            <td><span class="status-pill status-danger">{{ item.error_code or "-" }}</span></td>
+            <td><small>{{ item.field_value or "-" }}</small></td>
+            <td><small>{{ item.message or "-" }}</small></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty-state">エラー詳細はありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

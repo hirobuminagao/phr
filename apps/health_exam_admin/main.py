@@ -8094,6 +8094,70 @@ def load_recent_exam_processing_runs(cur: Any, *, event_id: int, limit: int = 20
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_etl_run_detail(cur: Any, *, run_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          run_id,
+          phase,
+          source,
+          db_schema,
+          status,
+          started_at,
+          finished_at,
+          db_path,
+          input_base,
+          input_file,
+          insurer_number,
+          dry_run,
+          limit_rows,
+          files,
+          rows_seen,
+          rows_inserted,
+          rows_updated,
+          rows_unchanged,
+          rows_skipped,
+          errors,
+          notes,
+          admin_note
+        FROM {qname(health_db())}.etl_runs
+        WHERE run_id = %s
+        """,
+        (run_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_etl_run_errors(cur: Any, *, run_id: int, limit: int = 500) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          error_id,
+          run_id,
+          phase,
+          source,
+          insurer_number,
+          src_file,
+          src_row_no,
+          src_line_no,
+          staging_rowid,
+          person_id_custom,
+          field,
+          field_value,
+          error_code,
+          message,
+          created_at
+        FROM {qname(health_db())}.etl_errors
+        WHERE run_id = %s
+        ORDER BY created_at DESC, error_id DESC
+        LIMIT %s
+        """,
+        (run_id, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_running_exam_processing_runs(cur: Any, *, event_id: int, limit: int = 20) -> list[dict[str, Any]]:
     phases = tuple(dict.fromkeys(step["phase"] for step in EXAM_PROCESSING_STEPS))
     placeholders = ", ".join(["%s"] * len(phases))
@@ -11137,6 +11201,49 @@ def exam_processing(request: Request) -> Response:
             "running_runs": running_runs,
             "unknown_scan_folders": unknown_scan_folders,
             "results": [],
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.get("/exam-processing/runs/{run_id}", response_class=HTMLResponse)
+def exam_processing_run_detail(request: Request, run_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_run_exam_processing(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            run = load_etl_run_detail(cur, run_id=run_id)
+            errors = load_etl_run_errors(cur, run_id=run_id) if run else []
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if not run:
+        return templates.TemplateResponse(
+            "exam_processing_run_detail.html",
+            {
+                "request": request,
+                "user": user,
+                "run": None,
+                "errors": [],
+                "message": None,
+                "error": f"run_id={run_id} の実行履歴が見つかりません。",
+            },
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        "exam_processing_run_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "run": run,
+            "errors": errors,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },

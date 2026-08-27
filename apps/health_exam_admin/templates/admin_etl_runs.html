@@ -51,7 +51,7 @@
         <tbody>
           {% for run in running_runs %}
           <tr>
-            <td>{{ run.run_id }}</td>
+            <td><a href="/exam-processing/runs/{{ run.run_id }}">run {{ run.run_id }}</a></td>
             <td>
               <strong>{{ run.phase }}</strong>
               <small>{{ run.source or "-" }} / {{ "dry-run" if run.dry_run else "本実行" }}</small>
