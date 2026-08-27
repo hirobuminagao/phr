@@ -135,7 +135,7 @@
       <table class="data-table compact-table">
         <thead>
           <tr>
-            <th>target</th>
+            <th class="csv-template-target-head">target</th>
             <th>解決</th>
             <th>選択</th>
             <th>ルール</th>
@@ -181,20 +181,21 @@
           <tr>
             <th>rule</th>
             <th>target</th>
-            <th>値</th>
-            <th>指定方式</th>
-            <th>条件数</th>
+	            <th>値</th>
+	            <th>指定方式</th>
+	            <th>ルール内容</th>
+	            <th>条件数</th>
             <th>状態</th>
           </tr>
         </thead>
         <tbody>
           {% for rule in rules %}
-          <tr data-filter-text="{{ rule.rule_key }} {{ rule.target_kind }} {{ rule.target_namecode or '' }} {{ rule.target_item_name or '' }} {{ rule.target_field or '' }} {{ rule.target_identity_item_code or '' }} {{ rule.condition_header_names or '' }} {{ rule.condition_column_nos or '' }} {{ rule.note or '' }}">
+	          <tr data-filter-text="{{ rule.rule_key }} {{ rule.target_kind }} {{ rule.target_namecode or '' }} {{ rule.target_item_name or '' }} {{ rule.target_field or '' }} {{ rule.target_identity_item_code or '' }} {{ rule.condition_header_names or '' }} {{ rule.condition_column_nos or '' }} {{ rule.rule_content_summary or '' }} {{ rule.rule_condition_summary or '' }} {{ rule.note or '' }}">
             <td>
               <strong>{{ rule.rule_key }}</strong>
               <small>ID {{ rule.csv_exam_result_mapping_rule_id }} / priority {{ rule.priority }}</small>
             </td>
-            <td>
+            <td class="csv-template-target-cell">
               <span class="status-pill status-neutral">{{ rule.target_kind }}</span>
               <strong>{{ rule.target_namecode or rule.target_field or rule.target_identity_item_code or "-" }}</strong>
               {% if rule.target_item_name %}<small>{{ rule.target_item_name }} / {{ rule.target_category_name or "-" }}</small>{% endif %}
@@ -207,19 +208,23 @@
               {% if rule.value_exclude_values %}<small>除外: {{ rule.value_exclude_values }}</small>{% endif %}
               {% if rule.note %}<small>{{ rule.note }}</small>{% endif %}
             </td>
-            <td>
-              <strong>{{ rule.locator_summary }}</strong>
-              <small title="{{ rule.condition_header_names or '' }}">ヘッダー: {{ rule.condition_header_names or "-" }}</small>
-              <small title="{{ rule.condition_column_nos or '' }}">CSV列番: {{ rule.condition_column_nos or "-" }}</small>
-            </td>
-            <td>{{ rule.condition_count }}</td>
+	            <td>
+	              <strong class="csv-template-header-primary" title="{{ rule.value_condition_summary or rule.condition_header_names or '' }}">{{ rule.value_condition_summary or rule.condition_header_names or "-" }}</strong>
+	              <small>参照方法: {{ rule.locator_summary }}</small>
+	              <small title="{{ rule.condition_column_nos or '' }}">CSV列番: {{ rule.condition_column_nos or "-" }}</small>
+	            </td>
+	            <td>
+	              <strong>{{ rule.rule_content_summary or "-" }}</strong>
+	              <small title="{{ rule.rule_condition_summary or '' }}">{{ rule.rule_condition_summary or "-" }}</small>
+	            </td>
+	            <td>{{ rule.condition_count }}</td>
             <td>
               <span class="status-pill {{ 'status-ready' if rule.is_active else 'status-muted' }}">{{ '有効' if rule.is_active else '無効' }}</span>
               {% if rule.is_required %}<span class="status-pill status-pending">必須</span>{% endif %}
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="empty-state">ルールはありません。</td></tr>
+	          <tr><td colspan="7" class="empty-state">ルールはありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>

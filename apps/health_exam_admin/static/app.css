@@ -6660,6 +6660,35 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   width: 190px;
 }
 
+.csv-template-rule-table {
+  min-width: 1500px;
+}
+
+.csv-template-rule-table .csv-template-target-head,
+.csv-template-rule-table .csv-template-target-cell {
+  min-width: 310px;
+}
+
+.csv-template-rule-table .csv-template-target-cell {
+  white-space: nowrap;
+}
+
+.csv-template-rule-table .csv-template-target-cell strong,
+.csv-template-rule-table .csv-template-target-cell small {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.csv-template-header-primary {
+  display: block;
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1560px) {
   .home-menu-grid,
   .home-menu-grid.is-compact {

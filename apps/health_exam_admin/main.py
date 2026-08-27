@@ -4546,6 +4546,132 @@ def csv_mapping_locator_summary(row: Mapping[str, Any]) -> str:
     return " / ".join(parts) or "-"
 
 
+def csv_mapping_condition_locator_text(condition: Mapping[str, Any]) -> str:
+    header_name = str(condition.get("header_name") or "").strip()
+    column_no = condition.get("column_no")
+    if header_name and column_no:
+        return f"{header_name}（CSV列{column_no}）"
+    if header_name:
+        return header_name
+    if column_no:
+        return f"CSV列{column_no}"
+    return "-"
+
+
+def csv_mapping_selection_mode_label(selection_mode: Any) -> str:
+    value = str(selection_mode or "").strip().upper()
+    labels = {
+        "DIRECT": "単一ルール",
+        "EXCLUSIVE_ONE": "候補のいずれか1つ",
+        "MULTI_ENTRY": "複数entry作成",
+    }
+    return labels.get(value, value or "-")
+
+
+def csv_mapping_source_role_label(source_role: Any) -> str:
+    value = str(source_role or "VALUE").strip().upper()
+    labels = {
+        "VALUE": "値",
+        "LOWER_LIMIT": "下限",
+        "UPPER_LIMIT": "上限",
+        "JUDGEMENT": "判定",
+        "METHOD": "方式",
+        "QUALIFIER": "補助条件",
+    }
+    return labels.get(value, value or "-")
+
+
+def csv_mapping_operator_label(operator: Any) -> str:
+    value = str(operator or "").strip().upper()
+    labels = {
+        "PRESENT": "存在",
+        "NOT_EMPTY": "空でない",
+        "EMPTY": "空",
+        "EQUALS": "=",
+        "NOT_EQUALS": "!=",
+        "IN": "いずれか",
+        "NOT_IN": "含まない",
+    }
+    return labels.get(value, value or "-")
+
+
+def enrich_csv_mapping_template_rules_with_conditions(
+    rules: list[dict[str, Any]],
+    conditions: list[Mapping[str, Any]],
+) -> None:
+    conditions_by_rule_id: dict[int, list[Mapping[str, Any]]] = {}
+    for condition in conditions:
+        rule_id = _optional_int(condition.get("csv_exam_result_mapping_rule_id"))
+        if rule_id:
+            conditions_by_rule_id.setdefault(rule_id, []).append(condition)
+
+    for rule in rules:
+        rule_id = _optional_int(rule.get("csv_exam_result_mapping_rule_id"))
+        rule_conditions = conditions_by_rule_id.get(rule_id or 0, [])
+        groups: dict[int, list[Mapping[str, Any]]] = {}
+        for condition in rule_conditions:
+            groups.setdefault(_optional_int(condition.get("condition_group_no")) or 1, []).append(condition)
+
+        value_conditions = [
+            condition
+            for condition in rule_conditions
+            if str(condition.get("source_role") or "VALUE").upper() == "VALUE"
+            and str(condition.get("condition_type") or "").upper() == "HEADER_MATCH"
+        ]
+        role_labels = sorted(
+            {
+                csv_mapping_source_role_label(condition.get("source_role"))
+                for condition in rule_conditions
+            }
+        )
+        detail_parts: list[str] = [csv_mapping_selection_mode_label(rule.get("selection_mode"))]
+        if str(rule.get("value_source_type") or "").upper() == "FIXED":
+            detail_parts.append(f"固定値: {rule.get('fixed_value') or '-'}")
+        elif len(value_conditions) > 1:
+            separator = rule.get("value_join_separator")
+            detail_parts.append(f"値列{len(value_conditions)}列を結合")
+            detail_parts.append(f"区切り: {separator if separator is not None else '未設定'}")
+        elif len(value_conditions) == 1:
+            detail_parts.append("値列1列")
+        else:
+            detail_parts.append("値列なし")
+
+        if len(groups) > 1:
+            detail_parts.append(f"{len(groups)}パターンのいずれか")
+        elif groups:
+            condition_count = len(next(iter(groups.values())))
+            detail_parts.append("条件なし" if condition_count <= 1 else f"{condition_count}条件AND")
+        if role_labels:
+            detail_parts.append("役割: " + " / ".join(role_labels))
+
+        group_summaries: list[str] = []
+        for group_no in sorted(groups):
+            group_conditions = sorted(
+                groups[group_no],
+                key=lambda condition: (
+                    _optional_int(condition.get("priority")) or 0,
+                    _optional_int(condition.get("csv_exam_result_mapping_condition_id")) or 0,
+                ),
+            )
+            condition_texts: list[str] = []
+            for condition in group_conditions:
+                source_role = csv_mapping_source_role_label(condition.get("source_role"))
+                locator = csv_mapping_condition_locator_text(condition)
+                operator = csv_mapping_operator_label(condition.get("operator"))
+                expected = str(condition.get("expected_value") or "").strip()
+                if expected:
+                    condition_texts.append(f"{source_role}:{locator} {operator} {expected}")
+                else:
+                    condition_texts.append(f"{source_role}:{locator} {operator}")
+            group_summaries.append(f"group {group_no}: " + " AND ".join(condition_texts))
+
+        rule["rule_content_summary"] = " / ".join(detail_parts)
+        rule["rule_condition_summary"] = " OR ".join(group_summaries) or "-"
+        rule["value_condition_summary"] = " / ".join(
+            csv_mapping_condition_locator_text(condition) for condition in value_conditions
+        )
+
+
 def build_csv_mapping_template_header_columns(
     template: Mapping[str, Any],
     conditions: list[Mapping[str, Any]],
@@ -15149,6 +15275,7 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
                 summaries = load_csv_mapping_template_rule_summary(cur, csv_format_version_id=csv_format_version_id)
                 rules = load_csv_mapping_template_rules(cur, csv_format_version_id=csv_format_version_id)
                 conditions = load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
+                enrich_csv_mapping_template_rules_with_conditions(rules, conditions)
                 header_columns = build_csv_mapping_template_header_columns(template, conditions)
             else:
                 summaries = []
