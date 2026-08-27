@@ -182,6 +182,7 @@
             <th>rule</th>
             <th>target</th>
             <th>値</th>
+            <th>指定方式</th>
             <th>条件数</th>
             <th>状態</th>
           </tr>
@@ -206,6 +207,10 @@
               {% if rule.value_exclude_values %}<small>除外: {{ rule.value_exclude_values }}</small>{% endif %}
               {% if rule.note %}<small>{{ rule.note }}</small>{% endif %}
             </td>
+            <td>
+              <strong>{{ rule.locator_summary }}</strong>
+              <small>ヘッダー名 / CSV列番 / 両方</small>
+            </td>
             <td>{{ rule.condition_count }}</td>
             <td>
               <span class="status-pill {{ 'status-ready' if rule.is_active else 'status-muted' }}">{{ '有効' if rule.is_active else '無効' }}</span>
@@ -213,7 +218,7 @@
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="5" class="empty-state">ルールはありません。</td></tr>
+          <tr><td colspan="6" class="empty-state">ルールはありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -231,7 +236,7 @@
     <div class="filter-card compact-filter">
       <label>
         <span>キーワード</span>
-        <input data-live-filter-input="#csv-template-condition-table" placeholder="ヘッダー / rule_key / 条件値">
+        <input data-live-filter-input="#csv-template-condition-table" placeholder="指定方式 / ヘッダー / CSV列番 / rule_key / 条件値">
       </label>
     </div>
     <div class="table-wrap">
@@ -240,6 +245,7 @@
           <tr>
             <th>rule</th>
             <th>条件</th>
+            <th>指定方式</th>
             <th>CSV列番</th>
             <th>場所</th>
             <th>期待値</th>
@@ -248,7 +254,7 @@
         </thead>
         <tbody>
           {% for condition in conditions %}
-          <tr data-filter-text="{{ condition.rule_key }} {{ condition.condition_type }} {{ condition.locator_type or '' }} {{ condition.header_context or '' }} {{ condition.header_name or '' }} {{ condition.column_no or '' }} {{ condition.expected_value or '' }} {{ condition.expected_value_normalized or '' }} {{ condition.note or '' }}">
+          <tr data-filter-text="{{ condition.rule_key }} {{ condition.condition_type }} {{ condition.locator_type or '' }} {{ condition.locator_type_label or '' }} {{ condition.header_context or '' }} {{ condition.header_name or '' }} {{ condition.column_no or '' }} {{ condition.expected_value or '' }} {{ condition.expected_value_normalized or '' }} {{ condition.note or '' }}">
             <td>
               <strong>{{ condition.rule_key }}</strong>
               <small>{{ condition.target_kind }} / {{ condition.target_namecode or condition.target_field or "-" }}</small>
@@ -256,6 +262,10 @@
             <td>
               <strong>{{ condition.condition_type }}</strong>
               <small>group {{ condition.condition_group_no }} / priority {{ condition.priority }}</small>
+            </td>
+            <td>
+              <strong>{{ condition.locator_type_label }}</strong>
+              <small>{{ condition.locator_type or "-" }}</small>
             </td>
             <td><strong>{{ condition.column_no or "-" }}</strong></td>
             <td>
@@ -272,7 +282,7 @@
             <td><span class="status-pill {{ 'status-ready' if condition.is_active else 'status-muted' }}">{{ '有効' if condition.is_active else '無効' }}</span></td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="empty-state">条件はありません。</td></tr>
+          <tr><td colspan="7" class="empty-state">条件はありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>

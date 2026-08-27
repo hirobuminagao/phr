@@ -4458,7 +4458,10 @@ def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, lim
           r.`priority`,
           r.`note`,
           r.`is_active`,
-          COUNT(c.`csv_exam_result_mapping_condition_id`) AS `condition_count`
+          COUNT(c.`csv_exam_result_mapping_condition_id`) AS `condition_count`,
+          SUM(CASE WHEN c.`locator_type` IN ('HEADER_NAME', 'HEADER_CONTEXT_AND_NAME') THEN 1 ELSE 0 END) AS `header_name_condition_count`,
+          SUM(CASE WHEN c.`locator_type` = 'COLUMN_NO' THEN 1 ELSE 0 END) AS `column_no_condition_count`,
+          SUM(CASE WHEN c.`locator_type` = 'HEADER_AND_COLUMN' THEN 1 ELSE 0 END) AS `header_and_column_condition_count`
         FROM {qname(master_db())}.`csv_exam_result_mapping_rules` AS r
         LEFT JOIN {qname(master_db())}.`csv_exam_result_mapping_conditions` AS c
           ON c.`csv_exam_result_mapping_rule_id` = r.`csv_exam_result_mapping_rule_id`
@@ -4471,7 +4474,10 @@ def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, lim
         """,
         (csv_format_version_id, limit),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["locator_summary"] = csv_mapping_locator_summary(row)
+    return rows
 
 
 def load_csv_mapping_template_conditions(cur: Any, *, csv_format_version_id: int, limit: int = 2000) -> list[dict[str, Any]]:
@@ -4507,7 +4513,35 @@ def load_csv_mapping_template_conditions(cur: Any, *, csv_format_version_id: int
         """,
         (csv_format_version_id, limit),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["locator_type_label"] = csv_mapping_locator_type_label(row.get("locator_type"))
+    return rows
+
+
+def csv_mapping_locator_type_label(locator_type: Any) -> str:
+    value = str(locator_type or "").strip().upper()
+    labels = {
+        "HEADER_NAME": "ヘッダー名",
+        "HEADER_CONTEXT_AND_NAME": "context+ヘッダー",
+        "COLUMN_NO": "CSV列番",
+        "HEADER_AND_COLUMN": "ヘッダー+列番",
+    }
+    return labels.get(value, value or "-")
+
+
+def csv_mapping_locator_summary(row: Mapping[str, Any]) -> str:
+    parts: list[str] = []
+    header_name_count = int(row.get("header_name_condition_count") or 0)
+    column_no_count = int(row.get("column_no_condition_count") or 0)
+    header_and_column_count = int(row.get("header_and_column_condition_count") or 0)
+    if header_name_count:
+        parts.append(f"ヘッダー名 {header_name_count}")
+    if column_no_count:
+        parts.append(f"CSV列番 {column_no_count}")
+    if header_and_column_count:
+        parts.append(f"両方 {header_and_column_count}")
+    return " / ".join(parts) or "-"
 
 
 def build_csv_mapping_template_header_columns(
