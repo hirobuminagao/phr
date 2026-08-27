@@ -60,7 +60,7 @@
         <tbody>
           <tr>
             <td><strong>ルートフォルダ名</strong></td>
-            <td>健診機関コード_保険者番号_作成日8桁+分割連番_1</td>
+            <td>健診機関コード_保険者番号_作成日8桁+同日分割送信回数_実施区分</td>
             <td>0110119070_06139463_202608270_1</td>
           </tr>
           <tr>
@@ -70,13 +70,69 @@
           </tr>
           <tr>
             <td><strong>個人XML名</strong></td>
-            <td>h + 健診機関コード + 作成日8桁 + 分割連番 + 1 + 6桁連番 + .xml</td>
+            <td>h + 健診機関コード + 作成日8桁 + 同日分割送信回数 + 種別 + 6桁連番 + .xml</td>
             <td>h01101190702026082701000001.xml</td>
           </tr>
           <tr>
             <td><strong>ix08</strong></td>
             <td>ルートフォルダ直下に `ix08_V08.xml` を置く</td>
             <td>0110119070_06139463_202608270_1/ix08_V08.xml</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-panel stacked-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>構成項目</th>
+            <th>種類</th>
+            <th>桁数</th>
+            <th>このシステムでの扱い</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>提出元健診機関番号</strong></td>
+            <td>健診機関コード</td>
+            <td>10桁</td>
+            <td>健診機関マスタのコードを使用します。</td>
+          </tr>
+          <tr>
+            <td><strong>提出先保険者番号</strong></td>
+            <td>保険者番号</td>
+            <td>8桁</td>
+            <td>出力対象者の保険者番号を使用します。</td>
+          </tr>
+          <tr>
+            <td><strong>提出年月日</strong></td>
+            <td>作成日</td>
+            <td>8桁</td>
+            <td>`YYYYMMDD` 形式です。</td>
+          </tr>
+          <tr>
+            <td><strong>同日分割送信回数</strong></td>
+            <td>同じ提出元・提出先・提出日の送信回数</td>
+            <td>1桁</td>
+            <td>`0` から `9`。初回は `0`、同日に分割・再送する場合は順に増やします。</td>
+          </tr>
+          <tr>
+            <td><strong>実施区分</strong></td>
+            <td>提出データの種類</td>
+            <td>1桁</td>
+            <td>今回のXML出力では、特定健診情報を表す `1` 固定です。</td>
+          </tr>
+          <tr>
+            <td><strong>個人XMLの種別</strong></td>
+            <td>個人XMLファイル名内のデータ種別</td>
+            <td>1桁</td>
+            <td>今回のXML出力では、実施区分と同じく `1` 固定です。</td>
+          </tr>
+          <tr>
+            <td><strong>個人XMLの連番</strong></td>
+            <td>ZIP内の個人XML順序</td>
+            <td>6桁</td>
+            <td>`000001` から始めて、ZIP内で重複しないようにします。</td>
           </tr>
         </tbody>
       </table>
