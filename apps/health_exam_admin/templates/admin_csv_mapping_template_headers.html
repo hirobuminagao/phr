@@ -72,10 +72,11 @@
         <p class="subtle">{{ compare_result.file_name }} / {{ compare_result.encoding }} / header_sha256 {{ compare_result.header_sha256 }}</p>
       </div>
       <div class="button-row">
-        <span class="status-pill status-ready">一致 {{ compare_result.matched_count }}件</span>
-        <span class="status-pill status-pending">列番のみ {{ compare_result.column_only_count }}件</span>
-        <span class="status-pill status-danger">追加 {{ compare_result.upload_only_count }}件</span>
-        <span class="status-pill status-muted">欠落 {{ compare_result.registered_only_count }}件</span>
+        <button type="button" class="csv-header-status-filter status-ready" data-header-status-filter="MATCH">一致 {{ compare_result.matched_count }}件</button>
+        <button type="button" class="csv-header-status-filter status-pending" data-header-status-filter="COLUMN_ONLY">列番のみ {{ compare_result.column_only_count }}件</button>
+        <button type="button" class="csv-header-status-filter status-danger" data-header-status-filter="UPLOAD_ONLY">追加 {{ compare_result.upload_only_count }}件</button>
+        <button type="button" class="csv-header-status-filter status-muted" data-header-status-filter="REGISTERED_ONLY">欠落 {{ compare_result.registered_only_count }}件</button>
+        <button type="button" class="csv-header-status-filter status-neutral is-active" data-header-status-filter="">全件</button>
       </div>
     </div>
     <div class="filter-card compact-filter">
@@ -88,7 +89,7 @@
       {% for row in compare_result.rows %}
       {% set uploaded = row.uploaded %}
       {% set registered = row.registered %}
-      <article class="csv-header-compare-card status-{{ row.status|lower }}" data-header-align-row data-filter-text="{{ row.status }} {{ row.match_type }} {% if uploaded %}{{ uploaded.column_no }} {{ uploaded.name }} {{ uploaded.context }} {{ uploaded.context_summary }}{% endif %} {% if registered %}{{ registered.column_no }} {{ registered.name or registered.header_name }} {{ registered.context or registered.header_context }} {{ registered.context_summary }}{% endif %}">
+      <article class="csv-header-compare-card status-{{ row.status|lower }}" data-header-align-row data-header-status="{{ row.status }}" data-filter-text="{{ row.status }} {{ row.match_type }} {% if uploaded %}{{ uploaded.column_no }} {{ uploaded.name }} {{ uploaded.context }} {{ uploaded.context_summary }}{% endif %} {% if registered %}{{ registered.column_no }} {{ registered.name or registered.header_name }} {{ registered.context or registered.header_context }} {{ registered.context_summary }}{% endif %}">
         <div class="csv-header-compare-status">
           <span class="status-pill {{ 'status-ready' if row.status == 'MATCH' else 'status-pending' if row.status == 'COLUMN_ONLY' else 'status-danger' if row.status == 'UPLOAD_ONLY' else 'status-muted' }}">
             {{ '一致' if row.status == 'MATCH' else '列番のみ' if row.status == 'COLUMN_ONLY' else 'アップロードのみ' if row.status == 'UPLOAD_ONLY' else '基準のみ' }}
@@ -206,9 +207,33 @@
 
   let draggedCard = null;
   let activePickerRow = null;
+  let activeStatusFilter = "";
   const pickerModal = document.getElementById("csv-header-picker-modal");
   const pickerTarget = pickerModal ? pickerModal.querySelector("[data-header-picker-target]") : null;
   const pickerFilter = pickerModal ? pickerModal.querySelector("[data-header-picker-filter]") : null;
+  const keywordInput = document.querySelector('[data-live-filter-input="#csv-header-compare-list"]');
+  const statusFilterButtons = Array.from(document.querySelectorAll("[data-header-status-filter]"));
+
+  const applyCompareFilters = () => {
+    const keyword = (keywordInput?.value || "").trim().toLowerCase();
+    for (const row of list.querySelectorAll("[data-header-align-row]")) {
+      const statusOk = !activeStatusFilter || row.dataset.headerStatus === activeStatusFilter;
+      const text = (row.dataset.filterText || row.textContent || "").toLowerCase();
+      const keywordOk = !keyword || text.includes(keyword);
+      row.hidden = !(statusOk && keywordOk);
+    }
+  };
+
+  for (const button of statusFilterButtons) {
+    button.addEventListener("click", () => {
+      activeStatusFilter = button.dataset.headerStatusFilter || "";
+      for (const other of statusFilterButtons) other.classList.toggle("is-active", other === button);
+      applyCompareFilters();
+    });
+  }
+
+  keywordInput?.addEventListener("input", applyCompareFilters);
+  applyCompareFilters();
 
   const syncSlot = (slot) => {
     const card = slot.querySelector("[data-upload-column]");

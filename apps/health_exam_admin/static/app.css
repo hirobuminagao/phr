@@ -6420,6 +6420,54 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   font-weight: 800;
 }
 
+.csv-header-side span,
+.csv-header-upload-card span,
+.csv-header-upload-empty,
+.csv-header-picker-card span {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.csv-header-status-filter {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: #1f2937;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.csv-header-status-filter.status-ready {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.csv-header-status-filter.status-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.csv-header-status-filter.status-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.csv-header-status-filter.status-muted,
+.csv-header-status-filter.status-neutral {
+  background: #eef2f7;
+  color: #607086;
+}
+
+.csv-header-status-filter:hover,
+.csv-header-status-filter:focus-visible,
+.csv-header-status-filter.is-active {
+  border-color: currentColor;
+  box-shadow: 0 0 0 3px rgba(20, 132, 95, 0.14);
+  outline: none;
+}
+
 .csv-header-manual-match label {
   display: grid;
   gap: 6px;
