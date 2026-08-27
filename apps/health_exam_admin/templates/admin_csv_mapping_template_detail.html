@@ -189,7 +189,7 @@
         </thead>
         <tbody>
           {% for rule in rules %}
-          <tr data-filter-text="{{ rule.rule_key }} {{ rule.target_kind }} {{ rule.target_namecode or '' }} {{ rule.target_item_name or '' }} {{ rule.target_field or '' }} {{ rule.target_identity_item_code or '' }} {{ rule.note or '' }}">
+          <tr data-filter-text="{{ rule.rule_key }} {{ rule.target_kind }} {{ rule.target_namecode or '' }} {{ rule.target_item_name or '' }} {{ rule.target_field or '' }} {{ rule.target_identity_item_code or '' }} {{ rule.condition_header_names or '' }} {{ rule.condition_column_nos or '' }} {{ rule.note or '' }}">
             <td>
               <strong>{{ rule.rule_key }}</strong>
               <small>ID {{ rule.csv_exam_result_mapping_rule_id }} / priority {{ rule.priority }}</small>
@@ -209,7 +209,8 @@
             </td>
             <td>
               <strong>{{ rule.locator_summary }}</strong>
-              <small>ヘッダー名 / CSV列番 / 両方</small>
+              <small title="{{ rule.condition_header_names or '' }}">ヘッダー: {{ rule.condition_header_names or "-" }}</small>
+              <small title="{{ rule.condition_column_nos or '' }}">CSV列番: {{ rule.condition_column_nos or "-" }}</small>
             </td>
             <td>{{ rule.condition_count }}</td>
             <td>

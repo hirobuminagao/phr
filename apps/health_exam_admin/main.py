@@ -4461,7 +4461,9 @@ def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, lim
           COUNT(c.`csv_exam_result_mapping_condition_id`) AS `condition_count`,
           SUM(CASE WHEN c.`locator_type` IN ('HEADER_NAME', 'HEADER_CONTEXT_AND_NAME') THEN 1 ELSE 0 END) AS `header_name_condition_count`,
           SUM(CASE WHEN c.`locator_type` = 'COLUMN_NO' THEN 1 ELSE 0 END) AS `column_no_condition_count`,
-          SUM(CASE WHEN c.`locator_type` = 'HEADER_AND_COLUMN' THEN 1 ELSE 0 END) AS `header_and_column_condition_count`
+          SUM(CASE WHEN c.`locator_type` = 'HEADER_AND_COLUMN' THEN 1 ELSE 0 END) AS `header_and_column_condition_count`,
+          GROUP_CONCAT(DISTINCT NULLIF(c.`header_name`, '') ORDER BY c.`priority`, c.`csv_exam_result_mapping_condition_id` SEPARATOR ' / ') AS `condition_header_names`,
+          GROUP_CONCAT(DISTINCT c.`column_no` ORDER BY c.`column_no` SEPARATOR ' / ') AS `condition_column_nos`
         FROM {qname(master_db())}.`csv_exam_result_mapping_rules` AS r
         LEFT JOIN {qname(master_db())}.`csv_exam_result_mapping_conditions` AS c
           ON c.`csv_exam_result_mapping_rule_id` = r.`csv_exam_result_mapping_rule_id`
