@@ -9009,6 +9009,7 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           d.subscriber_id,
           d.hia_subscriber_id,
           d.person_id_custom,
+          d.insurer_number,
           d.insurance_symbol,
           d.insurance_number,
           d.insurance_branch_number,
@@ -9669,6 +9670,140 @@ def resolve_manual_exam_entry_facility_id(cur: Any, draft: Mapping[str, Any]) ->
     )
     row = cur.fetchone()
     return _optional_int(row.get("exam_facility_id")) if row else None
+
+
+def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict[str, Any] | None:
+    draft = load_manual_exam_entry_draft_by_id(cur, draft_id)
+    if draft is None:
+        return None
+
+    facility_id = resolve_manual_exam_entry_facility_id(cur, draft)
+    criteria = [
+        {
+            "key": "event_id",
+            "label": "イベント",
+            "value": json_safe_value(draft.get("event_id")),
+            "required": True,
+        },
+        {
+            "key": "subscriber_id",
+            "label": "subscriber_id",
+            "value": json_safe_value(draft.get("subscriber_id")),
+            "required": True,
+        },
+        {
+            "key": "exam_date",
+            "label": "健診実施日",
+            "value": json_safe_value(draft.get("exam_date")),
+            "required": True,
+        },
+        {
+            "key": "exam_facility_id",
+            "label": "健診機関ID",
+            "value": json_safe_value(facility_id),
+            "required": True,
+            "note": f"コード {draft.get('facility_code') or '-'} から解決" if draft.get("facility_code") else None,
+        },
+        {
+            "key": "insurer_number",
+            "label": "保険者番号",
+            "value": json_safe_value(draft.get("insurer_number")),
+            "required": True,
+        },
+    ]
+    missing = [
+        item
+        for item in criteria
+        if item["required"] and str(item.get("value") or "").strip() == ""
+    ]
+    matches: list[dict[str, Any]] = []
+    nearby_cases: list[dict[str, Any]] = []
+    if not missing:
+        cur.execute(
+            f"""
+            SELECT
+              exam_export_case_id,
+              event_id,
+              subscriber_id,
+              hia_subscriber_id,
+              exam_date,
+              exam_facility_id,
+              facility_code,
+              facility_name,
+              insurer_number,
+              source_mode,
+              updated_at
+            FROM {qname(health_db())}.exam_export_cases
+            WHERE event_id = %s
+              AND subscriber_id = %s
+              AND exam_date = %s
+              AND exam_facility_id = %s
+              AND insurer_number = %s
+            ORDER BY exam_export_case_id DESC
+            LIMIT 10
+            """,
+            (
+                draft.get("event_id"),
+                draft.get("subscriber_id"),
+                draft.get("exam_date"),
+                facility_id,
+                draft.get("insurer_number"),
+            ),
+        )
+        matches = [json_safe_mapping(row) for row in cur.fetchall()]
+
+    if draft.get("event_id") and draft.get("subscriber_id"):
+        cur.execute(
+            f"""
+            SELECT
+              exam_export_case_id,
+              event_id,
+              subscriber_id,
+              hia_subscriber_id,
+              exam_date,
+              exam_facility_id,
+              facility_code,
+              facility_name,
+              insurer_number,
+              source_mode,
+              updated_at
+            FROM {qname(health_db())}.exam_export_cases
+            WHERE event_id = %s
+              AND subscriber_id = %s
+            ORDER BY exam_date DESC, exam_export_case_id DESC
+            LIMIT 10
+            """,
+            (draft.get("event_id"), draft.get("subscriber_id")),
+        )
+        nearby_cases = [json_safe_mapping(row) for row in cur.fetchall()]
+        for case in nearby_cases:
+            case["mismatches"] = []
+            if str(case.get("exam_date") or "") != str(draft.get("exam_date") or ""):
+                case["mismatches"].append("健診実施日")
+            if str(case.get("exam_facility_id") or "") != str(facility_id or ""):
+                case["mismatches"].append("健診機関ID")
+            if str(case.get("insurer_number") or "") != str(draft.get("insurer_number") or ""):
+                case["mismatches"].append("保険者番号")
+
+    if missing:
+        status = "MISSING_KEYS"
+        message = "case作成に必要なキーが不足しています。"
+    elif matches:
+        status = "MATCHED"
+        message = f"完全一致するcaseが {len(matches)} 件あります。"
+    else:
+        status = "NO_MATCH"
+        message = "必要キーは揃っていますが、完全一致するcaseはありません。case作成未実行、または既存case側のキー差異を確認してください。"
+
+    return {
+        "draft_id": draft_id,
+        "status": status,
+        "message": message,
+        "criteria": criteria,
+        "missing_keys": [item["key"] for item in missing],
+        "matches": matches,
+        "nearby_cases": nearby_cases,
+    }
 
 
 def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> dict[str, Any]:
@@ -11130,6 +11265,25 @@ async def check_manual_exam_entry_drafts_api(request: Request) -> Response:
             "errors": errors,
         }
     )
+
+
+@app.get("/api/manual-exam-entry-drafts/{draft_id}/case-match")
+def manual_exam_entry_draft_case_match_api(draft_id: int, request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_edit_manual_exam_entry(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        if not manual_exam_entry_table_exists(cur, health_db(), "manual_exam_entry_drafts"):
+            return JSONResponse({"message": "仮登録テーブルが未適用です。"}, status_code=400)
+        result = build_manual_exam_draft_case_match_check(cur, draft_id=draft_id)
+        if result is None:
+            return JSONResponse({"message": "対象の仮登録が見つかりません。"}, status_code=404)
+    return JSONResponse(result)
 
 
 @app.post("/api/manual-exam-entry-drafts/save")

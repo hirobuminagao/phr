@@ -596,11 +596,13 @@
                       class="manual-entry-value-input manual-entry-st-value-input"
                       name="item_value_{{ item.manual_entry_key or item.namecode }}"
                       data-manual-method-group="{{ item.manual_entry_key or item.namecode }}_{{ item.xml_value_type or '' }}"
+                      data-manual-text-limit="256"
                       {% if item.manual_blood_time_item %}data-manual-blood-time-input{% endif %}
                       {% if item.manual_random_time_required_trigger %}data-manual-random-time-input{% endif %}
                       placeholder="ST"
                       rows="3"
                     ></textarea>
+                    <small class="manual-entry-text-meter" data-manual-text-meter>0 / 256 byte</small>
                     {% else %}
                     <input
                       class="manual-entry-value-input"

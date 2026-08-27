@@ -2127,6 +2127,37 @@
       return values;
     };
 
+    const manualTextByteLength = (value) => {
+      return Array.from(String(value || "")).reduce((total, char) => total + (char.charCodeAt(0) <= 0x7f ? 1 : 2), 0);
+    };
+
+    const refreshManualTextLimit = (input) => {
+      if (!input?.matches?.("[data-manual-text-limit]")) return null;
+      const limit = Number(input.getAttribute("data-manual-text-limit") || "0");
+      const length = manualTextByteLength(input.value || "");
+      const meter = input.closest(".manual-entry-value-control")?.querySelector("[data-manual-text-meter]");
+      const exceeded = limit > 0 && length > limit;
+      input.classList.toggle("is-text-limit-exceeded", exceeded);
+      if (meter) {
+        meter.textContent = `${length} / ${limit} byte${exceeded ? " 超過" : ""}`;
+        meter.classList.toggle("is-exceeded", exceeded);
+      }
+      return { length, limit, exceeded };
+    };
+
+    const refreshManualTextLimits = () => {
+      let firstExceeded = null;
+      let exceededCount = 0;
+      for (const input of document.querySelectorAll("[data-manual-text-limit]")) {
+        const result = refreshManualTextLimit(input);
+        if (result?.exceeded) {
+          exceededCount += 1;
+          if (!firstExceeded) firstExceeded = input;
+        }
+      }
+      return { exceededCount, firstExceeded };
+    };
+
     refreshManualEntryFilledCount = () => {
       const count = collectManualEntryValues().length;
       if (manualEntryFilledCount) manualEntryFilledCount.textContent = String(count);
@@ -2148,6 +2179,15 @@
     const saveManualEntryDraft = async ({ silent = false, allowEmpty = false } = {}) => {
       const values = collectManualEntryValues();
       refreshManualEntryFilledCount();
+      const textLimitState = refreshManualTextLimits();
+      if (textLimitState.exceededCount > 0) {
+        if (!silent) {
+          setManualEntrySaveStatus(`ST文字数超過 ${textLimitState.exceededCount}件`, "status-danger");
+          textLimitState.firstExceeded?.scrollIntoView({ behavior: "smooth", block: "center" });
+          textLimitState.firstExceeded?.focus?.();
+        }
+        return;
+      }
       if (!values.length && !allowEmpty) {
         if (!silent) setManualEntrySaveStatus("入力値なし", "status-warning");
         return;
@@ -2205,14 +2245,17 @@
 
     for (const input of document.querySelectorAll(".manual-entry-form input, .manual-entry-form select, .manual-entry-form textarea")) {
       input.addEventListener("input", () => {
+        refreshManualTextLimit(input);
         updateManualPersonFloat();
         refreshManualEntryFilledCount();
       });
       input.addEventListener("change", () => {
+        refreshManualTextLimit(input);
         updateManualPersonFloat();
         refreshManualEntryFilledCount();
       });
     }
+    refreshManualTextLimits();
     manualEntryDraftSaveButton?.addEventListener("click", () => saveManualEntryDraft({ silent: false }));
 
     const setManualSubscriberMessage = (message) => {
@@ -2687,6 +2730,11 @@
     const draftCheckDetailMain = document.querySelector("[data-manual-draft-check-detail-main]");
     const draftCheckDetailMeta = document.querySelector("[data-manual-draft-check-detail-meta]");
     const draftCheckDetailBody = document.querySelector("[data-manual-draft-check-detail-body]");
+    const draftCaseMatchModal = document.querySelector("#manual-draft-case-match-modal");
+    const draftCaseMatchMessage = document.querySelector("[data-manual-draft-case-match-message]");
+    const draftCaseMatchCriteria = document.querySelector("[data-manual-draft-case-match-criteria]");
+    const draftCaseMatchResults = document.querySelector("[data-manual-draft-case-match-results]");
+    const draftCaseMatchNearby = document.querySelector("[data-manual-draft-case-match-nearby]");
 
     const toggleManualDraftNewActions = () => {
       if (!draftNewActions) return;
@@ -2988,6 +3036,99 @@
       }
     };
 
+    const caseMatchStatusClass = (status) => {
+      if (status === "MATCHED") return "status-ready";
+      if (status === "MISSING_KEYS" || status === "NO_MATCH") return "status-danger";
+      return "status-muted";
+    };
+
+    const caseLink = (caseId) => {
+      if (!caseId) return "-";
+      return `<a class="text-link-button" href="/exam-export-cases/${encodeURIComponent(caseId)}">${escapeHtml(caseId)}</a>`;
+    };
+
+    const renderManualDraftCaseMatch = (payload) => {
+      if (draftCaseMatchMessage) {
+        draftCaseMatchMessage.innerHTML = `
+          <span class="status-pill ${caseMatchStatusClass(payload.status)}">${escapeHtml(payload.status || "-")}</span>
+          ${escapeHtml(payload.message || "")}
+        `;
+      }
+      const criteria = Array.isArray(payload.criteria) ? payload.criteria : [];
+      if (draftCaseMatchCriteria) {
+        draftCaseMatchCriteria.innerHTML = criteria.length
+          ? criteria.map((item) => {
+            const hasValue = String(item.value ?? "").trim() !== "";
+            return `
+              <tr>
+                <td><strong>${escapeHtml(item.label || item.key || "-")}</strong>${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}</td>
+                <td>${escapeHtml(item.value ?? "-")}</td>
+                <td><span class="status-pill ${hasValue ? "status-ready" : "status-danger"}">${hasValue ? "あり" : "不足"}</span></td>
+              </tr>
+            `;
+          }).join("")
+          : '<tr><td colspan="3">確認条件がありません。</td></tr>';
+      }
+      const matches = Array.isArray(payload.matches) ? payload.matches : [];
+      if (draftCaseMatchResults) {
+        draftCaseMatchResults.innerHTML = matches.length
+          ? matches.map((item) => `
+            <tr>
+              <td>${caseLink(item.exam_export_case_id)}</td>
+              <td>${escapeHtml(item.exam_date || "-")}</td>
+              <td>${escapeHtml(item.facility_name || item.facility_code || item.exam_facility_id || "-")}</td>
+              <td>${escapeHtml(item.insurer_number || "-")}</td>
+            </tr>
+          `).join("")
+          : '<tr><td colspan="4">完全一致するcaseはありません。</td></tr>';
+      }
+      const nearby = Array.isArray(payload.nearby_cases) ? payload.nearby_cases : [];
+      if (draftCaseMatchNearby) {
+        draftCaseMatchNearby.innerHTML = nearby.length
+          ? nearby.map((item) => {
+            const mismatches = Array.isArray(item.mismatches) && item.mismatches.length ? item.mismatches.join(" / ") : "完全一致";
+            const statusClass = mismatches === "完全一致" ? "status-ready" : "status-pending";
+            return `
+              <tr>
+                <td>${caseLink(item.exam_export_case_id)}</td>
+                <td>${escapeHtml(item.exam_date || "-")}</td>
+                <td>${escapeHtml(item.facility_name || item.facility_code || item.exam_facility_id || "-")}</td>
+                <td>${escapeHtml(item.insurer_number || "-")}</td>
+                <td><span class="status-pill ${statusClass}">${escapeHtml(mismatches)}</span></td>
+              </tr>
+            `;
+          }).join("")
+          : '<tr><td colspan="5">同じevent/subscriberのcaseはありません。</td></tr>';
+      }
+    };
+
+    const openManualDraftCaseMatch = async (button) => {
+      const draftId = button?.getAttribute("data-draft-id") || "";
+      if (!draftId) return;
+      const originalText = button.textContent || "caseチェック";
+      button.disabled = true;
+      button.textContent = "確認中";
+      if (draftCaseMatchMessage) draftCaseMatchMessage.textContent = `draft ${draftId} を確認中です。`;
+      if (draftCaseMatchCriteria) draftCaseMatchCriteria.innerHTML = '<tr><td colspan="3">確認中...</td></tr>';
+      if (draftCaseMatchResults) draftCaseMatchResults.innerHTML = '<tr><td colspan="4">確認中...</td></tr>';
+      if (draftCaseMatchNearby) draftCaseMatchNearby.innerHTML = '<tr><td colspan="5">確認中...</td></tr>';
+      if (draftCaseMatchModal) {
+        draftCaseMatchModal.hidden = false;
+        document.body.classList.add("has-open-modal");
+      }
+      try {
+        const payload = await fetchJson(`/api/manual-exam-entry-drafts/${encodeURIComponent(draftId)}/case-match`);
+        renderManualDraftCaseMatch(payload);
+      } catch (error) {
+        if (draftCaseMatchMessage) {
+          draftCaseMatchMessage.innerHTML = `<span class="status-pill status-danger">ERROR</span> ${escapeHtml(error?.message || "")}`;
+        }
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    };
+
     const createManualDraftFromPerson = async (item, button) => {
       const originalText = button?.textContent || "";
       if (button) {
@@ -3066,6 +3207,9 @@
     });
     for (const button of document.querySelectorAll("[data-manual-draft-check-detail]")) {
       button.addEventListener("click", () => openManualDraftCheckDetail(button));
+    }
+    for (const button of document.querySelectorAll("[data-manual-draft-case-match]")) {
+      button.addEventListener("click", () => openManualDraftCaseMatch(button));
     }
 
     const setDraftPersonMessage = (message) => {

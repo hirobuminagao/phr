@@ -139,12 +139,19 @@
                   {{ status }}
                 </span>
                 <small>draft {{ draft.manual_exam_entry_draft_id }}</small>
+                <button
+                  type="button"
+                  class="ghost-button compact-action-button manual-draft-case-check-button"
+                  data-manual-draft-case-match
+                  data-draft-id="{{ draft.manual_exam_entry_draft_id }}"
+                >caseチェック</button>
               </td>
               <td>
                 <strong>{{ draft.name_kana or draft.name_full or "氏名未設定" }}</strong>
                 <small>
                   {{ draft.name_full or "" }}
                   {% if draft.hia_subscriber_id %}<br>HIA {{ draft.hia_subscriber_id }}{% endif %}
+                  {% if draft.insurer_number %}<br>保険者 {{ draft.insurer_number }}{% endif %}
                   {% if draft.insurance_symbol or draft.insurance_number %}
                     <br>{{ draft.insurance_symbol or "-" }}-{{ draft.insurance_number or "-" }}{% if draft.insurance_branch_number %}-{{ draft.insurance_branch_number }}{% endif %}
                   {% endif %}
@@ -383,6 +390,80 @@
           </tbody>
         </table>
       </div>
+      <div class="edit-modal__foot manual-entry-modal-actions">
+        <button type="button" class="primary-button" data-modal-close>閉じる</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="manual-draft-case-match-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel manual-draft-check-detail-modal" role="dialog" aria-modal="true" aria-labelledby="manual-draft-case-match-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">CASE MATCH CHECK</p>
+          <h2 id="manual-draft-case-match-title">case完全一致チェック</h2>
+          <p class="subtle" data-manual-draft-case-match-message>draftを選択してください。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="manual-draft-case-match-grid">
+        <section class="status-panel">
+          <h3>case作成キー</h3>
+          <div class="table-panel">
+            <table class="data-table compact-table">
+              <thead>
+                <tr>
+                  <th>項目</th>
+                  <th>値</th>
+                  <th>状態</th>
+                </tr>
+              </thead>
+              <tbody data-manual-draft-case-match-criteria>
+                <tr><td colspan="3">未確認</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="status-panel">
+          <h3>完全一致case</h3>
+          <div class="table-panel">
+            <table class="data-table compact-table">
+              <thead>
+                <tr>
+                  <th>case</th>
+                  <th>健診日</th>
+                  <th>施設</th>
+                  <th>保険者</th>
+                </tr>
+              </thead>
+              <tbody data-manual-draft-case-match-results>
+                <tr><td colspan="4">未確認</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+      <section class="status-panel">
+        <h3>同じ対象者の既存case</h3>
+        <p class="subtle">完全一致しない場合、どのキーが違うかを見るための確認用です。候補補完には使いません。</p>
+        <div class="table-panel">
+          <table class="data-table compact-table">
+            <thead>
+              <tr>
+                <th>case</th>
+                <th>健診日</th>
+                <th>施設</th>
+                <th>保険者</th>
+                <th>差異</th>
+              </tr>
+            </thead>
+            <tbody data-manual-draft-case-match-nearby>
+              <tr><td colspan="5">未確認</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <div class="edit-modal__foot manual-entry-modal-actions">
         <button type="button" class="primary-button" data-modal-close>閉じる</button>
       </div>

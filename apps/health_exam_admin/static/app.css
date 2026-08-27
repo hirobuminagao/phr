@@ -3262,6 +3262,22 @@ a.home-menu-card.is-navigating {
   box-shadow: inset 4px 0 0 #c99700;
 }
 
+.manual-draft-case-check-button {
+  margin-top: 6px;
+  width: 100%;
+  justify-content: center;
+}
+
+.manual-draft-case-match-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.manual-draft-case-match-grid .status-panel {
+  margin: 0;
+}
+
 .manual-entry-item-table tr.is-manual-required td {
   background: #fff7e6;
 }
@@ -3294,6 +3310,19 @@ a.home-menu-card.is-navigating {
   line-height: 1.35;
 }
 
+.manual-entry-text-meter {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.manual-entry-text-meter.is-exceeded {
+  color: #b42318;
+}
+
 .manual-entry-value-control .manual-entry-value-input:only-child {
   grid-column: 1 / -1;
 }
@@ -3302,6 +3331,11 @@ a.home-menu-card.is-navigating {
   min-height: 86px;
   resize: vertical;
   line-height: 1.5;
+}
+
+.manual-entry-st-value-input.is-text-limit-exceeded {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 2px rgba(217, 45, 32, 0.14);
 }
 
 .manual-entry-method-select {
