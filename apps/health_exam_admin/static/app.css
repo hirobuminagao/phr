@@ -6363,21 +6363,18 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-header-compare-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 14px;
   align-items: start;
-  padding-right: 340px;
 }
 
 .csv-header-unmatched-drawer {
-  position: fixed;
-  top: 96px;
-  right: 28px;
-  z-index: 30;
-  width: min(320px, calc(100vw - 56px));
+  position: sticky;
+  top: 84px;
+  width: auto;
   display: grid;
   gap: 10px;
-  max-height: calc(100vh - 124px);
+  max-height: calc(100vh - 110px);
   padding: 12px;
   overflow: auto;
   border: 1px solid #d7e2ef;
@@ -6432,14 +6429,13 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 @media (max-width: 1180px) {
   .csv-header-compare-workspace {
+    grid-template-columns: 1fr;
     padding-right: 0;
   }
 
   .csv-header-unmatched-drawer {
-    position: sticky;
-    top: 84px;
-    width: auto;
-    max-height: calc(100vh - 110px);
+    position: static;
+    max-height: none;
   }
 }
 
