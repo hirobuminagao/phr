@@ -4786,6 +4786,234 @@ def build_csv_mapping_template_header_columns(
     return rows
 
 
+def load_csv_mapping_template_header_columns(
+    cur: Any,
+    *,
+    template: Mapping[str, Any],
+    conditions: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    csv_format_version_id = _optional_int(template.get("csv_format_version_id"))
+    if not csv_format_version_id:
+        return build_csv_mapping_template_header_columns(template, conditions)
+    if not manual_exam_entry_table_exists(cur, master_db(), "csv_format_header_columns"):
+        return build_csv_mapping_template_header_columns(template, conditions)
+
+    mapped_by_column: dict[int, list[str]] = {}
+    mapped_by_header: dict[tuple[str, str, int], list[str]] = {}
+    for condition in conditions:
+        if not condition.get("is_active"):
+            continue
+        rule_key = str(condition.get("rule_key") or "-")
+        column_no = _optional_int(condition.get("column_no"))
+        if column_no:
+            mapped_by_column.setdefault(column_no, []).append(rule_key)
+        header_name = str(condition.get("header_name") or "").strip()
+        if header_name:
+            header_context = str(condition.get("header_context") or "").strip()
+            occurrence = _optional_int(condition.get("header_occurrence")) or 1
+            mapped_by_header.setdefault((header_context, header_name, occurrence), []).append(rule_key)
+
+    cur.execute(
+        f"""
+        SELECT
+          `csv_format_header_column_id`,
+          `csv_format_version_id`,
+          `column_no`,
+          `header_context`,
+          `header_name`,
+          `normalized_header_name`,
+          `header_occurrence`
+        FROM {qname(master_db())}.`csv_format_header_columns`
+        WHERE `csv_format_version_id` = %s
+        ORDER BY `column_no`
+        """,
+        (csv_format_version_id,),
+    )
+    rows: list[dict[str, Any]] = []
+    for row in cur.fetchall():
+        column = dict(row)
+        column_no = _optional_int(column.get("column_no")) or 0
+        context = str(column.get("header_context") or "").strip()
+        name = str(column.get("header_name") or "").strip()
+        occurrence = _optional_int(column.get("header_occurrence")) or 1
+        mapped_rules = [
+            *mapped_by_column.get(column_no, []),
+            *mapped_by_header.get((context, name, occurrence), []),
+        ]
+        column["context"] = context
+        column["name"] = name
+        column["occurrence"] = occurrence
+        column["mapped_rules"] = sorted(set(mapped_rules))
+        column["is_mapped"] = bool(mapped_rules)
+        rows.append(column)
+
+    return rows or build_csv_mapping_template_header_columns(template, conditions)
+
+
+def summarize_csv_header_context(column: Mapping[str, Any], *, neighbor_count: int = 2) -> str:
+    parts = []
+    context = str(column.get("context") or column.get("header_context") or "").strip()
+    if context:
+        parts.append(f"context: {context}")
+    previous_names = column.get("previous_names")
+    next_names = column.get("next_names")
+    if previous_names:
+        parts.append("前: " + " / ".join(str(value) for value in previous_names if value))
+    if next_names:
+        parts.append("後: " + " / ".join(str(value) for value in next_names if value))
+    return " | ".join(parts) or "-"
+
+
+def attach_csv_header_neighbors(columns: list[dict[str, Any]], *, neighbor_count: int = 2) -> list[dict[str, Any]]:
+    for index, column in enumerate(columns):
+        previous_columns = columns[max(0, index - neighbor_count):index]
+        next_columns = columns[index + 1:index + 1 + neighbor_count]
+        column["previous_names"] = [str(item.get("name") or item.get("header_name") or "") for item in previous_columns]
+        column["next_names"] = [str(item.get("name") or item.get("header_name") or "") for item in next_columns]
+        column["context_summary"] = summarize_csv_header_context(column, neighbor_count=neighbor_count)
+    return columns
+
+
+def build_csv_mapping_header_compare(uploaded_columns: list[dict[str, Any]], registered_columns: list[dict[str, Any]]) -> dict[str, Any]:
+    registered_by_exact: dict[tuple[str, str, int], dict[str, Any]] = {}
+    registered_by_normalized: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    registered_by_column: dict[int, dict[str, Any]] = {}
+    for column in registered_columns:
+        column_no = _optional_int(column.get("column_no")) or 0
+        context = str(column.get("context") or column.get("header_context") or "").strip()
+        name = str(column.get("name") or column.get("header_name") or "").strip()
+        occurrence = _optional_int(column.get("occurrence") or column.get("header_occurrence")) or 1
+        normalized = normalize_header(name) or ""
+        registered_by_exact[(context, name, occurrence)] = column
+        registered_by_normalized.setdefault((normalized, occurrence), []).append(column)
+        if column_no:
+            registered_by_column[column_no] = column
+
+    matched_registered_columns: set[int] = set()
+    rows: list[dict[str, Any]] = []
+    for upload in uploaded_columns:
+        column_no = _optional_int(upload.get("column_no")) or 0
+        context = str(upload.get("context") or "").strip()
+        name = str(upload.get("name") or "").strip()
+        occurrence = _optional_int(upload.get("occurrence")) or 1
+        normalized = normalize_header(name) or ""
+        matched = registered_by_exact.get((context, name, occurrence))
+        match_type = "EXACT"
+        if not matched:
+            normalized_matches = registered_by_normalized.get((normalized, occurrence), [])
+            if len(normalized_matches) == 1:
+                matched = normalized_matches[0]
+                match_type = "NORMALIZED"
+        if not matched:
+            by_column = registered_by_column.get(column_no)
+            if by_column:
+                matched = by_column
+                match_type = "COLUMN_NO"
+        if matched:
+            matched_no = _optional_int(matched.get("column_no")) or 0
+            if matched_no:
+                matched_registered_columns.add(matched_no)
+            status = "MATCH" if match_type in ("EXACT", "NORMALIZED") else "COLUMN_ONLY"
+        else:
+            status = "UPLOAD_ONLY"
+        rows.append(
+            {
+                "uploaded": upload,
+                "registered": matched,
+                "status": status,
+                "match_type": match_type if matched else "-",
+            }
+        )
+
+    missing_rows = [
+        {
+            "uploaded": None,
+            "registered": column,
+            "status": "REGISTERED_ONLY",
+            "match_type": "-",
+        }
+        for column in registered_columns
+        if (_optional_int(column.get("column_no")) or 0) not in matched_registered_columns
+    ]
+    rows.extend(missing_rows)
+    return {
+        "rows": rows,
+        "matched_count": sum(1 for row in rows if row["status"] == "MATCH"),
+        "column_only_count": sum(1 for row in rows if row["status"] == "COLUMN_ONLY"),
+        "upload_only_count": sum(1 for row in rows if row["status"] == "UPLOAD_ONLY"),
+        "registered_only_count": sum(1 for row in rows if row["status"] == "REGISTERED_ONLY"),
+    }
+
+
+def csv_header_snapshot_for_result(csv_result: Any) -> dict[str, Any]:
+    return {
+        "active_header_row_no": csv_result.header_set.active_header_row_no,
+        "header_rows": csv_result.header_set.header_rows,
+        "normalized_columns": [
+            {
+                "column_no": column.column_no,
+                "context": column.context,
+                "header_name": column.header_name,
+                "occurrence": column.occurrence,
+            }
+            for column in csv_result.header_set.normalized_columns
+        ],
+    }
+
+
+def save_csv_mapping_template_header_columns(cur: Any, *, csv_format_version_id: int, csv_result: Any) -> None:
+    if not manual_exam_entry_table_exists(cur, master_db(), "csv_format_header_columns"):
+        raise ValueError("csv_format_header_columnsテーブルがありません。migrationを適用してください。")
+    snapshot = csv_header_snapshot_for_result(csv_result)
+    cur.execute(
+        f"""
+        UPDATE {qname(master_db())}.`csv_format_versions`
+           SET `header_sha256` = %s,
+               `header_snapshot_json` = %s,
+               `header_hash_status` = 'VERIFIED'
+         WHERE `csv_format_version_id` = %s
+        """,
+        (
+            csv_result.header_set.header_sha256,
+            json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
+            csv_format_version_id,
+        ),
+    )
+    cur.execute(
+        f"""
+        DELETE FROM {qname(master_db())}.`csv_format_header_columns`
+        WHERE `csv_format_version_id` = %s
+        """,
+        (csv_format_version_id,),
+    )
+    rows = [
+        (
+            csv_format_version_id,
+            column.column_no,
+            column.context,
+            column.header_name,
+            normalize_header(column.header_name),
+            column.occurrence,
+        )
+        for column in csv_result.header_set.normalized_columns
+    ]
+    if rows:
+        cur.executemany(
+            f"""
+            INSERT INTO {qname(master_db())}.`csv_format_header_columns` (
+              `csv_format_version_id`,
+              `column_no`,
+              `header_context`,
+              `header_name`,
+              `normalized_header_name`,
+              `header_occurrence`
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            rows,
+        )
+
+
 def source_mode_label(value: Any) -> str:
     labels = {
         "UNKNOWN": "未設定",
@@ -15366,7 +15594,9 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
                 conditions = load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
                 enrich_csv_mapping_template_rules_with_conditions(rules, conditions)
                 target_groups = build_csv_mapping_template_target_groups(rules)
-                header_columns = build_csv_mapping_template_header_columns(template, conditions)
+                header_columns = attach_csv_header_neighbors(
+                    load_csv_mapping_template_header_columns(cur, template=template, conditions=conditions)
+                )
             else:
                 summaries = []
                 rules = []
@@ -15408,6 +15638,234 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
+    )
+
+
+@app.get("/admin/csv-mapping-templates/{csv_format_version_id}/headers", response_class=HTMLResponse)
+def admin_csv_mapping_template_headers(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if template:
+                conditions = load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
+                header_columns = attach_csv_header_neighbors(
+                    load_csv_mapping_template_header_columns(cur, template=template, conditions=conditions)
+                )
+            else:
+                header_columns = []
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if not template:
+        return templates.TemplateResponse(
+            "admin_csv_mapping_template_headers.html",
+            {
+                "request": request,
+                "user": user,
+                "template": None,
+                "header_columns": [],
+                "compare_result": None,
+                "message": None,
+                "error": f"csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。",
+            },
+            status_code=404,
+        )
+    return templates.TemplateResponse(
+        "admin_csv_mapping_template_headers.html",
+        {
+            "request": request,
+            "user": user,
+            "template": template,
+            "header_columns": header_columns,
+            "compare_result": None,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/csv-mapping-templates/{csv_format_version_id}/headers/compare", response_class=HTMLResponse)
+async def admin_csv_mapping_template_headers_compare(
+    request: Request,
+    csv_format_version_id: int,
+    csv_file: UploadFile = File(...),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    tmp_path: str | None = None
+    try:
+        uploaded_bytes = await csv_file.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+            tmp.write(uploaded_bytes)
+            tmp_path = tmp.name
+
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            try:
+                template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+                if template is None:
+                    conn.commit()
+                    return RedirectResponse(
+                        f"/admin/csv-mapping-templates/{csv_format_version_id}/headers?error=テンプレートが見つかりません。",
+                        status_code=303,
+                    )
+                conditions = load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
+                header_columns = attach_csv_header_neighbors(
+                    load_csv_mapping_template_header_columns(cur, template=template, conditions=conditions)
+                )
+                header_count = max(int(template.get("data_start_row_no") or 2) - 1, 0)
+                csv_result = load_csv_result(
+                    tmp_path,
+                    header_count=header_count,
+                    delimiter=str(template.get("delimiter") or ","),
+                    encoding=str(template.get("character_encoding") or "") or None,
+                    quote_char=str(template.get("quote_char") or '"'),
+                    active_header_row_no=(
+                        int(template["active_header_row_no"])
+                        if template.get("active_header_row_no") is not None
+                        else None
+                    ),
+                    data_start_row_no=int(template.get("data_start_row_no") or header_count + 1),
+                )
+                uploaded_columns = attach_csv_header_neighbors(
+                    [
+                        {
+                            "column_no": column.column_no,
+                            "context": column.context or "",
+                            "name": column.header_name or "",
+                            "normalized_header_name": normalize_header(column.header_name) or "",
+                            "occurrence": column.occurrence,
+                        }
+                        for column in csv_result.header_set.normalized_columns
+                    ]
+                )
+                compare_result = build_csv_mapping_header_compare(uploaded_columns, header_columns)
+                compare_result["file_name"] = csv_file.filename or "-"
+                compare_result["encoding"] = csv_result.encoding
+                compare_result["header_sha256"] = csv_result.header_set.header_sha256
+                compare_result["template_header_sha256"] = template.get("header_sha256")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    return templates.TemplateResponse(
+        "admin_csv_mapping_template_headers.html",
+        {
+            "request": request,
+            "user": user,
+            "template": template,
+            "header_columns": header_columns,
+            "compare_result": compare_result,
+            "message": None,
+            "error": None,
+        },
+    )
+
+
+@app.post("/admin/csv-mapping-templates/{csv_format_version_id}/headers/import", response_class=HTMLResponse)
+async def admin_csv_mapping_template_headers_import(
+    request: Request,
+    csv_format_version_id: int,
+    csv_file: UploadFile = File(...),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    tmp_path: str | None = None
+    try:
+        uploaded_bytes = await csv_file.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+            tmp.write(uploaded_bytes)
+            tmp_path = tmp.name
+
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            try:
+                template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+                if template is None:
+                    conn.commit()
+                    return RedirectResponse(
+                        f"/admin/csv-mapping-templates/{csv_format_version_id}/headers?error=テンプレートが見つかりません。",
+                        status_code=303,
+                    )
+                header_count = max(int(template.get("data_start_row_no") or 2) - 1, 0)
+                csv_result = load_csv_result(
+                    tmp_path,
+                    header_count=header_count,
+                    delimiter=str(template.get("delimiter") or ","),
+                    encoding=str(template.get("character_encoding") or "") or None,
+                    quote_char=str(template.get("quote_char") or '"'),
+                    active_header_row_no=(
+                        int(template["active_header_row_no"])
+                        if template.get("active_header_row_no") is not None
+                        else None
+                    ),
+                    data_start_row_no=int(template.get("data_start_row_no") or header_count + 1),
+                )
+                save_csv_mapping_template_header_columns(
+                    cur,
+                    csv_format_version_id=csv_format_version_id,
+                    csv_result=csv_result,
+                )
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="CSV_MAPPING_TEMPLATE_HEADER_IMPORT",
+                    target_schema=master_db(),
+                    target_table="csv_format_header_columns",
+                    target_id=str(csv_format_version_id),
+                    after={
+                        "csv_format_version_id": csv_format_version_id,
+                        "file_name": csv_file.filename,
+                        "column_count": len(csv_result.header_set.normalized_columns),
+                        "header_sha256": csv_result.header_set.header_sha256,
+                    },
+                )
+                conn.commit()
+            except ValueError as exc:
+                conn.rollback()
+                return RedirectResponse(
+                    f"/admin/csv-mapping-templates/{csv_format_version_id}/headers?error={quote(str(exc))}",
+                    status_code=303,
+                )
+            except Exception:
+                conn.rollback()
+                raise
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    return RedirectResponse(
+        f"/admin/csv-mapping-templates/{csv_format_version_id}/headers?message=基準ヘッダーを保存しました。",
+        status_code=303,
     )
 
 

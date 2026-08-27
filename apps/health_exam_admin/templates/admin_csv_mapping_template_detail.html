@@ -11,6 +11,7 @@
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/admin/csv-mapping-templates">一覧へ戻る</a>
+    {% if template %}<a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers">ヘッダー確認</a>{% endif %}
     <a class="ghost-button" href="/admin/folder-aliases">受領フォルダ管理</a>
     <a class="ghost-button" href="/">HOME</a>
   </nav>

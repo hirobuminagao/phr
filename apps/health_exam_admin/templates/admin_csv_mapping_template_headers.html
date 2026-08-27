@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% set title = "CSVマッピングヘッダー確認" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">CSV Mapping Header</p>
+    <h1>CSVマッピングヘッダー確認</h1>
+    {% if template %}
+    <p class="subtle">{{ template.mapping_version }} / {{ template.exam_facility_display_name or template.exam_facility_name or "健診機関未設定" }}</p>
+    {% endif %}
+  </div>
+  <nav class="top-actions">
+    {% if template %}<a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}">詳細へ戻る</a>{% endif %}
+    <a class="ghost-button" href="/admin/csv-mapping-templates">一覧へ戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  {% if template %}
+  <section class="summary-grid csv-template-summary-grid">
+    <article class="summary-card">
+      <small>テンプレート</small>
+      <strong>{{ template.mapping_version }}</strong>
+      <span>{{ template.format_name or "-" }}</span>
+    </article>
+    <article class="summary-card">
+      <small>基準ヘッダー</small>
+      <strong>{{ header_columns|length }}列</strong>
+      <span>{{ template.header_mode }} / data {{ template.data_start_row_no }}行目〜</span>
+    </article>
+    <article class="summary-card">
+      <small>header sha</small>
+      <strong>{{ template.header_hash_status }}</strong>
+      <span>{{ template.header_sha256 or "-" }}</span>
+    </article>
+    <article class="summary-card">
+      <small>読込</small>
+      <strong>{{ template.character_encoding }}</strong>
+      <span>delimiter {{ template.delimiter }} / quote {{ template.quote_char or '"' }}</span>
+    </article>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>比較用CSVアップロード</h2>
+        <p class="subtle">CSVは保存せず、ヘッダーだけを読み取って基準ヘッダーと比較します。</p>
+      </div>
+    </div>
+    <form class="csv-header-compare-upload" method="post" enctype="multipart/form-data" action="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers/compare">
+      <label class="csv-header-drop-zone">
+        <span>CSVを選択またはドラッグ&ドロップ</span>
+        <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      </label>
+      <div class="csv-header-upload-actions">
+        <button class="primary-button" type="submit">ヘッダー比較</button>
+        <button class="ghost-button" type="submit" formaction="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers/import">基準として保存</button>
+      </div>
+    </form>
+  </section>
+
+  {% if compare_result %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>比較結果</h2>
+        <p class="subtle">{{ compare_result.file_name }} / {{ compare_result.encoding }} / header_sha256 {{ compare_result.header_sha256 }}</p>
+      </div>
+      <div class="button-row">
+        <span class="status-pill status-ready">一致 {{ compare_result.matched_count }}件</span>
+        <span class="status-pill status-pending">列番のみ {{ compare_result.column_only_count }}件</span>
+        <span class="status-pill status-danger">追加 {{ compare_result.upload_only_count }}件</span>
+        <span class="status-pill status-muted">欠落 {{ compare_result.registered_only_count }}件</span>
+      </div>
+    </div>
+    <div class="filter-card compact-filter">
+      <label>
+        <span>キーワード</span>
+        <input data-live-filter-input="#csv-header-compare-list" placeholder="列番 / ヘッダー / context / 状態">
+      </label>
+    </div>
+    <div id="csv-header-compare-list" class="csv-header-compare-list" data-empty-message="一致する比較結果はありません。">
+      {% for row in compare_result.rows %}
+      {% set uploaded = row.uploaded %}
+      {% set registered = row.registered %}
+      <article class="csv-header-compare-card status-{{ row.status|lower }}" data-filter-text="{{ row.status }} {{ row.match_type }} {% if uploaded %}{{ uploaded.column_no }} {{ uploaded.name }} {{ uploaded.context }} {{ uploaded.context_summary }}{% endif %} {% if registered %}{{ registered.column_no }} {{ registered.name or registered.header_name }} {{ registered.context or registered.header_context }} {{ registered.context_summary }}{% endif %}">
+        <div class="csv-header-compare-status">
+          <span class="status-pill {{ 'status-ready' if row.status == 'MATCH' else 'status-pending' if row.status == 'COLUMN_ONLY' else 'status-danger' if row.status == 'UPLOAD_ONLY' else 'status-muted' }}">
+            {{ '一致' if row.status == 'MATCH' else '列番のみ' if row.status == 'COLUMN_ONLY' else 'アップロードのみ' if row.status == 'UPLOAD_ONLY' else '基準のみ' }}
+          </span>
+          <small>{{ row.match_type }}</small>
+        </div>
+        <div class="csv-header-side">
+          <small>アップロードCSV</small>
+          {% if uploaded %}
+          <strong>{{ uploaded.column_no }}列目 {{ uploaded.name or "-" }}</strong>
+          <span>{{ uploaded.context_summary }}</span>
+          {% else %}
+          <strong>-</strong>
+          <span>アップロード側に対応列なし</span>
+          {% endif %}
+        </div>
+        <div class="csv-header-side">
+          <small>テンプレート基準</small>
+          {% if registered %}
+          <strong>{{ registered.column_no }}列目 {{ registered.name or registered.header_name or "-" }}</strong>
+          <span>{{ registered.context_summary }}</span>
+          {% if registered.mapped_rules %}<span>rule: {{ registered.mapped_rules|join(', ') }}</span>{% endif %}
+          {% else %}
+          <strong>-</strong>
+          <span>基準側に対応列なし</span>
+          {% endif %}
+        </div>
+        <div class="csv-header-manual-match">
+          <label>
+            <span>手動対応先</span>
+            <select name="manual_match_{{ loop.index }}">
+              <option value="">未選択</option>
+              {% for base in header_columns %}
+              <option value="{{ base.column_no }}" {% if registered and base.column_no == registered.column_no %}selected{% endif %}>{{ base.column_no }}列目 {{ base.name or base.header_name or "-" }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>基準ヘッダー一覧</h2>
+        <p class="subtle">テンプレートが持つヘッダー列です。列番、ヘッダー名、context、前後列を確認します。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ header_columns|length }}列</span>
+    </div>
+    <div class="filter-card compact-filter">
+      <label>
+        <span>キーワード</span>
+        <input data-live-filter-input="#csv-template-header-list" placeholder="列番 / ヘッダー / context / rule">
+      </label>
+    </div>
+    <div id="csv-template-header-list" class="csv-template-header-grid" data-empty-message="一致するヘッダーはありません。">
+      {% for column in header_columns %}
+      <article class="csv-template-header-card" data-filter-text="{{ column.column_no }} {{ column.name or column.header_name }} {{ column.context or column.header_context }} {{ column.context_summary }} {{ column.mapped_rules|join(' ') }}">
+        <div>
+          <small>{{ column.column_no }}列目 / 出現 {{ column.occurrence or column.header_occurrence }}</small>
+          <strong>{{ column.name or column.header_name or "-" }}</strong>
+          <span>{{ column.context_summary }}</span>
+        </div>
+        <div>
+          <span class="status-pill {{ 'status-ready' if column.is_mapped else 'status-muted' }}">{{ '使用' if column.is_mapped else '未使用' }}</span>
+          {% if column.mapped_rules %}<small>{{ column.mapped_rules|join(', ') }}</small>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

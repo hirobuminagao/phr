@@ -6301,6 +6301,116 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   box-shadow: inset 4px 0 0 #f59e0b;
 }
 
+.csv-header-compare-upload {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) auto;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.csv-header-drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 72px;
+  padding: 16px 18px;
+  border: 2px dashed #bfd0e3;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #607086;
+  font-weight: 800;
+}
+
+.csv-header-drop-zone input {
+  max-width: 360px;
+}
+
+.csv-header-upload-actions {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.csv-header-upload-actions .primary-button,
+.csv-header-upload-actions .ghost-button {
+  white-space: nowrap;
+}
+
+.csv-template-header-grid,
+.csv-header-compare-list {
+  display: grid;
+  gap: 10px;
+}
+
+.csv-template-header-card,
+.csv-header-compare-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.csv-template-header-card {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  align-items: start;
+}
+
+.csv-template-header-card strong,
+.csv-header-side strong {
+  display: block;
+  color: #1f2937;
+  font-size: 1.02rem;
+}
+
+.csv-template-header-card span,
+.csv-header-side span {
+  display: block;
+  color: #607086;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.csv-header-compare-card {
+  grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr) minmax(260px, 320px);
+  align-items: start;
+}
+
+.csv-header-compare-card.status-match {
+  background: #f0fdf4;
+}
+
+.csv-header-compare-card.status-column_only {
+  background: #fffbeb;
+}
+
+.csv-header-compare-card.status-upload_only {
+  background: #fff7ed;
+}
+
+.csv-header-compare-card.status-registered_only {
+  background: #f8fafc;
+}
+
+.csv-header-compare-status small,
+.csv-header-side small,
+.csv-template-header-card small {
+  display: block;
+  color: #607086;
+  font-weight: 800;
+}
+
+.csv-header-manual-match label {
+  display: grid;
+  gap: 6px;
+}
+
+.csv-header-manual-match select {
+  width: 100%;
+}
+
 .adopted-source-cell {
   background: #ecfdf5;
   box-shadow: inset 4px 0 0 #16845f;
