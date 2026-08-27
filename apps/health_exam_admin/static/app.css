@@ -330,6 +330,10 @@ button[type="submit"]:disabled {
   padding: 20px;
 }
 
+.empty-state[hidden] {
+  display: none !important;
+}
+
 .panel.is-scroll-target-panel {
   box-shadow: 0 0 0 3px rgba(0, 132, 94, 0.18);
 }
@@ -6734,15 +6738,15 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-template-target-branch-table th:nth-child(2) {
-  width: 34%;
+  width: 30%;
 }
 
 .csv-template-target-branch-table th:nth-child(3) {
-  width: 12%;
+  width: 18%;
 }
 
 .csv-template-target-branch-table th:nth-child(4) {
-  width: 28%;
+  width: 26%;
 }
 
 .csv-template-target-branch-table th:nth-child(5) {
@@ -6753,6 +6757,15 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   font-size: 14px;
   line-height: 1.45;
   color: var(--text);
+  white-space: normal;
+}
+
+.csv-template-target-branch-table td:nth-child(3) strong {
+  font-size: 18px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .csv-template-target-branch-table td:nth-child(4) strong {

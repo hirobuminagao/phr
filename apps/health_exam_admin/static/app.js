@@ -194,7 +194,8 @@
     const table = tableSelector ? document.querySelector(tableSelector) : null;
     if (!table) continue;
 
-    const tbody = table.querySelector("tbody");
+    const isTableTarget = table.matches("table");
+    const tbody = isTableTarget ? table.querySelector("tbody") : null;
     const rows = Array.from(tbody ? table.querySelectorAll("tbody tr[data-filter-text]") : table.querySelectorAll("[data-filter-text]"));
     const tableFilters = {
       keywordInput: input,
