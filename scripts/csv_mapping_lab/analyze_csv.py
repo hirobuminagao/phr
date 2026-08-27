@@ -101,6 +101,7 @@ CONTACT_LEDGER_FIELDS = {"address", "postal_code"}
 
 FULL_WIDTH_KANA_RE = re.compile(r"^[ァ-ヶー 　]+$")
 HALF_WIDTH_KANA_RE = re.compile(r"^[ｦ-ﾟｰ 　]+$")
+HEADER_DECORATION_PREFIX_RE = re.compile(r"^[●○◎◇◆■□▲△▼▽★☆※＊*・･∙‣▶▷▸▹]+")
 
 
 LEDGER_FIELD_HINTS = {
@@ -248,6 +249,7 @@ def normalize_header(value: str | None) -> str | None:
         return None
     text = unicodedata.normalize("NFKC", text)
     text = re.sub(r"\s+", "", text)
+    text = HEADER_DECORATION_PREFIX_RE.sub("", text)
     return text.upper()
 
 
