@@ -6322,6 +6322,24 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   font-weight: 800;
 }
 
+.csv-header-drop-zone.is-dragover {
+  border-color: var(--green);
+  background: #ecfdf5;
+  color: var(--green-dark);
+}
+
+.csv-header-drop-zone.has-file {
+  border-style: solid;
+  background: #f0fdfa;
+}
+
+.csv-header-drop-zone small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
 .csv-header-drop-zone input {
   max-width: 360px;
 }

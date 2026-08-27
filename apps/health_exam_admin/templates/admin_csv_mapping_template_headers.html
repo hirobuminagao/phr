@@ -52,9 +52,10 @@
       </div>
     </div>
     <form class="csv-header-compare-upload" method="post" enctype="multipart/form-data" action="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers/compare">
-      <label class="csv-header-drop-zone">
+      <label class="csv-header-drop-zone" data-file-drop-zone>
         <span>CSVを選択またはドラッグ&ドロップ</span>
-        <input type="file" name="csv_file" accept=".csv,text/csv" required>
+        <input type="file" name="csv_file" accept=".csv,text/csv" required data-file-drop-input>
+        <small data-file-drop-name>またはクリックしてファイルを選択</small>
       </label>
       <div class="csv-header-upload-actions">
         <button class="primary-button" type="submit">ヘッダー比較</button>

@@ -120,6 +120,7 @@ http://127.0.0.1:8011/login
 - `--reload` はm4 Docker起動では使わない。ソース変更後は再ビルドしてコンテナを起動し直す。
 - `scripts/.env` は `.dockerignore` でイメージに入らないため、必ず `--env-file scripts/.env` を付ける。
 - Docker内で `PHR_DB_HOST=localhost` にすると管理画面コンテナ自身を見に行く。m4では `host.docker.internal` を使う。
+- DBパスワードは `scripts/.env` または起動中コンテナの環境変数を正とする。`root/root` は使わない。
 - `result_root_path` の実フォルダを `-v` でマウントしないと、画面は見えても `01スキャン` から受領フォルダが見えない。
 
 ## Docker起動（一般例）
