@@ -2081,6 +2081,7 @@
       exam_export_case_id: selectedManualCaseId || "",
       subscriber_id: document.querySelector("#manual-entry-subscriber-id-input")?.value?.trim() || "",
       hia_subscriber_id: document.querySelector("#manual-entry-hia-subscriber-id-input")?.value?.trim() || "",
+      insurer_number: document.querySelector("#manual-entry-insurer-number-input")?.value?.trim() || "",
       insurance_symbol: document.querySelector("#manual-entry-insurance-symbol-input")?.value?.trim() || "",
       insurance_number: document.querySelector("#manual-entry-insurance-number-input")?.value?.trim() || "",
       insurance_branch_number: document.querySelector("#manual-entry-insurance-branch-input")?.value?.trim() || "",
@@ -2237,6 +2238,7 @@
 
     const fillManualEntryFromPerson = (person) => {
       setValue("#manual-entry-subscriber-id-input", person.subscriber_id);
+      setValue("#manual-entry-insurer-number-input", person.insurer_number);
       setValue("#manual-entry-hia-subscriber-id-input", person.hia_subscriber_id);
       setValue("#manual-entry-name-full-input", person.name_full);
       setValue("#manual-entry-name-kana-input", person.name_kana);
@@ -2559,6 +2561,7 @@
       const person = {
         subscriber_id: params.get("subscriber_id") || "",
         hia_subscriber_id: params.get("hia_subscriber_id") || "",
+        insurer_number: params.get("insurer_number") || "",
         name_full: params.get("name_full") || "",
         name_kana: params.get("name_kana") || "",
         insurance_symbol: params.get("insurance_symbol") || "",
@@ -2611,6 +2614,7 @@
       const person = {
         subscriber_id: draft.subscriber_id || "",
         hia_subscriber_id: draft.hia_subscriber_id || "",
+        insurer_number: draft.insurer_number || "",
         name_full: draft.name_full || "",
         name_kana: draft.name_kana || "",
         insurance_symbol: draft.insurance_symbol || "",
