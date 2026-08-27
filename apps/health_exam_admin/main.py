@@ -11949,6 +11949,14 @@ def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 
+@app.get("/support/mhlw-zip-format", response_class=HTMLResponse)
+def support_mhlw_zip_format(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse("support_mhlw_zip_format.html", {"request": request, "user": user})
+
+
 @app.get("/manual-exam-entry", response_class=HTMLResponse)
 def manual_exam_entry(request: Request) -> Response:
     user = require_user(request)

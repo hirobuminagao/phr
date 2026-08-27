@@ -5831,7 +5831,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   gap: 12px;
 }
 
-.detail-grid > div {
+.detail-grid > div,
+.detail-grid > article {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
@@ -5858,6 +5859,26 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .detail-grid-wide {
   grid-column: 1 / -1;
+}
+
+.code-block {
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.support-steps {
+  margin: 0;
+  padding-left: 24px;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.9;
 }
 
 .definition-list {

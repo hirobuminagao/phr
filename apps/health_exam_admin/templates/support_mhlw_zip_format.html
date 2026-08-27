@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% set title = "厚労省フォーマットZIP作成サポート" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Support</p>
+    <h1>厚労省フォーマットZIP作成サポート</h1>
+    <p class="subtle">XML提出用ZIPで迷いやすい、ルートフォルダと中身の置き方を確認します。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/hia/xml-zip-check">XML ZIPチェック</a>
+    <a class="ghost-button" href="/export-lists">XML作成</a>
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>ZIPの作り方</h2>
+        <p class="subtle">ZIPを開いた直下に、提出対象のフォルダまたはXMLファイルが見える状態にします。</p>
+      </div>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <span class="status-pill status-ready">推奨</span>
+        <strong>提出単位のフォルダを選んでZIP化</strong>
+        <small>フォルダの親や作業用ディレクトリを含めないようにします。</small>
+      </div>
+      <div class="summary-card">
+        <span class="status-pill status-pending">確認</span>
+        <strong>ZIP直下に余計な階層を作らない</strong>
+        <small>Downloads、xml作成_出力履歴、日付フォルダなどが直下に入っていないか見ます。</small>
+      </div>
+      <div class="summary-card">
+        <span class="status-pill status-muted">避ける</span>
+        <strong>作業ルートごとZIP化しない</strong>
+        <small>受領フォルダ全体や履歴フォルダ全体をまとめると、提出先で読み取れない原因になります。</small>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>基本構造</h2>
+        <p class="subtle">ZIPの中を開いた時に、提出対象だけが見える形にします。</p>
+      </div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>確認箇所</th>
+            <th>OK</th>
+            <th>NG</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>ZIP直下</strong></td>
+            <td>提出用フォルダ、またはXMLファイルが直接見える</td>
+            <td>作業フォルダ、Downloads、履歴フォルダが先に見える</td>
+          </tr>
+          <tr>
+            <td><strong>ルートフォルダ</strong></td>
+            <td>提出する単位のフォルダだけをルートにする</td>
+            <td>受領ルートや複数の関係ない健診機関フォルダを含める</td>
+          </tr>
+          <tr>
+            <td><strong>対象ファイル</strong></td>
+            <td>XML作成で出力された提出対象ファイルだけを含める</td>
+            <td>CSV、元XML、ログ、作業メモ、別日付の出力を混ぜる</td>
+          </tr>
+          <tr>
+            <td><strong>再ZIP</strong></td>
+            <td>解凍後に対象フォルダを選び直してZIP化する</td>
+            <td>ZIPファイルを含むフォルダごとさらにZIP化する</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>例</h2>
+        <p class="subtle">FinderやエクスプローラーでZIPを開いた時の見え方です。</p>
+      </div>
+    </div>
+    <div class="detail-grid">
+      <article class="detail-card">
+        <span class="status-pill status-ready">OK</span>
+        <h3>提出フォルダを直接ZIP化</h3>
+        <pre class="code-block">提出用.zip
+└─ XML提出フォルダ
+   ├─ XXXXX.xml
+   └─ YYYYY.xml</pre>
+      </article>
+      <article class="detail-card">
+        <span class="status-pill status-danger">NG</span>
+        <h3>作業ルートごとZIP化</h3>
+        <pre class="code-block">提出用.zip
+└─ xml作成_出力履歴
+   └─ 2026-08-27
+      └─ XML提出フォルダ
+         ├─ XXXXX.xml
+         └─ YYYYY.xml</pre>
+      </article>
+      <article class="detail-card">
+        <span class="status-pill status-danger">NG</span>
+        <h3>ZIPの二重包み</h3>
+        <pre class="code-block">提出用.zip
+└─ 作業フォルダ
+   └─ XML提出フォルダ.zip</pre>
+      </article>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>提出前チェック</h2>
+        <p class="subtle">迷ったらZIPを一度開いて、直下の見え方を確認します。</p>
+      </div>
+    </div>
+    <ol class="support-steps">
+      <li>作成したZIPを開く。</li>
+      <li>直下に作業用の親フォルダが入っていないか見る。</li>
+      <li>提出対象ではないCSV、ログ、メモ、古い出力が混ざっていないか見る。</li>
+      <li>この画面のOK例と同じ階層なら提出候補にする。</li>
+      <li>不安な場合は「XML ZIPチェック」で中身を確認する。</li>
+    </ol>
+  </section>
+</main>
+{% endblock %}
