@@ -141,9 +141,13 @@
           <strong>未合致アップロードヘッダー</strong>
           <small>ここから基準行へドラッグ</small>
         </div>
+        <label class="csv-header-unmatched-filter">
+          <span>絞り込み</span>
+          <input type="search" data-header-drawer-filter placeholder="列番 / ヘッダー / context">
+        </label>
         <div class="csv-header-unmatched-list" data-header-drawer-list>
           {% for upload in compare_result.unmatched_uploads %}
-          <div class="csv-header-upload-card" draggable="true" data-upload-column="{{ upload.column_no }}">
+          <div class="csv-header-upload-card" draggable="true" data-upload-column="{{ upload.column_no }}" data-filter-text="{{ upload.column_no }} {{ upload.name }} {{ upload.context }} {{ upload.context_summary }}">
             <strong>{{ upload.column_no }}列目 {{ upload.name or "-" }}</strong>
             <span>{{ upload.context_summary }}</span>
           </div>
@@ -243,6 +247,7 @@
   const statusFilterButtons = Array.from(document.querySelectorAll("[data-header-status-filter]"));
   const drawer = document.querySelector("[data-header-unmatched-drawer]");
   const drawerList = document.querySelector("[data-header-drawer-list]");
+  const drawerFilter = document.querySelector("[data-header-drawer-filter]");
 
   const applyCompareFilters = () => {
     const keyword = (keywordInput?.value || "").trim().toLowerCase();
@@ -373,6 +378,14 @@
     if (draggedCard) draggedCard.classList.remove("is-dragging");
     draggedCard = null;
     list.querySelectorAll(".is-drop-target").forEach((node) => node.classList.remove("is-drop-target"));
+  });
+
+  drawerFilter?.addEventListener("input", () => {
+    const keyword = drawerFilter.value.trim().toLowerCase();
+    drawerList?.querySelectorAll("[data-upload-column]").forEach((card) => {
+      const text = (card.dataset.filterText || card.textContent || "").toLowerCase();
+      card.hidden = keyword ? !text.includes(keyword) : false;
+    });
   });
 
   list.addEventListener("dragover", (event) => {
