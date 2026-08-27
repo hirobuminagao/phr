@@ -2158,6 +2158,21 @@
       return { exceededCount, firstExceeded };
     };
 
+    const scrollToManualTextLimitInput = (input) => {
+      if (!input) return;
+      const category = input.closest("[data-manual-entry-category]");
+      if (category && "open" in category) category.open = true;
+      const row = input.closest("[data-manual-entry-item-row]");
+      if (row) {
+        row.classList.add("is-scroll-target");
+        window.setTimeout(() => row.classList.remove("is-scroll-target"), 2400);
+      }
+      window.setTimeout(() => {
+        (row || input).scrollIntoView({ behavior: "smooth", block: "center" });
+        input.focus?.();
+      }, 50);
+    };
+
     refreshManualEntryFilledCount = () => {
       const count = collectManualEntryValues().length;
       if (manualEntryFilledCount) manualEntryFilledCount.textContent = String(count);
@@ -2183,8 +2198,7 @@
       if (textLimitState.exceededCount > 0) {
         if (!silent) {
           setManualEntrySaveStatus(`ST文字数超過 ${textLimitState.exceededCount}件`, "status-danger");
-          textLimitState.firstExceeded?.scrollIntoView({ behavior: "smooth", block: "center" });
-          textLimitState.firstExceeded?.focus?.();
+          scrollToManualTextLimitInput(textLimitState.firstExceeded);
         }
         return;
       }

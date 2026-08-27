@@ -9009,7 +9009,7 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           d.subscriber_id,
           d.hia_subscriber_id,
           d.person_id_custom,
-          d.insurer_number,
+          COALESCE(NULLIF(d.insurer_number, ''), s.insurer_number) AS insurer_number,
           d.insurance_symbol,
           d.insurance_number,
           d.insurance_branch_number,
@@ -9032,6 +9032,8 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           COALESCE(cu.display_name, cu.employee_no, CONCAT('user ', d.created_by_app_user_id)) AS created_by_name,
           COALESCE(uu.display_name, uu.employee_no, CONCAT('user ', d.updated_by_app_user_id)) AS updated_by_name
         FROM {qname(health_db())}.manual_exam_entry_drafts d
+        LEFT JOIN {qname(dev_db())}.subscribers s
+          ON s.id = d.subscriber_id
         {value_join}
         {check_join}
         LEFT JOIN {qname(app_db())}.app_users cu
@@ -9122,32 +9124,34 @@ def load_manual_exam_entry_draft_by_id(cur: Any, draft_id: int) -> dict[str, Any
     cur.execute(
         f"""
         SELECT
-          manual_exam_entry_draft_id,
-          event_id,
-          draft_status,
-          entry_purpose,
-          exam_export_case_id,
-          subscriber_id,
-          hia_subscriber_id,
-          person_id_custom,
-          insurer_number,
-          insurance_symbol,
-          insurance_number,
-          insurance_branch_number,
-          name_full,
-          name_kana,
-          birthdate,
-          gender_code,
-          exam_facility_id,
-          facility_code,
-          facility_name,
-          facility_document_id,
-          exam_date,
-          note,
-          created_at,
-          updated_at
-        FROM {qname(health_db())}.manual_exam_entry_drafts
-        WHERE manual_exam_entry_draft_id = %s
+          d.manual_exam_entry_draft_id,
+          d.event_id,
+          d.draft_status,
+          d.entry_purpose,
+          d.exam_export_case_id,
+          d.subscriber_id,
+          d.hia_subscriber_id,
+          d.person_id_custom,
+          COALESCE(NULLIF(d.insurer_number, ''), s.insurer_number) AS insurer_number,
+          d.insurance_symbol,
+          d.insurance_number,
+          d.insurance_branch_number,
+          d.name_full,
+          d.name_kana,
+          d.birthdate,
+          d.gender_code,
+          d.exam_facility_id,
+          d.facility_code,
+          d.facility_name,
+          d.facility_document_id,
+          d.exam_date,
+          d.note,
+          d.created_at,
+          d.updated_at
+        FROM {qname(health_db())}.manual_exam_entry_drafts d
+        LEFT JOIN {qname(dev_db())}.subscribers s
+          ON s.id = d.subscriber_id
+        WHERE d.manual_exam_entry_draft_id = %s
         LIMIT 1
         """,
         (draft_id,),
@@ -9400,6 +9404,22 @@ def _manual_date_text(value: Any) -> str | None:
     return normalized.get("field_norm") or text
 
 
+def load_subscriber_insurer_number(cur: Any, subscriber_id: int | None) -> str | None:
+    if not subscriber_id:
+        return None
+    cur.execute(
+        f"""
+        SELECT insurer_number
+        FROM {qname(dev_db())}.subscribers
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (subscriber_id,),
+    )
+    row = cur.fetchone()
+    return _manual_text(row.get("insurer_number") if row else None)
+
+
 def insert_manual_exam_entry_draft(
     cur: Any,
     *,
@@ -9409,6 +9429,11 @@ def insert_manual_exam_entry_draft(
     source_payload: Mapping[str, Any],
     user_id: int,
 ) -> int:
+    subscriber_id = _optional_int(source_payload.get("subscriber_id"))
+    insurer_number = _manual_text(source_payload.get("insurer_number")) or load_subscriber_insurer_number(
+        cur,
+        subscriber_id,
+    )
     cur.execute(
         f"""
         INSERT INTO {qname(health_db())}.manual_exam_entry_drafts (
@@ -9463,10 +9488,10 @@ def insert_manual_exam_entry_draft(
             event_id,
             entry_purpose,
             _optional_int(source_payload.get("exam_export_case_id") or source_payload.get("case_id")),
-            _optional_int(source_payload.get("subscriber_id")),
+            subscriber_id,
             _manual_text(source_payload.get("hia_subscriber_id")),
             _manual_text(source_payload.get("person_id_custom")),
-            _manual_text(source_payload.get("insurer_number")),
+            insurer_number,
             _manual_text(source_payload.get("insurance_symbol")),
             _manual_text(source_payload.get("insurance_number")),
             _manual_text(source_payload.get("insurance_branch_number")),
@@ -10298,6 +10323,11 @@ def update_manual_exam_entry_draft_from_basic(
     before = load_manual_exam_entry_draft_by_id(cur, draft_id)
     if before is None:
         raise ValueError("draft_not_found")
+    subscriber_id = _optional_int(basic.get("subscriber_id"))
+    insurer_number = _manual_text(basic.get("insurer_number")) or load_subscriber_insurer_number(
+        cur,
+        subscriber_id,
+    )
     cur.execute(
         f"""
         UPDATE {qname(health_db())}.manual_exam_entry_drafts
@@ -10327,10 +10357,10 @@ def update_manual_exam_entry_draft_from_basic(
             event_id,
             _manual_text(basic.get("entry_purpose")) or "PAPER_ONLY",
             _optional_int(basic.get("exam_export_case_id")),
-            _optional_int(basic.get("subscriber_id")),
+            subscriber_id,
             _manual_text(basic.get("hia_subscriber_id")),
             _manual_text(basic.get("person_id_custom")),
-            _manual_text(basic.get("insurer_number")),
+            insurer_number,
             _manual_text(basic.get("insurance_symbol")),
             _manual_text(basic.get("insurance_number")),
             _manual_text(basic.get("insurance_branch_number")),
