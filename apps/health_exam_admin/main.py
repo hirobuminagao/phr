@@ -6167,8 +6167,9 @@ def load_subscriber_match_candidate_rows(
     query = query.strip()
     if query:
         like = f"%{query}%"
+        employee_code_expr = "s.employee_code" if "employee_code" in subscriber_columns else "''"
         where_parts.append(
-            """
+            f"""
             (
               s.hia_subscriber_id LIKE %s
               OR s.person_id_custom LIKE %s
@@ -6177,7 +6178,7 @@ def load_subscriber_match_candidate_rows(
               OR s.name_kana_full_match LIKE %s
               OR s.insurance_number LIKE %s
               OR s.insurance_number_match LIKE %s
-              OR {("s.employee_code" if "employee_code" in subscriber_columns else "''")} LIKE %s
+              OR {employee_code_expr} LIKE %s
             )
             """
         )
