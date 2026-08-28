@@ -103,14 +103,13 @@
         <p class="subtle">CSVフォーマットとしての読込設定です。</p>
       </div>
       <div class="button-row">
-        <span class="status-pill {{ 'status-ready' if template.is_active else 'status-muted' }}">{{ '有効' if template.is_active else '無効' }}</span>
-        {% if template.is_default_for_facility %}<span class="status-pill status-pending">施設default</span>{% endif %}
-        <form class="inline-form" method="post" action="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/toggle-active">
+        <form class="inline-form csv-template-active-toggle" method="post" action="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/toggle-active">
           <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
           <input type="hidden" name="return_to" value="detail">
-          <input type="hidden" name="is_active" value="{{ 0 if template.is_active else 1 }}">
-          <button class="ghost-button compact-action-button" type="submit">{{ '無効化' if template.is_active else '有効化' }}</button>
+          <button class="csv-template-active-toggle__option {{ 'is-active is-on' if template.is_active else '' }}" type="submit" name="is_active" value="1">有効</button>
+          <button class="csv-template-active-toggle__option {{ 'is-active is-off' if not template.is_active else '' }}" type="submit" name="is_active" value="0">無効</button>
         </form>
+        {% if template.is_default_for_facility %}<span class="status-pill status-pending">施設default</span>{% endif %}
       </div>
     </div>
     <div class="detail-grid">
@@ -130,6 +129,80 @@
       <pre>{{ template.header_snapshot_json }}</pre>
     </details>
     {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>alias設定</h2>
+        <p class="subtle">このテンプレートが、どの受領フォルダaliasに設定されているかを確認します。同じ健診機関のaliasなら複数設定できます。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ alias_rows|selectattr("is_current_template")|list|length }}件</span>
+    </div>
+    {% set assignable_alias_rows = alias_rows|rejectattr("is_current_template")|list %}
+    {% if assignable_alias_rows %}
+    <form class="filter-card compact-filter csv-template-alias-assign-form" method="post" action="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/aliases">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+      <label>
+        <span>このテンプレートを設定するalias</span>
+        <select name="alias_id" required>
+          <option value="">選択してください</option>
+          {% for alias in assignable_alias_rows %}
+          <option value="{{ alias.alias_id }}">
+            {{ alias.event_name or ('event ' ~ alias.event_id) }} / {{ alias.src_folder_raw }}{% if alias.mapping_version %} / 現在: {{ alias.mapping_version }}{% else %} / 現在: 未設定{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button type="submit">aliasに設定</button>
+      </div>
+    </form>
+    {% endif %}
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>受領フォルダalias</th>
+            <th>現在のテンプレート</th>
+            <th>受領方式</th>
+            <th>状態</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for alias in alias_rows %}
+          <tr>
+            <td>
+              <strong>{{ alias.src_folder_raw or "-" }}</strong>
+              <small>{{ alias.event_name or alias.event_id }} / alias_id {{ alias.alias_id }}</small>
+              {% if alias.dst_folder_norm and alias.dst_folder_norm != alias.src_folder_raw %}
+              <small>正規化後: {{ alias.dst_folder_norm }}</small>
+              {% endif %}
+            </td>
+            <td>
+              {% if alias.is_current_template %}
+              <span class="status-pill status-ready">このテンプレート</span>
+              {% elif alias.mapping_version %}
+              <strong>{{ alias.mapping_version }}</strong>
+              {% if alias.format_name %}<small>{{ alias.format_name }}</small>{% endif %}
+              {% else %}
+              <span class="status-pill status-muted">未設定</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="status-pill status-neutral">{{ alias.expected_source_mode_label }}</span>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if alias.is_active else 'status-muted' }}">{{ '有効' if alias.is_active else '無効' }}</span>
+              <small>更新 {{ alias.updated_at }}</small>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty-state">この健診機関の受領フォルダaliasはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section class="panel">

@@ -46,6 +46,7 @@
             <th>ヘッダー/形式</th>
             <th>ルール</th>
             <th>利用状況</th>
+            <th>alias設定</th>
             <th>状態</th>
             <th>操作</th>
           </tr>
@@ -76,23 +77,31 @@
               <small>ledger {{ row.ledger_count }}</small>
             </td>
             <td>
-              <span class="status-pill {{ 'status-ready' if row.is_active else 'status-muted' }}">{{ '有効' if row.is_active else '無効' }}</span>
+              <strong>{{ row.alias_count or 0 }}件</strong>
+              <small>有効 {{ row.active_alias_count or 0 }}件</small>
+              {% if row.alias_summary %}
+              <small class="csv-template-alias-summary">{{ row.alias_summary }}</small>
+              {% else %}
+              <small>未設定</small>
+              {% endif %}
+            </td>
+            <td>
+              <form class="inline-form csv-template-active-toggle" method="post" action="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}/toggle-active">
+                <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+                <input type="hidden" name="return_to" value="list">
+                <button class="csv-template-active-toggle__option {{ 'is-active is-on' if row.is_active else '' }}" type="submit" name="is_active" value="1">有効</button>
+                <button class="csv-template-active-toggle__option {{ 'is-active is-off' if not row.is_active else '' }}" type="submit" name="is_active" value="0">無効</button>
+              </form>
               {% if row.is_default_for_facility %}<span class="status-pill status-pending">施設default</span>{% endif %}
               <small>更新 {{ row.updated_at }}</small>
             </td>
             <td>
               <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}">詳細</a>
               <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}/edit">編集</a>
-              <form class="inline-form" method="post" action="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}/toggle-active">
-                <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
-                <input type="hidden" name="return_to" value="list">
-                <input type="hidden" name="is_active" value="{{ 0 if row.is_active else 1 }}">
-                <button class="ghost-button compact-action-button" type="submit">{{ '無効化' if row.is_active else '有効化' }}</button>
-              </form>
             </td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="empty-state">CSVテンプレートはありません。</td></tr>
+          <tr><td colspan="8" class="empty-state">CSVテンプレートはありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>

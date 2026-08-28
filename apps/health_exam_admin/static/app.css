@@ -5016,6 +5016,57 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   color: var(--muted);
 }
 
+.csv-template-active-toggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid #bfd0e4;
+  border-radius: 999px;
+  background: #edf3f8;
+}
+
+.csv-template-active-toggle__option {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.csv-template-active-toggle__option.is-active.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.csv-template-active-toggle__option.is-active.is-off {
+  background: #64748b;
+  color: #fff;
+}
+
+.csv-template-active-toggle__option:not(.is-active):hover,
+.csv-template-active-toggle__option:not(.is-active):focus-visible {
+  background: #fff;
+  color: var(--accent-dark);
+  border-color: #97afc7;
+  outline: none;
+}
+
+.csv-template-alias-summary {
+  max-width: 260px;
+  white-space: pre-line;
+}
+
+.csv-template-alias-assign-form {
+  grid-template-columns: minmax(360px, 1fr) auto;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;
@@ -6618,7 +6669,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  width: min(100%, 360px);
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -6839,8 +6890,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-template-target-selected__list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
 }
@@ -6971,6 +7022,14 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-template-header-candidates .csv-template-target-search {
   grid-column: 2;
+}
+
+.csv-template-header-search {
+  gap: 0;
+}
+
+.csv-template-header-search input {
+  min-height: 44px;
 }
 
 .csv-template-header-candidate-list {

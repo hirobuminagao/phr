@@ -4367,7 +4367,10 @@ def load_csv_mapping_template_rows(cur: Any, *, keyword: str = "", limit: int = 
           COALESCE(rule_counts.`view_only_rule_count`, 0) AS `view_only_rule_count`,
           COALESCE(rule_counts.`condition_count`, 0) AS `condition_count`,
           COALESCE(receipt_counts.`receipt_count`, 0) AS `receipt_count`,
-          COALESCE(ledger_counts.`ledger_count`, 0) AS `ledger_count`
+          COALESCE(ledger_counts.`ledger_count`, 0) AS `ledger_count`,
+          COALESCE(alias_counts.`alias_count`, 0) AS `alias_count`,
+          COALESCE(alias_counts.`active_alias_count`, 0) AS `active_alias_count`,
+          alias_counts.`alias_summary`
         FROM {qname(master_db())}.`csv_format_versions` AS cfv
         LEFT JOIN {qname(master_db())}.`exam_facilities` AS ef
           ON ef.`exam_facility_id` = cfv.`exam_facility_id`
@@ -4400,6 +4403,17 @@ def load_csv_mapping_template_rows(cur: Any, *, keyword: str = "", limit: int = 
           GROUP BY `mapping_version`
         ) AS ledger_counts
           ON ledger_counts.`mapping_version` = cfv.`mapping_version`
+        LEFT JOIN (
+          SELECT
+            mfa.`csv_format_version_id`,
+            COUNT(*) AS `alias_count`,
+            SUM(CASE WHEN mfa.`is_active` = 1 THEN 1 ELSE 0 END) AS `active_alias_count`,
+            GROUP_CONCAT(mfa.`src_folder_raw` ORDER BY mfa.`is_active` DESC, mfa.`updated_at` DESC, mfa.`alias_id` DESC SEPARATOR '\n') AS `alias_summary`
+          FROM {qname(master_db())}.`medical_folder_aliases` AS mfa
+          WHERE mfa.`csv_format_version_id` IS NOT NULL
+          GROUP BY mfa.`csv_format_version_id`
+        ) AS alias_counts
+          ON alias_counts.`csv_format_version_id` = cfv.`csv_format_version_id`
         WHERE {where_sql}
         ORDER BY cfv.`is_active` DESC, cfv.`is_default_for_facility` DESC, ef.`exam_facility_code`, cfv.`mapping_version`
         LIMIT %s
@@ -4429,6 +4443,47 @@ def load_csv_mapping_template_detail(cur: Any, *, csv_format_version_id: int) ->
     )
     row = cur.fetchone()
     return dict(row) if row else None
+
+
+def load_csv_mapping_template_alias_rows(
+    cur: Any, *, csv_format_version_id: int, exam_facility_id: int | None
+) -> list[dict[str, Any]]:
+    if not exam_facility_id:
+        return []
+    cur.execute(
+        f"""
+        SELECT
+          mfa.`alias_id`,
+          mfa.`event_id`,
+          ev.`event_name`,
+          mfa.`src_folder_raw`,
+          mfa.`dst_folder_norm`,
+          mfa.`expected_source_mode`,
+          mfa.`csv_format_version_id`,
+          cfv.`mapping_version`,
+          cfv.`format_name`,
+          cfv.`is_active` AS `csv_format_is_active`,
+          mfa.`is_active`,
+          mfa.`updated_at`
+        FROM {qname(master_db())}.`medical_folder_aliases` AS mfa
+        LEFT JOIN {qname(dev_db())}.`event` AS ev
+          ON ev.`event_id` = mfa.`event_id`
+        LEFT JOIN {qname(master_db())}.`csv_format_versions` AS cfv
+          ON cfv.`csv_format_version_id` = mfa.`csv_format_version_id`
+        WHERE mfa.`exam_facility_id` = %s
+        ORDER BY
+          CASE WHEN mfa.`csv_format_version_id` = %s THEN 0 ELSE 1 END,
+          mfa.`is_active` DESC,
+          mfa.`event_id` DESC,
+          mfa.`src_folder_raw`
+        """,
+        (exam_facility_id, csv_format_version_id),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+        row["is_current_template"] = int(row.get("csv_format_version_id") or 0) == int(csv_format_version_id)
+    return rows
 
 
 def load_csv_mapping_template_rule_summary(cur: Any, *, csv_format_version_id: int) -> list[dict[str, Any]]:
@@ -15970,12 +16025,18 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
                 header_columns = attach_csv_header_neighbors(
                     load_csv_mapping_template_header_columns(cur, template=template, conditions=conditions)
                 )
+                alias_rows = load_csv_mapping_template_alias_rows(
+                    cur,
+                    csv_format_version_id=csv_format_version_id,
+                    exam_facility_id=_optional_int(template.get("exam_facility_id")),
+                )
             else:
                 summaries = []
                 rules = []
                 conditions = []
                 target_groups = []
                 header_columns = []
+                alias_rows = []
             conn.commit()
         except Exception:
             conn.rollback()
@@ -16007,6 +16068,7 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "target_groups": target_groups,
             "header_columns": header_columns,
             "header_preview": build_csv_mapping_template_header_preview_payload(template, header_columns),
+            "alias_rows": alias_rows,
             "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
             "mapped_header_count": sum(1 for column in header_columns if column.get("is_mapped")),
             "unmapped_header_count": sum(1 for column in header_columns if not column.get("is_mapped")),
@@ -16250,6 +16312,87 @@ async def toggle_admin_csv_mapping_template_active(request: Request, csv_format_
     else:
         url = f"/admin/csv-mapping-templates/{csv_format_version_id}"
     return RedirectResponse(f"{url}?message={quote(message)}", status_code=303)
+
+
+@app.post("/admin/csv-mapping-templates/{csv_format_version_id}/aliases", response_class=HTMLResponse)
+async def assign_admin_csv_mapping_template_alias(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    alias_id = _optional_int(form.get("alias_id"))
+    if not alias_id:
+        return RedirectResponse(
+            f"/admin/csv-mapping-templates/{csv_format_version_id}?error={quote('設定する受領フォルダaliasを選択してください。')}",
+            status_code=303,
+        )
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if not template:
+                conn.rollback()
+                return RedirectResponse(
+                    f"/admin/csv-mapping-templates?error={quote(f'csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。')}",
+                    status_code=303,
+                )
+            cur.execute(
+                f"""
+                SELECT `alias_id`, `exam_facility_id`, `csv_format_version_id`, `src_folder_raw`
+                  FROM {qname(master_db())}.`medical_folder_aliases`
+                 WHERE `alias_id` = %s
+                """,
+                (alias_id,),
+            )
+            alias = cur.fetchone()
+            if not alias:
+                conn.rollback()
+                return RedirectResponse(
+                    f"/admin/csv-mapping-templates/{csv_format_version_id}?error={quote('受領フォルダaliasが見つかりません。')}",
+                    status_code=303,
+                )
+            if int(alias.get("exam_facility_id") or 0) != int(template.get("exam_facility_id") or 0):
+                conn.rollback()
+                return RedirectResponse(
+                    f"/admin/csv-mapping-templates/{csv_format_version_id}?error={quote('テンプレートとaliasの健診機関が一致しません。')}",
+                    status_code=303,
+                )
+            before = {
+                "alias_id": alias_id,
+                "csv_format_version_id": alias.get("csv_format_version_id"),
+                "src_folder_raw": alias.get("src_folder_raw"),
+            }
+            cur.execute(
+                f"""
+                UPDATE {qname(master_db())}.`medical_folder_aliases`
+                   SET `csv_format_version_id` = %s,
+                       `updated_at` = CURRENT_TIMESTAMP(3)
+                 WHERE `alias_id` = %s
+                """,
+                (csv_format_version_id, alias_id),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="CSV_MAPPING_TEMPLATE_ALIAS_ASSIGN",
+                target_schema=master_db(),
+                target_table="medical_folder_aliases",
+                target_id=str(alias_id),
+                before=before,
+                after={"csv_format_version_id": csv_format_version_id},
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse(
+        f"/admin/csv-mapping-templates/{csv_format_version_id}?message={quote('受領フォルダaliasにテンプレートを設定しました。')}",
+        status_code=303,
+    )
 
 
 @app.post("/api/admin/csv-mapping-templates/{csv_format_version_id}/screen-rules", response_class=JSONResponse)
