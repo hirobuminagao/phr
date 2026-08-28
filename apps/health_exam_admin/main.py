@@ -9830,7 +9830,7 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
         result_code_oid = str(row.get("result_code_oid") or "")
         row["manual_code_options"] = code_options.get(result_code_oid, [])
         row["manual_code_toggle_options"] = (
-            str(row.get("xml_value_type") or "").upper() == "CD"
+            str(row.get("xml_value_type") or "").upper() in {"CD", "CO"}
             and str(row.get("identity_item_code") or "") in MANUAL_EXAM_FLAG_TOGGLE_IDENTITY_CODES
             and len(row["manual_code_options"]) == 2
         )
@@ -11006,7 +11006,8 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
         code_value = _manual_text(value.get("code_value"))
         code_display = _manual_text(value.get("code_display"))
         raw_value = _manual_text(value.get("raw_value")) or code_value
-        normalized_value = _manual_text(value.get("normalized_value")) or raw_value
+        is_code_value = raw_value_type.upper() in {"CD", "CO"}
+        normalized_value = None if is_code_value else (_manual_text(value.get("normalized_value")) or raw_value)
         rows.append(
             (
                 event_id,
@@ -11416,7 +11417,9 @@ def replace_manual_exam_entry_draft_values(
                 _manual_text(value.get("identity_item_name")),
                 _manual_text(value.get("xml_value_type")),
                 raw_value or code_value,
-                _manual_text(value.get("normalized_value")) or raw_value or code_value,
+                None
+                if str(value.get("xml_value_type") or "").upper() in {"CD", "CO"}
+                else (_manual_text(value.get("normalized_value")) or raw_value or code_value),
                 _manual_text(value.get("code_system")),
                 code_value,
                 _manual_text(value.get("code_display")),

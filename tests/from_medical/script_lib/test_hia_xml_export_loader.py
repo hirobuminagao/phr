@@ -21,7 +21,9 @@ def base_row() -> dict:
         "exam_date": "2026-06-01",
         "health_exam_report_category": "10",
         "program_code": "010",
+        "address": "東京都千代田区",
         "subscriber_match_status": "MATCHED",
+        "export_readiness_status": "EXPORT_READY",
         "check_status": "OK",
         "check_reason": None,
         "manual_export_approved": 0,
@@ -58,6 +60,20 @@ def test_incomplete_candidate_is_not_treated_as_duplicate() -> None:
     assert detect_unresolved_duplicates([first, second]) == set()
 
 
+def test_candidate_allows_missing_postal_code_when_address_exists() -> None:
+    row = base_row()
+    row.update(postal_code=None, postal_code_completed_value=None, address="東京都千代田区", address_completed_value=None)
+    assert decide_candidate(row).allowed
+
+
+def test_candidate_blocks_when_address_is_missing() -> None:
+    row = base_row()
+    row.update(postal_code=None, postal_code_completed_value=None, address=None, address_completed_value=None)
+    decision = decide_candidate(row)
+    assert not decision.allowed
+    assert decision.reason == "ADDRESS_MISSING"
+
+
 def test_fetch_valid_items_passes_annex2_and_source_metadata() -> None:
     class Cursor:
         def execute(self, sql: str, params: tuple[object, ...]) -> None:
@@ -92,7 +108,7 @@ def test_fetch_valid_items_passes_annex2_and_source_metadata() -> None:
             ]
 
     cur = Cursor()
-    item = fetch_valid_items(cur, ledger_id=1, health_db="health_exam_result", dev_db="dev_phr")[0]
+    item = fetch_valid_items(cur, ledger_id=1, health_db="health_exam_result", dev_db="dev_phr", master_db="phr_master")[0]
 
     assert item.interpretation_code == "L"
     assert item.source_reference_lower == "35.5"

@@ -164,7 +164,10 @@ def _add_exam_item_observation(parent: ET.Element, item: ExamItem) -> ET.Element
     ET.SubElement(observation, _h("code"), code_attrs)
 
     value_type = (item.value_type or "ST").upper()
-    has_value = bool(item.nullflavor or item.code_value is not None or item.normalized_value is not None)
+    if value_type in {"CD", "CO"}:
+        has_value = bool(item.nullflavor or item.code_value is not None)
+    else:
+        has_value = bool(item.nullflavor or item.normalized_value is not None)
     if has_value or not item.negation_ind:
         value_attrs = {f"{{{NS_XSI}}}type": value_type}
         value = ET.SubElement(observation, _h("value"), value_attrs)

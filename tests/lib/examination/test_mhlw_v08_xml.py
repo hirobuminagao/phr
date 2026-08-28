@@ -25,7 +25,15 @@ def test_generated_clinical_document_and_index_validate_against_v08() -> None:
     items = [
         ExamItem("9N511000000000049", "01010", "ST", "異常なし", display_name="医師の診断"),
         ExamItem("9A755000000000001", "01010", "PQ", "170.0", normalized_unit="cm", display_name="身長"),
-        ExamItem("9N701000000000011", "01010", "CD", None, code_value="2", code_system="1.2.392.200119.6.2201"),
+        ExamItem(
+            "9N701000000000011",
+            "01010",
+            "CD",
+            None,
+            code_value="2",
+            code_system="1.2.392.200119.6.2201",
+            display_name="既往歴",
+        ),
     ]
 
     clinical = xml_bytes(build_clinical_document(person, facility, items, "20260730"))
@@ -42,6 +50,40 @@ def test_generated_clinical_document_and_index_validate_against_v08() -> None:
 def test_official_file_names() -> None:
     assert root_dir_name("0123456789", "06139463", "20260730", 0) == "0123456789_06139463_202607300_1"
     assert person_xml_file_name("0123456789", "20260730", 0, 1) == "h01234567892026073001000001.xml"
+
+
+def test_coded_values_do_not_emit_normalized_value_as_value_body() -> None:
+    facility = Facility("0123456789", "テスト健診機関")
+    person = Person("06139463", "1", "2", "ヤマダ　タロウ", "1", "19800102", "20260603", "10", "010")
+    items = [
+        ExamItem(
+            "9N206160700000011",
+            "01990",
+            "CD",
+            "所見なし",
+            code_system="1.2.392.200119.6.2102",
+            code_value="2",
+            code_display="所見なし",
+            display_name="胸部Ｘ線検査(一般:直接撮影)(所見の有無)",
+        ),
+        ExamItem(
+            "9N701000000000011",
+            "01010",
+            "CO",
+            "特記事項なし",
+            code_system="1.2.392.200119.6.2201",
+            code_value="2",
+            code_display="特記事項なし",
+            display_name="既往歴",
+        ),
+    ]
+
+    content = xml_bytes(build_clinical_document(person, facility, items, "20260730"))
+    assert b'xsi:type="CD" code="2"' in content
+    assert b'xsi:type="CO" code="2"' in content
+    assert b'value="\xe6\x89\x80\xe8\xa6\x8b\xe3\x81\xaa\xe3\x81\x97"' not in content
+    assert b">" + "所見なし".encode() + b"</value>" not in content
+    validate_xml(content, XSD_ROOT / "hc08_V08.xsd")
 
 
 def test_annex2_series_group_reference_range_and_interpretation() -> None:
@@ -71,7 +113,7 @@ def test_annex2_series_group_reference_range_and_interpretation() -> None:
             series_group_relation_code="RSON",
             display_name="貧血検査実施理由",
         ),
-        ExamItem("9A755000000000001", "01010", "PQ", None, negation_ind=True),
+        ExamItem("9A755000000000001", "01010", "PQ", None, negation_ind=True, display_name="身長"),
     ]
 
     content = xml_bytes(build_clinical_document(person, facility, items, "20260730"))

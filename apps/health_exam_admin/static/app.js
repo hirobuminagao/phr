@@ -2204,16 +2204,18 @@
         const selectedOption = codeSelect?.selectedOptions?.[0];
         const methodSelect = row.querySelector(".manual-entry-method-select");
         const methodOption = methodSelect?.selectedOptions?.[0];
+        const valueType = (row.getAttribute("data-xml-value-type") || "").toUpperCase();
+        const isCodeValue = valueType === "CD" || valueType === "CO";
         values.push({
           namecode: row.getAttribute("data-namecode") || "",
           namecode_display_name: row.getAttribute("data-item-name") || "",
           identity_item_code: row.getAttribute("data-identity-item-code") || "",
           identity_item_name: row.getAttribute("data-identity-item-name") || "",
-          xml_value_type: row.getAttribute("data-xml-value-type") || "",
+          xml_value_type: valueType,
           raw_value: rawValue,
-          normalized_value: rawValue,
+          normalized_value: isCodeValue ? "" : rawValue,
           code_system: row.getAttribute("data-code-system") || "",
-          code_value: row.getAttribute("data-xml-value-type") === "CD" ? rawValue : "",
+          code_value: isCodeValue ? rawValue : "",
           code_display: selectedOption && selectedOption.value ? selectedOption.textContent?.trim() || "" : "",
           display_unit: row.getAttribute("data-display-unit") || "",
           ucum_unit: row.getAttribute("data-ucum-unit") || "",

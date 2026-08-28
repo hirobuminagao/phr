@@ -53,8 +53,6 @@ def decide_candidate(row: Mapping[str, Any]) -> CandidateDecision:
             return CandidateDecision(False, reason)
     if row.get("basic_info_status") == "NG":
         return CandidateDecision(False, row.get("basic_info_reason") or "BASIC_INFO_NG")
-    if row.get("postal_code") in (None, "") and row.get("postal_code_completed_value") in (None, ""):
-        return CandidateDecision(False, "POSTAL_CODE_MISSING")
     if row.get("address") in (None, "") and row.get("address_completed_value") in (None, ""):
         return CandidateDecision(False, "ADDRESS_MISSING")
     if row.get("subscriber_match_status") != "MATCHED":
@@ -68,6 +66,40 @@ def decide_candidate(row: Mapping[str, Any]) -> CandidateDecision:
     if not row.get("manual_export_reason") or not row.get("manual_export_approved_at") or not row.get("manual_export_approved_by"):
         return CandidateDecision(False, "MANUAL_APPROVAL_INCOMPLETE")
     return CandidateDecision(True)
+
+
+def candidate_duplicate_key(row: Mapping[str, Any]) -> tuple[str, str, str, str] | None:
+    decision = decide_candidate(row)
+    if not decision.allowed:
+        return None
+    required = (
+        row.get("subscriber_id"),
+        row.get("exam_date"),
+        row.get("exam_facility_id"),
+        row.get("insurer_number"),
+    )
+    if any(value in (None, "") for value in required):
+        return None
+    insurer_number = re.sub(r"\D", "", str(row.get("insurer_number") or ""))
+    if insurer_number:
+        insurer_number = insurer_number.zfill(8)
+    return (
+        str(row.get("subscriber_id")),
+        str(row.get("exam_date")),
+        str(row.get("exam_facility_id")),
+        insurer_number,
+    )
+
+
+def detect_unresolved_duplicates(rows: Iterable[Mapping[str, Any]]) -> set[int]:
+    grouped: dict[tuple[str, str, str, str], list[int]] = {}
+    for row in rows:
+        key = candidate_duplicate_key(row)
+        row_id = row.get("csv_row_ledger_id") or row.get("exam_ledger_id") or row.get("exam_export_case_id")
+        if key is None or row_id in (None, ""):
+            continue
+        grouped.setdefault(key, []).append(int(row_id))
+    return {row_id for row_ids in grouped.values() if len(row_ids) > 1 for row_id in row_ids}
 
 
 def _in_clause(values: Iterable[Any], params: list[Any]) -> str:
@@ -190,7 +222,10 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
           ecv.namecode,
           COALESCE(NULLIF(em.cda_section_code_default, ''), '01990') AS section_code,
           COALESCE(em.xml_value_type, 'ST') AS value_type,
-          ecv.normalized_value,
+          CASE
+            WHEN COALESCE(em.xml_value_type, 'ST') IN ('CD', 'CO') THEN NULL
+            ELSE ecv.normalized_value
+          END AS normalized_value,
           CASE
             WHEN COALESCE(em.xml_value_type, 'ST') = 'PQ'
               THEN COALESCE(NULLIF(em.ucum_unit, ''), NULLIF(ecv.normalized_unit, ''), NULLIF(em.display_unit, ''))
