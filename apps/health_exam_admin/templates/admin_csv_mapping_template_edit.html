@@ -89,30 +89,23 @@
       <label>
         <span>テンプレート状態</span>
         {% set current_is_active = 1 if template and template.is_active else 0 %}
-        <select name="is_active">
-          <option value="0" {{ 'selected' if not current_is_active else '' }}>無効（scan/import対象外）</option>
-          <option value="1" {{ 'selected' if current_is_active else '' }}>有効（scan/import対象）</option>
-        </select>
+        <span class="csv-template-active-radio-toggle">
+          <label class="csv-template-active-radio-toggle__option {{ 'is-active is-on' if current_is_active else '' }}">
+            <input type="radio" name="is_active" value="1" {{ 'checked' if current_is_active else '' }}>
+            <span>有効</span>
+          </label>
+          <label class="csv-template-active-radio-toggle__option {{ 'is-active is-off' if not current_is_active else '' }}">
+            <input type="radio" name="is_active" value="0" {{ 'checked' if not current_is_active else '' }}>
+            <span>無効</span>
+          </label>
+        </span>
+        <small>無効にするとscan/importの対象外です。</small>
       </label>
     </div>
       <div class="button-row">
         <button class="primary-button" type="submit">{{ "作成" if mode == "new" else "基本情報を保存" }}</button>
-        {% if template %}
-        <button
-          class="ghost-button"
-          type="submit"
-          form="csv-template-active-toggle-form"
-        >{{ '無効化' if template.is_active else '有効化' }}</button>
-        {% endif %}
       </div>
     </form>
-    {% if template %}
-    <form id="csv-template-active-toggle-form" method="post" action="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/toggle-active">
-      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
-      <input type="hidden" name="return_to" value="edit">
-      <input type="hidden" name="is_active" value="{{ 0 if template.is_active else 1 }}">
-    </form>
-    {% endif %}
   </section>
 
   <div id="csv-template-facility-picker-modal" class="edit-modal" hidden data-alias-facility-picker-modal>

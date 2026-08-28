@@ -1327,6 +1327,19 @@
       formatNameInput.dispatchEvent(new Event("change", { bubbles: true }));
     }
   };
+  for (const toggle of document.querySelectorAll(".csv-template-active-radio-toggle")) {
+    const syncActiveRadioToggle = () => {
+      for (const option of toggle.querySelectorAll(".csv-template-active-radio-toggle__option")) {
+        const input = option.querySelector("input");
+        const checked = Boolean(input?.checked);
+        option.classList.toggle("is-active", checked);
+        option.classList.toggle("is-on", checked && input?.value === "1");
+        option.classList.toggle("is-off", checked && input?.value === "0");
+      }
+    };
+    toggle.addEventListener("change", syncActiveRadioToggle);
+    syncActiveRadioToggle();
+  }
   for (const button of document.querySelectorAll("[data-alias-facility-picker-open]")) {
     button.addEventListener("click", () => {
       const targetId = button.getAttribute("data-target-input") || "";

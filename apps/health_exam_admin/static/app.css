@@ -5016,7 +5016,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   color: var(--muted);
 }
 
-.csv-template-active-toggle {
+.csv-template-active-toggle,
+.csv-template-active-radio-toggle {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
@@ -5027,7 +5028,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #edf3f8;
 }
 
-.csv-template-active-toggle__option {
+.csv-template-active-toggle > .csv-template-active-toggle__option,
+.csv-template-active-radio-toggle > .csv-template-active-radio-toggle__option {
   min-height: 34px;
   padding: 6px 12px;
   border: 1px solid transparent;
@@ -5040,18 +5042,30 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   cursor: pointer;
 }
 
-.csv-template-active-toggle__option.is-active.is-on {
+.csv-template-active-radio-toggle__option input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.csv-template-active-toggle > .csv-template-active-toggle__option.is-active.is-on,
+.csv-template-active-radio-toggle > .csv-template-active-radio-toggle__option.is-active.is-on {
   background: var(--accent);
   color: #fff;
 }
 
-.csv-template-active-toggle__option.is-active.is-off {
+.csv-template-active-toggle > .csv-template-active-toggle__option.is-active.is-off,
+.csv-template-active-radio-toggle > .csv-template-active-radio-toggle__option.is-active.is-off {
   background: #64748b;
   color: #fff;
 }
 
-.csv-template-active-toggle__option:not(.is-active):hover,
-.csv-template-active-toggle__option:not(.is-active):focus-visible {
+.csv-template-active-toggle > .csv-template-active-toggle__option:not(.is-active):hover,
+.csv-template-active-toggle > .csv-template-active-toggle__option:not(.is-active):focus-visible,
+.csv-template-active-radio-toggle > .csv-template-active-radio-toggle__option:not(.is-active):hover,
+.csv-template-active-radio-toggle > .csv-template-active-radio-toggle__option:has(input:focus-visible) {
   background: #fff;
   color: var(--accent-dark);
   border-color: #97afc7;
