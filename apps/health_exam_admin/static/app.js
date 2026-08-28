@@ -3698,6 +3698,7 @@
     const manualEntryFloatingItemResults = document.querySelector("[data-manual-entry-floating-item-results]");
     const categories = Array.from(manualEntryItemList.querySelectorAll(".manual-entry-category"));
     const itemRows = Array.from(manualEntryItemList.querySelectorAll("tbody tr[data-filter-text]"));
+    let floatingSearchScrollTimer = null;
     const openCategoryForRow = (row) => {
       const category = row.closest(".manual-entry-category");
       if (category) category.open = true;
@@ -3762,6 +3763,13 @@
         `;
       }).join("");
     };
+    const scrollToFirstFloatingSearchMatch = () => {
+      if (!manualEntryFloatingItemSearchInput) return;
+      const keyword = normalize(manualEntryFloatingItemSearchInput.value);
+      if (!keyword) return;
+      const match = itemRows.find((row) => normalize(row.dataset.filterText).includes(keyword));
+      if (match) jumpToManualEntryRow(match);
+    };
 
     if (manualEntryFloatingNav && manualEntryFloatingCategoryToggle) {
       const setCategoryCollapsed = (collapsed) => {
@@ -3798,7 +3806,11 @@
         jumpToManualEntryItem();
       }
     });
-    manualEntryFloatingItemSearchInput?.addEventListener("input", renderFloatingItemResults);
+    manualEntryFloatingItemSearchInput?.addEventListener("input", () => {
+      renderFloatingItemResults();
+      window.clearTimeout(floatingSearchScrollTimer);
+      floatingSearchScrollTimer = window.setTimeout(scrollToFirstFloatingSearchMatch, 180);
+    });
     manualEntryFloatingItemSearchInput?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();

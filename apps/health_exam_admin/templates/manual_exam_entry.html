@@ -619,7 +619,7 @@
                       <div class="manual-entry-code-toggle-switch">
                         {% for option in item.manual_code_options %}
                         <button type="button" data-manual-code-toggle value="{{ option.code }}" title="{{ option.option_label }}">
-                          {{ "ON" if "あり" in option.label else "OFF" }}
+                          {{ option.option_label }}
                         </button>
                         {% endfor %}
                       </div>

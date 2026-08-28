@@ -3387,7 +3387,7 @@ a.home-menu-card.is-navigating {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 68px;
+  min-width: 112px;
   min-height: 36px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -3406,6 +3406,7 @@ a.home-menu-card.is-navigating {
   background: transparent;
   color: var(--muted);
   box-shadow: none;
+  white-space: nowrap;
 }
 
 .manual-entry-code-toggle button:hover {
@@ -3418,7 +3419,9 @@ a.home-menu-card.is-navigating {
   background: rgba(255, 255, 255, 0.74);
 }
 
-.manual-entry-code-toggle-switch button.is-selected {
+.manual-entry-code-toggle-switch button.is-selected,
+.manual-entry-code-toggle-switch button.is-selected:hover,
+.manual-entry-code-toggle-switch button[aria-pressed="true"] {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
