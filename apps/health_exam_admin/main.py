@@ -6881,6 +6881,9 @@ def load_exam_export_case_rows(
     offset: int = 0,
 ) -> list[dict[str, Any]]:
     where_sql, params = build_exam_export_case_where(filters)
+    order_sql = "eec.updated_at DESC, eec.exam_export_case_id DESC"
+    if filters.get("duplicate_subscriber") == "1":
+        order_sql = "eec.subscriber_id, eec.exam_date DESC, eec.exam_facility_id, eec.exam_export_case_id DESC"
     subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
     subscriber_name_full_expr = "s.name_kanji_full" if "name_kanji_full" in subscriber_columns else "s.name_full_match"
     subscriber_select = lambda column, alias=None: (
@@ -7029,7 +7032,7 @@ def load_exam_export_case_rows(
           ON subcase.event_id = eec.event_id
          AND subcase.subscriber_id = eec.subscriber_id
         {where_sql}
-        ORDER BY eec.updated_at DESC, eec.exam_export_case_id DESC
+        ORDER BY {order_sql}
         LIMIT %s OFFSET %s
         """,
         (*params, limit, offset),
