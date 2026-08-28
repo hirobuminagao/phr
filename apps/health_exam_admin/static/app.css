@@ -6651,10 +6651,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-template-target-item-modal__panel {
-  width: min(1320px, calc(100vw - 48px));
+  width: min(1480px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .csv-template-target-item-layout {
@@ -6673,11 +6674,18 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-template-composer-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.92fr) minmax(390px, 1fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(390px, 1fr) minmax(460px, 1.28fr) minmax(360px, 0.95fr);
   gap: 14px;
   align-items: start;
   min-height: 0;
-  overflow: hidden;
+}
+
+.csv-template-composer-body {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .csv-template-composer-column {
@@ -6713,6 +6721,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-template-target-detail {
   max-height: calc(100vh - 260px);
+  min-height: 260px;
   overflow: auto;
   padding: 14px;
   border: 1px solid var(--line);
@@ -6781,8 +6790,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-target-results {
   display: grid;
   gap: 8px;
-  max-height: calc(100vh - 360px);
-  min-height: 220px;
+  max-height: calc(100vh - 410px);
+  min-height: 260px;
   overflow: auto;
   padding-right: 4px;
 }
@@ -6791,7 +6800,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 300px);
   min-height: 260px;
   overflow: auto;
   padding-right: 4px;
@@ -6861,7 +6870,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   border: 1px solid #d7e2ef;
   border-radius: 8px;
   background: #f8fafc;
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 300px);
   overflow: hidden;
 }
 
@@ -6885,20 +6894,52 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
-  max-height: calc(100vh - 520px);
-  min-height: 180px;
+  max-height: calc(100vh - 560px);
+  min-height: 220px;
   overflow: auto;
   padding-right: 4px;
 }
 
 .csv-template-composer-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  margin: 14px -18px -18px;
-  padding: 12px 18px;
+  flex-shrink: 0;
+  z-index: 3;
+  margin: 14px -22px -22px;
+  padding: 14px 22px;
   border-top: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--panel);
+  box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.csv-template-target-item-modal .csv-template-composer-actions .primary-button {
+  display: inline-flex;
+  min-width: 148px;
+  min-height: 42px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  opacity: 1;
+}
+
+.csv-template-target-item-modal .csv-template-composer-actions .primary-button:hover {
+  background: var(--accent-dark);
+  color: #fff;
+}
+
+.csv-template-target-item-modal .csv-template-composer-actions .primary-button:disabled,
+.csv-template-target-item-modal .csv-template-composer-actions .primary-button.disabled {
+  border-color: #cbd5e1;
+  background: #e8edf3;
+  color: #607086;
+  opacity: 1;
+}
+
+.csv-template-target-item-modal .csv-template-composer-actions .ghost-button {
+  display: inline-flex;
+  min-height: 42px;
+  border: 1px solid #b9c5d2;
+  background: #fff;
+  color: var(--ink);
+  opacity: 1;
 }
 
 .csv-template-header-candidate-card {
