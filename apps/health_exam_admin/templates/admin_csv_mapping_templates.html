@@ -8,6 +8,7 @@
     <p class="subtle">健診機関ごとのCSV取込テンプレート、ルール数、利用状況を確認します。</p>
   </div>
   <nav class="top-actions">
+    <a class="primary-button" href="/admin/csv-mapping-templates/new">新規作成</a>
     <a class="ghost-button" href="/admin/folder-aliases">受領フォルダ管理</a>
     <a class="ghost-button" href="/admin/facility-master">健診機関マスタ</a>
     <a class="ghost-button" href="/">HOME</a>
@@ -22,7 +23,7 @@
     <div class="section-heading">
       <div>
         <h2>テンプレート一覧</h2>
-        <p class="subtle">編集はまだ行わず、現在DBに入っているテンプレート情報を確認します。</p>
+        <p class="subtle">テンプレートの確認、新規作成、画面編集対応ルールの編集を行います。</p>
       </div>
       <span class="status-pill status-neutral">{{ rows|length }}件</span>
     </div>
@@ -68,6 +69,7 @@
             <td>
               <strong>{{ row.active_rule_count }} / {{ row.rule_count }}</strong>
               <small>条件 {{ row.condition_count }}</small>
+              <small>編集可 {{ row.editable_rule_count }} / 表示のみ {{ row.view_only_rule_count }}</small>
             </td>
             <td>
               <strong>受領 {{ row.receipt_count }}</strong>
@@ -80,6 +82,7 @@
             </td>
             <td>
               <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}">詳細</a>
+              <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}/edit">編集</a>
             </td>
           </tr>
           {% else %}

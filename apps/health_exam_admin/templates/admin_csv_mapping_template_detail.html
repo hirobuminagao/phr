@@ -11,6 +11,7 @@
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/admin/csv-mapping-templates">一覧へ戻る</a>
+    {% if template %}<a class="primary-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/edit">編集</a>{% endif %}
     {% if template %}<a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers">ヘッダー確認</a>{% endif %}
     <a class="ghost-button" href="/admin/folder-aliases">受領フォルダ管理</a>
     <a class="ghost-button" href="/">HOME</a>
@@ -250,8 +251,9 @@
             <th>target</th>
 	            <th>値</th>
 	            <th>指定方式</th>
-	            <th>ルール内容</th>
-	            <th>条件数</th>
+            <th>ルール内容</th>
+            <th>条件数</th>
+            <th>編集</th>
             <th>状態</th>
           </tr>
         </thead>
@@ -280,18 +282,22 @@
 	              <small>参照方法: {{ rule.locator_summary }}</small>
 	              <small title="{{ rule.condition_column_nos or '' }}">CSV列番: {{ rule.condition_column_nos or "-" }}</small>
 	            </td>
-	            <td>
-	              <strong>{{ rule.rule_content_summary or "-" }}</strong>
-	              <small title="{{ rule.rule_condition_summary or '' }}">{{ rule.rule_condition_summary or "-" }}</small>
-	            </td>
-	            <td>{{ rule.condition_count }}</td>
+            <td>
+              <strong>{{ rule.rule_content_summary or "-" }}</strong>
+              <small title="{{ rule.rule_condition_summary or '' }}">{{ rule.rule_condition_summary or "-" }}</small>
+            </td>
+            <td>{{ rule.condition_count }}</td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if rule.is_screen_editable else 'status-muted' }}">{{ rule.edit_capability_label }}</span>
+              <small>{{ rule.rule_origin_label }}</small>
+            </td>
             <td>
               <span class="status-pill {{ 'status-ready' if rule.is_active else 'status-muted' }}">{{ '有効' if rule.is_active else '無効' }}</span>
               {% if rule.is_required %}<span class="status-pill status-pending">必須</span>{% endif %}
             </td>
           </tr>
           {% else %}
-	          <tr><td colspan="7" class="empty-state">ルールはありません。</td></tr>
+	          <tr><td colspan="8" class="empty-state">ルールはありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>

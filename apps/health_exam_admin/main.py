@@ -4329,6 +4329,13 @@ def load_csv_mapping_template_rows(cur: Any, *, keyword: str = "", limit: int = 
         )
         params.extend([like, like, like, like, like, like, like])
     where_sql = " AND ".join(where_parts)
+    has_rule_origin_type = manual_exam_entry_column_exists(
+        cur, master_db(), "csv_exam_result_mapping_rules", "rule_origin_type"
+    )
+    has_edit_capability = manual_exam_entry_column_exists(
+        cur, master_db(), "csv_exam_result_mapping_rules", "edit_capability"
+    )
+    edit_capability_expr = "r.`edit_capability`" if has_edit_capability else "'VIEW_ONLY'"
     cur.execute(
         f"""
         SELECT
@@ -4356,6 +4363,8 @@ def load_csv_mapping_template_rows(cur: Any, *, keyword: str = "", limit: int = 
           ef.`exam_facility_display_name`,
           COALESCE(rule_counts.`rule_count`, 0) AS `rule_count`,
           COALESCE(rule_counts.`active_rule_count`, 0) AS `active_rule_count`,
+          COALESCE(rule_counts.`editable_rule_count`, 0) AS `editable_rule_count`,
+          COALESCE(rule_counts.`view_only_rule_count`, 0) AS `view_only_rule_count`,
           COALESCE(rule_counts.`condition_count`, 0) AS `condition_count`,
           COALESCE(receipt_counts.`receipt_count`, 0) AS `receipt_count`,
           COALESCE(ledger_counts.`ledger_count`, 0) AS `ledger_count`
@@ -4367,6 +4376,8 @@ def load_csv_mapping_template_rows(cur: Any, *, keyword: str = "", limit: int = 
             r.`csv_format_version_id`,
             COUNT(*) AS `rule_count`,
             SUM(CASE WHEN r.`is_active` = 1 THEN 1 ELSE 0 END) AS `active_rule_count`,
+            SUM(CASE WHEN {edit_capability_expr} = 'BASIC_SIMPLE' THEN 1 ELSE 0 END) AS `editable_rule_count`,
+            SUM(CASE WHEN {edit_capability_expr} <> 'BASIC_SIMPLE' THEN 1 ELSE 0 END) AS `view_only_rule_count`,
             COUNT(c.`csv_exam_result_mapping_condition_id`) AS `condition_count`
           FROM {qname(master_db())}.`csv_exam_result_mapping_rules` AS r
           LEFT JOIN {qname(master_db())}.`csv_exam_result_mapping_conditions` AS c
@@ -4444,6 +4455,14 @@ def load_csv_mapping_template_rule_summary(cur: Any, *, csv_format_version_id: i
 
 
 def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, limit: int = 1000) -> list[dict[str, Any]]:
+    has_rule_origin_type = manual_exam_entry_column_exists(
+        cur, master_db(), "csv_exam_result_mapping_rules", "rule_origin_type"
+    )
+    has_edit_capability = manual_exam_entry_column_exists(
+        cur, master_db(), "csv_exam_result_mapping_rules", "edit_capability"
+    )
+    rule_origin_select = "r.`rule_origin_type`" if has_rule_origin_type else "'SEED'"
+    edit_capability_select = "r.`edit_capability`" if has_edit_capability else "'VIEW_ONLY'"
     cur.execute(
         f"""
         SELECT
@@ -4465,6 +4484,8 @@ def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, lim
           r.`value_exclude_values`,
           r.`raw_value_type`,
           r.`raw_unit`,
+          {rule_origin_select} AS `rule_origin_type`,
+          {edit_capability_select} AS `edit_capability`,
           r.`is_required`,
           r.`priority`,
           r.`note`,
@@ -4490,6 +4511,9 @@ def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, lim
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
         row["locator_summary"] = csv_mapping_locator_summary(row)
+        row["rule_origin_label"] = csv_mapping_rule_origin_label(row.get("rule_origin_type"))
+        row["edit_capability_label"] = csv_mapping_edit_capability_label(row.get("edit_capability"))
+        row["is_screen_editable"] = str(row.get("edit_capability") or "").upper() == "BASIC_SIMPLE"
     return rows
 
 
@@ -4590,6 +4614,27 @@ def csv_mapping_source_role_label(source_role: Any) -> str:
         "QUALIFIER": "補助条件",
     }
     return labels.get(value, value or "-")
+
+
+def csv_mapping_rule_origin_label(value: Any) -> str:
+    key = str(value or "SEED").strip().upper()
+    labels = {
+        "SEED": "裏投入",
+        "MIGRATION": "migration",
+        "SCREEN": "画面作成",
+        "IMPORT": "取込作成",
+    }
+    return labels.get(key, key or "-")
+
+
+def csv_mapping_edit_capability_label(value: Any) -> str:
+    key = str(value or "VIEW_ONLY").strip().upper()
+    labels = {
+        "BASIC_SIMPLE": "編集可",
+        "VIEW_ONLY": "表示のみ",
+        "UNSUPPORTED": "未実装",
+    }
+    return labels.get(key, key or "-")
 
 
 def csv_mapping_operator_label(operator: Any) -> str:
@@ -15586,6 +15631,121 @@ def admin_csv_mapping_templates(request: Request) -> Response:
     )
 
 
+@app.get("/admin/csv-mapping-templates/new", response_class=HTMLResponse)
+def admin_csv_mapping_template_new(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    facility_keyword = request.query_params.get("facility_q", "").strip()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            facility_rows = load_facility_master_admin_rows(cur, keyword=facility_keyword, code_match="partial", limit=80)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_csv_mapping_template_edit.html",
+        {
+            "request": request,
+            "user": user,
+            "mode": "new",
+            "template": None,
+            "facility_rows": facility_rows,
+            "filters": {"facility_q": facility_keyword},
+            "rules": [],
+            "target_groups": [],
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/csv-mapping-templates/new", response_class=HTMLResponse)
+async def create_admin_csv_mapping_template(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    exam_facility_id = _optional_int(form.get("exam_facility_id"))
+    mapping_version = str(form.get("mapping_version") or "").strip()
+    format_name = str(form.get("format_name") or "").strip() or None
+    data_start_row_no = _optional_int(form.get("data_start_row_no")) or 2
+    if not exam_facility_id:
+        return RedirectResponse("/admin/csv-mapping-templates/new?error=健診機関を選択してください。", status_code=303)
+    if not mapping_version:
+        return RedirectResponse("/admin/csv-mapping-templates/new?error=mapping_versionを入力してください。", status_code=303)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                f"""
+                INSERT INTO {qname(master_db())}.`csv_format_versions` (
+                  `exam_facility_id`,
+                  `mapping_version`,
+                  `file_type`,
+                  `format_name`,
+                  `has_header`,
+                  `header_mode`,
+                  `header_structure_type`,
+                  `data_start_row_no`,
+                  `header_hash_status`,
+                  `header_mismatch_policy`,
+                  `allow_column_no_rules`,
+                  `character_encoding`,
+                  `delimiter`,
+                  `note`,
+                  `is_active`
+                )
+                VALUES (%s, %s, 'CSV', %s, 1, 'SINGLE', 'SIMPLE_HEADER', %s, 'UNVERIFIED', 'ALLOW_AFTER_CONFIRM', 0, 'CP932', ',', %s, 1)
+                """,
+                (
+                    exam_facility_id,
+                    mapping_version,
+                    format_name,
+                    data_start_row_no,
+                    "created from admin csv mapping builder",
+                ),
+            )
+            csv_format_version_id = int(cur.lastrowid)
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="CSV_MAPPING_TEMPLATE_CREATE",
+                target_schema=master_db(),
+                target_table="csv_format_versions",
+                target_id=str(csv_format_version_id),
+                after={
+                    "exam_facility_id": exam_facility_id,
+                    "mapping_version": mapping_version,
+                    "format_name": format_name,
+                    "data_start_row_no": data_start_row_no,
+                },
+            )
+            conn.commit()
+        except IntegrityError as exc:
+            conn.rollback()
+            return RedirectResponse(
+                f"/admin/csv-mapping-templates/new?error={quote('同じ健診機関とmapping_versionのテンプレートが既にあります。')}",
+                status_code=303,
+            )
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse(
+        f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote('CSVマッピングテンプレートを作成しました。')}",
+        status_code=303,
+    )
+
+
 @app.get("/admin/csv-mapping-templates/{csv_format_version_id}", response_class=HTMLResponse)
 def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: int) -> Response:
     user = require_user(request)
@@ -15648,6 +15808,133 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
+    )
+
+
+@app.get("/admin/csv-mapping-templates/{csv_format_version_id}/edit", response_class=HTMLResponse)
+def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    facility_keyword = request.query_params.get("facility_q", "").strip()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            rules = load_csv_mapping_template_rules(cur, csv_format_version_id=csv_format_version_id) if template else []
+            conditions = (
+                load_csv_mapping_template_conditions(cur, csv_format_version_id=csv_format_version_id)
+                if template
+                else []
+            )
+            enrich_csv_mapping_template_rules_with_conditions(rules, conditions)
+            target_groups = build_csv_mapping_template_target_groups(rules)
+            facility_rows = load_facility_master_admin_rows(
+                cur,
+                keyword=facility_keyword,
+                code_match="partial",
+                limit=80,
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if not template:
+        return RedirectResponse(
+            f"/admin/csv-mapping-templates?error={quote(f'csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。')}",
+            status_code=303,
+        )
+    return templates.TemplateResponse(
+        "admin_csv_mapping_template_edit.html",
+        {
+            "request": request,
+            "user": user,
+            "mode": "edit",
+            "template": template,
+            "facility_rows": facility_rows,
+            "filters": {"facility_q": facility_keyword},
+            "rules": rules,
+            "target_groups": target_groups,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/csv-mapping-templates/{csv_format_version_id}/edit", response_class=HTMLResponse)
+async def update_admin_csv_mapping_template(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    exam_facility_id = _optional_int(form.get("exam_facility_id"))
+    mapping_version = str(form.get("mapping_version") or "").strip()
+    format_name = str(form.get("format_name") or "").strip() or None
+    data_start_row_no = _optional_int(form.get("data_start_row_no")) or 2
+    if not exam_facility_id:
+        return RedirectResponse(
+            f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?error=健診機関を選択してください。",
+            status_code=303,
+        )
+    if not mapping_version:
+        return RedirectResponse(
+            f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?error=mapping_versionを入力してください。",
+            status_code=303,
+        )
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                f"""
+                UPDATE {qname(master_db())}.`csv_format_versions`
+                   SET `exam_facility_id` = %s,
+                       `mapping_version` = %s,
+                       `format_name` = %s,
+                       `data_start_row_no` = %s
+                 WHERE `csv_format_version_id` = %s
+                """,
+                (exam_facility_id, mapping_version, format_name, data_start_row_no, csv_format_version_id),
+            )
+            if cur.rowcount == 0:
+                conn.rollback()
+                return RedirectResponse(
+                    f"/admin/csv-mapping-templates?error={quote(f'csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。')}",
+                    status_code=303,
+                )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="CSV_MAPPING_TEMPLATE_UPDATE",
+                target_schema=master_db(),
+                target_table="csv_format_versions",
+                target_id=str(csv_format_version_id),
+                after={
+                    "exam_facility_id": exam_facility_id,
+                    "mapping_version": mapping_version,
+                    "format_name": format_name,
+                    "data_start_row_no": data_start_row_no,
+                },
+            )
+            conn.commit()
+        except IntegrityError:
+            conn.rollback()
+            return RedirectResponse(
+                f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?error={quote('同じ健診機関とmapping_versionのテンプレートが既にあります。')}",
+                status_code=303,
+            )
+        except Exception:
+            conn.rollback()
+            raise
+    return RedirectResponse(
+        f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote('基本情報を保存しました。')}",
+        status_code=303,
     )
 
 

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% set title = "CSVマッピングテンプレート編集" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">CSV Mapping Builder</p>
+    <h1>{{ "CSVマッピングテンプレート新規作成" if mode == "new" else "CSVマッピングテンプレート編集" }}</h1>
+    <p class="subtle">
+      単純な1:1取り込みと、複数CSV列を結合して1項目へ入れるルールから作成します。
+    </p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/csv-mapping-templates">一覧へ戻る</a>
+    {% if template %}
+    <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}">詳細</a>
+    <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers">ヘッダー確認</a>
+    {% endif %}
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page csv-mapping-editor-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>テンプレート基本情報</h2>
+        <p class="subtle">まず健診機関とテンプレート名を決めます。保存処理は次の実装で接続します。</p>
+      </div>
+      <span class="status-pill {{ 'status-ready' if mode == 'edit' else 'status-pending' }}">{{ "編集" if mode == "edit" else "新規" }}</span>
+    </div>
+    <form class="filter-card compact-filter" method="get" action="{{ '/admin/csv-mapping-templates/new' if mode == 'new' else '/admin/csv-mapping-templates/' ~ template.csv_format_version_id ~ '/edit' }}">
+      <label>
+        <span>健診機関検索</span>
+        <input name="facility_q" value="{{ filters.facility_q or '' }}" placeholder="健診機関名 / コード">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">検索</button>
+        <a class="ghost-button" href="{{ '/admin/csv-mapping-templates/new' if mode == 'new' else '/admin/csv-mapping-templates/' ~ template.csv_format_version_id ~ '/edit' }}">クリア</a>
+      </div>
+    </form>
+    <form method="post" action="{{ '/admin/csv-mapping-templates/new' if mode == 'new' else '/admin/csv-mapping-templates/' ~ template.csv_format_version_id ~ '/edit' }}">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+    <div class="detail-grid">
+      <label>
+        <span>健診機関</span>
+        <select name="exam_facility_id">
+          {% if template %}
+          <option value="{{ template.exam_facility_id }}" selected>{{ template.exam_facility_display_name or template.exam_facility_name or template.exam_facility_id }} / {{ template.exam_facility_code or "-" }}</option>
+          {% else %}
+          <option value="">選択してください</option>
+          {% endif %}
+          {% for facility in facility_rows %}
+          <option value="{{ facility.exam_facility_id }}">{{ facility.exam_facility_display_name or facility.exam_facility_name }} / {{ facility.exam_facility_code or "-" }} / ID {{ facility.exam_facility_id }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>mapping_version</span>
+        <input name="mapping_version" value="{{ template.mapping_version if template else '' }}" placeholder="例: facility_2026_v1">
+      </label>
+      <label>
+        <span>テンプレート名</span>
+        <input name="format_name" value="{{ template.format_name if template else '' }}" placeholder="CSVの名前や用途">
+      </label>
+      <label>
+        <span>データ開始行</span>
+        <input type="number" name="data_start_row_no" min="1" value="{{ template.data_start_row_no if template else 2 }}">
+      </label>
+    </div>
+      <div class="button-row">
+        <button class="primary-button" type="submit">{{ "作成" if mode == "new" else "基本情報を保存" }}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>CSVヘッダー読み込み</h2>
+        <p class="subtle">CSVをアップロードして、ヘッダーと前後contextをマッピング作成に使います。</p>
+      </div>
+    </div>
+    <label class="csv-header-drop-zone" data-file-drop-zone>
+      <span>CSVを選択またはドラッグ&ドロップ</span>
+      <input type="file" name="csv_file" accept=".csv,text/csv" data-file-drop-input>
+      <small data-file-drop-name>まずはヘッダー確認用。保存接続は次段階で追加します。</small>
+    </label>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>登録先項目</h2>
+        <p class="subtle">左側に登録先の基本情報・健診項目を並べ、各項目にCSV列を割り当てます。</p>
+      </div>
+      <button type="button" class="primary-button" disabled>項目を追加</button>
+    </div>
+    <div class="summary-grid">
+      <article class="summary-card">
+        <small>対象</small>
+        <strong>exam_item_masterから選択</strong>
+        <span>手入力画面と同じく、階層とキーワードで絞り込む想定です。</span>
+      </article>
+      <article class="summary-card">
+        <small>ルール</small>
+        <strong>1:1 / 結合1:n</strong>
+        <span>まずは単純取り込みと、複数列の文字結合だけを画面編集対象にします。</span>
+      </article>
+      <article class="summary-card">
+        <small>未対応</small>
+        <strong>表示のみ</strong>
+        <span>条件分岐、固定値、排他候補などは種類だけ見せて編集不可にします。</span>
+      </article>
+    </div>
+  </section>
+
+  {% if template %}
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>現在のルール</h2>
+        <p class="subtle">画面から変更できるものだけ編集可。裏から入れた複雑なルールは表示のみです。</p>
+      </div>
+      <span class="status-pill status-neutral">{{ rules|length }}件</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>取り込み先</th>
+            <th>種類</th>
+            <th>CSVを見る列</th>
+            <th>編集</th>
+            <th>状態</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rule in rules %}
+          <tr>
+            <td>
+              <strong>{{ rule.target_item_name or rule.target_namecode or rule.target_field or rule.target_identity_item_code or "-" }}</strong>
+              <small>{{ rule.target_kind }} / {{ rule.target_namecode or rule.target_field or "-" }}</small>
+            </td>
+            <td>
+              <strong>{{ rule.rule_content_summary or rule.selection_mode }}</strong>
+              <small>{{ rule.value_source_type }} / {{ rule.target_resolution_type }}</small>
+            </td>
+            <td>{{ rule.value_condition_summary or rule.condition_header_names or "-" }}</td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if rule.is_screen_editable else 'status-muted' }}">{{ rule.edit_capability_label }}</span>
+              <small>{{ rule.rule_origin_label }}</small>
+            </td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if rule.is_active else 'status-muted' }}">{{ '有効' if rule.is_active else '無効' }}</span>
+              {% if rule.is_required %}<span class="status-pill status-pending">必須</span>{% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty-state">まだルールはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

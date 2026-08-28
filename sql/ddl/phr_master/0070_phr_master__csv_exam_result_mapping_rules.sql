@@ -16,6 +16,8 @@ CREATE TABLE `phr_master`.`csv_exam_result_mapping_rules` (
   `value_exclude_values` text,
   `raw_value_type` varchar(32) DEFAULT NULL,
   `raw_unit` varchar(64) DEFAULT NULL,
+  `rule_origin_type` varchar(32) NOT NULL DEFAULT 'SEED',
+  `edit_capability` varchar(32) NOT NULL DEFAULT 'VIEW_ONLY',
   `is_required` tinyint(1) NOT NULL DEFAULT 0,
   `priority` int NOT NULL DEFAULT 1000,
   `note` text,
@@ -29,7 +31,8 @@ CREATE TABLE `phr_master`.`csv_exam_result_mapping_rules` (
   KEY `idx_csv_exam_result_mapping_rules_target_kind` (`target_kind`),
   KEY `idx_csv_exam_result_mapping_rules_namecode` (`target_namecode`),
   KEY `idx_csv_exam_result_mapping_rules_identity` (`target_identity_item_code`),
-  KEY `idx_csv_exam_result_mapping_rules_selection` (`selection_group_code`, `selection_mode`, `priority`)
+  KEY `idx_csv_exam_result_mapping_rules_selection` (`selection_group_code`, `selection_mode`, `priority`),
+  KEY `idx_csv_exam_result_mapping_rules_edit` (`rule_origin_type`, `edit_capability`, `is_active`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
