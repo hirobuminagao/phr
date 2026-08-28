@@ -261,15 +261,9 @@
         <button type="button" class="primary-button" data-modal-open="csv-template-target-item-modal" data-csv-template-target-open-kind="exam">健診項目を追加</button>
       </div>
     </div>
-    <div class="csv-template-target-draft" data-csv-template-target-draft-list>
-      <p class="subtle">追加する項目をモーダルから選ぶと、ここに仮配置されます。保存接続はCSV列割り当てと合わせて追加します。</p>
+    <div class="csv-template-target-draft">
+      <p class="subtle" data-csv-template-target-save-message>項目を追加すると、そのままテンプレートのマッピングルールとして保存します。</p>
     </div>
-    {% if template %}
-    <div class="button-row csv-template-target-save-row">
-      <button type="button" class="primary-button" data-csv-template-target-save disabled>追加したマッピングを保存</button>
-      <span class="subtle" data-csv-template-target-save-message>追加予定はありません。</span>
-    </div>
-    {% endif %}
     <div class="summary-grid">
       <article class="summary-card">
         <small>対象</small>
@@ -305,7 +299,7 @@
             <th>取り込み先</th>
             <th>種類</th>
             <th>CSVを見る列</th>
-            <th>編集</th>
+            <th>操作</th>
             <th>状態</th>
           </tr>
         </thead>
@@ -324,6 +318,13 @@
             <td>
               <span class="status-pill {{ 'status-ready' if rule.is_screen_editable else 'status-muted' }}">{{ rule.edit_capability_label }}</span>
               <small>{{ rule.rule_origin_label }}</small>
+              {% if rule.is_screen_editable %}
+              <button
+                type="button"
+                class="ghost-button compact-action-button"
+                data-csv-template-rule-edit="{{ rule.screen_edit_payload|tojson|forceescape }}"
+              >編集</button>
+              {% endif %}
             </td>
             <td>
               <span class="status-pill {{ 'status-ready' if rule.is_active else 'status-muted' }}">{{ '有効' if rule.is_active else '無効' }}</span>
@@ -352,8 +353,16 @@
       <button type="button" class="ghost-button" data-modal-close>閉じる</button>
     </div>
 
-    <div class="csv-template-target-item-layout">
-      <div class="csv-template-target-item-picker">
+    <div class="csv-template-composer-mode">
+      <div class="csv-template-target-item-mode" aria-label="追加パターン">
+        <span>方式</span>
+        <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
+        <button type="button" data-csv-template-target-mode="many">1:n 結合</button>
+      </div>
+    </div>
+
+    <div class="csv-template-composer-layout">
+      <section class="csv-template-composer-column csv-template-target-item-picker">
         <label class="csv-template-target-search">
           <span>項目検索キーワード</span>
           <input data-csv-template-target-search-input autocomplete="off" placeholder="身長 / 血圧 / 9N...">
@@ -368,20 +377,9 @@
         <div class="csv-template-target-results" data-csv-template-target-results>
           <p class="subtle">検索すると候補ターゲット項目が表示されます。</p>
         </div>
-      </div>
+      </section>
 
-      <aside class="csv-template-target-detail" data-csv-template-target-detail>
-        <p class="subtle">候補を選ぶと、ここに項目詳細を表示します。</p>
-      </aside>
-    </div>
-
-    <section class="csv-template-source-mapping">
-      <div class="csv-template-target-item-mode" aria-label="追加パターン">
-        <span>方式</span>
-        <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
-        <button type="button" data-csv-template-target-mode="many">1:n 結合</button>
-      </div>
-      <div class="csv-template-source-mapping__body">
+      <section class="csv-template-composer-column csv-template-source-mapping">
         <section class="csv-template-target-selected">
           <div class="csv-template-target-selected__head">
             <strong>選択済みヘッダー</strong>
@@ -420,12 +418,16 @@
             {% endfor %}
           </div>
         </section>
-      </div>
-    </section>
+      </section>
 
-    <div class="edit-modal__actions">
+      <aside class="csv-template-composer-column csv-template-target-detail" data-csv-template-target-detail>
+        <p class="subtle">候補を選ぶと、ここに項目詳細を表示します。</p>
+      </aside>
+    </div>
+
+    <div class="edit-modal__actions csv-template-composer-actions">
       <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
-      <button type="button" class="primary-button" data-csv-template-target-apply disabled>追加</button>
+      <button type="button" class="primary-button" data-csv-template-target-apply disabled>マッピングに追加</button>
     </div>
   </section>
 </div>
@@ -442,8 +444,16 @@
       <button type="button" class="ghost-button" data-modal-close>閉じる</button>
     </div>
 
-    <div class="csv-template-ledger-modal-layout">
-      <section class="csv-template-ledger-field-grid">
+    <div class="csv-template-composer-mode">
+      <div class="csv-template-target-item-mode" aria-label="追加パターン">
+        <span>方式</span>
+        <button type="button" class="is-selected" data-csv-template-ledger-mode="one">1:1</button>
+        <button type="button" data-csv-template-ledger-mode="many">1:n 結合</button>
+      </div>
+    </div>
+
+    <div class="csv-template-composer-layout">
+      <section class="csv-template-composer-column csv-template-ledger-field-grid">
         {% for option in ledger_field_options %}
         <button
           type="button"
@@ -460,18 +470,8 @@
         </button>
         {% endfor %}
       </section>
-      <aside class="csv-template-target-detail" data-csv-template-ledger-detail>
-        <p class="subtle">候補を選ぶと、ここに基本・受診情報の詳細を表示します。</p>
-      </aside>
-    </div>
 
-    <section class="csv-template-source-mapping">
-      <div class="csv-template-target-item-mode" aria-label="追加パターン">
-        <span>方式</span>
-        <button type="button" class="is-selected" data-csv-template-ledger-mode="one">1:1</button>
-        <button type="button" data-csv-template-ledger-mode="many">1:n 結合</button>
-      </div>
-      <div class="csv-template-source-mapping__body">
+      <section class="csv-template-composer-column csv-template-source-mapping">
         <section class="csv-template-target-selected">
           <div class="csv-template-target-selected__head">
             <strong>選択済みヘッダー</strong>
@@ -510,12 +510,16 @@
             {% endfor %}
           </div>
         </section>
-      </div>
-    </section>
+      </section>
 
-    <div class="edit-modal__actions">
+      <aside class="csv-template-composer-column csv-template-target-detail" data-csv-template-ledger-detail>
+        <p class="subtle">候補を選ぶと、ここに基本・受診情報の詳細を表示します。</p>
+      </aside>
+    </div>
+
+    <div class="edit-modal__actions csv-template-composer-actions">
       <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
-      <button type="button" class="primary-button" data-csv-template-ledger-apply disabled>追加</button>
+      <button type="button" class="primary-button" data-csv-template-ledger-apply disabled>マッピングに追加</button>
     </div>
   </section>
 </div>

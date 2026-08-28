@@ -4672,7 +4672,7 @@ def enrich_csv_mapping_template_rules_with_conditions(
             condition
             for condition in rule_conditions
             if str(condition.get("source_role") or "VALUE").upper() == "VALUE"
-            and str(condition.get("condition_type") or "").upper() == "HEADER_MATCH"
+            and str(condition.get("condition_type") or "").upper() in {"HEADER_MATCH", "SOURCE_COLUMN"}
         ]
         role_labels = sorted(
             {
@@ -4726,6 +4726,24 @@ def enrich_csv_mapping_template_rules_with_conditions(
         rule["value_condition_summary"] = " / ".join(
             csv_mapping_condition_locator_text(condition) for condition in value_conditions
         )
+        rule["screen_edit_payload"] = {
+            "ruleId": rule_id,
+            "mode": "many" if str(rule.get("method_structure_type") or "").upper() == "MULTI_COLUMN_JOIN" else "one",
+            "targetKind": str(rule.get("target_kind") or ""),
+            "targetName": str(rule.get("target_item_name") or rule.get("target_field") or ""),
+            "targetCode": str(rule.get("target_namecode") or rule.get("target_field") or ""),
+            "targetMeta": str(rule.get("target_category_name") or rule.get("target_resolution_type") or ""),
+            "targetCategory": str(rule.get("target_category_name") or ""),
+            "targetValueType": str(rule.get("raw_value_type") or ""),
+            "headers": [
+                {
+                    "columnNo": str(condition.get("column_no") or ""),
+                    "headerName": str(condition.get("header_name") or ""),
+                    "headerContext": str(condition.get("header_context") or ""),
+                }
+                for condition in value_conditions
+            ],
+        }
 
 
 def build_csv_mapping_template_target_groups(rules: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -16165,6 +16183,7 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
             for index, item in enumerate(items, start=1):
                 if not isinstance(item, Mapping):
                     continue
+                rule_id = _optional_int(item.get("ruleId"))
                 target_kind = str(item.get("targetKind") or "").strip()
                 if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE"}:
                     continue
@@ -16212,6 +16231,76 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                 method_structure_type = "MULTI_COLUMN_JOIN" if mode == "many" else "SINGLE_COLUMN"
                 target_resolution_type = "LEDGER_FIELD" if target_kind == "LEDGER_FIELD" else "SINGLE_NAMECODE"
                 priority = max_priority + (index * 10)
+                if rule_id:
+                    cur.execute(
+                        f"""
+                        SELECT `csv_exam_result_mapping_rule_id`, `csv_format_version_id`,
+                               {('`edit_capability`' if has_edit_capability else "'VIEW_ONLY'")} AS `edit_capability`
+                        FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                        WHERE `csv_exam_result_mapping_rule_id` = %s
+                          AND `csv_format_version_id` = %s
+                        """,
+                        (rule_id, csv_format_version_id),
+                    )
+                    existing_rule = cur.fetchone()
+                    if not existing_rule or str(existing_rule.get("edit_capability") or "").upper() != "BASIC_SIMPLE":
+                        continue
+                    update_columns = [
+                        "`target_kind` = %s",
+                        "`target_resolution_type` = %s",
+                        "`selection_mode` = %s",
+                        "`selection_group_code` = %s",
+                        "`target_namecode` = %s",
+                        "`target_identity_item_code` = %s",
+                        "`target_field` = %s",
+                        "`method_structure_type` = %s",
+                        "`value_source_type` = %s",
+                        "`fixed_value` = %s",
+                        "`value_join_separator` = %s",
+                        "`raw_value_type` = %s",
+                        "`raw_unit` = %s",
+                        "`note` = %s",
+                    ]
+                    update_values: list[Any] = [
+                        target_kind,
+                        target_resolution_type,
+                        "DIRECT",
+                        None,
+                        target_code if target_kind == "EXAM_ITEM_VALUE" else None,
+                        None,
+                        target_code if target_kind == "LEDGER_FIELD" else None,
+                        method_structure_type,
+                        "SOURCE",
+                        None,
+                        "" if mode == "many" else None,
+                        None,
+                        None,
+                        f"screen: {item.get('targetName') or target_code}",
+                    ]
+                    if has_rule_origin_type:
+                        update_columns.append("`rule_origin_type` = %s")
+                        update_values.append("SCREEN")
+                    if has_edit_capability:
+                        update_columns.append("`edit_capability` = %s")
+                        update_values.append("BASIC_SIMPLE")
+                    cur.execute(
+                        f"""
+                        UPDATE {qname(master_db())}.`csv_exam_result_mapping_rules`
+                        SET {", ".join(update_columns)}
+                        WHERE `csv_exam_result_mapping_rule_id` = %s
+                          AND `csv_format_version_id` = %s
+                        """,
+                        (*update_values, rule_id, csv_format_version_id),
+                    )
+                    cur.execute(
+                        f"""
+                        DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_conditions`
+                        WHERE `csv_exam_result_mapping_rule_id` = %s
+                        """,
+                        (rule_id,),
+                    )
+                else:
+                    rule_id = None
                 columns = [
                     "`csv_format_version_id`",
                     "`rule_key`",
@@ -16260,16 +16349,17 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                 if has_edit_capability:
                     columns.append("`edit_capability`")
                     values.append("BASIC_SIMPLE")
-                cur.execute(
-                    f"""
-                    INSERT INTO {qname(master_db())}.`csv_exam_result_mapping_rules` (
-                      {", ".join(columns)}
+                if not rule_id:
+                    cur.execute(
+                        f"""
+                        INSERT INTO {qname(master_db())}.`csv_exam_result_mapping_rules` (
+                          {", ".join(columns)}
+                        )
+                        VALUES ({", ".join(["%s"] * len(values))})
+                        """,
+                        tuple(values),
                     )
-                    VALUES ({", ".join(["%s"] * len(values))})
-                    """,
-                    tuple(values),
-                )
-                rule_id = int(cur.lastrowid)
+                    rule_id = int(cur.lastrowid)
                 cur.executemany(
                     f"""
                     INSERT INTO {qname(master_db())}.`csv_exam_result_mapping_conditions` (

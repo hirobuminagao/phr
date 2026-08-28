@@ -6647,6 +6647,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-target-item-modal__panel {
   width: min(1320px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
 }
 
 .csv-template-target-item-layout {
@@ -6663,6 +6665,38 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   min-height: 360px;
 }
 
+.csv-template-composer-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.92fr) minmax(390px, 1fr) minmax(360px, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.csv-template-composer-column {
+  min-width: 0;
+}
+
+.csv-template-composer-rule-column {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.csv-template-composer-mode {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
 .csv-template-target-item-picker,
 .csv-template-target-detail {
   min-width: 0;
@@ -6672,12 +6706,17 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-template-target-detail {
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 260px);
   overflow: auto;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f8fafc;
+}
+
+.csv-template-target-detail--wide {
+  margin-top: 14px;
+  max-height: 260px;
 }
 
 .csv-template-target-item-mode,
@@ -6690,6 +6729,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-template-target-item-mode {
   justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .csv-template-target-item-mode button,
@@ -6735,7 +6775,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-target-results {
   display: grid;
   gap: 8px;
-  max-height: 360px;
+  max-height: calc(100vh - 360px);
+  min-height: 220px;
   overflow: auto;
   padding-right: 4px;
 }
@@ -6744,7 +6785,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
-  max-height: 520px;
+  max-height: calc(100vh - 280px);
+  min-height: 260px;
   overflow: auto;
   padding-right: 4px;
 }
@@ -6808,9 +6850,13 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-source-mapping {
   display: grid;
   gap: 12px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  margin-top: 0;
+  padding: 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  max-height: calc(100vh - 280px);
+  overflow: hidden;
 }
 
 .csv-template-source-mapping__body {
@@ -6827,19 +6873,26 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-header-candidates {
   display: grid;
   gap: 8px;
-  padding: 12px;
-  border: 1px solid #d7e2ef;
-  border-radius: 8px;
-  background: #f8fafc;
 }
 
 .csv-template-header-candidate-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 8px;
-  max-height: 240px;
+  max-height: calc(100vh - 520px);
+  min-height: 180px;
   overflow: auto;
   padding-right: 4px;
+}
+
+.csv-template-composer-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 14px -18px -18px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .csv-template-header-candidate-card {

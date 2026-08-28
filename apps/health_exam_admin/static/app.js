@@ -3837,6 +3837,7 @@
     const draftList = document.querySelector("[data-csv-template-target-draft-list]");
     const draftSaveButton = document.querySelector("[data-csv-template-target-save]");
     const draftSaveMessage = document.querySelector("[data-csv-template-target-save-message]");
+    const ruleEditButtons = Array.from(document.querySelectorAll("[data-csv-template-rule-edit]"));
     const headerSearchInput = csvTemplateTargetModal.querySelector("[data-csv-template-header-search-input]");
     const headerCandidateList = csvTemplateTargetModal.querySelector("[data-csv-template-header-candidate-list]");
     const headerCandidateCards = Array.from(csvTemplateTargetModal.querySelectorAll("[data-csv-template-header-candidate]"));
@@ -3867,6 +3868,35 @@
     const csvTemplateId = templateIdMatch ? templateIdMatch[1] : "";
 
     const selectedTarget = () => focusedLedger || focusedItem;
+
+    const setComposerMessage = (message) => {
+      if (draftSaveMessage) draftSaveMessage.textContent = message;
+    };
+
+    const saveTemplateMappingItem = async (item, button) => {
+      if (!csvTemplateId) {
+        setComposerMessage("先に基本情報を保存してください。");
+        return;
+      }
+      if (button) {
+        button.disabled = true;
+        button.classList.add("disabled");
+      }
+      setComposerMessage(item.ruleId ? "変更を保存中..." : "マッピングを保存中...");
+      try {
+        const payload = await postJson(`/api/admin/csv-mapping-templates/${csvTemplateId}/screen-rules`, {
+          items: [item],
+        });
+        const message = payload?.message || (item.ruleId ? "マッピングを変更しました。" : "マッピングを追加しました。");
+        window.location.href = `${window.location.pathname}?message=${encodeURIComponent(message)}`;
+      } catch (error) {
+        setComposerMessage(error.message || "保存でエラーが発生しました。");
+        if (button) {
+          button.disabled = false;
+          button.classList.remove("disabled");
+        }
+      }
+    };
 
     const updateDraftSaveState = () => {
       if (!draftSaveButton) return;
@@ -4192,7 +4222,7 @@
         button.classList.toggle("is-selected", button.getAttribute("data-csv-template-ledger-mode") === "one");
       });
       for (const card of ledgerCards) card.classList.remove("is-selected");
-      if (ledgerApplyButton) ledgerApplyButton.textContent = "追加";
+      if (ledgerApplyButton) ledgerApplyButton.textContent = "マッピングに追加";
       renderLedgerDetail(null);
       renderLedgerHeaderCards();
       filterLedgerHeaderCards();
@@ -4206,7 +4236,7 @@
 
     const loadLedgerDraftForEdit = (draft) => {
       resetLedgerModal();
-      editingDraftId = draft.id;
+      editingDraftId = draft.ruleId || null;
       ledgerMode = draft.mode || "one";
       ledgerSelectedHeaders = Array.isArray(draft.headers) ? [...draft.headers] : [];
       ledgerModeButtons.forEach((button) => {
@@ -4225,7 +4255,7 @@
         renderLedgerDetail(focusedLedger);
       }
       renderLedgerHeaderCards();
-      if (ledgerApplyButton) ledgerApplyButton.textContent = "変更";
+      if (ledgerApplyButton) ledgerApplyButton.textContent = "変更を保存";
       openLedgerModal();
     };
 
@@ -4234,7 +4264,7 @@
         loadLedgerDraftForEdit(draft);
         return;
       }
-      editingDraftId = draft.id;
+      editingDraftId = draft.ruleId || null;
       setTargetKind(draft.targetKind === "LEDGER_FIELD" ? "ledger" : "exam");
       targetMode = draft.mode || "one";
       modeButtons.forEach((modeButton) => {
@@ -4269,7 +4299,7 @@
       renderSelectedTargets();
       renderTargetResults();
       renderHeaderCandidateCards();
-      if (applyButton) applyButton.textContent = "変更";
+      if (applyButton) applyButton.textContent = "変更を保存";
       csvTemplateTargetModal.hidden = false;
       document.body.classList.add("has-open-modal");
     };
@@ -4357,7 +4387,7 @@
     ledgerApplyButton?.addEventListener("click", () => {
       if (!focusedLedger || !ledgerSelectedHeaders.length) return;
       const draft = {
-        id: editingDraftId || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ruleId: editingDraftId || null,
         mode: ledgerMode,
         targetKind: "LEDGER_FIELD",
         targetName: focusedLedger.label,
@@ -4367,18 +4397,12 @@
         targetValueType: "",
         headers: [...ledgerSelectedHeaders],
       };
-      if (editingDraftId) {
-        draftItems = draftItems.map((item) => (item.id === editingDraftId ? draft : item));
-      } else {
-        draftItems = [...draftItems, draft];
-      }
-      renderDraftItems();
-      csvTemplateLedgerModal?.querySelector("[data-modal-close]")?.click();
+      saveTemplateMappingItem(draft, ledgerApplyButton);
     });
 
     document.querySelectorAll("[data-csv-template-target-open-kind]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (applyButton) applyButton.textContent = "追加";
+        if (applyButton) applyButton.textContent = "マッピングに追加";
         resetTargetDraftForm(button.getAttribute("data-csv-template-target-open-kind") || "exam");
       });
     });
@@ -4422,14 +4446,14 @@
 
     applyButton?.addEventListener("click", () => {
       const target = selectedTarget();
-      if (!draftList || !target || !selectedHeaders.length) return;
+      if (!target || !selectedHeaders.length) return;
       const targetName = targetKind === "LEDGER_FIELD" ? focusedLedger.label : focusedItem.item_name;
       const targetCode = targetKind === "LEDGER_FIELD" ? focusedLedger.value : focusedItem.namecode;
       const targetMeta = targetKind === "LEDGER_FIELD"
         ? `LEDGER_FIELD / ${focusedLedger.hint || "-"}`
         : `${focusedItem.namecode || "-"} / ${focusedItem.category_name || "-"} / ${focusedItem.xml_value_type || "-"}`;
       const draft = {
-        id: editingDraftId || `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ruleId: editingDraftId || null,
         mode: targetMode,
         targetKind,
         targetName,
@@ -4439,13 +4463,7 @@
         targetValueType: focusedItem?.xml_value_type || "",
         headers: [...selectedHeaders],
       };
-      if (editingDraftId) {
-        draftItems = draftItems.map((item) => (item.id === editingDraftId ? draft : item));
-      } else {
-        draftItems = [...draftItems, draft];
-      }
-      renderDraftItems();
-      csvTemplateTargetModal.querySelector("[data-modal-close]")?.click();
+      saveTemplateMappingItem(draft, applyButton);
     });
 
     draftList?.addEventListener("click", (event) => {
@@ -4479,6 +4497,17 @@
         if (draftSaveMessage) draftSaveMessage.textContent = error.message || "保存でエラーが発生しました。";
         updateDraftSaveState();
       }
+    });
+
+    ruleEditButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        try {
+          const draft = JSON.parse(button.getAttribute("data-csv-template-rule-edit") || "{}");
+          if (draft?.ruleId) loadDraftForEdit(draft);
+        } catch (_error) {
+          setComposerMessage("編集データを読み取れませんでした。");
+        }
+      });
     });
 
     csvTemplateTargetModal.addEventListener("click", (event) => {
