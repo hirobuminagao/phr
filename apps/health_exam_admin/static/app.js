@@ -2099,6 +2099,7 @@
 
   const manualSubscriberResults = document.querySelector("[data-manual-entry-subscriber-results]");
   let refreshManualEntryFilledCount = () => 0;
+  let refreshManualCodeToggle = () => {};
   let scheduleManualEntryDraftSave = () => {};
   if (manualSubscriberResults) {
     const searchButton = document.querySelector("[data-manual-entry-subscriber-search]");
@@ -2354,7 +2355,7 @@
       refreshManualEntryFilledCount();
     };
 
-    const refreshManualCodeToggle = (input) => {
+    refreshManualCodeToggle = (input) => {
       const control = input?.closest(".manual-entry-value-control");
       const group = control?.querySelector("[data-manual-code-toggle-group]");
       if (!group) return;
@@ -3698,7 +3699,6 @@
     const manualEntryFloatingItemResults = document.querySelector("[data-manual-entry-floating-item-results]");
     const categories = Array.from(manualEntryItemList.querySelectorAll(".manual-entry-category"));
     const itemRows = Array.from(manualEntryItemList.querySelectorAll("tbody tr[data-filter-text]"));
-    let floatingSearchScrollTimer = null;
     const openCategoryForRow = (row) => {
       const category = row.closest(".manual-entry-category");
       if (category) category.open = true;
@@ -3734,14 +3734,20 @@
       const keyword = normalize(manualEntryFloatingItemSearchInput.value);
       if (!keyword) {
         manualEntryFloatingItemResults.hidden = true;
+        manualEntryFloatingItemResults.setAttribute("hidden", "");
+        manualEntryFloatingItemResults.classList.remove("is-visible");
+        manualEntryFloatingItemResults.style.display = "";
         manualEntryFloatingItemResults.innerHTML = "";
         return;
       }
       const matches = itemRows
         .map((row, index) => ({ row, index }))
-        .filter(({ row }) => normalize(row.dataset.filterText).includes(keyword))
+        .filter(({ row }) => normalize(row.getAttribute("data-filter-text")).includes(keyword))
         .slice(0, 10);
       manualEntryFloatingItemResults.hidden = false;
+      manualEntryFloatingItemResults.removeAttribute("hidden");
+      manualEntryFloatingItemResults.classList.add("is-visible");
+      manualEntryFloatingItemResults.style.display = "grid";
       if (!matches.length) {
         manualEntryFloatingItemResults.innerHTML = `<p class="manual-entry-floating-item-empty">該当項目はありません。</p>`;
         return;
@@ -3762,13 +3768,6 @@
           </div>
         `;
       }).join("");
-    };
-    const scrollToFirstFloatingSearchMatch = () => {
-      if (!manualEntryFloatingItemSearchInput) return;
-      const keyword = normalize(manualEntryFloatingItemSearchInput.value);
-      if (!keyword) return;
-      const match = itemRows.find((row) => normalize(row.dataset.filterText).includes(keyword));
-      if (match) jumpToManualEntryRow(match);
     };
 
     if (manualEntryFloatingNav && manualEntryFloatingCategoryToggle) {
@@ -3808,14 +3807,22 @@
     });
     manualEntryFloatingItemSearchInput?.addEventListener("input", () => {
       renderFloatingItemResults();
-      window.clearTimeout(floatingSearchScrollTimer);
-      floatingSearchScrollTimer = window.setTimeout(scrollToFirstFloatingSearchMatch, 180);
+    });
+    manualEntryFloatingItemSearchInput?.addEventListener("compositionend", () => {
+      renderFloatingItemResults();
+    });
+    manualEntryFloatingItemSearchInput?.addEventListener("keyup", () => {
+      renderFloatingItemResults();
     });
     manualEntryFloatingItemSearchInput?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
         const firstCard = manualEntryFloatingItemResults?.querySelector("[data-manual-entry-floating-item-jump]");
-        firstCard?.click();
+        if (firstCard instanceof HTMLElement) {
+          firstCard.click();
+        } else {
+          renderFloatingItemResults();
+        }
       }
     });
     manualEntryFloatingItemResults?.addEventListener("click", (event) => {
