@@ -1298,6 +1298,8 @@
 
   let aliasFacilityTargetInput = null;
   let aliasFacilityTargetNameInput = null;
+  let aliasFacilityTargetDisplayInput = null;
+  let aliasFacilityTargetValue = "code";
   const codeFromFolderAliasName = (folderName) => {
     const firstPart = String(folderName || "").trim().split("_")[0]?.trim() || "";
     return /^[0-9A-Za-z-]{2,}$/.test(firstPart) ? firstPart : "";
@@ -1306,13 +1308,21 @@
     button.addEventListener("click", () => {
       const targetId = button.getAttribute("data-target-input") || "";
       const targetNameId = button.getAttribute("data-target-name-input") || "";
+      const targetDisplayId = button.getAttribute("data-target-display-input") || "";
       aliasFacilityTargetInput = targetId ? document.getElementById(targetId) : null;
       aliasFacilityTargetNameInput = targetNameId ? document.getElementById(targetNameId) : null;
+      aliasFacilityTargetDisplayInput = targetDisplayId ? document.getElementById(targetDisplayId) : null;
+      aliasFacilityTargetValue = button.getAttribute("data-target-value") || "code";
       const form = button.closest("form");
       const folderInput = form?.querySelector("[data-folder-alias-src]");
       const code = codeFromFolderAliasName(folderInput?.value);
       const modal = document.getElementById(button.getAttribute("data-modal-open") || "");
-      if (!code || !modal) return;
+      if (!modal) return;
+      modal.dataset.aliasTargetInput = targetId;
+      modal.dataset.aliasTargetNameInput = targetNameId;
+      modal.dataset.aliasTargetDisplayInput = targetDisplayId;
+      modal.dataset.aliasTargetValue = aliasFacilityTargetValue;
+      if (!code) return;
       window.setTimeout(() => {
         const codeInput = modal.querySelector("[data-alias-facility-search-code]");
         const prefectureInput = modal.querySelector("[data-alias-facility-search-prefecture]");
@@ -1326,18 +1336,42 @@
     });
   }
   const selectAliasFacility = (element) => {
-    if (!aliasFacilityTargetInput || !(element instanceof Element)) return;
+    if (!(element instanceof Element)) return;
+    const modal = element.closest(".edit-modal");
+    const modalTargetId = modal?.dataset.aliasTargetInput || "";
+    const modalTargetNameId = modal?.dataset.aliasTargetNameInput || "";
+    const modalTargetDisplayId = modal?.dataset.aliasTargetDisplayInput || "";
+    const modalTargetValue = modal?.dataset.aliasTargetValue || aliasFacilityTargetValue || "code";
+    const targetInput = modalTargetId ? document.getElementById(modalTargetId) : aliasFacilityTargetInput;
+    const targetNameInput = modalTargetNameId ? document.getElementById(modalTargetNameId) : aliasFacilityTargetNameInput;
+    const targetDisplayInput = modalTargetDisplayId ? document.getElementById(modalTargetDisplayId) : aliasFacilityTargetDisplayInput;
+    if (!targetInput) return;
     const code = String(element.getAttribute("data-facility-code") || "").trim();
+    const facilityId = String(element.getAttribute("data-facility-id") || "").trim();
     const name = String(element.getAttribute("data-facility-name") || "").trim();
-    if (!code) return;
-    aliasFacilityTargetInput.value = code;
-    aliasFacilityTargetInput.dispatchEvent(new Event("input", { bubbles: true }));
-    if (aliasFacilityTargetNameInput && name) {
-      aliasFacilityTargetNameInput.value = name;
-      aliasFacilityTargetNameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    const display = String(element.getAttribute("data-facility-display") || "").trim()
+      || [name, code || "-", facilityId ? `ID ${facilityId}` : ""].filter(Boolean).join(" / ");
+    const nextValue = modalTargetValue === "exam_facility_id" ? facilityId : code;
+    if (!nextValue) return;
+    targetInput.value = nextValue;
+    targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+    targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+    if (targetNameInput && name) {
+      targetNameInput.value = name;
+      targetNameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      targetNameInput.dispatchEvent(new Event("change", { bubbles: true }));
     }
-    closeModal(element.closest(".edit-modal"));
-    aliasFacilityTargetInput.focus();
+    if (targetDisplayInput && display) {
+      targetDisplayInput.value = display;
+      targetDisplayInput.dispatchEvent(new Event("input", { bubbles: true }));
+      targetDisplayInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    closeModal(modal);
+    if (targetDisplayInput instanceof HTMLElement) {
+      targetDisplayInput.focus();
+    } else if (targetInput instanceof HTMLElement) {
+      targetInput.focus();
+    }
   };
   const renderAliasFacilityResults = (tbody, items, meta = {}) => {
     if (!tbody) return;
@@ -1354,25 +1388,27 @@
     tbody.innerHTML = summaryHtml + items.map((item) => {
       const code = item.exam_facility_code || item.medical_institution_code || item.reservation_system_medical_institution_code || "";
       const name = item.exam_facility_display_name || item.exam_facility_name || "名称未設定";
+      const facilityId = item.exam_facility_id || "";
+      const display = [name, code || "-", facilityId ? `ID ${facilityId}` : ""].filter(Boolean).join(" / ");
       const address = [item.postal_code || "", item.address || ""].filter(Boolean).join(" ");
       const related = item.medical_institution_code && item.medical_institution_code !== code
         ? `医療機関 ${escapeHtml(item.medical_institution_code)}`
         : "";
       const reservationCode = item.reservation_system_medical_institution_code || "";
       return `
-        <tr data-alias-facility-row data-facility-code="${escapeHtml(code)}" data-facility-name="${escapeHtml(name)}">
+        <tr data-alias-facility-row data-facility-id="${escapeHtml(facilityId)}" data-facility-code="${escapeHtml(code)}" data-facility-name="${escapeHtml(name)}" data-facility-display="${escapeHtml(display)}">
           <td>
             <strong>${escapeHtml(name)}</strong>
             <small>${escapeHtml(code)}${related ? ` / ${related}` : ""}</small>
           </td>
           <td>
-            <small>内部ID: ${escapeHtml(item.exam_facility_id || "-")}</small>
+            <small>内部ID: ${escapeHtml(facilityId || "-")}</small>
             <small>健診機関コード: ${escapeHtml(item.exam_facility_code || "-")}</small>
             <small>医療機関コード: ${escapeHtml(item.medical_institution_code || "-")}</small>
             ${reservationCode ? `<small>予約システム: ${escapeHtml(reservationCode)}</small>` : ""}
           </td>
           <td><small>${escapeHtml(address)}</small></td>
-          <td><button type="button" class="ghost-button compact-action-button" data-alias-facility-select data-facility-code="${escapeHtml(code)}" data-facility-name="${escapeHtml(name)}">選択</button></td>
+          <td><button type="button" class="ghost-button compact-action-button" data-alias-facility-select data-facility-id="${escapeHtml(facilityId)}" data-facility-code="${escapeHtml(code)}" data-facility-name="${escapeHtml(name)}" data-facility-display="${escapeHtml(display)}">選択</button></td>
         </tr>
       `;
     }).join("");
@@ -3693,6 +3729,303 @@
       const rowIndex = Number(card.getAttribute("data-manual-entry-floating-item-jump"));
       jumpToManualEntryRow(itemRows[rowIndex]);
     });
+  }
+
+  const csvTemplatePreviewDataElement = document.querySelector("#csv-template-header-preview-data");
+  const csvTemplatePreview = document.querySelector("[data-csv-template-inline-preview]");
+  if (csvTemplatePreviewDataElement && csvTemplatePreview) {
+    let previewPayload = { header_rows: [], columns: [] };
+    try {
+      previewPayload = JSON.parse(csvTemplatePreviewDataElement.textContent || "{}");
+    } catch (_error) {
+      previewPayload = { header_rows: [], columns: [] };
+    }
+    const previewTableBody = csvTemplatePreview.querySelector(".csv-template-inline-preview-table tbody");
+    const headerStructureInput = document.querySelector("select[name='header_structure_type']");
+    const activeHeaderRowInput = document.querySelector("input[name='active_header_row_no']");
+    const dataStartRowInput = document.querySelector("input[name='data_start_row_no']");
+    const headerRows = Array.isArray(previewPayload.header_rows) ? previewPayload.header_rows : [];
+    const columns = Array.isArray(previewPayload.columns) ? previewPayload.columns : [];
+    const maxColumnCount = Math.max(
+      columns.length,
+      ...headerRows.map((row) => (Array.isArray(row) ? row.length : 0)),
+    );
+
+    const positiveNumber = (value, fallback) => {
+      const parsed = Number.parseInt(String(value || ""), 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+    const rowTitleCell = (title, detail, extraClass = "") => `
+      <th class="csv-template-inline-preview-table__row-title ${extraClass}" scope="row">
+        <span>${escapeHtml(title)}</span>
+        <small>${escapeHtml(detail)}</small>
+      </th>
+    `;
+    const valueCell = (value, column, tagName = "td", extraClass = "") => {
+      const classNames = [column?.is_mapped ? "is-used" : "", extraClass].filter(Boolean).join(" ");
+      return `<${tagName} class="${classNames}">${escapeHtml(value || "-")}</${tagName}>`;
+    };
+    const buildContextValues = (activeHeaderIndex) => {
+      const contextRows = headerRows.slice(0, Math.max(activeHeaderIndex, 0));
+      return Array.from({ length: maxColumnCount }, (_, columnIndex) => {
+        const values = contextRows
+          .map((row) => (Array.isArray(row) ? String(row[columnIndex] || "").trim() : ""))
+          .filter(Boolean);
+        return values.join(" / ") || "-";
+      });
+    };
+    const renderCsvTemplatePreview = () => {
+      if (!previewTableBody || !maxColumnCount) return;
+      const dataStartRow = positiveNumber(dataStartRowInput?.value, 2);
+      const inferredHeaderRow = Math.max(dataStartRow - 1, 1);
+      const activeHeaderRow = positiveNumber(activeHeaderRowInput?.value, inferredHeaderRow);
+      const activeHeaderIndex = Math.max(0, Math.min(activeHeaderRow - 1, Math.max(headerRows.length - 1, 0)));
+      const isContextHeader = headerStructureInput?.value === "CONTEXT_HEADER";
+      const contextLabel =
+        activeHeaderRow > 2 ? `1-${activeHeaderRow - 1}行目` : activeHeaderRow === 2 ? "1行目" : "なし";
+      const rows = [];
+      rows.push(`
+        <tr>
+          ${rowTitleCell("列番", "CSV列")}
+          ${Array.from({ length: maxColumnCount }, (_, index) => valueCell(String(index + 1), columns[index], "th")).join("")}
+        </tr>
+      `);
+      if (isContextHeader) {
+        const contextValues = buildContextValues(activeHeaderIndex);
+        rows.push(`
+          <tr>
+            ${rowTitleCell("コンテキスト", contextLabel)}
+            ${contextValues.map((value, index) => valueCell(value, columns[index])).join("")}
+          </tr>
+        `);
+      }
+      const activeRow = Array.isArray(headerRows[activeHeaderIndex]) ? headerRows[activeHeaderIndex] : [];
+      rows.push(`
+        <tr>
+          ${rowTitleCell("ヘッダー", `${activeHeaderRow}行目`, "is-header-row")}
+          ${Array.from({ length: maxColumnCount }, (_, index) =>
+            valueCell(activeRow[index] || columns[index]?.name || "-", columns[index], "td", "csv-template-inline-preview-table__header"),
+          ).join("")}
+        </tr>
+      `);
+      rows.push(`
+        <tr>
+          ${rowTitleCell("データ", `${dataStartRow}行目`)}
+          ${Array.from({ length: maxColumnCount }, (_, index) => valueCell("-", columns[index])).join("")}
+        </tr>
+      `);
+      previewTableBody.innerHTML = rows.join("");
+    };
+
+    headerStructureInput?.addEventListener("change", renderCsvTemplatePreview);
+    activeHeaderRowInput?.addEventListener("input", renderCsvTemplatePreview);
+    dataStartRowInput?.addEventListener("input", renderCsvTemplatePreview);
+    renderCsvTemplatePreview();
+  }
+
+  const csvTemplateTargetModal = document.getElementById("csv-template-target-item-modal");
+  if (csvTemplateTargetModal) {
+    const modeButtons = Array.from(csvTemplateTargetModal.querySelectorAll("[data-csv-template-target-mode]"));
+    const typeButtons = Array.from(csvTemplateTargetModal.querySelectorAll("[data-csv-template-target-type-filter]"));
+    const searchInput = csvTemplateTargetModal.querySelector("[data-csv-template-target-search-input]");
+    const results = csvTemplateTargetModal.querySelector("[data-csv-template-target-results]");
+    const detail = csvTemplateTargetModal.querySelector("[data-csv-template-target-detail]");
+    const selectedList = csvTemplateTargetModal.querySelector("[data-csv-template-target-selected-list]");
+    const selectedCount = csvTemplateTargetModal.querySelector("[data-csv-template-target-selected-count]");
+    const applyButton = csvTemplateTargetModal.querySelector("[data-csv-template-target-apply]");
+    const draftList = document.querySelector("[data-csv-template-target-draft-list]");
+    let targetMode = "one";
+    let targetValueType = "";
+    let targetItems = [];
+    let selectedItems = [];
+    let focusedItem = null;
+    let searchTimer = null;
+
+    const renderTargetDetail = (item) => {
+      if (!detail) return;
+      if (!item) {
+        detail.innerHTML = `<p class="subtle">候補を選ぶと、ここに項目詳細を表示します。</p>`;
+        return;
+      }
+      const standardRows = Array.isArray(item.standard_code_rows) ? item.standard_code_rows : [];
+      const variantRows = Array.isArray(item.norm_variant_rows) ? item.norm_variant_rows : [];
+      const rows = [
+        ["namecode", item.namecode],
+        ["項目名", item.item_name],
+        ["カテゴリ", item.category_name],
+        ["識別項目", [item.identity_item_code, item.identity_item_name].filter(Boolean).join(" / ")],
+        ["XML値型", [item.xml_value_type, item.data_type_label].filter(Boolean).join(" / ")],
+        ["単位", [item.display_unit, item.ucum_unit].filter(Boolean).join(" / ")],
+        ["項目OID", item.item_code_oid],
+        ["結果OID", item.result_code_oid],
+        ["値取得", item.value_method],
+        ["実施要件", item.annex2_exec_requirement],
+      ];
+      detail.innerHTML = `
+        <div class="csv-template-target-detail__head">
+          <span class="status-pill">項目詳細</span>
+          <h3>${escapeHtml(item.item_name || item.namecode || "-")}</h3>
+          <small>${escapeHtml(item.namecode || "-")}</small>
+        </div>
+        <dl class="definition-grid">
+          ${rows.map(([label, value]) => `
+            <div>
+              <dt>${escapeHtml(label)}</dt>
+              <dd>${escapeHtml(value || "-")}</dd>
+            </div>
+          `).join("")}
+        </dl>
+        <div class="csv-template-target-detail__norm">
+          <strong>norm</strong>
+          <small>標準 ${escapeHtml(String(standardRows.length))}件 / 揺れ含む ${escapeHtml(String(variantRows.length))}件</small>
+        </div>
+      `;
+    };
+
+    const renderSelectedTargets = () => {
+      if (!selectedList) return;
+      if (selectedCount) selectedCount.textContent = `${selectedItems.length}件`;
+      if (applyButton) {
+        applyButton.disabled = selectedItems.length === 0;
+        applyButton.classList.toggle("disabled", selectedItems.length === 0);
+      }
+      if (!selectedItems.length) {
+        selectedList.innerHTML = `<p class="subtle">候補から項目を選んでください。</p>`;
+        return;
+      }
+      selectedList.innerHTML = selectedItems.map((item) => `
+        <article class="csv-template-target-selected-card">
+          <div>
+            <strong>${escapeHtml(item.item_name || item.namecode || "-")}</strong>
+            <small>${escapeHtml(item.namecode || "-")} / ${escapeHtml(item.xml_value_type || "-")}</small>
+          </div>
+          <button type="button" class="ghost-button compact-action-button" data-csv-template-target-remove="${escapeHtml(item.namecode || "")}">外す</button>
+        </article>
+      `).join("");
+    };
+
+    const renderTargetResults = () => {
+      if (!results) return;
+      if (!targetItems.length) {
+        results.innerHTML = `<p class="subtle">候補はありません。</p>`;
+        return;
+      }
+      results.innerHTML = targetItems.map((item) => {
+        const isSelected = selectedItems.some((selected) => selected.namecode === item.namecode);
+        const meta = [item.namecode, item.xml_value_type, item.display_unit, item.method_name].filter(Boolean).join(" / ");
+        return `
+          <button type="button" class="csv-mapping-exam-item-option${isSelected ? " is-selected" : ""}" data-csv-template-target-namecode="${escapeHtml(item.namecode || "")}">
+            <strong>${escapeHtml(item.item_name || item.namecode || "-")}</strong>
+            <small>${escapeHtml(meta || "-")}</small>
+            <span>${escapeHtml(item.category_name || "-")}${item.identity_item_name ? ` / ${escapeHtml(item.identity_item_name)}` : ""}</span>
+          </button>
+        `;
+      }).join("");
+    };
+
+    const searchTemplateTargetItems = async () => {
+      if (!results) return;
+      const keyword = String(searchInput?.value || "").trim();
+      results.innerHTML = `<p class="subtle">検索中...</p>`;
+      try {
+        const params = new URLSearchParams();
+        params.set("keyword", keyword);
+        if (targetValueType) params.set("value_type", targetValueType);
+        const response = await fetch(`/api/csv-mapping-lab/exam-items?${params.toString()}`);
+        if (!response.ok) throw new Error("search_failed");
+        const payload = await response.json();
+        targetItems = Array.isArray(payload.items) ? payload.items : [];
+        renderTargetResults();
+      } catch (_error) {
+        results.innerHTML = `<p class="subtle">検索でエラーが発生しました。</p>`;
+      }
+    };
+
+    const selectTemplateTargetItem = (namecode) => {
+      const item = targetItems.find((candidate) => candidate.namecode === namecode);
+      if (!item) return;
+      focusedItem = item;
+      renderTargetDetail(item);
+      const alreadySelected = selectedItems.some((selected) => selected.namecode === namecode);
+      if (alreadySelected) {
+        selectedItems = selectedItems.filter((selected) => selected.namecode !== namecode);
+      } else if (targetMode === "one") {
+        selectedItems = [item];
+      } else {
+        selectedItems = [...selectedItems, item];
+      }
+      renderSelectedTargets();
+      renderTargetResults();
+    };
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        targetMode = button.getAttribute("data-csv-template-target-mode") || "one";
+        modeButtons.forEach((modeButton) => modeButton.classList.toggle("is-selected", modeButton === button));
+        if (targetMode === "one" && selectedItems.length > 1) {
+          selectedItems = selectedItems.slice(0, 1);
+          renderSelectedTargets();
+          renderTargetResults();
+        }
+      });
+    });
+
+    typeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        targetValueType = button.getAttribute("data-csv-template-target-type-filter") || "";
+        typeButtons.forEach((typeButton) => typeButton.classList.toggle("is-selected", typeButton === button));
+        searchTemplateTargetItems();
+      });
+    });
+
+    searchInput?.addEventListener("input", () => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(searchTemplateTargetItems, 220);
+    });
+
+    results?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const option = target.closest("[data-csv-template-target-namecode]");
+      if (!option) return;
+      selectTemplateTargetItem(option.getAttribute("data-csv-template-target-namecode") || "");
+    });
+
+    selectedList?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const removeButton = target.closest("[data-csv-template-target-remove]");
+      if (!removeButton) return;
+      selectedItems = selectedItems.filter((item) => item.namecode !== removeButton.getAttribute("data-csv-template-target-remove"));
+      renderSelectedTargets();
+      renderTargetResults();
+    });
+
+    applyButton?.addEventListener("click", () => {
+      if (!draftList || !selectedItems.length) return;
+      draftList.innerHTML = selectedItems.map((item, index) => `
+        <article class="csv-template-target-draft-card">
+          <span class="status-pill ${targetMode === "many" ? "status-pending" : "status-ready"}">${targetMode === "many" ? "1:n 結合" : "1:1"}</span>
+          <div>
+            <strong>${escapeHtml(item.item_name || item.namecode || "-")}</strong>
+            <small>${escapeHtml(item.namecode || "-")} / ${escapeHtml(item.category_name || "-")} / ${escapeHtml(item.xml_value_type || "-")}</small>
+          </div>
+          <small>${targetMode === "many" ? `${index + 1}番目の結合対象` : "単純取り込み対象"}</small>
+        </article>
+      `).join("");
+      csvTemplateTargetModal.querySelector("[data-modal-close]")?.click();
+    });
+
+    csvTemplateTargetModal.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.matches("[data-modal-close], [data-modal-close] *")) {
+        focusedItem = null;
+      }
+    });
+
+    searchTemplateTargetItems();
+    renderSelectedTargets();
+    renderTargetDetail(focusedItem);
   }
 
   const externalFeedbackMemberResults = document.querySelector("[data-external-feedback-member-results]");

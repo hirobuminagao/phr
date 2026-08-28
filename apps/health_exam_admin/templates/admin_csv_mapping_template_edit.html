@@ -27,35 +27,33 @@
     <div class="section-heading">
       <div>
         <h2>テンプレート基本情報</h2>
-        <p class="subtle">まず健診機関とテンプレート名を決めます。保存処理は次の実装で接続します。</p>
+        <p class="subtle">健診機関とテンプレート名を決め、必要ならCSVヘッダーも一緒に読み込みます。</p>
       </div>
       <span class="status-pill {{ 'status-ready' if mode == 'edit' else 'status-pending' }}">{{ "編集" if mode == "edit" else "新規" }}</span>
     </div>
-    <form class="filter-card compact-filter" method="get" action="{{ '/admin/csv-mapping-templates/new' if mode == 'new' else '/admin/csv-mapping-templates/' ~ template.csv_format_version_id ~ '/edit' }}">
-      <label>
-        <span>健診機関検索</span>
-        <input name="facility_q" value="{{ filters.facility_q or '' }}" placeholder="健診機関名 / コード">
-      </label>
-      <div class="filter-actions">
-        <button type="submit">検索</button>
-        <a class="ghost-button" href="{{ '/admin/csv-mapping-templates/new' if mode == 'new' else '/admin/csv-mapping-templates/' ~ template.csv_format_version_id ~ '/edit' }}">クリア</a>
-      </div>
-    </form>
-    <form method="post" action="{{ '/admin/csv-mapping-templates/new' if mode == 'new' else '/admin/csv-mapping-templates/' ~ template.csv_format_version_id ~ '/edit' }}">
+    <form id="csv-template-basic-form" method="post" enctype="multipart/form-data" action="{{ '/admin/csv-mapping-templates/new' if mode == 'new' else '/admin/csv-mapping-templates/' ~ template.csv_format_version_id ~ '/edit' }}">
       <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
     <div class="detail-grid">
-      <label>
+      <label class="csv-template-facility-field">
         <span>健診機関</span>
-        <select name="exam_facility_id">
-          {% if template %}
-          <option value="{{ template.exam_facility_id }}" selected>{{ template.exam_facility_display_name or template.exam_facility_name or template.exam_facility_id }} / {{ template.exam_facility_code or "-" }}</option>
-          {% else %}
-          <option value="">選択してください</option>
-          {% endif %}
-          {% for facility in facility_rows %}
-          <option value="{{ facility.exam_facility_id }}">{{ facility.exam_facility_display_name or facility.exam_facility_name }} / {{ facility.exam_facility_code or "-" }} / ID {{ facility.exam_facility_id }}</option>
-          {% endfor %}
-        </select>
+        <input id="csv-template-facility-id" type="hidden" name="exam_facility_id" value="{{ template.exam_facility_id if template else '' }}">
+        <span class="input-with-button csv-template-facility-control">
+          <input
+            id="csv-template-facility-display"
+            value="{% if template %}{{ template.exam_facility_display_name or template.exam_facility_name or template.exam_facility_id }} / {{ template.exam_facility_code or '-' }} / ID {{ template.exam_facility_id }}{% endif %}"
+            placeholder="健診機関マスタから選択"
+            readonly
+          >
+          <button
+            type="button"
+            class="ghost-button compact-action-button"
+            data-alias-facility-picker-open
+            data-target-input="csv-template-facility-id"
+            data-target-value="exam_facility_id"
+            data-target-display-input="csv-template-facility-display"
+            data-modal-open="csv-template-facility-picker-modal"
+          >選択</button>
+        </span>
       </label>
       <label>
         <span>mapping_version</span>
@@ -69,6 +67,24 @@
         <span>データ開始行</span>
         <input type="number" name="data_start_row_no" min="1" value="{{ template.data_start_row_no if template else 2 }}">
       </label>
+      <label>
+        <span>ヘッダー構造</span>
+        <select name="header_structure_type">
+          {% set current_header_structure = template.header_structure_type if template else 'SIMPLE_HEADER' %}
+          <option value="SIMPLE_HEADER" {{ 'selected' if current_header_structure == 'SIMPLE_HEADER' else '' }}>シンプルヘッダー</option>
+          <option value="CONTEXT_HEADER" {{ 'selected' if current_header_structure == 'CONTEXT_HEADER' else '' }}>コンテキストあり</option>
+        </select>
+      </label>
+      <label>
+        <span>実ヘッダー行</span>
+        <input
+          type="number"
+          name="active_header_row_no"
+          min="1"
+          value="{{ template.active_header_row_no if template and template.active_header_row_no else '' }}"
+          placeholder="空ならデータ開始行の直前"
+        >
+      </label>
     </div>
       <div class="button-row">
         <button class="primary-button" type="submit">{{ "作成" if mode == "new" else "基本情報を保存" }}</button>
@@ -76,18 +92,162 @@
     </form>
   </section>
 
+  <div id="csv-template-facility-picker-modal" class="edit-modal" hidden data-alias-facility-picker-modal>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="csv-template-facility-picker-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">Facility Picker</p>
+          <h2 id="csv-template-facility-picker-title">健診機関マスタから選ぶ</h2>
+          <p class="subtle">CSVマッピングテンプレートに紐づける健診機関を選択します。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search alias-facility-search">
+        <label class="alias-facility-search__code">
+          <span>コード</span>
+          <input data-alias-facility-search-code data-modal-focus placeholder="健診機関コード / 医療機関コード">
+        </label>
+        <label class="alias-facility-search__prefecture">
+          <span>都道府県</span>
+          <input data-alias-facility-search-prefecture list="csv-template-facility-prefectures" placeholder="東京都">
+          <datalist id="csv-template-facility-prefectures">
+            {% for prefecture in prefecture_options %}
+            <option value="{{ prefecture }}"></option>
+            {% endfor %}
+          </datalist>
+        </label>
+        <label class="alias-facility-search__keyword">
+          <span>キーワード</span>
+          <input data-alias-facility-search-keyword placeholder="名称 / 住所">
+        </label>
+        <button type="button" class="primary-button" data-alias-facility-search>検索</button>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="csv-template-facility-picker-table" class="data-table compact-table" data-empty-message="一致する健診機関はありません。">
+          <thead>
+            <tr>
+              <th>健診機関</th>
+              <th>ID/コード</th>
+              <th>所在地</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody data-alias-facility-results>
+            <tr>
+              <td colspan="4">コードまたはキーワードで検索してください。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
   <section class="panel">
     <div class="section-heading">
       <div>
         <h2>CSVヘッダー読み込み</h2>
-        <p class="subtle">CSVをアップロードして、ヘッダーと前後contextをマッピング作成に使います。</p>
+        <p class="subtle">ヘッダー構造と実ヘッダー行を確認してからCSVを読み込みます。設定を変えたら再読み込みしてください。</p>
+      </div>
+      {% if header_columns %}
+      <span class="status-pill status-ready">保存済み {{ header_columns|length }}列</span>
+      {% else %}
+      <span class="status-pill status-muted">未保存</span>
+      {% endif %}
+    </div>
+    <div class="csv-template-header-status {{ 'is-saved' if header_columns else 'is-empty' }}">
+      <div>
+        <strong>{{ "基準ヘッダー保存済み" if header_columns else "基準ヘッダー未保存" }}</strong>
+        <small>
+          {% if header_columns %}
+          {{ header_columns|length }}列 / {{ template.header_hash_status or "UNVERIFIED" }} / 新しいCSVを読み込むと保存済みヘッダーを変更します。
+          {% else %}
+          CSVを読み込むと、このテンプレートの基準ヘッダーとして保存します。
+          {% endif %}
+        </small>
       </div>
     </div>
-    <label class="csv-header-drop-zone" data-file-drop-zone>
-      <span>CSVを選択またはドラッグ&ドロップ</span>
-      <input type="file" name="csv_file" accept=".csv,text/csv" data-file-drop-input>
-      <small data-file-drop-name>まずはヘッダー確認用。保存接続は次段階で追加します。</small>
-    </label>
+    {% if template %}
+    <div class="csv-header-compare-upload">
+      <label class="csv-header-drop-zone" data-file-drop-zone>
+        <span>CSVを選択またはドラッグ&ドロップ</span>
+        <input type="file" name="csv_file" accept=".csv,text/csv" data-file-drop-input form="csv-template-basic-form">
+        <small data-file-drop-name>またはクリックしてファイルを選択</small>
+      </label>
+      <div class="csv-header-upload-actions">
+        <button class="primary-button" type="submit" form="csv-template-basic-form">{{ "変更して読み込み" if header_columns else "保存して読み込み" }}</button>
+        <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers">ヘッダー確認へ</a>
+      </div>
+    </div>
+    {% else %}
+    <div class="csv-header-compare-upload">
+      <label class="csv-header-drop-zone" data-file-drop-zone>
+        <span>CSVを選択またはドラッグ&ドロップ</span>
+        <input type="file" name="csv_file" accept=".csv,text/csv" data-file-drop-input form="csv-template-basic-form">
+        <small data-file-drop-name>作成時に基準ヘッダーとして読み込みます。</small>
+      </label>
+      <div class="csv-header-upload-actions">
+        <button class="primary-button" type="submit" form="csv-template-basic-form">作成して読み込み</button>
+      </div>
+    </div>
+    {% endif %}
+    {% if header_columns %}
+    {% set has_header_context = header_columns|selectattr('context')|list|length > 0 or header_columns|selectattr('header_context')|list|length > 0 %}
+    {% set data_start_row = template.data_start_row_no if template and template.data_start_row_no else 2 %}
+    {% set inferred_header_row = data_start_row - 1 if data_start_row > 1 else 1 %}
+    {% set active_header_row = template.active_header_row_no if template and template.active_header_row_no else inferred_header_row %}
+    <script id="csv-template-header-preview-data" type="application/json">{{ header_preview|tojson }}</script>
+    <div class="csv-template-inline-preview" data-csv-template-inline-preview>
+      <div class="csv-template-inline-preview__head">
+        <strong>CSVプレビュー</strong>
+        <span>{{ header_columns|length }}列</span>
+      </div>
+      <div class="csv-template-inline-preview__scroll" aria-label="読み込み済みCSVヘッダープレビュー">
+        <table class="csv-template-inline-preview-table">
+          <tbody>
+            <tr>
+              <th class="csv-template-inline-preview-table__row-title" scope="row">
+                <span>列番</span>
+                <small>CSV列</small>
+              </th>
+              {% for column in header_columns %}
+              <th class="{{ 'is-used' if column.is_mapped else '' }}">{{ column.column_no }}</th>
+              {% endfor %}
+            </tr>
+            {% if has_header_context %}
+            <tr>
+              <th class="csv-template-inline-preview-table__row-title" scope="row">
+                <span>コンテキスト</span>
+                <small>{% if active_header_row > 2 %}1-{{ active_header_row - 1 }}行目{% else %}ヘッダー前{% endif %}</small>
+              </th>
+              {% for column in header_columns %}
+              <td class="{{ 'is-used' if column.is_mapped else '' }}">{{ column.context or column.header_context or "-" }}</td>
+              {% endfor %}
+            </tr>
+            {% endif %}
+            <tr>
+              <th class="csv-template-inline-preview-table__row-title is-header-row" scope="row">
+                <span>ヘッダー</span>
+                <small>{{ active_header_row }}行目</small>
+              </th>
+              {% for column in header_columns %}
+              <td class="csv-template-inline-preview-table__header {{ 'is-used' if column.is_mapped else '' }}">{{ column.name or column.header_name or "-" }}</td>
+              {% endfor %}
+            </tr>
+            <tr>
+              <th class="csv-template-inline-preview-table__row-title" scope="row">
+                <span>データ</span>
+                <small>{{ data_start_row }}行目</small>
+              </th>
+              {% for column in header_columns %}
+              <td class="{{ 'is-used' if column.is_mapped else '' }}">-</td>
+              {% endfor %}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
   </section>
 
   <section class="panel">
@@ -96,7 +256,10 @@
         <h2>登録先項目</h2>
         <p class="subtle">左側に登録先の基本情報・健診項目を並べ、各項目にCSV列を割り当てます。</p>
       </div>
-      <button type="button" class="primary-button" disabled>項目を追加</button>
+      <button type="button" class="primary-button" data-modal-open="csv-template-target-item-modal">項目を追加</button>
+    </div>
+    <div class="csv-template-target-draft" data-csv-template-target-draft-list>
+      <p class="subtle">追加する項目をモーダルから選ぶと、ここに仮配置されます。保存接続はCSV列割り当てと合わせて追加します。</p>
     </div>
     <div class="summary-grid">
       <article class="summary-card">
@@ -167,4 +330,61 @@
   </section>
   {% endif %}
 </main>
+
+<div id="csv-template-target-item-modal" class="edit-modal csv-template-target-item-modal" hidden>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <section class="edit-modal__panel csv-template-target-item-modal__panel" role="dialog" aria-modal="true" aria-labelledby="csv-template-target-item-title">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">Mapping Target</p>
+        <h2 id="csv-template-target-item-title">登録先項目を追加</h2>
+        <p class="subtle">CSV列を入れる先の健診項目を選びます。1:nは複数項目をまとめて追加できます。</p>
+      </div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+
+    <div class="csv-template-target-item-layout">
+      <div class="csv-template-target-item-picker">
+        <div class="csv-template-target-item-mode" aria-label="追加パターン">
+          <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
+          <button type="button" data-csv-template-target-mode="many">1:n 結合</button>
+        </div>
+
+        <section class="csv-template-target-selected">
+          <div class="csv-template-target-selected__head">
+            <strong>選択済み項目</strong>
+            <small data-csv-template-target-selected-count>0件</small>
+          </div>
+          <div class="csv-template-target-selected__list" data-csv-template-target-selected-list>
+            <p class="subtle">候補から項目を選んでください。</p>
+          </div>
+        </section>
+
+        <label class="csv-template-target-search">
+          <span>項目検索キーワード</span>
+          <input data-csv-template-target-search-input autocomplete="off" placeholder="身長 / 血圧 / 9N...">
+        </label>
+        <div class="csv-mapping-exam-item-type-filter" aria-label="形式で絞り込み">
+          <button type="button" class="is-selected" data-csv-template-target-type-filter="">すべて</button>
+          <button type="button" data-csv-template-target-type-filter="PQ">PQ</button>
+          <button type="button" data-csv-template-target-type-filter="CD">CD</button>
+          <button type="button" data-csv-template-target-type-filter="ST">ST</button>
+          <button type="button" data-csv-template-target-type-filter="CO">CO</button>
+        </div>
+        <div class="csv-template-target-results" data-csv-template-target-results>
+          <p class="subtle">検索すると候補ターゲット項目が表示されます。</p>
+        </div>
+      </div>
+
+      <aside class="csv-template-target-detail" data-csv-template-target-detail>
+        <p class="subtle">候補を選ぶと、ここに項目詳細を表示します。</p>
+      </aside>
+    </div>
+
+    <div class="edit-modal__actions">
+      <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+      <button type="button" class="primary-button" data-csv-template-target-apply disabled>追加</button>
+    </div>
+  </section>
+</div>
 {% endblock %}

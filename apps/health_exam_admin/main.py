@@ -4842,6 +4842,43 @@ def build_csv_mapping_template_header_columns(
     return rows
 
 
+def build_csv_mapping_template_header_preview_payload(
+    template: Mapping[str, Any] | None,
+    header_columns: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if not template:
+        return {"header_rows": [], "columns": []}
+    snapshot_raw = template.get("header_snapshot_json")
+    snapshot: Mapping[str, Any] = {}
+    if isinstance(snapshot_raw, str) and snapshot_raw:
+        try:
+            parsed = json.loads(snapshot_raw)
+            if isinstance(parsed, Mapping):
+                snapshot = parsed
+        except json.JSONDecodeError:
+            snapshot = {}
+    elif isinstance(snapshot_raw, Mapping):
+        snapshot = snapshot_raw
+    header_rows = snapshot.get("header_rows")
+    if not isinstance(header_rows, list):
+        header_rows = []
+    cleaned_header_rows = [
+        [str(cell or "") for cell in row] for row in header_rows if isinstance(row, list)
+    ]
+    return {
+        "header_rows": cleaned_header_rows,
+        "columns": [
+            {
+                "column_no": _optional_int(column.get("column_no")) or index + 1,
+                "name": str(column.get("name") or column.get("header_name") or ""),
+                "context": str(column.get("context") or column.get("header_context") or ""),
+                "is_mapped": bool(column.get("is_mapped")),
+            }
+            for index, column in enumerate(header_columns)
+        ],
+    }
+
+
 def load_csv_mapping_template_header_columns(
     cur: Any,
     *,
@@ -5057,6 +5094,65 @@ def save_csv_mapping_template_header_columns(cur: Any, *, csv_format_version_id:
             """,
             rows,
         )
+
+
+async def import_csv_mapping_template_header_upload(
+    cur: Any,
+    *,
+    request: Request,
+    user: dict[str, Any],
+    csv_format_version_id: int,
+    template: Mapping[str, Any],
+    csv_file: UploadFile,
+) -> dict[str, Any]:
+    tmp_path: str | None = None
+    try:
+        uploaded_bytes = await csv_file.read()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+            tmp.write(uploaded_bytes)
+            tmp_path = tmp.name
+        header_count = max(int(template.get("data_start_row_no") or 2) - 1, 0)
+        csv_result = load_csv_result(
+            tmp_path,
+            header_count=header_count,
+            delimiter=str(template.get("delimiter") or ","),
+            encoding=str(template.get("character_encoding") or "") or None,
+            quote_char=str(template.get("quote_char") or '"'),
+            active_header_row_no=(
+                int(template["active_header_row_no"])
+                if template.get("active_header_row_no") is not None
+                else None
+            ),
+            data_start_row_no=int(template.get("data_start_row_no") or header_count + 1),
+        )
+        save_csv_mapping_template_header_columns(
+            cur,
+            csv_format_version_id=csv_format_version_id,
+            csv_result=csv_result,
+        )
+        result = {
+            "csv_format_version_id": csv_format_version_id,
+            "file_name": csv_file.filename,
+            "column_count": len(csv_result.header_set.normalized_columns),
+            "header_sha256": csv_result.header_set.header_sha256,
+        }
+        log_audit(
+            cur,
+            request=request,
+            user=user,
+            action_code="CSV_MAPPING_TEMPLATE_HEADER_IMPORT",
+            target_schema=master_db(),
+            target_table="csv_format_header_columns",
+            target_id=str(csv_format_version_id),
+            after=result,
+        )
+        return result
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def source_mode_label(value: Any) -> str:
@@ -15638,16 +15734,6 @@ def admin_csv_mapping_template_new(request: Request) -> Response:
         return user
     if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
-    facility_keyword = request.query_params.get("facility_q", "").strip()
-    params = load_mysql_base_params(db_prefix())
-    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
-        cur = dict_cursor(conn)
-        try:
-            facility_rows = load_facility_master_admin_rows(cur, keyword=facility_keyword, code_match="partial", limit=80)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
     return templates.TemplateResponse(
         "admin_csv_mapping_template_edit.html",
         {
@@ -15655,10 +15741,11 @@ def admin_csv_mapping_template_new(request: Request) -> Response:
             "user": user,
             "mode": "new",
             "template": None,
-            "facility_rows": facility_rows,
-            "filters": {"facility_q": facility_keyword},
+            "prefecture_options": PREFECTURE_OPTIONS,
             "rules": [],
             "target_groups": [],
+            "header_columns": [],
+            "header_preview": {"header_rows": [], "columns": []},
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -15677,6 +15764,14 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
     mapping_version = str(form.get("mapping_version") or "").strip()
     format_name = str(form.get("format_name") or "").strip() or None
     data_start_row_no = _optional_int(form.get("data_start_row_no")) or 2
+    csv_file = form.get("csv_file")
+    csv_file_name = str(getattr(csv_file, "filename", "") or "")
+    active_header_row_no = _optional_int(form.get("active_header_row_no"))
+    header_structure_type = str(form.get("header_structure_type") or "SIMPLE_HEADER").strip()
+    if header_structure_type not in {"SIMPLE_HEADER", "CONTEXT_HEADER"}:
+        header_structure_type = "SIMPLE_HEADER"
+    header_mode = "MULTI_ROW" if header_structure_type == "CONTEXT_HEADER" else "SINGLE"
+    header_context_rule = "PREVIOUS_ROWS_AS_CONTEXT" if header_structure_type == "CONTEXT_HEADER" else None
     if not exam_facility_id:
         return RedirectResponse("/admin/csv-mapping-templates/new?error=健診機関を選択してください。", status_code=303)
     if not mapping_version:
@@ -15695,6 +15790,8 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
                   `has_header`,
                   `header_mode`,
                   `header_structure_type`,
+                  `header_context_rule`,
+                  `active_header_row_no`,
                   `data_start_row_no`,
                   `header_hash_status`,
                   `header_mismatch_policy`,
@@ -15704,17 +15801,38 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
                   `note`,
                   `is_active`
                 )
-                VALUES (%s, %s, 'CSV', %s, 1, 'SINGLE', 'SIMPLE_HEADER', %s, 'UNVERIFIED', 'ALLOW_AFTER_CONFIRM', 0, 'CP932', ',', %s, 1)
+                VALUES (%s, %s, 'CSV', %s, 1, %s, %s, %s, %s, %s, 'UNVERIFIED', 'ALLOW_AFTER_CONFIRM', 0, 'CP932', ',', %s, 1)
                 """,
                 (
                     exam_facility_id,
                     mapping_version,
                     format_name,
+                    header_mode,
+                    header_structure_type,
+                    header_context_rule,
+                    active_header_row_no,
                     data_start_row_no,
                     "created from admin csv mapping builder",
                 ),
             )
             csv_format_version_id = int(cur.lastrowid)
+            template_for_header_import = {
+                "data_start_row_no": data_start_row_no,
+                "delimiter": ",",
+                "character_encoding": "CP932",
+                "quote_char": '"',
+                "active_header_row_no": active_header_row_no,
+            }
+            header_import_result = None
+            if csv_file_name:
+                header_import_result = await import_csv_mapping_template_header_upload(
+                    cur,
+                    request=request,
+                    user=user,
+                    csv_format_version_id=csv_format_version_id,
+                    template=template_for_header_import,
+                    csv_file=csv_file,
+                )
             log_audit(
                 cur,
                 request=request,
@@ -15727,7 +15845,12 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
                     "exam_facility_id": exam_facility_id,
                     "mapping_version": mapping_version,
                     "format_name": format_name,
+                    "header_mode": header_mode,
+                    "header_structure_type": header_structure_type,
+                    "header_context_rule": header_context_rule,
+                    "active_header_row_no": active_header_row_no,
                     "data_start_row_no": data_start_row_no,
+                    "header_import": header_import_result,
                 },
             )
             conn.commit()
@@ -15740,8 +15863,11 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
         except Exception:
             conn.rollback()
             raise
+    message = "CSVマッピングテンプレートを作成しました。"
+    if csv_file_name:
+        message = "CSVマッピングテンプレートを作成し、基準ヘッダーを読み込みました。"
     return RedirectResponse(
-        f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote('CSVマッピングテンプレートを作成しました。')}",
+        f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote(message)}",
         status_code=303,
     )
 
@@ -15803,6 +15929,7 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "conditions": conditions,
             "target_groups": target_groups,
             "header_columns": header_columns,
+            "header_preview": build_csv_mapping_template_header_preview_payload(template, header_columns),
             "mapped_header_count": sum(1 for column in header_columns if column.get("is_mapped")),
             "unmapped_header_count": sum(1 for column in header_columns if not column.get("is_mapped")),
             "message": request.query_params.get("message"),
@@ -15818,7 +15945,6 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
         return user
     if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
-    facility_keyword = request.query_params.get("facility_q", "").strip()
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
@@ -15832,11 +15958,12 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
             )
             enrich_csv_mapping_template_rules_with_conditions(rules, conditions)
             target_groups = build_csv_mapping_template_target_groups(rules)
-            facility_rows = load_facility_master_admin_rows(
-                cur,
-                keyword=facility_keyword,
-                code_match="partial",
-                limit=80,
+            header_columns = (
+                attach_csv_header_neighbors(
+                    load_csv_mapping_template_header_columns(cur, template=template, conditions=conditions)
+                )
+                if template
+                else []
             )
             conn.commit()
         except Exception:
@@ -15854,10 +15981,11 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
             "user": user,
             "mode": "edit",
             "template": template,
-            "facility_rows": facility_rows,
-            "filters": {"facility_q": facility_keyword},
+            "prefecture_options": PREFECTURE_OPTIONS,
             "rules": rules,
             "target_groups": target_groups,
+            "header_columns": header_columns,
+            "header_preview": build_csv_mapping_template_header_preview_payload(template, header_columns),
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -15876,6 +16004,14 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
     mapping_version = str(form.get("mapping_version") or "").strip()
     format_name = str(form.get("format_name") or "").strip() or None
     data_start_row_no = _optional_int(form.get("data_start_row_no")) or 2
+    csv_file = form.get("csv_file")
+    csv_file_name = str(getattr(csv_file, "filename", "") or "")
+    active_header_row_no = _optional_int(form.get("active_header_row_no"))
+    header_structure_type = str(form.get("header_structure_type") or "SIMPLE_HEADER").strip()
+    if header_structure_type not in {"SIMPLE_HEADER", "CONTEXT_HEADER"}:
+        header_structure_type = "SIMPLE_HEADER"
+    header_mode = "MULTI_ROW" if header_structure_type == "CONTEXT_HEADER" else "SINGLE"
+    header_context_rule = "PREVIOUS_ROWS_AS_CONTEXT" if header_structure_type == "CONTEXT_HEADER" else None
     if not exam_facility_id:
         return RedirectResponse(
             f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?error=健診機関を選択してください。",
@@ -15896,16 +16032,47 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
                    SET `exam_facility_id` = %s,
                        `mapping_version` = %s,
                        `format_name` = %s,
+                       `header_mode` = %s,
+                       `header_structure_type` = %s,
+                       `header_context_rule` = %s,
+                       `active_header_row_no` = %s,
                        `data_start_row_no` = %s
                  WHERE `csv_format_version_id` = %s
                 """,
-                (exam_facility_id, mapping_version, format_name, data_start_row_no, csv_format_version_id),
+                (
+                    exam_facility_id,
+                    mapping_version,
+                    format_name,
+                    header_mode,
+                    header_structure_type,
+                    header_context_rule,
+                    active_header_row_no,
+                    data_start_row_no,
+                    csv_format_version_id,
+                ),
             )
             if cur.rowcount == 0:
                 conn.rollback()
                 return RedirectResponse(
                     f"/admin/csv-mapping-templates?error={quote(f'csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。')}",
                     status_code=303,
+                )
+            header_import_result = None
+            if csv_file_name:
+                template_for_header_import = {
+                    "data_start_row_no": data_start_row_no,
+                    "delimiter": ",",
+                    "character_encoding": "CP932",
+                    "quote_char": '"',
+                    "active_header_row_no": active_header_row_no,
+                }
+                header_import_result = await import_csv_mapping_template_header_upload(
+                    cur,
+                    request=request,
+                    user=user,
+                    csv_format_version_id=csv_format_version_id,
+                    template=template_for_header_import,
+                    csv_file=csv_file,
                 )
             log_audit(
                 cur,
@@ -15919,7 +16086,12 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
                     "exam_facility_id": exam_facility_id,
                     "mapping_version": mapping_version,
                     "format_name": format_name,
+                    "header_mode": header_mode,
+                    "header_structure_type": header_structure_type,
+                    "header_context_rule": header_context_rule,
+                    "active_header_row_no": active_header_row_no,
                     "data_start_row_no": data_start_row_no,
+                    "header_import": header_import_result,
                 },
             )
             conn.commit()
@@ -15932,8 +16104,11 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
         except Exception:
             conn.rollback()
             raise
+    message = "基本情報を保存しました。"
+    if csv_file_name:
+        message = "基本情報を保存し、基準ヘッダーを読み込みました。"
     return RedirectResponse(
-        f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote('基本情報を保存しました。')}",
+        f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote(message)}",
         status_code=303,
     )
 
@@ -16091,77 +16266,38 @@ async def admin_csv_mapping_template_headers_import(
     if not can_view_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
-    tmp_path: str | None = None
-    try:
-        uploaded_bytes = await csv_file.read()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
-            tmp.write(uploaded_bytes)
-            tmp_path = tmp.name
-
-        params = load_mysql_base_params(db_prefix())
-        with connect_ctx(params, database=health_db(), autocommit=False) as conn:
-            cur = dict_cursor(conn)
-            try:
-                template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
-                if template is None:
-                    conn.commit()
-                    return RedirectResponse(
-                        f"/admin/csv-mapping-templates/{csv_format_version_id}/headers?error=テンプレートが見つかりません。",
-                        status_code=303,
-                    )
-                header_count = max(int(template.get("data_start_row_no") or 2) - 1, 0)
-                csv_result = load_csv_result(
-                    tmp_path,
-                    header_count=header_count,
-                    delimiter=str(template.get("delimiter") or ","),
-                    encoding=str(template.get("character_encoding") or "") or None,
-                    quote_char=str(template.get("quote_char") or '"'),
-                    active_header_row_no=(
-                        int(template["active_header_row_no"])
-                        if template.get("active_header_row_no") is not None
-                        else None
-                    ),
-                    data_start_row_no=int(template.get("data_start_row_no") or header_count + 1),
-                )
-                save_csv_mapping_template_header_columns(
-                    cur,
-                    csv_format_version_id=csv_format_version_id,
-                    csv_result=csv_result,
-                )
-                log_audit(
-                    cur,
-                    request=request,
-                    user=user,
-                    action_code="CSV_MAPPING_TEMPLATE_HEADER_IMPORT",
-                    target_schema=master_db(),
-                    target_table="csv_format_header_columns",
-                    target_id=str(csv_format_version_id),
-                    after={
-                        "csv_format_version_id": csv_format_version_id,
-                        "file_name": csv_file.filename,
-                        "column_count": len(csv_result.header_set.normalized_columns),
-                        "header_sha256": csv_result.header_set.header_sha256,
-                    },
-                )
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if template is None:
                 conn.commit()
-            except ValueError as exc:
-                conn.rollback()
                 return RedirectResponse(
-                    f"/admin/csv-mapping-templates/{csv_format_version_id}/headers?error={quote(str(exc))}",
+                    f"/admin/csv-mapping-templates?error={quote('テンプレートが見つかりません。')}",
                     status_code=303,
                 )
-            except Exception:
-                conn.rollback()
-                raise
-    finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+            await import_csv_mapping_template_header_upload(
+                cur,
+                request=request,
+                user=user,
+                csv_format_version_id=csv_format_version_id,
+                template=template,
+                csv_file=csv_file,
+            )
+            conn.commit()
+        except ValueError as exc:
+            conn.rollback()
+            return RedirectResponse(
+                f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?error={quote(str(exc))}",
+                status_code=303,
+            )
+        except Exception:
+            conn.rollback()
+            raise
 
     return RedirectResponse(
-        f"/admin/csv-mapping-templates/{csv_format_version_id}/headers?message=基準ヘッダーを保存しました。",
+        f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote('基準ヘッダーを読み込みました。')}",
         status_code=303,
     )
 
