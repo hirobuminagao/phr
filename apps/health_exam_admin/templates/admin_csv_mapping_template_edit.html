@@ -51,17 +51,18 @@
             data-target-input="csv-template-facility-id"
             data-target-value="exam_facility_id"
             data-target-display-input="csv-template-facility-display"
+            data-csv-template-facility-defaults="{{ '1' if mode == 'new' else '0' }}"
             data-modal-open="csv-template-facility-picker-modal"
           >選択</button>
         </span>
       </label>
       <label>
         <span>mapping_version</span>
-        <input name="mapping_version" value="{{ template.mapping_version if template else '' }}" placeholder="例: facility_2026_v1">
+        <input name="mapping_version" value="{{ template.mapping_version if template else '' }}" placeholder="例: 0110119674_V1_20260828" data-csv-template-mapping-version>
       </label>
       <label>
         <span>テンプレート名</span>
-        <input name="format_name" value="{{ template.format_name if template else '' }}" placeholder="CSVの名前や用途">
+        <input name="format_name" value="{{ template.format_name if template else '' }}" placeholder="CSVの名前や用途" data-csv-template-format-name>
       </label>
       <label>
         <span>データ開始行</span>

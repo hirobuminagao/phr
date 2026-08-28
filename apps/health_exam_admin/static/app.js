@@ -1300,9 +1300,32 @@
   let aliasFacilityTargetNameInput = null;
   let aliasFacilityTargetDisplayInput = null;
   let aliasFacilityTargetValue = "code";
+  let aliasFacilityShouldFillCsvTemplateDefaults = false;
   const codeFromFolderAliasName = (folderName) => {
     const firstPart = String(folderName || "").trim().split("_")[0]?.trim() || "";
     return /^[0-9A-Za-z-]{2,}$/.test(firstPart) ? firstPart : "";
+  };
+  const yyyymmdd = (date = new Date()) => {
+    const year = String(date.getFullYear());
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}${month}${day}`;
+  };
+  const fillCsvTemplateDefaultsFromFacility = ({ code, name }) => {
+    const mappingVersionInput = document.querySelector("[data-csv-template-mapping-version]");
+    const formatNameInput = document.querySelector("[data-csv-template-format-name]");
+    const cleanCode = String(code || "").trim();
+    const cleanName = String(name || "").trim();
+    if (mappingVersionInput && !String(mappingVersionInput.value || "").trim() && cleanCode) {
+      mappingVersionInput.value = `${cleanCode}_V1_${yyyymmdd()}`;
+      mappingVersionInput.dispatchEvent(new Event("input", { bubbles: true }));
+      mappingVersionInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    if (formatNameInput && !String(formatNameInput.value || "").trim() && cleanName) {
+      formatNameInput.value = `${cleanName}_V1`;
+      formatNameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      formatNameInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
   };
   for (const button of document.querySelectorAll("[data-alias-facility-picker-open]")) {
     button.addEventListener("click", () => {
@@ -1313,6 +1336,7 @@
       aliasFacilityTargetNameInput = targetNameId ? document.getElementById(targetNameId) : null;
       aliasFacilityTargetDisplayInput = targetDisplayId ? document.getElementById(targetDisplayId) : null;
       aliasFacilityTargetValue = button.getAttribute("data-target-value") || "code";
+      aliasFacilityShouldFillCsvTemplateDefaults = button.getAttribute("data-csv-template-facility-defaults") === "1";
       const form = button.closest("form");
       const folderInput = form?.querySelector("[data-folder-alias-src]");
       const code = codeFromFolderAliasName(folderInput?.value);
@@ -1322,6 +1346,7 @@
       modal.dataset.aliasTargetNameInput = targetNameId;
       modal.dataset.aliasTargetDisplayInput = targetDisplayId;
       modal.dataset.aliasTargetValue = aliasFacilityTargetValue;
+      modal.dataset.csvTemplateFacilityDefaults = aliasFacilityShouldFillCsvTemplateDefaults ? "1" : "0";
       if (!code) return;
       window.setTimeout(() => {
         const codeInput = modal.querySelector("[data-alias-facility-search-code]");
@@ -1342,6 +1367,8 @@
     const modalTargetNameId = modal?.dataset.aliasTargetNameInput || "";
     const modalTargetDisplayId = modal?.dataset.aliasTargetDisplayInput || "";
     const modalTargetValue = modal?.dataset.aliasTargetValue || aliasFacilityTargetValue || "code";
+    const shouldFillCsvTemplateDefaults =
+      (modal?.dataset.csvTemplateFacilityDefaults || "") === "1" || aliasFacilityShouldFillCsvTemplateDefaults;
     const targetInput = modalTargetId ? document.getElementById(modalTargetId) : aliasFacilityTargetInput;
     const targetNameInput = modalTargetNameId ? document.getElementById(modalTargetNameId) : aliasFacilityTargetNameInput;
     const targetDisplayInput = modalTargetDisplayId ? document.getElementById(modalTargetDisplayId) : aliasFacilityTargetDisplayInput;
@@ -1365,6 +1392,9 @@
       targetDisplayInput.value = display;
       targetDisplayInput.dispatchEvent(new Event("input", { bubbles: true }));
       targetDisplayInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    if (shouldFillCsvTemplateDefaults) {
+      fillCsvTemplateDefaultsFromFacility({ code, name });
     }
     closeModal(modal);
     if (targetDisplayInput instanceof HTMLElement) {
