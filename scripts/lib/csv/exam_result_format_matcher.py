@@ -7,6 +7,7 @@ from typing import Any
 
 from scripts.lib.csv.csv_loader import CsvLoadResult, load_csv_result
 from scripts.lib.db.lookup.csv_exam_result_mapping import find_csv_format_versions_by_header
+from scripts.lib.db.lookup.csv_exam_result_mapping import get_csv_format_version_by_id
 from scripts.lib.db.schemas import PHR_MASTER
 
 
@@ -108,6 +109,7 @@ def match_csv_format_for_file(
     *,
     source_path: str,
     exam_facility_id: int | None,
+    preferred_csv_format_version_id: int | None = None,
     master_db: str = PHR_MASTER,
 ) -> CsvFormatMatchResult:
     if exam_facility_id is None:
@@ -117,6 +119,31 @@ def match_csv_format_for_file(
             csv_format_version_id=None,
             message="CSV format match failed: exam_facility_id is not set.",
         )
+
+    if preferred_csv_format_version_id is not None:
+        preferred = get_csv_format_version_by_id(
+            cur,
+            int(preferred_csv_format_version_id),
+            master_db=master_db,
+        )
+        if preferred is not None and int(preferred.get("exam_facility_id") or 0) == int(exam_facility_id):
+            csv_result, actual_header_sha256 = load_csv_matching_registered_header(source_path, preferred)
+            if csv_result is not None:
+                return CsvFormatMatchResult(
+                    result="MATCHED",
+                    actual_header_sha256=actual_header_sha256,
+                    csv_format_version_id=int(preferred["csv_format_version_id"]),
+                    message=f"CSV format matched by alias setting: {preferred.get('mapping_version')}",
+                    mapping_version=compact_text(preferred.get("mapping_version")),
+                    actual_character_encoding=csv_result.encoding,
+                )
+        elif preferred is not None:
+            return CsvFormatMatchResult(
+                result="ERROR",
+                actual_header_sha256=None,
+                csv_format_version_id=None,
+                message="CSV format match failed: alias template facility does not match receipt facility.",
+            )
 
     candidates = fetch_active_format_candidates(cur, exam_facility_id=exam_facility_id, master_db=master_db)
     if not candidates:

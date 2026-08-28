@@ -48,6 +48,7 @@ from scripts.from_medical.script_lib.check_exam_results import (
     article44_result_columns,
     validate_article44_result,
 )
+from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
 from scripts.from_medical.script_lib.hia_xml_export_loader import (
     ExportSelectors,
     decide_candidate,
@@ -7320,6 +7321,62 @@ def load_exam_export_case_month_options(cur: Any, *, event_id: str | None = None
         (*params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def load_exam_export_case_facility_options(cur: Any, *, event_id: str | None = None, limit: int = 2000) -> list[dict[str, Any]]:
+    where_parts = ["eec.exam_facility_id IS NOT NULL"]
+    params: list[Any] = []
+    event_text = str(event_id or "").strip()
+    if event_text:
+        where_parts.append("eec.event_id = %s")
+        params.append(event_text)
+    cur.execute(
+        f"""
+        SELECT
+          eec.event_id,
+          eec.exam_facility_id,
+          COALESCE(ef.exam_facility_code, eec.facility_code) AS exam_facility_code,
+          COALESCE(ef.exam_facility_name, eec.facility_name) AS exam_facility_name,
+          ef.exam_facility_display_name,
+          MAX(mfa.expected_source_mode) AS expected_source_mode,
+          COUNT(*) AS case_count,
+          SUM(CASE WHEN eec.source_mode LIKE '%%XML%%' THEN 1 ELSE 0 END) AS xml_case_count,
+          SUM(CASE WHEN eec.source_mode LIKE '%%CSV%%' THEN 1 ELSE 0 END) AS csv_case_count,
+          SUM(CASE WHEN eec.source_mode LIKE '%%PAPER%%' OR eec.source_mode LIKE '%%MANUAL%%' THEN 1 ELSE 0 END) AS paper_case_count,
+          MIN(eec.exam_date) AS first_exam_date,
+          MAX(eec.exam_date) AS latest_exam_date
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_id = eec.exam_facility_id
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            MAX(expected_source_mode) AS expected_source_mode
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE is_active = 1
+          GROUP BY event_id, exam_facility_id
+        ) AS mfa
+          ON mfa.event_id = eec.event_id
+         AND mfa.exam_facility_id = eec.exam_facility_id
+        WHERE {' AND '.join(where_parts)}
+        GROUP BY
+          eec.event_id,
+          eec.exam_facility_id,
+          COALESCE(ef.exam_facility_code, eec.facility_code),
+          COALESCE(ef.exam_facility_name, eec.facility_name),
+          ef.exam_facility_display_name
+        HAVING exam_facility_code IS NOT NULL
+           AND exam_facility_code <> ''
+        ORDER BY case_count DESC, exam_facility_code, exam_facility_name
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
+    return rows
 
 
 def load_facility_summary_month_options(cur: Any, *, event_id: str | None = None, limit: int = 36) -> list[dict[str, Any]]:
@@ -17678,7 +17735,7 @@ def exam_export_cases(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
-            folder_aliases = load_received_folder_alias_rows(cur)
+            case_facility_options = load_exam_export_case_facility_options(cur, event_id=filters["event_id"])
             exam_month_options = load_exam_export_case_month_options(cur, event_id=filters["event_id"])
             total_count = load_exam_export_case_count(cur, filters=filters)
             page_count = max(1, (total_count + limit - 1) // limit)
@@ -17728,7 +17785,7 @@ def exam_export_cases(request: Request) -> Response:
             "total_count": total_count,
             "limit": limit,
             "pagination": pagination,
-            "folder_aliases": folder_aliases,
+            "case_facility_options": case_facility_options,
             "exam_month_options": exam_month_options,
             "selected_exam_months": split_filter_values(filters.get("exam_month")),
             "can_download_csv": can_download_exam_export_case_csv(user),
@@ -18024,12 +18081,13 @@ async def exam_export_case_item_review(request: Request, exam_export_case_id: in
                         "new_review_status": review_status,
                     },
                 )
+            refresh_export_case_readiness(cur, health_db=health_db(), event_id=int(item.get("event_id") or 0))
             conn.commit()
         except Exception:
             conn.rollback()
             raise
     return RedirectResponse(
-        f"/exam-export-cases/{exam_export_case_id}?message=確認状態を保存しました。step5〜7を再実行するとcaseへ反映されます。",
+        f"/exam-export-cases/{exam_export_case_id}?message=確認状態を保存しました。caseの出力可否へ反映しました。",
         status_code=303,
     )
 
@@ -18100,12 +18158,14 @@ async def exam_export_case_item_review_bulk(request: Request, exam_export_case_i
                         "updated": updated,
                     },
                 )
+            if review_item_ids:
+                refresh_export_case_readiness(cur, health_db=health_db(), event_id=int(item.get("event_id") or 0))
             conn.commit()
         except Exception:
             conn.rollback()
             raise
     return RedirectResponse(
-        f"/exam-export-cases/{exam_export_case_id}?message=確認状態を{updated}件まとめて保存しました。step5〜7を再実行するとcaseへ反映されます。",
+        f"/exam-export-cases/{exam_export_case_id}?message=確認状態を{updated}件まとめて保存しました。caseの出力可否へ反映しました。",
         status_code=303,
     )
 

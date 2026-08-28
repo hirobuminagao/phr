@@ -416,6 +416,18 @@ def clear_case_values(cur: Any, config: BuildValueConfig, case_id: int) -> int:
     return int(cur.rowcount or 0)
 
 
+def clear_case_check_results(cur: Any, config: BuildValueConfig, case_id: int) -> int:
+    cur.execute(
+        f"""
+        DELETE FROM {qname(config.health_db)}.`exam_check_results`
+        WHERE `ledger_type` = 'EXPORT_CASE'
+          AND `exam_export_case_id` = %s
+        """,
+        (case_id,),
+    )
+    return int(cur.rowcount or 0)
+
+
 def update_case_value_status(
     cur: Any,
     config: BuildValueConfig,
@@ -432,6 +444,12 @@ def update_case_value_status(
         SET `value_build_status` = %s,
             `value_build_reason` = %s,
             `case_value_count` = %s,
+            `check_status` = 'PENDING',
+            `check_reason` = NULL,
+            `manual_export_approved` = 0,
+            `manual_export_reason` = NULL,
+            `manual_export_approved_at` = NULL,
+            `manual_export_approved_by` = NULL,
             `built_etl_run_id` = %s,
             `built_at` = CURRENT_TIMESTAMP(3),
             `updated_at` = CURRENT_TIMESTAMP(3)
@@ -472,6 +490,7 @@ def build_case_values(conn: Any, config: BuildValueConfig) -> BuildValueSummary:
             rules = fetch_precedence_rules(cur, config, case_row)
             selected, rules_applied, review_required = selected_values(items, rules)
             deleted = clear_case_values(cur, config, case_id)
+            clear_case_check_results(cur, config, case_id)
             inserted = 0
             if not review_required:
                 inserted = insert_case_values(cur, config, case_row=case_row, selected=selected, run_id=run_id)

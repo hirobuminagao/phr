@@ -175,6 +175,44 @@ def fetch_target_receipts(cur: Any, *, config: MatchConfig) -> list[dict[str, An
     return [dict(row) for row in cur.fetchall()]
 
 
+def scan_folder_name_from_relative_path(path_text: str | None) -> str | None:
+    text = compact_text(path_text)
+    if text is None:
+        return None
+    return text.replace("\\", "/").split("/")[0].strip() or None
+
+
+def find_alias_csv_format_version_id_for_receipt(
+    cur: Any,
+    *,
+    config: MatchConfig,
+    receipt: dict[str, Any],
+) -> int | None:
+    event_id = receipt.get("event_id")
+    exam_facility_id = receipt.get("exam_facility_id")
+    folder_name = scan_folder_name_from_relative_path(receipt.get("relative_path"))
+    if event_id is None or exam_facility_id is None or folder_name is None:
+        return None
+    cur.execute(
+        f"""
+        SELECT mfa.`csv_format_version_id`
+          FROM {qname(config.master_db)}.`medical_folder_aliases` AS mfa
+         WHERE mfa.`event_id` = %s
+           AND mfa.`exam_facility_id` = %s
+           AND mfa.`src_folder_raw` = %s
+           AND mfa.`is_active` = 1
+           AND mfa.`csv_format_version_id` IS NOT NULL
+         ORDER BY mfa.`updated_at` DESC, mfa.`alias_id` DESC
+         LIMIT 1
+        """,
+        (event_id, exam_facility_id, folder_name),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return int(row["csv_format_version_id"])
+
+
 def update_receipt_match(
     cur: Any,
     *,
@@ -219,6 +257,11 @@ def match_receipt(
         cur,
         source_path=source_path,
         exam_facility_id=int(exam_facility_id),
+        preferred_csv_format_version_id=find_alias_csv_format_version_id_for_receipt(
+            cur,
+            config=config,
+            receipt=receipt,
+        ),
         master_db=config.master_db,
     )
     return (

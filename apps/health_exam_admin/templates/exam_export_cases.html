@@ -308,7 +308,7 @@
     <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="case-facility-picker-title">
       <div class="edit-modal__head">
         <div>
-          <p class="eyebrow">受領フォルダ alias</p>
+          <p class="eyebrow">EXPORT CASE FACILITY</p>
           <h2 id="case-facility-picker-title">健診機関で絞り込む</h2>
         </div>
         <button type="button" class="ghost-button" data-modal-close>閉じる</button>
@@ -316,7 +316,7 @@
       <div class="export-facility-search">
         <label>
           検索
-          <input data-live-filter-input="#case-facility-picker-table" placeholder="健診機関名 / フォルダ名 / コード">
+          <input data-live-filter-input="#case-facility-picker-table" placeholder="健診機関名 / コード">
         </label>
       </div>
       <div class="table-panel export-facility-picker-table-panel">
@@ -324,30 +324,30 @@
           <thead>
             <tr>
               <th>健診機関</th>
-              <th>受領フォルダ</th>
-              <th>実績</th>
+              <th>case</th>
+              <th>期間</th>
               <th>選択</th>
             </tr>
           </thead>
           <tbody>
-            {% for alias in folder_aliases %}
-            {% set code = alias.exam_facility_code or "" %}
+            {% for facility in case_facility_options %}
+            {% set code = facility.exam_facility_code or "" %}
             <tr
               class="{{ 'clickable-table-row' if code else '' }}"
-              data-filter-text="{{ code }} {{ alias.exam_facility_name or '' }} {{ alias.exam_facility_display_name or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }} {{ alias.csv_mapping_version or '' }}"
+              data-filter-text="{{ code }} {{ facility.exam_facility_name or '' }} {{ facility.exam_facility_display_name or '' }} {{ facility.expected_source_mode or '' }}"
               {% if code %}data-case-facility-row data-facility-code="{{ code }}"{% endif %}
             >
               <td>
-                <strong title="{{ alias.exam_facility_name or '' }}">{{ alias.exam_facility_name or "健診機関未紐付け" }}</strong>
-                <small>{{ code or "コードなし" }} / {{ alias.expected_source_mode or "未設定" }}</small>
+                <strong title="{{ facility.exam_facility_name or '' }}">{{ facility.exam_facility_name or "健診機関名なし" }}</strong>
+                <small>{{ code or "コードなし" }} / {{ facility.expected_source_mode_label or "受領方式未設定" }}</small>
               </td>
               <td>
-                <strong title="{{ alias.src_folder_raw or '' }}">{{ alias.src_folder_raw or "" }}</strong>
-                <small>{{ alias.csv_mapping_version or "CSVテンプレートなし" }}</small>
+                <strong>{{ facility.case_count or 0 }}件</strong>
+                <small>XML {{ facility.xml_case_count or 0 }} / CSV {{ facility.csv_case_count or 0 }} / 紙 {{ facility.paper_case_count or 0 }}</small>
               </td>
               <td>
-                <strong>XML {{ alias.xml_file_count or 0 }} / CSV {{ alias.csv_file_count or 0 }}</strong>
-                <small>受領実績</small>
+                <strong>{{ facility.first_exam_date or "-" }}</strong>
+                <small>〜 {{ facility.latest_exam_date or "-" }}</small>
               </td>
               <td>
                 {% if code %}
@@ -364,7 +364,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="4">受領フォルダaliasがありません。</td>
+              <td colspan="4">caseに紐づいた健診機関がありません。</td>
             </tr>
             {% endfor %}
           </tbody>

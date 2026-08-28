@@ -285,6 +285,7 @@ def fetch_aliases(cur: Any, *, master_db: str, event_id: int) -> list[dict[str, 
             mfa.manual_judgement,
             mfa.is_active,
             mfa.note,
+            mfa.csv_format_version_id,
             ef.exam_facility_id,
             ef.exam_facility_code,
             ef.exam_facility_name
@@ -604,6 +605,9 @@ def scan_alias_files(
                 cur,
                 source_path=str(path),
                 exam_facility_id=exam_facility_id,
+                preferred_csv_format_version_id=(
+                    int(alias["csv_format_version_id"]) if alias.get("csv_format_version_id") is not None else None
+                ),
                 master_db=master_db,
             )
             actual_header_sha256 = match_result.actual_header_sha256
