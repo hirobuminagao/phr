@@ -2182,6 +2182,7 @@
       insurance_symbol: document.querySelector("#manual-entry-insurance-symbol-input")?.value?.trim() || "",
       insurance_number: document.querySelector("#manual-entry-insurance-number-input")?.value?.trim() || "",
       insurance_branch_number: document.querySelector("#manual-entry-insurance-branch-input")?.value?.trim() || "",
+      postal_code: document.querySelector("#manual-entry-postal-code-input")?.value?.trim() || "",
       name_full: document.querySelector("#manual-entry-name-full-input")?.value?.trim() || "",
       name_kana: document.querySelector("#manual-entry-name-kana-input")?.value?.trim() || "",
       birthdate: document.querySelector("#manual-entry-birthdate-input")?.value?.trim() || "",
@@ -2304,7 +2305,7 @@
         return;
       }
       const basic = collectManualEntryBasic();
-      const basicHasValue = ["facility_code", "facility_name", "exam_date", "hia_subscriber_id", "insurance_symbol", "insurance_number", "name_full", "name_kana"]
+      const basicHasValue = ["facility_code", "facility_name", "exam_date", "hia_subscriber_id", "insurance_symbol", "insurance_number", "postal_code", "name_full", "name_kana"]
         .some((key) => String(basic[key] || "").trim() !== "");
       if (!basicHasValue) {
         if (!silent) setManualEntrySaveStatus("基本情報不足", "status-warning");
@@ -2412,6 +2413,7 @@
       setValue("#manual-entry-insurance-symbol-input", person.insurance_symbol);
       setValue("#manual-entry-insurance-number-input", person.insurance_number);
       setValue("#manual-entry-insurance-branch-input", person.insurance_branch_number);
+      setValue("#manual-entry-postal-code-input", person.postal_code || person.subscriber_postal_code);
       setValue("#manual-entry-birthdate-input", person.birth || person.birthdate);
       setValue("#manual-entry-gender-input", person.gender_label);
       updateManualPersonFloat();
@@ -2737,6 +2739,7 @@
         insurance_symbol: params.get("insurance_symbol") || "",
         insurance_number: params.get("insurance_number") || "",
         insurance_branch_number: params.get("insurance_branch_number") || "",
+        postal_code: params.get("postal_code") || "",
         birth: params.get("birthdate") || "",
         gender_label: params.get("gender_label") || "",
       };
@@ -2790,6 +2793,7 @@
         insurance_symbol: draft.insurance_symbol || "",
         insurance_number: draft.insurance_number || "",
         insurance_branch_number: draft.insurance_branch_number || "",
+        postal_code: draft.postal_code || "",
         birth: draft.birthdate || "",
         gender_label: draft.gender_code || "",
       };
