@@ -369,6 +369,41 @@ def choose_split_no(facility_output_root: Path, facility_code: str, insurer_numb
     raise ValueError(f"split_no exhausted for {facility_code}/{insurer_number}/{file_date}")
 
 
+def resolve_facility_output_folder(cur: Any, *, config: ExportConfig, group: list[dict[str, Any]]) -> str:
+    first = group[0]
+    cur.execute(
+        f"""
+        SELECT
+          NULLIF(`dst_folder_norm`, '') AS dst_folder_norm,
+          NULLIF(`src_folder_raw`, '') AS src_folder_raw
+        FROM {qname(config.master_db)}.`medical_folder_aliases`
+        WHERE `event_id` = %s
+          AND `exam_facility_id` = %s
+          AND `is_active` = 1
+        ORDER BY `updated_at` DESC, `alias_id` DESC
+        """,
+        (config.selectors.event_id, first["exam_facility_id"]),
+    )
+    aliases = [dict(row) for row in cur.fetchall()]
+    alias_folder_names = {
+        str(alias.get("dst_folder_norm") or alias.get("src_folder_raw") or "").strip()
+        for alias in aliases
+        if str(alias.get("dst_folder_norm") or alias.get("src_folder_raw") or "").strip()
+    }
+    if len(alias_folder_names) == 1:
+        return next(iter(alias_folder_names))
+    if len(alias_folder_names) > 1:
+        raise ValueError(
+            f"FACILITY_OUTPUT_FOLDER_AMBIGUOUS: "
+            f"exam_facility_id={first['exam_facility_id']} folders={sorted(alias_folder_names)}"
+        )
+
+    folder_names = {facility_folder_name(row.get("relative_path")) for row in group}
+    if len(folder_names) != 1:
+        raise ValueError(f"FACILITY_FOLDER_CONFLICT: {sorted(folder_names)}")
+    return next(iter(folder_names))
+
+
 def resolve_export_address(row: Mapping[str, Any]) -> str | None:
     """Return a prepared source/completed address for XML export."""
     current = normalize_address_export(row.get("address"))
@@ -695,10 +730,7 @@ def build_group(
     first = group[0]
     facility_code = _digits(first["master_facility_code"], 10, "facility_code")
     insurer_number = _digits(first["insurer_number"], 8, "insurer_number")
-    folder_names = {facility_folder_name(row.get("relative_path")) for row in group}
-    if len(folder_names) != 1:
-        raise ValueError(f"FACILITY_FOLDER_CONFLICT: {sorted(folder_names)}")
-    folder_name = next(iter(folder_names))
+    folder_name = resolve_facility_output_folder(cur, config=config, group=group)
     exam_months = {exam_month_yyyymm(row.get("exam_date_export_value") or row.get("exam_date")) for row in group}
     if len(exam_months) != 1:
         raise ValueError(f"EXAM_MONTH_CONFLICT: {sorted(exam_months)}")
