@@ -2349,8 +2349,21 @@
         if (!input) continue;
         input.value = value.raw_value || value.normalized_value || value.code_value || "";
         input.dispatchEvent(new Event("input", { bubbles: true }));
+        refreshManualCodeToggle(input);
       }
       refreshManualEntryFilledCount();
+    };
+
+    const refreshManualCodeToggle = (input) => {
+      const control = input?.closest(".manual-entry-value-control");
+      const group = control?.querySelector("[data-manual-code-toggle-group]");
+      if (!group) return;
+      const currentValue = String(input.value || "").trim();
+      for (const button of group.querySelectorAll("[data-manual-code-toggle]")) {
+        const selected = button.value === currentValue;
+        button.classList.toggle("is-selected", selected);
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+      }
     };
 
     for (const input of document.querySelectorAll(".manual-entry-form input, .manual-entry-form select, .manual-entry-form textarea")) {
@@ -2432,6 +2445,9 @@
         }
         for (const select of document.querySelectorAll("[data-manual-code-select]")) {
           select.value = "";
+        }
+        for (const input of document.querySelectorAll(".manual-entry-value-input")) {
+          refreshManualCodeToggle(input);
         }
         for (const checkbox of document.querySelectorAll("input[name^='include_']")) {
           checkbox.checked = false;
@@ -3620,6 +3636,32 @@
         scheduleManualEntryDraftSave();
       });
     }
+
+    for (const button of document.querySelectorAll("[data-manual-code-toggle]")) {
+      button.addEventListener("click", () => {
+        const input = button.closest(".manual-entry-value-control")?.querySelector(".manual-entry-value-input");
+        if (!input) return;
+        input.value = button.value || "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        refreshManualCodeToggle(input);
+        scheduleManualEntryDraftSave();
+      });
+    }
+
+    for (const button of document.querySelectorAll("[data-manual-code-toggle-clear]")) {
+      button.addEventListener("click", () => {
+        const input = button.closest(".manual-entry-value-control")?.querySelector(".manual-entry-value-input");
+        if (!input) return;
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        refreshManualCodeToggle(input);
+        scheduleManualEntryDraftSave();
+      });
+    }
+
+    for (const input of manualValueInputs) {
+      refreshManualCodeToggle(input);
+    }
   }
 
   const manualRandomTimeInputs = Array.from(document.querySelectorAll("[data-manual-random-time-input]"));
@@ -3676,6 +3718,15 @@
         return !row.hidden;
       });
       jumpToManualEntryRow(target);
+    };
+    const openManualEntrySearchMatches = () => {
+      const keyword = normalize(manualEntryItemSearchInput?.value || "");
+      if (!keyword) return;
+      for (const category of categories) {
+        const hasMatch = Array.from(category.querySelectorAll("tbody tr[data-filter-text]"))
+          .some((row) => normalize(row.dataset.filterText).includes(keyword));
+        if (hasMatch) category.open = true;
+      }
     };
     const renderFloatingItemResults = () => {
       if (!manualEntryFloatingItemSearchInput || !manualEntryFloatingItemResults) return;
@@ -3740,6 +3791,7 @@
       }
     });
     document.querySelector("[data-manual-entry-item-jump]")?.addEventListener("click", jumpToManualEntryItem);
+    manualEntryItemSearchInput?.addEventListener("input", openManualEntrySearchMatches);
     manualEntryItemSearchInput?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();

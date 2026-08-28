@@ -157,6 +157,7 @@ BUSINESS_SETTINGS_PERMISSION = "business_settings.manage"
 SYSTEM_SETTINGS_PERMISSION = "users.manage"
 MANUAL_EXAM_ENTRY_EDIT_PERMISSION = "manual_exam_entry.edit"
 MANUAL_EXAM_ENTRY_MANAGE_PERMISSION = "manual_exam_entry.manage"
+MANUAL_EXAM_FLAG_TOGGLE_IDENTITY_CODES = {"9N056", "9N061", "9N066"}
 LOGIN_ERROR_MESSAGES = {
     "USER_NOT_FOUND": "社員番号またはパスワードが違います。",
     "PASSWORD_MISMATCH": "社員番号またはパスワードが違います。",
@@ -6873,6 +6874,91 @@ def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
     return int((row or {}).get("total_count") or 0)
 
 
+def exam_export_case_base_filters(filters: dict[str, str]) -> dict[str, str]:
+    return {key: (filters.get(key, "") if key == "event_id" else "") for key in filters}
+
+
+def has_exam_export_case_detail_filters(filters: dict[str, str]) -> bool:
+    ignored_keys = {"event_id", "limit", "page"}
+    return any(str(value or "").strip() for key, value in filters.items() if key not in ignored_keys)
+
+
+def load_exam_export_case_summary(cur: Any, *, filters: dict[str, str]) -> dict[str, int]:
+    where_sql, params = build_exam_export_case_where(filters)
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN eec.export_readiness_status = 'EXPORT_READY' THEN 1 ELSE 0 END) AS ready,
+          SUM(CASE WHEN eec.export_readiness_status = 'APPROVED_WITH_REASON' THEN 1 ELSE 0 END) AS approved_with_reason,
+          SUM(CASE WHEN eec.export_readiness_status = 'BLOCKED' THEN 1 ELSE 0 END) AS blocked,
+          SUM(CASE WHEN eec.export_readiness_status NOT IN ('EXPORT_READY', 'APPROVED_WITH_REASON', 'BLOCKED')
+                    OR eec.export_readiness_status IS NULL THEN 1 ELSE 0 END) AS waiting,
+          SUM(CASE WHEN eec.xml_export_status = 'EXPORTED' THEN 1 ELSE 0 END) AS exported,
+          SUM(CASE WHEN COALESCE(ecr.legal_check_result, 'PENDING') = 'NG' THEN 1 ELSE 0 END) AS legal_ng,
+          SUM(CASE WHEN ({specific_check_result_sql('ecr')}) = 'NG' THEN 1 ELSE 0 END) AS specific_ng,
+          SUM(CASE WHEN COALESCE(src.source_count, 0) >= 2 THEN 1 ELSE 0 END) AS multi_source,
+          SUM(CASE WHEN COALESCE(subcase.subscriber_case_count, 0) >= 2 THEN 1 ELSE 0 END) AS duplicate_subscriber
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest
+            ON latest.max_id = r1.id
+        ) AS ecr
+          ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN {qname(dev_db())}.subscribers AS s
+          ON s.id = eec.subscriber_id
+        LEFT JOIN (
+          SELECT
+            event_id,
+            exam_facility_id,
+            MAX(expected_source_mode) AS expected_source_mode
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE is_active = 1
+          GROUP BY event_id, exam_facility_id
+        ) AS mfa
+          ON mfa.event_id = eec.event_id
+         AND mfa.exam_facility_id = eec.exam_facility_id
+        LEFT JOIN (
+          SELECT exam_export_case_id, COUNT(*) AS source_count
+          FROM {qname(health_db())}.exam_export_case_sources
+          GROUP BY exam_export_case_id
+        ) AS src
+          ON src.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN (
+          SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE subscriber_id IS NOT NULL
+          GROUP BY event_id, subscriber_id
+        ) AS subcase
+          ON subcase.event_id = eec.event_id
+         AND subcase.subscriber_id = eec.subscriber_id
+        {where_sql}
+        """,
+        tuple(params),
+    )
+    row = dict(cur.fetchone() or {})
+    return {key: int(row.get(key) or 0) for key in (
+        "total",
+        "ready",
+        "approved_with_reason",
+        "blocked",
+        "waiting",
+        "exported",
+        "legal_ng",
+        "specific_ng",
+        "multi_source",
+        "duplicate_subscriber",
+    )}
+
+
 def load_exam_export_case_rows(
     cur: Any,
     *,
@@ -9739,6 +9825,11 @@ def load_manual_exam_entry_items(cur: Any, *, limit: int = 5000) -> list[dict[st
         row["manual_input_type"] = manual_exam_input_type(row.get("xml_value_type"))
         result_code_oid = str(row.get("result_code_oid") or "")
         row["manual_code_options"] = code_options.get(result_code_oid, [])
+        row["manual_code_toggle_options"] = (
+            str(row.get("xml_value_type") or "").upper() == "CD"
+            and str(row.get("identity_item_code") or "") in MANUAL_EXAM_FLAG_TOGGLE_IDENTITY_CODES
+            and len(row["manual_code_options"]) == 2
+        )
         namecode = str(row.get("namecode") or "")
         row["manual_article44_items"] = article44_flags.get(namecode, [])
     return rows
@@ -11496,8 +11587,12 @@ def load_manual_exam_cd_options(cur: Any, rows: list[dict[str, Any]]) -> dict[st
           AND normalized_code <> '<<CODE>>'
         ORDER BY
           result_code_oid,
-          priority,
+          CASE
+            WHEN normalized_code REGEXP '^[0-9]+$' THEN CAST(normalized_code AS UNSIGNED)
+            ELSE 999999
+          END,
           normalized_code,
+          priority,
           variant_id
         """,
         tuple(result_code_oids),
@@ -17740,12 +17835,16 @@ def exam_export_cases(request: Request) -> Response:
             event_options = load_event_options(cur)
             case_facility_options = load_exam_export_case_facility_options(cur, event_id=filters["event_id"])
             exam_month_options = load_exam_export_case_month_options(cur, event_id=filters["event_id"])
+            unfiltered_total_count = load_exam_export_case_count(
+                cur,
+                filters=exam_export_case_base_filters(filters),
+            )
             total_count = load_exam_export_case_count(cur, filters=filters)
             page_count = max(1, (total_count + limit - 1) // limit)
             page = min(page, page_count)
             offset = (page - 1) * limit
             rows = load_exam_export_case_rows(cur, filters=filters, limit=limit, offset=offset)
-            summary = summarize_exam_export_cases(rows)
+            summary = load_exam_export_case_summary(cur, filters=filters)
             pagination = build_exam_export_case_pagination(
                 filters,
                 total_count=total_count,
@@ -17786,6 +17885,8 @@ def exam_export_cases(request: Request) -> Response:
             "summary": summary,
             "summary_filter_urls": summary_filter_urls,
             "total_count": total_count,
+            "unfiltered_total_count": unfiltered_total_count,
+            "has_detail_filters": has_exam_export_case_detail_filters(filters),
             "limit": limit,
             "pagination": pagination,
             "case_facility_options": case_facility_options,

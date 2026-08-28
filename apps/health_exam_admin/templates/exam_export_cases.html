@@ -379,9 +379,15 @@
 
   <section class="summary-grid case-summary-grid">
     <div class="summary-card">
-      <span>検索結果case</span>
+      <span>{{ '絞り込み結果case' if has_detail_filters else 'case総数' }}</span>
       <strong>{{ total_count }}</strong>
-      <small>{{ pagination.start }}-{{ pagination.end }} 件を表示</small>
+      <small>
+        {% if has_detail_filters %}
+        全体 {{ unfiltered_total_count }} 件から絞り込み
+        {% else %}
+        {{ pagination.start }}-{{ pagination.end }} 件を表示
+        {% endif %}
+      </small>
     </div>
     <a class="summary-card summary-card-link {{ 'is-active' if filters.export_readiness_status == 'EXPORT_READY' else '' }}" href="{{ summary_filter_urls.ready }}">
       <span>出力可能</span>

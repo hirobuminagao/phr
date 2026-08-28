@@ -605,7 +605,7 @@
                     <small class="manual-entry-text-meter" data-manual-text-meter>0 / 256 byte</small>
                     {% else %}
                     <input
-                      class="manual-entry-value-input"
+                      class="manual-entry-value-input{% if item.manual_code_toggle_options %} manual-entry-code-toggle-value-input{% endif %}"
                       type="{{ item.manual_input_type }}"
                       name="item_value_{{ item.manual_entry_key or item.namecode }}"
                       data-manual-method-group="{{ item.manual_entry_key or item.namecode }}_{{ item.xml_value_type or '' }}"
@@ -614,7 +614,18 @@
                       placeholder="{{ item.xml_value_type or '値' }}"
                     >
                     {% endif %}
-                    {% if item.xml_value_type == "CD" and item.manual_code_options %}
+                    {% if item.xml_value_type == "CD" and item.manual_code_options and item.manual_code_toggle_options %}
+                    <div class="manual-entry-code-toggle" data-manual-code-toggle-group aria-label="{{ item.item_name }}の候補">
+                      <div class="manual-entry-code-toggle-switch">
+                        {% for option in item.manual_code_options %}
+                        <button type="button" data-manual-code-toggle value="{{ option.code }}" title="{{ option.option_label }}">
+                          {{ "ON" if "あり" in option.label else "OFF" }}
+                        </button>
+                        {% endfor %}
+                      </div>
+                      <button type="button" class="manual-entry-code-toggle-clear" data-manual-code-toggle-clear>クリア</button>
+                    </div>
+                    {% elif item.xml_value_type == "CD" and item.manual_code_options %}
                     <select data-manual-code-select aria-label="{{ item.item_name }}の候補">
                       <option value="">候補</option>
                       {% for option in item.manual_code_options %}
