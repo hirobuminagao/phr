@@ -256,11 +256,20 @@
         <h2>登録先項目</h2>
         <p class="subtle">左側に登録先の基本情報・健診項目を並べ、各項目にCSV列を割り当てます。</p>
       </div>
-      <button type="button" class="primary-button" data-modal-open="csv-template-target-item-modal">項目を追加</button>
+      <div class="button-row">
+        <button type="button" class="primary-button" data-modal-open="csv-template-ledger-field-modal">基本・受診情報を追加</button>
+        <button type="button" class="primary-button" data-modal-open="csv-template-target-item-modal" data-csv-template-target-open-kind="exam">健診項目を追加</button>
+      </div>
     </div>
     <div class="csv-template-target-draft" data-csv-template-target-draft-list>
       <p class="subtle">追加する項目をモーダルから選ぶと、ここに仮配置されます。保存接続はCSV列割り当てと合わせて追加します。</p>
     </div>
+    {% if template %}
+    <div class="button-row csv-template-target-save-row">
+      <button type="button" class="primary-button" data-csv-template-target-save disabled>追加したマッピングを保存</button>
+      <span class="subtle" data-csv-template-target-save-message>追加予定はありません。</span>
+    </div>
+    {% endif %}
     <div class="summary-grid">
       <article class="summary-card">
         <small>対象</small>
@@ -338,28 +347,13 @@
       <div>
         <p class="eyebrow">Mapping Target</p>
         <h2 id="csv-template-target-item-title">登録先項目を追加</h2>
-        <p class="subtle">CSV列を入れる先の健診項目を選びます。1:nは複数項目をまとめて追加できます。</p>
+        <p class="subtle">追加する健診項目を1つ選び、方式を決めてCSVヘッダー候補をセットします。</p>
       </div>
       <button type="button" class="ghost-button" data-modal-close>閉じる</button>
     </div>
 
     <div class="csv-template-target-item-layout">
       <div class="csv-template-target-item-picker">
-        <div class="csv-template-target-item-mode" aria-label="追加パターン">
-          <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
-          <button type="button" data-csv-template-target-mode="many">1:n 結合</button>
-        </div>
-
-        <section class="csv-template-target-selected">
-          <div class="csv-template-target-selected__head">
-            <strong>選択済み項目</strong>
-            <small data-csv-template-target-selected-count>0件</small>
-          </div>
-          <div class="csv-template-target-selected__list" data-csv-template-target-selected-list>
-            <p class="subtle">候補から項目を選んでください。</p>
-          </div>
-        </section>
-
         <label class="csv-template-target-search">
           <span>項目検索キーワード</span>
           <input data-csv-template-target-search-input autocomplete="off" placeholder="身長 / 血圧 / 9N...">
@@ -381,9 +375,147 @@
       </aside>
     </div>
 
+    <section class="csv-template-source-mapping">
+      <div class="csv-template-target-item-mode" aria-label="追加パターン">
+        <span>方式</span>
+        <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
+        <button type="button" data-csv-template-target-mode="many">1:n 結合</button>
+      </div>
+      <div class="csv-template-source-mapping__body">
+        <section class="csv-template-target-selected">
+          <div class="csv-template-target-selected__head">
+            <strong>選択済みヘッダー</strong>
+            <small data-csv-template-target-selected-count>0件</small>
+          </div>
+          <div class="csv-template-target-selected__list" data-csv-template-target-selected-list>
+            <p class="subtle">下の候補ヘッダーから選んでください。</p>
+          </div>
+        </section>
+        <section class="csv-template-header-candidates">
+          <div class="csv-template-target-selected__head">
+            <strong>候補ヘッダー</strong>
+            <small>{{ header_columns|length }}列</small>
+          </div>
+          <label class="csv-template-target-search">
+            <span>ヘッダー検索</span>
+            <input data-csv-template-header-search-input autocomplete="off" placeholder="列番 / ヘッダー / コンテキスト">
+          </label>
+          <div class="csv-template-header-candidate-list" data-csv-template-header-candidate-list>
+            {% for column in header_columns %}
+            <button
+              type="button"
+              class="csv-template-header-candidate-card {{ 'is-used' if column.is_mapped else '' }}"
+              data-csv-template-header-candidate
+              data-column-no="{{ column.column_no }}"
+              data-header-name="{{ column.name or column.header_name or '' }}"
+              data-header-context="{{ column.context or column.header_context or '' }}"
+              data-filter-text="{{ column.column_no }} {{ column.name or column.header_name or '' }} {{ column.context or column.header_context or '' }} {{ column.context_summary or '' }}"
+            >
+              <span>{{ column.column_no }}列目</span>
+              <strong>{{ column.name or column.header_name or "-" }}</strong>
+              <small>{{ column.context or column.header_context or "contextなし" }}</small>
+            </button>
+            {% else %}
+            <p class="subtle">基準ヘッダーを読み込むと候補が表示されます。</p>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </section>
+
     <div class="edit-modal__actions">
       <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
       <button type="button" class="primary-button" data-csv-template-target-apply disabled>追加</button>
+    </div>
+  </section>
+</div>
+
+<div id="csv-template-ledger-field-modal" class="edit-modal csv-template-target-item-modal" hidden>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <section class="edit-modal__panel csv-template-target-item-modal__panel" role="dialog" aria-modal="true" aria-labelledby="csv-template-ledger-field-title">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">Ledger Field</p>
+        <h2 id="csv-template-ledger-field-title">基本・受診情報を追加</h2>
+        <p class="subtle">追加する基本・受診情報を1つ選び、方式を決めてCSVヘッダー候補をセットします。</p>
+      </div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+
+    <div class="csv-template-ledger-modal-layout">
+      <section class="csv-template-ledger-field-grid">
+        {% for option in ledger_field_options %}
+        <button
+          type="button"
+          class="csv-template-ledger-field-card"
+          data-csv-template-ledger-modal-field
+          data-ledger-field="{{ option.value }}"
+          data-ledger-label="{{ option.label }}"
+          data-ledger-hint="{{ option.hint }}"
+          data-filter-text="{{ option.value }} {{ option.label }} {{ option.hint }}"
+        >
+          <strong>{{ option.label }}</strong>
+          <small>{{ option.value }}</small>
+          <span>{{ option.hint }}</span>
+        </button>
+        {% endfor %}
+      </section>
+      <aside class="csv-template-target-detail" data-csv-template-ledger-detail>
+        <p class="subtle">候補を選ぶと、ここに基本・受診情報の詳細を表示します。</p>
+      </aside>
+    </div>
+
+    <section class="csv-template-source-mapping">
+      <div class="csv-template-target-item-mode" aria-label="追加パターン">
+        <span>方式</span>
+        <button type="button" class="is-selected" data-csv-template-ledger-mode="one">1:1</button>
+        <button type="button" data-csv-template-ledger-mode="many">1:n 結合</button>
+      </div>
+      <div class="csv-template-source-mapping__body">
+        <section class="csv-template-target-selected">
+          <div class="csv-template-target-selected__head">
+            <strong>選択済みヘッダー</strong>
+            <small data-csv-template-ledger-selected-count>0件</small>
+          </div>
+          <div class="csv-template-target-selected__list" data-csv-template-ledger-selected-list>
+            <p class="subtle">下の候補ヘッダーから選んでください。</p>
+          </div>
+        </section>
+        <section class="csv-template-header-candidates">
+          <div class="csv-template-target-selected__head">
+            <strong>候補ヘッダー</strong>
+            <small>{{ header_columns|length }}列</small>
+          </div>
+          <label class="csv-template-target-search">
+            <span>ヘッダー検索</span>
+            <input data-csv-template-ledger-header-search-input autocomplete="off" placeholder="列番 / ヘッダー / コンテキスト">
+          </label>
+          <div class="csv-template-header-candidate-list" data-csv-template-ledger-header-candidate-list>
+            {% for column in header_columns %}
+            <button
+              type="button"
+              class="csv-template-header-candidate-card {{ 'is-used' if column.is_mapped else '' }}"
+              data-csv-template-ledger-header-candidate
+              data-column-no="{{ column.column_no }}"
+              data-header-name="{{ column.name or column.header_name or '' }}"
+              data-header-context="{{ column.context or column.header_context or '' }}"
+              data-filter-text="{{ column.column_no }} {{ column.name or column.header_name or '' }} {{ column.context or column.header_context or '' }} {{ column.context_summary or '' }}"
+            >
+              <span>{{ column.column_no }}列目</span>
+              <strong>{{ column.name or column.header_name or "-" }}</strong>
+              <small>{{ column.context or column.header_context or "contextなし" }}</small>
+            </button>
+            {% else %}
+            <p class="subtle">基準ヘッダーを読み込むと候補が表示されます。</p>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <div class="edit-modal__actions">
+      <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+      <button type="button" class="primary-button" data-csv-template-ledger-apply disabled>追加</button>
     </div>
   </section>
 </div>

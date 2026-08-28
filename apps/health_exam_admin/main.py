@@ -4879,6 +4879,13 @@ def build_csv_mapping_template_header_preview_payload(
     }
 
 
+def csv_mapping_screen_rule_key_part(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"[^a-z0-9_]+", "_", text)
+    text = re.sub(r"_+", "_", text).strip("_")
+    return text[:80] or "field"
+
+
 def load_csv_mapping_template_header_columns(
     cur: Any,
     *,
@@ -15746,6 +15753,7 @@ def admin_csv_mapping_template_new(request: Request) -> Response:
             "target_groups": [],
             "header_columns": [],
             "header_preview": {"header_rows": [], "columns": []},
+            "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -15930,6 +15938,7 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "target_groups": target_groups,
             "header_columns": header_columns,
             "header_preview": build_csv_mapping_template_header_preview_payload(template, header_columns),
+            "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
             "mapped_header_count": sum(1 for column in header_columns if column.get("is_mapped")),
             "unmapped_header_count": sum(1 for column in header_columns if not column.get("is_mapped")),
             "message": request.query_params.get("message"),
@@ -15986,6 +15995,7 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
             "target_groups": target_groups,
             "header_columns": header_columns,
             "header_preview": build_csv_mapping_template_header_preview_payload(template, header_columns),
+            "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
@@ -16111,6 +16121,186 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
         f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote(message)}",
         status_code=303,
     )
+
+
+@app.post("/api/admin/csv-mapping-templates/{csv_format_version_id}/screen-rules", response_class=JSONResponse)
+async def api_save_csv_mapping_template_screen_rules(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_manage_business_settings(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"message": "保存内容を読み取れません。"}, status_code=400)
+    items = payload.get("items") if isinstance(payload, Mapping) else None
+    if not isinstance(items, list) or not items:
+        return JSONResponse({"message": "保存するマッピングがありません。"}, status_code=400)
+
+    params = load_mysql_base_params(db_prefix())
+    saved_count = 0
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if not template:
+                conn.rollback()
+                return JSONResponse({"message": "対象テンプレートがありません。"}, status_code=404)
+            cur.execute(
+                f"""
+                SELECT COALESCE(MAX(`priority`), 0) AS `max_priority`
+                FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                WHERE `csv_format_version_id` = %s
+                """,
+                (csv_format_version_id,),
+            )
+            max_priority = int((cur.fetchone() or {}).get("max_priority") or 0)
+            has_rule_origin_type = manual_exam_entry_column_exists(
+                cur, master_db(), "csv_exam_result_mapping_rules", "rule_origin_type"
+            )
+            has_edit_capability = manual_exam_entry_column_exists(
+                cur, master_db(), "csv_exam_result_mapping_rules", "edit_capability"
+            )
+            for index, item in enumerate(items, start=1):
+                if not isinstance(item, Mapping):
+                    continue
+                target_kind = str(item.get("targetKind") or "").strip()
+                if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE"}:
+                    continue
+                mode = "many" if str(item.get("mode") or "") == "many" else "one"
+                headers = item.get("headers")
+                if not isinstance(headers, list) or not headers:
+                    continue
+                if mode == "one":
+                    headers = headers[:1]
+                condition_rows = []
+                for header_index, header in enumerate(headers, start=1):
+                    if not isinstance(header, Mapping):
+                        continue
+                    header_name = str(header.get("headerName") or "").strip()
+                    column_no = _optional_int(header.get("columnNo"))
+                    header_context = str(header.get("headerContext") or "").strip() or None
+                    if not header_name and not column_no:
+                        continue
+                    condition_rows.append(
+                        (
+                            1,
+                            "SOURCE_COLUMN",
+                            "HEADER_CONTEXT_AND_NAME" if header_context else "HEADER_NAME",
+                            header_context,
+                            header_name or None,
+                            1,
+                            column_no,
+                            None,
+                            None,
+                            None,
+                            "VALUE",
+                            header_index * 100,
+                            1,
+                        )
+                    )
+                if not condition_rows:
+                    continue
+                target_code = str(item.get("targetCode") or "").strip()
+                if not target_code:
+                    continue
+                if target_kind == "EXAM_ITEM_VALUE" and not re.fullmatch(r"[0-9A-Z]{17}", target_code):
+                    continue
+                target_part = csv_mapping_screen_rule_key_part(target_code)
+                rule_key = f"screen.{csv_format_version_id}.{target_kind.lower()}.{target_part}.{datetime.now().strftime('%Y%m%d%H%M%S%f')}.{index}"
+                method_structure_type = "MULTI_COLUMN_JOIN" if mode == "many" else "SINGLE_COLUMN"
+                target_resolution_type = "LEDGER_FIELD" if target_kind == "LEDGER_FIELD" else "SINGLE_NAMECODE"
+                priority = max_priority + (index * 10)
+                columns = [
+                    "`csv_format_version_id`",
+                    "`rule_key`",
+                    "`target_kind`",
+                    "`target_resolution_type`",
+                    "`selection_mode`",
+                    "`selection_group_code`",
+                    "`target_namecode`",
+                    "`target_identity_item_code`",
+                    "`target_field`",
+                    "`method_structure_type`",
+                    "`value_source_type`",
+                    "`fixed_value`",
+                    "`value_join_separator`",
+                    "`raw_value_type`",
+                    "`raw_unit`",
+                    "`is_required`",
+                    "`priority`",
+                    "`is_active`",
+                    "`note`",
+                ]
+                values: list[Any] = [
+                    csv_format_version_id,
+                    rule_key,
+                    target_kind,
+                    target_resolution_type,
+                    "DIRECT",
+                    None,
+                    target_code if target_kind == "EXAM_ITEM_VALUE" else None,
+                    None,
+                    target_code if target_kind == "LEDGER_FIELD" else None,
+                    method_structure_type,
+                    "SOURCE",
+                    None,
+                    "" if mode == "many" else None,
+                    None,
+                    None,
+                    0,
+                    priority,
+                    1,
+                    f"screen: {item.get('targetName') or target_code}",
+                ]
+                if has_rule_origin_type:
+                    columns.append("`rule_origin_type`")
+                    values.append("SCREEN")
+                if has_edit_capability:
+                    columns.append("`edit_capability`")
+                    values.append("BASIC_SIMPLE")
+                cur.execute(
+                    f"""
+                    INSERT INTO {qname(master_db())}.`csv_exam_result_mapping_rules` (
+                      {", ".join(columns)}
+                    )
+                    VALUES ({", ".join(["%s"] * len(values))})
+                    """,
+                    tuple(values),
+                )
+                rule_id = int(cur.lastrowid)
+                cur.executemany(
+                    f"""
+                    INSERT INTO {qname(master_db())}.`csv_exam_result_mapping_conditions` (
+                      `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`,
+                      `locator_type`, `header_context`, `header_name`, `header_occurrence`, `column_no`,
+                      `operator`, `expected_value`, `expected_value_normalized`, `source_role`,
+                      `priority`, `is_active`, `note`
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    [(rule_id, *condition_row, f"screen:{rule_key}") for condition_row in condition_rows],
+                )
+                saved_count += 1
+            if saved_count == 0:
+                conn.rollback()
+                return JSONResponse({"message": "保存できるマッピングがありません。"}, status_code=400)
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="CSV_MAPPING_TEMPLATE_SCREEN_RULES_SAVE",
+                target_schema=master_db(),
+                target_table="csv_exam_result_mapping_rules",
+                target_id=str(csv_format_version_id),
+                after={"saved_count": saved_count},
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse({"message": f"{saved_count}件のマッピングを保存しました。", "saved_count": saved_count})
 
 
 @app.get("/admin/csv-mapping-templates/{csv_format_version_id}/headers", response_class=HTMLResponse)

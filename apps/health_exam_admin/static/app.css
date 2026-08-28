@@ -6632,6 +6632,18 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   font-weight: 800;
 }
 
+.csv-template-target-draft-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.csv-template-target-save-row {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
 .csv-template-target-item-modal__panel {
   width: min(1320px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
@@ -6641,7 +6653,14 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   display: grid;
   grid-template-columns: minmax(420px, 0.9fr) minmax(420px, 1.1fr);
   gap: 16px;
-  min-height: 520px;
+  min-height: 420px;
+}
+
+.csv-template-ledger-modal-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.9fr) minmax(360px, 1.1fr);
+  gap: 16px;
+  min-height: 360px;
 }
 
 .csv-template-target-item-picker,
@@ -6721,6 +6740,45 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   padding-right: 4px;
 }
 
+.csv-template-ledger-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.csv-template-ledger-field-card {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-height: 92px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.csv-template-ledger-field-card.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.csv-template-ledger-field-card strong {
+  color: inherit;
+  font-weight: 900;
+}
+
+.csv-template-ledger-field-card small,
+.csv-template-ledger-field-card span {
+  color: inherit;
+  opacity: 0.82;
+  font-weight: 800;
+}
+
 .csv-template-target-detail__head {
   display: grid;
   gap: 5px;
@@ -6745,6 +6803,78 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   gap: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
+}
+
+.csv-template-source-mapping {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.csv-template-source-mapping__body {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 14px;
+}
+
+.csv-template-target-item-mode span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.csv-template-header-candidates {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.csv-template-header-candidate-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.csv-template-header-candidate-card {
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  min-height: 84px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.csv-template-header-candidate-card.is-used {
+  border-color: #b9ead5;
+  background: #ecfdf5;
+}
+
+.csv-template-header-candidate-card.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.csv-template-header-candidate-card span,
+.csv-template-header-candidate-card small {
+  color: inherit;
+  opacity: 0.82;
+  font-weight: 800;
+}
+
+.csv-template-header-candidate-card strong {
+  color: inherit;
+  font-weight: 900;
 }
 
 .csv-template-header-grid,
@@ -6828,6 +6958,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   .csv-header-unmatched-drawer {
     position: static;
     max-height: none;
+  }
+
+  .csv-template-target-item-layout,
+  .csv-template-ledger-modal-layout {
+    grid-template-columns: 1fr;
   }
 }
 
