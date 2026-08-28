@@ -6618,6 +6618,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: min(100%, 360px);
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -6809,26 +6810,44 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-template-target-selected {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
   padding: 12px;
   border: 1px solid #d7e2ef;
   border-radius: 8px;
   background: #f8fafc;
 }
 
+.csv-template-target-selected .csv-template-target-selected__head,
+.csv-template-header-candidates .csv-template-target-selected__head {
+  display: block;
+}
+
 .csv-template-target-selected__head strong {
+  display: block;
   color: var(--ink);
   font-weight: 900;
+  line-height: 1.25;
 }
 
 .csv-template-target-selected__head small {
+  display: block;
+  margin-top: 4px;
   color: var(--muted);
   font-weight: 800;
 }
 
 .csv-template-target-selected__list {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+}
+
+.csv-template-target-selected__list .subtle {
+  margin: 0;
+  align-self: center;
 }
 
 .csv-template-target-search {
@@ -6936,12 +6955,28 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-template-header-candidates {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.csv-template-header-candidates .csv-template-target-selected__head {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+}
+
+.csv-template-header-candidates .csv-template-target-search {
+  grid-column: 2;
 }
 
 .csv-template-header-candidate-list {
+  grid-column: 2;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
   max-height: calc(100vh - 560px);
   min-height: 220px;
