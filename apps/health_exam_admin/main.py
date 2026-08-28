@@ -4511,9 +4511,17 @@ def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, lim
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
         row["locator_summary"] = csv_mapping_locator_summary(row)
+        inferred_screen_simple = is_csv_mapping_screen_simple_rule(row)
+        if not has_rule_origin_type and inferred_screen_simple:
+            row["rule_origin_type"] = "SCREEN"
+        if not has_edit_capability and inferred_screen_simple:
+            row["edit_capability"] = "BASIC_SIMPLE"
         row["rule_origin_label"] = csv_mapping_rule_origin_label(row.get("rule_origin_type"))
         row["edit_capability_label"] = csv_mapping_edit_capability_label(row.get("edit_capability"))
-        row["is_screen_editable"] = str(row.get("edit_capability") or "").upper() == "BASIC_SIMPLE"
+        row["is_screen_editable"] = (
+            str(row.get("edit_capability") or "").upper() == "BASIC_SIMPLE"
+            or inferred_screen_simple
+        )
     return rows
 
 
@@ -4635,6 +4643,22 @@ def csv_mapping_edit_capability_label(value: Any) -> str:
         "UNSUPPORTED": "未実装",
     }
     return labels.get(key, key or "-")
+
+
+def is_csv_mapping_screen_simple_rule(row: Mapping[str, Any]) -> bool:
+    method = str(row.get("method_structure_type") or "").upper()
+    value_source = str(row.get("value_source_type") or "").upper()
+    selection_mode = str(row.get("selection_mode") or "").upper()
+    target_kind = str(row.get("target_kind") or "").upper()
+    if method not in {"SINGLE_COLUMN", "MULTI_COLUMN_JOIN"}:
+        return False
+    if value_source != "SOURCE" or selection_mode != "DIRECT":
+        return False
+    if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE"}:
+        return False
+    if row.get("fixed_value") not in (None, ""):
+        return False
+    return True
 
 
 def csv_mapping_operator_label(operator: Any) -> str:
@@ -16235,6 +16259,8 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                     cur.execute(
                         f"""
                         SELECT `csv_exam_result_mapping_rule_id`, `csv_format_version_id`,
+                               `target_kind`, `selection_mode`, `method_structure_type`,
+                               `value_source_type`, `fixed_value`,
                                {('`edit_capability`' if has_edit_capability else "'VIEW_ONLY'")} AS `edit_capability`
                         FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
                         WHERE `csv_exam_result_mapping_rule_id` = %s
@@ -16243,7 +16269,13 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                         (rule_id, csv_format_version_id),
                     )
                     existing_rule = cur.fetchone()
-                    if not existing_rule or str(existing_rule.get("edit_capability") or "").upper() != "BASIC_SIMPLE":
+                    if not existing_rule:
+                        continue
+                    existing_is_editable = (
+                        str(existing_rule.get("edit_capability") or "").upper() == "BASIC_SIMPLE"
+                        or is_csv_mapping_screen_simple_rule(existing_rule)
+                    )
+                    if not existing_is_editable:
                         continue
                     update_columns = [
                         "`target_kind` = %s",
