@@ -15813,6 +15813,8 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
     exam_facility_id = _optional_int(form.get("exam_facility_id"))
     mapping_version = str(form.get("mapping_version") or "").strip()
     format_name = str(form.get("format_name") or "").strip() or None
+    is_active = 1 if form.get("is_active") == "1" else 0
+    is_active = 1 if form.get("is_active") == "1" else 0
     data_start_row_no = _optional_int(form.get("data_start_row_no")) or 2
     csv_file = form.get("csv_file")
     csv_file_name = str(getattr(csv_file, "filename", "") or "")
@@ -15851,7 +15853,7 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
                   `note`,
                   `is_active`
                 )
-                VALUES (%s, %s, 'CSV', %s, 1, %s, %s, %s, %s, %s, 'UNVERIFIED', 'ALLOW_AFTER_CONFIRM', 0, 'CP932', ',', %s, 1)
+                VALUES (%s, %s, 'CSV', %s, 1, %s, %s, %s, %s, %s, 'UNVERIFIED', 'ALLOW_AFTER_CONFIRM', 0, 'CP932', ',', %s, %s)
                 """,
                 (
                     exam_facility_id,
@@ -15863,6 +15865,7 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
                     active_header_row_no,
                     data_start_row_no,
                     "created from admin csv mapping builder",
+                    is_active,
                 ),
             )
             csv_format_version_id = int(cur.lastrowid)
@@ -16088,7 +16091,8 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
                        `header_structure_type` = %s,
                        `header_context_rule` = %s,
                        `active_header_row_no` = %s,
-                       `data_start_row_no` = %s
+                       `data_start_row_no` = %s,
+                       `is_active` = %s
                  WHERE `csv_format_version_id` = %s
                 """,
                 (
@@ -16100,6 +16104,7 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
                     header_context_rule,
                     active_header_row_no,
                     data_start_row_no,
+                    is_active,
                     csv_format_version_id,
                 ),
             )
@@ -16163,6 +16168,64 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
         f"/admin/csv-mapping-templates/{csv_format_version_id}/edit?message={quote(message)}",
         status_code=303,
     )
+
+
+@app.post("/admin/csv-mapping-templates/{csv_format_version_id}/toggle-active", response_class=HTMLResponse)
+async def toggle_admin_csv_mapping_template_active(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    next_active = 1 if form.get("is_active") == "1" else 0
+    return_to = str(form.get("return_to") or "").strip()
+    if return_to not in {"list", "detail", "edit"}:
+        return_to = "detail"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if not template:
+                conn.rollback()
+                return RedirectResponse(
+                    f"/admin/csv-mapping-templates?error={quote(f'csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。')}",
+                    status_code=303,
+                )
+            before = {"is_active": int(template.get("is_active") or 0)}
+            cur.execute(
+                f"""
+                UPDATE {qname(master_db())}.`csv_format_versions`
+                   SET `is_active` = %s,
+                       `updated_at` = CURRENT_TIMESTAMP(3)
+                 WHERE `csv_format_version_id` = %s
+                """,
+                (next_active, csv_format_version_id),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="CSV_MAPPING_TEMPLATE_ACTIVE_TOGGLE",
+                target_schema=master_db(),
+                target_table="csv_format_versions",
+                target_id=str(csv_format_version_id),
+                before=before,
+                after={"is_active": next_active},
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    message = "テンプレートを有効にしました。" if next_active else "テンプレートを無効にしました。"
+    if return_to == "list":
+        url = "/admin/csv-mapping-templates"
+    elif return_to == "edit":
+        url = f"/admin/csv-mapping-templates/{csv_format_version_id}/edit"
+    else:
+        url = f"/admin/csv-mapping-templates/{csv_format_version_id}"
+    return RedirectResponse(f"{url}?message={quote(message)}", status_code=303)
 
 
 @app.post("/api/admin/csv-mapping-templates/{csv_format_version_id}/screen-rules", response_class=JSONResponse)

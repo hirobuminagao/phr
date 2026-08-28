@@ -105,6 +105,12 @@
       <div class="button-row">
         <span class="status-pill {{ 'status-ready' if template.is_active else 'status-muted' }}">{{ '有効' if template.is_active else '無効' }}</span>
         {% if template.is_default_for_facility %}<span class="status-pill status-pending">施設default</span>{% endif %}
+        <form class="inline-form" method="post" action="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/toggle-active">
+          <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+          <input type="hidden" name="return_to" value="detail">
+          <input type="hidden" name="is_active" value="{{ 0 if template.is_active else 1 }}">
+          <button class="ghost-button compact-action-button" type="submit">{{ '無効化' if template.is_active else '有効化' }}</button>
+        </form>
       </div>
     </div>
     <div class="detail-grid">

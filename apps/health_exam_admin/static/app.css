@@ -1650,6 +1650,12 @@ a.home-menu-card.is-navigating {
   gap: 8px;
 }
 
+.inline-form {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+}
+
 .small-button {
   min-height: 32px;
   padding: 6px 10px;
