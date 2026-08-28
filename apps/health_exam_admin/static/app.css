@@ -7724,6 +7724,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   width: 190px;
 }
 
+.case-duplicate-subscriber {
+  color: var(--danger);
+  font-weight: 800;
+}
+
 .csv-template-rule-table {
   min-width: 1500px;
 }

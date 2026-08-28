@@ -6679,6 +6679,7 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     qualification_lost_date = filters.get("qualification_lost_date", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
+    duplicate_subscriber = filters.get("duplicate_subscriber", "").strip()
     if event_id:
         where_parts.append("eec.event_id = %s")
         params.append(event_id)
@@ -6762,6 +6763,8 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     if facility_codes:
         where_parts.append(f"eec.facility_code IN ({', '.join(['%s'] * len(facility_codes))})")
         params.extend(facility_codes)
+    if duplicate_subscriber == "1":
+        where_parts.append("COALESCE(subcase.subscriber_case_count, 0) >= 2")
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     return where_sql, params
 
@@ -6798,6 +6801,14 @@ def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
         ) AS mfa
           ON mfa.event_id = eec.event_id
          AND mfa.exam_facility_id = eec.exam_facility_id
+        LEFT JOIN (
+          SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE subscriber_id IS NOT NULL
+          GROUP BY event_id, subscriber_id
+        ) AS subcase
+          ON subcase.event_id = eec.event_id
+         AND subcase.subscriber_id = eec.subscriber_id
         {where_sql}
         """,
         tuple(params),
@@ -6896,7 +6907,8 @@ def load_exam_export_case_rows(
           COALESCE(src.source_count, 0) AS source_count,
           COALESCE(src.xml_count, 0) AS xml_count,
           COALESCE(src.csv_count, 0) AS csv_count,
-          COALESCE(src.paper_count, 0) AS paper_count
+          COALESCE(src.paper_count, 0) AS paper_count,
+          COALESCE(subcase.subscriber_case_count, 0) AS subscriber_case_count
         FROM {qname(health_db())}.exam_export_cases AS eec
         LEFT JOIN (
           SELECT r1.*
@@ -6952,6 +6964,14 @@ def load_exam_export_case_rows(
         ) AS mfa
           ON mfa.event_id = eec.event_id
          AND mfa.exam_facility_id = eec.exam_facility_id
+        LEFT JOIN (
+          SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE subscriber_id IS NOT NULL
+          GROUP BY event_id, subscriber_id
+        ) AS subcase
+          ON subcase.event_id = eec.event_id
+         AND subcase.subscriber_id = eec.subscriber_id
         {where_sql}
         ORDER BY eec.updated_at DESC, eec.exam_export_case_id DESC
         LIMIT %s OFFSET %s
@@ -7219,6 +7239,7 @@ def build_exam_export_case_summary_filter_urls(filters: dict[str, str], *, limit
         "blocked": filter_url(export_readiness_status="BLOCKED"),
         "exported": filter_url(export_readiness_status="EXPORTED"),
         "multi_source": filter_url(source_mode="XML_CSV"),
+        "duplicate_subscriber": filter_url(duplicate_subscriber="1"),
     }
 
 
@@ -8146,6 +8167,7 @@ def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
         "legal_ng": 0,
         "specific_ng": 0,
         "multi_source": 0,
+        "duplicate_subscriber": 0,
     }
     for row in rows:
         readiness = str(row.get("export_readiness_status") or "")
@@ -8165,6 +8187,8 @@ def summarize_exam_export_cases(rows: list[dict[str, Any]]) -> dict[str, int]:
             summary["specific_ng"] += 1
         if int(row.get("source_count") or 0) >= 2:
             summary["multi_source"] += 1
+        if int(row.get("subscriber_case_count") or 0) >= 2:
+            summary["duplicate_subscriber"] += 1
     return summary
 
 
@@ -17500,6 +17524,7 @@ def exam_export_cases(request: Request) -> Response:
         "qualification_lost_date": request.query_params.get("qualification_lost_date", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "facility_codes": request.query_params.get("facility_codes", ""),
+        "duplicate_subscriber": request.query_params.get("duplicate_subscriber", ""),
         "limit": request.query_params.get("limit", "500"),
         "page": request.query_params.get("page", "1"),
     }

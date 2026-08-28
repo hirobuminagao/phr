@@ -41,12 +41,13 @@
       {% if filters.qualification_lost_date %}<span class="active-filter-chip">喪失日: {{ filters.qualification_lost_date }}</span>{% endif %}
       {% if filters.facility_q %}<span class="active-filter-chip">健診機関: {{ filters.facility_q }}</span>{% endif %}
       {% if filters.facility_codes %}<span class="active-filter-chip">健診機関コード: {{ filters.facility_codes }}</span>{% endif %}
+      {% if filters.duplicate_subscriber == '1' %}<span class="active-filter-chip">同一subscriber: 複数case</span>{% endif %}
       {% if filters.exam_month %}<span class="active-filter-chip">受診月: {{ filters.exam_month }}</span>{% endif %}
       {% if filters.legal_check_result %}<span class="active-filter-chip">法定: {{ filters.legal_check_result }}</span>{% endif %}
       {% if filters.specific_check_result %}<span class="active-filter-chip">特定健診: {{ check_result_label(filters.specific_check_result) or filters.specific_check_result }}</span>{% endif %}
       {% if filters.export_readiness_status %}<span class="active-filter-chip">出力: {{ filters.export_readiness_status }}</span>{% endif %}
       {% if filters.source_mode %}<span class="active-filter-chip">source: {{ filters.source_mode }}</span>{% endif %}
-      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.subscriber_id and not filters.qualification_lost_status and not filters.qualification_lost_date and not filters.facility_q and not filters.facility_codes and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
+      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.subscriber_id and not filters.qualification_lost_status and not filters.qualification_lost_date and not filters.facility_q and not filters.facility_codes and not filters.duplicate_subscriber and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
       <span class="active-filter-chip is-empty">条件なし</span>
       {% endif %}
     </div>
@@ -111,6 +112,13 @@
                 <button type="button" data-server-filter-toggle="qualification_lost_status" data-filter-value="ACTIVE" class="{{ 'is-active' if filters.qualification_lost_status == 'ACTIVE' else '' }}">喪失なし</button>
               </div>
               <input type="hidden" name="qualification_lost_status" value="{{ filters.qualification_lost_status }}" data-server-filter-value="qualification_lost_status">
+            </fieldset>
+            <fieldset class="filter-condition-block">
+              <legend>同一subscriber</legend>
+              <div class="filter-toggle-group">
+                <button type="button" data-server-filter-toggle="duplicate_subscriber" data-filter-value="1" class="{{ 'is-active' if filters.duplicate_subscriber == '1' else '' }}">複数caseあり</button>
+              </div>
+              <input type="hidden" name="duplicate_subscriber" value="{{ filters.duplicate_subscriber }}" data-server-filter-value="duplicate_subscriber">
             </fieldset>
           </div>
         </section>
@@ -400,6 +408,11 @@
       <strong>{{ summary.multi_source }}</strong>
       <small>複数source</small>
     </a>
+    <a class="summary-card summary-card-link {{ 'is-active' if filters.duplicate_subscriber == '1' else '' }}" href="{{ summary_filter_urls.duplicate_subscriber }}">
+      <span>同一subscriber複数</span>
+      <strong>{{ summary.duplicate_subscriber }}</strong>
+      <small>表示中の要確認候補</small>
+    </a>
   </section>
 
   <section class="panel">
@@ -462,6 +475,7 @@
               <strong>{{ row.name_kana_raw or "カナなし" }}</strong>
               <small>{{ row.name_full_raw or "氏名なし" }}</small>
               <small>HIA {{ row.hia_subscriber_id or "-" }} / {{ row.subscriber_match_status or "-" }}</small>
+              <small class="{{ 'case-duplicate-subscriber' if row.subscriber_case_count and row.subscriber_case_count > 1 else '' }}">subscriber {{ row.subscriber_id or "-" }} / case {{ row.subscriber_case_count or 0 }}件</small>
               <small>資格: {{ "喪失" if row.qualification_lost_date else "有効" }}{% if row.relationship_name %} / {{ row.relationship_name }}{% endif %}</small>
               <small>資格喪失日: {{ row.qualification_lost_date or "-" }}</small>
             </td>
