@@ -5739,6 +5739,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
           facility_name,
           exam_date,
           postal_code,
+          address,
           name_full_raw,
           name_kana_raw,
           health_exam_report_category,
@@ -9637,7 +9638,7 @@ def create_xml_export_list_from_form(cur: Any, *, form: dict[str, str], user: di
         exam_month=exam_month,
         include_exported=include_exported,
     )
-    candidates = fetch_candidates(cur, selectors=selectors, health_db=health_db(), master_db=master_db())
+    candidates = fetch_candidates(cur, selectors=selectors, health_db=health_db(), dev_db=dev_db(), master_db=master_db())
     selected = []
     for row in candidates:
         decision = decide_candidate(row)
@@ -9982,6 +9983,7 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           d.insurance_number,
           d.insurance_branch_number,
           d.postal_code,
+          d.address,
           d.name_full,
           d.name_kana,
           d.birthdate,
@@ -10418,6 +10420,7 @@ def insert_manual_exam_entry_draft(
           insurance_number,
           insurance_branch_number,
           postal_code,
+          address,
           name_full,
           name_kana,
           birthdate,
@@ -10432,6 +10435,7 @@ def insert_manual_exam_entry_draft(
         ) VALUES (
           %s,
           'DRAFT',
+          %s,
           %s,
           %s,
           %s,
@@ -10467,6 +10471,7 @@ def insert_manual_exam_entry_draft(
             _manual_text(source_payload.get("insurance_number")),
             _manual_text(source_payload.get("insurance_branch_number")),
             normalize_postal_code_export(source_payload.get("postal_code") or source_payload.get("subscriber_postal_code")),
+            normalize_address_export(source_payload.get("address") or source_payload.get("subscriber_address_line")),
             _manual_text(source_payload.get("name_full")),
             _manual_text(source_payload.get("name_kana")),
             _manual_date_text(source_payload.get("birthdate") or source_payload.get("birth")),
@@ -10923,6 +10928,7 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
           %s, %s, %s, 'MANUAL_ENTRY', 'manual exam entry draft applied',
           %s, %s,
           %s, %s, %s,
+          %s,
           'READY', 'manual exam entry draft applied',
           'READY', %s, 0, 'manual exam entry values applied',
           'READY', 'manual exam entry source',
@@ -10955,6 +10961,7 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
             _manual_text(draft.get("facility_name")),
             _manual_date_text(draft.get("exam_date")),
             normalize_postal_code_export(draft.get("postal_code")),
+            normalize_address_export(draft.get("address")),
             _manual_text(draft.get("name_full")),
             _manual_text(draft.get("name_kana")),
             _manual_text(draft.get("name_kana")),
@@ -11318,6 +11325,7 @@ def update_manual_exam_entry_draft_from_basic(
                insurance_number = %s,
                insurance_branch_number = %s,
                postal_code = %s,
+               address = %s,
                name_full = %s,
                name_kana = %s,
                birthdate = %s,
@@ -11342,6 +11350,7 @@ def update_manual_exam_entry_draft_from_basic(
             _manual_text(basic.get("insurance_number")),
             _manual_text(basic.get("insurance_branch_number")),
             normalize_postal_code_export(basic.get("postal_code") or basic.get("subscriber_postal_code")),
+            normalize_address_export(basic.get("address") or basic.get("subscriber_address_line")),
             _manual_text(basic.get("name_full")),
             _manual_text(basic.get("name_kana")),
             _manual_date_text(basic.get("birthdate")),

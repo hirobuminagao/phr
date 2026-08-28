@@ -883,6 +883,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                     cur,
                     selectors=config.selectors,
                     health_db=config.health_db,
+                    dev_db=config.dev_db,
                     master_db=config.master_db,
                 )
                 summary.candidates_seen = len(candidates)

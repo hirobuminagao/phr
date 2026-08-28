@@ -113,6 +113,7 @@ def fetch_candidates(
     *,
     selectors: ExportSelectors,
     health_db: str,
+    dev_db: str = "dev_phr",
     master_db: str,
 ) -> list[dict[str, Any]]:
     params: list[Any] = [selectors.event_id]
@@ -177,7 +178,9 @@ def fetch_candidates(
           ef.exam_facility_name AS master_facility_name,
           COALESCE(eec.exam_facility_postal_code, ef.postal_code) AS master_facility_postal_code,
           COALESCE(eec.exam_facility_address, ef.address) AS master_facility_address,
-          COALESCE(eec.exam_facility_phone_number, ef.phone_number) AS master_facility_phone_number
+          COALESCE(eec.exam_facility_phone_number, ef.phone_number) AS master_facility_phone_number,
+          sa.postal_code AS subscriber_postal_code,
+          sa.address_line AS subscriber_address_line
         FROM {qname(health_db)}.exam_export_cases eec
         LEFT JOIN (
           SELECT
@@ -199,13 +202,26 @@ def fetch_candidates(
           GROUP BY ecs.exam_export_case_id
         ) src ON src.exam_export_case_id = eec.exam_export_case_id
         INNER JOIN {qname(master_db)}.exam_facilities ef ON ef.exam_facility_id = eec.exam_facility_id
+        LEFT JOIN {qname(dev_db)}.subscriber_addresses sa
+          ON sa.subscriber_id = eec.subscriber_id
+         AND sa.is_current = 1
         WHERE {' AND '.join(filters)}
         ORDER BY eec.exam_facility_id, eec.insurer_number, eec.exam_date, eec.exam_export_case_id
         {limit_sql}
         """,
         tuple(params),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        if row.get("postal_code") in (None, "") and row.get("postal_code_completed_value") in (None, ""):
+            row["postal_code_completed_value"] = row.get("subscriber_postal_code")
+        if row.get("address") in (None, "") and row.get("address_completed_value") in (None, ""):
+            row["address_completed_value"] = row.get("subscriber_address_line")
+            if row.get("address_completed_value") not in (None, ""):
+                row["address_source"] = row.get("address_source") or "SUBSCRIBER"
+                row["address_completion_status"] = row.get("address_completion_status") or "SUBSCRIBER"
+                row["address_completion_reason"] = row.get("address_completion_reason") or "subscriber address fallback"
+    return rows
 
 
 def facility_folder_name(relative_path: Any) -> str:

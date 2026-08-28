@@ -3151,6 +3151,10 @@ a.home-menu-card.is-navigating {
   align-items: start;
 }
 
+.manual-entry-basic-wide {
+  grid-column: span 2;
+}
+
 .manual-entry-subscriber-modal {
   width: min(1120px, calc(100vw - 48px));
 }

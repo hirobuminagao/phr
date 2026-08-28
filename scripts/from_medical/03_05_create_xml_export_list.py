@@ -24,6 +24,7 @@ class Config:
     event_id: int
     list_name: str
     health_db: str
+    dev_db: str
     master_db: str
     facility_codes: tuple[str, ...]
     all_facilities: bool
@@ -64,6 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default="health_exam_result")
+    parser.add_argument("--dev-db", default="dev_phr")
     parser.add_argument("--master-db", default="phr_master")
     return parser.parse_args()
 
@@ -94,6 +96,7 @@ def load_config(args: argparse.Namespace) -> Config:
         event_id=args.event_id,
         list_name=list_name,
         health_db=args.health_db,
+        dev_db=args.dev_db,
         master_db=args.master_db,
         facility_codes=tuple(args.facility_code or ()),
         all_facilities=all_facilities,
@@ -194,7 +197,13 @@ def run(config: Config, *, db_prefix: str) -> int:
     params = load_mysql_base_params(db_prefix)
     with connect_ctx(params, database=config.health_db, autocommit=False) as conn:
         with dict_cursor(conn) as cur:
-            candidates = fetch_candidates(cur, selectors=selectors, health_db=config.health_db, master_db=config.master_db)
+            candidates = fetch_candidates(
+                cur,
+                selectors=selectors,
+                health_db=config.health_db,
+                dev_db=config.dev_db,
+                master_db=config.master_db,
+            )
             rows = [row for row in candidates if decide_candidate(row).allowed]
             if config.dry_run:
                 print(

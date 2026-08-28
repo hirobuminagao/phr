@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `manual_exam_entry_drafts` (
   `insurance_number` varchar(64) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
   `insurance_branch_number` varchar(16) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
   `postal_code` varchar(16) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
+  `address` varchar(255) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
   `name_full` varchar(255) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
   `name_kana` varchar(255) COLLATE utf8mb4_ja_0900_as_cs DEFAULT NULL,
   `birthdate` date DEFAULT NULL,
