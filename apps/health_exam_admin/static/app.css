@@ -6624,6 +6624,10 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #fff;
 }
 
+.csv-template-target-selected-card > div {
+  min-width: 0;
+}
+
 .csv-template-target-draft-card strong,
 .csv-template-target-selected-card strong {
   display: block;
@@ -6651,7 +6655,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-template-target-item-modal__panel {
-  width: min(1480px, calc(100vw - 48px));
+  width: min(1640px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
@@ -6673,11 +6677,13 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-template-composer-layout {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(390px, 1fr) minmax(460px, 1.28fr) minmax(360px, 0.95fr);
+  grid-template-columns: minmax(360px, 0.82fr) minmax(760px, 1.7fr);
   gap: 14px;
   align-items: start;
   min-height: 0;
+  overflow: hidden;
 }
 
 .csv-template-composer-body {
@@ -6704,6 +6710,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-composer-mode {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid #d7e2ef;
@@ -6711,8 +6718,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #f8fafc;
 }
 
-.csv-template-target-item-picker,
-.csv-template-target-detail {
+.csv-template-target-item-picker {
   min-width: 0;
   display: grid;
   align-content: start;
@@ -6720,18 +6726,61 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .csv-template-target-detail {
-  max-height: calc(100vh - 260px);
-  min-height: 260px;
+  min-width: 0;
+  max-height: calc(100vh - 330px);
+  min-height: 0;
   overflow: auto;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fafc;
 }
 
 .csv-template-target-detail--wide {
   margin-top: 14px;
   max-height: 260px;
+}
+
+.csv-template-detail-toggle {
+  min-width: 112px;
+  white-space: nowrap;
+}
+
+.csv-template-detail-toggle:disabled,
+.csv-template-detail-toggle.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.csv-template-target-detail-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  width: min(520px, 42vw);
+  max-height: calc(100vh - 245px);
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  box-shadow: -18px 0 36px rgba(15, 23, 42, 0.14);
+  transform: translateX(calc(100% + 18px));
+  transition: transform 0.18s ease;
+}
+
+.csv-template-target-detail-drawer.is-open {
+  transform: translateX(0);
+}
+
+.csv-template-target-detail-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.csv-template-target-detail-drawer__head strong {
+  color: var(--ink);
+  font-weight: 900;
 }
 
 .csv-template-target-item-mode,
@@ -6892,7 +6941,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .csv-template-header-candidate-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 8px;
   max-height: calc(100vh - 560px);
   min-height: 220px;
@@ -6942,6 +6991,18 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   opacity: 1;
 }
 
+.danger-action-button {
+  border-color: #efc4c4;
+  background: #fff5f5;
+  color: #9f1c1c;
+}
+
+.danger-action-button:hover {
+  border-color: #d98a8a;
+  background: #ffe8e8;
+  color: #7f1515;
+}
+
 .csv-template-header-candidate-card {
   display: grid;
   justify-items: start;
@@ -6952,6 +7013,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #fff;
   color: var(--ink);
   text-align: left;
+}
+
+.csv-template-header-candidate-card strong,
+.csv-template-header-candidate-card small {
+  overflow-wrap: anywhere;
 }
 
 .csv-template-header-candidate-card.is-used {

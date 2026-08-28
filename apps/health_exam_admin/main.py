@@ -16488,6 +16488,81 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
     return JSONResponse({"message": f"{saved_count}件のマッピングを保存しました。", "saved_count": saved_count})
 
 
+@app.delete(
+    "/api/admin/csv-mapping-templates/{csv_format_version_id}/screen-rules/{rule_id}",
+    response_class=JSONResponse,
+)
+async def api_delete_csv_mapping_template_screen_rule(
+    request: Request, csv_format_version_id: int, rule_id: int
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_manage_business_settings(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if not template:
+                conn.rollback()
+                return JSONResponse({"message": "対象テンプレートがありません。"}, status_code=404)
+            has_edit_capability = manual_exam_entry_column_exists(
+                cur, master_db(), "csv_exam_result_mapping_rules", "edit_capability"
+            )
+            cur.execute(
+                f"""
+                SELECT `csv_exam_result_mapping_rule_id`, `csv_format_version_id`,
+                       `target_kind`, `selection_mode`, `method_structure_type`,
+                       `value_source_type`, `fixed_value`,
+                       {('`edit_capability`' if has_edit_capability else "'VIEW_ONLY'")} AS `edit_capability`
+                FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                WHERE `csv_exam_result_mapping_rule_id` = %s
+                  AND `csv_format_version_id` = %s
+                """,
+                (rule_id, csv_format_version_id),
+            )
+            rule = cur.fetchone()
+            if not rule:
+                conn.rollback()
+                return JSONResponse({"message": "対象ルールがありません。"}, status_code=404)
+            if str(rule.get("edit_capability") or "").upper() != "BASIC_SIMPLE" and not is_csv_mapping_screen_simple_rule(rule):
+                conn.rollback()
+                return JSONResponse({"message": "このルールは画面から削除できません。"}, status_code=400)
+            cur.execute(
+                f"""
+                DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_conditions`
+                WHERE `csv_exam_result_mapping_rule_id` = %s
+                """,
+                (rule_id,),
+            )
+            cur.execute(
+                f"""
+                DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                WHERE `csv_exam_result_mapping_rule_id` = %s
+                  AND `csv_format_version_id` = %s
+                """,
+                (rule_id, csv_format_version_id),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="CSV_MAPPING_TEMPLATE_SCREEN_RULE_DELETE",
+                target_schema=master_db(),
+                target_table="csv_exam_result_mapping_rules",
+                target_id=str(rule_id),
+                before=dict(rule),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse({"message": "マッピングルールを削除しました。", "deleted_rule_id": rule_id})
+
+
 @app.get("/admin/csv-mapping-templates/{csv_format_version_id}/headers", response_class=HTMLResponse)
 def admin_csv_mapping_template_headers(request: Request, csv_format_version_id: int) -> Response:
     user = require_user(request)

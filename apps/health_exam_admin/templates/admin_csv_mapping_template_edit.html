@@ -346,6 +346,12 @@
                 class="ghost-button compact-action-button"
                 data-csv-template-rule-edit="{{ rule.screen_edit_payload|tojson|forceescape }}"
               >編集</button>
+              <button
+                type="button"
+                class="ghost-button compact-action-button danger-action-button"
+                data-csv-template-rule-delete="{{ rule.csv_exam_result_mapping_rule_id }}"
+                data-csv-template-rule-delete-label="{{ rule.target_item_name or rule.target_namecode or rule.target_field or rule.rule_key }}"
+              >削除</button>
               {% endif %}
             </td>
             <td>
@@ -382,6 +388,7 @@
           <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
           <button type="button" data-csv-template-target-mode="many">1:n 結合</button>
         </div>
+        <button type="button" class="ghost-button csv-template-detail-toggle" data-csv-template-target-detail-toggle disabled>項目詳細</button>
       </div>
 
       <div class="csv-template-composer-layout">
@@ -443,8 +450,14 @@
           </section>
         </section>
 
-        <aside class="csv-template-composer-column csv-template-target-detail" data-csv-template-target-detail>
+        <aside class="csv-template-target-detail-drawer" data-csv-template-target-detail-drawer>
+          <div class="csv-template-target-detail-drawer__head">
+            <strong>項目詳細</strong>
+            <button type="button" class="ghost-button compact-action-button" data-csv-template-target-detail-close>閉じる</button>
+          </div>
+          <div class="csv-template-target-detail" data-csv-template-target-detail>
           <p class="subtle">候補を選ぶと、ここに項目詳細を表示します。</p>
+          </div>
         </aside>
       </div>
     </div>
@@ -475,6 +488,7 @@
           <button type="button" class="is-selected" data-csv-template-ledger-mode="one">1:1</button>
           <button type="button" data-csv-template-ledger-mode="many">1:n 結合</button>
         </div>
+        <button type="button" class="ghost-button csv-template-detail-toggle" data-csv-template-ledger-detail-toggle disabled>項目詳細</button>
       </div>
 
       <div class="csv-template-composer-layout">
@@ -537,8 +551,14 @@
           </section>
         </section>
 
-        <aside class="csv-template-composer-column csv-template-target-detail" data-csv-template-ledger-detail>
-          <p class="subtle">候補を選ぶと、ここに基本・受診情報の詳細を表示します。</p>
+        <aside class="csv-template-target-detail-drawer" data-csv-template-ledger-detail-drawer>
+          <div class="csv-template-target-detail-drawer__head">
+            <strong>項目詳細</strong>
+            <button type="button" class="ghost-button compact-action-button" data-csv-template-ledger-detail-close>閉じる</button>
+          </div>
+          <div class="csv-template-target-detail" data-csv-template-ledger-detail>
+            <p class="subtle">候補を選ぶと、ここに基本・受診情報の詳細を表示します。</p>
+          </div>
         </aside>
       </div>
     </div>

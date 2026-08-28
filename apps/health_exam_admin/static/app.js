@@ -3831,6 +3831,9 @@
     const searchInput = csvTemplateTargetModal.querySelector("[data-csv-template-target-search-input]");
     const results = csvTemplateTargetModal.querySelector("[data-csv-template-target-results]");
     const detail = csvTemplateTargetModal.querySelector("[data-csv-template-target-detail]");
+    const detailDrawer = csvTemplateTargetModal.querySelector("[data-csv-template-target-detail-drawer]");
+    const detailToggle = csvTemplateTargetModal.querySelector("[data-csv-template-target-detail-toggle]");
+    const detailClose = csvTemplateTargetModal.querySelector("[data-csv-template-target-detail-close]");
     const selectedList = csvTemplateTargetModal.querySelector("[data-csv-template-target-selected-list]");
     const selectedCount = csvTemplateTargetModal.querySelector("[data-csv-template-target-selected-count]");
     const applyButton = csvTemplateTargetModal.querySelector("[data-csv-template-target-apply]");
@@ -3838,6 +3841,7 @@
     const draftSaveButton = document.querySelector("[data-csv-template-target-save]");
     const draftSaveMessage = document.querySelector("[data-csv-template-target-save-message]");
     const ruleEditButtons = Array.from(document.querySelectorAll("[data-csv-template-rule-edit]"));
+    const ruleDeleteButtons = Array.from(document.querySelectorAll("[data-csv-template-rule-delete]"));
     const headerSearchInput = csvTemplateTargetModal.querySelector("[data-csv-template-header-search-input]");
     const headerCandidateList = csvTemplateTargetModal.querySelector("[data-csv-template-header-candidate-list]");
     const headerCandidateCards = Array.from(csvTemplateTargetModal.querySelectorAll("[data-csv-template-header-candidate]"));
@@ -3850,6 +3854,9 @@
     const ledgerSelectedCount = document.querySelector("[data-csv-template-ledger-selected-count]");
     const ledgerApplyButton = document.querySelector("[data-csv-template-ledger-apply]");
     const ledgerDetail = document.querySelector("[data-csv-template-ledger-detail]");
+    const ledgerDetailDrawer = document.querySelector("[data-csv-template-ledger-detail-drawer]");
+    const ledgerDetailToggle = document.querySelector("[data-csv-template-ledger-detail-toggle]");
+    const ledgerDetailClose = document.querySelector("[data-csv-template-ledger-detail-close]");
     const modalTitle = csvTemplateTargetModal.querySelector("#csv-template-target-item-title");
     const modalLead = csvTemplateTargetModal.querySelector(".edit-modal__head .subtle");
     let targetMode = "one";
@@ -3868,6 +3875,14 @@
     const csvTemplateId = templateIdMatch ? templateIdMatch[1] : "";
 
     const selectedTarget = () => focusedLedger || focusedItem;
+
+    const setDetailDrawerOpen = (open) => {
+      if (detailDrawer) detailDrawer.classList.toggle("is-open", Boolean(open && selectedTarget()));
+    };
+
+    const setLedgerDetailDrawerOpen = (open) => {
+      if (ledgerDetailDrawer) ledgerDetailDrawer.classList.toggle("is-open", Boolean(open && focusedLedger));
+    };
 
     const setComposerMessage = (message) => {
       if (draftSaveMessage) draftSaveMessage.textContent = message;
@@ -3947,6 +3962,7 @@
       if (!detail) return;
       if (!item) {
         detail.innerHTML = `<p class="subtle">候補を選ぶと、ここに詳細を表示します。</p>`;
+        setDetailDrawerOpen(false);
         return;
       }
       if (item.targetKind === "LEDGER_FIELD") {
@@ -4010,6 +4026,10 @@
 
     const renderSelectedTargets = () => {
       if (!selectedList) return;
+      if (detailToggle) {
+        detailToggle.disabled = !selectedTarget();
+        detailToggle.classList.toggle("disabled", !selectedTarget());
+      }
       if (selectedCount) selectedCount.textContent = `${selectedHeaders.length}件`;
       if (applyButton) {
         applyButton.disabled = !selectedTarget() || selectedHeaders.length === 0;
@@ -4126,6 +4146,7 @@
           : "追加する健診項目を1つ選び、方式を決めてCSVヘッダー候補をセットします。";
       }
       renderTargetDetail(null);
+      setDetailDrawerOpen(false);
       renderSelectedTargets();
       renderTargetResults();
       renderHeaderCandidateCards();
@@ -4136,6 +4157,7 @@
       if (!ledgerDetail) return;
       if (!field) {
         ledgerDetail.innerHTML = `<p class="subtle">候補を選ぶと、ここに基本・受診情報の詳細を表示します。</p>`;
+        setLedgerDetailDrawerOpen(false);
         return;
       }
       ledgerDetail.innerHTML = `
@@ -4163,6 +4185,10 @@
 
     const renderLedgerSelectedHeaders = () => {
       if (ledgerSelectedCount) ledgerSelectedCount.textContent = `${ledgerSelectedHeaders.length}件`;
+      if (ledgerDetailToggle) {
+        ledgerDetailToggle.disabled = !focusedLedger;
+        ledgerDetailToggle.classList.toggle("disabled", !focusedLedger);
+      }
       if (ledgerApplyButton) {
         ledgerApplyButton.disabled = !focusedLedger || ledgerSelectedHeaders.length === 0;
         ledgerApplyButton.classList.toggle("disabled", !focusedLedger || ledgerSelectedHeaders.length === 0);
@@ -4224,9 +4250,15 @@
       for (const card of ledgerCards) card.classList.remove("is-selected");
       if (ledgerApplyButton) ledgerApplyButton.textContent = "マッピングに追加";
       renderLedgerDetail(null);
+      setLedgerDetailDrawerOpen(false);
       renderLedgerHeaderCards();
       filterLedgerHeaderCards();
     };
+
+    detailToggle?.addEventListener("click", () => setDetailDrawerOpen(true));
+    detailClose?.addEventListener("click", () => setDetailDrawerOpen(false));
+    ledgerDetailToggle?.addEventListener("click", () => setLedgerDetailDrawerOpen(true));
+    ledgerDetailClose?.addEventListener("click", () => setLedgerDetailDrawerOpen(false));
 
     const openLedgerModal = () => {
       if (!csvTemplateLedgerModal) return;
@@ -4506,6 +4538,32 @@
           if (draft?.ruleId) loadDraftForEdit(draft);
         } catch (_error) {
           setComposerMessage("編集データを読み取れませんでした。");
+        }
+      });
+    });
+
+    ruleDeleteButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const ruleId = button.getAttribute("data-csv-template-rule-delete") || "";
+        if (!csvTemplateId || !ruleId) return;
+        const label = button.getAttribute("data-csv-template-rule-delete-label") || "このルール";
+        if (!window.confirm(`${label} を削除します。よろしいですか？`)) return;
+        button.disabled = true;
+        button.classList.add("disabled");
+        setComposerMessage("マッピングルールを削除中...");
+        try {
+          const response = await fetch(`/api/admin/csv-mapping-templates/${csvTemplateId}/screen-rules/${encodeURIComponent(ruleId)}`, {
+            method: "DELETE",
+            headers: { Accept: "application/json" },
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.message || "削除でエラーが発生しました。");
+          const message = payload.message || "マッピングルールを削除しました。";
+          window.location.href = `${window.location.pathname}?message=${encodeURIComponent(message)}`;
+        } catch (error) {
+          setComposerMessage(error.message || "削除でエラーが発生しました。");
+          button.disabled = false;
+          button.classList.remove("disabled");
         }
       });
     });
