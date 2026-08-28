@@ -54,6 +54,18 @@ def write_config(path: Path, **values: object) -> Path:
     return path
 
 
+class FakeCursor:
+    def __init__(self, rows: list[dict[str, object]] | None = None) -> None:
+        self.rows = rows or []
+        self.execute_calls: list[tuple[str, tuple[object, ...]]] = []
+
+    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.execute_calls.append((sql, params))
+
+    def fetchall(self) -> list[dict[str, object]]:
+        return self.rows
+
+
 def test_load_config_accepts_yaml_selectors(tmp_path: Path) -> None:
     config_path = write_config(
         tmp_path / "export.yml",
@@ -138,3 +150,54 @@ def test_writes_official_export_state_only_for_official_non_dry_run(tmp_path: Pa
 
     assert export_hia_xml.writes_official_export_state(official) is True
     assert export_hia_xml.writes_official_export_state(dry_run) is False
+
+
+def test_resolve_facility_output_folder_uses_case_facility_alias(tmp_path: Path) -> None:
+    config_path = write_config(tmp_path / "export.yml", event_id=2, all_facilities=True)
+    config = export_hia_xml.load_config(args_for(config_path))
+    cur = FakeCursor(
+        [
+            {
+                "dst_folder_norm": "4710114044_小禄病院",
+                "src_folder_raw": "corporate_bundle",
+            }
+        ]
+    )
+
+    folder = export_hia_xml.resolve_facility_output_folder(
+        cur,
+        config=config,
+        group=[
+            {
+                "exam_facility_id": 54260,
+                "relative_path": "corporate_bundle/combined.zip/h0001.xml",
+            }
+        ],
+    )
+
+    assert folder == "4710114044_小禄病院"
+    _, params = cur.execute_calls[0]
+    assert params == (2, 54260)
+
+
+def test_resolve_facility_output_folder_rejects_ambiguous_aliases(tmp_path: Path) -> None:
+    config_path = write_config(tmp_path / "export.yml", event_id=2, all_facilities=True)
+    config = export_hia_xml.load_config(args_for(config_path))
+    cur = FakeCursor(
+        [
+            {"dst_folder_norm": "4710114044_小禄病院", "src_folder_raw": None},
+            {"dst_folder_norm": "4710114044_小禄病院_別名", "src_folder_raw": None},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="FACILITY_OUTPUT_FOLDER_AMBIGUOUS"):
+        export_hia_xml.resolve_facility_output_folder(
+            cur,
+            config=config,
+            group=[
+                {
+                    "exam_facility_id": 54260,
+                    "relative_path": "corporate_bundle/combined.zip/h0001.xml",
+                }
+            ],
+        )

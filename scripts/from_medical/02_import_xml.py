@@ -32,6 +32,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.lookup.event import get_event_insurer_number
+from scripts.lib.db.lookup.exam_facility import get_exam_facility_by_code
 from scripts.lib.db.lookup.exam_item_master import get_exam_items
 from scripts.lib.db.lookup.subscriber_identity import resolve_subscriber_identity
 from scripts.lib.db.lookup.subscriber_export_projection import (
@@ -1671,6 +1672,37 @@ def facility_folder_name(file_receipt: Mapping[str, Any]) -> str | None:
     return parts[0] if parts else None
 
 
+def resolve_xml_basic_facility(
+    cur: Any,
+    config: ImportConfig,
+    *,
+    basic: Mapping[str, Any],
+    file_receipt: Mapping[str, Any],
+) -> dict[str, Any]:
+    result = dict(basic)
+    facility = get_exam_facility_by_code(
+        cur,
+        compact_text(basic.get("facility_code")),
+        master_db=config.master_db,
+    )
+    if facility:
+        result["exam_facility_id"] = facility.get("exam_facility_id")
+        result["facility_code"] = facility.get("exam_facility_code") or result.get("facility_code")
+        result["facility_name"] = (
+            facility.get("exam_facility_display_name")
+            or facility.get("exam_facility_name")
+            or result.get("facility_name")
+        )
+        return result
+
+    result["exam_facility_id"] = file_receipt.get("exam_facility_id")
+    if not result.get("facility_code"):
+        result["facility_code"] = file_receipt.get("facility_code")
+    if not result.get("facility_name"):
+        result["facility_name"] = file_receipt.get("facility_name")
+    return result
+
+
 def resolve_zip_password(cur: Any, config: ImportConfig, file_receipt: Mapping[str, Any]) -> bytes | None:
     facility_codes = [
         compact_text(file_receipt.get("facility_code")),
@@ -1955,12 +1987,12 @@ def process_xml_candidate(
         master_db=config.master_db,
     )
     basic_info_params = basic_info.as_db_params()
-    basic_for_ledger = dict(basic)
-    basic_for_ledger["exam_facility_id"] = file_receipt.get("exam_facility_id")
-    if not basic_for_ledger.get("facility_code"):
-        basic_for_ledger["facility_code"] = file_receipt.get("facility_code")
-    if not basic_for_ledger.get("facility_name"):
-        basic_for_ledger["facility_name"] = file_receipt.get("facility_name")
+    basic_for_ledger = resolve_xml_basic_facility(
+        health_cur,
+        config,
+        basic=basic,
+        file_receipt=file_receipt,
+    )
     if basic_info_params.get("insurer_number_export_value"):
         basic_for_ledger["insurer_number_raw"] = basic_info_params["insurer_number_export_value"]
 

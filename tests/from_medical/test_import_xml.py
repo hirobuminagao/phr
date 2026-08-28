@@ -86,8 +86,9 @@ def observation_xml(
 
 
 class FakeCursor:
-    def __init__(self) -> None:
+    def __init__(self, rows: list[dict[str, object]] | None = None) -> None:
         self.lastrowid = 1
+        self.rows = rows or []
         self.execute_calls: list[tuple[str, tuple[object, ...]]] = []
         self.executemany_calls: list[tuple[str, list[tuple[object, ...]]]] = []
 
@@ -96,6 +97,9 @@ class FakeCursor:
 
     def executemany(self, sql: str, params: list[tuple[object, ...]]) -> None:
         self.executemany_calls.append((sql, params))
+
+    def fetchone(self) -> dict[str, object] | None:
+        return self.rows[0] if self.rows else None
 
 
 def test_extract_basic_info_reads_report_and_program_codes() -> None:
@@ -161,6 +165,62 @@ def test_insert_xml_ledger_includes_report_and_program_codes() -> None:
     assert "10" in params
     assert "010" in params
     assert sql.count("%s") == len(params)
+
+
+def test_resolve_xml_basic_facility_prefers_xml_facility_code() -> None:
+    cur = FakeCursor(
+        [
+            {
+                "exam_facility_id": 54260,
+                "exam_facility_code": "4710114044",
+                "exam_facility_name": "医療法人 禄寿会 小禄病院",
+                "exam_facility_display_name": "小禄病院",
+                "medical_institution_code": "4710114044",
+            }
+        ]
+    )
+    config = SimpleNamespace(master_db="phr_master")
+
+    basic = import_xml.resolve_xml_basic_facility(
+        cur,
+        config,
+        basic={
+            "facility_code": "4710114044",
+            "facility_name": "XMLの小禄病院",
+        },
+        file_receipt={
+            "exam_facility_id": 999,
+            "facility_code": "9999999999",
+            "facility_name": "法人まとめフォルダ",
+        },
+    )
+
+    assert basic["exam_facility_id"] == 54260
+    assert basic["facility_code"] == "4710114044"
+    assert basic["facility_name"] == "小禄病院"
+
+
+def test_resolve_xml_basic_facility_falls_back_to_receipt_when_xml_facility_is_unknown() -> None:
+    cur = FakeCursor()
+    config = SimpleNamespace(master_db="phr_master")
+
+    basic = import_xml.resolve_xml_basic_facility(
+        cur,
+        config,
+        basic={
+            "facility_code": "0000000000",
+            "facility_name": "",
+        },
+        file_receipt={
+            "exam_facility_id": 999,
+            "facility_code": "9999999999",
+            "facility_name": "法人まとめフォルダ",
+        },
+    )
+
+    assert basic["exam_facility_id"] == 999
+    assert basic["facility_code"] == "0000000000"
+    assert basic["facility_name"] == "法人まとめフォルダ"
 
 
 def test_extract_exam_items_adds_section_info_to_row() -> None:
