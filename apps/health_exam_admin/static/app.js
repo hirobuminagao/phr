@@ -50,6 +50,27 @@
     '"': "&quot;",
     "'": "&#39;",
   }[char]));
+  const createApiError = (response, payload, bodyText) => {
+    const detail = payload?.message || payload?.detail || bodyText.slice(0, 160);
+    const error = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+    error.logId = String(payload?.log_id || "");
+    error.errorDetailUrl = String(payload?.error_detail_url || "");
+    return error;
+  };
+  const apiErrorMarkup = (error, message = "処理中にエラーが発生しました。") => {
+    const logId = String(error?.logId || "");
+    const detailUrl = String(error?.errorDetailUrl || "");
+    return `
+      <div class="api-inline-error">
+        <strong>${escapeHtml(message)}</strong>
+        ${logId ? `
+          <span>ログID: <code>${escapeHtml(logId)}</code></span>
+          <div>
+            <button type="button" class="ghost-button compact-action-button" data-copy-value="${escapeHtml(logId)}">ログIDをコピー</button>
+            ${detailUrl ? `<a class="ghost-button compact-action-button" href="${escapeHtml(detailUrl)}">詳細を見る</a>` : ""}
+          </div>` : `<small>${escapeHtml(error?.message || "")}</small>`}
+      </div>`;
+  };
   const fetchJson = async (url) => {
     const response = await fetch(url, {
       headers: { Accept: "application/json" },
@@ -63,8 +84,7 @@
       payload = null;
     }
     if (!response.ok) {
-      const detail = payload?.message || payload?.detail || bodyText.slice(0, 160);
-      throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+      throw createApiError(response, payload, bodyText);
     }
     return payload || {};
   };
@@ -88,12 +108,33 @@
       payload = null;
     }
     if (!response.ok) {
-      const detail = payload?.message || payload?.detail || bodyText.slice(0, 160);
-      throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
+      throw createApiError(response, payload, bodyText);
     }
     return payload || {};
   };
   const filters = new Map();
+  const caseFilterDraft = new URLSearchParams(window.location.search);
+  const caseFilterDirty = document.querySelector("[data-case-filter-dirty]");
+  const markCaseFilterDirty = () => {
+    if (caseFilterDirty) caseFilterDirty.hidden = false;
+  };
+  const replaceCaseFilterDraftFromForm = (form, excludedNames = []) => {
+    if (!form) return;
+    const excluded = new Set(excludedNames);
+    const names = new Set(
+      Array.from(form.elements || [])
+        .map((element) => element.name)
+        .filter((name) => name && !excluded.has(name)),
+    );
+    const data = new FormData(form);
+    for (const name of names) {
+      caseFilterDraft.delete(name);
+      for (const value of data.getAll(name)) {
+        if (String(value).trim()) caseFilterDraft.append(name, String(value));
+      }
+    }
+    caseFilterDraft.set("page", "1");
+  };
   const processingOverlay = document.querySelector("[data-processing-overlay]");
   const processingTitle = document.querySelector("[data-processing-overlay-title]");
   const processingMessage = document.querySelector("[data-processing-overlay-message]");
@@ -189,6 +230,24 @@
     });
   }
 
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-copy-value]");
+    if (!button) return;
+    event.preventDefault();
+    const text = String(button.getAttribute("data-copy-value") || "");
+    if (!text) return;
+    const originalLabel = button.textContent;
+    try {
+      const copied = await copyTextToClipboard(text);
+      button.textContent = copied ? "コピーしました" : "コピー失敗";
+    } catch {
+      button.textContent = "コピー失敗";
+    }
+    window.setTimeout(() => {
+      button.textContent = originalLabel;
+    }, 1600);
+  });
+
   for (const button of document.querySelectorAll("[data-clear-input-ids]")) {
     button.addEventListener("click", () => {
       const ids = String(button.getAttribute("data-clear-input-ids") || "")
@@ -227,7 +286,10 @@
       const singleData = !official && packageMode === "single_data";
       if (facilityField) facilityField.hidden = !singleData;
       if (facilityCode) facilityCode.disabled = !singleData;
-      if (packageNote) packageNote.hidden = !official;
+      if (packageNote) {
+        packageNote.classList.toggle("is-visible", official);
+        packageNote.setAttribute("aria-hidden", official ? "false" : "true");
+      }
       if (submit) submit.textContent = official ? "03フォルダへ本番出力" : "確認用に出力";
     };
     for (const input of [...outputModes, ...packageModes]) input.addEventListener("change", syncExportMode);
@@ -820,8 +882,12 @@
     const resultsRoot = exportExamItemModal.querySelector("[data-export-exam-item-results]");
     const applyButton = exportExamItemModal.querySelector("[data-export-exam-item-apply]");
     const openButton = document.querySelector("[data-modal-open='export-exam-item-modal']");
+    const matchValue = document.querySelector("[data-export-exam-item-match-value]");
+    const matchLabel = document.querySelector("[data-export-exam-item-match-label]");
+    const matchButtons = Array.from(exportExamItemModal.querySelectorAll("[data-export-exam-item-match]"));
     let draft = new Map();
     let resultItems = [];
+    let draftMatchMode = "any";
 
     const readSelected = () => new Map(
       Array.from(exportExamItemSelected.querySelectorAll("[data-namecode]")).map((item) => [
@@ -841,6 +907,11 @@
               <small>${escapeHtml(item.namecode)}</small>
             </span>`).join("")
         : '<span class="subtle">選択なし</span>';
+    };
+    const renderMatchMode = () => {
+      for (const button of matchButtons) {
+        button.classList.toggle("is-selected", button.getAttribute("data-export-exam-item-match") === draftMatchMode);
+      }
     };
     const renderResults = () => {
       if (!resultsRoot) return;
@@ -876,24 +947,30 @@
       }
       if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">検索中...</p>';
       try {
-        const response = await fetch(`/api/csv-mapping-lab/exam-items?keyword=${encodeURIComponent(keyword)}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json();
+        const payload = await fetchJson(`/api/export-lists/exam-items?keyword=${encodeURIComponent(keyword)}`);
         resultItems = Array.isArray(payload.items) ? payload.items : [];
         renderResults();
       } catch (error) {
         resultItems = [];
-        if (resultsRoot) resultsRoot.innerHTML = `<p class="alert">健診項目を検索できませんでした。${escapeHtml(error.message || error)}</p>`;
+        if (resultsRoot) resultsRoot.innerHTML = apiErrorMarkup(error, "健診項目を検索できませんでした。");
       }
     };
 
     openButton?.addEventListener("click", () => {
       draft = readSelected();
+      draftMatchMode = matchValue?.value === "all" ? "all" : "any";
       resultItems = [];
       if (keywordInput) keywordInput.value = "";
       if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">キーワードを入力して検索してください。</p>';
       renderDraft();
+      renderMatchMode();
     });
+    for (const button of matchButtons) {
+      button.addEventListener("click", () => {
+        draftMatchMode = button.getAttribute("data-export-exam-item-match") === "all" ? "all" : "any";
+        renderMatchMode();
+      });
+    }
     searchButton?.addEventListener("click", searchExamItems);
     keywordInput?.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
@@ -901,6 +978,8 @@
       searchExamItems();
     });
     applyButton?.addEventListener("click", () => {
+      if (matchValue) matchValue.value = draftMatchMode;
+      if (matchLabel) matchLabel.textContent = draftMatchMode === "all" ? "すべて" : "いずれか";
       exportExamItemSelected.innerHTML = draft.size
         ? Array.from(draft.values()).map((item) => `
             <span class="export-exam-item-chip" data-namecode="${escapeHtml(item.namecode)}" data-item-name="${escapeHtml(item.item_name || item.namecode)}">
@@ -911,6 +990,164 @@
       closeModal(exportExamItemModal);
     });
   }
+
+  const caseExamItemModal = document.querySelector("[data-case-exam-item-modal]");
+  if (caseExamItemModal) {
+    const form = caseExamItemModal.querySelector("[data-case-exam-item-form]");
+    const valuesInput = caseExamItemModal.querySelector("[data-case-exam-item-values]");
+    const matchInput = caseExamItemModal.querySelector("[data-case-exam-item-match-value]");
+    const keywordInput = caseExamItemModal.querySelector("[data-case-exam-item-keyword]");
+    const searchButton = caseExamItemModal.querySelector("[data-case-exam-item-search]");
+    const selectedRoot = caseExamItemModal.querySelector("[data-case-exam-item-selected]");
+    const resultsRoot = caseExamItemModal.querySelector("[data-case-exam-item-results]");
+    const matchButtons = Array.from(caseExamItemModal.querySelectorAll("[data-case-exam-item-match]"));
+    const openButton = document.querySelector("[data-modal-open='case-exam-item-filter-modal']");
+    const clearButton = caseExamItemModal.querySelector("[data-case-exam-item-clear]");
+    const setButton = caseExamItemModal.querySelector("[data-case-exam-item-set]");
+    const initialItems = new Map(
+      Array.from(selectedRoot?.querySelectorAll("[data-namecode]") || []).map((item) => [
+        item.getAttribute("data-namecode") || "",
+        {
+          namecode: item.getAttribute("data-namecode") || "",
+          item_name: item.getAttribute("data-item-name") || item.getAttribute("data-namecode") || "",
+        },
+      ]).filter(([namecode]) => namecode),
+    );
+    let stagedItems = new Map(initialItems);
+    let stagedMatchMode = matchInput?.value === "all" ? "all" : "any";
+    let selectedItems = new Map(stagedItems);
+    let matchMode = stagedMatchMode;
+    let resultItems = [];
+
+    const renderCaseMatchMode = () => {
+      for (const button of matchButtons) {
+        button.classList.toggle("is-selected", button.getAttribute("data-case-exam-item-match") === matchMode);
+      }
+    };
+    const renderCaseSelected = () => {
+      if (!selectedRoot) return;
+      selectedRoot.innerHTML = selectedItems.size
+        ? Array.from(selectedItems.values()).map((item) => `
+            <span class="export-exam-item-chip">
+              <strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode)}</small>
+            </span>`).join("")
+        : '<span class="subtle">選択なし</span>';
+    };
+    const renderCaseResults = () => {
+      if (!resultsRoot) return;
+      resultsRoot.innerHTML = resultItems.length
+        ? resultItems.map((item) => {
+            const selected = selectedItems.has(String(item.namecode || ""));
+            return `
+              <button type="button" class="export-exam-item-result${selected ? " is-selected" : ""}" data-case-exam-item-result="${escapeHtml(item.namecode)}">
+                <strong>${escapeHtml(item.item_name || item.namecode)}</strong>
+                <small>${escapeHtml(item.namecode)} / ${escapeHtml(item.category_name || "カテゴリなし")} / ${escapeHtml(item.xml_value_type || "-")}</small>
+                <span>${selected ? "選択済み" : "選択"}</span>
+              </button>`;
+          }).join("")
+        : '<p class="subtle">一致する健診項目はありません。</p>';
+      for (const button of resultsRoot.querySelectorAll("[data-case-exam-item-result]")) {
+        button.addEventListener("click", () => {
+          const namecode = button.getAttribute("data-case-exam-item-result") || "";
+          const item = resultItems.find((row) => String(row.namecode || "") === namecode);
+          if (!item) return;
+          if (selectedItems.has(namecode)) selectedItems.delete(namecode);
+          else selectedItems.set(namecode, item);
+          renderCaseSelected();
+          renderCaseResults();
+        });
+      }
+    };
+    const searchCaseExamItems = async () => {
+      const keyword = String(keywordInput?.value || "").trim();
+      if (!keyword) {
+        if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">キーワードを入力してください。</p>';
+        return;
+      }
+      if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">検索中...</p>';
+      try {
+        const payload = await fetchJson(`/api/export-lists/exam-items?keyword=${encodeURIComponent(keyword)}`);
+        resultItems = Array.isArray(payload.items) ? payload.items : [];
+        renderCaseResults();
+      } catch (error) {
+        resultItems = [];
+        if (resultsRoot) resultsRoot.innerHTML = apiErrorMarkup(error, "健診項目を検索できませんでした。");
+      }
+    };
+
+    openButton?.addEventListener("click", () => {
+      selectedItems = new Map(stagedItems);
+      matchMode = stagedMatchMode;
+      resultItems = [];
+      if (keywordInput) keywordInput.value = "";
+      if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">キーワードを入力して検索してください。</p>';
+      renderCaseSelected();
+      renderCaseMatchMode();
+    });
+    for (const button of matchButtons) {
+      button.addEventListener("click", () => {
+        matchMode = button.getAttribute("data-case-exam-item-match") === "all" ? "all" : "any";
+        renderCaseMatchMode();
+      });
+    }
+    searchButton?.addEventListener("click", searchCaseExamItems);
+    keywordInput?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      searchCaseExamItems();
+    });
+    setButton?.addEventListener("click", () => {
+      stagedItems = new Map(selectedItems);
+      stagedMatchMode = matchMode;
+      if (valuesInput) valuesInput.value = Array.from(selectedItems.keys()).join(",");
+      if (matchInput) matchInput.value = matchMode;
+      caseFilterDraft.set("exam_item_namecodes", Array.from(selectedItems.keys()).join(","));
+      caseFilterDraft.set("exam_item_match_mode", matchMode);
+      caseFilterDraft.set("page", "1");
+      markCaseFilterDirty();
+      closeModal(caseExamItemModal);
+    });
+    clearButton?.addEventListener("click", () => {
+      selectedItems.clear();
+      stagedItems.clear();
+      stagedMatchMode = "any";
+      if (valuesInput) valuesInput.value = "";
+      if (matchInput) matchInput.value = "any";
+      caseFilterDraft.delete("exam_item_namecodes");
+      caseFilterDraft.set("exam_item_match_mode", "any");
+      caseFilterDraft.set("page", "1");
+      markCaseFilterDirty();
+      closeModal(caseExamItemModal);
+    });
+  }
+
+  const caseBasicFilterForm = document.getElementById("case-filter-form");
+  const caseBasicFilterSet = document.querySelector("[data-case-basic-filter-set]");
+  const caseBasicFilterClear = document.querySelector("[data-case-basic-filter-clear]");
+  caseBasicFilterSet?.addEventListener("click", () => {
+    replaceCaseFilterDraftFromForm(caseBasicFilterForm, ["exam_item_namecodes", "exam_item_match_mode"]);
+    markCaseFilterDirty();
+    closeModal(caseBasicFilterSet.closest(".edit-modal"));
+  });
+  caseBasicFilterForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    caseBasicFilterSet?.click();
+  });
+  caseBasicFilterClear?.addEventListener("click", () => {
+    for (const element of Array.from(caseBasicFilterForm?.elements || [])) {
+      if (!element.name || ["event_id", "limit", "exam_item_namecodes", "exam_item_match_mode"].includes(element.name)) continue;
+      if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)) element.checked = false;
+      else if ("value" in element) element.value = "";
+    }
+    replaceCaseFilterDraftFromForm(caseBasicFilterForm, ["exam_item_namecodes", "exam_item_match_mode"]);
+    markCaseFilterDirty();
+    closeModal(caseBasicFilterClear.closest(".edit-modal"));
+  });
+
+  document.querySelector("[data-case-filter-execute]")?.addEventListener("click", () => {
+    const query = caseFilterDraft.toString();
+    window.location.assign(`/exam-export-cases${query ? `?${query}` : ""}`);
+  });
 
   const csvMappingBulkModal = document.getElementById("csv-mapping-selected-bulk-modal");
   const csvMappingBulkOpen = document.querySelector("[data-csv-mapping-bulk-open]");
@@ -1186,9 +1423,7 @@
         const params = new URLSearchParams();
         params.set("keyword", keyword);
         if (csvExamItemValueType) params.set("value_type", csvExamItemValueType);
-        const response = await fetch(`/api/csv-mapping-lab/exam-items?${params.toString()}`);
-        if (!response.ok) throw new Error("search_failed");
-        const payload = await response.json();
+        const payload = await fetchJson(`/api/csv-mapping-lab/exam-items?${params.toString()}`);
         csvExamItemResultLimit = Number(payload.limit || 80);
         csvExamItemItems = Array.isArray(payload.items) ? payload.items : [];
         renderExamItemResults(csvExamItemItems);
@@ -1200,7 +1435,7 @@
           renderExamItemSelectedDetail(currentItem);
         }
       } catch (error) {
-        results.innerHTML = `<p class="subtle">検索でエラーが発生しました。</p>`;
+        results.innerHTML = apiErrorMarkup(error, "健診項目を検索できませんでした。");
       }
     };
 
@@ -4364,13 +4599,11 @@
         const params = new URLSearchParams();
         params.set("keyword", keyword);
         if (targetValueType) params.set("value_type", targetValueType);
-        const response = await fetch(`/api/csv-mapping-lab/exam-items?${params.toString()}`);
-        if (!response.ok) throw new Error("search_failed");
-        const payload = await response.json();
+        const payload = await fetchJson(`/api/csv-mapping-lab/exam-items?${params.toString()}`);
         targetItems = Array.isArray(payload.items) ? payload.items : [];
         renderTargetResults();
-      } catch (_error) {
-        results.innerHTML = `<p class="subtle">検索でエラーが発生しました。</p>`;
+      } catch (error) {
+        results.innerHTML = apiErrorMarkup(error, "健診項目を検索できませんでした。");
       }
     };
 

@@ -2371,6 +2371,52 @@ a.home-menu-card.is-navigating {
   cursor: pointer;
 }
 
+.case-filter-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.case-filter-summary-grid .active-filter-summary {
+  min-width: 0;
+  min-height: 184px;
+}
+
+.case-filter-apply-bar {
+  position: sticky;
+  top: 12px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid #afd5c9;
+  border-radius: 7px;
+  background: #f0faf6;
+  box-shadow: 0 8px 20px rgba(31, 41, 51, 0.08);
+}
+
+.case-filter-apply-bar > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.case-filter-apply-bar strong span {
+  color: var(--accent-dark);
+}
+
+.case-filter-apply-bar small {
+  color: var(--muted);
+}
+
+.case-filter-apply-bar > button {
+  min-height: var(--control-height);
+  white-space: nowrap;
+}
+
 .active-filter-summary:hover {
   border-color: var(--accent);
 }
@@ -2448,7 +2494,7 @@ a.home-menu-card.is-navigating {
 .case-filter-head-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  align-items: start;
   justify-content: flex-end;
   gap: 10px;
 }
@@ -6182,8 +6228,20 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   font-weight: 700;
 }
 
+.export-mode-note {
+  display: block;
+  min-height: 20px;
+  line-height: 20px;
+  visibility: hidden;
+}
+
+.export-mode-note.is-visible {
+  visibility: visible;
+}
+
 .export-mode-form > button[type="submit"] {
   min-height: var(--control-height);
+  margin-top: 29px;
   white-space: nowrap;
 }
 
@@ -6280,13 +6338,33 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .export-exam-item-modal {
   width: min(980px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 48px));
 }
 
 .export-exam-item-modal__body {
   display: grid;
   gap: 14px;
-  min-height: 420px;
+  min-height: 280px;
   overflow: hidden;
+}
+
+.export-exam-item-match-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.export-exam-item-match-picker .segmented-control button {
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+}
+
+.export-exam-item-match-picker .segmented-control button.is-selected {
+  color: #fff;
+  background: var(--accent);
 }
 
 .export-exam-item-search {
@@ -6300,7 +6378,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   gap: 8px;
-  max-height: 48vh;
+  max-height: 34vh;
   overflow-y: auto;
 }
 
@@ -6341,6 +6419,28 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .export-exam-item-result.is-selected small {
   color: #fff;
+}
+
+.api-inline-error {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #efb5af;
+  border-radius: 6px;
+  color: #8f2921;
+  background: #fff2f0;
+}
+
+.api-inline-error > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.api-inline-error code {
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .compact-choice-block {
@@ -7658,6 +7758,24 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   gap: 4px;
 }
 
+.case-exam-item-filter-modal {
+  width: min(980px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.case-exam-item-filter-body {
+  display: grid;
+  gap: 14px;
+  min-height: 300px;
+  overflow: hidden;
+}
+
+.case-exam-item-filter-modal .export-exam-item-results {
+  max-height: 34vh;
+}
+
 .csv-header-unmatched-filter span {
   color: #607086;
   font-size: 12px;
@@ -8535,6 +8653,24 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
   .export-detail-head {
     flex-direction: column;
+  }
+
+  .case-filter-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .case-filter-summary-grid .active-filter-summary {
+    min-height: 0;
+  }
+
+  .case-filter-apply-bar {
+    position: static;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .export-mode-form > button[type="submit"] {
+    margin-top: 0;
   }
 
   .ledger-detail-head {

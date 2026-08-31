@@ -20,12 +20,10 @@
 <main class="page">
   <button type="button" class="floating-filter-button" data-modal-open="case-filter-modal">絞り込み</button>
 
+  <div class="case-filter-summary-grid">
   <section class="panel active-filter-summary" data-modal-open="case-filter-modal" role="button" tabindex="0">
     <div class="section-heading section-heading-inline-note">
-      <div>
-        <h2>現在の絞り込み</h2>
-        <p class="subtle">クリックすると絞り込み条件を変更できます。</p>
-      </div>
+      <div><h2>基本の絞り込み</h2><p class="subtle">人・受診・状態など</p></div>
       <button type="button" class="ghost-button compact-action-button" data-modal-open="case-filter-modal">変更</button>
     </div>
     <div class="active-filter-chip-list">
@@ -52,6 +50,29 @@
       {% endif %}
     </div>
   </section>
+  <section class="panel active-filter-summary" data-modal-open="case-exam-item-filter-modal" role="button" tabindex="0">
+    <div class="section-heading section-heading-inline-note">
+      <div><h2>健診項目</h2><p class="subtle">項目の存在で絞り込み</p></div>
+      <button type="button" class="ghost-button compact-action-button" data-modal-open="case-exam-item-filter-modal">変更</button>
+    </div>
+    <div class="active-filter-chip-list">
+      {% if selected_case_exam_items %}
+      <span class="active-filter-chip">{{ 'すべて（AND）' if filters.exam_item_match_mode == 'all' else 'いずれか（OR）' }}</span>
+      {% for item in selected_case_exam_items %}<span class="active-filter-chip">{{ item.item_name or item.namecode }}</span>{% endfor %}
+      {% else %}
+      <span class="active-filter-chip is-empty">条件なし</span>
+      {% endif %}
+    </div>
+  </section>
+  </div>
+  <div class="case-filter-apply-bar">
+    <div>
+      <strong>基本の絞り込み <span>AND</span> 健診項目</strong>
+      <small>両方の条件を満たすcaseのみ表示します。</small>
+      <span class="status-pill status-warning" data-case-filter-dirty hidden>条件変更あり</span>
+    </div>
+    <button type="button" data-case-filter-execute>この条件で絞り込む</button>
+  </div>
 
   <div id="case-filter-modal" class="edit-modal" hidden>
     <div class="edit-modal__backdrop" data-modal-close></div>
@@ -77,6 +98,8 @@
         </div>
       </div>
     <form id="case-filter-form" method="get" action="/exam-export-cases" class="case-filter-form">
+      <input type="hidden" name="exam_item_namecodes" value="{{ filters.exam_item_namecodes or '' }}">
+      <input type="hidden" name="exam_item_match_mode" value="{{ filters.exam_item_match_mode or 'any' }}">
       <div class="case-filter-scroll">
         <section class="case-filter-group">
           <h3>基本情報</h3>
@@ -230,9 +253,59 @@
         <span>表示件数</span>
         <input form="case-filter-form" name="limit" value="{{ limit }}">
       </label>
-      <button type="submit" form="case-filter-form">検索</button>
-      <a class="ghost-button" href="/exam-export-cases">クリア</a>
+      <button type="button" data-case-basic-filter-set>条件をセット</button>
+      <button type="button" class="ghost-button" data-case-basic-filter-clear>基本条件をクリア</button>
     </div>
+    </section>
+  </div>
+
+  <div id="case-exam-item-filter-modal" class="edit-modal" hidden data-case-exam-item-modal>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel case-exam-item-filter-modal" role="dialog" aria-modal="true" aria-labelledby="case-exam-item-filter-title">
+      <div class="edit-modal__head">
+        <div>
+          <p class="eyebrow">EXAM ITEM FILTER</p>
+          <h2 id="case-exam-item-filter-title">健診項目で絞り込む</h2>
+          <p class="subtle">採用値に含まれる健診項目を複数選択できます。</p>
+        </div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <form id="case-exam-item-filter-form" method="get" action="/exam-export-cases" data-case-exam-item-form>
+        {% for key, value in filters.items() %}
+          {% if key not in ['exam_item_namecodes', 'exam_item_match_mode', 'page'] %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endif %}
+        {% endfor %}
+        <input type="hidden" name="page" value="1">
+        <input type="hidden" name="exam_item_namecodes" value="{{ filters.exam_item_namecodes or '' }}" data-case-exam-item-values>
+        <input type="hidden" name="exam_item_match_mode" value="{{ filters.exam_item_match_mode or 'any' }}" data-case-exam-item-match-value>
+        <div class="case-exam-item-filter-body">
+          <div class="export-exam-item-match-picker">
+            <strong>複数項目の条件</strong>
+            <div class="segmented-control" role="group" aria-label="複数項目の条件">
+              <button type="button" data-case-exam-item-match="any">いずれか（OR）</button>
+              <button type="button" data-case-exam-item-match="all">すべて（AND）</button>
+            </div>
+          </div>
+          <div class="export-exam-item-search">
+            <input data-case-exam-item-keyword data-modal-focus placeholder="項目名 / namecode / カテゴリ">
+            <button type="button" data-case-exam-item-search>検索</button>
+          </div>
+          <div class="export-exam-item-draft" data-case-exam-item-selected>
+            {% for item in selected_case_exam_items %}
+            <span class="export-exam-item-chip" data-namecode="{{ item.namecode }}" data-item-name="{{ item.item_name or item.namecode }}">
+              <strong>{{ item.item_name or item.namecode }}</strong><small>{{ item.namecode }}</small>
+            </span>
+            {% else %}<span class="subtle">選択なし</span>{% endfor %}
+          </div>
+          <div class="export-exam-item-results" data-case-exam-item-results>
+            <p class="subtle">キーワードを入力して検索してください。</p>
+          </div>
+        </div>
+      </form>
+      <div class="edit-modal__footer">
+        <button type="button" class="ghost-button" data-case-exam-item-clear>健診項目をクリア</button>
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="button" data-case-exam-item-set>条件をセット</button>
+      </div>
     </section>
   </div>
 

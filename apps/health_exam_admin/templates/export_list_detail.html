@@ -88,6 +88,7 @@
           {% if can_review_export %}<label><input type="radio" name="output_mode" value="review" checked><span>確認</span></label>{% endif %}
           {% if can_export %}<label><input type="radio" name="output_mode" value="official" {{ 'checked' if not can_review_export else '' }}><span>本番</span></label>{% endif %}
         </div>
+        <small class="export-mode-note" aria-hidden="true">&nbsp;</small>
       </div>
       <div class="export-mode-field">
         <strong>梱包方式</strong>
@@ -95,7 +96,7 @@
           <label><input type="radio" name="package_mode" value="standard" checked><span>健診機関・受診月別</span></label>
           <label><input type="radio" name="package_mode" value="single_data" data-single-data-package-option><span>リスト全員を単一DATA</span></label>
         </div>
-        <small data-official-package-note hidden>本番出力は健診機関・受診月別で固定です。</small>
+        <small class="export-mode-note" data-official-package-note>本番出力は健診機関・受診月別で固定です。</small>
       </div>
       <div data-single-data-facility hidden>
         <label>単一DATAの送付元健診機関
@@ -182,10 +183,11 @@
     <form method="get" action="/export-lists/{{ export_list.xml_export_list_id }}" class="filter-form">
       <input type="hidden" name="show_candidates" value="1">
       <div class="export-exam-item-filter" data-export-exam-item-filter>
+        <input type="hidden" name="exam_item_match_mode" value="{{ candidate_filters.exam_item_match_mode or 'any' }}" data-export-exam-item-match-value>
         <div class="export-exam-item-filter__head">
           <div>
-            <span class="field-label">健診項目（すべて含む）</span>
-            <small>複数選択した場合は、すべての項目がある人を検索します。</small>
+            <span class="field-label">健診項目（<span data-export-exam-item-match-label>{{ 'すべて' if candidate_filters.exam_item_match_mode == 'all' else 'いずれか' }}</span>）</span>
+            <small>選択した項目の条件と、ほかの検索条件を掛け合わせます。</small>
           </div>
           <button type="button" class="ghost-button" data-modal-open="export-exam-item-modal">健診項目を追加</button>
         </div>
@@ -310,6 +312,13 @@
         <button type="button" class="ghost-button" data-modal-close>閉じる</button>
       </div>
       <div class="export-exam-item-modal__body">
+        <div class="export-exam-item-match-picker">
+          <strong>複数項目の条件</strong>
+          <div class="segmented-control" role="group" aria-label="複数項目の条件">
+            <button type="button" data-export-exam-item-match="any">いずれか（OR）</button>
+            <button type="button" data-export-exam-item-match="all">すべて（AND）</button>
+          </div>
+        </div>
         <div class="export-exam-item-search">
           <input data-export-exam-item-keyword data-modal-focus placeholder="項目名 / namecode / カテゴリ">
           <button type="button" data-export-exam-item-search>検索</button>

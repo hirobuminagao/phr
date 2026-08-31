@@ -498,6 +498,17 @@ async def unhandled_app_exception(request: Request, exc: Exception) -> Response:
     except Exception:
         LOGGER.exception("failed to persist app error log log_id=%s", log_id)
     LOGGER.exception("unhandled app error log_id=%s path=%s", log_id, request.url.path)
+    wants_json = request.url.path.startswith("/api/") or "application/json" in request.headers.get("accept", "")
+    if wants_json:
+        return JSONResponse(
+            {
+                "error": "INTERNAL_ERROR",
+                "message": "処理中にエラーが発生しました。",
+                "log_id": log_id,
+                "error_detail_url": f"/admin/error-logs/{log_id}",
+            },
+            status_code=500,
+        )
     return templates.TemplateResponse(
         "internal_error.html",
         {
@@ -6767,6 +6778,10 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
     duplicate_subscriber = filters.get("duplicate_subscriber", "").strip()
+    exam_item_namecodes = split_filter_values(filters.get("exam_item_namecodes", ""))
+    exam_item_match_mode = filters.get("exam_item_match_mode", "any").strip().lower()
+    if exam_item_match_mode not in {"any", "all"}:
+        exam_item_match_mode = "any"
     if event_id:
         where_parts.append("eec.event_id = %s")
         params.append(event_id)
@@ -6852,6 +6867,21 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
         params.extend(facility_codes)
     if duplicate_subscriber == "1":
         where_parts.append("COALESCE(subcase.subscriber_case_count, 0) >= 2")
+    if exam_item_namecodes:
+        placeholders = ", ".join(["%s"] * len(exam_item_namecodes))
+        match_count = len(exam_item_namecodes) if exam_item_match_mode == "all" else 1
+        match_operator = "=" if exam_item_match_mode == "all" else ">="
+        where_parts.append(
+            f"""
+            (
+              SELECT COUNT(DISTINCT item_filter.namecode)
+              FROM {qname(health_db())}.exam_export_case_values AS item_filter
+              WHERE item_filter.exam_export_case_id = eec.exam_export_case_id
+                AND item_filter.namecode IN ({placeholders})
+            ) {match_operator} %s
+            """
+        )
+        params.extend([*exam_item_namecodes, match_count])
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     return where_sql, params
 
@@ -9105,6 +9135,9 @@ def load_export_case_add_candidates(
             if str(value).strip()
         )
     )
+    exam_item_match_mode = str(filters.get("exam_item_match_mode") or "any").strip().lower()
+    if exam_item_match_mode not in {"any", "all"}:
+        exam_item_match_mode = "any"
     readiness_values = tuple(
         value
         for value in ("EXPORT_READY", "APPROVED_WITH_REASON", "EXPORTED")
@@ -9138,6 +9171,8 @@ def load_export_case_add_candidates(
         params.append(exam_month)
     if exam_item_namecodes:
         placeholders = ", ".join(["%s"] * len(exam_item_namecodes))
+        match_count = len(exam_item_namecodes) if exam_item_match_mode == "all" else 1
+        match_operator = "=" if exam_item_match_mode == "all" else ">="
         where_parts.append(
             f"""
             (
@@ -9145,10 +9180,10 @@ def load_export_case_add_candidates(
               FROM {qname(health_db())}.exam_export_case_values AS eecv_filter
               WHERE eecv_filter.exam_export_case_id = eec.exam_export_case_id
                 AND eecv_filter.namecode IN ({placeholders})
-            ) = %s
+            ) {match_operator} %s
             """
         )
-        params.extend([*exam_item_namecodes, len(exam_item_namecodes)])
+        params.extend([*exam_item_namecodes, match_count])
     where_parts.append(f"eec.export_readiness_status IN ({', '.join(['%s'] * len(readiness_values))})")
     params.extend(readiness_values)
 
@@ -14442,18 +14477,18 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
               AND (%s = '' OR `xml_value_type` = %s)
               AND (
                 %s = ''
-                OR `namecode` LIKE %s
+                OR CONVERT(`namecode` USING utf8mb4) COLLATE utf8mb4_0900_ai_ci LIKE %s
                 OR `item_name` LIKE %s
                 OR `category_name` LIKE %s
-                OR `identity_item_code` LIKE %s
+                OR CONVERT(`identity_item_code` USING utf8mb4) COLLATE utf8mb4_0900_ai_ci LIKE %s
                 OR `identity_item_name` LIKE %s
                 OR `method_name` LIKE %s
               )
             ORDER BY
               CASE
-                WHEN `namecode` = %s THEN 0
+                WHEN CONVERT(`namecode` USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = %s THEN 0
                 WHEN `item_name` = %s THEN 1
-                WHEN `namecode` LIKE %s THEN 2
+                WHEN CONVERT(`namecode` USING utf8mb4) COLLATE utf8mb4_0900_ai_ci LIKE %s THEN 2
                 WHEN `item_name` LIKE %s THEN 3
                 ELSE 4
               END,
@@ -14496,6 +14531,57 @@ def api_csv_mapping_lab_exam_items(request: Request) -> Response:
         ]
         row["norm_variant_rows"] = [json_safe_mapping(variant) for variant in norm_rows]
     return JSONResponse({"items": [json_safe_mapping(row) for row in rows], "limit": 80})
+
+
+@app.get("/api/export-lists/exam-items")
+def api_export_list_exam_items(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return JSONResponse({"error": "FORBIDDEN"}, status_code=403)
+
+    keyword = str(request.query_params.get("keyword") or "").strip()
+    if not keyword:
+        return JSONResponse({"items": [], "limit": 60})
+    like = f"%{keyword}%"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            f"""
+            SELECT
+              namecode,
+              item_name,
+              category_name,
+              xml_value_type,
+              display_unit
+            FROM {qname(dev_db())}.exam_item_master
+            WHERE namecode IS NOT NULL
+              AND namecode <> ''
+              AND (
+                CONVERT(namecode USING utf8mb4) COLLATE utf8mb4_0900_ai_ci LIKE %s
+                OR item_name LIKE %s
+                OR category_name LIKE %s
+              )
+            ORDER BY
+              CASE
+                WHEN CONVERT(namecode USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = %s THEN 0
+                WHEN item_name = %s THEN 1
+                WHEN CONVERT(namecode USING utf8mb4) COLLATE utf8mb4_0900_ai_ci LIKE %s THEN 2
+                WHEN item_name LIKE %s THEN 3
+                ELSE 4
+              END,
+              COALESCE(category_name, ''),
+              COALESCE(item_name, ''),
+              namecode
+            LIMIT 60
+            """,
+            (like, like, like, keyword, keyword, f"{keyword}%", f"{keyword}%"),
+        )
+        rows = [json_safe_mapping(dict(row)) for row in cur.fetchall()]
+        cur.close()
+    return JSONResponse({"items": rows, "limit": 60})
 
 
 def exam_item_master_filters_from_query(query: Mapping[str, str]) -> dict[str, str]:
@@ -18389,6 +18475,8 @@ def exam_export_cases(request: Request) -> Response:
         "facility_q": request.query_params.get("facility_q", ""),
         "facility_codes": request.query_params.get("facility_codes", ""),
         "duplicate_subscriber": request.query_params.get("duplicate_subscriber", ""),
+        "exam_item_namecodes": request.query_params.get("exam_item_namecodes", ""),
+        "exam_item_match_mode": request.query_params.get("exam_item_match_mode", "any"),
         "limit": request.query_params.get("limit", "500"),
         "page": request.query_params.get("page", "1"),
     }
@@ -18401,6 +18489,10 @@ def exam_export_cases(request: Request) -> Response:
             event_options = load_event_options(cur)
             case_facility_options = load_exam_export_case_facility_options(cur, event_id=filters["event_id"])
             exam_month_options = load_exam_export_case_month_options(cur, event_id=filters["event_id"])
+            selected_case_exam_items = load_export_candidate_exam_items(
+                cur,
+                namecodes=split_filter_values(filters["exam_item_namecodes"]),
+            )
             unfiltered_total_count = load_exam_export_case_count(
                 cur,
                 filters=exam_export_case_base_filters(filters),
@@ -18458,6 +18550,7 @@ def exam_export_cases(request: Request) -> Response:
             "case_facility_options": case_facility_options,
             "exam_month_options": exam_month_options,
             "selected_exam_months": split_filter_values(filters.get("exam_month")),
+            "selected_case_exam_items": selected_case_exam_items,
             "can_download_csv": can_download_exam_export_case_csv(user),
             "csv_field_groups": EXAM_EXPORT_CASE_CSV_FIELD_GROUPS,
             "csv_default_fields": set(EXAM_EXPORT_CASE_CSV_DEFAULT_FIELDS),
@@ -18492,6 +18585,8 @@ async def exam_export_cases_csv_download(request: Request) -> Response:
         "qualification_lost_date": str(form.get("qualification_lost_date") or ""),
         "facility_q": str(form.get("facility_q") or ""),
         "facility_codes": str(form.get("facility_codes") or ""),
+        "exam_item_namecodes": str(form.get("exam_item_namecodes") or ""),
+        "exam_item_match_mode": str(form.get("exam_item_match_mode") or "any"),
         "limit": "5000",
         "page": "1",
     }
@@ -19034,6 +19129,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
                 "facility_codes": request.query_params.get("facility_codes", ""),
                 "exam_month": request.query_params.get("exam_month", ""),
                 "exam_item_namecodes": request.query_params.getlist("exam_item_namecode"),
+                "exam_item_match_mode": request.query_params.get("exam_item_match_mode", "any"),
                 "include_export_ready": request.query_params.get("include_export_ready", "1"),
                 "include_approved_with_reason": request.query_params.get("include_approved_with_reason", "1"),
                 "include_exported": request.query_params.get("include_exported", ""),
