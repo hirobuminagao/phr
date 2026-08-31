@@ -27,6 +27,7 @@
         <h2>{{ row.log_id }}</h2>
         <p class="subtle">{{ row.created_at }} / {{ row.method }} {{ row.path }}</p>
       </div>
+      <button type="button" class="ghost-button compact-action-button" data-copy-target="#admin-error-log-copy-text">ログをコピー</button>
       {% if row.resolved_at %}
       <span class="status-pill status-ready">対応済み</span>
       {% else %}
@@ -55,6 +56,15 @@
     <h2>トレース</h2>
     <pre class="log-pre">{{ row.traceback_text or "" }}</pre>
   </section>
+  <pre id="admin-error-log-copy-text" hidden>ログID: {{ row.log_id }}
+日時: {{ row.created_at }}
+リクエスト: {{ row.method }} {{ row.path }}{% if row.query_string %}?{{ row.query_string }}{% endif %}
+ステータス: {{ row.status_code }}
+例外: {{ row.exception_type }}: {{ row.exception_message }}
+利用者: {{ row.employee_no or "-" }}
+IP: {{ row.client_ip or "-" }}
+
+{{ row.traceback_text or "" }}</pre>
   {% endif %}
 </main>
 {% endblock %}

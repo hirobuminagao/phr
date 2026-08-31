@@ -21,8 +21,9 @@
     <div class="metric-grid">
       <div class="metric-card">
         <span>ログID</span>
-        <strong>{{ log_id }}</strong>
+        <strong id="internal-error-log-id">{{ log_id }}</strong>
         <small>問い合わせや調査時はこのIDを使います。</small>
+        <button type="button" class="ghost-button compact-action-button" data-copy-target="#internal-error-log-id">ログIDをコピー</button>
       </div>
     </div>
     <div class="form-actions">

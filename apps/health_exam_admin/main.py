@@ -6222,6 +6222,21 @@ def load_subscriber_match_candidate_rows(
         where_sql_parts.extend(f"({part})" for part in filter_parts)
     score_sql = " + ".join(score_parts) if score_parts else "0"
     case_event_id = event_id or (ledger.get("event_id") if ledger else None)
+    has_subscriber_addresses = manual_exam_entry_table_exists(cur, dev_db(), "subscriber_addresses")
+    address_select_sql = (
+        "a.postal_code AS subscriber_postal_code, "
+        "a.address_line AS subscriber_address_line, "
+        "a.building AS subscriber_building"
+        if has_subscriber_addresses
+        else "NULL AS subscriber_postal_code, NULL AS subscriber_address_line, NULL AS subscriber_building"
+    )
+    address_join_sql = (
+        f"LEFT JOIN {qname(dev_db())}.subscriber_addresses AS a "
+        "ON a.subscriber_id = s.id AND a.is_current = 1"
+        if has_subscriber_addresses
+        else ""
+    )
+    address_order_sql = "a.address_id DESC," if has_subscriber_addresses else ""
     cur.execute(
         f"""
         SELECT
@@ -6244,9 +6259,7 @@ def load_subscriber_match_candidate_rows(
           {subscriber_select("relationship_name")},
           {subscriber_select("qualification_lost_date")},
           {subscriber_select("employee_code")},
-          a.postal_code AS subscriber_postal_code,
-          a.address_line AS subscriber_address_line,
-          a.building AS subscriber_building,
+          {address_select_sql},
           hds.status AS hia_dashboard_status,
           hds.medical_institution AS hia_dashboard_medical_institution,
           hds.reservation_date AS hia_dashboard_reservation_date,
@@ -6263,9 +6276,7 @@ def load_subscriber_match_candidate_rows(
           latest_case.specific_check_result AS candidate_latest_case_specific_check_result,
           ({score_sql}) AS match_score
         FROM {qname(dev_db())}.subscribers AS s
-        LEFT JOIN {qname(dev_db())}.subscriber_addresses AS a
-          ON a.subscriber_id = s.id
-         AND a.is_current = 1
+        {address_join_sql}
         LEFT JOIN {qname(work_other_db())}.hia_dashboard_status AS hds
           ON hds.hia_subscriber_id = s.hia_subscriber_id
          AND hds.is_active = 1
@@ -6315,7 +6326,7 @@ def load_subscriber_match_candidate_rows(
         ) AS latest_case
           ON latest_case.subscriber_id = s.id
         WHERE {" AND ".join(where_sql_parts)}
-        ORDER BY match_score DESC, s.id, a.address_id DESC, hds.hia_dashboard_person_id DESC
+        ORDER BY match_score DESC, s.id, {address_order_sql} hds.hia_dashboard_person_id DESC
         LIMIT %s
         """,
         (*score_params, case_event_id, case_event_id, *params, *filter_params, limit),
