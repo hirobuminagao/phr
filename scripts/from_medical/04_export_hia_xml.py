@@ -70,6 +70,9 @@ REVIEW_OUTPUT_DEFAULT_ROOT = REPO_ROOT / "data" / "hia_xml_review_exports"
 OUTPUT_MODE_OFFICIAL = "official"
 OUTPUT_MODE_REVIEW = "review"
 OUTPUT_MODES = {OUTPUT_MODE_OFFICIAL, OUTPUT_MODE_REVIEW}
+PACKAGE_MODE_STANDARD = "standard"
+PACKAGE_MODE_SINGLE_DATA = "single_data"
+PACKAGE_MODES = {PACKAGE_MODE_STANDARD, PACKAGE_MODE_SINGLE_DATA}
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,8 @@ class ExportConfig:
     dry_run: bool
     output_mode: str
     review_output_root: Path
+    package_mode: str
+    submission_facility_code: str | None
 
 
 @dataclass
@@ -136,6 +141,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--file-date", help="YYYYMMDD; default is today")
     parser.add_argument("--output-mode", choices=sorted(OUTPUT_MODES), help="official=event folder, review=project data folder")
     parser.add_argument("--review-output-root", help="Base directory for output_mode=review")
+    parser.add_argument("--package-mode", choices=sorted(PACKAGE_MODES), default=PACKAGE_MODE_STANDARD)
+    parser.add_argument("--submission-facility-code")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
@@ -255,6 +262,13 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         limit=args.limit if args.limit is not None else int(data.get("limit") or 0),
     )
     output_mode = _output_mode(args.output_mode if args.output_mode is not None else data.get("output_mode"))
+    package_mode = str(args.package_mode or data.get("package_mode") or PACKAGE_MODE_STANDARD).strip().lower()
+    submission_facility_code = str(args.submission_facility_code or data.get("submission_facility_code") or "").strip() or None
+    if package_mode == PACKAGE_MODE_SINGLE_DATA:
+        if output_mode != OUTPUT_MODE_REVIEW:
+            raise ValueError("single_data package mode is available only for review output")
+        if not submission_facility_code:
+            raise ValueError("submission_facility_code is required for single_data package mode")
     return ExportConfig(
         selectors=selectors,
         health_db=str(args.health_db or data.get("health_db") or "health_exam_result"),
@@ -270,6 +284,8 @@ def load_config(args: argparse.Namespace) -> ExportConfig:
         review_output_root=_review_output_root(
             args.review_output_root if args.review_output_root is not None else data.get("review_output_root")
         ),
+        package_mode=package_mode,
+        submission_facility_code=submission_facility_code,
     )
 
 
@@ -728,25 +744,48 @@ def build_group(
     run_id: int | None,
 ) -> tuple[Path | None, tuple[str, str, str, str, str, int]]:
     first = group[0]
-    facility_code = _digits(first["master_facility_code"], 10, "facility_code")
-    insurer_number = _digits(first["insurer_number"], 8, "insurer_number")
-    folder_name = resolve_facility_output_folder(cur, config=config, group=group)
-    exam_months = {exam_month_yyyymm(row.get("exam_date_export_value") or row.get("exam_date")) for row in group}
-    if len(exam_months) != 1:
-        raise ValueError(f"EXAM_MONTH_CONFLICT: {sorted(exam_months)}")
-    exam_month = next(iter(exam_months))
-    for row in group:
-        ledger_code = _digits(row.get("facility_code"), 10, "ledger.facility_code")
-        if ledger_code != facility_code:
-            raise ValueError(f"FACILITY_CODE_CONFLICT: ledger={ledger_code} master={facility_code}")
-
-    facility = Facility(
-        code=facility_code,
-        name=str(first["master_facility_name"]),
-        postal_code=normalize_postal_code_export(first.get("master_facility_postal_code")),
-        address=normalize_address_export(first.get("master_facility_address")),
-        phone=normalize_phone_number_export(first.get("master_facility_phone_number")),
+    facility_code = _digits(
+        config.submission_facility_code if config.package_mode == PACKAGE_MODE_SINGLE_DATA else first["master_facility_code"],
+        10,
+        "facility_code",
     )
+    insurer_number = _digits(first["insurer_number"], 8, "insurer_number")
+    folder_name = (
+        f"{facility_code}_単一DATA確認"
+        if config.package_mode == PACKAGE_MODE_SINGLE_DATA
+        else resolve_facility_output_folder(cur, config=config, group=group)
+    )
+    exam_months = {exam_month_yyyymm(row.get("exam_date_export_value") or row.get("exam_date")) for row in group}
+    if config.package_mode == PACKAGE_MODE_STANDARD and len(exam_months) != 1:
+        raise ValueError(f"EXAM_MONTH_CONFLICT: {sorted(exam_months)}")
+    exam_month = next(iter(exam_months)) if len(exam_months) == 1 else "ALL"
+    if config.package_mode == PACKAGE_MODE_STANDARD:
+        for row in group:
+            ledger_code = _digits(row.get("facility_code"), 10, "ledger.facility_code")
+            if ledger_code != facility_code:
+                raise ValueError(f"FACILITY_CODE_CONFLICT: ledger={ledger_code} master={facility_code}")
+
+    if config.package_mode == PACKAGE_MODE_SINGLE_DATA:
+        cur.execute(
+            f"""
+            SELECT exam_facility_code, exam_facility_name, postal_code, address, phone_number
+            FROM {qname(config.master_db)}.exam_facilities
+            WHERE exam_facility_code = %s AND is_active = 1
+            ORDER BY exam_facility_id DESC LIMIT 1
+            """,
+            (facility_code,),
+        )
+        submission_master = cur.fetchone()
+        if not submission_master:
+            raise ValueError(f"SUBMISSION_FACILITY_NOT_FOUND: {facility_code}")
+    else:
+        submission_master = {
+            "exam_facility_name": first["master_facility_name"],
+            "postal_code": first.get("master_facility_postal_code"),
+            "address": first.get("master_facility_address"),
+            "phone_number": first.get("master_facility_phone_number"),
+        }
+    facility = Facility(code=facility_code, name=str(submission_master["exam_facility_name"]), postal_code=normalize_postal_code_export(submission_master.get("postal_code")), address=normalize_address_export(submission_master.get("address")), phone=normalize_phone_number_export(submission_master.get("phone_number")))
     output_base_root = resolve_output_base_root(result_root, config)
     output_root = output_base_root / folder_name / UPLOAD_DIR_NAME
     month_output_root = output_root / timestamp / exam_month
@@ -802,7 +841,14 @@ def build_group(
             )
             if not items:
                 raise ValueError(f"NO_VALID_EXAM_ITEMS: case_id={row['exam_export_case_id']}")
-            content = xml_bytes(build_clinical_document(person, facility, items, file_date))
+            person_facility = Facility(
+                code=_digits(row["master_facility_code"], 10, "person.facility_code"),
+                name=str(row["master_facility_name"]),
+                postal_code=normalize_postal_code_export(row.get("master_facility_postal_code")),
+                address=normalize_address_export(row.get("master_facility_address")),
+                phone=normalize_phone_number_export(row.get("master_facility_phone_number")),
+            )
+            content = xml_bytes(build_clinical_document(person, person_facility, items, file_date))
             validate_xml(content, bundle_dir / "hc08_V08.xsd")
             filename = person_xml_file_name(facility_code, file_date, split_no, sequence)
             (data_dir / filename).write_bytes(content)
@@ -896,16 +942,17 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                         continue
                     ready.append(row)
                 summary.candidates_ready = len(ready)
-                groups: dict[tuple[int, str, str], list[dict[str, Any]]] = defaultdict(list)
-                for row in ready:
-                    insurer = _digits(row.get("insurer_number"), 8, "insurer_number")
-                    groups[
-                        (
-                            int(row["exam_facility_id"]),
-                            insurer,
-                            exam_month_yyyymm(row.get("exam_date_export_value") or row.get("exam_date")),
-                        )
-                    ].append(row)
+                groups: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+                if config.package_mode == PACKAGE_MODE_SINGLE_DATA:
+                    insurers = {_digits(row.get("insurer_number"), 8, "insurer_number") for row in ready}
+                    if len(insurers) > 1:
+                        raise ValueError(f"MULTIPLE_INSURERS_NOT_ALLOWED: {sorted(insurers)}")
+                    if ready:
+                        groups[("single_data", next(iter(insurers)))].extend(ready)
+                else:
+                    for row in ready:
+                        insurer = _digits(row.get("insurer_number"), 8, "insurer_number")
+                        groups[(int(row["exam_facility_id"]), insurer, exam_month_yyyymm(row.get("exam_date_export_value") or row.get("exam_date")))].append(row)
 
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 operator_rows: list[tuple[str, str, str, str, str, int]] = []

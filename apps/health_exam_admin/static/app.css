@@ -722,6 +722,24 @@ button[type="submit"]:disabled {
   align-items: end;
 }
 
+.export-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.export-mode-form {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.export-mode-form .input-action-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.6fr) minmax(240px, 1fr) auto;
+  gap: 8px;
+}
+
 .case-rebuild-search label:first-child {
   grid-column: 1 / -1;
   max-width: 480px;

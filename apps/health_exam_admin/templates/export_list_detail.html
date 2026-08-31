@@ -58,22 +58,53 @@
         <p class="subtle">この出力リストに追加済みの人だけを対象にします。</p>
       </div>
     </div>
-    <div class="action-row">
+    <div class="export-mode-grid">
       {% if can_review_export %}
-      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export">
+      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export" class="panel-inset export-mode-form">
         <input type="hidden" name="output_mode" value="review">
+        <strong>確認用出力</strong>
+        <label>梱包方式
+          <select name="package_mode" data-review-package-mode>
+            <option value="standard">健診機関・受診月別</option>
+            <option value="single_data">リスト全員を単一DATA</option>
+          </select>
+        </label>
+        <label data-single-data-facility hidden>単一DATAの送付元健診機関
+          <span class="input-action-row">
+            <input id="single-data-submission-facility-code" name="submission_facility_code" placeholder="健診機関コード" readonly disabled>
+            <input id="single-data-submission-facility-display" placeholder="健診機関を選択" readonly>
+            <button type="button" class="ghost-button compact-action-button" data-alias-facility-picker-open data-target-input="single-data-submission-facility-code" data-target-display-input="single-data-submission-facility-display" data-target-value="code" data-modal-open="single-data-facility-picker-modal">選択</button>
+          </span>
+        </label>
         <button class="ghost-button" type="submit">確認用に出力</button>
       </form>
       {% endif %}
       {% if can_export %}
-      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export">
+      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export" class="panel-inset export-mode-form">
         <input type="hidden" name="output_mode" value="official">
+        <input type="hidden" name="package_mode" value="standard">
+        <strong>本番出力</strong>
+        <label>梱包方式<input value="健診機関・受診月別（固定）" disabled></label>
         <button type="submit">03フォルダへ本番出力</button>
       </form>
       {% endif %}
     </div>
   </section>
   {% endif %}
+
+  <div id="single-data-facility-picker-modal" class="edit-modal" hidden data-alias-facility-picker-modal>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="single-data-facility-picker-title">
+      <div class="edit-modal__head"><div><p class="eyebrow">Facility Picker</p><h2 id="single-data-facility-picker-title">送付元健診機関を選択</h2></div><button type="button" class="ghost-button" data-modal-close>閉じる</button></div>
+      <div class="export-facility-search alias-facility-search">
+        <label class="alias-facility-search__code"><span>コード</span><input data-alias-facility-search-code data-modal-focus placeholder="健診機関コード"></label>
+        <label class="alias-facility-search__prefecture"><span>都道府県</span><input data-alias-facility-search-prefecture list="single-data-facility-prefectures" placeholder="東京都"><datalist id="single-data-facility-prefectures">{% for prefecture in prefecture_options %}<option value="{{ prefecture }}"></option>{% endfor %}</datalist></label>
+        <label class="alias-facility-search__keyword"><span>キーワード</span><input data-alias-facility-search-keyword placeholder="名称 / 住所"></label>
+        <button type="button" class="primary-button" data-alias-facility-search>検索</button>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel"><table class="data-table compact-table"><thead><tr><th>健診機関</th><th>ID/コード</th><th>所在地</th><th>操作</th></tr></thead><tbody data-alias-facility-results><tr><td colspan="4">コードまたはキーワードで検索してください。</td></tr></tbody></table></div>
+    </section>
+  </div>
 
   {% if can_review_export %}
   <section class="panel">

@@ -624,6 +624,21 @@ FastAPI管理画面からの確認用出力では、確認用ZIPを出力リス�
 確認用ZIPは正式な `xml_export_zips` / `xml_export_members` には記録しない。
 そのため、正式出力済みcaseであっても確認用には再生成できるようにし、確認用出力では既出力除外条件を適用しない。
 
+### Package Mode
+
+出力先を表す `output_mode` と、ZIPのまとめ方を表す `package_mode` は別の軸として扱う。
+
+| output_mode | 選択可能なpackage_mode |
+| --- | --- |
+| `official` | `standard` 固定 |
+| `review` | `standard` / `single_data` |
+
+`standard` は従来どおり、健診機関・保険者・受診月ごとにZIPを分ける。
+
+`single_data` は確認用出力に限り、出力リストの対象者全員を1つの `DATA/` に格納する。このモードでは `submission_facility_code` を必須とし、ZIP名、個人XMLファイル名、`ix08_V08.xml` の送付元健診機関番号に使用する。個人XML本文の実施健診機関は各caseの健診機関を維持し、送付元コードで上書きしない。
+
+出力対象に複数の保険者番号が含まれる場合、`single_data` は `MULTIPLE_INSURERS_NOT_ALLOWED` で停止し、ZIPを作成しない。本番出力では誤送付防止のため `single_data` を選択できず、サーバ側でも `standard` へ強制する。
+
 最終出力物は以下の命名規則で作るZIPである。
 個人XML名とZIP内部の構成は公式仕様を正とし、旧exporterの実装は補助的に参照する。
 

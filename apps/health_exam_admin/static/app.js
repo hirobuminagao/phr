@@ -205,6 +205,19 @@
     });
   }
 
+  for (const select of document.querySelectorAll("[data-review-package-mode]")) {
+    const form = select.closest("form");
+    const facilityField = form?.querySelector("[data-single-data-facility]");
+    const facilityCode = form?.querySelector("input[name='submission_facility_code']");
+    const syncPackageMode = () => {
+      const singleData = select.value === "single_data";
+      if (facilityField) facilityField.hidden = !singleData;
+      if (facilityCode) facilityCode.disabled = !singleData;
+    };
+    select.addEventListener("change", syncPackageMode);
+    syncPackageMode();
+  }
+
   for (const input of document.querySelectorAll("[data-live-filter-input]")) {
     const tableSelector = input.getAttribute("data-live-filter-input");
     const table = tableSelector ? document.querySelector(tableSelector) : null;

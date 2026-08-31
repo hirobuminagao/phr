@@ -9276,9 +9276,15 @@ def remove_export_list_case(
     return int(cur.rowcount or 0)
 
 
-def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -> str:
+def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str, package_mode: str = "standard", submission_facility_code: str = "") -> str:
     if output_mode not in {"review", "official"}:
         raise ValueError("OUTPUT_MODE_INVALID")
+    if output_mode == "official":
+        package_mode = "standard"
+    if package_mode not in {"standard", "single_data"}:
+        raise ValueError("PACKAGE_MODE_INVALID")
+    if package_mode == "single_data" and not submission_facility_code.strip():
+        raise ValueError("単一DATAでは送付元健診機関を選択してください。")
     script_path = REPO_ROOT / "scripts" / "from_medical" / "04_export_hia_xml.py"
     cmd = [
         sys.executable,
@@ -9288,7 +9294,11 @@ def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str) -
         "--output-mode",
         output_mode,
         "--no-latest-xml-export-list",
+        "--package-mode",
+        package_mode,
     ]
+    if package_mode == "single_data":
+        cmd.extend(["--submission-facility-code", submission_facility_code.strip()])
     if output_mode == "review":
         cmd.extend(["--include-exported", "--review-output-root", str(HIA_XML_REVIEW_EXPORT_ROOT_DIR)])
     completed = subprocess.run(
@@ -19030,6 +19040,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "can_edit": has_permission(user, "export_lists.edit"),
             "can_review_export": has_permission(user, "xml_export.review"),
             "can_export": has_permission(user, "xml_export.official"),
+            "prefecture_options": PREFECTURE_OPTIONS,
         },
     )
 
@@ -19136,12 +19147,14 @@ async def export_list_run(request: Request, xml_export_list_id: int) -> Response
         return user
     form = await read_form(request)
     output_mode = (form.get("output_mode") or "review").strip().lower()
+    package_mode = (form.get("package_mode") or "standard").strip().lower()
+    submission_facility_code = (form.get("submission_facility_code") or "").strip()
     required_permission = "xml_export.official" if output_mode == "official" else "xml_export.review"
     if not has_permission(user, required_permission):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     try:
-        result = run_hia_xml_export_from_list(xml_export_list_id=xml_export_list_id, output_mode=output_mode)
+        result = run_hia_xml_export_from_list(xml_export_list_id=xml_export_list_id, output_mode=output_mode, package_mode=package_mode, submission_facility_code=submission_facility_code)
     except Exception as exc:
         message = str(exc).strip() or type(exc).__name__
         return RedirectResponse(
