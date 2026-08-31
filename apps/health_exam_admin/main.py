@@ -32,7 +32,7 @@ from starlette.background import BackgroundTask
 from scripts.lib.csv.csv_loader import load_csv_result
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.schemas import CSV_MAPPING_LAB
-from scripts.lib.db.lookup.event import get_event_year
+from scripts.lib.db.lookup.event import get_event_insurer_number, get_event_year
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.etl.metrics import RunMetrics
 from scripts.lib.etl.runs import finish_run, start_run
@@ -225,6 +225,14 @@ WORK_PERMISSION_ITEMS = (
 )
 
 BASIC_INFO_CORRECTION_FIELDS: dict[str, dict[str, Any]] = {
+    "report_codes": {
+        "label": "報告区分 / プログラムコード",
+        "case_value_column": "health_exam_report_category",
+        "case_secondary_value_column": "program_code",
+        "case_source_column": "report_code_resolution_source",
+        "case_reason_column": "report_code_resolution_reason",
+        "composite": True,
+    },
     "exam_date": {
         "label": "健診実施日",
         "case_value_column": "exam_date_export_value",
@@ -7384,6 +7392,8 @@ EXAM_EXPORT_CASE_CSV_FIELD_GROUPS: list[dict[str, Any]] = [
             ("exam_date", "受診日"),
             ("health_exam_report_category", "報告区分"),
             ("program_code", "プログラムコード"),
+            ("report_code_resolution_source", "報告コード確定元"),
+            ("report_code_resolution_reason", "報告コード確定理由"),
         ],
     },
     {
@@ -8079,6 +8089,12 @@ def load_exam_export_case_check_rows(cur: Any, *, exam_export_case_id: int, limi
 
 
 def _case_basic_info_display_value(case: Mapping[str, Any], field_code: str) -> str | None:
+    if field_code == "report_codes":
+        report_category = case.get("health_exam_report_category")
+        program_code = case.get("program_code")
+        if report_category in (None, "") and program_code in (None, ""):
+            return None
+        return f"{report_category or ''}|{program_code or ''}"
     if field_code == "exam_date":
         value = case.get("exam_date_export_value") or case.get("exam_date")
         return None if value in (None, "") else str(value)
@@ -8104,6 +8120,15 @@ def normalize_basic_info_correction_value(
     value = raw_value.strip()
     if not value:
         return None, "ERROR", "VALUE_REQUIRED"
+    if field_code == "report_codes":
+        values = [part.strip() for part in value.split("|", 1)]
+        if len(values) != 2 or not values[0] or not values[1]:
+            return None, "ERROR", "REPORT_CATEGORY_AND_PROGRAM_CODE_REQUIRED"
+        if not re.fullmatch(r"[0-9]{2}", values[0]):
+            return None, "ERROR", "INVALID_REPORT_CATEGORY"
+        if not re.fullmatch(r"[0-9]{3}", values[1]):
+            return None, "ERROR", "INVALID_PROGRAM_CODE"
+        return f"{values[0]}|{values[1]}", "OK", None
     if field_code == "exam_date":
         result = normalize_date_to_ymd_and_compact(value, purpose="exam_date")
         normalized = result.get("field_norm")
@@ -8182,6 +8207,7 @@ def build_basic_info_correction_rows(
                 "field_code": field_code,
                 "label": config["label"],
                 "current_value": current_value,
+                "current_values": current_value.split("|", 1) if field_code == "report_codes" and current_value else [],
                 "correction": correction,
                 "has_active_correction": correction.get("correction_status") == "ACTIVE",
             }
@@ -8285,8 +8311,17 @@ def update_exam_case_basic_info_correction(
         return None
     correction_id = int(correction["exam_case_basic_info_correction_id"])
 
-    update_columns = [f"`{config['case_value_column']}` = %s", "`correction_status` = 'CORRECTED'"]
-    update_params: list[Any] = [normalized_value]
+    if config.get("composite"):
+        primary_value, secondary_value = normalized_value.split("|", 1)
+        update_columns = [
+            f"`{config['case_value_column']}` = %s",
+            f"`{config['case_secondary_value_column']}` = %s",
+            "`correction_status` = 'CORRECTED'",
+        ]
+        update_params: list[Any] = [primary_value, secondary_value]
+    else:
+        update_columns = [f"`{config['case_value_column']}` = %s", "`correction_status` = 'CORRECTED'"]
+        update_params = [normalized_value]
     if config.get("case_source_column"):
         update_columns.append(f"`{config['case_source_column']}` = 'MANUAL_CORRECTION'")
     if config.get("case_reason_column"):
@@ -8368,8 +8403,16 @@ def clear_exam_case_basic_info_correction(
     item = dict(correction)
     config = BASIC_INFO_CORRECTION_FIELDS[field_code]
     restore_value = item.get("source_value")
-    update_columns = [f"`{config['case_value_column']}` = %s"]
-    update_params: list[Any] = [restore_value]
+    if config.get("composite"):
+        restore_values = str(restore_value or "|").split("|", 1)
+        update_columns = [
+            f"`{config['case_value_column']}` = %s",
+            f"`{config['case_secondary_value_column']}` = %s",
+        ]
+        update_params: list[Any] = [restore_values[0] or None, restore_values[1] or None]
+    else:
+        update_columns = [f"`{config['case_value_column']}` = %s"]
+        update_params = [restore_value]
     if config.get("case_source_column"):
         update_columns.append(f"`{config['case_source_column']}` = NULL")
     if config.get("case_reason_column"):
@@ -10948,6 +10991,53 @@ def load_subscriber_insurer_number(cur: Any, subscriber_id: int | None) -> str |
     return _manual_text(row.get("insurer_number") if row else None)
 
 
+def _manual_effective_insurer_number(value: Any) -> str | None:
+    result = normalize_insurer_number(None if value is None else str(value))
+    normalized = result.get("field_norm")
+    if not result.get("ok") or normalized in (None, "", "0"):
+        return None
+    return zero_pad(str(normalized), 8)
+
+
+def resolve_manual_exam_entry_insurer_number(
+    cur: Any,
+    *,
+    event_id: int,
+    source_value: Any,
+    exam_export_case_id: int | None = None,
+    subscriber_id: int | None = None,
+) -> tuple[str | None, str]:
+    source_number = _manual_effective_insurer_number(source_value)
+    if source_number:
+        return source_number, "SOURCE"
+    if exam_export_case_id:
+        cur.execute(
+            f"""
+            SELECT insurer_number_export_value, insurer_number
+            FROM {qname(health_db())}.exam_export_cases
+            WHERE exam_export_case_id = %s
+              AND event_id = %s
+            LIMIT 1
+            """,
+            (exam_export_case_id, event_id),
+        )
+        case = cur.fetchone() or {}
+        case_number = _manual_effective_insurer_number(
+            case.get("insurer_number_export_value") or case.get("insurer_number")
+        )
+        if case_number:
+            return case_number, "LINKED_CASE"
+    event_number = _manual_effective_insurer_number(
+        get_event_insurer_number(cur, event_id=event_id, dev_db=dev_db())
+    )
+    if event_number:
+        return event_number, "EVENT"
+    subscriber_number = _manual_effective_insurer_number(load_subscriber_insurer_number(cur, subscriber_id))
+    if subscriber_number:
+        return subscriber_number, "SUBSCRIBER"
+    return None, "UNRESOLVED"
+
+
 def insert_manual_exam_entry_draft(
     cur: Any,
     *,
@@ -10958,9 +11048,14 @@ def insert_manual_exam_entry_draft(
     user_id: int,
 ) -> int:
     subscriber_id = _optional_int(source_payload.get("subscriber_id"))
-    insurer_number = _manual_text(source_payload.get("insurer_number")) or load_subscriber_insurer_number(
+    event_id = int(event_id)
+    exam_export_case_id = _optional_int(source_payload.get("exam_export_case_id") or source_payload.get("case_id"))
+    insurer_number, _insurer_source = resolve_manual_exam_entry_insurer_number(
         cur,
-        subscriber_id,
+        event_id=event_id,
+        source_value=source_payload.get("insurer_number"),
+        exam_export_case_id=exam_export_case_id,
+        subscriber_id=subscriber_id,
     )
     cur.execute(
         f"""
@@ -11019,7 +11114,7 @@ def insert_manual_exam_entry_draft(
         (
             event_id,
             entry_purpose,
-            _optional_int(source_payload.get("exam_export_case_id") or source_payload.get("case_id")),
+            exam_export_case_id,
             subscriber_id,
             _manual_text(source_payload.get("hia_subscriber_id")),
             _manual_text(source_payload.get("person_id_custom")),
@@ -11237,6 +11332,13 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
         return None
 
     facility_id = resolve_manual_exam_entry_facility_id(cur, draft)
+    effective_insurer_number, insurer_source = resolve_manual_exam_entry_insurer_number(
+        cur,
+        event_id=int(draft.get("event_id") or 0),
+        source_value=draft.get("insurer_number"),
+        exam_export_case_id=_optional_int(draft.get("exam_export_case_id")),
+        subscriber_id=_optional_int(draft.get("subscriber_id")),
+    )
     criteria = [
         {
             "key": "event_id",
@@ -11266,8 +11368,9 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
         {
             "key": "insurer_number",
             "label": "保険者番号",
-            "value": json_safe_value(draft.get("insurer_number")),
+            "value": json_safe_value(effective_insurer_number),
             "required": True,
+            "note": f"確定元: {insurer_source}",
         },
     ]
     missing = [
@@ -11290,6 +11393,7 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
               facility_code,
               facility_name,
               insurer_number,
+              insurer_number_export_value,
               source_mode,
               updated_at
             FROM {qname(health_db())}.exam_export_cases
@@ -11297,7 +11401,7 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
               AND subscriber_id = %s
               AND exam_date = %s
               AND exam_facility_id = %s
-              AND insurer_number = %s
+              AND COALESCE(insurer_number_export_value, insurer_number) = %s
             ORDER BY exam_export_case_id DESC
             LIMIT 10
             """,
@@ -11306,7 +11410,7 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
                 draft.get("subscriber_id"),
                 draft.get("exam_date"),
                 facility_id,
-                draft.get("insurer_number"),
+                effective_insurer_number,
             ),
         )
         matches = [json_safe_mapping(row) for row in cur.fetchall()]
@@ -11324,6 +11428,7 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
               facility_code,
               facility_name,
               insurer_number,
+              insurer_number_export_value,
               source_mode,
               updated_at
             FROM {qname(health_db())}.exam_export_cases
@@ -11341,7 +11446,8 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
                 case["mismatches"].append("健診実施日")
             if str(case.get("exam_facility_id") or "") != str(facility_id or ""):
                 case["mismatches"].append("健診機関ID")
-            if str(case.get("insurer_number") or "") != str(draft.get("insurer_number") or ""):
+            case_insurer_number = case.get("insurer_number_export_value") or case.get("insurer_number")
+            if str(case_insurer_number or "") != str(effective_insurer_number or ""):
                 case["mismatches"].append("保険者番号")
 
     if missing:
@@ -11405,7 +11511,16 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
     row_sha256 = hashlib.sha256(
         f"manual_exam_entry_draft:{draft_id}:apply:{apply_sequence}".encode("utf-8")
     ).hexdigest()
-    identity = manual_exam_entry_identity_from_draft(draft)
+    effective_insurer_number, insurer_source = resolve_manual_exam_entry_insurer_number(
+        cur,
+        event_id=event_id,
+        source_value=draft.get("insurer_number"),
+        exam_export_case_id=_optional_int(draft.get("exam_export_case_id")),
+        subscriber_id=_optional_int(draft.get("subscriber_id")),
+    )
+    effective_draft = dict(draft)
+    effective_draft["insurer_number"] = effective_insurer_number
+    identity = manual_exam_entry_identity_from_draft(effective_draft)
     person_id_custom = identity.get("person_id_custom") or _manual_text(draft.get("person_id_custom"))
     identity_hash = identity.get("identity_hash")
     match_status = "MANUAL_CONFIRMED" if draft.get("subscriber_id") else "MANUAL_ENTRY"
@@ -11511,7 +11626,7 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
             match_reason,
             document_id,
             _manual_text(draft.get("facility_document_id")),
-            _manual_text(draft.get("insurer_number")),
+            effective_insurer_number,
             exam_facility_id,
             _manual_text(draft.get("facility_code")),
             _manual_text(draft.get("facility_name")),
@@ -19519,6 +19634,8 @@ async def exam_export_case_basic_info_correction(request: Request, exam_export_c
     field_code = str(form.get("field_code") or "").strip()
     action = str(form.get("action") or "save").strip()
     corrected_value = str(form.get("corrected_value") or "").strip()
+    if field_code == "report_codes":
+        corrected_value = f"{corrected_value}|{str(form.get('corrected_value_secondary') or '').strip()}"
     correction_reason = str(form.get("correction_reason") or "").strip()
     if field_code not in BASIC_INFO_CORRECTION_FIELDS:
         return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=補正対象が不正です。", status_code=303)

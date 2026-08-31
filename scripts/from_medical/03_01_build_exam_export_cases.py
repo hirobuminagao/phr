@@ -9,7 +9,7 @@ import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -19,7 +19,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.lib.db.config import load_mysql_base_params
+from scripts.lib.db.lookup.event import get_event_year
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
+from scripts.lib.examination.report_classification import classify_report_codes_by_age, fiscal_year_end_date
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import start_run as etl_start_run
@@ -73,6 +75,109 @@ class BuildCaseSummary:
             f"sources_upserted={self.sources_upserted} review_required={self.review_required} "
             f"skipped={self.skipped} errors={self.errors} dry_run={self.dry_run}"
         )
+
+
+@dataclass(frozen=True)
+class ReportCodeResolution:
+    report_category: str | None
+    program_code: str | None
+    source: str | None
+    reason: str | None
+
+
+REPORT_TO_PROGRAM = {"10": "010", "40": "990"}
+PROGRAM_TO_REPORT = {program: report for report, program in REPORT_TO_PROGRAM.items()}
+
+
+def _text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _birthdate(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = _text(value)
+    if not text:
+        return None
+    for pattern in ("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(text, pattern).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _source_report_codes(row: dict[str, Any]) -> tuple[str | None, str | None]:
+    return (
+        _text(row.get("health_exam_report_category")) or _text(row.get("report_category_code")),
+        _text(row.get("program_code")) or _text(row.get("program_type_code")),
+    )
+
+
+def resolve_report_codes(group: list[dict[str, Any]], *, event_year: int | None) -> ReportCodeResolution:
+    source_rank = {"XML": 0, "CSV": 1, "MANUAL": 2, "PAPER": 3}
+    ordered = sorted(
+        group,
+        key=lambda row: (
+            source_rank.get(str(row.get("source_type") or ""), 9),
+            row.get("check_status") != "OK",
+            int(row.get("exam_ledger_id") or 0),
+        ),
+    )
+    incomplete: list[str] = []
+    for row in ordered:
+        report_category, program_code = _source_report_codes(row)
+        if not report_category and not program_code:
+            continue
+        source_type = str(row.get("source_type") or "SOURCE")
+        if report_category and program_code:
+            return ReportCodeResolution(
+                report_category,
+                program_code,
+                f"{source_type}_EXPLICIT",
+                "SOURCE_EXPLICIT_PAIR",
+            )
+        if report_category in REPORT_TO_PROGRAM:
+            return ReportCodeResolution(
+                report_category,
+                REPORT_TO_PROGRAM[report_category],
+                f"{source_type}_KNOWN_PAIR",
+                "PROGRAM_CODE_COMPLETED_FROM_REPORT_CATEGORY",
+            )
+        if program_code in PROGRAM_TO_REPORT:
+            return ReportCodeResolution(
+                PROGRAM_TO_REPORT[program_code],
+                program_code,
+                f"{source_type}_KNOWN_PAIR",
+                "REPORT_CATEGORY_COMPLETED_FROM_PROGRAM_CODE",
+            )
+        incomplete.append(f"{source_type}:report={report_category or '-'},program={program_code or '-'}")
+
+    reference_date = fiscal_year_end_date(event_year) if event_year is not None else None
+    birthdate = next((parsed for row in ordered if (parsed := _birthdate(row.get("birthdate")))), None)
+    if birthdate and reference_date:
+        report_category, program_code = classify_report_codes_by_age(
+            birthdate=birthdate,
+            reference_date=reference_date,
+        )
+        return ReportCodeResolution(
+            report_category,
+            program_code,
+            "EVENT_AGE_DEFAULT",
+            f"MISSING_SOURCE_CODES: fiscal_year_end={reference_date.isoformat()}",
+        )
+    detail = "; ".join(incomplete)
+    reason = "REPORT_CODES_UNRESOLVED"
+    if detail:
+        reason += f": {detail}"
+    if not birthdate:
+        reason += "; BIRTHDATE_MISSING"
+    if reference_date is None:
+        reason += "; EVENT_YEAR_MISSING"
+    return ReportCodeResolution(None, None, None, reason)
 
 
 def parse_args() -> argparse.Namespace:
@@ -208,7 +313,15 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
           ) AS resolved_subscriber_id,
           COALESCE(el.`exam_date`, eec.`exam_date`) AS resolved_exam_date,
           COALESCE(el.`exam_facility_id`, eec.`exam_facility_id`) AS resolved_exam_facility_id,
-          COALESCE(el.`insurer_number`, eec.`insurer_number`) AS resolved_insurer_number,
+          COALESCE(
+            NULLIF(el.`insurer_number_export_value`, ''),
+            CASE
+              WHEN el.`insurer_number` REGEXP '^0+$' THEN NULL
+              ELSE NULLIF(el.`insurer_number`, '')
+            END,
+            eec.`insurer_number_export_value`,
+            eec.`insurer_number`
+          ) AS resolved_insurer_number,
           COALESCE(el.`facility_code`, eec.`facility_code`) AS resolved_facility_code,
           COALESCE(el.`facility_name`, eec.`facility_name`) AS resolved_facility_name
         FROM {qname(config.health_db)}.`exam_ledgers` AS el
@@ -240,10 +353,11 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
     for row in rows:
         if row.get("subscriber_id") is None and row.get("resolved_subscriber_id") is not None:
             row["subscriber_id"] = row["resolved_subscriber_id"]
+        if row.get("resolved_insurer_number") is not None:
+            row["insurer_number"] = row["resolved_insurer_number"]
         if row.get("manual_exam_export_case_id"):
             row["exam_date"] = row.get("resolved_exam_date")
             row["exam_facility_id"] = row.get("resolved_exam_facility_id")
-            row["insurer_number"] = row.get("resolved_insurer_number")
             row["facility_code"] = row.get("resolved_facility_code")
             row["facility_name"] = row.get("resolved_facility_name")
     return rows
@@ -312,7 +426,13 @@ def merge_status(group: list[dict[str, Any]]) -> tuple[str, str | None]:
     return "REVIEW_REQUIRED", "multiple source ledgers require manual review"
 
 
-def case_params(primary: dict[str, Any], group: list[dict[str, Any]], run_id: int) -> dict[str, Any]:
+def case_params(
+    primary: dict[str, Any],
+    group: list[dict[str, Any]],
+    run_id: int,
+    *,
+    report_codes: ReportCodeResolution,
+) -> dict[str, Any]:
     mode = source_mode(group)
     merge, reason = merge_status(group)
     return {
@@ -331,8 +451,10 @@ def case_params(primary: dict[str, Any], group: list[dict[str, Any]], run_id: in
         "exam_date_export_value": primary.get("exam_date_export_value"),
         "exam_date_export_source": primary.get("exam_date_export_source"),
         "exam_date_export_reason": primary.get("exam_date_export_reason"),
-        "health_exam_report_category": primary.get("health_exam_report_category") or primary.get("report_category_code"),
-        "program_code": primary.get("program_code") or primary.get("program_type_code"),
+        "health_exam_report_category": report_codes.report_category,
+        "program_code": report_codes.program_code,
+        "report_code_resolution_source": report_codes.source,
+        "report_code_resolution_reason": report_codes.reason,
         "name_full_raw": primary.get("name_full_raw"),
         "name_kana_raw": primary.get("name_kana_raw"),
         "name_kana_export_value": primary.get("name_kana_export_value"),
@@ -398,6 +520,8 @@ CASE_COLUMNS = [
     "exam_date_export_reason",
     "health_exam_report_category",
     "program_code",
+    "report_code_resolution_source",
+    "report_code_resolution_reason",
     "name_full_raw",
     "name_kana_raw",
     "name_kana_export_value",
@@ -446,6 +570,7 @@ CASE_COLUMNS = [
 
 
 BASIC_INFO_CORRECTION_CASE_COLUMNS = {
+    "report_codes": ("health_exam_report_category", "report_code_resolution_source", "report_code_resolution_reason"),
     "exam_date": ("exam_date_export_value", "exam_date_export_source", "exam_date_export_reason"),
     "name_kana": ("name_kana_export_value", "name_kana_export_source", "name_kana_export_reason"),
     "insurance_symbol": (
@@ -495,6 +620,23 @@ def reapply_basic_info_corrections(cur: Any, config: BuildCaseConfig, *, case_id
         return
     for row in rows:
         field_code = str(row.get("field_code") or "")
+        if field_code == "report_codes":
+            values = str(row.get("normalized_value") or "|").split("|", 1)
+            if len(values) != 2 or not values[0] or not values[1]:
+                continue
+            cur.execute(
+                f"""
+                UPDATE {qname(config.health_db)}.`exam_export_cases`
+                SET `health_exam_report_category` = %s,
+                    `program_code` = %s,
+                    `report_code_resolution_source` = 'MANUAL_CORRECTION',
+                    `report_code_resolution_reason` = %s,
+                    `correction_status` = 'CORRECTED'
+                WHERE exam_export_case_id = %s
+                """,
+                (values[0], values[1], row.get("correction_reason") or "MANUAL_CORRECTION", case_id),
+            )
+            continue
         columns = BASIC_INFO_CORRECTION_CASE_COLUMNS.get(field_code)
         if not columns:
             continue
@@ -637,9 +779,11 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
             print(summary.message())
             return summary
 
+        event_year = get_event_year(cur, event_id=config.event_id, dev_db=config.dev_db)
         for group in groups:
             primary = choose_primary(group)
-            params = case_params(primary, group, run_id)
+            report_codes = resolve_report_codes(group, event_year=event_year)
+            params = case_params(primary, group, run_id, report_codes=report_codes)
             case_id, action = upsert_case(cur, config, params)
             if action == "inserted":
                 summary.cases_inserted += 1

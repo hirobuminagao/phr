@@ -51,6 +51,9 @@ def test_build_cases_filters_sources_by_existing_case_key() -> None:
     source_sql, source_params = cur.calls[1]
     assert "resolved_subscriber_id = %s" in source_sql
     assert "resolved_exam_date = %s" in source_sql
+    assert "NULLIF(el.`insurer_number_export_value`, '')" in source_sql
+    assert "el.`insurer_number` REGEXP '^0+$'" in source_sql
+    assert "eec.`insurer_number_export_value`" in source_sql
     assert source_params == (2, 100, "2026-06-01", 70, "06139463")
 
 

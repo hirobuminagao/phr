@@ -87,11 +87,17 @@ def _normalize_insurer_number_export(value: Any) -> tuple[str | None, str | None
     return normalized, None
 
 
+def _is_all_zero_insurer_number(value: Any) -> bool:
+    result = normalize_insurer_number(value)
+    return bool(result.get("ok") and result.get("field_norm") == "0")
+
+
 def resolve_insurer_number_completion(
     *,
     source_value: Any,
     event_value: Any,
 ) -> InsurerNumberCompletion:
+    source_is_all_zero = _is_all_zero_insurer_number(source_value)
     source_number, source_reason = _normalize_insurer_number_export(source_value)
     event_number, event_reason = _normalize_insurer_number_export(event_value)
 
@@ -103,10 +109,10 @@ def resolve_insurer_number_completion(
             export_value=None,
         )
 
-    if source_value in (None, ""):
+    if source_value in (None, "") or source_is_all_zero:
         return InsurerNumberCompletion(
             status=INSURER_NUMBER_STATUS_FILLED_FROM_EVENT,
-            reason=None,
+            reason="SOURCE_INSURER_NUMBER_ALL_ZERO" if source_is_all_zero else None,
             source=INSURER_NUMBER_SOURCE_EVENT,
             export_value=event_number,
         )

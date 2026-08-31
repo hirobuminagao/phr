@@ -459,13 +459,17 @@ Current as of 2026-08-05.
 - `event_id = 2` は2026年度定期健診であり、特定健診対象判定と不足コード補完では年度末 `2027-03-31` 時点の満年齢を使う。
 - コース名称、検査項目構成、特定健診判定からは報告区分を推測しない。今回の自動補完はeventの健診年度と年度末年齢だけを根拠とする。
 - 施設側コースコードは厚生労働省プログラムコードとして使用しない。小禄病院の `健診コースコード` mappingも無効化する。
+- CSV/XMLの保険者番号が全桁0の場合は実番号ではなくプレースホルダー欠損として扱い、eventの保険者番号を出力用値へ補完する。原本値はraw側に残し、補完元と理由を記録する。
 
 ### CSV to HIA XML Export
 
 - `health_exam_report_category` と厚生労働省プログラムコードは、CSV mappingによって正しい値が登録されている場合は、その値をXML出力に使用する。
 - mapping値がない場合はCSV取込時にevent年齢規則で補完されたledger値をXML出力に使用する。
 - XML取込では、元XMLの `ClinicalDocument/code` を `exam_ledgers.report_category_code`、`documentationOf/serviceEvent/code` を `exam_ledgers.program_type_code` に保存する。
-- XML由来コードは元XMLの明示値を正とし、event年齢規則による上書きや補完は行わない。
+- XML由来コードは元XMLの明示値を正とし、event年齢規則による上書きは行わない。
+- case作成時にXML、CSV等の順で同一source内のコードペアを解決し、全sourceで不足する場合だけevent年度末年齢からcaseへ補完する。
+- 補完元と理由はcaseへ保存し、受領値と年齢補完を区別する。
+- 自動解決できない報告区分・プログラムコードはcase詳細から2項目をセットで手動補正できる。片方だけの保存は認めず、補正理由を必須とし、case再作成後も有効な補正を再適用する。
 - 既存XMLは `02_import_xml.py --include-imported` で再取込し、新カラムをbackfillできるようにする。
 - XML検査値は `VALID` のみ出力する。`WARNING/SKIPPED` は初期版ではentryを省略し、`INVALID` も該当entryを出力しない。
 - 妊娠中等の確認済み理由により法定項目が `MISSING` の場合は、不足項目を `exam_case_check_review_items` のcase用確認項目として作成し、その確認状態を記録してXML出力を許可できる。

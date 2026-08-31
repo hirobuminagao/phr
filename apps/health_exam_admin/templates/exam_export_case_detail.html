@@ -90,7 +90,7 @@
       <summary>
         <span>
           <strong>基本情報補正</strong>
-          <small>健診実施日・受診券・氏名カナ・記号番号・郵便番号・住所などをcase単位で補正します。</small>
+          <small>報告区分・プログラムコード・健診実施日・受診券・氏名カナ・記号番号・住所などをcase単位で補正します。</small>
         </span>
         <span class="summary-action">補正する</span>
       </summary>
@@ -135,6 +135,13 @@
                 <td>
                   <form method="post" action="/exam-export-cases/{{ case.exam_export_case_id }}/basic-info-correction" class="basic-info-correction-form">
                     <input type="hidden" name="field_code" value="{{ row.field_code }}">
+                    {% if row.field_code == "report_codes" %}
+                    {% set corrected_codes = (correction.corrected_value or row.current_value or '|').split('|', 1) %}
+                    <div class="basic-info-correction-pair">
+                      <label><span>報告区分</span><input name="corrected_value" value="{{ corrected_codes[0] }}" inputmode="numeric" maxlength="2" placeholder="10"></label>
+                      <label><span>プログラム</span><input name="corrected_value_secondary" value="{{ corrected_codes[1] if corrected_codes|length > 1 else '' }}" inputmode="numeric" maxlength="3" placeholder="010"></label>
+                    </div>
+                    {% else %}
                     <input
                       name="corrected_value"
                       value="{{ correction.corrected_value or row.current_value or '' }}"
@@ -144,6 +151,7 @@
                       data-date-display-format="hyphen"
                       {% endif %}
                     >
+                    {% endif %}
                     <textarea name="correction_reason" rows="2" placeholder="補正理由。保存時は必須">{{ correction.correction_reason or "" }}</textarea>
                     <div class="inline-action-row">
                       <button type="submit" name="action" value="save">保存</button>

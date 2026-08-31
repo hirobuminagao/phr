@@ -441,6 +441,10 @@ XMLは厚生労働省標準様式によって構造、namecode、型、単位が
 
 `exam_ledgers` はXMLの `ClinicalDocument/code` を `report_category_code`、`documentationOf/serviceEvent/code` を `program_type_code` として保存する。
 XML由来コードは元XMLの明示値を正とし、event年齢規則で上書きしない。
+case作成時は、XMLの明示値、XML内の既知コードペア補完、CSV等の明示値、CSV等の既知コードペア補完の順に確定する。別sourceの片方ずつは結合しない。
+全sourceに利用可能なコードがない場合に限り、event年度末日の満年齢から `10/010` または `40/990` をcaseへ補完する。
+caseには確定値とともに `report_code_resolution_source` / `report_code_resolution_reason` を保存し、明示値と年齢補完を識別できるようにする。
+自動解決できない場合はcase詳細の基本情報補正で報告区分とプログラムコードをセット入力し、理由と変更履歴を保存する。補正はcase再作成後にも再適用する。
 既存XMLは `02_import_xml.py --include-imported` で再取込し、追加カラムをbackfillする。
 
 検査値の結合keyは、原則として `namecode + occurrence_no` とする。

@@ -6923,6 +6923,23 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   width: 100%;
 }
 
+.basic-info-correction-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.basic-info-correction-pair label {
+  display: grid;
+  gap: 4px;
+}
+
+.basic-info-correction-pair label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .basic-info-correction-form textarea {
   min-height: 44px;
 }
