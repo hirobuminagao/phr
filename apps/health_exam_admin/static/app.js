@@ -189,6 +189,22 @@
     });
   }
 
+  for (const button of document.querySelectorAll("[data-clear-input-ids]")) {
+    button.addEventListener("click", () => {
+      const ids = String(button.getAttribute("data-clear-input-ids") || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      for (const id of ids) {
+        const input = document.getElementById(id);
+        if (!input) continue;
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+  }
+
   for (const input of document.querySelectorAll("[data-live-filter-input]")) {
     const tableSelector = input.getAttribute("data-live-filter-input");
     const table = tableSelector ? document.querySelector(tableSelector) : null;

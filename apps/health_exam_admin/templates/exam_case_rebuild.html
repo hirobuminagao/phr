@@ -37,11 +37,31 @@
           {% endfor %}
         </select>
       </label>
-      <label>HIA加入者ID<input name="hia_subscriber_id" value="{{ search_filters.hia_subscriber_id }}" placeholder="IDの一部"></label>
-      <label>記号<input name="insurance_symbol" value="{{ search_filters.insurance_symbol }}" placeholder="例: ABC"></label>
-      <label>番号<input name="insurance_number" value="{{ search_filters.insurance_number }}" placeholder="例: 12345"></label>
-      <label>生年月日<input name="birth" value="{{ search_filters.birth }}" placeholder="例: 1980-01"></label>
-      <label>氏名かな<input name="name_kana" value="{{ search_filters.name_kana }}" placeholder="例: ヤマダ"></label>
+      <div class="case-rebuild-person-filters">
+        <label>HIA加入者ID<input name="hia_subscriber_id" value="{{ search_filters.hia_subscriber_id }}" placeholder="IDの一部"></label>
+        <label>記号<input name="insurance_symbol" value="{{ search_filters.insurance_symbol }}" placeholder="例: ABC"></label>
+        <label>番号<input name="insurance_number" value="{{ search_filters.insurance_number }}" placeholder="例: 12345"></label>
+        <label>生年月日<input name="birth" value="{{ search_filters.birth }}" placeholder="例: 1980-01"></label>
+        <label>氏名かな<input name="name_kana" value="{{ search_filters.name_kana }}" placeholder="例: ヤマダ"></label>
+      </div>
+      <div class="case-rebuild-exam-filters">
+        <label class="case-rebuild-facility-filter">
+          健診機関
+          <span class="input-action-row">
+            <input id="case-rebuild-facility-id" type="hidden" name="exam_facility_id" value="{{ search_filters.exam_facility_id }}">
+            <input id="case-rebuild-facility-display" name="exam_facility_display" value="{{ search_filters.exam_facility_display }}" placeholder="健診機関を選択" readonly>
+            <button type="button" class="ghost-button compact-action-button" data-alias-facility-picker-open data-target-input="case-rebuild-facility-id" data-target-display-input="case-rebuild-facility-display" data-target-value="exam_facility_id" data-modal-open="case-rebuild-facility-picker-modal">選択</button>
+            <button type="button" class="ghost-button compact-action-button" data-clear-input-ids="case-rebuild-facility-id,case-rebuild-facility-display">解除</button>
+          </span>
+        </label>
+        <label>
+          受診月
+          <input name="exam_month" value="{{ search_filters.exam_month }}" list="case-rebuild-month-options" placeholder="例: 2026-05">
+          <datalist id="case-rebuild-month-options">
+            {% for month in exam_month_options %}<option value="{{ month }}"></option>{% endfor %}
+          </datalist>
+        </label>
+      </div>
       <button type="submit">検索</button>
     </form>
   </section>
@@ -169,4 +189,23 @@
   </section>
   {% endif %}
 </main>
+
+<div id="case-rebuild-facility-picker-modal" class="edit-modal" hidden data-alias-facility-picker-modal>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="case-rebuild-facility-picker-title">
+    <div class="edit-modal__head">
+      <div><p class="eyebrow">Facility Picker</p><h2 id="case-rebuild-facility-picker-title">健診機関を選択</h2></div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+    <div class="export-facility-search alias-facility-search">
+      <label class="alias-facility-search__code"><span>コード</span><input data-alias-facility-search-code data-modal-focus placeholder="健診機関コード / 医療機関コード"></label>
+      <label class="alias-facility-search__prefecture"><span>都道府県</span><input data-alias-facility-search-prefecture list="case-rebuild-facility-prefectures" placeholder="東京都"><datalist id="case-rebuild-facility-prefectures">{% for prefecture in prefecture_options %}<option value="{{ prefecture }}"></option>{% endfor %}</datalist></label>
+      <label class="alias-facility-search__keyword"><span>キーワード</span><input data-alias-facility-search-keyword placeholder="名称 / 住所"></label>
+      <button type="button" class="primary-button" data-alias-facility-search>検索</button>
+    </div>
+    <div class="table-panel export-facility-picker-table-panel">
+      <table class="data-table compact-table"><thead><tr><th>健診機関</th><th>ID/コード</th><th>所在地</th><th>操作</th></tr></thead><tbody data-alias-facility-results><tr><td colspan="4">コードまたはキーワードで検索してください。</td></tr></tbody></table>
+    </div>
+  </section>
+</div>
 {% endblock %}

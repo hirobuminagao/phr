@@ -717,7 +717,7 @@ button[type="submit"]:disabled {
 
 .case-rebuild-search {
   display: grid;
-  grid-template-columns: minmax(210px, 1.3fr) repeat(3, minmax(130px, 0.7fr)) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
 }
@@ -725,6 +725,25 @@ button[type="submit"]:disabled {
 .case-rebuild-search label:first-child {
   grid-column: 1 / -1;
   max-width: 480px;
+}
+
+.case-rebuild-person-filters {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(210px, 1.3fr) repeat(3, minmax(130px, 0.7fr)) minmax(180px, 1fr);
+  gap: 10px;
+}
+
+.case-rebuild-exam-filters {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(160px, 0.35fr);
+  gap: 10px;
+}
+
+.case-rebuild-facility-filter .input-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
 }
 
 .case-rebuild-search input,
@@ -8346,6 +8365,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 @media (max-width: 900px) {
   .case-rebuild-search,
+  .case-rebuild-person-filters,
+  .case-rebuild-exam-filters,
   .case-rebuild-candidates,
   .case-rebuild-subject-grid {
     grid-template-columns: 1fr;

@@ -6213,6 +6213,14 @@ def load_subscriber_match_candidate_rows(
     if candidate_hia_subscriber_id:
         filter_parts.append("s.hia_subscriber_id LIKE %s")
         filter_params.append(f"%{candidate_hia_subscriber_id}%")
+    candidate_subscriber_ids = tuple(
+        int(value)
+        for value in (candidate_filters.get("subscriber_ids") or ())
+        if str(value).isdigit() and int(value) > 0
+    )
+    if candidate_subscriber_ids:
+        filter_parts.append(f"s.id IN ({', '.join(['%s'] * len(candidate_subscriber_ids))})")
+        filter_params.extend(candidate_subscriber_ids)
     if not where_parts and not filter_parts:
         return []
     where_sql_parts: list[str] = []
@@ -9536,6 +9544,77 @@ def load_case_rebuild_ledgers(
         (event_id, subscriber_id, subscriber_id, hia_subscriber_id or "", hia_subscriber_id or ""),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def load_case_rebuild_scope_subscriber_ids(
+    cur: Any,
+    *,
+    event_id: int,
+    exam_facility_id: int | None,
+    exam_month: str,
+) -> tuple[int, ...]:
+    case_filters = ["eec.event_id = %s", "eec.subscriber_id IS NOT NULL"]
+    ledger_filters = ["el.event_id = %s"]
+    case_params: list[Any] = [event_id]
+    ledger_params: list[Any] = [event_id]
+    if exam_facility_id is not None:
+        case_filters.append("eec.exam_facility_id = %s")
+        ledger_filters.append("el.exam_facility_id = %s")
+        case_params.append(exam_facility_id)
+        ledger_params.append(exam_facility_id)
+    if exam_month:
+        case_filters.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
+        ledger_filters.append("DATE_FORMAT(el.exam_date, '%Y-%m') = %s")
+        case_params.append(exam_month)
+        ledger_params.append(exam_month)
+    cur.execute(
+        f"""
+        SELECT DISTINCT scoped.subscriber_id
+        FROM (
+          SELECT eec.subscriber_id
+          FROM {qname(health_db())}.exam_export_cases AS eec
+          WHERE {' AND '.join(case_filters)}
+
+          UNION
+
+          SELECT COALESCE(el.subscriber_id, d.subscriber_id, s.id) AS subscriber_id
+          FROM {qname(health_db())}.exam_ledgers AS el
+          LEFT JOIN {qname(health_db())}.manual_exam_entry_drafts AS d
+            ON el.source_type IN ('PAPER', 'MANUAL')
+           AND CAST(d.manual_exam_entry_draft_id AS CHAR) = JSON_UNQUOTE(
+             JSON_EXTRACT(el.raw_row_json, '$.manual_exam_entry_draft_id')
+           )
+          LEFT JOIN {qname(dev_db())}.subscribers AS s
+            ON s.hia_subscriber_id = el.hia_subscriber_id
+          WHERE {' AND '.join(ledger_filters)}
+        ) AS scoped
+        WHERE scoped.subscriber_id IS NOT NULL
+        ORDER BY scoped.subscriber_id
+        """,
+        (*case_params, *ledger_params),
+    )
+    return tuple(int(row["subscriber_id"]) for row in cur.fetchall())
+
+
+def load_case_rebuild_month_options(cur: Any, *, event_id: int, limit: int = 36) -> list[str]:
+    cur.execute(
+        f"""
+        SELECT exam_month
+        FROM (
+          SELECT DATE_FORMAT(exam_date, '%Y-%m') AS exam_month
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE event_id = %s AND exam_date IS NOT NULL
+          UNION
+          SELECT DATE_FORMAT(exam_date, '%Y-%m') AS exam_month
+          FROM {qname(health_db())}.exam_ledgers
+          WHERE event_id = %s AND exam_date IS NOT NULL
+        ) AS months
+        ORDER BY exam_month DESC
+        LIMIT %s
+        """,
+        (event_id, event_id, limit),
+    )
+    return [str(row["exam_month"]) for row in cur.fetchall()]
 
 
 def load_recent_exam_processing_runs(cur: Any, *, event_id: int, limit: int = 20) -> list[dict[str, Any]]:
@@ -12916,6 +12995,9 @@ def exam_case_rebuild(request: Request) -> Response:
         "name_kana": str(request.query_params.get("name_kana") or "").strip(),
         "birth": str(request.query_params.get("birth") or "").strip(),
         "hia_subscriber_id": str(request.query_params.get("hia_subscriber_id") or "").strip(),
+        "exam_facility_id": str(request.query_params.get("exam_facility_id") or "").strip(),
+        "exam_facility_display": str(request.query_params.get("exam_facility_display") or "").strip(),
+        "exam_month": str(request.query_params.get("exam_month") or "").strip(),
     }
     has_search_filters = any(search_filters.values())
     search_query = urlencode({key: value for key, value in search_filters.items() if value})
@@ -12925,13 +13007,29 @@ def exam_case_rebuild(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             events = load_event_options(cur)
+            exam_facility_id = _optional_int(search_filters["exam_facility_id"])
+            has_exam_scope = exam_facility_id is not None or bool(search_filters["exam_month"])
+            scoped_subscriber_ids = (
+                load_case_rebuild_scope_subscriber_ids(
+                    cur,
+                    event_id=event_id,
+                    exam_facility_id=exam_facility_id,
+                    exam_month=search_filters["exam_month"],
+                )
+                if has_exam_scope
+                else ()
+            )
+            candidate_filters = dict(search_filters)
+            if has_exam_scope:
+                candidate_filters["subscriber_ids"] = scoped_subscriber_ids
             candidates = load_subscriber_match_candidate_rows(
                 cur,
                 ledger=None,
                 event_id=event_id,
-                candidate_filters=search_filters,
+                candidate_filters=candidate_filters,
                 limit=50,
-            ) if has_search_filters else []
+            ) if has_search_filters and (not has_exam_scope or scoped_subscriber_ids) else []
+            exam_month_options = load_case_rebuild_month_options(cur, event_id=event_id)
             selected_subscriber = (
                 load_case_rebuild_subscriber(cur, subscriber_id=subscriber_id)
                 if subscriber_id is not None
@@ -12966,6 +13064,8 @@ def exam_case_rebuild(request: Request) -> Response:
             "selected_event_id": event_id,
             "search_filters": search_filters,
             "search_query": search_query,
+            "exam_month_options": exam_month_options,
+            "prefecture_options": PREFECTURE_OPTIONS,
             "candidates": candidates,
             "selected_subscriber": selected_subscriber,
             "cases": cases,
@@ -13018,6 +13118,7 @@ async def run_exam_case_rebuild(request: Request) -> Response:
                 subscriber_id=subscriber_id,
                 hia_subscriber_id=(selected_subscriber or {}).get("hia_subscriber_id"),
             ) if selected_subscriber else []
+            exam_month_options = load_case_rebuild_month_options(cur, event_id=event_id)
             running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
             conn.commit()
         except Exception:
@@ -13111,8 +13212,13 @@ async def run_exam_case_rebuild(request: Request) -> Response:
                 "name_kana": "",
                 "birth": "",
                 "hia_subscriber_id": "",
+                "exam_facility_id": "",
+                "exam_facility_display": "",
+                "exam_month": "",
             },
             "search_query": "",
+            "exam_month_options": exam_month_options,
+            "prefecture_options": PREFECTURE_OPTIONS,
             "candidates": [],
             "selected_subscriber": selected_subscriber,
             "cases": cases,
