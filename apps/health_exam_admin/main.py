@@ -9554,7 +9554,14 @@ def load_case_rebuild_scope_subscriber_ids(
     exam_month: str,
 ) -> tuple[int, ...]:
     case_filters = ["eec.event_id = %s", "eec.subscriber_id IS NOT NULL"]
-    ledger_filters = ["el.event_id = %s"]
+    ledger_filters = [
+        "el.event_id = %s",
+        "el.source_type IN ('XML', 'CSV', 'PAPER', 'MANUAL')",
+        "COALESCE(el.row_status, '') <> 'REVERTED_TO_DRAFT'",
+        "(el.subscriber_match_status = 'MATCHED' OR "
+        "(el.source_type IN ('PAPER', 'MANUAL') AND "
+        "el.subscriber_match_status IN ('MANUAL_ENTRY', 'MANUAL_CONFIRMED')))",
+    ]
     case_params: list[Any] = [event_id]
     ledger_params: list[Any] = [event_id]
     if exam_facility_id is not None:

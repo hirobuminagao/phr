@@ -78,6 +78,11 @@ python scripts/from_medical/03_04_check_exam_export_cases.py --event-id 2 --case
 既存caseがない場合は、対象加入者の利用可能なledgerを `--subscriber-id` で絞り、
 case作成、採用値作成、case単位チェックまで続けて実行します。
 
+画面の検索は、HIA加入者ID、記号、番号、生年月日、氏名かなの部分一致に加え、
+健診機関と受診月でcase・ledgerを横断して対象加入者を絞り込みます。
+再実行は加入者1人単位で行い、複数加入者の一括処理は要件整理後の対応とします。
+詳細は `docs/spec/exam_result_csv_import/44_case_scoped_rebuild_screen.md` を参照してください。
+
 ```powershell
 python scripts/from_medical/03_01_build_exam_export_cases.py --event-id 2 --subscriber-id 100
 ```
