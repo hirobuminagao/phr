@@ -205,17 +205,33 @@
     });
   }
 
-  for (const select of document.querySelectorAll("[data-review-package-mode]")) {
-    const form = select.closest("form");
-    const facilityField = form?.querySelector("[data-single-data-facility]");
-    const facilityCode = form?.querySelector("input[name='submission_facility_code']");
-    const syncPackageMode = () => {
-      const singleData = select.value === "single_data";
+  for (const form of document.querySelectorAll("[data-export-mode-form]")) {
+    const outputModes = Array.from(form.querySelectorAll("input[name='output_mode']"));
+    const packageModes = Array.from(form.querySelectorAll("input[name='package_mode']"));
+    const packageModeControl = form.querySelector("[data-package-mode-control]");
+    const singleDataOption = form.querySelector("[data-single-data-package-option]");
+    const facilityField = form.querySelector("[data-single-data-facility]");
+    const facilityCode = form.querySelector("input[name='submission_facility_code']");
+    const packageNote = form.querySelector("[data-official-package-note]");
+    const submit = form.querySelector("[data-export-submit]");
+    const syncExportMode = () => {
+      const outputMode = outputModes.find((input) => input.checked)?.value || "review";
+      const official = outputMode === "official";
+      if (official) {
+        const standard = packageModes.find((input) => input.value === "standard");
+        if (standard) standard.checked = true;
+      }
+      if (singleDataOption) singleDataOption.disabled = official;
+      if (packageModeControl) packageModeControl.classList.toggle("is-locked", official);
+      const packageMode = packageModes.find((input) => input.checked)?.value || "standard";
+      const singleData = !official && packageMode === "single_data";
       if (facilityField) facilityField.hidden = !singleData;
       if (facilityCode) facilityCode.disabled = !singleData;
+      if (packageNote) packageNote.hidden = !official;
+      if (submit) submit.textContent = official ? "03フォルダへ本番出力" : "確認用に出力";
     };
-    select.addEventListener("change", syncPackageMode);
-    syncPackageMode();
+    for (const input of [...outputModes, ...packageModes]) input.addEventListener("change", syncExportMode);
+    syncExportMode();
   }
 
   for (const input of document.querySelectorAll("[data-live-filter-input]")) {
@@ -793,6 +809,107 @@
 
   for (const button of document.querySelectorAll("[data-modal-close]")) {
     button.addEventListener("click", () => closeModal(button.closest(".edit-modal")));
+  }
+
+  const exportExamItemModal = document.querySelector("[data-export-exam-item-modal]");
+  const exportExamItemSelected = document.querySelector("[data-export-exam-item-selected]");
+  if (exportExamItemModal && exportExamItemSelected) {
+    const keywordInput = exportExamItemModal.querySelector("[data-export-exam-item-keyword]");
+    const searchButton = exportExamItemModal.querySelector("[data-export-exam-item-search]");
+    const draftRoot = exportExamItemModal.querySelector("[data-export-exam-item-draft]");
+    const resultsRoot = exportExamItemModal.querySelector("[data-export-exam-item-results]");
+    const applyButton = exportExamItemModal.querySelector("[data-export-exam-item-apply]");
+    const openButton = document.querySelector("[data-modal-open='export-exam-item-modal']");
+    let draft = new Map();
+    let resultItems = [];
+
+    const readSelected = () => new Map(
+      Array.from(exportExamItemSelected.querySelectorAll("[data-namecode]")).map((item) => [
+        item.getAttribute("data-namecode") || "",
+        {
+          namecode: item.getAttribute("data-namecode") || "",
+          item_name: item.getAttribute("data-item-name") || item.getAttribute("data-namecode") || "",
+        },
+      ]).filter(([namecode]) => namecode),
+    );
+    const renderDraft = () => {
+      if (!draftRoot) return;
+      draftRoot.innerHTML = draft.size
+        ? Array.from(draft.values()).map((item) => `
+            <span class="export-exam-item-chip">
+              <strong>${escapeHtml(item.item_name || item.namecode)}</strong>
+              <small>${escapeHtml(item.namecode)}</small>
+            </span>`).join("")
+        : '<span class="subtle">選択なし</span>';
+    };
+    const renderResults = () => {
+      if (!resultsRoot) return;
+      resultsRoot.innerHTML = resultItems.length
+        ? resultItems.map((item) => {
+            const selected = draft.has(String(item.namecode || ""));
+            return `
+              <button type="button" class="export-exam-item-result${selected ? " is-selected" : ""}" data-export-exam-item-result="${escapeHtml(item.namecode)}">
+                <strong>${escapeHtml(item.item_name || item.namecode)}</strong>
+                <small>${escapeHtml(item.namecode)} / ${escapeHtml(item.category_name || "カテゴリなし")} / ${escapeHtml(item.xml_value_type || "-")}</small>
+                <span>${selected ? "選択済み" : "選択"}</span>
+              </button>`;
+          }).join("")
+        : '<p class="subtle">一致する健診項目はありません。</p>';
+      for (const button of resultsRoot.querySelectorAll("[data-export-exam-item-result]")) {
+        button.addEventListener("click", () => {
+          const namecode = button.getAttribute("data-export-exam-item-result") || "";
+          const item = resultItems.find((row) => String(row.namecode || "") === namecode);
+          if (!item) return;
+          if (draft.has(namecode)) draft.delete(namecode);
+          else draft.set(namecode, item);
+          renderDraft();
+          renderResults();
+        });
+      }
+    };
+    const searchExamItems = async () => {
+      const keyword = String(keywordInput?.value || "").trim();
+      if (!keyword) {
+        resultItems = [];
+        if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">キーワードを入力してください。</p>';
+        return;
+      }
+      if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">検索中...</p>';
+      try {
+        const response = await fetch(`/api/csv-mapping-lab/exam-items?keyword=${encodeURIComponent(keyword)}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        resultItems = Array.isArray(payload.items) ? payload.items : [];
+        renderResults();
+      } catch (error) {
+        resultItems = [];
+        if (resultsRoot) resultsRoot.innerHTML = `<p class="alert">健診項目を検索できませんでした。${escapeHtml(error.message || error)}</p>`;
+      }
+    };
+
+    openButton?.addEventListener("click", () => {
+      draft = readSelected();
+      resultItems = [];
+      if (keywordInput) keywordInput.value = "";
+      if (resultsRoot) resultsRoot.innerHTML = '<p class="subtle">キーワードを入力して検索してください。</p>';
+      renderDraft();
+    });
+    searchButton?.addEventListener("click", searchExamItems);
+    keywordInput?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      searchExamItems();
+    });
+    applyButton?.addEventListener("click", () => {
+      exportExamItemSelected.innerHTML = draft.size
+        ? Array.from(draft.values()).map((item) => `
+            <span class="export-exam-item-chip" data-namecode="${escapeHtml(item.namecode)}" data-item-name="${escapeHtml(item.item_name || item.namecode)}">
+              <strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode)}</small>
+              <input type="hidden" name="exam_item_namecode" value="${escapeHtml(item.namecode)}">
+            </span>`).join("")
+        : '<span class="subtle" data-export-exam-item-empty>未指定: 健診項目では絞り込みません。</span>';
+      closeModal(exportExamItemModal);
+    });
   }
 
   const csvMappingBulkModal = document.getElementById("csv-mapping-selected-bulk-modal");

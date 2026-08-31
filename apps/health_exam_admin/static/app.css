@@ -875,6 +875,12 @@ button[type="submit"]:disabled {
   background: var(--accent);
 }
 
+.segmented-control.is-locked input:disabled + span {
+  color: #9aa6b2;
+  background: transparent;
+  cursor: not-allowed;
+}
+
 .processing-results {
   display: grid;
   gap: 10px;
@@ -6124,6 +6130,63 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   gap: 18px;
 }
 
+.export-list-title-block {
+  flex: 1 1 620px;
+  min-width: 0;
+}
+
+.export-list-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.export-list-title-row h2 {
+  margin: 0;
+}
+
+.export-list-name-modal {
+  width: min(620px, calc(100vw - 32px));
+}
+
+.export-list-name-form {
+  display: grid;
+  gap: 10px;
+}
+
+.export-list-name-form > label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.export-list-name-form input {
+  min-height: var(--control-height);
+}
+
+.export-mode-form {
+  display: grid;
+  grid-template-columns: auto minmax(340px, 1fr) minmax(380px, 1.15fr) auto;
+  align-items: end;
+  gap: 18px;
+}
+
+.export-mode-field {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.export-mode-field small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.export-mode-form > button[type="submit"] {
+  min-height: var(--control-height);
+  white-space: nowrap;
+}
+
 .detail-status-stack,
 .cli-hint {
   display: grid;
@@ -6169,6 +6232,115 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .export-page .filter-form {
   grid-template-columns: minmax(220px, 1.2fr) minmax(220px, 1fr) minmax(130px, 0.55fr) minmax(300px, 1.1fr) auto;
   align-items: end;
+}
+
+.export-exam-item-filter {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #f7f9fb;
+}
+
+.export-exam-item-filter__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.export-exam-item-filter__head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.export-exam-item-filter__head small,
+.export-exam-item-chip small {
+  color: var(--muted);
+}
+
+.export-exam-item-selected,
+.export-exam-item-draft {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.export-exam-item-chip {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 180px;
+  padding: 9px 11px;
+  border: 1px solid #b8d9cf;
+  border-radius: 6px;
+  background: #eef9f5;
+}
+
+.export-exam-item-modal {
+  width: min(980px, calc(100vw - 32px));
+}
+
+.export-exam-item-modal__body {
+  display: grid;
+  gap: 14px;
+  min-height: 420px;
+  overflow: hidden;
+}
+
+.export-exam-item-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.export-exam-item-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 8px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+
+.export-exam-item-result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  min-height: 78px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: #fff;
+  text-align: left;
+}
+
+.export-exam-item-result strong,
+.export-exam-item-result small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.export-exam-item-result small {
+  grid-column: 1;
+  color: var(--muted);
+}
+
+.export-exam-item-result > span {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.export-exam-item-result.is-selected {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+}
+
+.export-exam-item-result.is-selected small {
+  color: #fff;
 }
 
 .compact-choice-block {
@@ -8356,7 +8528,8 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   }
 
   .export-create-form,
-  .export-summary-grid {
+  .export-summary-grid,
+  .export-mode-form {
     grid-template-columns: 1fr;
   }
 

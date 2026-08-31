@@ -9085,7 +9085,7 @@ def load_export_case_add_candidates(
     *,
     xml_export_list_id: int,
     event_id: int,
-    filters: dict[str, str],
+    filters: Mapping[str, Any],
     limit: int = 80,
 ) -> list[dict[str, Any]]:
     where_parts = ["eec.event_id = %s"]
@@ -9098,6 +9098,13 @@ def load_export_case_add_candidates(
         if item.strip()
     )
     exam_month = filters.get("exam_month", "").strip()
+    exam_item_namecodes = tuple(
+        dict.fromkeys(
+            str(value).strip()
+            for value in (filters.get("exam_item_namecodes") or [])
+            if str(value).strip()
+        )
+    )
     readiness_values = tuple(
         value
         for value in ("EXPORT_READY", "APPROVED_WITH_REASON", "EXPORTED")
@@ -9129,6 +9136,19 @@ def load_export_case_add_candidates(
     if exam_month:
         where_parts.append("DATE_FORMAT(eec.exam_date, '%Y-%m') = %s")
         params.append(exam_month)
+    if exam_item_namecodes:
+        placeholders = ", ".join(["%s"] * len(exam_item_namecodes))
+        where_parts.append(
+            f"""
+            (
+              SELECT COUNT(DISTINCT eecv_filter.namecode)
+              FROM {qname(health_db())}.exam_export_case_values AS eecv_filter
+              WHERE eecv_filter.exam_export_case_id = eec.exam_export_case_id
+                AND eecv_filter.namecode IN ({placeholders})
+            ) = %s
+            """
+        )
+        params.extend([*exam_item_namecodes, len(exam_item_namecodes)])
     where_parts.append(f"eec.export_readiness_status IN ({', '.join(['%s'] * len(readiness_values))})")
     params.extend(readiness_values)
 
@@ -9171,6 +9191,25 @@ def load_export_case_add_candidates(
         (xml_export_list_id, *params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def load_export_candidate_exam_items(cur: Any, *, namecodes: Sequence[str]) -> list[dict[str, Any]]:
+    selected = tuple(dict.fromkeys(str(value).strip() for value in namecodes if str(value).strip()))
+    if not selected:
+        return []
+    cur.execute(
+        f"""
+        SELECT namecode, item_name, category_name, xml_value_type, display_unit
+        FROM {qname(dev_db())}.exam_item_master
+        WHERE namecode IN ({', '.join(['%s'] * len(selected))})
+        """,
+        selected,
+    )
+    rows_by_namecode = {str(row["namecode"]): dict(row) for row in cur.fetchall()}
+    return [
+        rows_by_namecode.get(namecode, {"namecode": namecode, "item_name": namecode})
+        for namecode in selected
+    ]
 
 
 def add_export_case_to_list(
@@ -9284,7 +9323,7 @@ def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str, p
     if package_mode not in {"standard", "single_data"}:
         raise ValueError("PACKAGE_MODE_INVALID")
     if package_mode == "single_data" and not submission_facility_code.strip():
-        raise ValueError("単一DATAでは送付元健診機関を選択してください。")
+        submission_facility_code = "1322100106"
     script_path = REPO_ROOT / "scripts" / "from_medical" / "04_export_hia_xml.py"
     cmd = [
         sys.executable,
@@ -18994,11 +19033,16 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
                 "facility_q": request.query_params.get("facility_q", ""),
                 "facility_codes": request.query_params.get("facility_codes", ""),
                 "exam_month": request.query_params.get("exam_month", ""),
+                "exam_item_namecodes": request.query_params.getlist("exam_item_namecode"),
                 "include_export_ready": request.query_params.get("include_export_ready", "1"),
                 "include_approved_with_reason": request.query_params.get("include_approved_with_reason", "1"),
                 "include_exported": request.query_params.get("include_exported", ""),
             }
             show_candidates = request.query_params.get("show_candidates") == "1"
+            selected_candidate_exam_items = load_export_candidate_exam_items(
+                cur,
+                namecodes=candidate_filters["exam_item_namecodes"],
+            )
             add_candidates = (
                 load_export_case_add_candidates(
                     cur,
@@ -19032,6 +19076,7 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "cases": cases,
             "add_candidates": add_candidates,
             "candidate_filters": candidate_filters,
+            "selected_candidate_exam_items": selected_candidate_exam_items,
             "show_candidates": show_candidates,
             "folder_aliases": folder_aliases,
             "review_downloads": review_downloads,
@@ -19042,6 +19087,65 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "can_export": has_permission(user, "xml_export.official"),
             "prefecture_options": PREFECTURE_OPTIONS,
         },
+    )
+
+
+@app.post("/export-lists/{xml_export_list_id}/name", response_class=HTMLResponse)
+async def export_list_name_update(request: Request, xml_export_list_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "export_lists.edit"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    list_name = str(form.get("list_name") or "").strip()
+    if not list_name:
+        return RedirectResponse(
+            f"/export-lists/{xml_export_list_id}?error={quote('出力リスト名を入力してください。')}",
+            status_code=303,
+        )
+    if len(list_name) > 255:
+        return RedirectResponse(
+            f"/export-lists/{xml_export_list_id}?error={quote('出力リスト名は255文字以内で入力してください。')}",
+            status_code=303,
+        )
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            export_list = load_xml_export_list_detail(cur, xml_export_list_id=xml_export_list_id)
+            if not export_list:
+                conn.rollback()
+                return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
+            old_name = str(export_list.get("list_name") or "")
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db())}.ops_xml_export_lists
+                SET list_name = %s
+                WHERE xml_export_list_id = %s
+                """,
+                (list_name, xml_export_list_id),
+            )
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="XML_EXPORT_LIST_NAME_UPDATE",
+                target_schema=health_db(),
+                target_table="ops_xml_export_lists",
+                target_id=str(xml_export_list_id),
+                after={"old_list_name": old_name, "list_name": list_name},
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return RedirectResponse(
+        f"/export-lists/{xml_export_list_id}?message={quote('出力リスト名を変更しました。')}",
+        status_code=303,
     )
 
 

@@ -24,9 +24,12 @@
   {% endif %}
 
   <section class="panel export-detail-head">
-    <div>
+    <div class="export-list-title-block">
       <p class="eyebrow">#{{ export_list.xml_export_list_id }}</p>
-      <h2>{{ export_list.list_name }}</h2>
+      <div class="export-list-title-row">
+        <h2>{{ export_list.list_name }}</h2>
+        {% if can_edit %}<button type="button" class="ghost-button compact-action-button" data-modal-open="export-list-name-modal">変更</button>{% endif %}
+      </div>
       <p class="subtle">{{ export_list.selector_summary|replace("\n", " / ") }}</p>
     </div>
     <div class="detail-status-stack">
@@ -34,6 +37,26 @@
       <small>event {{ export_list.event_id }} / 受診月 {{ export_list.requested_exam_month or "全て" }}</small>
     </div>
   </section>
+
+  {% if can_edit %}
+  <div id="export-list-name-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-list-name-modal" role="dialog" aria-modal="true" aria-labelledby="export-list-name-title">
+      <div class="edit-modal__head">
+        <div><p class="eyebrow">Output List</p><h2 id="export-list-name-title">出力リスト名を変更</h2></div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/name" class="export-list-name-form">
+        <label for="export-list-name">出力リスト名</label>
+        <input id="export-list-name" name="list_name" value="{{ export_list.list_name }}" maxlength="255" required data-modal-focus>
+        <div class="edit-modal__footer">
+          <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+          <button type="submit">変更を保存</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  {% endif %}
 
   <section class="summary-grid export-summary-grid">
     <div class="summary-card">
@@ -58,37 +81,33 @@
         <p class="subtle">この出力リストに追加済みの人だけを対象にします。</p>
       </div>
     </div>
-    <div class="export-mode-grid">
-      {% if can_review_export %}
-      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export" class="panel-inset export-mode-form">
-        <input type="hidden" name="output_mode" value="review">
-        <strong>確認用出力</strong>
-        <label>梱包方式
-          <select name="package_mode" data-review-package-mode>
-            <option value="standard">健診機関・受診月別</option>
-            <option value="single_data">リスト全員を単一DATA</option>
-          </select>
-        </label>
-        <label data-single-data-facility hidden>単一DATAの送付元健診機関
+    <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export" class="panel-inset export-mode-form" data-export-mode-form>
+      <div class="export-mode-field">
+        <strong>出力先</strong>
+        <div class="segmented-control" role="group" aria-label="出力先">
+          {% if can_review_export %}<label><input type="radio" name="output_mode" value="review" checked><span>確認</span></label>{% endif %}
+          {% if can_export %}<label><input type="radio" name="output_mode" value="official" {{ 'checked' if not can_review_export else '' }}><span>本番</span></label>{% endif %}
+        </div>
+      </div>
+      <div class="export-mode-field">
+        <strong>梱包方式</strong>
+        <div class="segmented-control" role="group" aria-label="梱包方式" data-package-mode-control>
+          <label><input type="radio" name="package_mode" value="standard" checked><span>健診機関・受診月別</span></label>
+          <label><input type="radio" name="package_mode" value="single_data" data-single-data-package-option><span>リスト全員を単一DATA</span></label>
+        </div>
+        <small data-official-package-note hidden>本番出力は健診機関・受診月別で固定です。</small>
+      </div>
+      <div data-single-data-facility hidden>
+        <label>単一DATAの送付元健診機関
           <span class="input-action-row">
-            <input id="single-data-submission-facility-code" name="submission_facility_code" placeholder="健診機関コード" readonly disabled>
-            <input id="single-data-submission-facility-display" placeholder="健診機関を選択" readonly>
+            <input id="single-data-submission-facility-code" name="submission_facility_code" value="1322100106" placeholder="健診機関コード" readonly disabled>
+            <input id="single-data-submission-facility-display" value="1322100106（既定）" placeholder="健診機関を選択" readonly>
             <button type="button" class="ghost-button compact-action-button" data-alias-facility-picker-open data-target-input="single-data-submission-facility-code" data-target-display-input="single-data-submission-facility-display" data-target-value="code" data-modal-open="single-data-facility-picker-modal">選択</button>
           </span>
         </label>
-        <button class="ghost-button" type="submit">確認用に出力</button>
-      </form>
-      {% endif %}
-      {% if can_export %}
-      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/export" class="panel-inset export-mode-form">
-        <input type="hidden" name="output_mode" value="official">
-        <input type="hidden" name="package_mode" value="standard">
-        <strong>本番出力</strong>
-        <label>梱包方式<input value="健診機関・受診月別（固定）" disabled></label>
-        <button type="submit">03フォルダへ本番出力</button>
-      </form>
-      {% endif %}
-    </div>
+      </div>
+      <button type="submit" data-export-submit>確認用に出力</button>
+    </form>
   </section>
   {% endif %}
 
@@ -162,6 +181,25 @@
     </div>
     <form method="get" action="/export-lists/{{ export_list.xml_export_list_id }}" class="filter-form">
       <input type="hidden" name="show_candidates" value="1">
+      <div class="export-exam-item-filter" data-export-exam-item-filter>
+        <div class="export-exam-item-filter__head">
+          <div>
+            <span class="field-label">健診項目（すべて含む）</span>
+            <small>複数選択した場合は、すべての項目がある人を検索します。</small>
+          </div>
+          <button type="button" class="ghost-button" data-modal-open="export-exam-item-modal">健診項目を追加</button>
+        </div>
+        <div class="export-exam-item-selected" data-export-exam-item-selected>
+          {% for item in selected_candidate_exam_items %}
+          <span class="export-exam-item-chip" data-namecode="{{ item.namecode }}" data-item-name="{{ item.item_name or item.namecode }}">
+            <strong>{{ item.item_name or item.namecode }}</strong><small>{{ item.namecode }}</small>
+            <input type="hidden" name="exam_item_namecode" value="{{ item.namecode }}">
+          </span>
+          {% else %}
+          <span class="subtle" data-export-exam-item-empty>未指定: 健診項目では絞り込みません。</span>
+          {% endfor %}
+        </div>
+      </div>
       <label>
         <span>人・番号</span>
         <input name="case_q" value="{{ candidate_filters.case_q }}" placeholder="氏名カナ / HIA ID / 記号番号 / case_id">
@@ -261,6 +299,32 @@
     </div>
     {% endif %}
   </section>
+  {% endif %}
+
+  {% if can_edit %}
+  <div id="export-exam-item-modal" class="edit-modal" hidden data-export-exam-item-modal>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-exam-item-modal" role="dialog" aria-modal="true" aria-labelledby="export-exam-item-modal-title">
+      <div class="edit-modal__head">
+        <div><p class="eyebrow">Exam Items</p><h2 id="export-exam-item-modal-title">健診項目を選択</h2></div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-exam-item-modal__body">
+        <div class="export-exam-item-search">
+          <input data-export-exam-item-keyword data-modal-focus placeholder="項目名 / namecode / カテゴリ">
+          <button type="button" data-export-exam-item-search>検索</button>
+        </div>
+        <div class="export-exam-item-draft" data-export-exam-item-draft></div>
+        <div class="export-exam-item-results" data-export-exam-item-results>
+          <p class="subtle">キーワードを入力して検索してください。</p>
+        </div>
+      </div>
+      <div class="edit-modal__footer">
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="button" data-export-exam-item-apply>選択を反映</button>
+      </div>
+    </section>
+  </div>
   {% endif %}
 
   {% if can_edit %}
