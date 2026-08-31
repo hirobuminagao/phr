@@ -39,6 +39,7 @@ class BuildValueConfig:
     dry_run: bool
     limit_cases: int
     include_review_required: bool
+    case_ids: tuple[int, ...] = ()
 
 
 @dataclass
@@ -77,6 +78,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event-id", type=int, default=2)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit-cases", type=int, default=0)
+    parser.add_argument("--case-id", type=int, action="append", default=[])
     parser.add_argument("--include-review-required", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
@@ -95,6 +97,8 @@ def validate_config(config: BuildValueConfig) -> None:
         raise ValueError("event_id must be positive")
     if config.limit_cases < 0:
         raise ValueError("limit_cases must be >= 0")
+    if any(case_id <= 0 for case_id in config.case_ids):
+        raise ValueError("case_id must be positive")
     qname(config.health_db)
     qname(config.master_db)
 
@@ -104,6 +108,9 @@ def fetch_cases(cur: Any, config: BuildValueConfig) -> list[dict[str, Any]]:
     params: list[Any] = [config.event_id]
     if not config.include_review_required:
         filters.append("`merge_status` <> 'REVIEW_REQUIRED'")
+    if config.case_ids:
+        filters.append(f"`exam_export_case_id` IN ({', '.join(['%s'] * len(config.case_ids))})")
+        params.extend(config.case_ids)
     limit_sql = ""
     if config.limit_cases:
         limit_sql = "LIMIT %s"
@@ -504,7 +511,16 @@ def build_case_values(conn: Any, config: BuildValueConfig) -> BuildValueSummary:
             summary.values_inserted += inserted
             summary.precedence_rules_applied += rules_applied
             summary.cases_built += 1
-        refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.event_id)
+        if config.case_ids:
+            for case_id in config.case_ids:
+                refresh_export_case_readiness(
+                    cur,
+                    health_db=config.health_db,
+                    event_id=config.event_id,
+                    exam_export_case_id=case_id,
+                )
+        else:
+            refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.event_id)
         etl_finish_run(cur, run_id, summary.to_metrics(), extra_notes=summary.message())
     conn.commit()
     print(summary.message())
@@ -520,6 +536,7 @@ def main() -> int:
         dry_run=bool(args.dry_run),
         limit_cases=int(args.limit_cases or 0),
         include_review_required=bool(args.include_review_required),
+        case_ids=tuple(args.case_id or ()),
     )
     validate_config(config)
     params = load_mysql_base_params(args.db_prefix)

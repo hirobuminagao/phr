@@ -38,6 +38,7 @@ class BuildCaseConfig:
     dev_db: str
     dry_run: bool
     limit_groups: int
+    case_ids: tuple[int, ...] = ()
 
 
 @dataclass
@@ -78,6 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event-id", type=int, default=2)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit-groups", type=int, default=0)
+    parser.add_argument("--case-id", type=int, action="append", default=[])
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
     parser.add_argument("--dev-db", default="dev_phr")
@@ -99,6 +101,8 @@ def validate_config(config: BuildCaseConfig) -> None:
         raise ValueError("event_id must be positive")
     if config.limit_groups < 0:
         raise ValueError("limit_groups must be >= 0")
+    if any(case_id <= 0 for case_id in config.case_ids):
+        raise ValueError("case_id must be positive")
     qname(config.health_db)
     qname(config.dev_db)
 
@@ -114,6 +118,41 @@ def case_key(row: dict[str, Any]) -> tuple[Any, ...]:
 
 
 def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, Any]]:
+    target_keys: list[dict[str, Any]] = []
+    if config.case_ids:
+        placeholders = ", ".join(["%s"] * len(config.case_ids))
+        cur.execute(
+            f"""
+            SELECT event_id, subscriber_id, exam_date, exam_facility_id, insurer_number
+            FROM {qname(config.health_db)}.`exam_export_cases`
+            WHERE event_id = %s
+              AND exam_export_case_id IN ({placeholders})
+            """,
+            (config.event_id, *config.case_ids),
+        )
+        target_keys = [dict(row) for row in cur.fetchall()]
+        if not target_keys:
+            return []
+
+    target_having = ""
+    params: list[Any] = [config.event_id]
+    if target_keys:
+        target_having = " AND (" + " OR ".join(
+            [
+                "(resolved_subscriber_id = %s AND resolved_exam_date = %s "
+                "AND resolved_exam_facility_id = %s AND resolved_insurer_number = %s)"
+            ]
+            * len(target_keys)
+        ) + ")"
+        for key in target_keys:
+            params.extend(
+                (
+                    key["subscriber_id"],
+                    key["exam_date"],
+                    key["exam_facility_id"],
+                    key["insurer_number"],
+                )
+            )
     cur.execute(
         f"""
         SELECT
@@ -183,9 +222,10 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
           AND resolved_exam_date IS NOT NULL
           AND resolved_exam_facility_id IS NOT NULL
           AND resolved_insurer_number IS NOT NULL
+          {target_having}
         ORDER BY resolved_subscriber_id, resolved_exam_date, resolved_exam_facility_id, resolved_insurer_number, el.`source_type`, el.`exam_ledger_id`
         """,
-        (config.event_id,),
+        tuple(params),
     )
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
@@ -601,7 +641,16 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
             summary.sources_upserted += upsert_sources(cur, config, case_id=case_id, group=group, primary=primary)
             reapply_basic_info_corrections(cur, config, case_id=case_id)
 
-        refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.event_id)
+        if config.case_ids:
+            for case_id in config.case_ids:
+                refresh_export_case_readiness(
+                    cur,
+                    health_db=config.health_db,
+                    event_id=config.event_id,
+                    exam_export_case_id=case_id,
+                )
+        else:
+            refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.event_id)
         etl_finish_run(cur, run_id, summary.to_metrics(), extra_notes=summary.message())
     conn.commit()
     print(summary.message())
@@ -616,6 +665,7 @@ def main() -> int:
         dev_db=args.dev_db,
         dry_run=bool(args.dry_run),
         limit_groups=int(args.limit_groups or 0),
+        case_ids=tuple(args.case_id or ()),
     )
     validate_config(config)
     params = load_mysql_base_params(args.db_prefix)

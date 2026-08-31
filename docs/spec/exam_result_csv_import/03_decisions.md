@@ -192,6 +192,9 @@ Current as of 2026-08-05.
 - 結合出力用caseの人が見る総合状態は `exam_export_cases.export_readiness_status` / `export_readiness_reason` に持つ。
 - `export_readiness_status` は少なくとも `EXPORT_READY`, `APPROVED_WITH_REASON`, `BLOCKED`, `WAITING_VALUES`, `WAITING_CHECK`, `EXPORTED`, `EXPORT_ERROR` を扱う。
 - `export_readiness_status` は `03_01_build_exam_export_cases.py`, `03_02_build_exam_export_case_values.py`, `03_04_check_exam_export_cases.py` の後で再計算し、caseの `subscriber_match_status`, `merge_status`, `case_status`, `value_build_status`, `check_status`, item valueの `review_status`, `xml_export_status` から導く。
+- 既存caseを個人単位で再構築する場合は、`03_01_build_exam_export_cases.py`、`03_02_build_exam_export_case_values.py`、`03_04_check_exam_export_cases.py` の各入口へ同じ `--case-id` を渡す。複数caseは `--case-id` を繰り返して指定でき、readinessも指定caseだけ再計算する。
+- `03_00_check_imported_exam_ledgers.py` はcase成立前のsource単位チェックであり、case限定再構築の対象には含めない。追加sourceをcaseへ結合した後の最終的な法定・特定健診チェックは `03_04_check_exam_export_cases.py --case-id ...` を正とする。
+- `03_05_create_xml_export_list.py` は既存どおり `--case-id` で出力リストへ追加するcaseを限定できる。
 - XML出力済みのcaseには、`output_zip_path`, `output_zip_file_name`, `output_xml_file_name`, `xml_exported_at`, `xml_export_etl_run_id` を保持する。これは後続の出力画面、HIAアップロード依頼、再出力判断のための証跡である。
 - CSV→XML出力済みの正本は `xml_export_zips` / `xml_export_members` とする。再scan/importや `sync_exam_ledgers` で `xml_export_status` を未出力へ戻してはならない。
 - 結合出力用caseの `xml_export_status` は、構成元 `exam_ledgers` の技術状態だけでなく `xml_export_members` の出力事実を参照して `EXPORTED` を復元する。

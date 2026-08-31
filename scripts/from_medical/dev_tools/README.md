@@ -65,6 +65,21 @@ python scripts/from_medical/03_02_build_exam_export_case_values.py
 python scripts/from_medical/03_04_check_exam_export_cases.py
 ```
 
+既存caseを1件だけ再構築する場合は、3段階すべてへ同じcase IDを指定します。
+`03_02` は採用値とcheck状態を作り直すため、必ず続けて `03_04` まで実行します。
+
+```powershell
+python scripts/from_medical/03_01_build_exam_export_cases.py --event-id 2 --case-id 3446
+python scripts/from_medical/03_02_build_exam_export_case_values.py --event-id 2 --case-id 3446
+python scripts/from_medical/03_04_check_exam_export_cases.py --event-id 2 --case-id 3446
+```
+
+出力リストもそのcaseだけで新規作成する場合は続けて実行します。
+
+```powershell
+python scripts/from_medical/03_05_create_xml_export_list.py --event-id 2 --case-id 3446
+```
+
 ## `refresh_exam_result_ledger_report.py`
 
 指定した `event_id` の `health_exam_result.exam_ledgers` を、
