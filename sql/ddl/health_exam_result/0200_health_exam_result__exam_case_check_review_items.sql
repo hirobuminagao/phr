@@ -8,6 +8,7 @@ CREATE TABLE `health_exam_result`.`exam_case_check_review_items` (
   `raw_value_type` varchar(32) DEFAULT NULL,
   `validation_reason` text DEFAULT NULL,
   `review_status` varchar(32) NOT NULL DEFAULT 'NEEDS_CONFIRMATION' COMMENT 'NEEDS_CONFIRMATION/APPROVED_WITH_REASON/EXCLUDED/WAITING_RESUBMISSION/RESUBMITTED/RESOLVED_BY_SOURCE_VALUE/NONE',
+  `review_note` text DEFAULT NULL COMMENT '現在有効な人手判断理由。変更履歴はaudit_logsへ保存',
   `reviewed_at` datetime(3) DEFAULT NULL,
   `reviewed_by_app_user_id` bigint unsigned DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

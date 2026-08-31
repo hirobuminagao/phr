@@ -7777,6 +7777,7 @@ def load_exam_export_case_placeholders(cur: Any, *, exam_export_case_id: int) ->
           cri.validation_reason,
           'MISSING_PLACEHOLDER' AS value_source_role,
           cri.review_status,
+          cri.review_note,
           cri.reviewed_at,
           cri.reviewed_by_app_user_id,
           latest_audit.note AS latest_note,
@@ -8295,11 +8296,12 @@ def update_exam_case_check_review(
         f"""
         UPDATE {qname(health_db())}.exam_case_check_review_items
         SET review_status = %s,
+            review_note = NULLIF(%s, ''),
             reviewed_at = CURRENT_TIMESTAMP(3),
             reviewed_by_app_user_id = %s
         WHERE exam_case_check_review_item_id = %s
         """,
-        (review_status, app_user_id, review_item_id),
+        (review_status, note, app_user_id, review_item_id),
     )
     cur.execute(
         f"""
@@ -18176,8 +18178,9 @@ async def exam_export_case_item_review(request: Request, exam_export_case_id: in
     }
     if review_status not in allowed_statuses:
         return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=状態が不正です。", status_code=303)
-    if review_status == "APPROVED_WITH_REASON" and not note:
-        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=理由ありOKには理由が必須です。", status_code=303)
+    if review_status in {"APPROVED_WITH_REASON", "EXCLUDED"} and not note:
+        label = "理由ありOK" if review_status == "APPROVED_WITH_REASON" else "除外"
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error={label}には理由が必須です。", status_code=303)
 
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -18211,7 +18214,12 @@ async def exam_export_case_item_review(request: Request, exam_export_case_id: in
                         "new_review_status": review_status,
                     },
                 )
-            refresh_export_case_readiness(cur, health_db=health_db(), event_id=int(item.get("event_id") or 0))
+            refresh_export_case_readiness(
+                cur,
+                health_db=health_db(),
+                event_id=int(item.get("event_id") or 0),
+                exam_export_case_id=exam_export_case_id,
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -18247,8 +18255,9 @@ async def exam_export_case_item_review_bulk(request: Request, exam_export_case_i
         return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=状態が不正です。", status_code=303)
     if target_scope not in allowed_scopes:
         return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=一括対象が不正です。", status_code=303)
-    if review_status == "APPROVED_WITH_REASON" and not note:
-        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error=理由ありOKには理由が必須です。", status_code=303)
+    if review_status in {"APPROVED_WITH_REASON", "EXCLUDED"} and not note:
+        label = "理由ありOK" if review_status == "APPROVED_WITH_REASON" else "除外"
+        return RedirectResponse(f"/exam-export-cases/{exam_export_case_id}?error={label}には理由が必須です。", status_code=303)
 
     params = load_mysql_base_params(db_prefix())
     updated = 0
@@ -18289,7 +18298,12 @@ async def exam_export_case_item_review_bulk(request: Request, exam_export_case_i
                     },
                 )
             if review_item_ids:
-                refresh_export_case_readiness(cur, health_db=health_db(), event_id=int(item.get("event_id") or 0))
+                refresh_export_case_readiness(
+                    cur,
+                    health_db=health_db(),
+                    event_id=int(item.get("event_id") or 0),
+                    exam_export_case_id=exam_export_case_id,
+                )
             conn.commit()
         except Exception:
             conn.rollback()

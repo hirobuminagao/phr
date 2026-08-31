@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--event-id", type=int, default=2)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--case-id", type=int, action="append", default=[])
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_EXAM_RESULT_DB)
     parser.add_argument("--dev-db", default=DEV_PHR_DB)
@@ -44,6 +45,7 @@ def main() -> int:
         limit=int(args.limit or 0),
         verbose=bool(args.verbose),
         ledger_type=LEDGER_TYPE_EXPORT_CASE,
+        case_ids=tuple(args.case_id or ()),
     )
     summary = run(config, db_prefix=args.db_prefix)
     summary.print()

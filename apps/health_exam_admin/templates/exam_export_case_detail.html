@@ -190,7 +190,7 @@
       </label>
       <label class="case-review-bulk-note">
         <span>理由・確認内容</span>
-        <textarea name="note" rows="2" placeholder="例: 健診機関確認済み。妊娠中のため未実施。理由ありOKは必須"></textarea>
+        <textarea name="note" rows="2" placeholder="例: 健診機関確認済み。妊娠中のため未実施。理由ありOK・除外は必須"></textarea>
       </label>
       <button type="submit">まとめて保存</button>
     </form>
@@ -252,7 +252,7 @@
                   <option value="{{ status }}" {% if item.review_status == status %}selected{% endif %}>{{ case_review_status_label(status) }}</option>
                   {% endfor %}
                 </select>
-                <textarea name="note" rows="2" placeholder="理由・確認内容。理由ありOKは必須">{{ item.latest_note or "" }}</textarea>
+                <textarea name="note" rows="2" placeholder="理由・確認内容。理由ありOK・除外は必須">{{ item.review_note or item.latest_note or "" }}</textarea>
                 <button type="submit">保存</button>
               </form>
             </td>

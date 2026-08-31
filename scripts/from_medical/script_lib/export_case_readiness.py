@@ -12,7 +12,10 @@ def refresh_export_case_readiness(
     *,
     health_db: str,
     event_id: int,
+    exam_export_case_id: int | None = None,
 ) -> int:
+    case_filter = " AND eec.`exam_export_case_id` = %s" if exam_export_case_id is not None else ""
+    params: tuple[Any, ...] = (event_id, exam_export_case_id) if exam_export_case_id is not None else (event_id,)
     cur.execute(
         f"""
         UPDATE {qname(health_db)}.`exam_export_cases` AS eec
@@ -23,15 +26,16 @@ def refresh_export_case_readiness(
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
              )
              AND NOT EXISTS (
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
                  AND (
                    cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR NULLIF(TRIM(cri.`review_note`), '') IS NULL
                    OR cri.`reviewed_at` IS NULL
                    OR cri.`reviewed_by_app_user_id` IS NULL
                  )
@@ -45,28 +49,33 @@ def refresh_export_case_readiness(
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
              )
              AND NOT EXISTS (
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
                  AND (
                    cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR NULLIF(TRIM(cri.`review_note`), '') IS NULL
                    OR cri.`reviewed_at` IS NULL
                    OR cri.`reviewed_by_app_user_id` IS NULL
                  )
              )
             THEN (
               SELECT GROUP_CONCAT(
-                CONCAT(cri.`check_item_code`, ':', COALESCE(cri.`check_item_name`, ''), ':', COALESCE(cri.`validation_reason`, ''))
+                CONCAT(
+                  cri.`check_item_code`, ':',
+                  COALESCE(cri.`check_item_name`, ''), ':',
+                  cri.`review_note`
+                )
                 ORDER BY cri.`check_scope`, cri.`check_item_code`
                 SEPARATOR ' | '
               )
               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                AND cri.`review_status` = 'APPROVED_WITH_REASON'
             )
             ELSE NULL
           END,
@@ -76,15 +85,16 @@ def refresh_export_case_readiness(
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
              )
              AND NOT EXISTS (
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
                  AND (
                    cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR NULLIF(TRIM(cri.`review_note`), '') IS NULL
                    OR cri.`reviewed_at` IS NULL
                    OR cri.`reviewed_by_app_user_id` IS NULL
                  )
@@ -93,7 +103,7 @@ def refresh_export_case_readiness(
               SELECT MAX(cri.`reviewed_at`)
               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                AND cri.`review_status` = 'APPROVED_WITH_REASON'
             )
             ELSE NULL
           END,
@@ -103,15 +113,16 @@ def refresh_export_case_readiness(
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
              )
              AND NOT EXISTS (
                SELECT 1
                FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
                WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                 AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                 AND cri.`review_status` NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')
                  AND (
                    cri.`review_status` <> 'APPROVED_WITH_REASON'
+                   OR NULLIF(TRIM(cri.`review_note`), '') IS NULL
                    OR cri.`reviewed_at` IS NULL
                    OR cri.`reviewed_by_app_user_id` IS NULL
                  )
@@ -120,14 +131,14 @@ def refresh_export_case_readiness(
               SELECT GROUP_CONCAT(DISTINCT CAST(cri.`reviewed_by_app_user_id` AS CHAR) ORDER BY cri.`reviewed_by_app_user_id` SEPARATOR ',')
               FROM {qname(health_db)}.`exam_case_check_review_items` AS cri
               WHERE cri.`exam_export_case_id` = eec.`exam_export_case_id`
-                AND cri.`review_status` <> 'RESOLVED_BY_SOURCE_VALUE'
+                AND cri.`review_status` = 'APPROVED_WITH_REASON'
             )
             ELSE NULL
           END,
           `updated_at` = CURRENT_TIMESTAMP(3)
-        WHERE eec.`event_id` = %s
+        WHERE eec.`event_id` = %s{case_filter}
         """,
-        (event_id,),
+        params,
     )
     cur.execute(
         f"""
@@ -178,8 +189,9 @@ def refresh_export_case_readiness(
           END,
           `updated_at` = CURRENT_TIMESTAMP(3)
         WHERE `event_id` = %s
+          {"AND `exam_export_case_id` = %s" if exam_export_case_id is not None else ""}
         """,
-        (event_id,),
+        params,
     )
     return int(cur.rowcount or 0)
 

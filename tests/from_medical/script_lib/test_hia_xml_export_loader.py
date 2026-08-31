@@ -47,6 +47,21 @@ def test_manual_approval_allows_only_missing_check_results() -> None:
     assert not decide_candidate(row).allowed
 
 
+def test_case_approved_with_reason_is_exportable_after_excluded_review_is_ignored() -> None:
+    row = base_row()
+    row.update(
+        export_readiness_status="APPROVED_WITH_REASON",
+        check_status="NG",
+        check_reason="4410001001:尿糖:MISSING | 4410001002:尿蛋白:MISSING",
+        manual_export_approved=1,
+        manual_export_reason="4410001001:尿糖:健診機関確認済み | 4410001002:尿蛋白:未実施を確認済み",
+        manual_export_approved_at="2026-08-31 10:00:00",
+        manual_export_approved_by="12",
+    )
+
+    assert decide_candidate(row).allowed
+
+
 def test_duplicate_key_and_windows_facility_folder() -> None:
     first = base_row()
     second = {**first, "csv_row_ledger_id": 2, "insurer_number": "6139463"}

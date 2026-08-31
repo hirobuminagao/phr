@@ -63,11 +63,6 @@ LEDGER_TYPES = {LEDGER_TYPE_XML, LEDGER_TYPE_CSV, LEDGER_TYPE_EXAM, LEDGER_TYPE_
 ARTICLE44_OK_STATUSES = {STATUS_OK, STATUS_CALCULATED, STATUS_ALTERNATIVE}
 ARTICLE44_PROBLEM_STATUSES = {STATUS_MISSING, STATUS_INVALID}
 ARTICLE44_ALLOWED_STATUSES = ARTICLE44_OK_STATUSES | ARTICLE44_PROBLEM_STATUSES
-PLACEHOLDER_REVIEW_OPEN_STATUSES = {
-    "NONE",
-    "NEEDS_CONFIRMATION",
-    "WAITING_RESUBMISSION",
-}
 ARTICLE44_DETAIL_NAMES: dict[str, str] = {
     "4401001001": "既往歴",
     "4402001001": "自覚症状",
@@ -104,6 +99,7 @@ class CheckConfig:
     limit: int
     verbose: bool
     ledger_type: str
+    case_ids: tuple[int, ...] = ()
 
 
 @dataclass
@@ -578,6 +574,12 @@ def sync_export_case_missing_placeholders(
                     raw_value_type = %s,
                     validation_reason = %s,
                     review_status = %s,
+                    review_note = CASE WHEN %s = 'RESOLVED_BY_SOURCE_VALUE' THEN NULL ELSE review_note END,
+                    reviewed_at = CASE WHEN %s = 'RESOLVED_BY_SOURCE_VALUE' THEN NULL ELSE reviewed_at END,
+                    reviewed_by_app_user_id = CASE
+                      WHEN %s = 'RESOLVED_BY_SOURCE_VALUE' THEN NULL
+                      ELSE reviewed_by_app_user_id
+                    END,
                     updated_at = CURRENT_TIMESTAMP(3)
                 WHERE exam_case_check_review_item_id = %s
                 """,
@@ -586,10 +588,41 @@ def sync_export_case_missing_placeholders(
                     item.raw_value_type,
                     item.validation_reason,
                     next_status,
+                    current_status,
+                    current_status,
+                    current_status,
                     existing["exam_case_check_review_item_id"],
                 ),
             )
             changed += int(cur.rowcount or 0)
+            if current_status == "RESOLVED_BY_SOURCE_VALUE":
+                cur.execute(
+                    f"""
+                    INSERT INTO {qname(health_db)}.exam_case_check_review_item_audit_logs (
+                      exam_case_check_review_item_id,
+                      event_id,
+                      exam_export_case_id,
+                      check_scope,
+                      check_item_code,
+                      field_name,
+                      old_value,
+                      new_value,
+                      source,
+                      note
+                    )
+                    VALUES (%s, %s, %s, %s, %s, 'review_status', %s, %s, 'CHECK_EXAM_RESULTS', %s)
+                    """,
+                    (
+                        existing["exam_case_check_review_item_id"],
+                        ledger.get("event_id"),
+                        case_id,
+                        item.check_scope,
+                        item.namecode,
+                        current_status,
+                        next_status,
+                        "不足項目が再検出されたため確認待ちへ戻した",
+                    ),
+                )
             continue
 
         cur.execute(
@@ -628,20 +661,49 @@ def sync_export_case_missing_placeholders(
         key = (str(row.get("check_scope") or ""), str(row.get("check_item_code") or ""))
         if key in active_keys:
             continue
-        if str(row.get("review_status") or "") not in PLACEHOLDER_REVIEW_OPEN_STATUSES:
+        old_status = str(row.get("review_status") or "NONE")
+        if old_status == "RESOLVED_BY_SOURCE_VALUE":
             continue
         cur.execute(
             f"""
             UPDATE {qname(health_db)}.exam_case_check_review_items
             SET review_status = 'RESOLVED_BY_SOURCE_VALUE',
+                review_note = NULL,
                 validation_reason = 'RESOLVED_BY_SOURCE_VALUE',
                 reviewed_at = CURRENT_TIMESTAMP(3),
+                reviewed_by_app_user_id = NULL,
                 updated_at = CURRENT_TIMESTAMP(3)
             WHERE exam_case_check_review_item_id = %s
             """,
             (row["exam_case_check_review_item_id"],),
         )
         changed += int(cur.rowcount or 0)
+        cur.execute(
+            f"""
+            INSERT INTO {qname(health_db)}.exam_case_check_review_item_audit_logs (
+              exam_case_check_review_item_id,
+              event_id,
+              exam_export_case_id,
+              check_scope,
+              check_item_code,
+              field_name,
+              old_value,
+              new_value,
+              source,
+              note
+            )
+            VALUES (%s, %s, %s, %s, %s, 'review_status', %s, 'RESOLVED_BY_SOURCE_VALUE', 'CHECK_EXAM_RESULTS', %s)
+            """,
+            (
+                row["exam_case_check_review_item_id"],
+                ledger.get("event_id"),
+                case_id,
+                row.get("check_scope"),
+                row.get("check_item_code"),
+                old_status,
+                "不足項目が受領値で補完されたため自動解消",
+            ),
+        )
 
     return changed
 
@@ -995,8 +1057,13 @@ def fetch_target_case_ledgers(
     health_db: str,
     event_id: int,
     limit: int = 0,
+    case_ids: tuple[int, ...] = (),
 ) -> list[dict[str, Any]]:
     params: list[Any] = [event_id]
+    case_filter = ""
+    if case_ids:
+        case_filter = f"AND exam_export_case_id IN ({', '.join(['%s'] * len(case_ids))})"
+        params.extend(case_ids)
     limit_sql = ""
     if limit:
         limit_sql = "LIMIT %s"
@@ -1016,6 +1083,7 @@ def fetch_target_case_ledgers(
         WHERE event_id = %s
           AND value_build_status = 'READY'
           AND subscriber_match_status = 'MATCHED'
+          {case_filter}
         ORDER BY exam_export_case_id
         {limit_sql}
         """,
@@ -1031,6 +1099,7 @@ def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[st
             health_db=config.health_db,
             event_id=config.event_id,
             limit=config.limit,
+            case_ids=config.case_ids,
         )
     if config.ledger_type == LEDGER_TYPE_EXAM:
         return fetch_target_exam_ledgers(
@@ -1239,7 +1308,16 @@ def process_ledgers(
         summary.ledgers_updated += 1
 
     if not config.dry_run and config.ledger_type == LEDGER_TYPE_EXPORT_CASE:
-        refresh_export_case_readiness(health_cur, health_db=config.health_db, event_id=config.event_id)
+        if config.case_ids:
+            for case_id in config.case_ids:
+                refresh_export_case_readiness(
+                    health_cur,
+                    health_db=config.health_db,
+                    event_id=config.event_id,
+                    exam_export_case_id=case_id,
+                )
+        else:
+            refresh_export_case_readiness(health_cur, health_db=config.health_db, event_id=config.event_id)
 
     if not config.dry_run:
         health_conn.commit()
