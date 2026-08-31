@@ -717,12 +717,18 @@ button[type="submit"]:disabled {
 
 .case-rebuild-search {
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 2fr) auto;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
   gap: 16px;
   align-items: end;
 }
 
-.case-rebuild-query input {
+.case-rebuild-search label:first-child {
+  grid-column: 1 / -1;
+  max-width: 480px;
+}
+
+.case-rebuild-search input,
+.case-rebuild-search select {
   width: 100%;
 }
 

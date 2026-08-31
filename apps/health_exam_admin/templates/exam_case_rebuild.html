@@ -23,7 +23,7 @@
     <div class="section-heading">
       <div>
         <h2>再実行対象の検索</h2>
-        <p class="subtle">eventを選び、氏名・カナ・社員番号・保険証番号・HIA IDなどで加入者を検索します。</p>
+        <p class="subtle">eventを選び、加入者情報を部分一致で検索します。複数項目を入れた場合はすべてに一致する加入者が対象です。</p>
       </div>
     </div>
     <form method="get" action="/exam-case-rebuild" class="case-rebuild-search">
@@ -37,10 +37,11 @@
           {% endfor %}
         </select>
       </label>
-      <label class="case-rebuild-query">
-        加入者
-        <input name="q" value="{{ query }}" placeholder="氏名 / カナ / 社員番号 / 保険証番号 / HIA ID">
-      </label>
+      <label>記号<input name="insurance_symbol" value="{{ search_filters.insurance_symbol }}" placeholder="例: ABC"></label>
+      <label>番号<input name="insurance_number" value="{{ search_filters.insurance_number }}" placeholder="例: 12345"></label>
+      <label>氏名かな<input name="name_kana" value="{{ search_filters.name_kana }}" placeholder="例: ヤマダ"></label>
+      <label>生年月日<input name="birth" value="{{ search_filters.birth }}" placeholder="例: 1980-01"></label>
+      <label>HIA加入者ID<input name="hia_subscriber_id" value="{{ search_filters.hia_subscriber_id }}" placeholder="IDの一部"></label>
       <button type="submit">検索</button>
     </form>
   </section>
@@ -50,7 +51,7 @@
     <div class="section-heading"><div><h2>加入者候補</h2><p class="subtle">対象者を1人選択してください。</p></div><span class="count-badge">{{ candidates|length }}件</span></div>
     <div class="case-rebuild-candidates">
       {% for candidate in candidates %}
-      <a href="/exam-case-rebuild?event_id={{ selected_event_id }}&subscriber_id={{ candidate.subscriber_id }}&q={{ query|urlencode }}" class="case-rebuild-candidate">
+      <a href="/exam-case-rebuild?event_id={{ selected_event_id }}&subscriber_id={{ candidate.subscriber_id }}{% if search_query %}&{{ search_query }}{% endif %}" class="case-rebuild-candidate">
         <strong>{{ candidate.name_kanji_full or candidate.name_kana_full or "氏名未登録" }}</strong>
         <span>{{ candidate.name_kana_full or "-" }}</span>
         <small>subscriber {{ candidate.subscriber_id }} / 社員番号 {{ candidate.employee_code or "-" }} / HIA {{ candidate.hia_subscriber_id or "-" }}</small>

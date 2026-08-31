@@ -6205,6 +6205,14 @@ def load_subscriber_match_candidate_rows(
         like = f"%{candidate_employee_code}%"
         filter_parts.append("s.employee_code LIKE %s")
         filter_params.append(like)
+    candidate_birth = str(candidate_filters.get("birth") or "").strip()
+    if candidate_birth:
+        filter_parts.append("CAST(s.birth AS CHAR) LIKE %s")
+        filter_params.append(f"%{candidate_birth}%")
+    candidate_hia_subscriber_id = str(candidate_filters.get("hia_subscriber_id") or "").strip()
+    if candidate_hia_subscriber_id:
+        filter_parts.append("s.hia_subscriber_id LIKE %s")
+        filter_params.append(f"%{candidate_hia_subscriber_id}%")
     if not where_parts and not filter_parts:
         return []
     where_sql_parts: list[str] = []
@@ -12891,7 +12899,15 @@ def exam_case_rebuild(request: Request) -> Response:
     if not can_run_exam_processing(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
-    query = str(request.query_params.get("q") or "").strip()
+    search_filters = {
+        "insurance_symbol": str(request.query_params.get("insurance_symbol") or "").strip(),
+        "insurance_number": str(request.query_params.get("insurance_number") or "").strip(),
+        "name_kana": str(request.query_params.get("name_kana") or "").strip(),
+        "birth": str(request.query_params.get("birth") or "").strip(),
+        "hia_subscriber_id": str(request.query_params.get("hia_subscriber_id") or "").strip(),
+    }
+    has_search_filters = any(search_filters.values())
+    search_query = urlencode({key: value for key, value in search_filters.items() if value})
     subscriber_id = _optional_int(request.query_params.get("subscriber_id"))
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -12902,9 +12918,9 @@ def exam_case_rebuild(request: Request) -> Response:
                 cur,
                 ledger=None,
                 event_id=event_id,
-                query=query,
+                candidate_filters=search_filters,
                 limit=50,
-            ) if query else []
+            ) if has_search_filters else []
             selected_subscriber = (
                 load_case_rebuild_subscriber(cur, subscriber_id=subscriber_id)
                 if subscriber_id is not None
@@ -12937,7 +12953,8 @@ def exam_case_rebuild(request: Request) -> Response:
             "user": user,
             "events": events,
             "selected_event_id": event_id,
-            "query": query,
+            "search_filters": search_filters,
+            "search_query": search_query,
             "candidates": candidates,
             "selected_subscriber": selected_subscriber,
             "cases": cases,
@@ -13077,7 +13094,14 @@ async def run_exam_case_rebuild(request: Request) -> Response:
             "user": user,
             "events": events,
             "selected_event_id": event_id,
-            "query": "",
+            "search_filters": {
+                "insurance_symbol": "",
+                "insurance_number": "",
+                "name_kana": "",
+                "birth": "",
+                "hia_subscriber_id": "",
+            },
+            "search_query": "",
             "candidates": [],
             "selected_subscriber": selected_subscriber,
             "cases": cases,
