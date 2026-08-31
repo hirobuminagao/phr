@@ -1004,6 +1004,7 @@
     const openButton = document.querySelector("[data-modal-open='case-exam-item-filter-modal']");
     const clearButton = caseExamItemModal.querySelector("[data-case-exam-item-clear]");
     const setButton = caseExamItemModal.querySelector("[data-case-exam-item-set]");
+    const summaryRoot = document.querySelector("[data-case-exam-item-summary]");
     const initialItems = new Map(
       Array.from(selectedRoot?.querySelectorAll("[data-namecode]") || []).map((item) => [
         item.getAttribute("data-namecode") || "",
@@ -1032,6 +1033,15 @@
               <strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode)}</small>
             </span>`).join("")
         : '<span class="subtle">選択なし</span>';
+    };
+    const renderCaseSummary = () => {
+      if (!summaryRoot) return;
+      summaryRoot.innerHTML = stagedItems.size
+        ? `
+          <span class="active-filter-chip">${stagedMatchMode === "all" ? "すべて（AND）" : "いずれか（OR）"}</span>
+          ${Array.from(stagedItems.values()).map((item) => `
+            <span class="active-filter-chip">${escapeHtml(item.item_name || item.namecode)}</span>`).join("")}`
+        : '<span class="active-filter-chip is-empty">条件なし</span>';
     };
     const renderCaseResults = () => {
       if (!resultsRoot) return;
@@ -1104,6 +1114,7 @@
       caseFilterDraft.set("exam_item_namecodes", Array.from(selectedItems.keys()).join(","));
       caseFilterDraft.set("exam_item_match_mode", matchMode);
       caseFilterDraft.set("page", "1");
+      renderCaseSummary();
       markCaseFilterDirty();
       closeModal(caseExamItemModal);
     });
@@ -1116,6 +1127,7 @@
       caseFilterDraft.delete("exam_item_namecodes");
       caseFilterDraft.set("exam_item_match_mode", "any");
       caseFilterDraft.set("page", "1");
+      renderCaseSummary();
       markCaseFilterDirty();
       closeModal(caseExamItemModal);
     });
