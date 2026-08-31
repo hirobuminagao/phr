@@ -190,6 +190,12 @@
       </div>
     </div>
     <div class="home-menu-grid">
+      {% if "subscriber_reference.view" in user.permissions or "users.manage" in user.permissions %}
+      <a class="home-menu-card" href="/utilities/subscribers">
+        <span class="status-pill status-ready">利用可</span>
+        <div><strong>加入者情報確認</strong><small>加入者を検索し、イベント・健診処理・変更履歴を参照する</small></div>
+      </a>
+      {% endif %}
       <a class="home-menu-card" href="/utilities/person-selection">
         <span class="status-pill status-ready">利用可</span>
         <div><strong>対象者リスト作成</strong><small>一人ずつ、またはExcel貼り付けからidentity/HIA ID/subscriber/case候補を作る</small></div>

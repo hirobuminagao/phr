@@ -94,6 +94,18 @@
         </div>
       </div>
       <div class="form-section">
+        <h2>加入者個人情報の表示</h2>
+        <p class="subtle">通常詳細は完全表示権限があってもマスク表示です。完全表示は専用ボタンから開き、閲覧履歴を記録します。</p>
+        <div class="segmented-control subscriber-pii-level-control">
+          {% for value, label in [('FULL', '完全表示可'), ('MASKED', 'マスク表示'), ('HIDDEN', '非表示')] %}
+          <label>
+            <input type="radio" name="subscriber_pii_level" value="{{ value }}" {% if (subscriber_pii_level or 'HIDDEN') == value %}checked{% endif %}>
+            <span>{{ label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="form-section">
         <h2>ログイン許可IP</h2>
         <p class="subtle">空欄ならIP制限なし。入力した場合は、登録したIPからのみログインできます。複数は改行またはカンマで入力します。</p>
         <label>

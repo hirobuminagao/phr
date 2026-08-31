@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set title = "加入者情報確認" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Utility / Subscriber</p><h1>加入者情報確認</h1><p>加入者を起点に、イベントと健診処理の現在地を参照します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/">HOME</a><form method="post" action="/logout"><button class="ghost-button" type="submit">ログアウト</button></form></nav>
+</header>
+<main class="page subscriber-reference-page">
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <section class="panel">
+    <div class="section-heading"><div><h2>加入者検索</h2><p class="subtle">複数条件はANDです。入力値は閲覧監査へ保存しません。</p></div><span class="status-pill">個人情報 {{ pii_level }}</span></div>
+    <form method="get" action="/utilities/subscribers" class="subscriber-reference-search-grid">
+      <label><span>HIA加入者ID</span><input name="hia_subscriber_id" value="{{ filters.hia_subscriber_id }}"></label>
+      <label><span>記号</span><input name="insurance_symbol" value="{{ filters.insurance_symbol }}"></label>
+      <label><span>番号</span><input name="insurance_number" value="{{ filters.insurance_number }}"></label>
+      <label><span>氏名カナ</span><input name="name_kana" value="{{ filters.name_kana }}"></label>
+      <label><span>生年月日</span><input name="birth" value="{{ filters.birth }}" placeholder="YYYY-MM-DD"></label>
+      <label><span>保険者番号</span><input name="insurer_number" value="{{ filters.insurer_number }}"></label>
+      <label><span>社員番号</span><input name="employee_code" value="{{ filters.employee_code }}"></label>
+      <label><span>subscriber ID</span><input name="subscriber_id" value="{{ filters.subscriber_id }}"></label>
+      {% if can_open_full %}
+      <div class="subscriber-list-display-mode">
+        <span>一覧の個人情報</span>
+        <div class="segmented-control" role="group" aria-label="一覧の個人情報表示モード">
+          <label><input type="radio" name="display_mode" value="MASKED" {% if display_mode != 'FULL' %}checked{% endif %} onchange="this.form.submit()"><span>マスク表示</span></label>
+          <label><input type="radio" name="display_mode" value="FULL" {% if display_mode == 'FULL' %}checked{% endif %} onchange="this.form.submit()"><span>完全表示</span></label>
+        </div>
+      </div>
+      {% else %}<input type="hidden" name="display_mode" value="{{ display_mode }}">{% endif %}
+      <div class="form-actions subscriber-search-actions"><button type="submit">検索</button><a class="ghost-button" href="/utilities/subscribers">クリア</a></div>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="section-heading"><div><h2>検索結果</h2><p class="subtle">{% if searched %}{{ rows|length }}件{% else %}条件を入力して検索してください。{% endif %}</p></div></div>
+    {% if rows %}
+    <div class="table-wrap"><table class="data-table subscriber-reference-table"><thead><tr><th>加入者</th><th>個人情報</th><th>資格・健診</th><th>関連</th><th>操作</th></tr></thead><tbody>
+      {% for row in rows %}<tr>
+        <td><strong>ID {{ row.subscriber_id }}</strong><small>HIA {{ row.hia_subscriber_id or '-' }}</small><small>保険者 {{ row.insurer_number or '-' }}</small></td>
+        <td><strong>{{ row.name_display }}</strong><small>{{ row.birth_display }}</small><small>{{ row.insurance_display }}</small></td>
+        <td><strong>{{ '資格喪失' if row.qualification_lost_date else '資格中' }}</strong><small>最新健診 {{ row.latest_exam_date or '-' }}</small><small>更新 {{ row.updated_at or '-' }}</small></td>
+        <td><strong>event {{ row.event_count }}</strong><small>case {{ row.case_count }}</small></td>
+        <td><div class="compact-action-row"><a class="ghost-button compact-action-button" href="/utilities/subscribers/{{ row.subscriber_id }}">マスク表示</a>{% if can_open_full %}<form method="post" action="/utilities/subscribers/{{ row.subscriber_id }}/full"><button class="compact-action-button" type="submit">完全表示</button></form>{% endif %}</div></td>
+      </tr>{% endfor %}
+    </tbody></table></div>
+    {% elif searched %}<div class="empty-state">該当する加入者はありません。</div>{% endif %}
+  </section>
+</main>
+{% endblock %}

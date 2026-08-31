@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% set title = "加入者情報確認 詳細" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Utility / Subscriber</p><h1>加入者詳細</h1><p>ID {{ subscriber.subscriber_id }} を起点に関連状態を表示します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/utilities/subscribers">検索へ戻る</a><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page subscriber-reference-page">
+  <section class="panel subscriber-reference-identity-head">
+    <div class="section-heading"><div><h2>概要</h2><p class="subtle">参照専用 / {{ '完全表示' if display_mode == 'FULL' else ('マスク表示' if display_mode == 'MASKED' else '個人情報非表示') }}</p></div><span class="status-pill {{ 'status-warning' if display_mode == 'FULL' else 'status-ready' }}">{{ display_mode }}</span></div>
+    <div class="detail-grid subscriber-reference-summary-grid">
+      <div><span>subscriber ID</span><strong>{{ subscriber.subscriber_id }}</strong></div><div><span>HIA加入者ID</span><strong>{{ subscriber.hia_subscriber_id or '-' }}</strong></div>
+      <div><span>氏名</span><strong>{{ subscriber.name_kanji_full or ('非表示' if display_mode == 'HIDDEN' else '未登録') }}</strong><small>{{ subscriber.name_kana_full or '-' }}</small></div>
+      <div><span>生年月日</span><strong>{{ subscriber.birth or ('非表示' if display_mode == 'HIDDEN' else '-') }}</strong></div>
+      <div><span>保険</span><strong>{{ subscriber.insurer_number or '-' }}</strong><small>{{ subscriber.insurance_symbol or ('非表示' if display_mode == 'HIDDEN' else '-') }} / {{ subscriber.insurance_number or ('非表示' if display_mode == 'HIDDEN' else '-') }}</small></div>
+      <div><span>資格</span><strong>{{ '資格喪失' if subscriber.qualification_lost_date else '資格中' }}</strong><small>{{ subscriber.qualification_acquired_date or '-' }} - {{ subscriber.qualification_lost_date or '-' }}</small></div>
+      <div><span>住所</span><strong>{{ subscriber.postal_code or ('非表示' if display_mode == 'HIDDEN' else '-') }}</strong><small>{{ subscriber.address_line or ('非表示' if display_mode == 'HIDDEN' else '-') }} {{ subscriber.building or '' }}</small></div>
+      <div><span>追跡</span><strong>person {{ subscriber.person_id_custom or '-' }}</strong><small>run {{ subscriber.last_change_run_id or '-' }} / identity {{ (subscriber.identity_hash or '-')[:12] }}</small></div>
+    </div>
+    {% if subscriber.contacts %}<div class="subscriber-contact-list">{% for item in subscriber.contacts %}<span><strong>{{ item.contact_type }}</strong> {{ item.contact_value }}</span>{% endfor %}</div>{% endif %}
+  </section>
+
+  <section class="panel"><div class="section-heading"><div><h2>HIAダッシュボード</h2><p class="subtle">現在有効なダッシュボード行</p></div><span class="status-pill">{{ dashboard_rows|length }}件</span></div>
+    {% if dashboard_rows %}<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>状態</th><th>日付</th><th>健診</th><th>run</th></tr></thead><tbody>{% for row in dashboard_rows %}<tr><td>{{ row.hia_dashboard_person_id }}</td><td><strong>{{ row.status or '-' }}</strong></td><td>予約 {{ row.reservation_date or '-' }}<br>受診 {{ row.exam_date or '-' }}</td><td>{{ row.medical_institution or '-' }}<br><small>{{ row.course_name or '-' }}</small></td><td>{{ row.first_seen_run_id }} → {{ row.last_seen_run_id }}<br><small>{{ row.updated_at }}</small></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">有効なダッシュボード情報はありません。</div>{% endif %}
+  </section>
+
+  <section class="panel"><div class="section-heading"><div><h2>イベント・健診状況</h2><p class="subtle">工程ごとの状態を統合せず、そのまま並べます。</p></div><span class="status-pill">{{ events|length }}イベント</span></div>
+    <div class="subscriber-event-list">{% for event in events %}<details class="subscriber-event-card" {% if loop.first %}open{% endif %}><summary><div><strong>{{ event.event_name or ('イベント ' ~ event.event_id) }}</strong><small>ID {{ event.event_id }} / {{ event.event_year }} / {{ event.event_type }}</small></div><div class="subscriber-event-statuses"><span>ledger {{ event.ledger_count }}</span><span>case {{ event.case_count }}</span><span>{{ event.latest_exam_date or '受診日なし' }}</span></div></summary>
+      <div class="subscriber-process-flow"><div><span>人・event</span><strong>{{ event.hia_status_code or '-' }}</strong><small>person_event {{ event.person_event_id or '-' }}</small></div><div><span>受領・ledger</span><strong>{{ event.ledger_count }}件</strong><small>{{ event.source_types or '-' }}</small></div><div><span>case・採用値</span><strong>{{ event.case_count }}件</strong><small>{{ event.readiness_statuses or '-' }}</small></div><div><span>法定チェック</span><strong>{{ event.check_statuses or '-' }}</strong></div><div><span>XML出力</span><strong>{{ event.xml_statuses or '-' }}</strong></div></div>
+      {% if event.status_items %}<div class="status-item-grid">{% for item in event.status_items %}<div><strong>{{ item.item_code }}</strong><small>{{ item.value_code or item.value_text or item.value_number or item.value_date or item.value_datetime or ('ON' if item.value_bool else '-') }}</small><small>run {{ item.source_run_id or '-' }} / {{ item.refreshed_at }}</small></div>{% endfor %}</div>{% endif %}
+      <div class="compact-action-row"><a class="ghost-button compact-action-button" href="/exam-ledgers?event_id={{ event.event_id }}&subscriber_id={{ subscriber.subscriber_id }}">ledger一覧</a><a class="ghost-button compact-action-button" href="/exam-export-cases?event_id={{ event.event_id }}&subscriber_id={{ subscriber.subscriber_id }}">case一覧</a><a class="ghost-button compact-action-button" href="/exam-case-rebuild?event_id={{ event.event_id }}&subscriber_id={{ subscriber.subscriber_id }}">限定再実行画面</a></div>
+    </details>{% else %}<div class="empty-state">関連するイベント、ledger、caseはありません。</div>{% endfor %}</div>
+  </section>
+
+  {% if can_view_history %}<section class="panel"><div class="section-heading"><div><h2>変更・参照履歴</h2><p class="subtle">変更前後の値は取得・表示しません。</p></div></div>
+    <div class="subscriber-history-grid"><div><h3>加入者変更履歴</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>ID・日時</th><th>項目</th><th>由来</th><th>run</th></tr></thead><tbody>{% for row in history_rows %}<tr><td>{{ row.audit_id }}<br><small>{{ row.changed_at }}</small></td><td><strong>{{ row.field }}</strong><small>{{ '理由記録あり' if row.has_note else '理由記録なし' }}</small></td><td>{{ row.source or '-' }}</td><td>{{ row.change_run_id or '-' }}</td></tr>{% else %}<tr><td colspan="4">変更履歴はありません。</td></tr>{% endfor %}</tbody></table></div></div>
+      <div><h3>この加入者の参照履歴</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>ID・日時</th><th>操作</th><th>操作者</th></tr></thead><tbody>{% for row in view_history_rows %}<tr><td>{{ row.app_audit_log_id }}<br><small>{{ row.created_at }}</small></td><td>{{ row.action_code }}</td><td>ID {{ row.app_user_id or '-' }}<br><small>{{ row.employee_no or '-' }}</small></td></tr>{% else %}<tr><td colspan="3">参照履歴はありません。</td></tr>{% endfor %}</tbody></table></div></div></div>
+  </section>{% endif %}
+</main>
+{% endblock %}

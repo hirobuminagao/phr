@@ -157,6 +157,12 @@ BUSINESS_SETTINGS_PERMISSION = "business_settings.manage"
 SYSTEM_SETTINGS_PERMISSION = "users.manage"
 MANUAL_EXAM_ENTRY_EDIT_PERMISSION = "manual_exam_entry.edit"
 MANUAL_EXAM_ENTRY_MANAGE_PERMISSION = "manual_exam_entry.manage"
+SUBSCRIBER_REFERENCE_VIEW_PERMISSION = "subscriber_reference.view"
+SUBSCRIBER_REFERENCE_HISTORY_PERMISSION = "subscriber_reference.history_view"
+SUBSCRIBER_REFERENCE_EDIT_PERMISSION = "subscriber_reference.edit"
+SUBSCRIBER_REFERENCE_PII_FULL_PERMISSION = "subscriber_reference.pii.full"
+SUBSCRIBER_REFERENCE_PII_MASKED_PERMISSION = "subscriber_reference.pii.masked"
+SUBSCRIBER_REFERENCE_PII_HIDDEN_PERMISSION = "subscriber_reference.pii.hidden"
 MANUAL_EXAM_FLAG_TOGGLE_IDENTITY_CODES = {"9N056", "9N061", "9N066"}
 LOGIN_ERROR_MESSAGES = {
     "USER_NOT_FOUND": "社員番号またはパスワードが違います。",
@@ -208,6 +214,13 @@ WORK_PERMISSION_ITEMS = (
         "description": "個人case一覧の絞り込み結果を、加入者情報付きCSVとして出力する",
         "view_codes": ("exam_export_cases.csv_download",),
         "edit_codes": ("exam_export_cases.csv_download",),
+    },
+    {
+        "key": "subscriber_reference",
+        "name": "加入者情報確認",
+        "description": "表示=加入者・イベント・履歴の参照、編集=将来の加入者情報変更を許可する",
+        "view_codes": (SUBSCRIBER_REFERENCE_VIEW_PERMISSION, SUBSCRIBER_REFERENCE_HISTORY_PERMISSION),
+        "edit_codes": (SUBSCRIBER_REFERENCE_EDIT_PERMISSION,),
     },
 )
 
@@ -476,6 +489,26 @@ def can_edit_manual_exam_entry(user: dict[str, Any]) -> bool:
 
 def can_manage_manual_exam_entry(user: dict[str, Any]) -> bool:
     return has_any_permission(user, (MANUAL_EXAM_ENTRY_MANAGE_PERMISSION, SYSTEM_SETTINGS_PERMISSION))
+
+
+def can_view_subscriber_reference(user: dict[str, Any]) -> bool:
+    return has_any_permission(user, (SUBSCRIBER_REFERENCE_VIEW_PERMISSION, SYSTEM_SETTINGS_PERMISSION))
+
+
+def can_view_subscriber_history(user: dict[str, Any]) -> bool:
+    return has_any_permission(user, (SUBSCRIBER_REFERENCE_HISTORY_PERMISSION, SYSTEM_SETTINGS_PERMISSION))
+
+
+def subscriber_reference_pii_level(user: dict[str, Any]) -> str:
+    if has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return "FULL"
+    if has_permission(user, SUBSCRIBER_REFERENCE_PII_HIDDEN_PERMISSION):
+        return "HIDDEN"
+    if has_permission(user, SUBSCRIBER_REFERENCE_PII_MASKED_PERMISSION):
+        return "MASKED"
+    if has_permission(user, SUBSCRIBER_REFERENCE_PII_FULL_PERMISSION):
+        return "FULL"
+    return "HIDDEN"
 
 
 def require_user(request: Request) -> dict[str, Any] | RedirectResponse:
@@ -800,6 +833,65 @@ def replace_user_work_permissions(
                     permission_code,
                 ),
             )
+
+
+def load_user_subscriber_pii_level(cur: Any, *, app_user_id: int) -> str:
+    cur.execute(
+        """
+        SELECT p.permission_code, up.is_allowed
+        FROM app_permissions p
+        LEFT JOIN app_user_permissions up
+          ON up.app_permission_id = p.app_permission_id
+         AND up.app_user_id = %s
+        WHERE p.permission_code IN (%s, %s, %s)
+        """,
+        (
+            app_user_id,
+            SUBSCRIBER_REFERENCE_PII_FULL_PERMISSION,
+            SUBSCRIBER_REFERENCE_PII_MASKED_PERMISSION,
+            SUBSCRIBER_REFERENCE_PII_HIDDEN_PERMISSION,
+        ),
+    )
+    allowed = {str(row["permission_code"]) for row in cur.fetchall() if bool(row.get("is_allowed"))}
+    if SUBSCRIBER_REFERENCE_PII_HIDDEN_PERMISSION in allowed:
+        return "HIDDEN"
+    if SUBSCRIBER_REFERENCE_PII_MASKED_PERMISSION in allowed:
+        return "MASKED"
+    if SUBSCRIBER_REFERENCE_PII_FULL_PERMISSION in allowed:
+        return "FULL"
+    return "HIDDEN"
+
+
+def replace_user_subscriber_pii_level(
+    cur: Any,
+    *,
+    app_user_id: int,
+    pii_level: str,
+    assigned_by_app_user_id: int,
+) -> None:
+    permission_by_level = {
+        "FULL": SUBSCRIBER_REFERENCE_PII_FULL_PERMISSION,
+        "MASKED": SUBSCRIBER_REFERENCE_PII_MASKED_PERMISSION,
+        "HIDDEN": SUBSCRIBER_REFERENCE_PII_HIDDEN_PERMISSION,
+    }
+    selected_code = permission_by_level.get(pii_level, SUBSCRIBER_REFERENCE_PII_HIDDEN_PERMISSION)
+    for permission_code in permission_by_level.values():
+        cur.execute(
+            """
+            INSERT INTO app_user_permissions (
+              app_user_id, app_permission_id, is_allowed, assigned_by_app_user_id, note
+            )
+            SELECT %s, p.app_permission_id, %s, %s, 'subscriber PII level set by admin screen'
+            FROM app_permissions p
+            WHERE p.permission_code = %s
+              AND p.is_active = 1
+            ON DUPLICATE KEY UPDATE
+              is_allowed = VALUES(is_allowed),
+              assigned_by_app_user_id = VALUES(assigned_by_app_user_id),
+              note = VALUES(note)
+            """,
+            (app_user_id, 1 if permission_code == selected_code else 0, assigned_by_app_user_id, permission_code),
+        )
 
 
 def admin_user_filters_from_request(request: Request) -> dict[str, str]:
@@ -15703,6 +15795,360 @@ async def download_csv_mapping_lab_prompt(request: Request) -> Response:
     )
 
 
+def mask_subscriber_text(value: Any, *, keep_end: int = 2) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "未登録"
+    if len(text) <= keep_end:
+        return "*" * len(text)
+    return "*" * (len(text) - keep_end) + text[-keep_end:]
+
+
+def subscriber_reference_filters(request: Request) -> dict[str, str]:
+    return {
+        "subscriber_id": str(request.query_params.get("subscriber_id") or "").strip(),
+        "hia_subscriber_id": str(request.query_params.get("hia_subscriber_id") or "").strip(),
+        "insurance_symbol": str(request.query_params.get("insurance_symbol") or "").strip(),
+        "insurance_number": str(request.query_params.get("insurance_number") or "").strip(),
+        "name_kana": str(request.query_params.get("name_kana") or "").strip(),
+        "birth": str(request.query_params.get("birth") or "").strip(),
+        "insurer_number": str(request.query_params.get("insurer_number") or "").strip(),
+        "employee_code": str(request.query_params.get("employee_code") or "").strip(),
+    }
+
+
+def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str], pii_level: str) -> list[dict[str, Any]]:
+    subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
+    where: list[str] = []
+    params: list[Any] = []
+    field_map = {
+        "subscriber_id": "CAST(s.id AS CHAR)",
+        "hia_subscriber_id": "s.hia_subscriber_id",
+        "insurance_symbol": "s.insurance_symbol",
+        "insurance_number": "s.insurance_number",
+        "name_kana": "COALESCE(s.name_kana_full_match, s.name_kana_full)",
+        "birth": "CAST(s.birth AS CHAR)",
+        "insurer_number": "s.insurer_number",
+        "employee_code": "s.employee_code" if "employee_code" in subscriber_columns else "NULL",
+    }
+    for key, expression in field_map.items():
+        value = str(filters.get(key) or "").strip()
+        if value:
+            if expression == "NULL":
+                return []
+            where.append(f"{expression} LIKE %s")
+            params.append(f"%{value}%")
+    if not where:
+        return []
+    event_count_expr = (
+        f"(SELECT COUNT(*) FROM {qname(dev_db())}.person_event pe WHERE pe.subscriber_id = s.id)"
+        if manual_exam_entry_table_exists(cur, dev_db(), "person_event")
+        else "0"
+    )
+    cur.execute(
+        f"""
+        SELECT
+          s.id AS subscriber_id,
+          s.hia_subscriber_id,
+          s.name_kana_full,
+          s.birth,
+          s.insurer_number,
+          s.insurance_symbol,
+          s.insurance_number,
+          {('s.employee_code' if 'employee_code' in subscriber_columns else 'NULL')} AS employee_code,
+          {('s.qualification_lost_date' if 'qualification_lost_date' in subscriber_columns else 'NULL')} AS qualification_lost_date,
+          s.updated_at,
+          (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id) AS latest_exam_date,
+          {event_count_expr} AS event_count,
+          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id) AS case_count
+        FROM {qname(dev_db())}.subscribers s
+        WHERE {' AND '.join(where)}
+        ORDER BY latest_exam_date DESC, s.id DESC
+        LIMIT 100
+        """,
+        tuple(params),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        if pii_level == "HIDDEN":
+            row["name_display"] = "非表示"
+            row["birth_display"] = "非表示"
+            row["insurance_display"] = "非表示"
+        elif pii_level == "FULL":
+            row["name_display"] = str(row.get("name_kana_full") or "未登録")
+            row["birth_display"] = str(row.get("birth") or "未登録")
+            row["insurance_display"] = f"{row.get('insurance_symbol') or '-'} / {row.get('insurance_number') or '-'}"
+        else:
+            row["name_display"] = mask_subscriber_text(row.get("name_kana_full"), keep_end=2)
+            birth = str(row.get("birth") or "")
+            row["birth_display"] = f"{birth[:4]}-**-**" if len(birth) >= 4 else "未登録"
+            row["insurance_display"] = f"{mask_subscriber_text(row.get('insurance_symbol'))} / {mask_subscriber_text(row.get('insurance_number'), keep_end=4)}"
+        row.pop("name_kana_full", None)
+        row.pop("birth", None)
+        row.pop("insurance_symbol", None)
+        row.pop("insurance_number", None)
+    return rows
+
+
+def load_subscriber_reference_detail(cur: Any, *, subscriber_id: int, display_mode: str) -> dict[str, Any] | None:
+    subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
+    optional_select = lambda column: f"s.{column}" if column in subscriber_columns else f"NULL AS {column}"
+    cur.execute(
+        f"""
+        SELECT
+          s.id AS subscriber_id, s.hia_subscriber_id, s.person_id_custom, s.identity_hash,
+          s.insurer_number, s.insurance_symbol, s.insurance_number, s.insurance_branchnumber,
+          {optional_select('name_kanji_full')}, s.name_kana_full, s.birth, s.gender_code,
+          {optional_select('employee_code')}, {optional_select('employer_code')}, {optional_select('department_code')},
+          {optional_select('qualification_acquired_date')}, {optional_select('qualification_lost_date')},
+          {optional_select('last_change_run_id')}, s.created_at, s.updated_at,
+          a.postal_code, a.address_line, a.building
+        FROM {qname(dev_db())}.subscribers s
+        LEFT JOIN {qname(dev_db())}.subscriber_addresses a
+          ON a.subscriber_id = s.id AND a.is_current = 1
+        WHERE s.id = %s
+        ORDER BY a.address_id DESC
+        LIMIT 1
+        """,
+        (subscriber_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    detail = dict(row)
+    contacts: list[dict[str, Any]] = []
+    if manual_exam_entry_table_exists(cur, dev_db(), "subscriber_contact_points"):
+        cur.execute(
+            f"""
+            SELECT contact_type, contact_value
+            FROM {qname(dev_db())}.subscriber_contact_points
+            WHERE subscriber_id = %s AND is_current = 1
+            ORDER BY contact_type, contact_point_id DESC
+            """,
+            (subscriber_id,),
+        )
+        contacts = [dict(item) for item in cur.fetchall()]
+    sensitive_keys = (
+        "insurance_symbol", "insurance_number", "insurance_branchnumber", "name_kanji_full",
+        "name_kana_full", "birth", "postal_code", "address_line", "building",
+    )
+    if display_mode == "HIDDEN":
+        for key in sensitive_keys:
+            detail[key] = None
+        detail["contacts"] = []
+    elif display_mode == "MASKED":
+        detail["name_kanji_full"] = mask_subscriber_text(detail.get("name_kanji_full"), keep_end=1)
+        detail["name_kana_full"] = mask_subscriber_text(detail.get("name_kana_full"), keep_end=2)
+        birth = str(detail.get("birth") or "")
+        detail["birth"] = f"{birth[:4]}-**-**" if len(birth) >= 4 else None
+        detail["insurance_symbol"] = mask_subscriber_text(detail.get("insurance_symbol"))
+        detail["insurance_number"] = mask_subscriber_text(detail.get("insurance_number"), keep_end=4)
+        detail["insurance_branchnumber"] = mask_subscriber_text(detail.get("insurance_branchnumber"), keep_end=1)
+        detail["postal_code"] = mask_subscriber_text(detail.get("postal_code"), keep_end=2)
+        detail["address_line"] = "登録あり（マスク）" if detail.get("address_line") else None
+        detail["building"] = "登録あり（マスク）" if detail.get("building") else None
+        detail["contacts"] = [
+            {"contact_type": item.get("contact_type"), "contact_value": mask_subscriber_text(item.get("contact_value"), keep_end=4)}
+            for item in contacts
+        ]
+    else:
+        detail["contacts"] = contacts
+    return detail
+
+
+def load_subscriber_reference_events(cur: Any, *, subscriber_id: int) -> list[dict[str, Any]]:
+    has_person_event = manual_exam_entry_table_exists(cur, dev_db(), "person_event")
+    has_status_items = manual_exam_entry_table_exists(cur, dev_db(), "person_event_status_items")
+    person_event_select = (
+        "pe.person_event_id, pe.result_received_count, pe.delivery_detected_count, "
+        "pe.hia_status_code, pe.delivery_target_flag, pe.delivery_exported_flag, "
+        "pe.gap_flag, pe.gap_reason, pe.updated_at AS person_event_updated_at"
+        if has_person_event
+        else "NULL AS person_event_id, 0 AS result_received_count, 0 AS delivery_detected_count, "
+             "NULL AS hia_status_code, NULL AS delivery_target_flag, NULL AS delivery_exported_flag, "
+             "NULL AS gap_flag, NULL AS gap_reason, NULL AS person_event_updated_at"
+    )
+    person_event_join = (
+        f"LEFT JOIN {qname(dev_db())}.person_event pe ON pe.event_id = ev.event_id AND pe.subscriber_id = %s"
+        if has_person_event else ""
+    )
+    person_event_where = "pe.person_event_id IS NOT NULL OR" if has_person_event else ""
+    cur.execute(
+        f"""
+        SELECT
+          ev.event_id, ev.event_name, ev.event_year, ev.event_type,
+          {person_event_select},
+          (SELECT COUNT(*) FROM {qname(health_db())}.exam_ledgers el WHERE el.event_id = ev.event_id AND el.subscriber_id = %s) AS ledger_count,
+          (SELECT GROUP_CONCAT(DISTINCT el.source_type ORDER BY el.source_type SEPARATOR ' / ') FROM {qname(health_db())}.exam_ledgers el WHERE el.event_id = ev.event_id AND el.subscriber_id = %s) AS source_types,
+          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS case_count,
+          (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS latest_exam_date,
+          (SELECT GROUP_CONCAT(DISTINCT eec.export_readiness_status ORDER BY eec.export_readiness_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS readiness_statuses,
+          (SELECT GROUP_CONCAT(DISTINCT eec.check_status ORDER BY eec.check_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS check_statuses,
+          (SELECT GROUP_CONCAT(DISTINCT eec.xml_export_status ORDER BY eec.xml_export_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS xml_statuses
+        FROM {qname(dev_db())}.event ev
+        {person_event_join}
+        WHERE {person_event_where}
+           EXISTS (SELECT 1 FROM {qname(health_db())}.exam_ledgers el WHERE el.event_id = ev.event_id AND el.subscriber_id = %s)
+           OR EXISTS (SELECT 1 FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s)
+        ORDER BY ev.event_year DESC, ev.event_id DESC
+        """,
+        (subscriber_id,) * (10 if has_person_event else 9),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        if not has_status_items:
+            row["status_items"] = []
+            continue
+        cur.execute(
+            f"""
+            SELECT item_code, value_type, value_bool, value_number, value_text, value_code,
+                   value_date, value_datetime, value_ref_type, value_ref_id, reason, source_run_id, refreshed_at
+            FROM {qname(dev_db())}.person_event_status_items
+            WHERE event_id = %s AND subscriber_id = %s
+            ORDER BY item_code
+            """,
+            (row["event_id"], subscriber_id),
+        )
+        row["status_items"] = [dict(item) for item in cur.fetchall()]
+    return rows
+
+
+def load_subscriber_reference_dashboard(cur: Any, *, subscriber_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT hia_dashboard_person_id, status, reservation_date, exam_date,
+               medical_institution, course_name, first_seen_run_id, last_seen_run_id, updated_at
+        FROM {qname(work_other_db())}.hia_dashboard_status
+        WHERE subscribers_id = %s AND is_active = 1
+        ORDER BY updated_at DESC, hia_dashboard_person_id DESC
+        LIMIT 20
+        """,
+        (subscriber_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_subscriber_reference_history(cur: Any, *, subscriber_id: int) -> list[dict[str, Any]]:
+    if not manual_exam_entry_table_exists(cur, dev_db(), "subscriber_audit"):
+        return []
+    cur.execute(
+        f"""
+        SELECT audit_id, field, changed_at, source,
+               CASE WHEN note IS NULL OR note = '' THEN 0 ELSE 1 END AS has_note,
+               change_run_id
+        FROM {qname(dev_db())}.subscriber_audit
+        WHERE subscriber_id = %s
+        ORDER BY audit_id DESC
+        LIMIT 200
+        """,
+        (subscriber_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_subscriber_reference_view_history(cur: Any, *, subscriber_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT app_audit_log_id, app_user_id, employee_no, action_code,
+               target_schema, target_table, target_id, created_at
+        FROM {qname(app_db())}.app_audit_logs
+        WHERE target_table = 'subscribers'
+          AND target_id = %s
+          AND action_code LIKE 'PERSONAL_INFO_%SUBSCRIBER%UTILITY'
+        ORDER BY app_audit_log_id DESC
+        LIMIT 200
+        """,
+        (str(subscriber_id),),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def render_subscriber_reference_detail(request: Request, *, subscriber_id: int, full: bool) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_subscriber_reference(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    pii_level = subscriber_reference_pii_level(user)
+    if full and pii_level != "FULL":
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    display_mode = "FULL" if full else ("HIDDEN" if pii_level == "HIDDEN" else "MASKED")
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        detail = load_subscriber_reference_detail(cur, subscriber_id=subscriber_id, display_mode=display_mode)
+        if not detail:
+            conn.rollback()
+            return RedirectResponse("/utilities/subscribers?error=加入者が見つかりません。", status_code=303)
+        events = load_subscriber_reference_events(cur, subscriber_id=subscriber_id)
+        dashboard_rows = load_subscriber_reference_dashboard(cur, subscriber_id=subscriber_id)
+        history_rows = load_subscriber_reference_history(cur, subscriber_id=subscriber_id) if can_view_subscriber_history(user) else []
+        view_history_rows = load_subscriber_reference_view_history(cur, subscriber_id=subscriber_id) if can_view_subscriber_history(user) else []
+        if audit_enabled(cur):
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="PERSONAL_INFO_VIEW_SUBSCRIBER_FULL_UTILITY" if full else "PERSONAL_INFO_VIEW_SUBSCRIBER_UTILITY",
+                target_schema=dev_db(),
+                target_table="subscribers",
+                target_id=str(subscriber_id),
+                after={"subscriber_id": subscriber_id, "display_mode": display_mode},
+            )
+        conn.commit()
+    return templates.TemplateResponse(
+        "subscriber_reference_detail.html",
+        {
+            "request": request, "user": user, "subscriber": detail, "events": events,
+            "dashboard_rows": dashboard_rows, "history_rows": history_rows,
+            "view_history_rows": view_history_rows, "display_mode": display_mode,
+            "can_open_full": pii_level == "FULL", "can_view_history": can_view_subscriber_history(user),
+        },
+    )
+
+
+@app.get("/utilities/subscribers", response_class=HTMLResponse)
+def subscriber_reference_search(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_subscriber_reference(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filters = subscriber_reference_filters(request)
+    searched = any(filters.values())
+    pii_level = subscriber_reference_pii_level(user)
+    requested_display_mode = str(request.query_params.get("display_mode") or "MASKED").strip().upper()
+    display_mode = "FULL" if requested_display_mode == "FULL" and pii_level == "FULL" else ("HIDDEN" if pii_level == "HIDDEN" else "MASKED")
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        rows = load_subscriber_reference_search_rows(cur, filters=filters, pii_level=display_mode) if searched else []
+        if searched and audit_enabled(cur):
+            log_audit(
+                cur, request=request, user=user,
+                action_code="PERSONAL_INFO_SEARCH_SUBSCRIBER_FULL_UTILITY" if display_mode == "FULL" else "PERSONAL_INFO_SEARCH_SUBSCRIBER_UTILITY",
+                target_schema=dev_db(), target_table="subscribers", target_id=None,
+                after={"filter_fields": [key for key, value in filters.items() if value], "result_count": len(rows), "display_mode": display_mode},
+            )
+        conn.commit()
+    return templates.TemplateResponse(
+        "subscriber_reference_search.html",
+        {"request": request, "user": user, "filters": filters, "rows": rows, "searched": searched,
+         "pii_level": pii_level, "display_mode": display_mode,
+         "can_open_full": pii_level == "FULL", "error": request.query_params.get("error")},
+    )
+
+
+@app.get("/utilities/subscribers/{subscriber_id}", response_class=HTMLResponse)
+def subscriber_reference_detail(request: Request, subscriber_id: int) -> Response:
+    return render_subscriber_reference_detail(request, subscriber_id=subscriber_id, full=False)
+
+
+@app.post("/utilities/subscribers/{subscriber_id}/full", response_class=HTMLResponse)
+def subscriber_reference_full_detail(request: Request, subscriber_id: int) -> Response:
+    return render_subscriber_reference_detail(request, subscriber_id=subscriber_id, full=True)
+
+
 @app.get("/utilities/person-selection", response_class=HTMLResponse)
 def person_selection_utility(request: Request) -> Response:
     user = require_user(request)
@@ -20103,6 +20549,7 @@ def edit_user_form(request: Request, app_user_id: int) -> Response:
         row = load_admin_user_detail(cur, app_user_id=app_user_id)
         roles = load_manageable_roles(cur)
         work_permissions = load_work_permission_rows(cur, app_user_id=app_user_id)
+        subscriber_pii_level = load_user_subscriber_pii_level(cur, app_user_id=app_user_id)
         allowed_ips = load_allowed_ip_rows(cur, app_user_id=app_user_id)
         cur.close()
     if row is None:
@@ -20115,6 +20562,7 @@ def edit_user_form(request: Request, app_user_id: int) -> Response:
             "target_user": row,
             "roles": roles,
             "work_permissions": work_permissions,
+            "subscriber_pii_level": subscriber_pii_level,
             "allowed_ips": allowed_ips,
             "form": admin_user_form_values(row),
             "allowed_ips_text": allowed_ips_text(allowed_ips),
@@ -20146,6 +20594,9 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
         for action_key in ("view", "edit")
         if form.get(f"work_permission__{item['key']}__{action_key}") == "1"
     }
+    subscriber_pii_level = str(form.get("subscriber_pii_level") or "HIDDEN").strip().upper()
+    if subscriber_pii_level not in {"FULL", "MASKED", "HIDDEN"}:
+        subscriber_pii_level = "HIDDEN"
     form_values = {
         "employee_no": employee_no,
         "display_name": display_name,
@@ -20271,6 +20722,12 @@ async def update_admin_user(request: Request, app_user_id: int) -> Response:
                 cur,
                 app_user_id=app_user_id,
                 allowed_work_permissions=allowed_work_permissions,
+                assigned_by_app_user_id=int(user["app_user_id"]),
+            )
+            replace_user_subscriber_pii_level(
+                cur,
+                app_user_id=app_user_id,
+                pii_level=subscriber_pii_level,
                 assigned_by_app_user_id=int(user["app_user_id"]),
             )
             replace_allowed_ips(cur, app_user_id=app_user_id, allowed_ips_text=allowed_ips_input)

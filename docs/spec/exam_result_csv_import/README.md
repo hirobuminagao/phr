@@ -15,7 +15,7 @@
 
 ## Documents
 
-2026-08-10時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。
+2026-08-31時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。出力リストと個人case一覧の直近の画面・検索挙動は `45_export_list_and_case_filter_current_spec.md` を参照する。
 実際のカラム・処理挙動は適用対象のDDL、migration、seed、コードを優先する。
 `05_design_history.md` は協議履歴、`30_pre_implementation_review.md` は実装着手時の基準点であり、旧案や当時の未決事項が残っていても現在正とは限らない。
 
@@ -97,6 +97,12 @@
 - `44_case_scoped_rebuild_screen.md`
   - eventと加入者を検索し、既存caseの限定再実行、またはledgerからのcase作成を行う管理画面の現在仕様。
   - 加入者条件、健診機関・受診月のcase/ledger横断検索、処理範囲、複数加入者処理を保留する理由を整理する。
+- `45_export_list_and_case_filter_current_spec.md`
+  - 出力リスト詳細、XML梱包方式、候補追加、個人case一覧の基本条件・健診項目条件、APIエラー表示の実装同期仕様。
+  - 2026-08-31時点の画面操作と検索条件の組み合わせを正として整理する。
+- `46_subscriber_reference_utility_design.md`
+  - 加入者検索、参照専用の加入者詳細、event別健診処理状況、値を表示しない変更・参照履歴の設計。
+  - 2026-08-31初期版実装済み。ユーティリティ配置、既存監査テーブルの利用、権限migrationと環境差の境界を整理する。
 
 ## ADR Policy
 
