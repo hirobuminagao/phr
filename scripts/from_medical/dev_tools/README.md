@@ -74,6 +74,14 @@ python scripts/from_medical/03_02_build_exam_export_case_values.py --event-id 2 
 python scripts/from_medical/03_04_check_exam_export_cases.py --event-id 2 --case-id 3446
 ```
 
+管理画面の「対象者別 case再実行」では、eventと加入者を検索して同じ限定実行を行えます。
+既存caseがない場合は、対象加入者の利用可能なledgerを `--subscriber-id` で絞り、
+case作成、採用値作成、case単位チェックまで続けて実行します。
+
+```powershell
+python scripts/from_medical/03_01_build_exam_export_cases.py --event-id 2 --subscriber-id 100
+```
+
 出力リストもそのcaseだけで新規作成する場合は続けて実行します。
 
 ```powershell

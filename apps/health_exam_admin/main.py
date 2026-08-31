@@ -9341,6 +9341,8 @@ def run_exam_processing_step(
     dry_run: bool,
     limit: int = 0,
     include_imported: bool = False,
+    case_ids: tuple[int, ...] = (),
+    subscriber_ids: tuple[int, ...] = (),
 ) -> dict[str, Any]:
     step = EXAM_PROCESSING_STEP_MAP.get(step_key)
     if not step:
@@ -9356,7 +9358,14 @@ def run_exam_processing_step(
         "--health-db",
         health_db(),
     ]
-    if step_key in {"scan_files", "import_xml", "import_csv", "check_sources", "check_cases"}:
+    if step_key in {
+        "scan_files",
+        "import_xml",
+        "import_csv",
+        "check_sources",
+        "build_cases",
+        "check_cases",
+    }:
         cmd.extend(["--dev-db", dev_db()])
     if step_key in {"scan_files", "import_xml", "import_csv", "build_values"}:
         cmd.extend(["--master-db", master_db()])
@@ -9364,6 +9373,12 @@ def run_exam_processing_step(
         cmd.append("--dry-run")
     if include_imported and step_key in {"import_xml", "import_csv"}:
         cmd.append("--include-imported")
+    if case_ids and step_key in {"build_cases", "build_values", "check_cases"}:
+        for case_id in case_ids:
+            cmd.extend(["--case-id", str(case_id)])
+    if subscriber_ids and step_key == "build_cases":
+        for subscriber_id in subscriber_ids:
+            cmd.extend(["--subscriber-id", str(subscriber_id)])
     if limit > 0:
         limit_arg = "--limit-cases" if step_key == "build_values" else "--limit-groups" if step_key == "build_cases" else "--limit"
         cmd.extend([limit_arg, str(limit)])
@@ -9383,6 +9398,125 @@ def run_exam_processing_step(
         "ok": completed.returncode == 0,
         "output": output or "(出力なし)",
     }
+
+
+def load_case_rebuild_cases(cur: Any, *, event_id: int, subscriber_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          eec.exam_export_case_id,
+          eec.exam_date,
+          eec.exam_facility_id,
+          eec.facility_code,
+          eec.facility_name,
+          eec.source_mode,
+          eec.case_status,
+          eec.merge_status,
+          eec.value_build_status,
+          eec.check_status,
+          eec.export_readiness_status,
+          eec.xml_export_status,
+          COUNT(DISTINCT src.exam_export_case_source_id) AS source_count,
+          COUNT(DISTINCT cv.exam_export_case_value_id) AS value_count
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN {qname(health_db())}.exam_export_case_sources AS src
+          ON src.exam_export_case_id = eec.exam_export_case_id
+         AND src.source_status = 'ACTIVE'
+        LEFT JOIN {qname(health_db())}.exam_export_case_values AS cv
+          ON cv.exam_export_case_id = eec.exam_export_case_id
+        WHERE eec.event_id = %s
+          AND eec.subscriber_id = %s
+        GROUP BY eec.exam_export_case_id
+        ORDER BY eec.exam_date DESC, eec.exam_facility_id, eec.exam_export_case_id DESC
+        """,
+        (event_id, subscriber_id),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_case_rebuild_subscriber(cur: Any, *, subscriber_id: int) -> dict[str, Any] | None:
+    columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
+    name_expr = "s.name_kanji_full" if "name_kanji_full" in columns else "s.name_full_match"
+    employee_expr = "s.employee_code" if "employee_code" in columns else "NULL"
+    cur.execute(
+        f"""
+        SELECT
+          s.id AS subscriber_id,
+          s.hia_subscriber_id,
+          s.person_id_custom,
+          s.insurer_number,
+          s.insurance_number,
+          s.name_kana_full,
+          {name_expr} AS name_kanji_full,
+          s.birth,
+          {employee_expr} AS employee_code
+        FROM {qname(dev_db())}.subscribers AS s
+        WHERE s.id = %s
+        LIMIT 1
+        """,
+        (subscriber_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_case_rebuild_ledgers(
+    cur: Any,
+    *,
+    event_id: int,
+    subscriber_id: int,
+    hia_subscriber_id: str | None,
+) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          el.exam_ledger_id,
+          el.source_type,
+          el.exam_date,
+          el.exam_facility_id,
+          el.facility_code,
+          el.facility_name,
+          el.insurer_number,
+          el.row_status,
+          el.check_status,
+          el.xml_file_name,
+          fr.file_name,
+          src.exam_export_case_id
+        FROM {qname(health_db())}.exam_ledgers AS el
+        LEFT JOIN {qname(health_db())}.manual_exam_entry_drafts AS d
+          ON el.source_type IN ('PAPER', 'MANUAL')
+         AND CAST(d.manual_exam_entry_draft_id AS CHAR) = JSON_UNQUOTE(
+           JSON_EXTRACT(el.raw_row_json, '$.manual_exam_entry_draft_id')
+         )
+        LEFT JOIN {qname(health_db())}.file_receipts AS fr
+          ON fr.id = el.file_receipt_id
+        LEFT JOIN {qname(health_db())}.exam_export_case_sources AS src
+          ON src.source_exam_ledger_id = el.exam_ledger_id
+         AND src.source_status = 'ACTIVE'
+        WHERE el.event_id = %s
+          AND el.source_type IN ('XML', 'CSV', 'PAPER', 'MANUAL')
+          AND COALESCE(el.row_status, '') <> 'REVERTED_TO_DRAFT'
+          AND (
+            el.subscriber_match_status = 'MATCHED'
+            OR (
+              el.source_type IN ('PAPER', 'MANUAL')
+              AND el.subscriber_match_status IN ('MANUAL_ENTRY', 'MANUAL_CONFIRMED')
+            )
+          )
+          AND (
+            el.subscriber_id = %s
+            OR d.subscriber_id = %s
+            OR (
+              el.source_type IN ('PAPER', 'MANUAL')
+              AND %s <> ''
+              AND el.hia_subscriber_id = %s
+            )
+          )
+        ORDER BY el.exam_date DESC, el.exam_facility_id, el.source_type, el.exam_ledger_id
+        """,
+        (event_id, subscriber_id, subscriber_id, hia_subscriber_id or "", hia_subscriber_id or ""),
+    )
+    return [dict(row) for row in cur.fetchall()]
 
 
 def load_recent_exam_processing_runs(cur: Any, *, event_id: int, limit: int = 20) -> list[dict[str, Any]]:
@@ -12745,6 +12879,213 @@ def exam_processing(request: Request) -> Response:
             "results": [],
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.get("/exam-case-rebuild", response_class=HTMLResponse)
+def exam_case_rebuild(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_run_exam_processing(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
+    query = str(request.query_params.get("q") or "").strip()
+    subscriber_id = _optional_int(request.query_params.get("subscriber_id"))
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            events = load_event_options(cur)
+            candidates = load_subscriber_match_candidate_rows(
+                cur,
+                ledger=None,
+                event_id=event_id,
+                query=query,
+                limit=50,
+            ) if query else []
+            selected_subscriber = (
+                load_case_rebuild_subscriber(cur, subscriber_id=subscriber_id)
+                if subscriber_id is not None
+                else None
+            )
+            cases = (
+                load_case_rebuild_cases(cur, event_id=event_id, subscriber_id=subscriber_id)
+                if selected_subscriber and subscriber_id is not None
+                else []
+            )
+            ledgers = (
+                load_case_rebuild_ledgers(
+                    cur,
+                    event_id=event_id,
+                    subscriber_id=subscriber_id,
+                    hia_subscriber_id=selected_subscriber.get("hia_subscriber_id"),
+                )
+                if selected_subscriber and subscriber_id is not None
+                else []
+            )
+            running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_case_rebuild.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "selected_event_id": event_id,
+            "query": query,
+            "candidates": candidates,
+            "selected_subscriber": selected_subscriber,
+            "cases": cases,
+            "ledgers": ledgers,
+            "running_runs": running_runs,
+            "results": [],
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/exam-case-rebuild/run", response_class=HTMLResponse)
+async def run_exam_case_rebuild(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_run_exam_processing(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await request.form()
+    event_id = parse_positive_int(str(form.get("event_id") or ""), default=2, maximum=999999)
+    subscriber_id = _optional_int(form.get("subscriber_id"))
+    mode = str(form.get("mode") or "full").strip()
+    requested_case_ids = tuple(
+        int(value)
+        for value in form.getlist("case_ids")
+        if str(value).strip().isdigit() and int(value) > 0
+    )
+    if subscriber_id is None:
+        return RedirectResponse(
+            f"/exam-case-rebuild?event_id={event_id}&error={quote('対象の加入者を選択してください。')}",
+            status_code=303,
+        )
+    if mode not in {"full", "values", "check"}:
+        return RedirectResponse(
+            f"/exam-case-rebuild?event_id={event_id}&subscriber_id={subscriber_id}&error={quote('再実行範囲が不正です。')}",
+            status_code=303,
+        )
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            events = load_event_options(cur)
+            selected_subscriber = load_case_rebuild_subscriber(cur, subscriber_id=subscriber_id)
+            cases_before = load_case_rebuild_cases(cur, event_id=event_id, subscriber_id=subscriber_id)
+            ledgers = load_case_rebuild_ledgers(
+                cur,
+                event_id=event_id,
+                subscriber_id=subscriber_id,
+                hia_subscriber_id=(selected_subscriber or {}).get("hia_subscriber_id"),
+            ) if selected_subscriber else []
+            running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    error: str | None = None
+    results: list[dict[str, Any]] = []
+    available_case_ids = {int(row["exam_export_case_id"]) for row in cases_before}
+    if selected_subscriber is None:
+        error = "加入者が見つかりません。"
+    elif running_runs:
+        error = "このeventで別の健診結果処理が実行中です。"
+    elif available_case_ids:
+        if not requested_case_ids:
+            error = "再実行するcaseを1件以上選択してください。"
+        elif not set(requested_case_ids).issubset(available_case_ids):
+            error = "選択した加入者に属さないcaseが含まれています。"
+    elif not ledgers:
+        error = "この加入者にはcase作成元にできるledgerがありません。"
+    elif mode != "full":
+        error = "caseがまだないため、case作成から実行してください。"
+
+    target_case_ids = requested_case_ids
+    if error is None and not available_case_ids:
+        result = run_exam_processing_step(
+            step_key="build_cases",
+            event_id=event_id,
+            dry_run=False,
+            subscriber_ids=(subscriber_id,),
+        )
+        results.append(result)
+        if not result["ok"]:
+            error = "case作成で停止しました。"
+        else:
+            with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+                cur = dict_cursor(conn)
+                try:
+                    cases_after = load_case_rebuild_cases(cur, event_id=event_id, subscriber_id=subscriber_id)
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+            target_case_ids = tuple(int(row["exam_export_case_id"]) for row in cases_after)
+            if not target_case_ids:
+                error = "ledgerは見つかりましたがcaseを作成できませんでした。実行結果を確認してください。"
+
+    if error is None:
+        steps = {
+            "full": ("build_cases", "build_values", "check_cases") if available_case_ids else ("build_values", "check_cases"),
+            "values": ("build_values", "check_cases"),
+            "check": ("check_cases",),
+        }[mode]
+        for step_key in steps:
+            result = run_exam_processing_step(
+                step_key=step_key,
+                event_id=event_id,
+                dry_run=False,
+                case_ids=target_case_ids,
+            )
+            results.append(result)
+            if not result["ok"]:
+                error = f"{result['label']}で停止しました。"
+                break
+
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cases = load_case_rebuild_cases(cur, event_id=event_id, subscriber_id=subscriber_id)
+            ledgers = load_case_rebuild_ledgers(
+                cur,
+                event_id=event_id,
+                subscriber_id=subscriber_id,
+                hia_subscriber_id=(selected_subscriber or {}).get("hia_subscriber_id"),
+            ) if selected_subscriber else []
+            running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "exam_case_rebuild.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "selected_event_id": event_id,
+            "query": "",
+            "candidates": [],
+            "selected_subscriber": selected_subscriber,
+            "cases": cases,
+            "ledgers": ledgers,
+            "running_runs": running_runs,
+            "results": results,
+            "message": f"{sum(1 for result in results if result['ok'])}件の処理が完了しました。" if results else None,
+            "error": error,
         },
     )
 

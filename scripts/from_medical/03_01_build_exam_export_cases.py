@@ -39,6 +39,7 @@ class BuildCaseConfig:
     dry_run: bool
     limit_groups: int
     case_ids: tuple[int, ...] = ()
+    subscriber_ids: tuple[int, ...] = ()
 
 
 @dataclass
@@ -80,6 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit-groups", type=int, default=0)
     parser.add_argument("--case-id", type=int, action="append", default=[])
+    parser.add_argument("--subscriber-id", type=int, action="append", default=[])
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
     parser.add_argument("--dev-db", default="dev_phr")
@@ -103,6 +105,10 @@ def validate_config(config: BuildCaseConfig) -> None:
         raise ValueError("limit_groups must be >= 0")
     if any(case_id <= 0 for case_id in config.case_ids):
         raise ValueError("case_id must be positive")
+    if any(subscriber_id <= 0 for subscriber_id in config.subscriber_ids):
+        raise ValueError("subscriber_id must be positive")
+    if config.case_ids and config.subscriber_ids:
+        raise ValueError("case_id and subscriber_id cannot be specified together")
     qname(config.health_db)
     qname(config.dev_db)
 
@@ -153,6 +159,9 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
                     key["insurer_number"],
                 )
             )
+    elif config.subscriber_ids:
+        target_having = " AND resolved_subscriber_id IN (" + ", ".join(["%s"] * len(config.subscriber_ids)) + ")"
+        params.extend(config.subscriber_ids)
     cur.execute(
         f"""
         SELECT
@@ -666,6 +675,7 @@ def main() -> int:
         dry_run=bool(args.dry_run),
         limit_groups=int(args.limit_groups or 0),
         case_ids=tuple(args.case_id or ()),
+        subscriber_ids=tuple(args.subscriber_id or ()),
     )
     validate_config(config)
     params = load_mysql_base_params(args.db_prefix)

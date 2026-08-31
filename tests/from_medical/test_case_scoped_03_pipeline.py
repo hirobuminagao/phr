@@ -54,6 +54,25 @@ def test_build_cases_filters_sources_by_existing_case_key() -> None:
     assert source_params == (2, 100, "2026-06-01", 70, "06139463")
 
 
+def test_build_cases_can_target_subscriber_before_case_exists() -> None:
+    cur = SequentialCursor([[]])
+    config = build_cases.BuildCaseConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        dev_db="dev_phr",
+        dry_run=False,
+        limit_groups=0,
+        subscriber_ids=(100,),
+    )
+
+    rows = build_cases.fetch_source_ledgers(cur, config)
+
+    assert rows == []
+    sql, params = cur.calls[0]
+    assert "resolved_subscriber_id IN (%s)" in sql
+    assert params == (2, 100)
+
+
 def test_build_values_filters_cases_by_case_id() -> None:
     cur = SequentialCursor([[]])
     config = build_values.BuildValueConfig(

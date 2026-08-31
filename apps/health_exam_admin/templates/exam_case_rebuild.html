@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% set title = "対象者別 case再実行" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">Case Rebuild</p>
+    <h1>対象者別 case再実行</h1>
+    <p class="subtle">加入者を選び、その人のcaseだけを作成・更新・再チェックします。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/">HOME</a>
+    <a class="ghost-button" href="/exam-processing">全体処理</a>
+    <a class="ghost-button" href="/exam-export-cases">case一覧</a>
+  </nav>
+</header>
+
+<main class="page case-rebuild-page">
+  {% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  {% if running_runs %}<div class="alert alert-warning">このeventでは別の健診結果処理が実行中です。完了後に再実行してください。</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>再実行対象の検索</h2>
+        <p class="subtle">eventを選び、氏名・カナ・社員番号・保険証番号・HIA IDなどで加入者を検索します。</p>
+      </div>
+    </div>
+    <form method="get" action="/exam-case-rebuild" class="case-rebuild-search">
+      <label>
+        対象event
+        <select name="event_id">
+          {% for event in events %}
+          <option value="{{ event.event_id }}" {% if event.event_id == selected_event_id %}selected{% endif %}>
+            {{ event.event_name or ("event " ~ event.event_id) }} / {{ event.insurer_number or "-" }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="case-rebuild-query">
+        加入者
+        <input name="q" value="{{ query }}" placeholder="氏名 / カナ / 社員番号 / 保険証番号 / HIA ID">
+      </label>
+      <button type="submit">検索</button>
+    </form>
+  </section>
+
+  {% if candidates %}
+  <section class="panel">
+    <div class="section-heading"><div><h2>加入者候補</h2><p class="subtle">対象者を1人選択してください。</p></div><span class="count-badge">{{ candidates|length }}件</span></div>
+    <div class="case-rebuild-candidates">
+      {% for candidate in candidates %}
+      <a href="/exam-case-rebuild?event_id={{ selected_event_id }}&subscriber_id={{ candidate.subscriber_id }}&q={{ query|urlencode }}" class="case-rebuild-candidate">
+        <strong>{{ candidate.name_kanji_full or candidate.name_kana_full or "氏名未登録" }}</strong>
+        <span>{{ candidate.name_kana_full or "-" }}</span>
+        <small>subscriber {{ candidate.subscriber_id }} / 社員番号 {{ candidate.employee_code or "-" }} / HIA {{ candidate.hia_subscriber_id or "-" }}</small>
+        <small>既存case {{ candidate.candidate_case_count or 0 }}件</small>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if selected_subscriber %}
+  <section class="panel case-rebuild-subject">
+    <div class="section-heading">
+      <div>
+        <h2>{{ selected_subscriber.name_kanji_full or selected_subscriber.name_kana_full or "氏名未登録" }}</h2>
+        <p class="subtle">{{ selected_subscriber.name_kana_full or "-" }}</p>
+      </div>
+      <span class="status-pill status-ready">選択中</span>
+    </div>
+    <dl class="case-rebuild-subject-grid">
+      <div><dt>subscriber ID</dt><dd>{{ selected_subscriber.subscriber_id }}</dd></div>
+      <div><dt>社員番号</dt><dd>{{ selected_subscriber.employee_code or "-" }}</dd></div>
+      <div><dt>HIA ID</dt><dd>{{ selected_subscriber.hia_subscriber_id or "-" }}</dd></div>
+      <div><dt>生年月日</dt><dd>{{ selected_subscriber.birth or "-" }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>既存case</h2>
+        <p class="subtle">{% if cases %}再実行するcaseと処理範囲を選択します。{% else %}caseはまだありません。ledgerがあればcase作成から実行できます。{% endif %}</p>
+      </div>
+      <span class="count-badge">{{ cases|length }}件</span>
+    </div>
+    <form method="post" action="/exam-case-rebuild/run" data-processing-form data-processing-message="対象者のcaseを再実行しています">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+      <input type="hidden" name="event_id" value="{{ selected_event_id }}">
+      <input type="hidden" name="subscriber_id" value="{{ selected_subscriber.subscriber_id }}">
+      {% if cases %}
+      <div class="table-wrap">
+        <table class="data-table compact-table">
+          <thead><tr><th>選択</th><th>case</th><th>受診日</th><th>健診機関</th><th>source</th><th>値</th><th>状態</th></tr></thead>
+          <tbody>
+            {% for case in cases %}
+            <tr>
+              <td><input type="checkbox" name="case_ids" value="{{ case.exam_export_case_id }}" checked aria-label="case {{ case.exam_export_case_id }}を選択"></td>
+              <td><a href="/exam-export-cases/{{ case.exam_export_case_id }}"><strong>{{ case.exam_export_case_id }}</strong></a></td>
+              <td>{{ case.exam_date or "-" }}</td>
+              <td><strong>{{ case.facility_name or "-" }}</strong><small>{{ case.facility_code or case.exam_facility_id }}</small></td>
+              <td>{{ case.source_count }}件<small>{{ case.source_mode or "-" }}</small></td>
+              <td>{{ case.value_count }}件</td>
+              <td><strong>{{ case.export_readiness_status or "-" }}</strong><small>values {{ case.value_build_status }} / check {{ case.check_status }}</small></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="case-rebuild-runbar">
+        <div class="segmented-control" role="group" aria-label="再実行範囲">
+          <label><input type="radio" name="mode" value="full" checked><span>case構成から</span></label>
+          <label><input type="radio" name="mode" value="values"><span>採用値から</span></label>
+          <label><input type="radio" name="mode" value="check"><span>最終チェックだけ</span></label>
+        </div>
+        <button type="submit" {% if running_runs %}disabled{% endif %}>選択caseを再実行</button>
+      </div>
+      {% elif ledgers %}
+      <input type="hidden" name="mode" value="full">
+      <div class="case-rebuild-empty-action">
+        <p>case作成元候補が{{ ledgers|length }}件あります。受診日・健診機関ごとにcaseを作成し、採用値作成と最終チェックまで実行します。</p>
+        <button type="submit" {% if running_runs %}disabled{% endif %}>case作成から実行</button>
+      </div>
+      {% else %}
+      <div class="empty-state">caseも、case作成元にできるledgerもありません。</div>
+      {% endif %}
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading"><div><h2>対象ledger</h2><p class="subtle">選択した加入者に紐づく、case構成元の候補です。</p></div><span class="count-badge">{{ ledgers|length }}件</span></div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead><tr><th>ledger</th><th>形式</th><th>受診日</th><th>健診機関</th><th>ファイル</th><th>状態</th><th>case</th></tr></thead>
+        <tbody>
+          {% for ledger in ledgers %}
+          <tr>
+            <td><a href="/exam-ledgers/{{ ledger.exam_ledger_id }}">{{ ledger.exam_ledger_id }}</a></td>
+            <td><strong>{{ ledger.source_type }}</strong></td>
+            <td>{{ ledger.exam_date or "-" }}</td>
+            <td><strong>{{ ledger.facility_name or "-" }}</strong><small>{{ ledger.facility_code or ledger.exam_facility_id or "-" }}</small></td>
+            <td>{{ ledger.file_name or ledger.xml_file_name or "-" }}</td>
+            <td>{{ ledger.row_status or "-" }}<small>check {{ ledger.check_status or "-" }}</small></td>
+            <td>{% if ledger.exam_export_case_id %}<a href="/exam-export-cases/{{ ledger.exam_export_case_id }}">{{ ledger.exam_export_case_id }}</a>{% else %}未作成{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" class="empty-state">対象ledgerはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if results %}
+  <section class="panel">
+    <div class="section-heading"><div><h2>今回の実行結果</h2><p class="subtle">上から順に実行した結果です。</p></div></div>
+    <div class="processing-results">
+      {% for result in results %}
+      <details {% if not result.ok %}open{% endif %}>
+        <summary><strong>{{ result.label }}</strong><span class="status-pill {{ 'status-ready' if result.ok else 'status-error' }}">{{ '完了' if result.ok else 'エラー' }}</span></summary>
+        <pre>{{ result.output }}</pre>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
