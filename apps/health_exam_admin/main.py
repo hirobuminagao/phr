@@ -9349,12 +9349,15 @@ def add_export_case_to_list(
     operator = str(user.get("employee_no") or user.get("display_name") or "")
     cur.execute(
         f"""
-        SELECT export_readiness_status, export_readiness_reason
-        FROM {qname(health_db())}.exam_export_cases
-        WHERE exam_export_case_id = %s
+        SELECT eec.export_readiness_status, eec.export_readiness_reason
+        FROM {qname(health_db())}.exam_export_cases eec
+        INNER JOIN {qname(health_db())}.ops_xml_export_lists xel
+          ON xel.xml_export_list_id = %s
+         AND xel.event_id = eec.event_id
+        WHERE eec.exam_export_case_id = %s
         LIMIT 1
         """,
-        (exam_export_case_id,),
+        (xml_export_list_id, exam_export_case_id),
     )
     case = cur.fetchone()
     if not case:
@@ -19617,6 +19620,12 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "export_list": export_list,
             "cases": cases,
             "add_candidates": add_candidates,
+            "addable_candidate_count": sum(
+                1
+                for candidate in add_candidates
+                if candidate.get("existing_list_case_id") is None
+                or candidate.get("existing_removed_at") is not None
+            ),
             "candidate_filters": candidate_filters,
             "selected_candidate_exam_items": selected_candidate_exam_items,
             "show_candidates": show_candidates,
@@ -19630,6 +19639,41 @@ def export_list_detail(request: Request, xml_export_list_id: int) -> Response:
             "prefecture_options": PREFECTURE_OPTIONS,
         },
     )
+
+
+EXPORT_LIST_CANDIDATE_QUERY_KEYS = {
+    "show_candidates",
+    "case_q",
+    "facility_q",
+    "facility_codes",
+    "exam_month",
+    "exam_item_namecode",
+    "exam_item_match_mode",
+    "include_export_ready",
+    "include_approved_with_reason",
+    "include_exported",
+}
+
+
+def export_list_candidate_return_url(
+    *,
+    xml_export_list_id: int,
+    return_query: str,
+    message: str | None = None,
+    error: str | None = None,
+) -> str:
+    parsed = parse_qs(return_query, keep_blank_values=False)
+    query = {
+        key: values
+        for key, values in parsed.items()
+        if key in EXPORT_LIST_CANDIDATE_QUERY_KEYS and values
+    }
+    query["show_candidates"] = ["1"]
+    if message:
+        query["message"] = [message]
+    if error:
+        query["error"] = [error]
+    return f"/export-lists/{xml_export_list_id}?{urlencode(query, doseq=True)}"
 
 
 @app.post("/export-lists/{xml_export_list_id}/name", response_class=HTMLResponse)
@@ -19699,11 +19743,16 @@ async def export_list_case_add(request: Request, xml_export_list_id: int) -> Res
     if not has_permission(user, "export_lists.edit"):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await read_form(request)
+    return_query = str(form.get("return_query") or "")
     try:
         exam_export_case_id = int(str(form.get("exam_export_case_id") or "").strip())
     except ValueError:
         return RedirectResponse(
-            f"/export-lists/{xml_export_list_id}?error={quote('追加するcaseを選択してください。')}",
+            export_list_candidate_return_url(
+                xml_export_list_id=xml_export_list_id,
+                return_query=return_query,
+                error="追加するcaseを選択してください。",
+            ),
             status_code=303,
         )
     params = load_mysql_base_params(db_prefix())
@@ -19737,7 +19786,87 @@ async def export_list_case_add(request: Request, xml_export_list_id: int) -> Res
             raise
     labels = {"added": "追加しました。", "readded": "再追加しました。", "already": "すでに追加済みです。"}
     return RedirectResponse(
-        f"/export-lists/{xml_export_list_id}?message={quote(labels.get(action, '更新しました。'))}",
+        export_list_candidate_return_url(
+            xml_export_list_id=xml_export_list_id,
+            return_query=return_query,
+            message=labels.get(action, "更新しました。"),
+        ),
+        status_code=303,
+    )
+
+
+@app.post("/export-lists/{xml_export_list_id}/cases/add-visible", response_class=HTMLResponse)
+async def export_list_visible_cases_add(request: Request, xml_export_list_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "export_lists.edit"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    return_query = str(form.get("return_query") or "")
+    case_ids: list[int] = []
+    for raw_case_id in str(form.get("exam_export_case_ids") or "").split(","):
+        try:
+            case_id = int(raw_case_id.strip())
+        except ValueError:
+            continue
+        if case_id > 0 and case_id not in case_ids:
+            case_ids.append(case_id)
+    if not case_ids:
+        return RedirectResponse(
+            export_list_candidate_return_url(
+                xml_export_list_id=xml_export_list_id,
+                return_query=return_query,
+                error="追加できる候補がありません。",
+            ),
+            status_code=303,
+        )
+
+    action_counts = {"added": 0, "readded": 0, "already": 0}
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            for exam_export_case_id in case_ids:
+                action = add_export_case_to_list(
+                    cur,
+                    xml_export_list_id=xml_export_list_id,
+                    exam_export_case_id=exam_export_case_id,
+                    user=user,
+                )
+                action_counts[action] = action_counts.get(action, 0) + 1
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="XML_EXPORT_LIST_VISIBLE_CASES_ADD",
+                    target_schema=health_db(),
+                    target_table="ops_xml_export_list_cases",
+                    target_id=str(xml_export_list_id),
+                    after={
+                        "xml_export_list_id": xml_export_list_id,
+                        "exam_export_case_ids": case_ids,
+                        "action_counts": action_counts,
+                    },
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    message_parts = [f"{action_counts['added']}件追加"]
+    if action_counts["readded"]:
+        message_parts.append(f"{action_counts['readded']}件再追加")
+    if action_counts["already"]:
+        message_parts.append(f"{action_counts['already']}件追加済み")
+    return RedirectResponse(
+        export_list_candidate_return_url(
+            xml_export_list_id=xml_export_list_id,
+            return_query=return_query,
+            message="、".join(message_parts) + "しました。",
+        ),
         status_code=303,
     )
 

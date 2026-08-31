@@ -242,6 +242,19 @@
     </form>
 
     {% if show_candidates %}
+    <div class="candidate-bulk-actions">
+      <div>
+        <strong>検索結果 {{ add_candidates|length }}件</strong>
+        <small>現在表示している候補をまとめて追加します。</small>
+      </div>
+      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/add-visible">
+        <input type="hidden" name="return_query" value="{{ request.url.query }}">
+        <input type="hidden" name="exam_export_case_ids" value="{% for case in add_candidates %}{{ ',' if not loop.first else '' }}{{ case.exam_export_case_id }}{% endfor %}">
+        <button type="submit" {% if addable_candidate_count == 0 %}disabled aria-disabled="true"{% endif %}>
+          表示中をすべて追加（{{ addable_candidate_count }}件）
+        </button>
+      </form>
+    </div>
     <div class="table-panel">
       <table class="data-table export-case-table">
         <thead>
@@ -286,6 +299,7 @@
               {% else %}
                 <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/add">
                   <input type="hidden" name="exam_export_case_id" value="{{ case.exam_export_case_id }}">
+                  <input type="hidden" name="return_query" value="{{ request.url.query }}">
                   <button type="submit">{{ "再追加" if was_removed else "追加" }}</button>
                 </form>
               {% endif %}

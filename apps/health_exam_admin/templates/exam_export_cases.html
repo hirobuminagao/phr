@@ -26,7 +26,7 @@
       <div><h2>基本の絞り込み</h2><p class="subtle">人・受診・状態など</p></div>
       <button type="button" class="ghost-button compact-action-button" data-modal-open="case-filter-modal">変更</button>
     </div>
-    <div class="active-filter-chip-list" data-case-exam-item-summary>
+    <div class="active-filter-chip-list">
       {% if filters.case_id %}<span class="active-filter-chip">case ID: {{ filters.case_id }}</span>{% endif %}
       {% if filters.name_full %}<span class="active-filter-chip">氏名: {{ filters.name_full }}</span>{% endif %}
       {% if filters.name_kana %}<span class="active-filter-chip">カナ: {{ filters.name_kana }}</span>{% endif %}
@@ -55,7 +55,7 @@
       <div><h2>健診項目</h2><p class="subtle">項目の存在で絞り込み</p></div>
       <button type="button" class="ghost-button compact-action-button" data-modal-open="case-exam-item-filter-modal">変更</button>
     </div>
-    <div class="active-filter-chip-list">
+    <div class="active-filter-chip-list" data-case-exam-item-summary>
       {% if selected_case_exam_items %}
       <span class="active-filter-chip">{{ 'すべて（AND）' if filters.exam_item_match_mode == 'all' else 'いずれか（OR）' }}</span>
       {% for item in selected_case_exam_items %}<span class="active-filter-chip">{{ item.item_name or item.namecode }}</span>{% endfor %}

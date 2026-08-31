@@ -4084,6 +4084,37 @@ a.home-menu-card.is-navigating {
   overflow-x: visible;
 }
 
+.candidate-bulk-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.candidate-bulk-actions > div {
+  display: grid;
+  gap: 3px;
+}
+
+.candidate-bulk-actions small {
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .candidate-bulk-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .candidate-bulk-actions button {
+    width: 100%;
+  }
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
