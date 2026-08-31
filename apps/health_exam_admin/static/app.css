@@ -4104,6 +4104,26 @@ a.home-menu-card.is-navigating {
   color: var(--muted);
 }
 
+.manual-ledger-export-list-refs {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.manual-ledger-export-list-refs > a {
+  display: grid;
+  gap: 1px;
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.manual-ledger-export-list-refs > a small {
+  color: var(--muted);
+  font-weight: 600;
+}
+
 @media (max-width: 760px) {
   .candidate-bulk-actions {
     align-items: stretch;

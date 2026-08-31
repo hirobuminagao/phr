@@ -6000,6 +6000,7 @@ def load_admin_manual_exam_ledger_rows(
           FROM {qname(health_db())}.exam_export_case_sources AS eecs
           INNER JOIN {qname(health_db())}.ops_xml_export_list_cases AS oelc
             ON oelc.exam_export_case_id = eecs.exam_export_case_id
+           AND oelc.removed_at IS NULL
           GROUP BY eecs.source_exam_ledger_id
         ) AS listed
           ON listed.source_exam_ledger_id = el.exam_ledger_id
@@ -6015,7 +6016,37 @@ def load_admin_manual_exam_ledger_rows(
         """,
         (*params, limit),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    ledger_ids = [int(row["exam_ledger_id"]) for row in rows]
+    refs_by_ledger: dict[int, list[dict[str, Any]]] = {ledger_id: [] for ledger_id in ledger_ids}
+    if ledger_ids:
+        placeholders = ", ".join(["%s"] * len(ledger_ids))
+        cur.execute(
+            f"""
+            SELECT DISTINCT
+              eecs.source_exam_ledger_id,
+              oel.xml_export_list_id,
+              oel.list_name,
+              oel.list_status,
+              oelc.xml_export_list_case_id,
+              oelc.list_case_status
+            FROM {qname(health_db())}.exam_export_case_sources AS eecs
+            INNER JOIN {qname(health_db())}.ops_xml_export_list_cases AS oelc
+              ON oelc.exam_export_case_id = eecs.exam_export_case_id
+             AND oelc.removed_at IS NULL
+            INNER JOIN {qname(health_db())}.ops_xml_export_lists AS oel
+              ON oel.xml_export_list_id = oelc.xml_export_list_id
+            WHERE eecs.source_exam_ledger_id IN ({placeholders})
+            ORDER BY oel.xml_export_list_id, oelc.xml_export_list_case_id
+            """,
+            tuple(ledger_ids),
+        )
+        for ref in cur.fetchall():
+            ledger_id = int(ref["source_exam_ledger_id"])
+            refs_by_ledger.setdefault(ledger_id, []).append(dict(ref))
+    for row in rows:
+        row["export_list_refs"] = refs_by_ledger.get(int(row["exam_ledger_id"]), [])
+    return rows
 
 
 SUBSCRIBER_MATCH_ISSUE_FILTERS = {
@@ -9445,6 +9476,103 @@ def remove_export_list_case(
     return int(cur.rowcount or 0)
 
 
+LEDGER_REVERT_LIST_REMOVE_REASON_PREFIX = "SOURCE_LEDGER_REVERTED:"
+EXPORT_LIST_AUTO_RESTORE_READY_STATUSES = {"EXPORT_READY", "APPROVED_WITH_REASON"}
+
+
+def reconcile_reverted_export_list_cases_after_recheck(
+    cur: Any,
+    *,
+    exam_export_case_ids: Sequence[int],
+    operator: str,
+) -> dict[str, Any]:
+    case_ids = tuple(dict.fromkeys(int(case_id) for case_id in exam_export_case_ids if int(case_id) > 0))
+    if not case_ids:
+        return {"considered": 0, "restored": 0, "kept_removed": 0, "list_ids": []}
+    placeholders = ", ".join(["%s"] * len(case_ids))
+    cur.execute(
+        f"""
+        SELECT
+          oelc.xml_export_list_case_id,
+          oelc.xml_export_list_id,
+          oelc.exam_export_case_id,
+          oelc.remove_reason,
+          oelc.removed_at,
+          eec.export_readiness_status,
+          eec.export_readiness_reason
+        FROM {qname(health_db())}.ops_xml_export_list_cases AS oelc
+        INNER JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON eec.exam_export_case_id = oelc.exam_export_case_id
+        WHERE oelc.exam_export_case_id IN ({placeholders})
+          AND oelc.removed_at IS NOT NULL
+          AND oelc.remove_reason LIKE %s
+        ORDER BY oelc.xml_export_list_case_id
+        """,
+        (*case_ids, f"{LEDGER_REVERT_LIST_REMOVE_REASON_PREFIX}%"),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    restored = 0
+    kept_removed = 0
+    for row in rows:
+        readiness_status = str(row.get("export_readiness_status") or "")
+        readiness_reason = str(row.get("export_readiness_reason") or "")
+        if readiness_status in EXPORT_LIST_AUTO_RESTORE_READY_STATUSES:
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db())}.ops_xml_export_list_cases
+                SET list_case_status = 'READY',
+                    export_readiness_status_snapshot = %s,
+                    export_readiness_reason_snapshot = NULLIF(%s, ''),
+                    added_by = %s,
+                    added_at = CURRENT_TIMESTAMP(3),
+                    list_case_note = CONCAT_WS(
+                      '\n',
+                      NULLIF(list_case_note, ''),
+                      CONCAT('[AUTO_RESTORED_AFTER_CASE_RECHECK] ', COALESCE(remove_reason, ''))
+                    ),
+                    removed_by = NULL,
+                    removed_at = NULL,
+                    remove_reason = NULL,
+                    export_error_reason = NULL,
+                    updated_at = CURRENT_TIMESTAMP(3)
+                WHERE xml_export_list_case_id = %s
+                  AND removed_at IS NOT NULL
+                """,
+                (
+                    readiness_status,
+                    readiness_reason,
+                    operator,
+                    row["xml_export_list_case_id"],
+                ),
+            )
+            restored += int(cur.rowcount or 0)
+            continue
+        cur.execute(
+            f"""
+            UPDATE {qname(health_db())}.ops_xml_export_list_cases
+            SET export_readiness_status_snapshot = NULLIF(%s, ''),
+                export_readiness_reason_snapshot = NULLIF(%s, ''),
+                export_error_reason = %s,
+                updated_at = CURRENT_TIMESTAMP(3)
+            WHERE xml_export_list_case_id = %s
+              AND removed_at IS NOT NULL
+            """,
+            (
+                readiness_status,
+                readiness_reason,
+                f"CASE_RECHECK_NOT_READY: {readiness_status or 'UNKNOWN'} / {readiness_reason or '-'}",
+                row["xml_export_list_case_id"],
+            ),
+        )
+        kept_removed += int(cur.rowcount or 0)
+    return {
+        "considered": len(rows),
+        "restored": restored,
+        "kept_removed": kept_removed,
+        "list_ids": sorted({int(row["xml_export_list_id"]) for row in rows}),
+    }
+
+
 def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str, package_mode: str = "standard", submission_facility_code: str = "") -> str:
     if output_mode not in {"review", "official"}:
         raise ValueError("OUTPUT_MODE_INVALID")
@@ -11561,7 +11689,14 @@ def apply_manual_exam_entry_draft(cur: Any, *, draft_id: int, user_id: int) -> d
     return {"exam_ledger_id": exam_ledger_id, "value_count": len(rows), "source_type": source_type}
 
 
-def revert_manual_exam_ledger_to_draft(cur: Any, *, exam_ledger_id: int, user_id: int) -> dict[str, Any]:
+def revert_manual_exam_ledger_to_draft(
+    cur: Any,
+    *,
+    exam_ledger_id: int,
+    user: Mapping[str, Any],
+) -> dict[str, Any]:
+    user_id = int(user["app_user_id"])
+    operator = str(user.get("employee_no") or user.get("display_name") or f"app_user_id:{user_id}")
     cur.execute(
         f"""
         SELECT
@@ -11604,6 +11739,7 @@ def revert_manual_exam_ledger_to_draft(cur: Any, *, exam_ledger_id: int, user_id
           FROM {qname(health_db())}.exam_export_case_sources AS eecs
           INNER JOIN {qname(health_db())}.ops_xml_export_list_cases AS oelc
             ON oelc.exam_export_case_id = eecs.exam_export_case_id
+           AND oelc.removed_at IS NULL
           GROUP BY eecs.source_exam_ledger_id
         ) AS listed
           ON listed.source_exam_ledger_id = el.exam_ledger_id
@@ -11622,8 +11758,26 @@ def revert_manual_exam_ledger_to_draft(cur: Any, *, exam_ledger_id: int, user_id
         raise ValueError("manual_exam_ledger_has_no_draft")
     if str(row.get("draft_status") or "").upper() != "APPLIED":
         raise ValueError("manual_exam_draft_is_not_applied")
-    if int(row.get("list_case_count") or 0) > 0:
-        raise ValueError("manual_exam_ledger_is_in_export_list")
+
+    cur.execute(
+        f"""
+        SELECT DISTINCT
+          oelc.xml_export_list_case_id,
+          oelc.xml_export_list_id,
+          oelc.list_case_status,
+          oel.list_name
+        FROM {qname(health_db())}.exam_export_case_sources AS eecs
+        INNER JOIN {qname(health_db())}.ops_xml_export_list_cases AS oelc
+          ON oelc.exam_export_case_id = eecs.exam_export_case_id
+         AND oelc.removed_at IS NULL
+        INNER JOIN {qname(health_db())}.ops_xml_export_lists AS oel
+          ON oel.xml_export_list_id = oelc.xml_export_list_id
+        WHERE eecs.source_exam_ledger_id = %s
+        ORDER BY oelc.xml_export_list_id, oelc.xml_export_list_case_id
+        """,
+        (exam_ledger_id,),
+    )
+    removed_list_refs = [dict(ref) for ref in cur.fetchall()]
 
     old_value = {
         "exam_ledger_id": exam_ledger_id,
@@ -11632,7 +11786,28 @@ def revert_manual_exam_ledger_to_draft(cur: Any, *, exam_ledger_id: int, user_id
         "case_source_count": int(row.get("case_source_count") or 0),
         "adopted_value_count": int(row.get("adopted_value_count") or 0),
         "item_value_count": int(row.get("item_value_count") or 0),
+        "export_list_refs": removed_list_refs,
     }
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.ops_xml_export_list_cases AS oelc
+        INNER JOIN {qname(health_db())}.exam_export_case_sources AS eecs
+          ON eecs.exam_export_case_id = oelc.exam_export_case_id
+        SET oelc.list_case_status = 'REMOVED',
+            oelc.removed_by = %s,
+            oelc.removed_at = CURRENT_TIMESTAMP(3),
+            oelc.remove_reason = %s,
+            oelc.updated_at = CURRENT_TIMESTAMP(3)
+        WHERE eecs.source_exam_ledger_id = %s
+          AND oelc.removed_at IS NULL
+        """,
+        (
+            operator,
+            f"{LEDGER_REVERT_LIST_REMOVE_REASON_PREFIX} ledger_id={exam_ledger_id}",
+            exam_ledger_id,
+        ),
+    )
+    removed_list_case_count = int(cur.rowcount or 0)
     cur.execute(
         f"""
         UPDATE {qname(health_db())}.exam_export_case_sources
@@ -11703,7 +11878,14 @@ def revert_manual_exam_ledger_to_draft(cur: Any, *, exam_ledger_id: int, user_id
             draft_id,
             _optional_int(row.get("event_id")) or 2,
             json.dumps(old_value, ensure_ascii=False, default=manual_exam_json_default),
-            json.dumps({"draft_status": "DRAFT", "exam_ledger_row_status": "REVERTED_TO_DRAFT"}, ensure_ascii=False),
+            json.dumps(
+                {
+                    "draft_status": "DRAFT",
+                    "exam_ledger_row_status": "REVERTED_TO_DRAFT",
+                    "removed_export_list_cases": removed_list_case_count,
+                },
+                ensure_ascii=False,
+            ),
             user_id,
         ),
     )
@@ -11711,6 +11893,8 @@ def revert_manual_exam_ledger_to_draft(cur: Any, *, exam_ledger_id: int, user_id
         "exam_ledger_id": exam_ledger_id,
         "manual_exam_entry_draft_id": draft_id,
         "item_value_count": int(row.get("item_value_count") or 0),
+        "removed_export_list_case_count": removed_list_case_count,
+        "removed_export_list_ids": sorted({int(ref["xml_export_list_id"]) for ref in removed_list_refs}),
     }
 
 
@@ -13370,9 +13554,36 @@ async def run_exam_case_rebuild(request: Request) -> Response:
                 error = f"{result['label']}で停止しました。"
                 break
 
+    recovery_result: dict[str, Any] | None = None
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
+            check_completed = any(
+                result.get("step_key") == "check_cases" and result.get("ok")
+                for result in results
+            )
+            if error is None and check_completed:
+                operator = str(
+                    user.get("employee_no")
+                    or user.get("display_name")
+                    or f"app_user_id:{user.get('app_user_id')}"
+                )
+                recovery_result = reconcile_reverted_export_list_cases_after_recheck(
+                    cur,
+                    exam_export_case_ids=target_case_ids,
+                    operator=operator,
+                )
+                if recovery_result["considered"] and audit_enabled(cur):
+                    log_audit(
+                        cur,
+                        request=request,
+                        user=user,
+                        action_code="RESTORE_EXPORT_LIST_CASES_AFTER_PERSON_RECHECK",
+                        target_schema=health_db(),
+                        target_table="ops_xml_export_list_cases",
+                        target_id=",".join(str(case_id) for case_id in target_case_ids),
+                        after=recovery_result,
+                    )
             cases = load_case_rebuild_cases(cur, event_id=event_id, subscriber_id=subscriber_id)
             ledgers = load_case_rebuild_ledgers(
                 cur,
@@ -13385,6 +13596,20 @@ async def run_exam_case_rebuild(request: Request) -> Response:
         except Exception:
             conn.rollback()
             raise
+    if recovery_result and recovery_result["considered"]:
+        results.append(
+            {
+                "step_key": "restore_export_list_cases",
+                "label": "出力リスト復帰判定",
+                "returncode": 0,
+                "ok": True,
+                "output": (
+                    f"対象 {recovery_result['considered']}件 / "
+                    f"復帰 {recovery_result['restored']}件 / "
+                    f"除外継続 {recovery_result['kept_removed']}件"
+                ),
+            }
+        )
     return templates.TemplateResponse(
         "exam_case_rebuild.html",
         {
@@ -13646,7 +13871,7 @@ async def admin_revert_manual_exam_ledger(exam_ledger_id: int, request: Request)
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            result = revert_manual_exam_ledger_to_draft(cur, exam_ledger_id=exam_ledger_id, user_id=int(user["app_user_id"]))
+            result = revert_manual_exam_ledger_to_draft(cur, exam_ledger_id=exam_ledger_id, user=user)
             if audit_enabled(cur):
                 log_audit(
                     cur,
@@ -13667,6 +13892,7 @@ async def admin_revert_manual_exam_ledger(exam_ledger_id: int, request: Request)
             raise
     message = (
         f"ledger {result['exam_ledger_id']} をdraft {result['manual_exam_entry_draft_id']} へ戻しました。"
+        f"出力リストから{result['removed_export_list_case_count']}件を履歴付きで除外しました。"
         "必要に応じて健診結果処理 step5〜7 を再実行してください。"
     )
     return JSONResponse({"ok": True, "message": message, **result})

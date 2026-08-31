@@ -3945,12 +3945,14 @@
   if (manualLedgerRevertModal) {
     const manualLedgerRevertLabel = document.querySelector("[data-manual-ledger-revert-label]");
     const manualLedgerRevertConfirm = document.querySelector("[data-manual-ledger-revert-confirm]");
+    const manualLedgerRevertListWarning = document.querySelector("[data-manual-ledger-revert-list-warning]");
     let activeManualLedgerRevertButton = null;
 
     const openManualLedgerRevertModal = (button) => {
       const ledgerId = button.getAttribute("data-ledger-id") || "";
       const draftId = button.getAttribute("data-draft-id") || "";
       const valueCount = button.getAttribute("data-value-count") || "0";
+      const exportListCount = Number(button.getAttribute("data-export-list-count") || "0");
       if (!ledgerId || !draftId) return;
       activeManualLedgerRevertButton = button;
       if (manualLedgerRevertLabel) {
@@ -3959,6 +3961,12 @@
       if (manualLedgerRevertConfirm) {
         manualLedgerRevertConfirm.disabled = false;
         manualLedgerRevertConfirm.textContent = "draftへ戻す";
+      }
+      if (manualLedgerRevertListWarning) {
+        manualLedgerRevertListWarning.hidden = exportListCount === 0;
+        manualLedgerRevertListWarning.textContent = exportListCount > 0
+          ? `掲載中の出力リスト ${exportListCount}件から、このcaseを履歴付きで除外します。case再判定後はリスト詳細から再追加できます。`
+          : "";
       }
       manualLedgerRevertModal.hidden = false;
       document.body.classList.add("has-open-modal");

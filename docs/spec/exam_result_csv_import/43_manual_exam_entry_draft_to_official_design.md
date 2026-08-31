@@ -503,7 +503,14 @@ caseから選択した場合:
 - 戻し後は `03_01`〜`03_04` 相当のcase再生成・case値再作成・caseチェックを再実行する。
 - 戻し実行時は、正式ledgerを物理削除せず `exam_ledgers.row_status = 'REVERTED_TO_DRAFT'` として残す。
 - 紐づく `manual_exam_entry_drafts` は `draft_status = 'DRAFT'`、`applied_*` をNULLに戻し、再編集・再反映できる状態へ戻す。
-- 既に出力リストへ掲載されている正式ledgerは、初期版では戻し不可とする。
+- 出力リストへ掲載されている正式ledgerも戻せる。戻し時は、そのledgerをACTIVE sourceとして参照するcaseを掲載中の全出力リストから履歴付きで除外する。
+- 出力リストcaseは物理削除せず、`list_case_status = 'REMOVED'`、`removed_at`、`removed_by`、`remove_reason` を記録する。理由には戻したsource ledger IDを残す。
+- 既に生成済みのZIP/XMLや出力member履歴は削除しない。戻しは今後の出力対象から外す操作であり、過去に行った出力の事実を取り消す処理ではない。
+- ledger再反映後の復帰トリガーは、管理画面の「対象者別 case再実行（個人再チェック）」とする。case単位チェックが正常終了した時だけ、同じcaseの出力リスト掲載状態を再評価する。
+- 復帰判定の対象は、`remove_reason` が `SOURCE_LEDGER_REVERTED:` で始まる自動除外行だけとする。担当者が出力リスト画面で手動除外した行は自動復帰させない。
+- 最新の `export_readiness_status` が `EXPORT_READY` または `APPROVED_WITH_REASON` なら、list caseを `READY` へ復帰する。除外理由は消去前に `list_case_note` へ復帰履歴として退避する。
+- 再チェック後も出力不可なら `REMOVED` を維持し、最新のreadiness snapshotと `CASE_RECHECK_NOT_READY` エラー理由をlist caseへ記録する。
+- event全件処理だけを復帰トリガーにはしない。担当者が対象者を指定して再チェックした操作を、出力リストへ戻す明示的な意思として扱う。
 - case構成sourceやcase採用値に使われていても戻し可能とする。戻し時にcase sourceを無効化し、該当source由来の採用値を削除する。
 - 戻し時は該当 `exam_export_case_sources.source_status` を `REVERTED_TO_DRAFT` にし、該当source由来の `exam_export_case_values` は削除する。
 - 戻し操作は `manual_exam_entry_draft_audit_logs` と個人情報監査ログへ記録する。
@@ -677,7 +684,9 @@ Migration:
 - 作業担当者による絞り込みは、作成者・更新者・正式反映者のいずれかに一致するものを対象にする。
 - 画面上では「戻し候補」または「要確認」を表示する。
 - 安全条件を満たす行だけ「戻す」ボタンを表示する。
-- 戻し不可条件は、draft紐づきなし、出力リスト掲載ありなど。
+- 戻し不可条件はdraft紐づきなし、draftが正式反映済み状態ではない場合など。出力リスト掲載中であること自体は戻し不可条件にしない。
+- 一覧の戻し判断には、掲載中の出力リストID・名称・list case状態・list状態を表示する。
+- 掲載中の出力リストがあるledgerを戻す場合は、確認モーダルで該当件数と履歴付き除外になることを明示する。
 - case採用値ありの行は戻し可能だが、戻し実行時に採用値が解除されることを画面に表示する。
 - 戻し後の導線として、健診結果処理画面へのリンクを表示し、step5〜7の再実行を促す。
 - この画面の個人情報閲覧は監査ログに記録する。

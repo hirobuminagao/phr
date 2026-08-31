@@ -111,7 +111,6 @@
           {% set has_draft = row.manual_exam_entry_draft_id %}
           {% set blocked_reason = [] %}
           {% if not has_draft %}{% set _ = blocked_reason.append("draft紐づきなし") %}{% endif %}
-          {% if row.list_case_count %}{% set _ = blocked_reason.append("出力リスト掲載あり") %}{% endif %}
           <tr>
             <td>
               <strong>ledger {{ row.exam_ledger_id }}</strong>
@@ -160,7 +159,18 @@
               <small>{{ " / ".join(blocked_reason) }}</small>
               {% else %}
               <span class="status-pill status-ready">候補</span>
-              <small>draftへ戻せます</small>
+              <small>draftへ戻せます{% if row.export_list_refs %}（掲載中リストから除外）{% endif %}</small>
+              {% endif %}
+              {% if row.export_list_refs %}
+              <div class="manual-ledger-export-list-refs">
+                <small class="warning-text">掲載中の出力リスト</small>
+                {% for ref in row.export_list_refs %}
+                <a href="/export-lists/{{ ref.xml_export_list_id }}">
+                  ID {{ ref.xml_export_list_id }} {{ ref.list_name }}
+                  <small>{{ ref.list_case_status }} / {{ ref.list_status }}</small>
+                </a>
+                {% endfor %}
+              </div>
               {% endif %}
               {% if not blocked_reason and row.row_status != "REVERTED_TO_DRAFT" %}
               <div class="inline-action-stack admin-manual-ledger-revert-action">
@@ -171,6 +181,7 @@
                   data-ledger-id="{{ row.exam_ledger_id }}"
                   data-draft-id="{{ row.manual_exam_entry_draft_id }}"
                   data-value-count="{{ row.item_value_count or 0 }}"
+                  data-export-list-count="{{ row.export_list_refs|length }}"
                 >戻す</button>
               </div>
               {% endif %}
@@ -208,6 +219,7 @@
     <div class="edit-modal__body">
       <p class="subtle">正式ledgerを戻し済みにし、紐づくdraftを再編集できる状態へ戻します。</p>
       <p class="warning-text">戻すとcase source/採用値は解除されます。戻した後は、健診結果処理 step5〜7 を再実行してください。</p>
+      <p class="warning-text" data-manual-ledger-revert-list-warning hidden></p>
       <p><a class="ghost-button compact-action-button" href="/exam-processing">健診結果処理へ移動</a></p>
       <div class="inline-summary-card">
         <strong data-manual-ledger-revert-label>ledger / draft</strong>
