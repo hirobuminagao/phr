@@ -119,12 +119,15 @@ def fetch_candidates(
     params: list[Any] = [selectors.event_id]
     filters = ["eec.event_id = %s"]
     if selectors.xml_export_list_id is not None:
+        list_case_statuses = "'SELECTED', 'READY', 'EXPORT_ERROR'"
+        if selectors.include_exported:
+            list_case_statuses += ", 'EXPORTED'"
         filters.append(
             "EXISTS ("
             f"SELECT 1 FROM {qname(health_db)}.ops_xml_export_list_cases xelc "
             "WHERE xelc.exam_export_case_id = eec.exam_export_case_id "
             "AND xelc.xml_export_list_id = %s "
-            "AND xelc.list_case_status IN ('SELECTED', 'READY', 'EXPORT_ERROR') "
+            f"AND xelc.list_case_status IN ({list_case_statuses}) "
             "AND xelc.removed_at IS NULL"
             ")"
         )

@@ -4124,6 +4124,27 @@ a.home-menu-card.is-navigating {
   font-weight: 600;
 }
 
+.manual-draft-list-filter {
+  margin-bottom: 18px;
+}
+
+.manual-draft-duplicate-check {
+  align-self: end;
+  min-height: var(--control-height);
+}
+
+.manual-draft-duplicate-refs {
+  display: grid;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.manual-draft-duplicate-refs a {
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 760px) {
   .candidate-bulk-actions {
     align-items: stretch;
@@ -6263,9 +6284,38 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .export-mode-form {
   display: grid;
-  grid-template-columns: auto minmax(340px, 1fr) minmax(380px, 1.15fr) auto;
+  grid-template-columns: auto minmax(300px, 1fr) minmax(340px, 1.1fr) minmax(230px, auto) auto;
   align-items: end;
   gap: 18px;
+}
+
+.export-reexport-option {
+  min-height: var(--control-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 29px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.export-reexport-option input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.export-reexport-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.export-reexport-option small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .export-mode-field {

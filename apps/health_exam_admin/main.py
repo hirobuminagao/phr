@@ -9573,7 +9573,14 @@ def reconcile_reverted_export_list_cases_after_recheck(
     }
 
 
-def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str, package_mode: str = "standard", submission_facility_code: str = "") -> str:
+def run_hia_xml_export_from_list(
+    *,
+    xml_export_list_id: int,
+    output_mode: str,
+    package_mode: str = "standard",
+    submission_facility_code: str = "",
+    include_exported: bool = False,
+) -> str:
     if output_mode not in {"review", "official"}:
         raise ValueError("OUTPUT_MODE_INVALID")
     if output_mode == "official":
@@ -9596,8 +9603,10 @@ def run_hia_xml_export_from_list(*, xml_export_list_id: int, output_mode: str, p
     ]
     if package_mode == "single_data":
         cmd.extend(["--submission-facility-code", submission_facility_code.strip()])
+    if include_exported or output_mode == "review":
+        cmd.append("--include-exported")
     if output_mode == "review":
-        cmd.extend(["--include-exported", "--review-output-root", str(HIA_XML_REVIEW_EXPORT_ROOT_DIR)])
+        cmd.extend(["--review-output-root", str(HIA_XML_REVIEW_EXPORT_ROOT_DIR)])
     completed = subprocess.run(
         cmd,
         cwd=REPO_ROOT,
@@ -10524,8 +10533,8 @@ def load_manual_exam_entry_draft_rows(cur: Any, *, limit: int = 200, status_filt
           d.entry_purpose,
           d.exam_export_case_id,
           d.subscriber_id,
-          d.hia_subscriber_id,
-          d.person_id_custom,
+          COALESCE(NULLIF(d.hia_subscriber_id, ''), s.hia_subscriber_id) AS hia_subscriber_id,
+          COALESCE(NULLIF(d.person_id_custom, ''), s.person_id_custom) AS person_id_custom,
           COALESCE(NULLIF(d.insurer_number, ''), s.insurer_number) AS insurer_number,
           d.insurance_symbol,
           d.insurance_number,
@@ -12124,6 +12133,8 @@ def summarize_manual_exam_entry_drafts(rows: list[dict[str, Any]]) -> dict[str, 
         "ready": 0,
         "applied": 0,
         "error": 0,
+        "duplicate": 0,
+        "duplicate_groups": 0,
     }
     for row in rows:
         status = str(row.get("draft_status") or "DRAFT").upper()
@@ -12135,7 +12146,114 @@ def summarize_manual_exam_entry_drafts(rows: list[dict[str, Any]]) -> dict[str, 
             summary["error"] += 1
         else:
             summary["draft"] += 1
+    duplicate_group_keys = {
+        str(row.get("draft_duplicate_group") or "")
+        for row in rows
+        if int(row.get("draft_duplicate_count") or 0) > 1
+    }
+    summary["duplicate"] = sum(1 for row in rows if int(row.get("draft_duplicate_count") or 0) > 1)
+    summary["duplicate_groups"] = len(duplicate_group_keys)
     return summary
+
+
+def manual_exam_draft_identity_keys(row: Mapping[str, Any]) -> tuple[str, ...]:
+    event_id = str(row.get("event_id") or "")
+    keys: list[str] = []
+
+    def add(kind: str, *values: Any) -> None:
+        normalized = tuple(re.sub(r"[\s　]+", "", str(value or "")).casefold() for value in values)
+        if all(normalized):
+            keys.append(f"{event_id}:{kind}:" + ":".join(normalized))
+
+    add("subscriber", row.get("subscriber_id"))
+    add("hia", row.get("hia_subscriber_id"))
+    add("person", row.get("person_id_custom"))
+    add(
+        "insurance",
+        row.get("insurer_number"),
+        row.get("insurance_symbol") or "-",
+        row.get("insurance_number"),
+        row.get("insurance_branch_number") or "-",
+        row.get("birthdate"),
+    )
+    add("kana_birth", row.get("name_kana"), row.get("birthdate"))
+    return tuple(dict.fromkeys(keys))
+
+
+def annotate_manual_exam_draft_duplicates(rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    parent = list(range(len(rows)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    first_by_key: dict[str, int] = {}
+    for index, row in enumerate(rows):
+        for identity_key in manual_exam_draft_identity_keys(row):
+            first_index = first_by_key.setdefault(identity_key, index)
+            union(index, first_index)
+
+    groups: dict[int, list[int]] = {}
+    for index in range(len(rows)):
+        groups.setdefault(find(index), []).append(index)
+    for indexes in groups.values():
+        minimum_draft_id = min(int(rows[index]["manual_exam_entry_draft_id"]) for index in indexes)
+        duplicate_refs = [
+            {
+                "manual_exam_entry_draft_id": int(rows[index]["manual_exam_entry_draft_id"]),
+                "draft_status": str(rows[index].get("draft_status") or "DRAFT"),
+                "name": str(rows[index].get("name_kana") or rows[index].get("name_full") or "氏名未設定"),
+            }
+            for index in indexes
+        ]
+        for index in indexes:
+            current_id = int(rows[index]["manual_exam_entry_draft_id"])
+            rows[index]["draft_duplicate_group"] = f"draft:{minimum_draft_id}"
+            rows[index]["draft_duplicate_count"] = len(indexes)
+            rows[index]["draft_duplicate_refs"] = [
+                ref for ref in duplicate_refs if ref["manual_exam_entry_draft_id"] != current_id
+            ]
+
+
+def filter_manual_exam_entry_draft_rows(
+    rows: Sequence[dict[str, Any]],
+    *,
+    status_filter: str,
+    hia_subscriber_id: str,
+    case_id: str,
+    duplicates_only: bool,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    hia_query = hia_subscriber_id.strip().casefold()
+    case_query = case_id.strip().casefold()
+    for row in rows:
+        status = str(row.get("draft_status") or "DRAFT").upper()
+        if status_filter == "ERROR":
+            if status not in {"ERROR", "FAILED"}:
+                continue
+        elif status_filter and status != status_filter:
+            continue
+        if hia_query and hia_query not in str(row.get("hia_subscriber_id") or "").casefold():
+            continue
+        if case_query and case_query not in str(row.get("exam_export_case_id") or "").casefold():
+            continue
+        if duplicates_only and int(row.get("draft_duplicate_count") or 0) <= 1:
+            continue
+        filtered.append(row)
+        if len(filtered) >= limit:
+            break
+    return filtered
 
 
 def load_manual_exam_article44_flags(cur: Any, rows: list[dict[str, Any]]) -> dict[str, list[dict[str, str]]]:
@@ -13074,8 +13192,20 @@ def manual_exam_entry_drafts(request: Request) -> Response:
             status_filter = str(request.query_params.get("status", "") or "").upper().strip()
             if status_filter not in {"DRAFT", "READY", "APPLIED", "ERROR"}:
                 status_filter = ""
+            draft_filters = {
+                "hia_subscriber_id": str(request.query_params.get("hia_subscriber_id", "") or "").strip(),
+                "case_id": str(request.query_params.get("case_id", "") or "").strip(),
+                "duplicates": "1" if request.query_params.get("duplicates") == "1" else "",
+            }
             summary_rows = load_manual_exam_entry_draft_rows(cur, limit=100000) if schema_ready else []
-            draft_rows = load_manual_exam_entry_draft_rows(cur, status_filter=status_filter) if schema_ready else []
+            annotate_manual_exam_draft_duplicates(summary_rows)
+            draft_rows = filter_manual_exam_entry_draft_rows(
+                summary_rows,
+                status_filter=status_filter,
+                hia_subscriber_id=draft_filters["hia_subscriber_id"],
+                case_id=draft_filters["case_id"],
+                duplicates_only=draft_filters["duplicates"] == "1",
+            )
             summary = summarize_manual_exam_entry_drafts(summary_rows)
             conn.commit()
         except Exception:
@@ -13092,6 +13222,7 @@ def manual_exam_entry_drafts(request: Request) -> Response:
             "draft_rows": draft_rows,
             "summary": summary,
             "status_filter": status_filter,
+            "draft_filters": draft_filters,
             "can_manage_manual_entry": can_manage_manual_exam_entry(user),
             "message": request.query_params.get("message", ""),
         },
@@ -20150,12 +20281,19 @@ async def export_list_run(request: Request, xml_export_list_id: int) -> Response
     output_mode = (form.get("output_mode") or "review").strip().lower()
     package_mode = (form.get("package_mode") or "standard").strip().lower()
     submission_facility_code = (form.get("submission_facility_code") or "").strip()
+    include_exported = form.get("include_exported") == "1"
     required_permission = "xml_export.official" if output_mode == "official" else "xml_export.review"
     if not has_permission(user, required_permission):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
 
     try:
-        result = run_hia_xml_export_from_list(xml_export_list_id=xml_export_list_id, output_mode=output_mode, package_mode=package_mode, submission_facility_code=submission_facility_code)
+        result = run_hia_xml_export_from_list(
+            xml_export_list_id=xml_export_list_id,
+            output_mode=output_mode,
+            package_mode=package_mode,
+            submission_facility_code=submission_facility_code,
+            include_exported=include_exported,
+        )
     except Exception as exc:
         message = str(exc).strip() or type(exc).__name__
         return RedirectResponse(

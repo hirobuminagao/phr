@@ -2718,6 +2718,7 @@
         currentManualDraftId = String(payload.draft_id || currentManualDraftId || "");
         setManualEntrySaveStatus(`保存済 ${payload.value_count || values.length}件`, "status-ready");
         updateManualPersonFloat();
+        if (!silent) window.alert("保存しました。");
       } catch (error) {
         setManualEntrySaveStatus("保存エラー", "status-danger");
         if (!silent) window.alert(`下書き保存でエラーが発生しました。${error?.message || ""}`);

@@ -60,6 +60,11 @@
       <strong>{{ summary.error }}</strong>
       <small>要確認</small>
     </a>
+    <a class="summary-card summary-card-link {% if draft_filters.duplicates == '1' %}is-active{% endif %}" href="/manual-exam-entry-drafts?duplicates=1{% if status_filter %}&status={{ status_filter }}{% endif %}">
+      <span>重複候補</span>
+      <strong>{{ summary.duplicate }}</strong>
+      <small>{{ summary.duplicate_groups }}グループ</small>
+    </a>
   </section>
 
   <section class="panel">
@@ -109,6 +114,26 @@
       </div>
     </div>
 
+    <form method="get" action="/manual-exam-entry-drafts" class="filter-form manual-draft-list-filter">
+      {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+      <label>
+        <span>HIA加入者ID</span>
+        <input name="hia_subscriber_id" value="{{ draft_filters.hia_subscriber_id }}" placeholder="HIA IDを部分一致で検索">
+      </label>
+      <label>
+        <span>case ID</span>
+        <input name="case_id" value="{{ draft_filters.case_id }}" inputmode="numeric" placeholder="case IDを部分一致で検索">
+      </label>
+      <label class="inline-check manual-draft-duplicate-check">
+        <input type="checkbox" name="duplicates" value="1" {% if draft_filters.duplicates == '1' %}checked{% endif %}>
+        同一人物の重複候補のみ
+      </label>
+      <div class="form-actions">
+        <button type="submit">絞り込む</button>
+        <a class="ghost-button" href="/manual-exam-entry-drafts{% if status_filter %}?status={{ status_filter }}{% endif %}">クリア</a>
+      </div>
+    </form>
+
     <div class="table-panel">
       <table class="data-table compact-table manual-draft-list-table">
         <thead>
@@ -139,6 +164,9 @@
                   {{ status }}
                 </span>
                 <small>draft {{ draft.manual_exam_entry_draft_id }}</small>
+                {% if draft.draft_duplicate_count > 1 %}
+                <span class="status-pill status-danger">重複候補 {{ draft.draft_duplicate_count }}件</span>
+                {% endif %}
                 <button
                   type="button"
                   class="ghost-button compact-action-button manual-draft-case-check-button"
@@ -158,6 +186,16 @@
                   {% if draft.birthdate %}<br>{{ draft.birthdate }}{% endif %}
                   {% if draft.exam_export_case_id %}<br>case {{ draft.exam_export_case_id }}{% endif %}
                 </small>
+                {% if draft.draft_duplicate_refs %}
+                <div class="manual-draft-duplicate-refs">
+                  <small class="warning-text">同一人物候補</small>
+                  {% for ref in draft.draft_duplicate_refs %}
+                  <a href="/manual-exam-entry?draft_id={{ ref.manual_exam_entry_draft_id }}">
+                    draft {{ ref.manual_exam_entry_draft_id }} / {{ ref.draft_status }}
+                  </a>
+                  {% endfor %}
+                </div>
+                {% endif %}
               </td>
               <td>
                 {% if draft.facility_name or draft.facility_code %}

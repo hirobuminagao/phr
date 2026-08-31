@@ -38,6 +38,8 @@ def args_for(config: Path, **overrides: object) -> argparse.Namespace:
         "file_date": None,
         "output_mode": None,
         "review_output_root": None,
+        "package_mode": None,
+        "submission_facility_code": None,
         "limit": None,
         "dry_run": False,
         "db_prefix": "PHR_DB_",
@@ -113,6 +115,39 @@ def test_cli_selectors_override_yaml_lists(tmp_path: Path) -> None:
     assert config.selectors.facility_ids == (30,)
     assert config.selectors.facility_codes == ("1111111111",)
     assert config.selectors.file_receipt_ids == (202,)
+
+
+def test_exported_list_cases_are_validated_when_reexport_is_enabled(tmp_path: Path) -> None:
+    config_path = write_config(tmp_path / "export.yml", event_id=2)
+    config = export_hia_xml.load_config(
+        args_for(config_path, xml_export_list_id=72, include_exported=True)
+    )
+    cursor = FakeCursor(
+        [
+            {
+                "xml_export_list_case_id": 10,
+                "exam_export_case_id": 3446,
+                "case_event_id": 2,
+                "export_readiness_status": "EXPORTED",
+                "export_readiness_reason": None,
+                "xml_export_status": "EXPORTED",
+                "has_active_source": 1,
+                "already_exported": 1,
+            }
+        ]
+    )
+
+    assert export_hia_xml.validate_export_list_cases(cursor, config=config) is None
+    assert "'EXPORT_ERROR', 'EXPORTED'" in cursor.execute_calls[0][0]
+
+
+def test_exported_list_cases_remain_excluded_without_reexport(tmp_path: Path) -> None:
+    config_path = write_config(tmp_path / "export.yml", event_id=2)
+    config = export_hia_xml.load_config(args_for(config_path, xml_export_list_id=72))
+    cursor = FakeCursor([])
+
+    assert export_hia_xml.validate_export_list_cases(cursor, config=config) is None
+    assert "'EXPORT_ERROR', 'EXPORTED'" not in cursor.execute_calls[0][0]
 
 
 def test_requires_explicit_scope(tmp_path: Path) -> None:

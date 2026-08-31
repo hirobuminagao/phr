@@ -330,7 +330,7 @@ def resolve_latest_xml_export_list(cur: Any, config: ExportConfig) -> ExportConf
         SELECT xml_export_list_id, list_name, list_status
         FROM {qname(config.health_db)}.ops_xml_export_lists
         WHERE event_id = %s
-          AND list_status IN ('READY', 'PARTIAL', 'ERROR')
+          AND list_status IN ('READY', 'PARTIAL', 'ERROR', 'EXPORTED')
         ORDER BY xml_export_list_id DESC
         LIMIT 1
         """,
@@ -515,6 +515,9 @@ def mark_export_list_started(cur: Any, *, config: ExportConfig, run_id: int) -> 
 def validate_export_list_cases(cur: Any, *, config: ExportConfig) -> str | None:
     if config.selectors.xml_export_list_id is None:
         return None
+    list_case_statuses = "'SELECTED', 'READY', 'EXPORT_ERROR'"
+    if config.selectors.include_exported:
+        list_case_statuses += ", 'EXPORTED'"
     cur.execute(
         f"""
         SELECT
@@ -544,7 +547,7 @@ def validate_export_list_cases(cur: Any, *, config: ExportConfig) -> str | None:
         LEFT JOIN {qname(config.health_db)}.exam_export_cases eec
           ON eec.exam_export_case_id = xelc.exam_export_case_id
         WHERE xelc.xml_export_list_id = %s
-          AND xelc.list_case_status IN ('SELECTED', 'READY', 'EXPORT_ERROR')
+          AND xelc.list_case_status IN ({list_case_statuses})
           AND xelc.removed_at IS NULL
         ORDER BY xelc.xml_export_list_case_id
         """,
