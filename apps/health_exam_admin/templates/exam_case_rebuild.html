@@ -37,11 +37,11 @@
           {% endfor %}
         </select>
       </label>
+      <label>HIA加入者ID<input name="hia_subscriber_id" value="{{ search_filters.hia_subscriber_id }}" placeholder="IDの一部"></label>
       <label>記号<input name="insurance_symbol" value="{{ search_filters.insurance_symbol }}" placeholder="例: ABC"></label>
       <label>番号<input name="insurance_number" value="{{ search_filters.insurance_number }}" placeholder="例: 12345"></label>
-      <label>氏名かな<input name="name_kana" value="{{ search_filters.name_kana }}" placeholder="例: ヤマダ"></label>
       <label>生年月日<input name="birth" value="{{ search_filters.birth }}" placeholder="例: 1980-01"></label>
-      <label>HIA加入者ID<input name="hia_subscriber_id" value="{{ search_filters.hia_subscriber_id }}" placeholder="IDの一部"></label>
+      <label>氏名かな<input name="name_kana" value="{{ search_filters.name_kana }}" placeholder="例: ヤマダ"></label>
       <button type="submit">検索</button>
     </form>
   </section>
