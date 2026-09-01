@@ -8978,6 +8978,71 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
     return result[:limit]
 
 
+OROKU_HEARING_HEADERS = {
+    "オージオ（右）1000Ｈｚ": ("右 1000Hz", "9D100163100000011"),
+    "オージオ（左）1000Ｈｚ": ("左 1000Hz", "9D100163500000011"),
+    "オージオ（右）4000Ｈｚ": ("右 4000Hz", "9D100163200000011"),
+    "オージオ（左）4000Ｈｚ": ("左 4000Hz", "9D100163600000011"),
+}
+
+
+def build_hearing_judgement_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    item_rows: dict[str, dict[str, Any]] = {
+        header_name: {
+            "header_name": header_name,
+            "item_label": item_label,
+            "namecode": namecode,
+            "normal_count": 0,
+            "abnormal_count": 0,
+            "unknown_count": 0,
+            "total_count": 0,
+            "abnormal_rate": None,
+        }
+        for header_name, (item_label, namecode) in OROKU_HEARING_HEADERS.items()
+    }
+    ledger_states: dict[int, set[str]] = {}
+    for source in rows:
+        header_name = str(source.get("header_name") or "")
+        item = item_rows.get(header_name)
+        if item is None:
+            continue
+        raw_value = str(source.get("raw_value") or "").strip()
+        if not raw_value:
+            continue
+        ledger_id = int(source["exam_ledger_id"])
+        state = "NORMAL" if raw_value == "1" else "ABNORMAL" if raw_value == "2" else "UNKNOWN"
+        ledger_states.setdefault(ledger_id, set()).add(state)
+        item["total_count"] += 1
+        item[f"{state.lower()}_count"] += 1
+
+    normal_ledgers = 0
+    abnormal_ledgers = 0
+    unknown_ledgers = 0
+    for states in ledger_states.values():
+        if "ABNORMAL" in states:
+            abnormal_ledgers += 1
+        elif "UNKNOWN" in states:
+            unknown_ledgers += 1
+        else:
+            normal_ledgers += 1
+
+    for item in item_rows.values():
+        judged_count = item["normal_count"] + item["abnormal_count"]
+        if judged_count:
+            item["abnormal_rate"] = round(item["abnormal_count"] * 100 / judged_count, 1)
+
+    judged_ledgers = normal_ledgers + abnormal_ledgers
+    return {
+        "available": bool(ledger_states),
+        "ledger_total": len(ledger_states),
+        "normal_ledger_count": normal_ledgers,
+        "abnormal_ledger_count": abnormal_ledgers,
+        "unknown_ledger_count": unknown_ledgers,
+        "abnormal_ledger_rate": round(abnormal_ledgers * 100 / judged_ledgers, 1) if judged_ledgers else None,
+        "item_rows": list(item_rows.values()),
+    }
+
+
 def load_facility_summary_detail(
     cur: Any,
     *,
@@ -9203,6 +9268,36 @@ def load_facility_summary_detail(
     )
     item_error_rows = [dict(row) for row in cur.fetchall()]
 
+    hearing_headers = tuple(OROKU_HEARING_HEADERS)
+    hearing_header_placeholders = ", ".join(["%s"] * len(hearing_headers))
+    cur.execute(
+        f"""
+        SELECT
+          el.exam_ledger_id,
+          h.header_name,
+          JSON_UNQUOTE(
+            JSON_EXTRACT(el.raw_row_json, CONCAT('$[', h.column_no - 1, ']'))
+          ) AS raw_value
+        FROM {qname(health_db())}.exam_ledgers AS el
+        INNER JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_code = el.facility_code
+        INNER JOIN {qname(master_db())}.csv_format_versions AS cfv
+          ON cfv.exam_facility_id = ef.exam_facility_id
+         AND cfv.mapping_version = el.mapping_version
+        INNER JOIN {qname(master_db())}.csv_format_header_columns AS h
+          ON h.csv_format_version_id = cfv.csv_format_version_id
+         AND h.header_name IN ({hearing_header_placeholders})
+        WHERE el.event_id = %s
+          AND el.facility_code = %s
+          AND el.source_type = 'CSV'
+          AND el.raw_row_json IS NOT NULL
+          {month_clause}
+        ORDER BY el.exam_ledger_id, h.column_no
+        """,
+        (*hearing_headers, event_id, facility_code, *month_params),
+    )
+    hearing_summary = build_hearing_judgement_summary(dict(row) for row in cur.fetchall())
+
     return {
         "header": header,
         "monthly_rows": monthly_rows,
@@ -9210,6 +9305,7 @@ def load_facility_summary_detail(
         "source_ng_reasons": source_ng_reasons,
         "case_check_rows": case_check_rows,
         "item_error_rows": item_error_rows,
+        "hearing_summary": hearing_summary,
         "summary": {
             "file_total": sum(int(row.get("file_count") or 0) for row in monthly_rows),
             "source_total": sum(int(row.get("source_count") or 0) for row in monthly_rows),

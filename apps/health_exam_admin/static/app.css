@@ -334,6 +334,25 @@ button[type="submit"]:disabled {
   margin-bottom: 16px;
 }
 
+.hearing-summary-grid {
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  margin-bottom: 16px;
+}
+
+.hearing-conversion-table {
+  min-width: 980px;
+}
+
+.hearing-conversion-table .status-pill {
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .hearing-summary-grid {
+    grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+}
+
 .two-column-panels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
