@@ -4262,7 +4262,6 @@ def search_facility_master(request: Request) -> Response:
             code=code,
             code_match=code_match,
             prefecture=prefecture,
-            prefer_alias_registered=prefer_alias_registered,
         )
         rows = load_facility_master_admin_rows(
             cur,
@@ -4271,6 +4270,7 @@ def search_facility_master(request: Request) -> Response:
             code=code,
             code_match=code_match,
             prefecture=prefecture,
+            prefer_alias_registered=prefer_alias_registered,
         )
         cur.close()
     return JSONResponse(
