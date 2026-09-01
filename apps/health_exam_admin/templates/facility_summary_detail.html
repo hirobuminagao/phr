@@ -299,6 +299,46 @@
     </div>
   </section>
 
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>特定健診項目のNG</h2>
+        <p class="subtle">特定健診チェックで不足・不正になった項目を集計します。CSVに列がある項目は、マッピング追加の候補として確認してください。</p>
+      </div>
+      <a class="ghost-button" href="/admin/csv-mapping-templates?q={{ (detail.header.facility_code or filters.facility_code)|url_quote }}">CSVマッピングを確認</a>
+    </div>
+    <div class="table-panel">
+      <table class="data-table compact-table">
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>NG理由</th>
+            <th>case数</th>
+            <th>確認待ち</th>
+            <th>再提出待ち</th>
+            <th>理由ありOK</th>
+            <th>除外</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.specific_ng_item_rows %}
+          <tr>
+            <td><strong>{{ row.item_name }}</strong><small>{{ row.namecode }}</small></td>
+            <td>{{ row.validation_reason }}</td>
+            <td><strong>{{ row.case_count }}</strong></td>
+            <td>{{ row.needs_confirmation_count }}</td>
+            <td>{{ row.waiting_resubmission_count }}</td>
+            <td>{{ row.approved_count }}</td>
+            <td>{{ row.excluded_count }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7">特定健診項目のNGはありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="panel hearing-summary-panel">
     <div class="section-heading">
       <div>

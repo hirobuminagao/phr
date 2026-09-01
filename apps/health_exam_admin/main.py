@@ -9267,6 +9267,45 @@ def load_facility_summary_detail(
     cur.execute(
         f"""
         SELECT
+          cri.check_item_code AS namecode,
+          COALESCE(NULLIF(cri.check_item_name, ''), cri.check_item_code) AS item_name,
+          COALESCE(NULLIF(cri.validation_reason, ''), '理由なし') AS validation_reason,
+          COUNT(DISTINCT cri.exam_export_case_id) AS case_count,
+          SUM(CASE WHEN cri.review_status = 'NEEDS_CONFIRMATION' THEN 1 ELSE 0 END) AS needs_confirmation_count,
+          SUM(CASE WHEN cri.review_status = 'WAITING_RESUBMISSION' THEN 1 ELSE 0 END) AS waiting_resubmission_count,
+          SUM(CASE WHEN cri.review_status = 'APPROVED_WITH_REASON' THEN 1 ELSE 0 END) AS approved_count,
+          SUM(CASE WHEN cri.review_status = 'EXCLUDED' THEN 1 ELSE 0 END) AS excluded_count
+        FROM {qname(health_db())}.exam_case_check_review_items AS cri
+        INNER JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON eec.exam_export_case_id = cri.exam_export_case_id
+        WHERE eec.event_id = %s
+          AND eec.facility_code = %s
+          AND cri.check_scope = 'SPECIFIC_HEALTH'
+          AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
+          {month_clause.replace('el.exam_date', 'eec.exam_date')}
+        GROUP BY
+          cri.check_item_code,
+          COALESCE(NULLIF(cri.check_item_name, ''), cri.check_item_code),
+          COALESCE(NULLIF(cri.validation_reason, ''), '理由なし')
+        ORDER BY case_count DESC, cri.check_item_code
+        LIMIT 100
+        """,
+        (event_id, facility_code, *month_params),
+    )
+    specific_ng_item_rows = [dict(row) for row in cur.fetchall()]
+    for row in specific_ng_item_rows:
+        for field in (
+            "case_count",
+            "needs_confirmation_count",
+            "waiting_resubmission_count",
+            "approved_count",
+            "excluded_count",
+        ):
+            row[field] = int(row.get(field) or 0)
+
+    cur.execute(
+        f"""
+        SELECT
           eiv.namecode,
           COALESCE(eiv.namecode_display_name, eiv.namecode) AS item_name,
           eiv.normalize_status,
@@ -9325,6 +9364,7 @@ def load_facility_summary_detail(
         "file_rows": file_rows,
         "source_ng_reasons": source_ng_reasons,
         "case_check_rows": case_check_rows,
+        "specific_ng_item_rows": specific_ng_item_rows,
         "item_error_rows": item_error_rows,
         "hearing_summary": hearing_summary,
         "summary": {
