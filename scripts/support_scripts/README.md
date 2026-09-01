@@ -21,6 +21,20 @@ python scripts/support_scripts/capture_snapshot.py --incident-id 1 --phase BEFOR
 python scripts/support_scripts/capture_snapshot.py --incident-id 1 --phase BEFORE
 ```
 
+再取込とcase採用値再作成後の差分確認:
+
+```bash
+python scripts/support_scripts/capture_snapshot.py --incident-id 1 --phase AFTER --dry-run
+```
+
+差分を保存し、修正前に出力済みだった復旧caseを出力リストへ登録:
+
+```bash
+python scripts/support_scripts/capture_snapshot.py --incident-id 1 --phase AFTER --create-export-list
+```
+
+出力リストは事象・eventごとに作成され、同じコマンドを再実行した場合は既存リストを再利用します。
+
 既定では`queries/001.sql`を実行します。事象を追加するときは`support_incidents`へ登録し、同じ事象IDを3桁にしたSQLファイルを`queries`へ追加します。
 
 抽出SQLは`target_type`と`target_id`を必ず返します。`event_id`、`exam_export_case_id`、`source_exam_ledger_id`、`reprocess_required`、`reexport_required`を返すと検索用列にも保存され、SELECT結果全体は`JSON`として保持されます。

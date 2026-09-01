@@ -67,12 +67,111 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--database", default=SUPPORT_DB)
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--create-export-list",
+        action="store_true",
+        help="AFTERで再出力対象を事象専用の出力リストへ登録する",
+    )
+    parser.add_argument("--export-list-name", default=None, help="再出力リスト名。省略時は事象名から生成")
     return parser.parse_args()
+
+
+def default_query_path(incident_id: int, phase: str) -> Path:
+    suffix = "_after" if phase == "AFTER" else ""
+    return QUERY_DIR / f"{incident_id:03d}{suffix}.sql"
+
+
+def create_or_update_reexport_lists(
+    cur: Any,
+    *,
+    incident: dict[str, Any],
+    rows: list[dict[str, Any]],
+    operator: str,
+    list_name: str | None,
+) -> dict[int, int]:
+    targets_by_event: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        if not bool(row.get("reexport_required")):
+            continue
+        event_id = int(row["event_id"])
+        targets_by_event.setdefault(event_id, []).append(row)
+
+    result: dict[int, int] = {}
+    for event_id, targets in targets_by_event.items():
+        selector_marker = f"support_incident_id={incident['incident_id']}\nsupport_phase=AFTER"
+        cur.execute(
+            """
+            SELECT xml_export_list_id
+            FROM health_exam_result.ops_xml_export_lists
+            WHERE event_id = %s
+              AND selector_summary LIKE %s
+              AND list_status IN ('DRAFT', 'READY', 'PARTIAL', 'ERROR')
+            ORDER BY xml_export_list_id DESC
+            LIMIT 1
+            """,
+            (event_id, f"%{selector_marker}%"),
+        )
+        existing = cur.fetchone()
+        if existing:
+            xml_export_list_id = int(existing["xml_export_list_id"])
+        else:
+            generated_name = list_name or f"【再出力】{incident['incident_key']} event {event_id}"
+            cur.execute(
+                """
+                INSERT INTO health_exam_result.ops_xml_export_lists (
+                  event_id, list_name, list_status, selector_summary,
+                  include_exported, created_by, confirmed_by, confirmed_at, list_note
+                ) VALUES (%s, %s, 'READY', %s, 1, %s, %s, CURRENT_TIMESTAMP(3), %s)
+                """,
+                (
+                    event_id,
+                    generated_name,
+                    selector_marker,
+                    operator,
+                    operator,
+                    f"phr_system_support incident_id={incident['incident_id']} のAFTER比較から自動作成",
+                ),
+            )
+            xml_export_list_id = int(cur.lastrowid)
+
+        for row in targets:
+            cur.execute(
+                """
+                INSERT INTO health_exam_result.ops_xml_export_list_cases (
+                  xml_export_list_id, exam_export_case_id, list_case_status,
+                  export_readiness_status_snapshot, export_readiness_reason_snapshot,
+                  added_by, list_case_note
+                ) VALUES (%s, %s, 'READY', %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                  list_case_status = 'READY',
+                  export_readiness_status_snapshot = VALUES(export_readiness_status_snapshot),
+                  export_readiness_reason_snapshot = VALUES(export_readiness_reason_snapshot),
+                  added_by = VALUES(added_by),
+                  added_at = CURRENT_TIMESTAMP(3),
+                  removed_by = NULL,
+                  removed_at = NULL,
+                  remove_reason = NULL,
+                  list_case_note = VALUES(list_case_note),
+                  updated_at = CURRENT_TIMESTAMP(3)
+                """,
+                (
+                    xml_export_list_id,
+                    row["exam_export_case_id"],
+                    row.get("current_export_readiness_status"),
+                    row.get("current_export_readiness_reason"),
+                    operator,
+                    f"support incident {incident['incident_id']} author修復後の再出力対象",
+                ),
+            )
+        result[event_id] = xml_export_list_id
+    return result
 
 
 def main() -> int:
     args = parse_args()
-    query_path = args.query_file or QUERY_DIR / f"{args.incident_id:03d}.sql"
+    if args.create_export_list and args.phase != "AFTER":
+        raise ValueError("--create-export-list can only be used with --phase AFTER")
+    query_path = args.query_file or default_query_path(args.incident_id, args.phase)
     query_sql = load_select_sql(query_path)
     batch_id = args.batch_id or str(uuid.uuid4())
     params = load_mysql_base_params(args.db_prefix)
@@ -103,6 +202,7 @@ def main() -> int:
         for row in rows[:20]:
             print(
                 f"  {row['target_type']}:{row['target_id']} "
+                f"status={row.get('comparison_status') or '-'} "
                 f"reprocess={int(bool(row.get('reprocess_required')))} "
                 f"reexport={int(bool(row.get('reexport_required')))}"
             )
@@ -145,11 +245,37 @@ def main() -> int:
                     "captured_by": args.captured_by,
                 },
             )
+        export_list_ids: dict[int, int] = {}
+        if args.create_export_list:
+            export_list_ids = create_or_update_reexport_lists(
+                cur,
+                incident=dict(incident),
+                rows=rows,
+                operator=args.captured_by,
+                list_name=args.export_list_name,
+            )
+            for event_id, xml_export_list_id in export_list_ids.items():
+                cur.execute(
+                    """
+                    UPDATE support_snapshot_targets
+                    SET action_status = 'PROCESSED',
+                        snapshot_data = JSON_SET(snapshot_data, '$.xml_export_list_id', %s),
+                        processed_at = CURRENT_TIMESTAMP(3)
+                    WHERE incident_id = %s
+                      AND capture_batch_id = %s
+                      AND snapshot_phase = 'AFTER'
+                      AND event_id = %s
+                      AND reexport_required = 1
+                    """,
+                    (xml_export_list_id, args.incident_id, batch_id, event_id),
+                )
         cur.execute(
             "UPDATE support_incidents SET status = 'SNAPSHOTTED' WHERE incident_id = %s AND status = 'OPEN'",
             (args.incident_id,),
         )
         conn.commit()
+        for event_id, xml_export_list_id in export_list_ids.items():
+            print(f"export_list event_id={event_id} xml_export_list_id={xml_export_list_id}")
     return 0
 
 
