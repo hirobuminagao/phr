@@ -4426,9 +4426,14 @@
           list.innerHTML = `<span class="status-pill status-ready">MISSING 100%の項目なし</span>`;
           return;
         }
-        list.innerHTML = items.map((item) => item.is_mapped
-          ? `<span class="status-pill status-ready">${escapeHtml(item.item_name || item.namecode)} / マッピング済み</span>`
-          : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")} / ${escapeHtml(String(item.missing_case_count || 0))} case</small></button>`,
+        list.innerHTML = items.map((item) => {
+          const xmlLabel = Number(item.xml_ledger_count || 0) > 0
+            ? `XMLあり ${escapeHtml(String(item.xml_ledger_count))}件`
+            : "XMLなし";
+          return item.is_mapped
+            ? `<span class="status-pill status-ready">${escapeHtml(item.item_name || item.namecode)} / マッピング済み / ${xmlLabel}</span>`
+            : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")} / ${escapeHtml(String(item.missing_case_count || 0))} case / ${xmlLabel}</small></button>`;
+        },
         ).join("");
       } catch (error) {
         if (summary) summary.textContent = "特定健診の不足状況を取得できませんでした。";

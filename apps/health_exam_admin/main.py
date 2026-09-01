@@ -17869,8 +17869,34 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                 """,
                 (facility_code,),
             )
+            missing_rows = [dict(row) for row in cur.fetchall()]
+            xml_counts: dict[str, int] = {}
+            missing_namecodes = [str(row.get("namecode") or "") for row in missing_rows if row.get("namecode")]
+            if missing_namecodes:
+                placeholders = ", ".join(["%s"] * len(missing_namecodes))
+                cur.execute(
+                    f"""
+                    SELECT
+                      eiv.namecode,
+                      COUNT(DISTINCT el.exam_ledger_id) AS xml_ledger_count
+                    FROM {qname(health_db())}.exam_item_values AS eiv
+                    INNER JOIN {qname(health_db())}.exam_ledgers AS el
+                      ON el.exam_ledger_id = eiv.ledger_id
+                     AND eiv.ledger_type = 'EXAM'
+                    WHERE el.facility_code = %s
+                      AND el.source_type = 'XML'
+                      AND eiv.namecode IN ({placeholders})
+                    GROUP BY eiv.namecode
+                    """,
+                    (facility_code, *missing_namecodes),
+                )
+                xml_counts = {
+                    str(row.get("namecode") or ""): int(row.get("xml_ledger_count") or 0)
+                    for row in cur.fetchall()
+                }
+
             items = []
-            for row in cur.fetchall():
+            for row in missing_rows:
                 missing_case_count = int(row.get("missing_case_count") or 0)
                 missing_rate = round(missing_case_count * 100 / subject_case_count, 1) if subject_case_count else None
                 if missing_rate != 100:
@@ -17882,6 +17908,7 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                         "item_name": row.get("item_name") or namecode,
                         "missing_case_count": missing_case_count,
                         "missing_rate": missing_rate,
+                        "xml_ledger_count": xml_counts.get(namecode, 0),
                         "is_mapped": namecode in mapped_namecodes,
                     }
                 )
