@@ -316,7 +316,7 @@
       </div>
     </div>
     <div class="table-panel"><table class="data-table compact-table hearing-conversion-table">
-      <thead><tr><th>聴力項目</th><th>CD 2</th><th>判定</th><th>CD 1</th><th>判定</th><th>不明値</th><th>異常割合</th></tr></thead>
+      <thead><tr><th>聴力項目</th><th>CD 2（raw=1）</th><th>判定</th><th>CD 1（raw=2）</th><th>判定</th><th>不明値</th><th>異常割合</th></tr></thead>
       <tbody>{% for row in detail.hearing_summary.item_rows %}<tr><td><strong>{{ row.item_label }}</strong><small>{{ row.namecode }}</small></td><td>{{ row.normal_count }}件</td><td><span class="status-pill status-ready">異常所見なし</span></td><td>{{ row.abnormal_count }}件</td><td><span class="status-pill status-danger">異常所見あり</span></td><td>{{ row.unknown_count }}件</td><td>{{ row.abnormal_rate if row.abnormal_rate is not none else '-' }}{% if row.abnormal_rate is not none %}%{% endif %}</td></tr>{% endfor %}</tbody>
     </table></div>
     {% if detail.hearing_summary.abnormal_ledger_rate == 100 %}<p class="status-panel status-panel--danger">異常判定が100%です。CSVの値定義とマッピング変換ルールを確認してください。</p>{% endif %}
