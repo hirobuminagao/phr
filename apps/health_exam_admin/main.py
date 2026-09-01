@@ -18054,9 +18054,6 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
             cur.execute(
                 f"""
                 SELECT
-                  'ARTICLE44' AS check_scope,
-                  gm.namecode,
-                  COALESCE(NULLIF(MAX(eim.item_name), ''), gm.namecode) AS item_name,
                   cri.check_item_code AS legal_detail_no,
                   COALESCE(NULLIF(MAX(cri.check_item_name), ''), cri.check_item_code) AS legal_detail_name,
                   COUNT(DISTINCT cri.exam_export_case_id) AS missing_case_count
@@ -18074,22 +18071,50 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                     GROUP BY exam_export_case_id
                   ) AS latest ON latest.max_id = r1.id
                 ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
-                INNER JOIN {qname(dev_db())}.exam_item_group_members AS gm
-                  ON gm.group_code = 'v2_2026_ARTICLE44_CHECK_ITEMS'
-                 AND gm.notes LIKE CONCAT('%%Article44 ', cri.check_item_code, ':%%')
-                LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
-                  ON eim.namecode = gm.namecode
                 WHERE eec.facility_code = %s
                   AND ecr.legal_check_result IN ('OK', 'NG')
                   AND cri.check_scope = 'ARTICLE44'
                   AND cri.validation_reason REGEXP '^ARTICLE44:44[0-9]{8}:(MISSING|NOT_FOUND|NULL|EMPTY|CODE_VALUE_MISSING|TEXT_VALUE_MISSING)$'
                   AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
-                GROUP BY cri.check_item_code, gm.namecode
-                ORDER BY missing_case_count DESC, cri.check_item_code, gm.priority, gm.namecode
+                GROUP BY cri.check_item_code
+                ORDER BY missing_case_count DESC, cri.check_item_code
                 """,
                 (facility_code,),
             )
-            missing_rows.extend(dict(row) for row in cur.fetchall())
+            legal_detail_rows = [dict(row) for row in cur.fetchall()]
+            if legal_detail_rows:
+                cur.execute(
+                    f"""
+                    SELECT
+                      gm.namecode,
+                      COALESCE(NULLIF(eim.item_name, ''), gm.namecode) AS item_name,
+                      gm.notes,
+                      gm.priority
+                    FROM {qname(dev_db())}.exam_item_group_members AS gm
+                    LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
+                      ON eim.namecode = gm.namecode
+                    WHERE gm.group_code = 'v2_2026_ARTICLE44_CHECK_ITEMS'
+                    ORDER BY gm.priority, gm.namecode
+                    """
+                )
+                legal_targets_by_detail: dict[str, list[dict[str, Any]]] = {}
+                for target in cur.fetchall():
+                    match = re.search(r"Article44\s+(44\d{8})\s*:", str(target.get("notes") or ""))
+                    if match:
+                        legal_targets_by_detail.setdefault(match.group(1), []).append(dict(target))
+                for detail in legal_detail_rows:
+                    detail_no = str(detail.get("legal_detail_no") or "")
+                    for target in legal_targets_by_detail.get(detail_no, []):
+                        missing_rows.append(
+                            {
+                                "check_scope": "ARTICLE44",
+                                "namecode": target.get("namecode"),
+                                "item_name": target.get("item_name"),
+                                "legal_detail_no": detail_no,
+                                "legal_detail_name": detail.get("legal_detail_name"),
+                                "missing_case_count": detail.get("missing_case_count"),
+                            }
+                        )
             xml_counts: dict[str, int] = {}
             missing_namecodes = [str(row.get("namecode") or "") for row in missing_rows if row.get("namecode")]
             if missing_namecodes:

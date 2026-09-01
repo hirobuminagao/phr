@@ -86,7 +86,7 @@
           placeholder="空ならデータ開始行の直前"
         >
       </label>
-      <label>
+      <div class="form-field">
         <span>テンプレート状態</span>
         {% set current_is_active = 1 if template and template.is_active else 0 %}
         <span class="csv-template-active-radio-toggle">
@@ -100,7 +100,7 @@
           </label>
         </span>
         <small>無効にするとscan/importの対象外です。</small>
-      </label>
+      </div>
     </div>
       <div class="button-row">
         <button class="primary-button" type="submit">{{ "作成" if mode == "new" else "基本情報を保存" }}</button>
