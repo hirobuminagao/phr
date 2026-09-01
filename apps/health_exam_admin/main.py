@@ -17766,6 +17766,138 @@ def admin_csv_mapping_templates(request: Request) -> Response:
     )
 
 
+@app.get("/api/admin/csv-mapping-templates/facility-missing-items")
+def api_csv_mapping_template_facility_missing_items(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return JSONResponse({"error": "権限がありません。"}, status_code=403)
+    exam_facility_id = _optional_int(request.query_params.get("exam_facility_id"))
+    csv_format_version_id = _optional_int(request.query_params.get("csv_format_version_id"))
+    if not exam_facility_id:
+        return JSONResponse({"subject_case_count": 0, "items": []})
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                f"""
+                SELECT exam_facility_code
+                FROM {qname(master_db())}.exam_facilities
+                WHERE exam_facility_id = %s
+                LIMIT 1
+                """,
+                (exam_facility_id,),
+            )
+            facility = cur.fetchone()
+            facility_code = str((facility or {}).get("exam_facility_code") or "").strip()
+            if not facility_code:
+                return JSONResponse({"subject_case_count": 0, "items": []})
+
+            cur.execute(
+                f"""
+                SELECT COUNT(*) AS subject_case_count
+                FROM {qname(health_db())}.exam_export_cases AS eec
+                INNER JOIN (
+                  SELECT r1.exam_export_case_id, r1.specific_check_result
+                  FROM {qname(health_db())}.exam_check_results AS r1
+                  INNER JOIN (
+                    SELECT exam_export_case_id, MAX(id) AS max_id
+                    FROM {qname(health_db())}.exam_check_results
+                    WHERE ledger_type = 'EXPORT_CASE'
+                      AND exam_export_case_id IS NOT NULL
+                    GROUP BY exam_export_case_id
+                  ) AS latest ON latest.max_id = r1.id
+                ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
+                WHERE eec.facility_code = %s
+                  AND ecr.specific_check_result IN ('OK', 'NG')
+                """,
+                (facility_code,),
+            )
+            subject_case_count = int((cur.fetchone() or {}).get("subject_case_count") or 0)
+
+            mapped_namecodes: set[str] = set()
+            if csv_format_version_id:
+                cur.execute(
+                    f"""
+                    SELECT DISTINCT target_namecode
+                    FROM {qname(master_db())}.csv_exam_result_mapping_rules
+                    WHERE csv_format_version_id = %s
+                      AND target_kind = 'EXAM_ITEM_VALUE'
+                      AND is_active = 1
+                      AND target_namecode IS NOT NULL
+                    """,
+                    (csv_format_version_id,),
+                )
+                mapped_namecodes = {str(row.get("target_namecode") or "") for row in cur.fetchall()}
+
+            cur.execute(
+                f"""
+                SELECT
+                  cri.check_item_code AS namecode,
+                  COALESCE(NULLIF(MAX(cri.check_item_name), ''), cri.check_item_code) AS item_name,
+                  COUNT(DISTINCT cri.exam_export_case_id) AS missing_case_count
+                FROM {qname(health_db())}.exam_case_check_review_items AS cri
+                INNER JOIN {qname(health_db())}.exam_export_cases AS eec
+                  ON eec.exam_export_case_id = cri.exam_export_case_id
+                INNER JOIN (
+                  SELECT r1.exam_export_case_id, r1.specific_check_result
+                  FROM {qname(health_db())}.exam_check_results AS r1
+                  INNER JOIN (
+                    SELECT exam_export_case_id, MAX(id) AS max_id
+                    FROM {qname(health_db())}.exam_check_results
+                    WHERE ledger_type = 'EXPORT_CASE'
+                      AND exam_export_case_id IS NOT NULL
+                    GROUP BY exam_export_case_id
+                  ) AS latest ON latest.max_id = r1.id
+                ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
+                WHERE eec.facility_code = %s
+                  AND ecr.specific_check_result IN ('OK', 'NG')
+                  AND cri.check_scope = 'SPECIFIC_HEALTH'
+                  AND cri.validation_reason IN (
+                    'SPECIFIC_HEALTH:NOT_FOUND',
+                    'SPECIFIC_HEALTH:NULL',
+                    'SPECIFIC_HEALTH:EMPTY',
+                    'SPECIFIC_HEALTH:CODE_VALUE_MISSING',
+                    'SPECIFIC_HEALTH:TEXT_VALUE_MISSING'
+                  )
+                  AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
+                GROUP BY cri.check_item_code
+                ORDER BY missing_case_count DESC, cri.check_item_code
+                """,
+                (facility_code,),
+            )
+            items = []
+            for row in cur.fetchall():
+                missing_case_count = int(row.get("missing_case_count") or 0)
+                missing_rate = round(missing_case_count * 100 / subject_case_count, 1) if subject_case_count else None
+                if missing_rate != 100:
+                    continue
+                namecode = str(row.get("namecode") or "")
+                items.append(
+                    {
+                        "namecode": namecode,
+                        "item_name": row.get("item_name") or namecode,
+                        "missing_case_count": missing_case_count,
+                        "missing_rate": missing_rate,
+                        "is_mapped": namecode in mapped_namecodes,
+                    }
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return JSONResponse(
+        {
+            "facility_code": facility_code,
+            "subject_case_count": subject_case_count,
+            "items": items,
+        }
+    )
+
+
 @app.get("/admin/csv-mapping-templates/new", response_class=HTMLResponse)
 def admin_csv_mapping_template_new(request: Request) -> Response:
     user = require_user(request)

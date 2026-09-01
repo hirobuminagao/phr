@@ -216,6 +216,12 @@
     <div class="csv-template-inline-preview" data-csv-template-inline-preview>
       <div class="csv-template-inline-preview__head">
         <strong>CSVプレビュー</strong>
+        <div class="csv-template-preview-search">
+          <input type="search" placeholder="ヘッダーを検索" aria-label="CSVヘッダーを検索" data-csv-template-preview-search>
+          <span data-csv-template-preview-search-count>0 / 0</span>
+          <button type="button" class="ghost-button compact-action-button" aria-label="前の一致列" data-csv-template-preview-search-prev>&lt;</button>
+          <button type="button" class="ghost-button compact-action-button" aria-label="次の一致列" data-csv-template-preview-search-next>&gt;</button>
+        </div>
         <span>{{ header_columns|length }}列</span>
       </div>
       <div class="csv-template-inline-preview__scroll" aria-label="読み込み済みCSVヘッダープレビュー">
@@ -279,6 +285,15 @@
     </div>
     <div class="csv-template-target-draft">
       <p class="subtle" data-csv-template-target-save-message>項目を追加すると、そのままテンプレートのマッピングルールとして保存します。</p>
+    </div>
+    <div class="csv-template-missing-targets" data-csv-template-missing-targets data-csv-template-id="{{ template.csv_format_version_id if template else '' }}">
+      <div>
+        <strong>特定健診 MISSING 100%のtarget候補</strong>
+        <small data-csv-template-missing-targets-summary>健診機関を選ぶと、その施設の全対象caseで不足している項目を表示します。</small>
+      </div>
+      <div class="csv-template-missing-targets__list" data-csv-template-missing-targets-list>
+        <span class="status-pill status-muted">健診機関を選択してください</span>
+      </div>
     </div>
     <div class="summary-grid">
       <article class="summary-card">

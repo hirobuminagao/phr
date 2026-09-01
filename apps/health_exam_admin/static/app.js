@@ -4267,6 +4267,11 @@
       previewPayload = { header_rows: [], columns: [] };
     }
     const previewTableBody = csvTemplatePreview.querySelector(".csv-template-inline-preview-table tbody");
+    const previewScroll = csvTemplatePreview.querySelector(".csv-template-inline-preview__scroll");
+    const previewSearchInput = csvTemplatePreview.querySelector("[data-csv-template-preview-search]");
+    const previewSearchCount = csvTemplatePreview.querySelector("[data-csv-template-preview-search-count]");
+    const previewSearchPrev = csvTemplatePreview.querySelector("[data-csv-template-preview-search-prev]");
+    const previewSearchNext = csvTemplatePreview.querySelector("[data-csv-template-preview-search-next]");
     const headerStructureInput = document.querySelector("select[name='header_structure_type']");
     const activeHeaderRowInput = document.querySelector("input[name='active_header_row_no']");
     const dataStartRowInput = document.querySelector("input[name='data_start_row_no']");
@@ -4276,6 +4281,8 @@
       columns.length,
       ...headerRows.map((row) => (Array.isArray(row) ? row.length : 0)),
     );
+    let previewSearchMatches = [];
+    let previewSearchPosition = -1;
 
     const positiveNumber = (value, fallback) => {
       const parsed = Number.parseInt(String(value || ""), 10);
@@ -4299,6 +4306,38 @@
           .filter(Boolean);
         return values.join(" / ") || "-";
       });
+    };
+    const updatePreviewSearch = (preservePosition = false) => {
+      const keyword = String(previewSearchInput?.value || "").trim().toLowerCase();
+      const headerCells = Array.from(csvTemplatePreview.querySelectorAll(".csv-template-inline-preview-table__header"));
+      headerCells.forEach((cell) => cell.classList.remove("is-search-match", "is-search-current"));
+      previewSearchMatches = keyword
+        ? headerCells
+            .map((cell, index) => ({ cell, index }))
+            .filter(({ cell }) => String(cell.textContent || "").toLowerCase().includes(keyword))
+        : [];
+      if (!preservePosition || previewSearchPosition >= previewSearchMatches.length) {
+        previewSearchPosition = previewSearchMatches.length ? 0 : -1;
+      }
+      previewSearchMatches.forEach(({ cell }) => cell.classList.add("is-search-match"));
+      const current = previewSearchMatches[previewSearchPosition];
+      if (current) {
+        current.cell.classList.add("is-search-current");
+        const left = Math.max(current.cell.offsetLeft - 130, 0);
+        previewScroll?.scrollTo({ left, behavior: "smooth" });
+      }
+      if (previewSearchCount) {
+        previewSearchCount.textContent = previewSearchMatches.length
+          ? `${previewSearchPosition + 1} / ${previewSearchMatches.length}`
+          : "0 / 0";
+      }
+      if (previewSearchPrev) previewSearchPrev.disabled = previewSearchMatches.length < 2;
+      if (previewSearchNext) previewSearchNext.disabled = previewSearchMatches.length < 2;
+    };
+    const movePreviewSearch = (direction) => {
+      if (!previewSearchMatches.length) return;
+      previewSearchPosition = (previewSearchPosition + direction + previewSearchMatches.length) % previewSearchMatches.length;
+      updatePreviewSearch(true);
     };
     const renderCsvTemplatePreview = () => {
       if (!previewTableBody || !maxColumnCount) return;
@@ -4341,12 +4380,82 @@
         </tr>
       `);
       previewTableBody.innerHTML = rows.join("");
+      updatePreviewSearch();
     };
 
     headerStructureInput?.addEventListener("change", renderCsvTemplatePreview);
     activeHeaderRowInput?.addEventListener("input", renderCsvTemplatePreview);
     dataStartRowInput?.addEventListener("input", renderCsvTemplatePreview);
+    previewSearchInput?.addEventListener("input", () => updatePreviewSearch());
+    previewSearchInput?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      movePreviewSearch(event.shiftKey ? -1 : 1);
+    });
+    previewSearchPrev?.addEventListener("click", () => movePreviewSearch(-1));
+    previewSearchNext?.addEventListener("click", () => movePreviewSearch(1));
     renderCsvTemplatePreview();
+  }
+
+  const csvTemplateMissingTargets = document.querySelector("[data-csv-template-missing-targets]");
+  if (csvTemplateMissingTargets) {
+    const facilityInput = document.querySelector("#csv-template-facility-id");
+    const summary = csvTemplateMissingTargets.querySelector("[data-csv-template-missing-targets-summary]");
+    const list = csvTemplateMissingTargets.querySelector("[data-csv-template-missing-targets-list]");
+    const csvTemplateId = csvTemplateMissingTargets.getAttribute("data-csv-template-id") || "";
+
+    const renderMissingTargets = async () => {
+      const facilityId = String(facilityInput?.value || "").trim();
+      if (!facilityId) {
+        if (summary) summary.textContent = "健診機関を選ぶと、その施設の全対象caseで不足している項目を表示します。";
+        if (list) list.innerHTML = `<span class="status-pill status-muted">健診機関を選択してください</span>`;
+        return;
+      }
+      if (summary) summary.textContent = "特定健診の不足状況を集計しています...";
+      if (list) list.innerHTML = `<span class="status-pill status-muted">読み込み中</span>`;
+      try {
+        const params = new URLSearchParams({ exam_facility_id: facilityId });
+        if (csvTemplateId) params.set("csv_format_version_id", csvTemplateId);
+        const payload = await fetchJson(`/api/admin/csv-mapping-templates/facility-missing-items?${params.toString()}`);
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        if (summary) {
+          summary.textContent = `特定健診対象 ${payload.subject_case_count || 0} caseを母数に、MISSING 100%の項目を表示しています。`;
+        }
+        if (!list) return;
+        if (!items.length) {
+          list.innerHTML = `<span class="status-pill status-ready">MISSING 100%の項目なし</span>`;
+          return;
+        }
+        list.innerHTML = items.map((item) => item.is_mapped
+          ? `<span class="status-pill status-ready">${escapeHtml(item.item_name || item.namecode)} / マッピング済み</span>`
+          : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")} / ${escapeHtml(String(item.missing_case_count || 0))} case</small></button>`,
+        ).join("");
+      } catch (error) {
+        if (summary) summary.textContent = "特定健診の不足状況を取得できませんでした。";
+        if (list) list.innerHTML = apiErrorMarkup(error, "MISSING項目を取得できませんでした。");
+      }
+    };
+
+    facilityInput?.addEventListener("input", renderMissingTargets);
+    facilityInput?.addEventListener("change", renderMissingTargets);
+    list?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const candidate = target.closest("[data-csv-template-missing-target-namecode]");
+      if (!candidate) return;
+      const namecode = candidate.getAttribute("data-csv-template-missing-target-namecode") || "";
+      const openButton = document.querySelector("[data-csv-template-target-open-kind='exam']");
+      if (!(openButton instanceof HTMLElement)) return;
+      openButton.click();
+      window.setTimeout(() => {
+        const input = document.querySelector("[data-csv-template-target-search-input]");
+        if (!(input instanceof HTMLInputElement)) return;
+        input.value = namecode;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.focus();
+      }, 50);
+    });
+    renderMissingTargets();
   }
 
   const csvTemplateTargetModal = document.getElementById("csv-template-target-item-modal");
