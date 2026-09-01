@@ -15,7 +15,7 @@
 
 ## Documents
 
-2026-08-31時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。出力リストと個人case一覧の直近の画面・検索挙動は `45_export_list_and_case_filter_current_spec.md` を参照する。
+2026-09-01時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。出力リストと個人case一覧の直近の画面・検索挙動は `45_export_list_and_case_filter_current_spec.md`、月次NG報告の設計は `49_monthly_ng_and_rescue_reporting_design.md` を参照する。
 実際のカラム・処理挙動は適用対象のDDL、migration、seed、コードを優先する。
 `05_design_history.md` は協議履歴、`30_pre_implementation_review.md` は実装着手時の基準点であり、旧案や当時の未決事項が残っていても現在正とは限らない。
 
@@ -103,6 +103,10 @@
 - `46_subscriber_reference_utility_design.md`
   - 加入者検索、参照専用の加入者詳細、event別健診処理状況、値を表示しない変更・参照履歴の設計。
   - 2026-08-31初期版実装済み。ユーティリティ配置、既存監査テーブルの利用、権限migrationと環境差の境界を整理する。
+- `48_current_operation_flow_and_capacity_estimate.md`
+  - 受領からHIAアップロードまでの業務・システムフローと、施設数・対象者数に応じた要員試算を整理する。
+- `49_monthly_ng_and_rescue_reporting_design.md`
+  - 受診月単位の全体NG報告、施設別・項目別内訳、CSV/手入力による補完・救済実績の定義と画面案を整理する。
 
 ## ADR Policy
 
