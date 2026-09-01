@@ -108,7 +108,7 @@
     </form>
   </section>
 
-  <div id="csv-template-facility-picker-modal" class="edit-modal" hidden data-alias-facility-picker-modal>
+  <div id="csv-template-facility-picker-modal" class="edit-modal" hidden data-alias-facility-picker-modal data-prefer-alias-registered="1">
     <div class="edit-modal__backdrop" data-modal-close></div>
     <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="csv-template-facility-picker-title">
       <div class="edit-modal__head">
@@ -288,7 +288,7 @@
     </div>
     <div class="csv-template-missing-targets" data-csv-template-missing-targets data-csv-template-id="{{ template.csv_format_version_id if template else '' }}">
       <div>
-        <strong>特定健診 MISSING 100%のtarget候補</strong>
+        <strong>法定・特定健診 MISSING 100%のtarget候補</strong>
         <small data-csv-template-missing-targets-summary>健診機関を選ぶと、その施設の全対象caseで不足している項目を表示します。</small>
       </div>
       <div class="csv-template-missing-targets__list" data-csv-template-missing-targets-list>

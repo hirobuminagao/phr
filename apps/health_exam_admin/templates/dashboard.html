@@ -213,6 +213,10 @@
         <div><strong>厚労省フォーマットZIP作成</strong><small>提出用ZIPのルートフォルダ、中身、NG例を確認する</small></div>
       </a>
       {% if "business_settings.manage" in user.permissions or "users.manage" in user.permissions %}
+      <a class="home-menu-card" href="/reports/monthly-exam-ng-summary">
+        <span class="status-pill status-ready">利用可</span>
+        <div><strong>月次NG・対応実績</strong><small>受診月ごとのNG、施設・項目別内訳、CSV・手入力の補完実績を確認する</small></div>
+      </a>
       <a class="home-menu-card" href="/admin/workload-estimate">
         <span class="status-pill status-ready">利用可</span>
         <div><strong>業務工数・増員試算</strong><small>想定条件とDB実績から全件処理時の工数、必要人数を比較する</small></div>

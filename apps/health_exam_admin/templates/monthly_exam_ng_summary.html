@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set title = "月次NG・対応実績" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">MONTHLY QUALITY REPORT</p><h1>月次NG・対応実績</h1><p class="subtle">現在のDB状態を受診月単位で集計します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/facility-summary">健診機関サマリー</a><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page">
+  <section class="panel filter-panel">
+    <form method="get" class="filter-form filter-form-wide">
+      <label><span>イベント</span><select name="event_id">{% for event in events %}<option value="{{ event.event_id }}" {{ 'selected' if filters.event_id|string == event.event_id|string else '' }}>{{ event.event_name or ('event ' ~ event.event_id) }}</option>{% endfor %}</select></label>
+      <label><span>受診月</span><select name="exam_month">{% for option in month_options %}<option value="{{ option.exam_month }}" {{ 'selected' if filters.exam_month == option.exam_month else '' }}>{{ option.exam_month }} / case {{ option.case_count }}</option>{% endfor %}</select></label>
+      <div class="filter-actions"><button type="submit">集計</button></div>
+    </form>
+  </section>
+  <section class="summary-grid facility-summary-grid">
+    <div class="summary-card"><span>case総数</span><strong>{{ report.summary.case_count or 0 }}</strong><small>{{ report.summary.facility_count or 0 }}施設</small></div>
+    <div class="summary-card summary-card--ok"><span>出力可能</span><strong>{{ report.summary.ready_count or 0 }}</strong><small>理由ありOK {{ report.summary.approved_count or 0 }}</small></div>
+    <div class="summary-card summary-card--warn"><span>BLOCKED</span><strong>{{ report.summary.blocked_count or 0 }}</strong><small>出力済み {{ report.summary.exported_count or 0 }}</small></div>
+    <div class="summary-card"><span>法定NG</span><strong>{{ report.summary.legal_ng_count or 0 }}</strong><small>{{ report.summary.legal_ng_rate or '0.0%' }}</small></div>
+    <div class="summary-card"><span>特定健診NG</span><strong>{{ report.summary.specific_ng_count or 0 }}</strong><small>{{ report.summary.specific_ng_rate or '0.0%' }}</small></div>
+    <div class="summary-card"><span>source NG</span><strong>{{ report.summary.source_ng_count or 0 }}</strong><small>{{ report.summary.source_ng_rate or '0.0%' }} / XML・CSV</small></div>
+  </section>
+  <section class="two-column-panels">
+    <section class="panel"><div class="section-heading"><div><h2>CSV補完実績</h2><p class="subtle">CSV由来の採用値があるcaseです。厳密な救済判定ではありません。</p></div></div><div class="summary-grid"><div class="summary-card"><span>採用case</span><strong>{{ report.summary.csv_adopted_case_count or 0 }}</strong></div><div class="summary-card"><span>採用項目</span><strong>{{ report.summary.csv_adopted_value_count or 0 }}</strong></div></div></section>
+    <section class="panel"><div class="section-heading"><div><h2>手入力補完実績</h2><p class="subtle">MANUAL/PAPER由来の採用値があるcaseです。厳密な救済判定ではありません。</p></div></div><div class="summary-grid"><div class="summary-card"><span>採用case</span><strong>{{ report.summary.manual_adopted_case_count or 0 }}</strong></div><div class="summary-card"><span>採用項目</span><strong>{{ report.summary.manual_adopted_value_count or 0 }}</strong></div></div></section>
+  </section>
+  <section class="panel"><div class="section-heading"><div><h2>健診機関別</h2><p class="subtle">case件数とNG、補完実績を施設単位で比較します。</p></div></div><div class="table-panel"><table class="data-table compact-table"><thead><tr><th>健診機関</th><th>case</th><th>法定NG</th><th>特定NG</th><th>source NG</th><th>CSV採用</th><th>手入力採用</th><th>状態</th></tr></thead><tbody>
+  {% for row in report.facility_rows %}{% if row.case_count %}<tr><td><a href="/facility-summary/detail?event_id={{ filters.event_id }}&facility_code={{ row.facility_code|url_quote }}&exam_month={{ filters.exam_month|url_quote }}"><strong>{{ row.facility_name or row.facility_code }}</strong></a><small>{{ row.facility_code }}</small></td><td>{{ row.case_count }}</td><td>{{ row.legal_ng_count }}<small>{{ row.legal_ng_rate }}</small></td><td>{{ row.specific_ng_count }}<small>{{ row.specific_ng_rate }}</small></td><td>{{ row.source_ng_count }}<small>{{ row.source_ng_rate }}</small></td><td>{{ row.csv_adopted_case_count }} case<small>{{ row.csv_adopted_value_count }}項目</small></td><td>{{ row.manual_adopted_case_count }} case<small>{{ row.manual_adopted_value_count }}項目</small></td><td>READY {{ row.case_ready_count }}<small>BLOCKED {{ row.case_blocked_count }}</small></td></tr>{% endif %}{% else %}<tr><td colspan="8">対象データはありません。</td></tr>{% endfor %}
+  </tbody></table></div></section>
+  <section class="panel"><div class="section-heading"><div><h2>NG項目別</h2><p class="subtle">未解消の法定・特定健診確認項目をcase数順に表示します。</p></div></div><div class="table-panel"><table class="data-table compact-table"><thead><tr><th>区分・項目</th><th>理由</th><th>case</th><th>施設</th><th>未確認</th><th>再提出待ち</th><th>理由ありOK</th><th>除外</th></tr></thead><tbody>
+  {% for row in report.ng_item_rows %}<tr><td><strong>{{ '特定健診' if row.check_scope == 'SPECIFIC_HEALTH' else '法定' }}</strong><small>{{ row.check_item_name }} / {{ row.check_item_code }}</small></td><td>{{ row.validation_reason }}</td><td>{{ row.case_count }}</td><td>{{ row.facility_count }}</td><td>{{ row.open_count }}</td><td>{{ row.waiting_count }}</td><td>{{ row.approved_count }}</td><td>{{ row.excluded_count }}</td></tr>{% else %}<tr><td colspan="8">未解消のNG項目はありません。</td></tr>{% endfor %}
+  </tbody></table></div></section>
+</main>
+{% endblock %}

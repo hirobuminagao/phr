@@ -3904,6 +3904,105 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
     return {key: int(value or 0) for key, value in values.items()}
 
 
+def load_monthly_exam_ng_report(cur: Any, *, event_id: str, exam_month: str) -> dict[str, Any]:
+    facility_rows = load_facility_summary_rows(
+        cur,
+        filters={"event_id": event_id, "exam_month": exam_month, "q": ""},
+        limit=2000,
+    )
+    month_clause = ""
+    params: list[Any] = [event_id]
+    if exam_month:
+        month_clause = " AND DATE_FORMAT(eec.exam_date, '%Y-%m') = %s"
+        params.append(exam_month)
+
+    cur.execute(
+        f"""
+        SELECT source_mix.facility_code,
+          SUM(source_mix.has_csv) AS csv_adopted_case_count,
+          SUM(source_mix.has_manual) AS manual_adopted_case_count,
+          SUM(CASE WHEN source_mix.source_type_count >= 2 THEN 1 ELSE 0 END) AS multi_source_case_count,
+          SUM(source_mix.csv_value_count) AS csv_adopted_value_count,
+          SUM(source_mix.manual_value_count) AS manual_adopted_value_count
+        FROM (
+          SELECT eec.exam_export_case_id, eec.facility_code,
+            MAX(CASE WHEN el.source_type = 'CSV' THEN 1 ELSE 0 END) AS has_csv,
+            MAX(CASE WHEN el.source_type IN ('MANUAL', 'PAPER') THEN 1 ELSE 0 END) AS has_manual,
+            COUNT(DISTINCT CASE WHEN el.source_type IN ('XML', 'CSV', 'MANUAL', 'PAPER') THEN el.source_type END) AS source_type_count,
+            SUM(CASE WHEN el.source_type = 'CSV' THEN 1 ELSE 0 END) AS csv_value_count,
+            SUM(CASE WHEN el.source_type IN ('MANUAL', 'PAPER') THEN 1 ELSE 0 END) AS manual_value_count
+          FROM {qname(health_db())}.exam_export_cases AS eec
+          LEFT JOIN {qname(health_db())}.exam_export_case_values AS eecv
+            ON eecv.exam_export_case_id = eec.exam_export_case_id
+          LEFT JOIN {qname(health_db())}.exam_item_values AS eiv
+            ON eiv.id = eecv.source_exam_item_value_id
+          LEFT JOIN {qname(health_db())}.exam_ledgers AS el
+            ON el.exam_ledger_id = eiv.ledger_id AND eiv.ledger_type = 'EXAM'
+          WHERE eec.event_id = %s {month_clause}
+          GROUP BY eec.exam_export_case_id, eec.facility_code
+        ) AS source_mix
+        GROUP BY source_mix.facility_code
+        """,
+        tuple(params),
+    )
+    source_by_facility = {str(row.get("facility_code") or ""): dict(row) for row in cur.fetchall()}
+    for row in facility_rows:
+        source = source_by_facility.get(str(row.get("facility_code") or ""), {})
+        for field in ("csv_adopted_case_count", "manual_adopted_case_count", "multi_source_case_count", "csv_adopted_value_count", "manual_adopted_value_count"):
+            row[field] = int(source.get(field) or 0)
+
+    cur.execute(
+        f"""
+        SELECT cri.check_scope, cri.check_item_code,
+          COALESCE(NULLIF(MAX(cri.check_item_name), ''), cri.check_item_code) AS check_item_name,
+          COALESCE(NULLIF(cri.validation_reason, ''), '理由なし') AS validation_reason,
+          COUNT(DISTINCT cri.exam_export_case_id) AS case_count,
+          COUNT(DISTINCT eec.facility_code) AS facility_count,
+          SUM(CASE WHEN cri.review_status IN ('NONE', 'NEEDS_CONFIRMATION') THEN 1 ELSE 0 END) AS open_count,
+          SUM(CASE WHEN cri.review_status = 'WAITING_RESUBMISSION' THEN 1 ELSE 0 END) AS waiting_count,
+          SUM(CASE WHEN cri.review_status = 'APPROVED_WITH_REASON' THEN 1 ELSE 0 END) AS approved_count,
+          SUM(CASE WHEN cri.review_status = 'EXCLUDED' THEN 1 ELSE 0 END) AS excluded_count
+        FROM {qname(health_db())}.exam_case_check_review_items AS cri
+        INNER JOIN {qname(health_db())}.exam_export_cases AS eec
+          ON eec.exam_export_case_id = cri.exam_export_case_id
+        WHERE eec.event_id = %s
+          AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
+          {month_clause}
+        GROUP BY cri.check_scope, cri.check_item_code,
+          COALESCE(NULLIF(cri.validation_reason, ''), '理由なし')
+        ORDER BY case_count DESC, facility_count DESC, cri.check_scope, cri.check_item_code
+        LIMIT 200
+        """,
+        tuple(params),
+    )
+    ng_item_rows = [dict(row) for row in cur.fetchall()]
+    for row in ng_item_rows:
+        for field in ("case_count", "facility_count", "open_count", "waiting_count", "approved_count", "excluded_count"):
+            row[field] = int(row.get(field) or 0)
+
+    summary = {
+        "facility_count": len([row for row in facility_rows if int(row.get("case_count") or 0) > 0]),
+        "case_count": sum(int(row.get("case_count") or 0) for row in facility_rows),
+        "ready_count": sum(int(row.get("case_ready_count") or 0) for row in facility_rows),
+        "approved_count": sum(int(row.get("case_approved_count") or 0) for row in facility_rows),
+        "blocked_count": sum(int(row.get("case_blocked_count") or 0) for row in facility_rows),
+        "exported_count": sum(int(row.get("case_exported_count") or 0) for row in facility_rows),
+        "legal_ng_count": sum(int(row.get("legal_ng_count") or 0) for row in facility_rows),
+        "specific_ng_count": sum(int(row.get("specific_ng_count") or 0) for row in facility_rows),
+        "specific_subject_count": sum(int(row.get("specific_subject_count") or 0) for row in facility_rows),
+        "source_ng_count": sum(int(row.get("source_ng_count") or 0) for row in facility_rows),
+        "source_count": sum(int(row.get("source_count") or 0) for row in facility_rows),
+        "csv_adopted_case_count": sum(int(row.get("csv_adopted_case_count") or 0) for row in facility_rows),
+        "manual_adopted_case_count": sum(int(row.get("manual_adopted_case_count") or 0) for row in facility_rows),
+        "csv_adopted_value_count": sum(int(row.get("csv_adopted_value_count") or 0) for row in facility_rows),
+        "manual_adopted_value_count": sum(int(row.get("manual_adopted_value_count") or 0) for row in facility_rows),
+    }
+    summary["legal_ng_rate"] = pct_label(summary["legal_ng_count"], summary["case_count"])
+    summary["specific_ng_rate"] = pct_label(summary["specific_ng_count"], summary["specific_subject_count"])
+    summary["source_ng_rate"] = pct_label(summary["source_ng_count"], summary["source_count"])
+    return {"summary": summary, "facility_rows": facility_rows, "ng_item_rows": ng_item_rows}
+
+
 def load_admin_event_rows(cur: Any) -> list[dict[str, Any]]:
     cur.execute(
         f"""
@@ -4078,6 +4177,7 @@ def load_facility_master_admin_rows(
     code: str | None = None,
     code_match: str = "exact",
     prefecture: str | None = None,
+    prefer_alias_registered: bool = False,
 ) -> list[dict[str, Any]]:
     where_sql, params = facility_master_search_where(
         keyword=keyword,
@@ -4088,23 +4188,40 @@ def load_facility_master_admin_rows(
     cur.execute(
         f"""
         SELECT
-          exam_facility_id,
-          exam_facility_code,
-          exam_facility_name,
-          exam_facility_display_name,
-          exam_facility_type,
-          medical_institution_code,
-          reservation_system_medical_institution_code,
-          postal_code,
-          address,
-          phone_number,
-          data_source_name,
-          note,
-          is_active,
-          updated_at
-        FROM {qname(master_db())}.exam_facilities
+          ef.exam_facility_id,
+          ef.exam_facility_code,
+          ef.exam_facility_name,
+          ef.exam_facility_display_name,
+          ef.exam_facility_type,
+          ef.medical_institution_code,
+          ef.reservation_system_medical_institution_code,
+          ef.postal_code,
+          ef.address,
+          ef.phone_number,
+          ef.data_source_name,
+          ef.note,
+          ef.is_active,
+          ef.updated_at,
+          COALESCE(alias_counts.alias_count, 0) AS alias_count,
+          COALESCE(alias_counts.active_alias_count, 0) AS active_alias_count
+        FROM {qname(master_db())}.exam_facilities AS ef
+        LEFT JOIN (
+          SELECT
+            exam_facility_id,
+            COUNT(*) AS alias_count,
+            SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_alias_count
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE exam_facility_id IS NOT NULL
+          GROUP BY exam_facility_id
+        ) AS alias_counts
+          ON alias_counts.exam_facility_id = ef.exam_facility_id
         {where_sql}
-        ORDER BY is_active DESC, exam_facility_code IS NULL, exam_facility_code, exam_facility_name
+        ORDER BY
+          {"COALESCE(alias_counts.alias_count, 0) > 0 DESC," if prefer_alias_registered else ""}
+          ef.is_active DESC,
+          ef.exam_facility_code IS NULL,
+          ef.exam_facility_code,
+          ef.exam_facility_name
         LIMIT %s
         """,
         [*params, limit],
@@ -4123,6 +4240,7 @@ def search_facility_master(request: Request) -> Response:
     keyword = request.query_params.get("q", "").strip()
     prefecture = request.query_params.get("prefecture", "").strip()
     code_match = request.query_params.get("code_match", "").strip()
+    prefer_alias_registered = request.query_params.get("prefer_alias_registered", "").strip() == "1"
     if code_match == "partial" and code and len(code) < 2:
         return JSONResponse({"items": [], "message": "コードは2桁以上で検索してください。"})
     if code_match != "partial":
@@ -4140,6 +4258,7 @@ def search_facility_master(request: Request) -> Response:
             code=code,
             code_match=code_match,
             prefecture=prefecture,
+            prefer_alias_registered=prefer_alias_registered,
         )
         rows = load_facility_master_admin_rows(
             cur,
@@ -4169,6 +4288,8 @@ def search_facility_master(request: Request) -> Response:
                     "address": row.get("address"),
                     "phone_number": row.get("phone_number"),
                     "is_active": row.get("is_active"),
+                    "alias_count": row.get("alias_count"),
+                    "active_alias_count": row.get("active_alias_count"),
                 }
                 for row in rows
             ],
@@ -14227,6 +14348,45 @@ def admin_workload_estimate(request: Request) -> Response:
     )
 
 
+@app.get("/reports/monthly-exam-ng-summary", response_class=HTMLResponse)
+def monthly_exam_ng_summary(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    event_id = request.query_params.get("event_id", "").strip()
+    exam_month = request.query_params.get("exam_month", "").strip()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            events = load_event_options(cur)
+            if not event_id and events:
+                event_id = str(events[0]["event_id"])
+            month_options = load_facility_summary_month_options(cur, event_id=event_id) if event_id else []
+            if not exam_month and month_options:
+                exam_month = str(month_options[0].get("exam_month") or "")
+            report = load_monthly_exam_ng_report(cur, event_id=event_id, exam_month=exam_month) if event_id else {
+                "summary": {}, "facility_rows": [], "ng_item_rows": []
+            }
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "monthly_exam_ng_summary.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "month_options": month_options,
+            "filters": {"event_id": event_id, "exam_month": exam_month},
+            "report": report,
+        },
+    )
+
+
 @app.get("/admin/manual-exam-ledgers", response_class=HTMLResponse)
 def admin_manual_exam_ledgers(request: Request) -> Response:
     user = require_user(request)
@@ -17776,7 +17936,14 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
     exam_facility_id = _optional_int(request.query_params.get("exam_facility_id"))
     csv_format_version_id = _optional_int(request.query_params.get("csv_format_version_id"))
     if not exam_facility_id:
-        return JSONResponse({"subject_case_count": 0, "items": []})
+        return JSONResponse(
+            {
+                "subject_case_count": 0,
+                "specific_subject_case_count": 0,
+                "legal_subject_case_count": 0,
+                "items": [],
+            }
+        )
 
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -17794,14 +17961,23 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
             facility = cur.fetchone()
             facility_code = str((facility or {}).get("exam_facility_code") or "").strip()
             if not facility_code:
-                return JSONResponse({"subject_case_count": 0, "items": []})
+                return JSONResponse(
+                    {
+                        "subject_case_count": 0,
+                        "specific_subject_case_count": 0,
+                        "legal_subject_case_count": 0,
+                        "items": [],
+                    }
+                )
 
             cur.execute(
                 f"""
-                SELECT COUNT(*) AS subject_case_count
+                SELECT
+                  SUM(CASE WHEN ecr.specific_check_result IN ('OK', 'NG') THEN 1 ELSE 0 END) AS specific_subject_case_count,
+                  SUM(CASE WHEN ecr.legal_check_result IN ('OK', 'NG') THEN 1 ELSE 0 END) AS legal_subject_case_count
                 FROM {qname(health_db())}.exam_export_cases AS eec
                 INNER JOIN (
-                  SELECT r1.exam_export_case_id, r1.specific_check_result
+                  SELECT r1.exam_export_case_id, r1.specific_check_result, r1.legal_check_result
                   FROM {qname(health_db())}.exam_check_results AS r1
                   INNER JOIN (
                     SELECT exam_export_case_id, MAX(id) AS max_id
@@ -17812,11 +17988,12 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                   ) AS latest ON latest.max_id = r1.id
                 ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
                 WHERE eec.facility_code = %s
-                  AND ecr.specific_check_result IN ('OK', 'NG')
                 """,
                 (facility_code,),
             )
-            subject_case_count = int((cur.fetchone() or {}).get("subject_case_count") or 0)
+            subject_counts = dict(cur.fetchone() or {})
+            specific_subject_case_count = int(subject_counts.get("specific_subject_case_count") or 0)
+            legal_subject_case_count = int(subject_counts.get("legal_subject_case_count") or 0)
 
             mapped_namecodes: set[str] = set()
             if csv_format_version_id:
@@ -17836,8 +18013,11 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
             cur.execute(
                 f"""
                 SELECT
+                  'SPECIFIC_HEALTH' AS check_scope,
                   cri.check_item_code AS namecode,
                   COALESCE(NULLIF(MAX(cri.check_item_name), ''), cri.check_item_code) AS item_name,
+                  NULL AS legal_detail_no,
+                  NULL AS legal_detail_name,
                   COUNT(DISTINCT cri.exam_export_case_id) AS missing_case_count
                 FROM {qname(health_db())}.exam_case_check_review_items AS cri
                 INNER JOIN {qname(health_db())}.exam_export_cases AS eec
@@ -17870,6 +18050,46 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                 (facility_code,),
             )
             missing_rows = [dict(row) for row in cur.fetchall()]
+
+            cur.execute(
+                f"""
+                SELECT
+                  'ARTICLE44' AS check_scope,
+                  gm.namecode,
+                  COALESCE(NULLIF(MAX(eim.item_name), ''), gm.namecode) AS item_name,
+                  cri.check_item_code AS legal_detail_no,
+                  COALESCE(NULLIF(MAX(cri.check_item_name), ''), cri.check_item_code) AS legal_detail_name,
+                  COUNT(DISTINCT cri.exam_export_case_id) AS missing_case_count
+                FROM {qname(health_db())}.exam_case_check_review_items AS cri
+                INNER JOIN {qname(health_db())}.exam_export_cases AS eec
+                  ON eec.exam_export_case_id = cri.exam_export_case_id
+                INNER JOIN (
+                  SELECT r1.exam_export_case_id, r1.legal_check_result
+                  FROM {qname(health_db())}.exam_check_results AS r1
+                  INNER JOIN (
+                    SELECT exam_export_case_id, MAX(id) AS max_id
+                    FROM {qname(health_db())}.exam_check_results
+                    WHERE ledger_type = 'EXPORT_CASE'
+                      AND exam_export_case_id IS NOT NULL
+                    GROUP BY exam_export_case_id
+                  ) AS latest ON latest.max_id = r1.id
+                ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
+                INNER JOIN {qname(dev_db())}.exam_item_group_members AS gm
+                  ON gm.group_code = 'v2_2026_ARTICLE44_CHECK_ITEMS'
+                 AND gm.notes LIKE CONCAT('%%Article44 ', cri.check_item_code, ':%%')
+                LEFT JOIN {qname(dev_db())}.exam_item_master AS eim
+                  ON eim.namecode = gm.namecode
+                WHERE eec.facility_code = %s
+                  AND ecr.legal_check_result IN ('OK', 'NG')
+                  AND cri.check_scope = 'ARTICLE44'
+                  AND cri.validation_reason REGEXP '^ARTICLE44:44[0-9]{8}:(MISSING|NOT_FOUND|NULL|EMPTY|CODE_VALUE_MISSING|TEXT_VALUE_MISSING)$'
+                  AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
+                GROUP BY cri.check_item_code, gm.namecode
+                ORDER BY missing_case_count DESC, cri.check_item_code, gm.priority, gm.namecode
+                """,
+                (facility_code,),
+            )
+            missing_rows.extend(dict(row) for row in cur.fetchall())
             xml_counts: dict[str, int] = {}
             missing_namecodes = [str(row.get("namecode") or "") for row in missing_rows if row.get("namecode")]
             if missing_namecodes:
@@ -17898,6 +18118,10 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
             items = []
             for row in missing_rows:
                 missing_case_count = int(row.get("missing_case_count") or 0)
+                check_scope = str(row.get("check_scope") or "")
+                subject_case_count = (
+                    legal_subject_case_count if check_scope == "ARTICLE44" else specific_subject_case_count
+                )
                 missing_rate = round(missing_case_count * 100 / subject_case_count, 1) if subject_case_count else None
                 if missing_rate != 100:
                     continue
@@ -17906,6 +18130,10 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                     {
                         "namecode": namecode,
                         "item_name": row.get("item_name") or namecode,
+                        "check_scope": check_scope,
+                        "check_scope_label": "法定" if check_scope == "ARTICLE44" else "特定健診",
+                        "legal_detail_no": row.get("legal_detail_no"),
+                        "legal_detail_name": row.get("legal_detail_name"),
                         "missing_case_count": missing_case_count,
                         "missing_rate": missing_rate,
                         "xml_ledger_count": xml_counts.get(namecode, 0),
@@ -17919,7 +18147,9 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
     return JSONResponse(
         {
             "facility_code": facility_code,
-            "subject_case_count": subject_case_count,
+            "subject_case_count": specific_subject_case_count,
+            "specific_subject_case_count": specific_subject_case_count,
+            "legal_subject_case_count": legal_subject_case_count,
             "items": items,
         }
     )
@@ -17962,7 +18192,6 @@ async def create_admin_csv_mapping_template(request: Request) -> Response:
     exam_facility_id = _optional_int(form.get("exam_facility_id"))
     mapping_version = str(form.get("mapping_version") or "").strip()
     format_name = str(form.get("format_name") or "").strip() or None
-    is_active = 1 if form.get("is_active") == "1" else 0
     is_active = 1 if form.get("is_active") == "1" else 0
     data_start_row_no = _optional_int(form.get("data_start_row_no")) or 2
     csv_file = form.get("csv_file")
@@ -18214,6 +18443,7 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
     exam_facility_id = _optional_int(form.get("exam_facility_id"))
     mapping_version = str(form.get("mapping_version") or "").strip()
     format_name = str(form.get("format_name") or "").strip() or None
+    is_active = 1 if form.get("is_active") == "1" else 0
     data_start_row_no = _optional_int(form.get("data_start_row_no")) or 2
     csv_file = form.get("csv_file")
     csv_file_name = str(getattr(csv_file, "filename", "") or "")

@@ -1831,11 +1831,17 @@
         ? `医療機関 ${escapeHtml(item.medical_institution_code)}`
         : "";
       const reservationCode = item.reservation_system_medical_institution_code || "";
+      const aliasCount = Number(item.alias_count || 0);
+      const activeAliasCount = Number(item.active_alias_count || 0);
+      const aliasStatus = aliasCount > 0
+        ? `<span class="status-pill status-ok">alias登録済み ${escapeHtml(aliasCount)}件${activeAliasCount !== aliasCount ? `（有効 ${escapeHtml(activeAliasCount)}件）` : ""}</span>`
+        : '<span class="status-pill status-muted">alias未登録</span>';
       return `
         <tr data-alias-facility-row data-facility-id="${escapeHtml(facilityId)}" data-facility-code="${escapeHtml(code)}" data-facility-name="${escapeHtml(name)}" data-facility-display="${escapeHtml(display)}">
           <td>
             <strong>${escapeHtml(name)}</strong>
             <small>${escapeHtml(code)}${related ? ` / ${related}` : ""}</small>
+            ${aliasStatus}
           </td>
           <td>
             <small>内部ID: ${escapeHtml(facilityId || "-")}</small>
@@ -1892,6 +1898,7 @@
         }
         if (prefecture) params.set("prefecture", prefecture);
         if (keyword) params.set("q", keyword);
+        if (modal.dataset.preferAliasRegistered === "1") params.set("prefer_alias_registered", "1");
         const payload = await fetchJson(`/admin/facility-master/search?${params.toString()}`);
         renderAliasFacilityResults(resultsBody, payload.items || [], payload);
       } catch (error) {
@@ -4411,7 +4418,7 @@
         if (list) list.innerHTML = `<span class="status-pill status-muted">健診機関を選択してください</span>`;
         return;
       }
-      if (summary) summary.textContent = "特定健診の不足状況を集計しています...";
+      if (summary) summary.textContent = "法定・特定健診の不足状況を集計しています...";
       if (list) list.innerHTML = `<span class="status-pill status-muted">読み込み中</span>`;
       try {
         const params = new URLSearchParams({ exam_facility_id: facilityId });
@@ -4419,7 +4426,7 @@
         const payload = await fetchJson(`/api/admin/csv-mapping-templates/facility-missing-items?${params.toString()}`);
         const items = Array.isArray(payload.items) ? payload.items : [];
         if (summary) {
-          summary.textContent = `特定健診対象 ${payload.subject_case_count || 0} caseを母数に、MISSING 100%の項目を表示しています。`;
+          summary.textContent = `法定対象 ${payload.legal_subject_case_count || 0} case・特定健診対象 ${payload.specific_subject_case_count || 0} caseを母数に、MISSING 100%の項目を表示しています。`;
         }
         if (!list) return;
         if (!items.length) {
@@ -4430,13 +4437,17 @@
           const xmlLabel = Number(item.xml_ledger_count || 0) > 0
             ? `XMLあり ${escapeHtml(String(item.xml_ledger_count))}件`
             : "XMLなし";
+          const scopeLabel = escapeHtml(item.check_scope_label || "健診");
+          const legalDetail = item.legal_detail_name
+            ? ` / ${escapeHtml(item.legal_detail_name)}${item.legal_detail_no ? ` (${escapeHtml(item.legal_detail_no)})` : ""}`
+            : "";
           return item.is_mapped
-            ? `<span class="status-pill status-ready">${escapeHtml(item.item_name || item.namecode)} / マッピング済み / ${xmlLabel}</span>`
-            : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")} / ${escapeHtml(String(item.missing_case_count || 0))} case / ${xmlLabel}</small></button>`;
+            ? `<span class="status-pill status-ready">${scopeLabel} / ${escapeHtml(item.item_name || item.namecode)} / マッピング済み / ${xmlLabel}</span>`
+            : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${scopeLabel} / ${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")}${legalDetail} / ${escapeHtml(String(item.missing_case_count || 0))} case / ${xmlLabel}</small></button>`;
         },
         ).join("");
       } catch (error) {
-        if (summary) summary.textContent = "特定健診の不足状況を取得できませんでした。";
+        if (summary) summary.textContent = "法定・特定健診の不足状況を取得できませんでした。";
         if (list) list.innerHTML = apiErrorMarkup(error, "MISSING項目を取得できませんでした。");
       }
     };
