@@ -4426,7 +4426,7 @@
         const payload = await fetchJson(`/api/admin/csv-mapping-templates/facility-missing-items?${params.toString()}`);
         const items = Array.isArray(payload.items) ? payload.items : [];
         if (summary) {
-          summary.textContent = `法定対象 ${payload.legal_subject_case_count || 0} case・特定健診対象 ${payload.specific_subject_case_count || 0} caseを母数に、MISSING 100%の項目を表示しています。`;
+          summary.textContent = `法定はXML ${payload.legal_xml_ledger_count || 0}・CSV ${payload.legal_csv_ledger_count || 0} ledger、特定健診はXML ${payload.specific_xml_ledger_count || 0}・CSV ${payload.specific_csv_ledger_count || 0} ledgerを母数に、MISSING 100%の項目を表示しています。`;
         }
         if (!list) return;
         if (!items.length) {
@@ -4441,9 +4441,10 @@
           const legalDetail = item.legal_detail_name
             ? ` / ${escapeHtml(item.legal_detail_name)}${item.legal_detail_no ? ` (${escapeHtml(item.legal_detail_no)})` : ""}`
             : "";
+          const sourceMissing = ` / XML ${escapeHtml(String(item.xml_missing_count || 0))}/${escapeHtml(String(item.xml_subject_count || 0))}・CSV ${escapeHtml(String(item.csv_missing_count || 0))}/${escapeHtml(String(item.csv_subject_count || 0))}`;
           return item.is_mapped
             ? `<span class="status-pill status-ready">${scopeLabel} / ${escapeHtml(item.item_name || item.namecode)} / マッピング済み / ${xmlLabel}</span>`
-            : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${scopeLabel} / ${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")}${legalDetail} / ${escapeHtml(String(item.missing_case_count || 0))} case / ${xmlLabel}</small></button>`;
+            : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${scopeLabel} / ${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")}${legalDetail}${sourceMissing} / ${xmlLabel}</small></button>`;
         },
         ).join("");
       } catch (error) {

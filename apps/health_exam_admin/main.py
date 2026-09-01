@@ -17970,31 +17970,6 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                     }
                 )
 
-            cur.execute(
-                f"""
-                SELECT
-                  SUM(CASE WHEN ecr.specific_check_result IN ('OK', 'NG') THEN 1 ELSE 0 END) AS specific_subject_case_count,
-                  SUM(CASE WHEN ecr.legal_check_result IN ('OK', 'NG') THEN 1 ELSE 0 END) AS legal_subject_case_count
-                FROM {qname(health_db())}.exam_export_cases AS eec
-                INNER JOIN (
-                  SELECT r1.exam_export_case_id, r1.specific_check_result, r1.legal_check_result
-                  FROM {qname(health_db())}.exam_check_results AS r1
-                  INNER JOIN (
-                    SELECT exam_export_case_id, MAX(id) AS max_id
-                    FROM {qname(health_db())}.exam_check_results
-                    WHERE ledger_type = 'EXPORT_CASE'
-                      AND exam_export_case_id IS NOT NULL
-                    GROUP BY exam_export_case_id
-                  ) AS latest ON latest.max_id = r1.id
-                ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
-                WHERE eec.facility_code = %s
-                """,
-                (facility_code,),
-            )
-            subject_counts = dict(cur.fetchone() or {})
-            specific_subject_case_count = int(subject_counts.get("specific_subject_case_count") or 0)
-            legal_subject_case_count = int(subject_counts.get("legal_subject_case_count") or 0)
-
             mapped_namecodes: set[str] = set()
             if csv_format_version_id:
                 cur.execute(
@@ -18010,78 +17985,128 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                 )
                 mapped_namecodes = {str(row.get("target_namecode") or "") for row in cur.fetchall()}
 
+            article44_status_columns = ",\n                  ".join(
+                f"r1.`a44_{detail_no}_status`" for detail_no in ARTICLE44_DETAIL_NAMES
+            )
+            specific_result_columns = ",\n                  ".join(
+                (
+                    f"r1.`sp_{detail_code}_status`,\n"
+                    f"                  r1.`sp_{detail_code}_reason`"
+                )
+                for detail_code in SPECIFIC_DETAIL_CODE_BY_NAMECODE.values()
+            )
             cur.execute(
                 f"""
                 SELECT
-                  'SPECIFIC_HEALTH' AS check_scope,
-                  cri.check_item_code AS namecode,
-                  COALESCE(NULLIF(MAX(cri.check_item_name), ''), cri.check_item_code) AS item_name,
-                  NULL AS legal_detail_no,
-                  NULL AS legal_detail_name,
-                  COUNT(DISTINCT cri.exam_export_case_id) AS missing_case_count
-                FROM {qname(health_db())}.exam_case_check_review_items AS cri
-                INNER JOIN {qname(health_db())}.exam_export_cases AS eec
-                  ON eec.exam_export_case_id = cri.exam_export_case_id
+                  r1.exam_ledger_id,
+                  r1.legal_check_result,
+                  r1.specific_check_result,
+                  el.source_type,
+                  {article44_status_columns},
+                  {specific_result_columns}
+                FROM {qname(health_db())}.exam_check_results AS r1
                 INNER JOIN (
-                  SELECT r1.exam_export_case_id, r1.specific_check_result
-                  FROM {qname(health_db())}.exam_check_results AS r1
-                  INNER JOIN (
-                    SELECT exam_export_case_id, MAX(id) AS max_id
-                    FROM {qname(health_db())}.exam_check_results
-                    WHERE ledger_type = 'EXPORT_CASE'
-                      AND exam_export_case_id IS NOT NULL
-                    GROUP BY exam_export_case_id
-                  ) AS latest ON latest.max_id = r1.id
-                ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
-                WHERE eec.facility_code = %s
-                  AND ecr.specific_check_result IN ('OK', 'NG')
-                  AND cri.check_scope = 'SPECIFIC_HEALTH'
-                  AND cri.validation_reason IN (
-                    'SPECIFIC_HEALTH:NOT_FOUND',
-                    'SPECIFIC_HEALTH:NULL',
-                    'SPECIFIC_HEALTH:EMPTY',
-                    'SPECIFIC_HEALTH:CODE_VALUE_MISSING',
-                    'SPECIFIC_HEALTH:TEXT_VALUE_MISSING'
+                  SELECT exam_ledger_id, MAX(id) AS max_id
+                  FROM {qname(health_db())}.exam_check_results
+                  WHERE ledger_type = 'EXAM'
+                    AND exam_ledger_id IS NOT NULL
+                  GROUP BY exam_ledger_id
+                ) AS latest ON latest.max_id = r1.id
+                INNER JOIN {qname(health_db())}.exam_ledgers AS el
+                  ON el.exam_ledger_id = r1.exam_ledger_id
+                WHERE el.facility_code = %s
+                  AND el.source_type IN ('XML', 'CSV')
+                  AND (
+                    r1.legal_check_result IN ('OK', 'NG')
+                    OR r1.specific_check_result IN ('OK', 'NG')
                   )
-                  AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
-                GROUP BY cri.check_item_code
-                ORDER BY missing_case_count DESC, cri.check_item_code
                 """,
                 (facility_code,),
             )
-            missing_rows = [dict(row) for row in cur.fetchall()]
-
-            cur.execute(
-                f"""
-                SELECT
-                  cri.check_item_code AS legal_detail_no,
-                  COALESCE(NULLIF(MAX(cri.check_item_name), ''), cri.check_item_code) AS legal_detail_name,
-                  COUNT(DISTINCT cri.exam_export_case_id) AS missing_case_count
-                FROM {qname(health_db())}.exam_case_check_review_items AS cri
-                INNER JOIN {qname(health_db())}.exam_export_cases AS eec
-                  ON eec.exam_export_case_id = cri.exam_export_case_id
-                INNER JOIN (
-                  SELECT r1.exam_export_case_id, r1.legal_check_result
-                  FROM {qname(health_db())}.exam_check_results AS r1
-                  INNER JOIN (
-                    SELECT exam_export_case_id, MAX(id) AS max_id
-                    FROM {qname(health_db())}.exam_check_results
-                    WHERE ledger_type = 'EXPORT_CASE'
-                      AND exam_export_case_id IS NOT NULL
-                    GROUP BY exam_export_case_id
-                  ) AS latest ON latest.max_id = r1.id
-                ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
-                WHERE eec.facility_code = %s
-                  AND ecr.legal_check_result IN ('OK', 'NG')
-                  AND cri.check_scope = 'ARTICLE44'
-                  AND cri.validation_reason REGEXP '^ARTICLE44:44[0-9]{8}:(MISSING|NOT_FOUND|NULL|EMPTY|CODE_VALUE_MISSING|TEXT_VALUE_MISSING)$'
-                  AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
-                GROUP BY cri.check_item_code
-                ORDER BY missing_case_count DESC, cri.check_item_code
-                """,
-                (facility_code,),
-            )
-            legal_detail_rows = [dict(row) for row in cur.fetchall()]
+            source_check_rows = [dict(row) for row in cur.fetchall()]
+            legal_check_rows = [row for row in source_check_rows if row.get("legal_check_result") in {"OK", "NG"}]
+            specific_check_rows = [row for row in source_check_rows if row.get("specific_check_result") in {"OK", "NG"}]
+            legal_xml_ledger_count = sum(1 for row in legal_check_rows if row.get("source_type") == "XML")
+            legal_csv_ledger_count = sum(1 for row in legal_check_rows if row.get("source_type") == "CSV")
+            legal_subject_case_count = legal_xml_ledger_count + legal_csv_ledger_count
+            specific_xml_ledger_count = sum(1 for row in specific_check_rows if row.get("source_type") == "XML")
+            specific_csv_ledger_count = sum(1 for row in specific_check_rows if row.get("source_type") == "CSV")
+            specific_subject_case_count = specific_xml_ledger_count + specific_csv_ledger_count
+            missing_rows: list[dict[str, Any]] = []
+            specific_missing_reasons = {
+                "NOT_FOUND", "NULL", "EMPTY", "CODE_VALUE_MISSING", "TEXT_VALUE_MISSING"
+            }
+            for namecode, detail_code in SPECIFIC_DETAIL_CODE_BY_NAMECODE.items():
+                source_counts: dict[str, dict[str, int]] = {}
+                for source_type in ("XML", "CSV"):
+                    rows = [row for row in specific_check_rows if row.get("source_type") == source_type]
+                    statuses = [str(row.get(f"sp_{detail_code}_status") or "").strip() for row in rows]
+                    reasons = [str(row.get(f"sp_{detail_code}_reason") or "").strip() for row in rows]
+                    subject_count = sum(
+                        1 for status in statuses if status and status not in {RESULT_NOT_APPLICABLE, RESULT_UNDETERMINABLE}
+                    )
+                    missing_count = sum(
+                        1
+                        for status, reason in zip(statuses, reasons)
+                        if status in {"MISSING", "INVALID"} and reason in specific_missing_reasons
+                    )
+                    source_counts[source_type] = {"subject": subject_count, "missing": missing_count}
+                xml_subject_count = source_counts["XML"]["subject"]
+                xml_missing_count = source_counts["XML"]["missing"]
+                csv_subject_count = source_counts["CSV"]["subject"]
+                csv_missing_count = source_counts["CSV"]["missing"]
+                xml_missing_rate = round(xml_missing_count * 100 / xml_subject_count, 1) if xml_subject_count else None
+                csv_missing_rate = round(csv_missing_count * 100 / csv_subject_count, 1) if csv_subject_count else None
+                if xml_missing_rate == 100 or csv_missing_rate == 100:
+                    missing_rows.append(
+                        {
+                            "check_scope": "SPECIFIC_HEALTH",
+                            "namecode": namecode,
+                            "item_name": SPECIFIC_ITEM_NAMES.get(namecode, namecode),
+                            "missing_case_count": xml_missing_count + csv_missing_count,
+                            "subject_case_count": xml_subject_count + csv_subject_count,
+                            "xml_subject_count": xml_subject_count,
+                            "xml_missing_count": xml_missing_count,
+                            "xml_missing_rate": xml_missing_rate,
+                            "csv_subject_count": csv_subject_count,
+                            "csv_missing_count": csv_missing_count,
+                            "csv_missing_rate": csv_missing_rate,
+                        }
+                    )
+            legal_detail_rows: list[dict[str, Any]] = []
+            for detail_no, detail_name in ARTICLE44_DETAIL_NAMES.items():
+                source_counts: dict[str, dict[str, int]] = {}
+                for source_type in ("XML", "CSV"):
+                    statuses = [
+                        str(row.get(f"a44_{detail_no}_status") or "").strip()
+                        for row in legal_check_rows
+                        if row.get("source_type") == source_type
+                    ]
+                    source_counts[source_type] = {
+                        "subject": sum(1 for status in statuses if status),
+                        "missing": sum(1 for status in statuses if status == "MISSING"),
+                    }
+                xml_subject_count = source_counts["XML"]["subject"]
+                xml_missing_count = source_counts["XML"]["missing"]
+                csv_subject_count = source_counts["CSV"]["subject"]
+                csv_missing_count = source_counts["CSV"]["missing"]
+                xml_missing_rate = round(xml_missing_count * 100 / xml_subject_count, 1) if xml_subject_count else None
+                csv_missing_rate = round(csv_missing_count * 100 / csv_subject_count, 1) if csv_subject_count else None
+                if xml_missing_rate == 100 or csv_missing_rate == 100:
+                    legal_detail_rows.append(
+                        {
+                            "legal_detail_no": detail_no,
+                            "legal_detail_name": f"法定チェック: {detail_name}",
+                            "missing_case_count": xml_missing_count + csv_missing_count,
+                            "subject_case_count": xml_subject_count + csv_subject_count,
+                            "xml_subject_count": xml_subject_count,
+                            "xml_missing_count": xml_missing_count,
+                            "xml_missing_rate": xml_missing_rate,
+                            "csv_subject_count": csv_subject_count,
+                            "csv_missing_count": csv_missing_count,
+                            "csv_missing_rate": csv_missing_rate,
+                        }
+                    )
             if legal_detail_rows:
                 cur.execute(
                     f"""
@@ -18113,6 +18138,13 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                                 "legal_detail_no": detail_no,
                                 "legal_detail_name": detail.get("legal_detail_name"),
                                 "missing_case_count": detail.get("missing_case_count"),
+                                "subject_case_count": detail.get("subject_case_count"),
+                                "xml_subject_count": detail.get("xml_subject_count"),
+                                "xml_missing_count": detail.get("xml_missing_count"),
+                                "xml_missing_rate": detail.get("xml_missing_rate"),
+                                "csv_subject_count": detail.get("csv_subject_count"),
+                                "csv_missing_count": detail.get("csv_missing_count"),
+                                "csv_missing_rate": detail.get("csv_missing_rate"),
                             }
                         )
             xml_counts: dict[str, int] = {}
@@ -18144,12 +18176,8 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
             for row in missing_rows:
                 missing_case_count = int(row.get("missing_case_count") or 0)
                 check_scope = str(row.get("check_scope") or "")
-                subject_case_count = (
-                    legal_subject_case_count if check_scope == "ARTICLE44" else specific_subject_case_count
-                )
+                subject_case_count = int(row.get("subject_case_count") or 0)
                 missing_rate = round(missing_case_count * 100 / subject_case_count, 1) if subject_case_count else None
-                if missing_rate != 100:
-                    continue
                 namecode = str(row.get("namecode") or "")
                 items.append(
                     {
@@ -18161,6 +18189,12 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
                         "legal_detail_name": row.get("legal_detail_name"),
                         "missing_case_count": missing_case_count,
                         "missing_rate": missing_rate,
+                        "xml_subject_count": row.get("xml_subject_count"),
+                        "xml_missing_count": row.get("xml_missing_count"),
+                        "xml_missing_rate": row.get("xml_missing_rate"),
+                        "csv_subject_count": row.get("csv_subject_count"),
+                        "csv_missing_count": row.get("csv_missing_count"),
+                        "csv_missing_rate": row.get("csv_missing_rate"),
                         "xml_ledger_count": xml_counts.get(namecode, 0),
                         "is_mapped": namecode in mapped_namecodes,
                     }
@@ -18175,6 +18209,10 @@ def api_csv_mapping_template_facility_missing_items(request: Request) -> Respons
             "subject_case_count": specific_subject_case_count,
             "specific_subject_case_count": specific_subject_case_count,
             "legal_subject_case_count": legal_subject_case_count,
+            "legal_xml_ledger_count": legal_xml_ledger_count,
+            "legal_csv_ledger_count": legal_csv_ledger_count,
+            "specific_xml_ledger_count": specific_xml_ledger_count,
+            "specific_csv_ledger_count": specific_csv_ledger_count,
             "items": items,
         }
     )
