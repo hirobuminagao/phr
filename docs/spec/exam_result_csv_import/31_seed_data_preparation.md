@@ -66,7 +66,7 @@ Implemented and expanded.
 `0015_fix_result_code_variant_code_systems.sql` は、実行環境へ適用してよい `phr_master.norm_variants` の安定補正seedである。対象は、陽性/陰性OID `1.2.392.200119.6.2100` と尿定性OID `1.2.392.200119.6.2102` の `code_system` 欠落補正、およびカッコ付き `+` / `-` など実運用で必要なaliasである。
 匿名化済みnormalizeエラーfixtureを保存する `health_exam_result.exam_item_value_normalize_error_fixtures` と、そのimportスクリプトはm4検証・辞書整備用であり、実行環境には適用しない。
 
-`0016_add_oroku_questionnaire_mapping.sql` は、小禄病院の結合済みCSV `OROKU_2026_05_JOINED_PATTERN_C_V1` に特定健診問診の列99-119を追加するseedである。列120 `22生活改善指導利用` は4期XML出力対象外として、このseedでは追加しない。
+`0016_add_oroku_questionnaire_mapping.sql` は、小禄病院の結合済みCSV `OROKU_2026_05_JOINED_PATTERN_C_V1` に特定健診問診の列99-119を追加するseedである。列120 `22生活改善指導利用` は、後続の `0020_fix_oroku_hearing_code_mapping.sql` で第4期の `9N808000000000011`（特定保健指導の受診歴）として追加する。
 
 `0017_add_oroku_questionnaire_runtime_variants.sql` は、`0016` 反映後の小禄CSV再取込で残った問診表記揺れを追加するseedである。対象は飲酒頻度、飲酒量、生活習慣改善、咀嚼の全角数字・表記差分である。
 
