@@ -234,7 +234,14 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
         placeholders = ", ".join(["%s"] * len(config.case_ids))
         cur.execute(
             f"""
-            SELECT event_id, subscriber_id, exam_date, exam_facility_id, insurer_number
+            SELECT
+              exam_export_case_id,
+              event_id,
+              subscriber_id,
+              exam_date,
+              exam_facility_id,
+              insurer_number,
+              insurer_number_export_value
             FROM {qname(config.health_db)}.`exam_export_cases`
             WHERE event_id = %s
               AND exam_export_case_id IN ({placeholders})
@@ -250,18 +257,22 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
     if target_keys:
         target_having = " AND (" + " OR ".join(
             [
-                "(resolved_subscriber_id = %s AND resolved_exam_date = %s "
-                "AND resolved_exam_facility_id = %s AND resolved_insurer_number = %s)"
+                "(manual_exam_export_case_id = %s OR ("
+                "resolved_subscriber_id = %s AND resolved_exam_date = %s "
+                "AND resolved_exam_facility_id = %s "
+                "AND resolved_insurer_number IN (%s, %s)))"
             ]
             * len(target_keys)
         ) + ")"
         for key in target_keys:
             params.extend(
                 (
+                    key["exam_export_case_id"],
                     key["subscriber_id"],
                     key["exam_date"],
                     key["exam_facility_id"],
                     key["insurer_number"],
+                    key.get("insurer_number_export_value") or key["insurer_number"],
                 )
             )
     elif config.subscriber_ids:
@@ -355,6 +366,24 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
             row["subscriber_id"] = row["resolved_subscriber_id"]
         if row.get("resolved_insurer_number") is not None:
             row["insurer_number"] = row["resolved_insurer_number"]
+        if target_keys:
+            for key in target_keys:
+                same_case_dimensions = (
+                    row.get("resolved_subscriber_id") == key["subscriber_id"]
+                    and row.get("resolved_exam_date") == key["exam_date"]
+                    and row.get("resolved_exam_facility_id") == key["exam_facility_id"]
+                )
+                accepted_insurer_numbers = {
+                    key["insurer_number"],
+                    key.get("insurer_number_export_value") or key["insurer_number"],
+                }
+                linked_to_case = row.get("manual_exam_export_case_id") == key["exam_export_case_id"]
+                if linked_to_case or (
+                    same_case_dimensions and row.get("resolved_insurer_number") in accepted_insurer_numbers
+                ):
+                    # A corrected insurer number is an export value, not a new case identity.
+                    row["insurer_number"] = key["insurer_number"]
+                    break
         if row.get("manual_exam_export_case_id"):
             row["exam_date"] = row.get("resolved_exam_date")
             row["exam_facility_id"] = row.get("resolved_exam_facility_id")
@@ -703,6 +732,22 @@ def upsert_case(cur: Any, config: BuildCaseConfig, params: dict[str, Any]) -> tu
     return int(row["exam_export_case_id"]), action
 
 
+def reopen_export_error(cur: Any, config: BuildCaseConfig, *, case_id: int) -> int:
+    """Clear a stale XML error after the case itself has been rebuilt successfully."""
+    cur.execute(
+        f"""
+        UPDATE {qname(config.health_db)}.`exam_export_cases`
+        SET `xml_export_status` = 'PENDING',
+            `xml_export_etl_run_id` = NULL,
+            `updated_at` = CURRENT_TIMESTAMP(3)
+        WHERE `exam_export_case_id` = %s
+          AND `xml_export_status` = 'ERROR'
+        """,
+        (case_id,),
+    )
+    return int(cur.rowcount or 0)
+
+
 def source_role(row: dict[str, Any], primary: dict[str, Any], group: list[dict[str, Any]]) -> tuple[int, str, str]:
     if int(row["exam_ledger_id"]) == int(primary["exam_ledger_id"]):
         return 10, "PRIMARY", "primary source for case"
@@ -793,6 +838,7 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
                 summary.review_required += 1
             summary.sources_upserted += upsert_sources(cur, config, case_id=case_id, group=group, primary=primary)
             reapply_basic_info_corrections(cur, config, case_id=case_id)
+            reopen_export_error(cur, config, case_id=case_id)
 
         if config.case_ids:
             for case_id in config.case_ids:
