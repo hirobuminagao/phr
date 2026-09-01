@@ -1136,8 +1136,45 @@
   const caseBasicFilterForm = document.getElementById("case-filter-form");
   const caseBasicFilterSet = document.querySelector("[data-case-basic-filter-set]");
   const caseBasicFilterClear = document.querySelector("[data-case-basic-filter-clear]");
+  const caseBasicFilterSummary = document.querySelector("[data-case-basic-filter-summary]");
+  const caseBasicFilterLabels = {
+    q: "キーワード",
+    case_id: "case ID",
+    name_full: "氏名",
+    name_kana: "カナ",
+    insurance_symbol: "記号",
+    insurance_number: "番号",
+    hia_subscriber_id: "HIA ID",
+    subscriber_id: "subscriber",
+    qualification_lost_date: "喪失日",
+    facility_q: "健診機関",
+    facility_codes: "健診機関コード",
+    exam_month: "受診月",
+    legal_check_result: "法定",
+    specific_check_result: "特定健診",
+    export_readiness_status: "出力",
+    source_mode: "source",
+  };
+  const renderCaseBasicFilterSummary = () => {
+    if (!caseBasicFilterSummary) return;
+    const chips = [];
+    for (const [name, label] of Object.entries(caseBasicFilterLabels)) {
+      const value = String(caseFilterDraft.get(name) || "").trim();
+      if (value) chips.push(`<span class="active-filter-chip">${escapeHtml(label)}: ${escapeHtml(value)}</span>`);
+    }
+    const qualification = String(caseFilterDraft.get("qualification_lost_status") || "").trim();
+    if (qualification === "LOST") chips.push('<span class="active-filter-chip">資格: 喪失あり</span>');
+    if (qualification === "ACTIVE") chips.push('<span class="active-filter-chip">資格: 喪失なし</span>');
+    if (caseFilterDraft.get("duplicate_subscriber") === "1") {
+      chips.push('<span class="active-filter-chip">同一subscriber: 複数case</span>');
+    }
+    caseBasicFilterSummary.innerHTML = chips.length
+      ? chips.join("")
+      : '<span class="active-filter-chip is-empty">条件なし</span>';
+  };
   caseBasicFilterSet?.addEventListener("click", () => {
     replaceCaseFilterDraftFromForm(caseBasicFilterForm, ["exam_item_namecodes", "exam_item_match_mode"]);
+    renderCaseBasicFilterSummary();
     markCaseFilterDirty();
     closeModal(caseBasicFilterSet.closest(".edit-modal"));
   });
@@ -1152,6 +1189,7 @@
       else if ("value" in element) element.value = "";
     }
     replaceCaseFilterDraftFromForm(caseBasicFilterForm, ["exam_item_namecodes", "exam_item_match_mode"]);
+    renderCaseBasicFilterSummary();
     markCaseFilterDirty();
     closeModal(caseBasicFilterClear.closest(".edit-modal"));
   });

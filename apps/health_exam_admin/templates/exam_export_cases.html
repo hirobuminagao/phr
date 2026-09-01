@@ -26,7 +26,8 @@
       <div><h2>基本の絞り込み</h2><p class="subtle">人・受診・状態など</p></div>
       <button type="button" class="ghost-button compact-action-button" data-modal-open="case-filter-modal">変更</button>
     </div>
-    <div class="active-filter-chip-list">
+    <div class="active-filter-chip-list" data-case-basic-filter-summary>
+      {% if filters.q %}<span class="active-filter-chip">キーワード: {{ filters.q }}</span>{% endif %}
       {% if filters.case_id %}<span class="active-filter-chip">case ID: {{ filters.case_id }}</span>{% endif %}
       {% if filters.name_full %}<span class="active-filter-chip">氏名: {{ filters.name_full }}</span>{% endif %}
       {% if filters.name_kana %}<span class="active-filter-chip">カナ: {{ filters.name_kana }}</span>{% endif %}
