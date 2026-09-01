@@ -4772,7 +4772,9 @@
       const keyword = String(headerSearchInput?.value || "").trim().toLowerCase();
       for (const card of headerCandidateCards) {
         const text = String(card.getAttribute("data-filter-text") || "").toLowerCase();
-        card.hidden = Boolean(keyword) && !text.includes(keyword);
+        const isFilteredOut = Boolean(keyword) && !text.includes(keyword);
+        card.hidden = isFilteredOut;
+        card.classList.toggle("is-filtered-out", isFilteredOut);
       }
     };
 
@@ -4909,7 +4911,9 @@
       const keyword = String(ledgerHeaderSearchInput?.value || "").trim().toLowerCase();
       for (const card of ledgerHeaderCards) {
         const text = String(card.getAttribute("data-filter-text") || "").toLowerCase();
-        card.hidden = Boolean(keyword) && !text.includes(keyword);
+        const isFilteredOut = Boolean(keyword) && !text.includes(keyword);
+        card.hidden = isFilteredOut;
+        card.classList.toggle("is-filtered-out", isFilteredOut);
       }
     };
 

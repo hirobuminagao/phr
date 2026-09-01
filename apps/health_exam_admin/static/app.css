@@ -5454,6 +5454,30 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #edf3f8;
 }
 
+.csv-mapping-editor-page #csv-template-basic-form .csv-template-active-radio-toggle {
+  display: inline-flex !important;
+  width: fit-content;
+  max-width: 100%;
+  grid-template-columns: none;
+}
+
+.csv-mapping-editor-page #csv-template-basic-form .csv-template-active-radio-toggle__option {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 88px;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 0;
+}
+
+.csv-mapping-editor-page #csv-template-basic-form .csv-template-active-radio-toggle__option > span {
+  display: block;
+  width: auto;
+  color: inherit;
+  line-height: 1;
+}
+
 .csv-template-active-toggle > .csv-template-active-toggle__option,
 .csv-template-active-radio-toggle > .csv-template-active-radio-toggle__option {
   min-height: 34px;
@@ -7894,6 +7918,11 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #fff;
   color: var(--ink);
   text-align: left;
+}
+
+.csv-template-header-candidate-card.is-filtered-out,
+.csv-template-header-candidate-card[hidden] {
+  display: none !important;
 }
 
 .csv-template-header-candidate-card strong,
