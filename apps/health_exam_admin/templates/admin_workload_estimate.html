@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set title = "業務工数・増員試算" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">System Admin</p><h1>業務工数・増員試算</h1><p class="subtle">計画上の想定と、現在のDB件数から換算した工数を比較します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/">HOME</a><form method="post" action="/logout"><button type="submit" class="ghost-button">ログアウト</button></form></nav>
+</header>
+<main class="page workload-page" data-workload-estimate>
+  <section class="panel workload-toolbar">
+    <form method="get" class="workload-event-form"><label>対象イベント<select name="event_id" onchange="this.form.submit()">{% for event in events %}<option value="{{ event.event_id }}" {% if event.event_id == selected_event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / ID {{ event.event_id }}</option>{% endfor %}</select></label></form>
+    <div class="workload-capacity-fields"><label>1人あたり月間時間<input type="number" min="1" value="160" data-capacity-hours></label><label>実働率（%）<input type="number" min="1" max="100" value="80" data-utilization></label></div>
+    <button type="button" class="ghost-button" data-reset-workload>初期値に戻す</button>
+  </section>
+  <section class="workload-summary-grid">
+    <article class="workload-summary is-plan"><span>想定試算</span><strong data-plan-hours>0時間</strong><b data-plan-fte>0人</b><small>年間計画や受領予定を基準にした見込み</small></article>
+    <article class="workload-summary is-actual"><span>DB実数ベース</span><strong data-actual-hours>0時間</strong><b data-actual-fte>0人</b><small>現在までにDBへ記帳された件数の工数換算</small></article>
+    <article class="workload-summary"><span>差</span><strong data-difference-hours>0時間</strong><b data-difference-fte>0人</b><small>DB実数ベース - 想定試算</small></article>
+  </section>
+  <section class="panel">
+    <div class="section-heading"><div><h2>計算条件</h2><p class="subtle">件数・割合・時間は画面内で変更できます。DBには保存しません。</p></div></div>
+    <div class="table-wrap"><table class="data-table workload-table">
+      <thead><tr><th>作業</th><th>想定</th><th>DB実数ベース</th><th>作業時間</th><th>想定工数</th><th>実数換算工数</th></tr></thead>
+      <tbody>
+        {% set facility_count = actuals.facility_count or 0 %}
+        <tr data-workload-row data-mode="count"><td><strong>受領原本保存</strong><small>健診機関単位</small></td><td><input data-plan-count type="number" value="213" min="0"></td><td><input data-actual-count type="number" value="{{ facility_count }}" min="0"><small class="db-value">DB: 施設数</small></td><td><input data-minutes type="number" value="5" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="count"><td><strong>01→02移動・形式確認</strong><small>健診機関単位</small></td><td><input data-plan-count type="number" value="213" min="0"></td><td><input data-actual-count type="number" value="{{ facility_count }}" min="0"><small class="db-value">DB: 施設数</small></td><td><input data-minutes type="number" value="10" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="rate"><td><strong>結果修正</strong><small>実数は法定NG case</small></td><td><input data-plan-base type="number" value="30000" min="0">人 × <input data-plan-rate type="number" value="15" min="0">%</td><td><input data-actual-count type="number" value="{{ actuals.legal_error_case_count or 0 }}" min="0"><small class="db-value">DB: 法定NG</small></td><td><input data-minutes type="number" value="5" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="rate"><td><strong>紙から補正データ作成</strong><small>既存結果への補足</small></td><td><input data-plan-base type="number" value="30000" min="0">人 × <input data-plan-rate type="number" value="5" min="0">%</td><td><input data-actual-count type="number" value="{{ actuals.supplement_count or 0 }}" min="0"><small class="db-value">DB: 補正手入力</small></td><td><input data-minutes type="number" value="5" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="rate"><td><strong>ゼロからデータ作成</strong><small>紙のみの新規作成</small></td><td><input data-plan-base type="number" value="30000" min="0">人 × <input data-plan-rate type="number" value="1" min="0">%</td><td><input data-actual-count type="number" value="{{ actuals.paper_only_count or 0 }}" min="0"><small class="db-value">DB: 紙のみ</small></td><td><input data-minutes type="number" value="10" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="rate"><td><strong>理由ありOK判断</strong><small>確認・理由記帳</small></td><td><input data-plan-base type="number" value="30000" min="0">人 × <input data-plan-rate type="number" value="1" min="0">%</td><td><input data-actual-count type="number" value="{{ actuals.approved_with_reason_count or 0 }}" min="0"><small class="db-value">DB: 理由ありOK</small></td><td><input data-minutes type="number" value="3" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="count"><td><strong>エラー理由確認</strong><small>健診機関単位</small></td><td><input data-plan-count type="number" value="5" min="0"></td><td><input data-actual-count type="number" value="{{ actuals.legal_error_facility_count or 0 }}" min="0"><small class="db-value">DB: NG施設</small></td><td><input data-minutes type="number" value="15" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="count"><td><strong>HIAアップロード・記帳</strong><small>健診機関単位</small></td><td><input data-plan-count type="number" value="213" min="0"></td><td><input data-actual-count type="number" value="{{ facility_count }}" min="0"><small class="db-value">DB: 施設数</small></td><td><input data-minutes type="number" value="10" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+        <tr data-workload-row data-mode="count"><td><strong>CSVマッピング作成</strong><small>想定は年1件を月割り</small></td><td><input data-plan-count type="number" value="0.0833" min="0" step="0.0001"></td><td><input data-actual-count type="number" value="0" min="0"><small>必要に応じて入力</small></td><td><input data-minutes type="number" value="30" min="0"> 分</td><td data-plan-result></td><td data-actual-result></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section class="panel workload-flow-panel">
+    <div class="section-heading"><div><h2>処理フロー</h2><p class="subtle">受領からHIAアップロードまで。横にスクロールして全工程を確認できます。</p></div><div class="workload-flow-legend"><span class="is-human">人の作業</span><span class="is-system">システム</span><span class="is-mixed">共同</span></div></div>
+    <div class="workload-flow-scroll" aria-label="健診結果の処理フロー">
+      <ol class="workload-process-flow">
+        <li class="is-human"><span>01</span><strong>結果受領・原本保存</strong><small>健診機関 × 受領回<br>5分/施設</small></li>
+        <li class="is-human"><span>02</span><strong>編集領域へ移動</strong><small>形式・件数・対象月確認<br>10分/施設</small></li>
+        <li class="is-system"><span>01 SCAN</span><strong>施設・形式を判定</strong><small>イベント → 施設 → ファイル<br>1〜5分/イベント</small></li>
+        <li class="is-system"><span>02 / 02_02</span><strong>XML・CSV取込</strong><small>file receipt / 対象者<br>ledger・値を作成</small></li>
+        <li class="is-mixed"><span>紙・補正</span><strong>手入力ledger化</strong><small>紙のみ10分/人<br>補正5分/人</small></li>
+        <li class="is-system"><span>03_00</span><strong>sourceチェック</strong><small>ledger単位<br>取込結果を検査</small></li>
+        <li class="is-system"><span>03_01</span><strong>case作成</strong><small>加入者・受診単位<br>複数sourceを束ねる</small></li>
+        <li class="is-system"><span>03_02</span><strong>採用値作成</strong><small>case × 健診項目<br>優先値を決定</small></li>
+        <li class="is-system"><span>03_04</span><strong>caseチェック</strong><small>法定・特定健診<br>出力可否を判定</small></li>
+        <li class="is-human"><span>確認</span><strong>不足・矛盾を解決</strong><small>修正5分/人<br>理由ありOKを記帳</small></li>
+        <li class="is-mixed"><span>03_05</span><strong>出力リスト確定</strong><small>対象条件・対象者<br>10分/バッチ</small></li>
+        <li class="is-system"><span>04</span><strong>XML・ZIP出力</strong><small>case・施設・受診月<br>厚労省形式</small></li>
+        <li class="is-human"><span>納品</span><strong>HIAアップロード</strong><small>健診機関単位<br>10分/施設</small></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="panel workload-scope-panel">
+    <div class="section-heading"><div><h2>作業範囲フロー</h2><p class="subtle">担当者の工数、機械処理、外部回答待ちを分けて確認します。</p></div></div>
+    <div class="workload-scope-grid">
+      <div class="workload-scope-label is-human"><strong>担当者</strong><small>増員で処理量を増やせる範囲</small></div>
+      <div class="workload-scope-track is-human"><span>受領・保存</span><span>形式確認</span><span>CSV差分・マッピング</span><span>紙入力・結果修正</span><span>理由ありOK</span><span>出力確認・HIA記帳</span></div>
+      <div class="workload-scope-label is-system"><strong>システム</strong><small>性能・実行単位で改善する範囲</small></div>
+      <div class="workload-scope-track is-system"><span>SCAN</span><span>XML・CSV取込</span><span>ledgerチェック</span><span>case・採用値作成</span><span>法定チェック</span><span>XML・ZIP生成</span></div>
+      <div class="workload-scope-label is-external"><strong>健診機関・外部</strong><small>工数ではなく待ち時間として分離</small></div>
+      <div class="workload-scope-track is-external"><span>結果送付</span><span>形式・値の確認回答</span><span>再提出</span><span>HIA受付・結果確認</span></div>
+    </div>
+    <p class="workload-scope-note">担当者が機械処理中に別作業をできる時間と、画面を見て待つ時間は分けて実測します。健診機関からの回答待ちは月間作業工数へ直接加算しません。</p>
+  </section>
+
+  <section class="panel workload-footnote"><h2>実数の読み方</h2><p>選択イベントに現在存在する記録の途中経過です。未受領・未処理は含まれないため、将来の必要人数は想定試算、現在の発生傾向はDB実数ベースで確認します。</p><dl><div><dt>case総数</dt><dd>{{ actuals.case_count or 0 }}件</dd></div><div><dt>施設数</dt><dd>{{ facility_count }}件</dd></div><div><dt>法定NG</dt><dd>{{ actuals.legal_error_case_count or 0 }}件</dd></div></dl></section>
+</main>
+<script>
+(() => { const root=document.querySelector('[data-workload-estimate]'); if(!root)return; const fields=[...root.querySelectorAll('input')], initial=fields.map(x=>x.value), n=e=>Number.parseFloat(e?.value||'0')||0, h=m=>`${(m/60).toLocaleString('ja-JP',{maximumFractionDigits:1})}時間`;
+const calc=()=>{let pm=0,am=0;root.querySelectorAll('[data-workload-row]').forEach(r=>{const mins=n(r.querySelector('[data-minutes]')), pc=r.dataset.mode==='rate'?n(r.querySelector('[data-plan-base]'))*n(r.querySelector('[data-plan-rate]'))/100:n(r.querySelector('[data-plan-count]')), ac=n(r.querySelector('[data-actual-count]')), rp=pc*mins,ra=ac*mins;pm+=rp;am+=ra;r.querySelector('[data-plan-result]').textContent=h(rp);r.querySelector('[data-actual-result]').textContent=h(ra)});const cap=n(root.querySelector('[data-capacity-hours]'))*n(root.querySelector('[data-utilization]'))/100,ph=pm/60,ah=am/60,f=x=>cap>0?`${(x/cap).toFixed(2)}人`:'-';root.querySelector('[data-plan-hours]').textContent=h(pm);root.querySelector('[data-actual-hours]').textContent=h(am);root.querySelector('[data-difference-hours]').textContent=`${ah>=ph?'+':''}${(ah-ph).toFixed(1)}時間`;root.querySelector('[data-plan-fte]').textContent=f(ph);root.querySelector('[data-actual-fte]').textContent=f(ah);root.querySelector('[data-difference-fte]').textContent=cap>0?`${ah>=ph?'+':''}${((ah-ph)/cap).toFixed(2)}人`:'-'};
+root.addEventListener('input',calc);root.querySelector('[data-reset-workload]').addEventListener('click',()=>{fields.forEach((x,i)=>x.value=initial[i]);calc()});calc(); })();
+</script>
+{% endblock %}

@@ -3876,6 +3876,34 @@ def load_event_options(cur: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS case_count,
+          COUNT(DISTINCT exam_facility_id) AS facility_count,
+          SUM(CASE WHEN check_status = 'NG' THEN 1 ELSE 0 END) AS legal_error_case_count,
+          COUNT(DISTINCT CASE WHEN check_status = 'NG' THEN exam_facility_id END) AS legal_error_facility_count,
+          SUM(CASE WHEN export_readiness_status = 'APPROVED_WITH_REASON' THEN 1 ELSE 0 END) AS approved_with_reason_count
+        FROM {qname(health_db())}.exam_export_cases
+        WHERE event_id = %s
+        """,
+        (event_id,),
+    )
+    case_row = dict(cur.fetchone() or {})
+    cur.execute(
+        f"""
+        SELECT
+          SUM(CASE WHEN entry_purpose = 'PAPER_ONLY' AND applied_exam_ledger_id IS NOT NULL THEN 1 ELSE 0 END) AS paper_only_count,
+          SUM(CASE WHEN entry_purpose = 'SUPPLEMENT' AND applied_exam_ledger_id IS NOT NULL THEN 1 ELSE 0 END) AS supplement_count
+        FROM {qname(health_db())}.manual_exam_entry_drafts
+        WHERE event_id = %s
+        """,
+        (event_id,),
+    )
+    values = {**case_row, **dict(cur.fetchone() or {})}
+    return {key: int(value or 0) for key, value in values.items()}
+
+
 def load_admin_event_rows(cur: Any) -> list[dict[str, Any]]:
     cur.execute(
         f"""
@@ -8978,18 +9006,17 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
     return result[:limit]
 
 
-OROKU_HEARING_HEADERS = {
-    "オージオ（右）1000Ｈｚ": ("右 1000Hz", "9D100163100000011"),
-    "オージオ（左）1000Ｈｚ": ("左 1000Hz", "9D100163500000011"),
-    "オージオ（右）4000Ｈｚ": ("右 4000Hz", "9D100163200000011"),
-    "オージオ（左）4000Ｈｚ": ("左 4000Hz", "9D100163600000011"),
+HEARING_JUDGEMENT_ITEMS = {
+    "9D100163100000011": "右 1000Hz",
+    "9D100163500000011": "左 1000Hz",
+    "9D100163200000011": "右 4000Hz",
+    "9D100163600000011": "左 4000Hz",
 }
 
 
 def build_hearing_judgement_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     item_rows: dict[str, dict[str, Any]] = {
-        header_name: {
-            "header_name": header_name,
+        namecode: {
             "item_label": item_label,
             "namecode": namecode,
             "normal_count": 0,
@@ -8998,12 +9025,12 @@ def build_hearing_judgement_summary(rows: Iterable[Mapping[str, Any]]) -> dict[s
             "total_count": 0,
             "abnormal_rate": None,
         }
-        for header_name, (item_label, namecode) in OROKU_HEARING_HEADERS.items()
+        for namecode, item_label in HEARING_JUDGEMENT_ITEMS.items()
     }
     ledger_states: dict[int, set[str]] = {}
     for source in rows:
-        header_name = str(source.get("header_name") or "")
-        item = item_rows.get(header_name)
+        namecode = str(source.get("namecode") or "")
+        item = item_rows.get(namecode)
         if item is None:
             continue
         raw_value = str(source.get("raw_value") or "").strip()
@@ -9190,6 +9217,7 @@ def load_facility_summary_detail(
         WHERE el.event_id = %s
           AND el.facility_code = %s
           AND el.check_status = 'NG'
+          AND el.source_type IN ('XML', 'CSV')
           {month_clause}
         GROUP BY COALESCE(el.check_reason, '理由なし')
         ORDER BY cnt DESC
@@ -9268,33 +9296,26 @@ def load_facility_summary_detail(
     )
     item_error_rows = [dict(row) for row in cur.fetchall()]
 
-    hearing_headers = tuple(OROKU_HEARING_HEADERS)
-    hearing_header_placeholders = ", ".join(["%s"] * len(hearing_headers))
+    hearing_namecodes = tuple(HEARING_JUDGEMENT_ITEMS)
+    hearing_namecode_placeholders = ", ".join(["%s"] * len(hearing_namecodes))
     cur.execute(
         f"""
         SELECT
           el.exam_ledger_id,
-          h.header_name,
-          JSON_UNQUOTE(
-            JSON_EXTRACT(el.raw_row_json, CONCAT('$[', h.column_no - 1, ']'))
-          ) AS raw_value
+          eiv.namecode,
+          eiv.raw_value
         FROM {qname(health_db())}.exam_ledgers AS el
-        INNER JOIN {qname(master_db())}.exam_facilities AS ef
-          ON ef.exam_facility_code = el.facility_code
-        INNER JOIN {qname(master_db())}.csv_format_versions AS cfv
-          ON cfv.exam_facility_id = ef.exam_facility_id
-         AND cfv.mapping_version = el.mapping_version
-        INNER JOIN {qname(master_db())}.csv_format_header_columns AS h
-          ON h.csv_format_version_id = cfv.csv_format_version_id
-         AND h.header_name IN ({hearing_header_placeholders})
+        INNER JOIN {qname(health_db())}.exam_item_values AS eiv
+          ON eiv.ledger_id = el.exam_ledger_id
+         AND eiv.ledger_type = 'EXAM'
+         AND eiv.namecode IN ({hearing_namecode_placeholders})
         WHERE el.event_id = %s
           AND el.facility_code = %s
           AND el.source_type = 'CSV'
-          AND el.raw_row_json IS NOT NULL
           {month_clause}
-        ORDER BY el.exam_ledger_id, h.column_no
+        ORDER BY el.exam_ledger_id, eiv.namecode
         """,
-        (*hearing_headers, event_id, facility_code, *month_params),
+        (*hearing_namecodes, event_id, facility_code, *month_params),
     )
     hearing_summary = build_hearing_judgement_summary(dict(row) for row in cur.fetchall())
 
@@ -14137,6 +14158,32 @@ def admin_etl_runs(request: Request) -> Response:
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
+    )
+
+
+@app.get("/admin/workload-estimate", response_class=HTMLResponse)
+def admin_workload_estimate(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    selected_event_id = _optional_int(request.query_params.get("event_id"))
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            events = load_event_options(cur)
+            if selected_event_id is None and events:
+                selected_event_id = int(events[0]["event_id"])
+            actuals = load_workload_estimate_actuals(cur, event_id=selected_event_id) if selected_event_id else {}
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "admin_workload_estimate.html",
+        {"request": request, "user": user, "events": events, "selected_event_id": selected_event_id, "actuals": actuals},
     )
 
 

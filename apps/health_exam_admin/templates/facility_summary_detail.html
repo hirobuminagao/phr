@@ -132,7 +132,7 @@
     <div class="section-heading">
       <div>
         <h2>聴力判定の分布</h2>
-        <p class="subtle">CSV原値と標準コードへの変換結果を確認します。4項目のうち1つでも異常なら、そのledgerを異常として集計します。</p>
+        <p class="subtle">マッピング後の聴力4項目についてCSV原値と標準コードへの変換結果を確認します。1項目でも異常なら、そのledgerを異常として集計します。</p>
       </div>
     </div>
     {% if detail.hearing_summary.available %}
@@ -190,7 +190,7 @@
       <p class="status-panel status-panel--danger">1/2以外の値を含むledgerが{{ detail.hearing_summary.unknown_ledger_count }}件あります。健診機関への確認候補です。</p>
     {% endif %}
     {% else %}
-      <p class="subtle">保存済みCSVヘッダーと照合できる聴力判定データはありません。</p>
+      <p class="subtle">マッピング済みの聴力判定データはありません。</p>
     {% endif %}
   </section>
 
@@ -279,7 +279,7 @@
         <table class="data-table compact-table">
           <thead>
             <tr>
-              <th><span class="table-help-heading">理由 {{ help_button("help-detail-source-ng-reason", "source NG理由", "exam_ledgers.check_reasonを同じ理由ごとにまとめています。ファイル/行として取込が成立しなかった原因を見るための一覧です。") }}</span></th>
+              <th><span class="table-help-heading">理由 {{ help_button("help-detail-source-ng-reason", "source NG理由", "XML・CSVのexam_ledgers.check_reasonを同じ理由ごとにまとめています。紙・手入力sourceは含みません。") }}</span></th>
               <th><span class="table-help-heading">件数 {{ help_button("help-detail-source-ng-count", "source NG件数", "同じsource NG理由に該当するexam_ledgersの件数です。", True) }}</span></th>
             </tr>
           </thead>
