@@ -35,6 +35,8 @@
       <span class="status-pill {{ 'status-ready' if case.export_readiness_status == 'EXPORT_READY' else 'status-pending' if case.export_readiness_status == 'APPROVED_WITH_REASON' else 'status-danger' if case.export_readiness_status == 'BLOCKED' else 'status-muted' }}">{{ case.export_readiness_status }}</span>
       <span class="status-pill {{ 'status-ready' if case.legal_check_result == 'OK' else 'status-danger' if case.legal_check_result == 'NG' else 'status-pending' }}">法定 {{ case.legal_check_result or "未判定" }}</span>
       <span class="status-pill {{ check_result_status_class(case.specific_check_result_display) }}">特定 {{ check_result_label(case.specific_check_result_display) or "未判定" }}</span>
+      {% if case.author_recovered_count %}<span class="status-pill status-ready">author補完 {{ case.author_recovered_count }}件</span>{% endif %}
+      {% if case.author_missing_candidate %}<span class="status-pill status-warning">author未取得候補</span>{% endif %}
     </div>
   </section>
 

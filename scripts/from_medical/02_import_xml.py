@@ -714,6 +714,11 @@ def observation_text(elem: ElementTree.Element) -> ElementTree.Element | None:
     return find_child(elem, "text")
 
 
+def observation_author_name(elem: ElementTree.Element) -> str | None:
+    name = path_by_local(elem, "author", "assignedAuthor", "assignedPerson", "name")
+    return elem_text(name)
+
+
 def has_entry_relationship(elem: ElementTree.Element) -> bool:
     return find_child(elem, "entryRelationship") is not None
 
@@ -828,6 +833,7 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
         raw_code = attr_value(code_elem, "code", "value") if code_elem is not None else attr_value(elem, "code")
         raw_code_system = attr_value(code_elem, "codeSystem") if code_elem is not None else attr_value(elem, "codeSystem")
         raw_code_display = attr_value(code_elem, "displayName") if code_elem is not None else attr_value(elem, "displayName")
+        author_name = observation_author_name(elem)
         value_elem = find_child(elem, "value")
         text_elem = observation_text(elem)
         if is_grouping_observation(code_elem=code_elem, value_elem=value_elem, text_elem=text_elem, elem=elem):
@@ -878,6 +884,7 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                     "negation_ind": negation_ind,
                     "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                     "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
+                    "author_name": author_name,
                 }
             )
             continue
@@ -904,6 +911,7 @@ def extract_exam_items(root: ElementTree.Element) -> ExamExtraction:
                 "negation_ind": negation_ind,
                 "identity_item_code": attr_value(elem, "identityItemCode", "identity_item_code"),
                 "jun_no": parse_int(attr_value(elem, "junNo", "jun_no")),
+                "author_name": author_name,
             }
         )
 
@@ -960,6 +968,65 @@ def supplement_missing_finding_presence_rows(rows: list[dict[str, Any]]) -> list
     return supplemented
 
 
+def supplement_author_exam_item_rows(
+    rows: list[dict[str, Any]],
+    item_by_namecode: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    supplemented = list(rows)
+    existing_values: set[tuple[str, str]] = set()
+    occurrence_by_namecode: dict[str, int] = {}
+    for row in rows:
+        namecode = compact_text(row.get("namecode"))
+        raw_value = compact_text(row.get("raw_value"))
+        if not namecode:
+            continue
+        occurrence_by_namecode[namecode] = max(
+            occurrence_by_namecode.get(namecode, 0),
+            int(row.get("occurrence_no") or 1),
+        )
+        if raw_value:
+            existing_values.add((namecode, raw_value))
+
+    for row in rows:
+        parent_namecode = compact_text(row.get("namecode"))
+        author_name = compact_text(row.get("author_name"))
+        parent_item = item_by_namecode.get(parent_namecode or "")
+        author_item_code = compact_text(parent_item.get("author_item_code")) if parent_item else None
+        if not author_item_code or not author_name:
+            continue
+        dedupe_key = (author_item_code, author_name)
+        if dedupe_key in existing_values:
+            continue
+        occurrence_by_namecode[author_item_code] = occurrence_by_namecode.get(author_item_code, 0) + 1
+        supplemented.append(
+            {
+                "section_code": row.get("section_code"),
+                "section_code_system": row.get("section_code_system"),
+                "section_name": row.get("section_name"),
+                "namecode": author_item_code,
+                "occurrence_no": occurrence_by_namecode[author_item_code],
+                "raw_value": author_name,
+                "raw_value_type": "ST",
+                "raw_unit": None,
+                "nullflavor": None,
+                "code_system": None,
+                "code_value": None,
+                "code_display": None,
+                "interpretation_code": None,
+                "interpretation_code_system": None,
+                "interpretation_name": None,
+                "namecode_display_name": None,
+                "negation_ind": None,
+                "identity_item_code": author_item_code[:5],
+                "jun_no": None,
+                "author_name": None,
+                "author_derived": True,
+            }
+        )
+        existing_values.add(dedupe_key)
+    return supplemented
+
+
 def normalize_xml_exam_item_rows(
     cur: Any,
     config: ImportConfig,
@@ -970,13 +1037,22 @@ def normalize_xml_exam_item_rows(
         [cast(str | None, row.get("namecode")) for row in rows],
         dev_db=config.dev_db,
     )
+    rows = supplement_author_exam_item_rows(rows, item_by_namecode)
+    item_by_namecode = get_exam_items(
+        cur,
+        [cast(str | None, row.get("namecode")) for row in rows],
+        dev_db=config.dev_db,
+    )
     normalized_rows: list[dict[str, Any]] = []
     for row in rows:
         normalized_row = dict(row)
+        author_derived = bool(row.get("author_derived"))
         namecode = compact_text(row.get("namecode"))
         raw_value = row.get("raw_value")
         raw_unit = cast(str | None, row.get("raw_unit"))
         item = item_by_namecode.get(namecode or "")
+        if item and not compact_text(normalized_row.get("namecode_display_name")):
+            normalized_row["namecode_display_name"] = compact_text(item.get("item_name"))
         data_type = compact_text(item.get("data_type")) if item else compact_text(row.get("raw_value_type"))
         result_code_oid = compact_text(item.get("result_code_oid")) if item else None
         code_system = compact_text(row.get("code_system"))
@@ -1045,6 +1121,8 @@ def normalize_xml_exam_item_rows(
                     "validation_reason": "NAMECODE_NOT_FOUND",
                 }
             )
+        if author_derived and normalized_row.get("normalize_status") == "OK":
+            normalized_row["normalize_reason"] = "XML_AUTHOR_ELEMENT"
         normalized_rows.append(normalized_row)
     return normalized_rows
 

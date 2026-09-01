@@ -298,6 +298,10 @@ app = FastAPI(title="PHR Health Exam Admin")
 app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=APP_ROOT / "templates")
 templates.env.filters["url_quote"] = lambda value: quote(str(value or ""), safe="")
+templates.env.globals["static_asset_version"] = max(
+    (APP_ROOT / "static" / "app.css").stat().st_mtime_ns,
+    (APP_ROOT / "static" / "app.js").stat().st_mtime_ns,
+)
 
 
 def admin_allowed_client_ips() -> set[str]:
@@ -7058,6 +7062,7 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
     duplicate_subscriber = filters.get("duplicate_subscriber", "").strip()
+    author_import_status = filters.get("author_import_status", "").strip()
     exam_item_namecodes = split_filter_values(filters.get("exam_item_namecodes", ""))
     exam_item_match_mode = filters.get("exam_item_match_mode", "any").strip().lower()
     if exam_item_match_mode not in {"any", "all"}:
@@ -7147,6 +7152,21 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
         params.extend(facility_codes)
     if duplicate_subscriber == "1":
         where_parts.append("COALESCE(subcase.subscriber_case_count, 0) >= 2")
+    if author_import_status == "RECOVERED":
+        where_parts.append(
+            f"""
+            EXISTS (
+              SELECT 1
+              FROM {qname(health_db())}.exam_export_case_values AS author_case_value
+              INNER JOIN {qname(health_db())}.exam_item_values AS author_value
+                ON author_value.id = author_case_value.source_exam_item_value_id
+              WHERE author_case_value.exam_export_case_id = eec.exam_export_case_id
+                AND author_value.normalize_reason = 'XML_AUTHOR_ELEMENT'
+            )
+            """
+        )
+    elif author_import_status == "MISSING_CANDIDATE":
+        where_parts.append(author_missing_candidate_exists_sql("eec"))
     if exam_item_namecodes:
         placeholders = ", ".join(["%s"] * len(exam_item_namecodes))
         match_count = len(exam_item_namecodes) if exam_item_match_mode == "all" else 1
@@ -7164,6 +7184,43 @@ def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any
         params.extend([*exam_item_namecodes, match_count])
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     return where_sql, params
+
+
+def author_missing_candidate_exists_sql(case_alias: str) -> str:
+    return f"""
+        EXISTS (
+          SELECT 1
+          FROM {qname(health_db())}.exam_export_case_sources AS author_source
+          INNER JOIN {qname(health_db())}.exam_item_values AS author_parent_value
+            ON author_parent_value.ledger_type = 'EXAM'
+           AND author_parent_value.ledger_id = author_source.source_exam_ledger_id
+          INNER JOIN {qname(dev_db())}.exam_item_master AS author_parent_item
+            ON author_parent_item.namecode = author_parent_value.namecode
+           AND author_parent_item.annex2_author_item_code IS NOT NULL
+          WHERE author_source.exam_export_case_id = {case_alias}.exam_export_case_id
+            AND author_source.source_type = 'XML'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM {qname(health_db())}.exam_item_values AS expected_author_value
+              WHERE expected_author_value.ledger_type = 'EXAM'
+                AND expected_author_value.ledger_id = author_source.source_exam_ledger_id
+                AND expected_author_value.namecode = author_parent_item.annex2_author_item_code
+            )
+        )
+    """
+
+
+def author_recovered_count_sql(case_alias: str) -> str:
+    return f"""
+        (
+          SELECT COUNT(*)
+          FROM {qname(health_db())}.exam_export_case_values AS author_case_value
+          INNER JOIN {qname(health_db())}.exam_item_values AS author_value
+            ON author_value.id = author_case_value.source_exam_item_value_id
+          WHERE author_case_value.exam_export_case_id = {case_alias}.exam_export_case_id
+            AND author_value.normalize_reason = 'XML_AUTHOR_ELEMENT'
+        )
+    """
 
 
 def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
@@ -7395,7 +7452,9 @@ def load_exam_export_case_rows(
           COALESCE(src.xml_count, 0) AS xml_count,
           COALESCE(src.csv_count, 0) AS csv_count,
           COALESCE(src.paper_count, 0) AS paper_count,
-          COALESCE(subcase.subscriber_case_count, 0) AS subscriber_case_count
+          COALESCE(subcase.subscriber_case_count, 0) AS subscriber_case_count,
+          {author_recovered_count_sql('eec')} AS author_recovered_count,
+          CASE WHEN {author_missing_candidate_exists_sql('eec')} THEN 1 ELSE 0 END AS author_missing_candidate
         FROM {qname(health_db())}.exam_export_cases AS eec
         LEFT JOIN (
           SELECT r1.*
@@ -7864,7 +7923,9 @@ def load_exam_export_case_detail(cur: Any, *, exam_export_case_id: int) -> dict[
           COALESCE(ecr.legal_check_result, 'PENDING') AS legal_check_result,
           ecr.legal_reason_summary,
           COALESCE(ecr.specific_check_result, 'PENDING') AS specific_check_result,
-          ecr.specific_reason_summary
+          ecr.specific_reason_summary,
+          {author_recovered_count_sql('eec')} AS author_recovered_count,
+          CASE WHEN {author_missing_candidate_exists_sql('eec')} THEN 1 ELSE 0 END AS author_missing_candidate
         FROM {qname(health_db())}.exam_export_cases AS eec
         LEFT JOIN (
           SELECT r1.*
@@ -20031,6 +20092,7 @@ def exam_export_cases(request: Request) -> Response:
         "facility_q": request.query_params.get("facility_q", ""),
         "facility_codes": request.query_params.get("facility_codes", ""),
         "duplicate_subscriber": request.query_params.get("duplicate_subscriber", ""),
+        "author_import_status": request.query_params.get("author_import_status", ""),
         "exam_item_namecodes": request.query_params.get("exam_item_namecodes", ""),
         "exam_item_match_mode": request.query_params.get("exam_item_match_mode", "any"),
         "limit": request.query_params.get("limit", "500"),

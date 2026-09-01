@@ -41,12 +41,14 @@
       {% if filters.facility_q %}<span class="active-filter-chip">健診機関: {{ filters.facility_q }}</span>{% endif %}
       {% if filters.facility_codes %}<span class="active-filter-chip">健診機関コード: {{ filters.facility_codes }}</span>{% endif %}
       {% if filters.duplicate_subscriber == '1' %}<span class="active-filter-chip">同一subscriber: 複数case</span>{% endif %}
+      {% if filters.author_import_status == 'RECOVERED' %}<span class="active-filter-chip">author: 補完済み</span>{% endif %}
+      {% if filters.author_import_status == 'MISSING_CANDIDATE' %}<span class="active-filter-chip">author: 未取得候補</span>{% endif %}
       {% if filters.exam_month %}<span class="active-filter-chip">受診月: {{ filters.exam_month }}</span>{% endif %}
       {% if filters.legal_check_result %}<span class="active-filter-chip">法定: {{ filters.legal_check_result }}</span>{% endif %}
       {% if filters.specific_check_result %}<span class="active-filter-chip">特定健診: {{ check_result_label(filters.specific_check_result) or filters.specific_check_result }}</span>{% endif %}
       {% if filters.export_readiness_status %}<span class="active-filter-chip">出力: {{ filters.export_readiness_status }}</span>{% endif %}
       {% if filters.source_mode %}<span class="active-filter-chip">source: {{ filters.source_mode }}</span>{% endif %}
-      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.subscriber_id and not filters.qualification_lost_status and not filters.qualification_lost_date and not filters.facility_q and not filters.facility_codes and not filters.duplicate_subscriber and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
+      {% if not filters.q and not filters.case_id and not filters.name_full and not filters.name_kana and not filters.insurance_symbol and not filters.insurance_number and not filters.hia_subscriber_id and not filters.subscriber_id and not filters.qualification_lost_status and not filters.qualification_lost_date and not filters.facility_q and not filters.facility_codes and not filters.duplicate_subscriber and not filters.author_import_status and not filters.exam_month and not filters.legal_check_result and not filters.specific_check_result and not filters.export_readiness_status and not filters.source_mode %}
       <span class="active-filter-chip is-empty">条件なし</span>
       {% endif %}
     </div>
@@ -244,6 +246,14 @@
                 <button type="button" data-server-filter-toggle="source_mode" data-filter-value="MULTI_SOURCE" class="{{ 'is-active' if filters.source_mode == 'MULTI_SOURCE' else '' }}">複数</button>
               </div>
               <input type="hidden" name="source_mode" value="{{ filters.source_mode }}" data-server-filter-value="source_mode">
+            </fieldset>
+            <fieldset class="filter-condition-block">
+              <legend>XML author取込</legend>
+              <div class="filter-toggle-group">
+                <button type="button" data-server-filter-toggle="author_import_status" data-filter-value="RECOVERED" class="{{ 'is-active' if filters.author_import_status == 'RECOVERED' else '' }}">補完済み</button>
+                <button type="button" data-server-filter-toggle="author_import_status" data-filter-value="MISSING_CANDIDATE" class="{{ 'is-active' if filters.author_import_status == 'MISSING_CANDIDATE' else '' }}">未取得候補</button>
+              </div>
+              <input type="hidden" name="author_import_status" value="{{ filters.author_import_status }}" data-server-filter-value="author_import_status">
             </fieldset>
           </div>
         </section>
@@ -568,6 +578,8 @@
               <span class="status-pill status-muted">{{ row.source_mode or "-" }}</span>
               <small>XML {{ row.xml_count or 0 }} / CSV {{ row.csv_count or 0 }} / 紙 {{ row.paper_count or 0 }}</small>
               <small>値 {{ row.case_value_count or 0 }} / build {{ row.value_build_status }}</small>
+              {% if row.author_recovered_count %}<span class="status-pill status-ready">author補完 {{ row.author_recovered_count }}件</span>{% endif %}
+              {% if row.author_missing_candidate %}<span class="status-pill status-warning">author未取得候補</span>{% endif %}
             </td>
             <td>
               <span class="status-pill {{ 'status-ready' if row.legal_check_result == 'OK' else 'status-danger' if row.legal_check_result == 'NG' else 'status-pending' }}">{{ row.legal_check_result or "未判定" }}</span>

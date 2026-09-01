@@ -31,12 +31,14 @@ CREATE TABLE `dev_phr`.`exam_item_master` (
   `cda_section_code_default` varchar(16) DEFAULT NULL COMMENT 'CDAデフォルトセクションコード（01010 / 01990）',
   `annex2_series_group_identifier` char(17) DEFAULT NULL COMMENT '付属2: 一連検査グループ識別',
   `annex2_series_group_relation_code` varchar(16) DEFAULT NULL COMMENT '付属2: 一連検査グループ関係コード（COMP / RSON）',
+  `annex2_author_item_code` char(17) DEFAULT NULL COMMENT '付属2: author要素で表現する診断者・記述者の項目コード',
 
   PRIMARY KEY (`namecode`),
   KEY `idx_exam_item_category` (`category_name`),
   KEY `idx_exam_item_xml_value_type` (`xml_value_type`),
   KEY `idx_exam_item_result_oid` (`result_code_oid`),
-  KEY `idx_exam_item_series_group` (`annex2_series_group_identifier`)
+  KEY `idx_exam_item_series_group` (`annex2_series_group_identifier`),
+  KEY `idx_exam_item_author_item` (`annex2_author_item_code`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

@@ -263,6 +263,12 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
           NULLIF(ecv.source_reference_upper, '') AS source_reference_upper,
           em.annex2_series_group_identifier AS series_group_identifier,
           em.annex2_series_group_relation_code AS series_group_relation_code,
+          em.annex2_author_item_code AS author_item_code,
+          EXISTS (
+            SELECT 1
+            FROM {qname(dev_db)}.exam_item_master author_parent
+            WHERE author_parent.annex2_author_item_code = ecv.namecode
+          ) AS is_author_item,
           ecv.negation_ind,
           ecv.occurrence_no,
           em.jun_no AS jun_no
@@ -315,6 +321,10 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
             series_group_relation_code=None
             if row["series_group_relation_code"] is None
             else str(row["series_group_relation_code"]),
+            author_item_code=None
+            if row.get("author_item_code") is None
+            else str(row["author_item_code"]),
+            is_author_item=bool(row.get("is_author_item")),
             negation_ind=None if row["negation_ind"] is None else bool(row["negation_ind"]),
             occurrence_no=int(row["occurrence_no"] or 1),
             jun_no=None if row["jun_no"] is None else int(row["jun_no"]),

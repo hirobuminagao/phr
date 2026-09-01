@@ -259,6 +259,72 @@ def test_extract_exam_items_adds_interpretation_code_to_row() -> None:
     assert rows[0]["interpretation_name"] == "High"
 
 
+def test_extract_and_supplement_exam_item_author() -> None:
+    root = parse_xml(
+        section_xml(
+            entries="""
+            <entry>
+              <observation>
+                <code code="9N511000000000049" displayName="医師の診断"/>
+                <value xsi:type="ST" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">異常なし</value>
+                <author>
+                  <time nullFlavor="NI"/>
+                  <assignedAuthor>
+                    <id nullFlavor="NI"/>
+                    <assignedPerson><name>基金 次郎</name></assignedPerson>
+                  </assignedAuthor>
+                </author>
+              </observation>
+            </entry>
+            """,
+        )
+    )
+
+    extracted = import_xml.extract_exam_items(root).rows
+    supplemented = import_xml.supplement_author_exam_item_rows(
+        extracted,
+        {
+            "9N511000000000049": {
+                "author_item_code": "9N516000000000049",
+            }
+        },
+    )
+
+    assert extracted[0]["author_name"] == "基金 次郎"
+    assert [row["namecode"] for row in supplemented] == [
+        "9N511000000000049",
+        "9N516000000000049",
+    ]
+    assert supplemented[1]["raw_value"] == "基金 次郎"
+    assert supplemented[1]["raw_value_type"] == "ST"
+    assert supplemented[1]["author_derived"] is True
+
+
+def test_supplement_exam_item_author_deduplicates_shared_and_legacy_values() -> None:
+    author_code = "9N586000000000049"
+    base = {
+        "section_code": "01990",
+        "section_code_system": None,
+        "section_name": None,
+        "occurrence_no": 1,
+    }
+    rows = [
+        {**base, "namecode": "9N581161300000011", "raw_value": "1", "author_name": "医師 太郎"},
+        {**base, "namecode": "9N581161400000049", "raw_value": "所見", "author_name": "医師 太郎"},
+        {**base, "namecode": author_code, "raw_value": "医師 太郎", "author_name": None},
+    ]
+    items = {
+        "9N581161300000011": {"author_item_code": author_code},
+        "9N581161400000049": {"author_item_code": author_code},
+        author_code: {"author_item_code": None},
+    }
+
+    supplemented = import_xml.supplement_author_exam_item_rows(rows, items)
+
+    assert len(supplemented) == 3
+    assert sum(row["namecode"] == author_code for row in supplemented) == 1
+
+
 def test_extract_exam_items_uses_title_when_display_name_is_missing() -> None:
     root = parse_xml(
         section_xml(

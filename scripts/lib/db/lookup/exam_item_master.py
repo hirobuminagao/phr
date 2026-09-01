@@ -27,7 +27,8 @@ EXAM_ITEM_MASTER_COLUMNS = """
     data_type_label,
     identity_item_code,
     jun_no,
-    cda_section_code_default AS section_code
+    cda_section_code_default AS section_code,
+    annex2_author_item_code AS author_item_code
 """
 
 

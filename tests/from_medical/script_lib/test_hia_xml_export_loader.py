@@ -116,6 +116,8 @@ def test_fetch_valid_items_passes_annex2_and_source_metadata() -> None:
                     "source_reference_upper": "48.9",
                     "series_group_identifier": "2A020161001930149",
                     "series_group_relation_code": "COMP",
+                    "author_item_code": "9N516000000000049",
+                    "is_author_item": 0,
                     "negation_ind": None,
                     "occurrence_no": 1,
                     "jun_no": 840,
@@ -130,7 +132,9 @@ def test_fetch_valid_items_passes_annex2_and_source_metadata() -> None:
     assert item.source_reference_upper == "48.9"
     assert item.series_group_identifier == "2A020161001930149"
     assert item.series_group_relation_code == "COMP"
+    assert item.author_item_code == "9N516000000000049"
     assert "annex2_series_group_identifier" in cur.sql
+    assert "annex2_author_item_code" in cur.sql
 
 
 def test_fetch_candidates_can_filter_by_facility_code() -> None:

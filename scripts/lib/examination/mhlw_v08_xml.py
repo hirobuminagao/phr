@@ -79,6 +79,8 @@ class ExamItem:
     source_reference_upper: str | None = None
     series_group_identifier: str | None = None
     series_group_relation_code: str | None = None
+    author_item_code: str | None = None
+    is_author_item: bool = False
     negation_ind: bool | None = None
     occurrence_no: int = 1
     jun_no: int | None = None
@@ -149,7 +151,23 @@ def _add_exam_ticket_participant(parent: ET.Element, person: Person) -> None:
     ET.SubElement(scoping, _h("id"), {"extension": person.insurer_number, "root": OID_INSURER})
 
 
-def _add_exam_item_observation(parent: ET.Element, item: ExamItem) -> ET.Element:
+def _add_observation_author(observation: ET.Element, author_item: ExamItem) -> None:
+    author_name = (author_item.normalized_value or "").strip()
+    if not author_name:
+        return
+    author = ET.SubElement(observation, _h("author"))
+    ET.SubElement(author, _h("time"), {"nullFlavor": "NI"})
+    assigned_author = ET.SubElement(author, _h("assignedAuthor"))
+    ET.SubElement(assigned_author, _h("id"), {"nullFlavor": "NI"})
+    assigned_person = ET.SubElement(assigned_author, _h("assignedPerson"))
+    ET.SubElement(assigned_person, _h("name")).text = author_name
+
+
+def _add_exam_item_observation(
+    parent: ET.Element,
+    item: ExamItem,
+    author_item: ExamItem | None = None,
+) -> ET.Element:
     if not item.display_name:
         raise ValueError(f"{item.namecode}: displayName is missing")
 
@@ -200,6 +218,8 @@ def _add_exam_item_observation(parent: ET.Element, item: ExamItem) -> ET.Element
         ET.SubElement(observation, _h("interpretationCode"), attrs)
     if item.method_code:
         ET.SubElement(observation, _h("methodCode"), {"code": item.method_code})
+    if author_item is not None:
+        _add_observation_author(observation, author_item)
     if item.source_reference_lower is not None or item.source_reference_upper is not None:
         if value_type != "PQ":
             raise ValueError(f"{item.namecode}: reference range is only supported for PQ")
@@ -258,8 +278,27 @@ def build_clinical_document(person: Person, facility: Facility, items: Iterable[
     _add_organization(assigned_entity, facility)
 
     structured = ET.SubElement(ET.SubElement(root, _h("component")), _h("structuredBody"))
+    all_items = list(items)
+    author_item_codes = {item.author_item_code for item in all_items if item.author_item_code}
+    author_item_codes.update(item.namecode for item in all_items if item.is_author_item)
+    author_items: dict[str, list[ExamItem]] = {}
+    for item in all_items:
+        if item.namecode in author_item_codes:
+            author_items.setdefault(item.namecode, []).append(item)
+
+    def matching_author(item: ExamItem) -> ExamItem | None:
+        if not item.author_item_code:
+            return None
+        candidates = author_items.get(item.author_item_code, [])
+        return next(
+            (candidate for candidate in candidates if candidate.occurrence_no == item.occurrence_no),
+            candidates[0] if candidates else None,
+        )
+
     grouped: dict[str, list[ExamItem]] = {}
-    for item in items:
+    for item in all_items:
+        if item.namecode in author_item_codes:
+            continue
         grouped.setdefault(item.section_code or "01990", []).append(item)
 
     for section_code in sorted(grouped):
@@ -273,7 +312,11 @@ def build_clinical_document(person: Person, facility: Facility, items: Iterable[
         for item in section_items:
             group_identifier = item.series_group_identifier
             if not group_identifier:
-                _add_exam_item_observation(ET.SubElement(section, _h("entry")), item)
+                _add_exam_item_observation(
+                    ET.SubElement(section, _h("entry")),
+                    item,
+                    matching_author(item),
+                )
                 continue
             if group_identifier in emitted_groups:
                 continue
@@ -306,7 +349,11 @@ def build_clinical_document(person: Person, facility: Facility, items: Iterable[
                         f"{grouped_item.series_group_relation_code!r}"
                     )
                 relationship = ET.SubElement(parent, _h("entryRelationship"), {"typeCode": relation_code})
-                _add_exam_item_observation(relationship, grouped_item)
+                _add_exam_item_observation(
+                    relationship,
+                    grouped_item,
+                    matching_author(grouped_item),
+                )
     return ET.ElementTree(root)
 
 

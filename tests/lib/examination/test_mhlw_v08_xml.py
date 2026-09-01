@@ -86,6 +86,47 @@ def test_coded_values_do_not_emit_normalized_value_as_value_body() -> None:
     validate_xml(content, XSD_ROOT / "hc08_V08.xsd")
 
 
+def test_exam_item_author_is_nested_and_not_emitted_as_independent_observation() -> None:
+    facility = Facility("0123456789", "テスト健診機関")
+    person = Person("06139463", "1", "2", "ヤマダ　タロウ", "1", "19800102", "20260603", "10", "010")
+    author_code = "9N516000000000049"
+    items = [
+        ExamItem(
+            "9N511000000000049",
+            "01010",
+            "ST",
+            "異常なし",
+            display_name="医師の診断",
+            author_item_code=author_code,
+        ),
+        ExamItem(
+            author_code,
+            "01010",
+            "ST",
+            "基金 次郎",
+            display_name="健康診断を実施した医師の氏名",
+        ),
+    ]
+
+    content = xml_bytes(build_clinical_document(person, facility, items, "20260730"))
+    validate_xml(content, XSD_ROOT / "hc08_V08.xsd")
+    root = ElementTree.fromstring(content)
+    ns = {"h": "urn:hl7-org:v3"}
+    observations = root.findall(".//h:section//h:observation", ns)
+    diagnosis = next(
+        node
+        for node in observations
+        if (code := node.find("h:code", ns)) is not None
+        and code.get("code") == "9N511000000000049"
+    )
+
+    assert diagnosis.findtext("h:author/h:assignedAuthor/h:assignedPerson/h:name", namespaces=ns) == "基金 次郎"
+    assert not any(
+        (code := node.find("h:code", ns)) is not None and code.get("code") == author_code
+        for node in observations
+    )
+
+
 def test_annex2_series_group_reference_range_and_interpretation() -> None:
     facility = Facility("0123456789", "テスト健診機関")
     person = Person("06139463", "1", "2", "ヤマダ　タロウ", "1", "19800102", "20260603", "10", "010")
