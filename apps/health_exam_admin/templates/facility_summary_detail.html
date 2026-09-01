@@ -132,7 +132,7 @@
     <div class="section-heading">
       <div>
         <h2>聴力判定の分布</h2>
-        <p class="subtle">マッピング後の聴力4項目についてCSV原値と標準コードへの変換結果を確認します。1項目でも異常なら、そのledgerを異常として集計します。</p>
+        <p class="subtle">マッピング後の聴力4項目を結果コードで集計します。CD 1が1項目でもあれば、そのledgerを異常として集計します。</p>
       </div>
     </div>
     {% if detail.hearing_summary.available %}
@@ -163,10 +163,10 @@
         <thead>
           <tr>
             <th>聴力項目</th>
-            <th>raw 1</th>
-            <th>変換後</th>
-            <th>raw 2</th>
-            <th>変換後</th>
+            <th>CD 2</th>
+            <th>判定</th>
+            <th>CD 1</th>
+            <th>判定</th>
             <th>不明値</th>
             <th>異常割合</th>
           </tr>
@@ -176,9 +176,9 @@
           <tr>
             <td><strong>{{ row.item_label }}</strong><small>{{ row.namecode }}</small></td>
             <td>{{ row.normal_count }}件</td>
-            <td><span class="status-pill status-ready">CD 2 / 異常所見なし</span></td>
+            <td><span class="status-pill status-ready">異常所見なし</span></td>
             <td>{{ row.abnormal_count }}件</td>
-            <td><span class="status-pill status-danger">CD 1 / 異常所見あり</span></td>
+            <td><span class="status-pill status-danger">異常所見あり</span></td>
             <td>{{ row.unknown_count }}件</td>
             <td>{{ row.abnormal_rate if row.abnormal_rate is not none else '-' }}{% if row.abnormal_rate is not none %}%{% endif %}</td>
           </tr>

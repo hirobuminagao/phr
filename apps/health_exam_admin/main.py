@@ -9033,11 +9033,11 @@ def build_hearing_judgement_summary(rows: Iterable[Mapping[str, Any]]) -> dict[s
         item = item_rows.get(namecode)
         if item is None:
             continue
-        raw_value = str(source.get("raw_value") or "").strip()
-        if not raw_value:
+        code_value = str(source.get("code_value") or "").strip()
+        if not code_value:
             continue
         ledger_id = int(source["exam_ledger_id"])
-        state = "NORMAL" if raw_value == "1" else "ABNORMAL" if raw_value == "2" else "UNKNOWN"
+        state = "ABNORMAL" if code_value == "1" else "NORMAL" if code_value == "2" else "UNKNOWN"
         ledger_states.setdefault(ledger_id, set()).add(state)
         item["total_count"] += 1
         item[f"{state.lower()}_count"] += 1
@@ -9303,7 +9303,7 @@ def load_facility_summary_detail(
         SELECT
           el.exam_ledger_id,
           eiv.namecode,
-          eiv.raw_value
+          eiv.code_value
         FROM {qname(health_db())}.exam_ledgers AS el
         INNER JOIN {qname(health_db())}.exam_item_values AS eiv
           ON eiv.ledger_id = el.exam_ledger_id
