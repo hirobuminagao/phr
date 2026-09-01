@@ -9014,7 +9014,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .workload-table [data-plan-base] { width: 110px; }
 .workload-table [data-plan-result], .workload-table [data-actual-result] { white-space: nowrap; font-weight: 800; }
 .db-value { margin-top: 5px; color: var(--primary); }
-.workload-footnote dl { display: flex; gap: 12px; margin: 18px 0 0; }
+.workload-footnote dl { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0 0; }
 .workload-footnote dl div { min-width: 160px; padding: 12px; background: var(--surface-muted); border-radius: 6px; }
 .workload-footnote dt { color: var(--muted); font-weight: 700; }
 .workload-footnote dd { margin: 4px 0 0; font-size: 20px; font-weight: 800; }

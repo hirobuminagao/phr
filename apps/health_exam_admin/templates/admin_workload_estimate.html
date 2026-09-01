@@ -68,7 +68,7 @@
     <p class="workload-scope-note">担当者が機械処理中に別作業をできる時間と、画面を見て待つ時間は分けて実測します。健診機関からの回答待ちは月間作業工数へ直接加算しません。</p>
   </section>
 
-  <section class="panel workload-footnote"><h2>実数の読み方</h2><p>選択イベントに現在存在する記録の途中経過です。未受領・未処理は含まれないため、将来の必要人数は想定試算、現在の発生傾向はDB実数ベースで確認します。</p><dl><div><dt>case総数</dt><dd>{{ actuals.case_count or 0 }}件</dd></div><div><dt>施設数</dt><dd>{{ facility_count }}件</dd></div><div><dt>法定NG</dt><dd>{{ actuals.legal_error_case_count or 0 }}件</dd></div></dl></section>
+  <section class="panel workload-footnote"><h2>実数の読み方</h2><p>選択イベントに現在存在する記録の途中経過です。未受領・未処理は含まれないため、将来の必要人数は想定試算、現在の発生傾向はDB実数ベースで確認します。</p><dl><div><dt>case総数</dt><dd>{{ actuals.case_count or 0 }}件</dd></div><div><dt>施設数</dt><dd>{{ facility_count }}件</dd></div><div><dt>法定NG</dt><dd>{{ actuals.legal_error_case_count or 0 }}件</dd></div><div><dt>法定NG率</dt><dd>{% if actuals.case_count %}{{ ((actuals.legal_error_case_count or 0) * 100 / actuals.case_count)|round(1) }}%{% else %}-{% endif %}</dd></div></dl></section>
 </main>
 <script>
 (() => { const root=document.querySelector('[data-workload-estimate]'); if(!root)return; const fields=[...root.querySelectorAll('input')], initial=fields.map(x=>x.value), n=e=>Number.parseFloat(e?.value||'0')||0, h=m=>`${(m/60).toLocaleString('ja-JP',{maximumFractionDigits:1})}時間`;
