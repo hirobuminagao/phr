@@ -2,7 +2,7 @@
 {% set title = "業務工数・増員試算" %}
 {% block body %}
 <header class="topbar">
-  <div><p class="eyebrow">System Admin</p><h1>業務工数・増員試算</h1><p class="subtle">計画上の想定と、現在のDB件数から換算した工数を比較します。</p></div>
+  <div><p class="eyebrow">Utility</p><h1>業務工数・増員試算</h1><p class="subtle">計画上の想定と、現在のDB件数から換算した工数を比較します。</p></div>
   <nav class="top-actions"><a class="ghost-button" href="/">HOME</a><form method="post" action="/logout"><button type="submit" class="ghost-button">ログアウト</button></form></nav>
 </header>
 <main class="page workload-page" data-workload-estimate data-current-case-count="{{ actuals.case_count or 0 }}" data-current-facility-count="{{ actuals.facility_count or 0 }}" data-target-facility-count="213">

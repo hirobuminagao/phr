@@ -280,7 +280,7 @@ flowchart TD
 
 ## 10. 管理画面での試算
 
-システム管理者向けに `/admin/workload-estimate` を設ける。HOMEの「システム管理」から開き、`users.manage` 権限を持つ利用者だけが参照できる。
+業務管理用ユーティリティとして `/admin/workload-estimate` を設ける。HOMEの「ユーティリティ」から開き、作業管理者の `business_settings.manage` またはシステム管理者の `users.manage` 権限を持つ利用者が参照できる。
 
 画面では次の2種類を並べて表示する。
 

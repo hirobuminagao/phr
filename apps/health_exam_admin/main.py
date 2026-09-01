@@ -14166,7 +14166,7 @@ def admin_workload_estimate(request: Request) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+    if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     selected_event_id = _optional_int(request.query_params.get("event_id"))
     params = load_mysql_base_params(db_prefix())
