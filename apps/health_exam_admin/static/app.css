@@ -9004,6 +9004,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .workload-summary span { color: var(--muted); font-weight: 800; }
 .workload-summary strong { margin-top: 10px; font-size: 28px; }
 .workload-summary b { margin: 4px 0 8px; color: var(--primary); font-size: 20px; }
+.workload-summary .workload-progress { margin: 0 0 4px; color: inherit; font-size: 14px; }
 .workload-summary.is-plan { border-top: 4px solid #64748b; }
 .workload-summary.is-actual { border-top: 4px solid var(--primary); }
 .workload-table { min-width: 1180px; }
