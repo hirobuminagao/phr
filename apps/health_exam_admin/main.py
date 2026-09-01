@@ -4233,6 +4233,25 @@ def load_facility_master_admin_rows(
     return [dict(row) for row in cur.fetchall()]
 
 
+def facility_master_search_item(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "exam_facility_id": row.get("exam_facility_id"),
+        "exam_facility_code": row.get("exam_facility_code"),
+        "medical_institution_code": row.get("medical_institution_code"),
+        "reservation_system_medical_institution_code": row.get(
+            "reservation_system_medical_institution_code"
+        ),
+        "exam_facility_name": row.get("exam_facility_name"),
+        "exam_facility_display_name": row.get("exam_facility_display_name"),
+        "postal_code": row.get("postal_code"),
+        "address": row.get("address"),
+        "phone_number": row.get("phone_number"),
+        "is_active": row.get("is_active"),
+        "alias_count": int(row.get("alias_count") or 0),
+        "active_alias_count": int(row.get("active_alias_count") or 0),
+    }
+
+
 @app.get("/admin/facility-master/search", response_class=JSONResponse)
 def search_facility_master(request: Request) -> Response:
     user = require_user(request)
@@ -4279,22 +4298,7 @@ def search_facility_master(request: Request) -> Response:
             "limit": 50,
             "has_more": total_count > 50,
             "items": [
-                {
-                    "exam_facility_id": row.get("exam_facility_id"),
-                    "exam_facility_code": row.get("exam_facility_code"),
-                    "medical_institution_code": row.get("medical_institution_code"),
-                    "reservation_system_medical_institution_code": row.get(
-                        "reservation_system_medical_institution_code"
-                    ),
-                    "exam_facility_name": row.get("exam_facility_name"),
-                    "exam_facility_display_name": row.get("exam_facility_display_name"),
-                    "postal_code": row.get("postal_code"),
-                    "address": row.get("address"),
-                    "phone_number": row.get("phone_number"),
-                    "is_active": row.get("is_active"),
-                    "alias_count": row.get("alias_count"),
-                    "active_alias_count": row.get("active_alias_count"),
-                }
+                facility_master_search_item(row)
                 for row in rows
             ],
         }
