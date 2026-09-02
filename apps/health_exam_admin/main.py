@@ -19261,6 +19261,50 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                         branch_specs.append({"operator": operator, "expected_value": expected_value, "output_value": output_value})
                     if not branch_specs:
                         continue
+                    cur.execute(
+                        f"""
+                        SELECT `xml_value_type`, `result_code_oid`
+                        FROM {qname(dev_db())}.`exam_item_master`
+                        WHERE `namecode` = %s
+                        LIMIT 1
+                        """,
+                        (target_code,),
+                    )
+                    target_item = cur.fetchone()
+                    target_value_type = str((target_item or {}).get("xml_value_type") or "").upper()
+                    target_result_code_oid = str((target_item or {}).get("result_code_oid") or "").strip()
+                    if target_value_type not in {"CD", "CO"} or not target_result_code_oid:
+                        conn.rollback()
+                        return JSONResponse(
+                            {"message": "条件分岐を設定できるのは結果OIDを持つCDまたはCOの健診項目です。"},
+                            status_code=400,
+                        )
+                    cur.execute(
+                        f"""
+                        SELECT DISTINCT `normalized_code`
+                        FROM {qname(master_db())}.`norm_variants`
+                        WHERE `result_code_oid` = %s
+                          AND `is_active` = 1
+                          AND `is_canonical` = 1
+                          AND `normalized_code` IS NOT NULL
+                          AND `normalized_code` <> ''
+                          AND `normalized_code` <> '<<CODE>>'
+                        """,
+                        (target_result_code_oid,),
+                    )
+                    allowed_output_values = {
+                        str(row.get("normalized_code") or "").strip() for row in cur.fetchall()
+                    }
+                    invalid_output_values = {
+                        branch["output_value"] for branch in branch_specs
+                        if branch["output_value"] not in allowed_output_values
+                    }
+                    if invalid_output_values:
+                        conn.rollback()
+                        return JSONResponse(
+                            {"message": "選択した健診項目の登録値候補にない値が指定されています。"},
+                            status_code=400,
+                        )
                     requested_rule_ids = item.get("ruleIds")
                     if requested_rule_ids is not None and not isinstance(requested_rule_ids, list):
                         continue
@@ -19309,7 +19353,7 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                             """,
                             (
                                 csv_format_version_id, branch_rule_key, target_kind, target_resolution_type,
-                                group_code, target_code, branch["output_value"], str(item.get("targetValueType") or "") or None,
+                                group_code, target_code, branch["output_value"], target_value_type,
                                 priority + branch_index, f"screen conditional: {item.get('targetName') or target_code}",
                             ),
                         )

@@ -4559,6 +4559,7 @@
     const blankPolicyButtons = Array.from(conditionalModal?.querySelectorAll("[data-csv-template-blank-policy]") || []);
     const blankOutputField = conditionalModal?.querySelector("[data-csv-template-blank-output]");
     const blankOutputValue = conditionalModal?.querySelector("[data-csv-template-blank-output-value]");
+    const conditionalModeButton = modeButtons.find((button) => button.getAttribute("data-csv-template-target-mode") === "conditional");
     let targetMode = "one";
     let targetKind = "EXAM_ITEM_VALUE";
     let targetValueType = "";
@@ -4604,6 +4605,29 @@
         : [],
     });
 
+    const conditionalCodeOptions = () => {
+      if (!focusedItem || !["CD", "CO"].includes(String(focusedItem.xml_value_type || "").toUpperCase())) return [];
+      const rows = Array.isArray(focusedItem.standard_code_rows) ? focusedItem.standard_code_rows : [];
+      const seen = new Set();
+      return rows.reduce((options, row) => {
+        const code = String(row.normalized_code || "").trim();
+        if (!code || code === "<<CODE>>" || seen.has(code)) return options;
+        seen.add(code);
+        const displayName = String(row.display_name || "").trim();
+        options.push({ code, label: displayName ? `${code}: ${displayName}` : code });
+        return options;
+      }, []);
+    };
+
+    const conditionalOutputOptionsMarkup = (selectedValue) => {
+      const selected = String(selectedValue || "");
+      const options = conditionalCodeOptions();
+      return [
+        `<option value="">登録値を選択</option>`,
+        ...options.map((option) => `<option value="${escapeHtml(option.code)}" ${option.code === selected ? "selected" : ""}>${escapeHtml(option.label)}</option>`),
+      ].join("");
+    };
+
     const renderConditionalSummary = () => {
       if (!conditionalSummary) return;
       conditionalSummary.hidden = targetMode !== "conditional";
@@ -4628,17 +4652,29 @@
             <strong class="csv-template-conditional-branch__number">条件 ${index + 1}</strong>
             <label><span>判定</span><select data-csv-template-conditional-operator><option value="EQUALS" ${branch.operator === "EQUALS" ? "selected" : ""}>一致する</option><option value="NOT_EQUALS" ${branch.operator === "NOT_EQUALS" ? "selected" : ""}>一致しない</option><option value="IN" ${branch.operator === "IN" ? "selected" : ""}>いずれかに一致</option></select></label>
             <label><span>比較する値</span><input data-csv-template-conditional-expected value="${escapeHtml(branch.expectedValue)}" placeholder="例: A"></label>
-            <label><span>登録値</span><input data-csv-template-conditional-output value="${escapeHtml(branch.outputValue)}" placeholder="例: 2"></label>
+            <label><span>登録値</span><select data-csv-template-conditional-output>${conditionalOutputOptionsMarkup(branch.outputValue)}</select></label>
             <button type="button" class="ghost-button danger-action-button" data-csv-template-conditional-remove="${index}">削除</button>
           </article>`).join("")
         : `<div class="empty-state">条件がありません。「条件を追加」から設定してください。</div>`;
       blankPolicyButtons.forEach((button) => button.classList.toggle("is-selected", button.getAttribute("data-csv-template-blank-policy") === conditionalWorking.blankPolicy));
       if (blankOutputField) blankOutputField.hidden = conditionalWorking.blankPolicy !== "OUTPUT";
-      if (blankOutputValue) blankOutputValue.value = conditionalWorking.blankOutputValue;
+      if (blankOutputValue) blankOutputValue.innerHTML = conditionalOutputOptionsMarkup(conditionalWorking.blankOutputValue);
     };
 
     const openConditionalModal = () => {
       if (!conditionalModal) return;
+      if (!focusedItem) {
+        setComposerMessage("先に取り込み先の健診項目を選択してください。");
+        return;
+      }
+      if (!["CD", "CO"].includes(String(focusedItem.xml_value_type || "").toUpperCase())) {
+        setComposerMessage("条件分岐を設定できるのはCDまたはCOの健診項目です。");
+        return;
+      }
+      if (!conditionalCodeOptions().length) {
+        setComposerMessage("選択した健診項目に登録値候補がありません。結果OIDのnorm設定を確認してください。");
+        return;
+      }
       if (!selectedHeaders.length) {
         setComposerMessage("先に判定に使うCSVヘッダーを選択してください。");
         return;
@@ -4798,6 +4834,18 @@
 
     const renderSelectedTargets = () => {
       if (!selectedList) return;
+      const conditionalAvailable = Boolean(
+        focusedItem
+        && ["CD", "CO"].includes(String(focusedItem.xml_value_type || "").toUpperCase())
+        && conditionalCodeOptions().length
+      );
+      if (conditionalModeButton) {
+        conditionalModeButton.disabled = !conditionalAvailable;
+        conditionalModeButton.classList.toggle("disabled", !conditionalAvailable);
+        conditionalModeButton.title = conditionalAvailable
+          ? "CSV値による条件分岐を設定"
+          : "CDまたはCOの健診項目を選択すると設定できます";
+      }
       renderConditionalSummary();
       if (detailToggle) {
         detailToggle.disabled = !selectedTarget();
@@ -4882,8 +4930,20 @@
     const selectTemplateTargetItem = (namecode) => {
       const item = targetItems.find((candidate) => candidate.namecode === namecode);
       if (!item) return;
+      if (focusedItem?.namecode && focusedItem.namecode !== item.namecode) {
+        conditionalConfig = { blankPolicy: "SKIP", blankOutputValue: "", branches: [] };
+      }
       focusedItem = item;
       focusedLedger = null;
+      if (
+        targetMode === "conditional"
+        && (!["CD", "CO"].includes(String(item.xml_value_type || "").toUpperCase()) || !conditionalCodeOptions().length)
+      ) {
+        targetMode = "one";
+        modeButtons.forEach((button) => {
+          button.classList.toggle("is-selected", button.getAttribute("data-csv-template-target-mode") === "one");
+        });
+      }
       renderTargetDetail(item);
       renderSelectedTargets();
       renderTargetResults();
@@ -5068,7 +5128,7 @@
       openLedgerModal();
     };
 
-    const loadDraftForEdit = (draft) => {
+    const loadDraftForEdit = async (draft) => {
       if (draft.targetKind === "LEDGER_FIELD") {
         loadLedgerDraftForEdit(draft);
         return;
@@ -5097,7 +5157,15 @@
           renderTargetDetail(focusedLedger);
         }
       } else {
-        focusedItem = {
+        let loadedItem = null;
+        try {
+          const params = new URLSearchParams({ keyword: draft.targetCode || "" });
+          const payload = await fetchJson(`/api/csv-mapping-lab/exam-items?${params.toString()}`);
+          loadedItem = (Array.isArray(payload.items) ? payload.items : []).find((item) => item.namecode === draft.targetCode) || null;
+        } catch (_error) {
+          loadedItem = null;
+        }
+        focusedItem = loadedItem || {
           targetKind: "EXAM_ITEM_VALUE",
           namecode: draft.targetCode || "",
           item_name: draft.targetName || "",
@@ -5118,7 +5186,9 @@
 
     modeButtons.forEach((button) => {
       button.addEventListener("click", () => {
-        targetMode = button.getAttribute("data-csv-template-target-mode") || "one";
+        const nextMode = button.getAttribute("data-csv-template-target-mode") || "one";
+        if (nextMode === "conditional" && button.disabled) return;
+        targetMode = nextMode;
         modeButtons.forEach((modeButton) => modeButton.classList.toggle("is-selected", modeButton === button));
         if (["one", "conditional"].includes(targetMode) && selectedHeaders.length > 1) {
           selectedHeaders = selectedHeaders.slice(0, 1);
@@ -5270,6 +5340,9 @@
       });
     });
     blankOutputValue?.addEventListener("input", () => {
+      if (conditionalWorking) conditionalWorking.blankOutputValue = blankOutputValue.value;
+    });
+    blankOutputValue?.addEventListener("change", () => {
       if (conditionalWorking) conditionalWorking.blankOutputValue = blankOutputValue.value;
     });
     conditionalBranchesElement?.addEventListener("input", (event) => {
