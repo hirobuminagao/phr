@@ -475,29 +475,7 @@ def run_csv_mapping_data_check(
             )
 
         if len(preview_rows) < MAX_PREVIEW_ROWS:
-            value_count = sum(1 for cell in preview_cells if cell.get("raw_value") not in {None, ""})
-            failure_count = sum(1 for cell in preview_cells if cell.get("status") in {"ERROR", "CONFLICT"})
-            code_counts: Counter[str] = Counter()
-            for cell in preview_cells:
-                target = targets.get(str(cell.get("target_key") or ""))
-                if str((target or {}).get("data_type") or "").upper() != "CD":
-                    continue
-                output_value = str(cell.get("output_value") or "").strip()
-                if output_value:
-                    code_counts[output_value] += 1
-            preview_rows.append(
-                {
-                    "line_no": line_no,
-                    "value_count": value_count,
-                    "blank_count": max(len(preview_cells) - value_count, 0),
-                    "failure_count": failure_count,
-                    "code_counts": [
-                        {"code_value": code_value, "count": count}
-                        for code_value, count in code_counts.most_common()
-                    ],
-                    "cells": preview_cells,
-                }
-            )
+            preview_rows.append({"line_no": line_no, "cells": preview_cells})
 
     serialized_targets = []
     for target in targets.values():

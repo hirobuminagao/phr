@@ -143,9 +143,9 @@ def test_streaming_check_reads_screen_created_source_column_rules(tmp_path: Path
     )
 
     assert result["targets"][0]["value_count"] == 1
-    assert result["preview_rows"][0]["value_count"] == 1
-    assert result["preview_rows"][0]["blank_count"] == 0
-    assert result["preview_rows"][0]["code_counts"] == [{"code_value": "2", "count": 1}]
+    assert result["targets"][0]["blank_count"] == 0
+    assert result["targets"][0]["code_rows"][0]["code_value"] == "2"
+    assert result["targets"][0]["code_rows"][0]["count"] == 1
 
 
 def test_streaming_check_counts_blank_rows_without_normalizing(tmp_path: Path) -> None:
