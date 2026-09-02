@@ -15,7 +15,7 @@
 
 ## Documents
 
-2026-09-01時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。出力リストと個人case一覧の直近の画面・検索挙動は `45_export_list_and_case_filter_current_spec.md`、月次NG報告の設計は `49_monthly_ng_and_rescue_reporting_design.md` を参照する。
+2026-09-02時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。出力リストと個人case一覧の直近の画面・検索挙動は `45_export_list_and_case_filter_current_spec.md`、月次NG報告の設計は `49_monthly_ng_and_rescue_reporting_design.md`、CSVマッピングの実データdry-run検証は `51_csv_mapping_real_data_check_design.md` を参照する。
 実際のカラム・処理挙動は適用対象のDDL、migration、seed、コードを優先する。
 `05_design_history.md` は協議履歴、`30_pre_implementation_review.md` は実装着手時の基準点であり、旧案や当時の未決事項が残っていても現在正とは限らない。
 
@@ -110,6 +110,9 @@
 - `50_handoff_notice_and_change_request_backlog.md`
   - 担当者間の申し送り、健診機関・alias注意事項、HOMEの未読通知、業務対象への関連リンク、改修要望管理の将来案を整理する。
   - 申し送りと改修要望を同じ仕組みにするかは未決定とし、共通化候補と分離すべき状態・権限を記録する。
+- `51_csv_mapping_real_data_check_design.md`
+  - 保存済みCSVマッピングを実データへdry-run適用し、CD/COの変換後分布、PQの値、空欄・変換失敗を本取込前に確認する設計。
+  - 無効テンプレートの有効化前確認、通常importとの評価処理共通化、10,000行制限、実データ破棄、CSVマッピング編集権限を整理する。
 
 ## ADR Policy
 
