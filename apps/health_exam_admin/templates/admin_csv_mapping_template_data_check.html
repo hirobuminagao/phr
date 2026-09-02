@@ -8,6 +8,7 @@
     <p class="subtle">{{ template.mapping_version }} / {{ template.exam_facility_display_name or template.exam_facility_name or "健診機関未設定" }}</p>
   </div>
   <nav class="top-actions">
+    <a class="primary-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/edit">マッピングを編集</a>
     <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}">詳細へ戻る</a>
     <a class="ghost-button" href="/admin/csv-mapping-templates">一覧へ戻る</a>
     <a class="ghost-button" href="/">HOME</a>
@@ -38,6 +39,7 @@
   <section class="panel" data-csv-data-check-result hidden>
     <div class="section-heading">
       <div><h2>チェック結果</h2><p class="subtle">表で実値と変換後を確認できます。割合の分母は実際に処理した行数です。</p></div>
+      <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/edit">マッピングを編集</a>
     </div>
     <div data-csv-data-check-overview></div>
     <div data-csv-data-check-preview></div>
