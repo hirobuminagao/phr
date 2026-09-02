@@ -7610,6 +7610,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-conditional-branch label span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .csv-template-conditional-branch__number { align-self: center; font-weight: 800; }
 .csv-template-conditional-branch [data-csv-template-conditional-remove] { min-width: 72px; white-space: nowrap; }
+.csv-template-conditional-add { margin-top: 12px; width: 100%; }
 @media (max-width: 760px) {
   .csv-template-conditional-blank,
   .csv-template-conditional-branch { grid-template-columns: 1fr; }

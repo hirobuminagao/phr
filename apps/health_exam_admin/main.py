@@ -19318,7 +19318,9 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                         placeholders = ", ".join(["%s"] * len(existing_rule_ids))
                         cur.execute(
                             f"""
-                            SELECT `csv_exam_result_mapping_rule_id`, `edit_capability`
+                            SELECT `csv_exam_result_mapping_rule_id`, `rule_origin_type`, `edit_capability`,
+                                   `target_kind`, `selection_mode`, `method_structure_type`,
+                                   `value_source_type`, `fixed_value`
                             FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
                             WHERE `csv_format_version_id` = %s
                               AND `csv_exam_result_mapping_rule_id` IN ({placeholders})
@@ -19326,13 +19328,24 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                             (csv_format_version_id, *existing_rule_ids),
                         )
                         existing_rows = [dict(row) for row in cur.fetchall()]
-                        if len(existing_rows) != len(existing_rule_ids) or any(
-                            str(row.get("edit_capability") or "").upper() != "CONDITIONAL_FIXED"
+                        existing_conditional_group = bool(existing_rows) and all(
+                            str(row.get("edit_capability") or "").upper() == "CONDITIONAL_FIXED"
                             for row in existing_rows
+                        )
+                        existing_screen_simple = (
+                            len(existing_rows) == 1
+                            and len(existing_rule_ids) == 1
+                            and str(existing_rows[0].get("rule_origin_type") or "").upper() == "SCREEN"
+                            and str(existing_rows[0].get("edit_capability") or "").upper() == "BASIC_SIMPLE"
+                            and is_csv_mapping_screen_simple_rule(existing_rows[0])
+                        )
+                        if (
+                            len(existing_rows) != len(existing_rule_ids)
+                            or not (existing_conditional_group or existing_screen_simple)
                         ):
                             conn.rollback()
                             return JSONResponse(
-                                {"message": "変更対象の条件分岐ルールが見つからないか、画面編集できない状態です。画面を再読み込みしてください。"},
+                                {"message": "変更対象のルールが見つからないか、条件分岐へ変更できない状態です。画面を再読み込みしてください。"},
                                 status_code=409,
                             )
                         cur.execute(
