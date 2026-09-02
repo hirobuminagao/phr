@@ -113,6 +113,9 @@
 - `51_csv_mapping_real_data_check_design.md`
   - 保存済みCSVマッピングを実データへdry-run適用し、CD/COの変換後分布、PQの値、空欄・変換失敗を本取込前に確認する設計。
   - 無効テンプレートの有効化前確認、通常importとの評価処理共通化、10,000行制限、実データ破棄、CSVマッピング編集権限を整理する。
+- `52_csv_mapping_conditional_branch_editor_design.md`
+  - CSVマッピング編集モーダルへ条件分岐を追加し、別モーダルで空欄時の処理、比較条件、固定出力値を設定する初期実装仕様。
+  - 空欄設定を条件一覧と分離すること、同一targetの複数固定値ruleを一まとまりで保存・再編集すること、聴力判定normalize追加を整理する。
 
 ## ADR Policy
 

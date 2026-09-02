@@ -306,13 +306,13 @@
       </article>
       <article class="summary-card">
         <small>ルール</small>
-        <strong>1:1 / 結合1:n</strong>
-        <span>まずは単純取り込みと、複数列の文字結合だけを画面編集対象にします。</span>
+        <strong>1:1 / 結合1:n / 条件分岐</strong>
+        <span>単純取り込み、複数列の文字結合、CSV値による固定値の条件分岐を画面から設定できます。</span>
       </article>
       <article class="summary-card">
         <small>未対応</small>
         <strong>表示のみ</strong>
-        <span>条件分岐、固定値、排他候補などは種類だけ見せて編集不可にします。</span>
+        <span>排他候補など、画面未対応の複雑なルールは種類だけ見せて編集不可にします。</span>
       </article>
     </div>
   </section>
@@ -399,9 +399,18 @@
           <span>方式</span>
           <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
           <button type="button" data-csv-template-target-mode="many">1:n 結合</button>
+          <button type="button" data-csv-template-target-mode="conditional">条件分岐</button>
         </div>
         <button type="button" class="ghost-button csv-template-detail-toggle" data-csv-template-target-detail-toggle disabled>項目詳細</button>
       </div>
+
+      <section class="csv-template-conditional-summary" data-csv-template-conditional-summary hidden>
+        <div>
+          <strong>条件分岐</strong>
+          <small data-csv-template-conditional-summary-text>条件を設定してください。</small>
+        </div>
+        <button type="button" class="ghost-button" data-csv-template-conditional-open>条件を設定</button>
+      </section>
 
       <div class="csv-template-composer-layout">
         <section class="csv-template-composer-column csv-template-target-item-picker">
@@ -476,6 +485,48 @@
     <div class="edit-modal__actions csv-template-composer-actions">
       <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
       <button type="button" class="primary-button" data-csv-template-target-apply disabled>マッピングに追加</button>
+    </div>
+  </section>
+</div>
+
+<div id="csv-template-conditional-modal" class="edit-modal csv-template-conditional-modal" hidden>
+  <div class="edit-modal__backdrop" data-csv-template-conditional-cancel></div>
+  <section class="edit-modal__panel csv-template-conditional-modal__panel" role="dialog" aria-modal="true" aria-labelledby="csv-template-conditional-title">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">Conditional Mapping</p>
+        <h2 id="csv-template-conditional-title">条件分岐を設定</h2>
+        <p class="subtle">選択したCSVヘッダーの値によって、取り込み先へ登録する固定値を分けます。</p>
+      </div>
+      <button type="button" class="ghost-button" data-csv-template-conditional-cancel>閉じる</button>
+    </div>
+
+    <section class="csv-template-conditional-blank">
+      <div>
+        <strong>空欄時の処理</strong>
+        <small>個別条件より先に判定します。</small>
+      </div>
+      <div class="csv-template-target-item-mode" aria-label="空欄時の処理">
+        <button type="button" class="is-selected" data-csv-template-blank-policy="SKIP">出力しない</button>
+        <button type="button" data-csv-template-blank-policy="OUTPUT">出力する</button>
+      </div>
+      <label data-csv-template-blank-output hidden>
+        <span>空欄時の登録値</span>
+        <input data-csv-template-blank-output-value placeholder="例: 9">
+      </label>
+    </section>
+
+    <section class="csv-template-conditional-branches">
+      <div class="section-heading">
+        <div><h3>条件</h3><p class="subtle">同じCSV値へ複数条件が一致しないように設定してください。</p></div>
+        <button type="button" class="ghost-button" data-csv-template-conditional-add>条件を追加</button>
+      </div>
+      <div data-csv-template-conditional-branches></div>
+    </section>
+
+    <div class="edit-modal__actions csv-template-composer-actions">
+      <button type="button" class="ghost-button" data-csv-template-conditional-cancel>キャンセル</button>
+      <button type="button" class="primary-button" data-csv-template-conditional-apply>条件を決定</button>
     </div>
   </section>
 </div>

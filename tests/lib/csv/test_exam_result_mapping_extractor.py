@@ -82,6 +82,98 @@ def test_fixed_value_is_emitted_when_row_condition_matches() -> None:
     assert result.errors == ()
 
 
+def test_conditional_not_equals_skips_blank_when_not_empty_is_combined() -> None:
+    mapping = rule(
+        condition(
+            1,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="NOT_EMPTY",
+        ),
+        condition(
+            2,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="NOT_EQUALS",
+            expected_value="A",
+        ),
+        value_source_type="FIXED",
+        fixed_value="1",
+    )
+
+    matched = extract_rule_value(["B"], mapping)
+    blank = extract_rule_value([""], mapping)
+
+    assert matched.values_by_role["VALUE"] == "1"
+    assert matched.errors == ()
+    assert blank.values_by_role == {}
+    assert blank.errors == ("NO_CONDITION_GROUP_MATCHED",)
+
+
+def test_blank_output_does_not_overlap_guarded_not_equals_branch() -> None:
+    blank_mapping = rule(
+        condition(
+            1,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="EMPTY",
+        ),
+        value_source_type="FIXED",
+        fixed_value="9",
+    )
+    non_a_mapping = rule(
+        condition(
+            1,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="NOT_EMPTY",
+        ),
+        condition(
+            2,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="NOT_EQUALS",
+            expected_value="A",
+        ),
+        value_source_type="FIXED",
+        fixed_value="1",
+    )
+
+    blank_result = extract_rule_value([""], blank_mapping)
+    non_a_result = extract_rule_value([""], non_a_mapping)
+
+    assert blank_result.values_by_role["VALUE"] == "9"
+    assert non_a_result.values_by_role == {}
+
+
+def test_conditional_in_matches_comma_separated_candidates() -> None:
+    mapping = rule(
+        condition(
+            1,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="IN",
+            expected_value="B, C, D2",
+        ),
+        value_source_type="FIXED",
+        fixed_value="1",
+    )
+
+    matched = extract_rule_value(["D2"], mapping)
+    unmatched = extract_rule_value(["A"], mapping)
+
+    assert matched.values_by_role["VALUE"] == "1"
+    assert matched.errors == ()
+    assert unmatched.values_by_role == {}
+    assert unmatched.errors == ("NO_CONDITION_GROUP_MATCHED",)
+
+
 def test_multiple_value_columns_are_joined_while_blank_values_are_ignored() -> None:
     mapping = rule(
         condition(1, condition_type="HEADER_MATCH", column_no=1),

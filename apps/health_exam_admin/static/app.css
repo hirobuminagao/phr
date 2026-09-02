@@ -7581,6 +7581,39 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #f8fafc;
 }
 
+.csv-template-conditional-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #b9d9ce;
+  border-left: 5px solid var(--primary);
+  border-radius: 8px;
+  background: #f0faf6;
+}
+
+.csv-template-conditional-summary[hidden] { display: none; }
+.csv-template-conditional-summary strong,
+.csv-template-conditional-summary small { display: block; }
+.csv-template-conditional-summary small { margin-top: 3px; color: var(--muted); }
+
+.csv-template-conditional-modal { z-index: 95; }
+.csv-template-conditional-modal__panel { width: min(900px, calc(100vw - 32px)); }
+.csv-template-conditional-blank,
+.csv-template-conditional-branches { margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; }
+.csv-template-conditional-blank { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1fr); gap: 16px; align-items: end; }
+.csv-template-conditional-blank strong,
+.csv-template-conditional-blank small { display: block; }
+.csv-template-conditional-branch-list { display: grid; gap: 12px; }
+.csv-template-conditional-branch { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(150px, 0.8fr) auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid #d7e2ef; border-radius: 8px; background: #fff; }
+.csv-template-conditional-branch label span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.csv-template-conditional-branch__number { align-self: center; font-weight: 800; }
+@media (max-width: 760px) {
+  .csv-template-conditional-blank,
+  .csv-template-conditional-branch { grid-template-columns: 1fr; }
+}
+
 .csv-template-target-item-picker {
   min-width: 0;
   display: grid;

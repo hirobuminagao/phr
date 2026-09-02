@@ -4853,7 +4853,7 @@ def load_csv_mapping_template_rules(cur: Any, *, csv_format_version_id: int, lim
         row["rule_origin_label"] = csv_mapping_rule_origin_label(row.get("rule_origin_type"))
         row["edit_capability_label"] = csv_mapping_edit_capability_label(row.get("edit_capability"))
         row["is_screen_editable"] = (
-            str(row.get("edit_capability") or "").upper() == "BASIC_SIMPLE"
+            str(row.get("edit_capability") or "").upper() in {"BASIC_SIMPLE", "CONDITIONAL_FIXED"}
             or inferred_screen_simple
         )
     return rows
@@ -4973,6 +4973,7 @@ def csv_mapping_edit_capability_label(value: Any) -> str:
     key = str(value or "VIEW_ONLY").strip().upper()
     labels = {
         "BASIC_SIMPLE": "編集可",
+        "CONDITIONAL_FIXED": "条件分岐・編集可",
         "VIEW_ONLY": "表示のみ",
         "UNSUPPORTED": "未実装",
     }
@@ -5102,6 +5103,87 @@ def enrich_csv_mapping_template_rules_with_conditions(
                 for condition in value_conditions
             ],
         }
+        rule["screen_conditions"] = [dict(condition) for condition in rule_conditions]
+
+
+def build_csv_mapping_template_edit_rules(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    conditional_groups: dict[str, list[dict[str, Any]]] = {}
+    for rule in rules:
+        group_code = str(rule.get("selection_group_code") or "").strip()
+        is_conditional = (
+            str(rule.get("method_structure_type") or "").upper() == "CONDITIONAL_FIXED"
+            and str(rule.get("value_source_type") or "").upper() == "FIXED"
+            and bool(group_code)
+        )
+        if is_conditional:
+            conditional_groups.setdefault(group_code, []).append(rule)
+        else:
+            result.append(rule)
+
+    for group_code, group_rules in conditional_groups.items():
+        ordered = sorted(group_rules, key=lambda row: (_optional_int(row.get("priority")) or 0, _optional_int(row.get("csv_exam_result_mapping_rule_id")) or 0))
+        display_rule = dict(ordered[0])
+        headers: list[dict[str, str]] = []
+        branches: list[dict[str, str]] = []
+        blank_policy = "SKIP"
+        blank_output_value = ""
+        condition_summaries: list[str] = []
+        for branch_rule in ordered:
+            conditions = list(branch_rule.get("screen_conditions") or [])
+            for condition in conditions:
+                header = {
+                    "columnNo": str(condition.get("column_no") or ""),
+                    "headerName": str(condition.get("header_name") or ""),
+                    "headerContext": str(condition.get("header_context") or ""),
+                }
+                if header not in headers:
+                    headers.append(header)
+            meaningful = next(
+                (condition for condition in conditions if str(condition.get("operator") or "").upper() in {"EMPTY", "EQUALS", "NOT_EQUALS", "IN"}),
+                None,
+            )
+            if not meaningful:
+                continue
+            operator = str(meaningful.get("operator") or "").upper()
+            output_value = str(branch_rule.get("fixed_value") or "")
+            if operator == "EMPTY":
+                blank_policy = "OUTPUT"
+                blank_output_value = output_value
+                condition_summaries.append(f"空欄 -> {output_value}")
+                continue
+            expected_value = str(meaningful.get("expected_value") or "")
+            branches.append({"operator": operator, "expectedValue": expected_value, "outputValue": output_value})
+            operator_label = {"EQUALS": "=", "NOT_EQUALS": "!=", "IN": "いずれか"}.get(operator, operator)
+            condition_summaries.append(f"{expected_value} {operator_label} -> {output_value}")
+        display_rule["rule_content_summary"] = f"条件分岐 / {len(branches)}条件 / 空欄:{'出力' if blank_policy == 'OUTPUT' else '出力しない'}"
+        display_rule["value_condition_summary"] = " / ".join(
+            filter(None, [header.get("headerName") or f"{header.get('columnNo')}列目" for header in headers])
+        )
+        display_rule["rule_condition_summary"] = " / ".join(condition_summaries)
+        display_rule["is_screen_editable"] = all(
+            str(rule.get("edit_capability") or "").upper() == "CONDITIONAL_FIXED" for rule in ordered
+        )
+        display_rule["edit_capability_label"] = "条件分岐・編集可" if display_rule["is_screen_editable"] else "表示のみ"
+        payload = dict(display_rule.get("screen_edit_payload") or {})
+        payload.update(
+            {
+                "ruleId": _optional_int(ordered[0].get("csv_exam_result_mapping_rule_id")),
+                "ruleIds": [_optional_int(rule.get("csv_exam_result_mapping_rule_id")) for rule in ordered],
+                "groupCode": group_code,
+                "mode": "conditional",
+                "headers": headers[:1],
+                "conditional": {
+                    "blankPolicy": blank_policy,
+                    "blankOutputValue": blank_output_value,
+                    "branches": branches,
+                },
+            }
+        )
+        display_rule["screen_edit_payload"] = payload
+        result.append(display_rule)
+
+    return sorted(result, key=lambda row: (0 if row.get("is_active") else 1, _optional_int(row.get("priority")) or 0, str(row.get("rule_key") or "")))
 
 
 def build_csv_mapping_template_target_groups(rules: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -18755,6 +18837,7 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
             )
             enrich_csv_mapping_template_rules_with_conditions(rules, conditions)
             target_groups = build_csv_mapping_template_target_groups(rules)
+            edit_rules = build_csv_mapping_template_edit_rules(rules)
             header_columns = (
                 attach_csv_header_neighbors(
                     load_csv_mapping_template_header_columns(cur, template=template, conditions=conditions)
@@ -18779,7 +18862,7 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
             "mode": "edit",
             "template": template,
             "prefecture_options": PREFECTURE_OPTIONS,
-            "rules": rules,
+            "rules": edit_rules,
             "target_groups": target_groups,
             "header_columns": header_columns,
             "header_preview": build_csv_mapping_template_header_preview_payload(template, header_columns),
@@ -19100,11 +19183,12 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                 target_kind = str(item.get("targetKind") or "").strip()
                 if target_kind not in {"LEDGER_FIELD", "EXAM_ITEM_VALUE"}:
                     continue
-                mode = "many" if str(item.get("mode") or "") == "many" else "one"
+                requested_mode = str(item.get("mode") or "").strip().lower()
+                mode = requested_mode if requested_mode in {"one", "many", "conditional"} else "one"
                 headers = item.get("headers")
                 if not isinstance(headers, list) or not headers:
                     continue
-                if mode == "one":
+                if mode in {"one", "conditional"}:
                     headers = headers[:1]
                 condition_rows = []
                 for header_index, header in enumerate(headers, start=1):
@@ -19144,6 +19228,120 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                 method_structure_type = "MULTI_COLUMN_JOIN" if mode == "many" else "SINGLE_COLUMN"
                 target_resolution_type = "LEDGER_FIELD" if target_kind == "LEDGER_FIELD" else "SINGLE_NAMECODE"
                 priority = max_priority + (index * 10)
+                if mode == "conditional":
+                    if not has_rule_origin_type or not has_edit_capability:
+                        conn.rollback()
+                        return JSONResponse(
+                            {"message": "条件分岐の保存に必要なDB更新が未適用です。"},
+                            status_code=409,
+                        )
+                    conditional = item.get("conditional")
+                    branches = conditional.get("branches") if isinstance(conditional, Mapping) else None
+                    blank_policy = str((conditional or {}).get("blankPolicy") or "SKIP").upper() if isinstance(conditional, Mapping) else "SKIP"
+                    blank_output_value = str((conditional or {}).get("blankOutputValue") or "").strip() if isinstance(conditional, Mapping) else ""
+                    if target_kind != "EXAM_ITEM_VALUE" or not isinstance(branches, list) or not branches:
+                        continue
+                    source_header = headers[0] if headers and isinstance(headers[0], Mapping) else {}
+                    source_header_name = str(source_header.get("headerName") or "").strip() or None
+                    source_column_no = _optional_int(source_header.get("columnNo"))
+                    source_header_context = str(source_header.get("headerContext") or "").strip() or None
+                    if not source_header_name and not source_column_no:
+                        continue
+                    branch_specs: list[dict[str, str]] = []
+                    if blank_policy == "OUTPUT" and blank_output_value:
+                        branch_specs.append({"operator": "EMPTY", "expected_value": "", "output_value": blank_output_value})
+                    for branch in branches:
+                        if not isinstance(branch, Mapping):
+                            continue
+                        operator = str(branch.get("operator") or "EQUALS").strip().upper()
+                        expected_value = str(branch.get("expectedValue") or "").strip()
+                        output_value = str(branch.get("outputValue") or "").strip()
+                        if operator not in {"EQUALS", "NOT_EQUALS", "IN"} or not output_value or not expected_value:
+                            continue
+                        branch_specs.append({"operator": operator, "expected_value": expected_value, "output_value": output_value})
+                    if not branch_specs:
+                        continue
+                    requested_rule_ids = item.get("ruleIds")
+                    if requested_rule_ids is not None and not isinstance(requested_rule_ids, list):
+                        continue
+                    existing_rule_ids = [
+                        value for value in (_optional_int(existing_rule_id) for existing_rule_id in (requested_rule_ids or [])) if value
+                    ]
+                    if not existing_rule_ids and _optional_int(item.get("ruleId")):
+                        existing_rule_ids = [_optional_int(item.get("ruleId"))]
+                    if existing_rule_ids:
+                        placeholders = ", ".join(["%s"] * len(existing_rule_ids))
+                        cur.execute(
+                            f"""
+                            SELECT `csv_exam_result_mapping_rule_id`, `edit_capability`
+                            FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                            WHERE `csv_format_version_id` = %s
+                              AND `csv_exam_result_mapping_rule_id` IN ({placeholders})
+                            """,
+                            (csv_format_version_id, *existing_rule_ids),
+                        )
+                        existing_rows = [dict(row) for row in cur.fetchall()]
+                        if len(existing_rows) != len(existing_rule_ids) or any(
+                            str(row.get("edit_capability") or "").upper() != "CONDITIONAL_FIXED"
+                            for row in existing_rows
+                        ):
+                            continue
+                        cur.execute(
+                            f"DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_conditions` WHERE `csv_exam_result_mapping_rule_id` IN ({placeholders})",
+                            tuple(existing_rule_ids),
+                        )
+                        cur.execute(
+                            f"DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_rules` WHERE `csv_format_version_id` = %s AND `csv_exam_result_mapping_rule_id` IN ({placeholders})",
+                            (csv_format_version_id, *existing_rule_ids),
+                        )
+                    group_code = str(item.get("groupCode") or "").strip() or f"screen_cond_{secrets.token_hex(12)}"
+                    for branch_index, branch in enumerate(branch_specs, start=1):
+                        branch_rule_key = f"screen.{csv_format_version_id}.conditional.{target_part}.{datetime.now().strftime('%Y%m%d%H%M%S%f')}.{index}.{branch_index}"
+                        cur.execute(
+                            f"""
+                            INSERT INTO {qname(master_db())}.`csv_exam_result_mapping_rules` (
+                              `csv_format_version_id`, `rule_key`, `target_kind`, `target_resolution_type`,
+                              `selection_mode`, `selection_group_code`, `target_namecode`, `target_field`,
+                              `method_structure_type`, `value_source_type`, `fixed_value`, `raw_value_type`,
+                              `rule_origin_type`, `edit_capability`, `is_required`, `priority`, `is_active`, `note`
+                            ) VALUES (%s, %s, %s, %s, 'DIRECT', %s, %s, NULL, 'CONDITIONAL_FIXED', 'FIXED', %s, %s,
+                                      'SCREEN', 'CONDITIONAL_FIXED', 0, %s, 1, %s)
+                            """,
+                            (
+                                csv_format_version_id, branch_rule_key, target_kind, target_resolution_type,
+                                group_code, target_code, branch["output_value"], str(item.get("targetValueType") or "") or None,
+                                priority + branch_index, f"screen conditional: {item.get('targetName') or target_code}",
+                            ),
+                        )
+                        conditional_rule_id = int(cur.lastrowid)
+                        condition_specs = [(branch["operator"], branch["expected_value"] or None)]
+                        if branch["operator"] == "NOT_EQUALS":
+                            condition_specs.insert(0, ("NOT_EMPTY", None))
+                        cur.executemany(
+                            f"""
+                            INSERT INTO {qname(master_db())}.`csv_exam_result_mapping_conditions` (
+                              `csv_exam_result_mapping_rule_id`, `condition_group_no`, `condition_type`, `locator_type`,
+                              `header_context`, `header_name`, `header_occurrence`, `column_no`, `operator`,
+                              `expected_value`, `source_role`, `priority`, `is_active`, `note`
+                            ) VALUES (%s, 1, 'CELL_VALUE', %s, %s, %s, 1, %s, %s, %s, 'QUALIFIER', %s, 1, %s)
+                            """,
+                            [
+                                (
+                                    conditional_rule_id,
+                                    "HEADER_CONTEXT_AND_NAME" if source_header_context else "HEADER_NAME",
+                                    source_header_context,
+                                    source_header_name,
+                                    source_column_no,
+                                    operator,
+                                    expected_value,
+                                    condition_index * 100,
+                                    f"screen conditional:{branch_rule_key}",
+                                )
+                                for condition_index, (operator, expected_value) in enumerate(condition_specs, start=1)
+                            ],
+                        )
+                    saved_count += 1
+                    continue
                 if rule_id:
                     cur.execute(
                         f"""
@@ -19342,7 +19540,7 @@ async def api_delete_csv_mapping_template_screen_rule(
                 f"""
                 SELECT `csv_exam_result_mapping_rule_id`, `csv_format_version_id`,
                        `target_kind`, `selection_mode`, `method_structure_type`,
-                       `value_source_type`, `fixed_value`,
+                       `selection_group_code`, `value_source_type`, `fixed_value`,
                        {('`edit_capability`' if has_edit_capability else "'VIEW_ONLY'")} AS `edit_capability`
                 FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
                 WHERE `csv_exam_result_mapping_rule_id` = %s
@@ -19354,23 +19552,38 @@ async def api_delete_csv_mapping_template_screen_rule(
             if not rule:
                 conn.rollback()
                 return JSONResponse({"message": "対象ルールがありません。"}, status_code=404)
-            if str(rule.get("edit_capability") or "").upper() != "BASIC_SIMPLE" and not is_csv_mapping_screen_simple_rule(rule):
+            edit_capability = str(rule.get("edit_capability") or "").upper()
+            if edit_capability not in {"BASIC_SIMPLE", "CONDITIONAL_FIXED"} and not is_csv_mapping_screen_simple_rule(rule):
                 conn.rollback()
                 return JSONResponse({"message": "このルールは画面から削除できません。"}, status_code=400)
+            delete_rule_ids = [rule_id]
+            if edit_capability == "CONDITIONAL_FIXED" and rule.get("selection_group_code"):
+                cur.execute(
+                    f"""
+                    SELECT `csv_exam_result_mapping_rule_id`
+                    FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                    WHERE `csv_format_version_id` = %s
+                      AND `selection_group_code` = %s
+                      AND `edit_capability` = 'CONDITIONAL_FIXED'
+                    """,
+                    (csv_format_version_id, rule.get("selection_group_code")),
+                )
+                delete_rule_ids = [int(row["csv_exam_result_mapping_rule_id"]) for row in cur.fetchall()]
+            placeholders = ", ".join(["%s"] * len(delete_rule_ids))
             cur.execute(
                 f"""
                 DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_conditions`
-                WHERE `csv_exam_result_mapping_rule_id` = %s
+                WHERE `csv_exam_result_mapping_rule_id` IN ({placeholders})
                 """,
-                (rule_id,),
+                tuple(delete_rule_ids),
             )
             cur.execute(
                 f"""
                 DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
-                WHERE `csv_exam_result_mapping_rule_id` = %s
+                WHERE `csv_exam_result_mapping_rule_id` IN ({placeholders})
                   AND `csv_format_version_id` = %s
                 """,
-                (rule_id, csv_format_version_id),
+                (*delete_rule_ids, csv_format_version_id),
             )
             log_audit(
                 cur,
@@ -19380,13 +19593,13 @@ async def api_delete_csv_mapping_template_screen_rule(
                 target_schema=master_db(),
                 target_table="csv_exam_result_mapping_rules",
                 target_id=str(rule_id),
-                before=dict(rule),
+                before={"rule": dict(rule), "deleted_rule_ids": delete_rule_ids},
             )
             conn.commit()
         except Exception:
             conn.rollback()
             raise
-    return JSONResponse({"message": "マッピングルールを削除しました。", "deleted_rule_id": rule_id})
+    return JSONResponse({"message": "マッピングルールを削除しました。", "deleted_rule_ids": delete_rule_ids})
 
 
 @app.get("/admin/csv-mapping-templates/{csv_format_version_id}/headers", response_class=HTMLResponse)
