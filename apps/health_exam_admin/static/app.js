@@ -5479,7 +5479,8 @@
         <div class="section-heading"><div><h3>変換結果プレビュー</h3><p class="subtle">先頭${Math.min(previewRows.length, payload.preview_row_limit || previewRows.length)}行。各セルは raw → 変換後です。</p></div><span class="status-pill status-neutral">${previewTargets.length}項目</span></div>
         <div class="csv-data-check-preview-wrap"><table class="data-table compact-table csv-data-check-preview-table"><thead><tr><th>CSV行</th>${previewTargets.map((target) => `<th><strong>${escapeHtml(target.target_name || target.target_namecode || target.target_field || target.key)}</strong><small>${escapeHtml(target.data_type || target.target_kind || "")}</small></th>`).join("")}</tr></thead><tbody>${previewRows.map((row) => {
           const cellsByKey = new Map((row.cells || []).map((cell) => [cell.target_key, cell]));
-          return `<tr><th>${row.line_no}</th>${previewTargets.map((target) => {
+          const codeCounts = (row.code_counts || []).map((code) => `<span>CD ${escapeHtml(code.code_value)}: <strong>${code.count}</strong></span>`).join("");
+          return `<tr><th><strong>${row.line_no}行目</strong><span>値あり: <b>${row.value_count || 0}</b></span><span>空欄: <b>${row.blank_count || 0}</b></span><span class="${row.failure_count ? "is-error" : ""}">失敗: <b>${row.failure_count || 0}</b></span>${codeCounts ? `<div class="csv-data-check-row-code-counts">${codeCounts}</div>` : ""}</th>${previewTargets.map((target) => {
             const cell = cellsByKey.get(target.key) || {};
             const raw = cell.raw_value == null || cell.raw_value === "" ? "(空欄)" : cell.raw_value;
             const output = cell.output_value || "-";

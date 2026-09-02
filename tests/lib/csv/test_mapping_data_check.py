@@ -11,12 +11,17 @@ from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingCondition, C
 from scripts.lib.examination.value_normalizer import NormalizedExamValue
 
 
-def mapping_rule(*, namecode: str = "9D100163100000011", use_column_fallback: bool = False) -> CsvMappingRule:
+def mapping_rule(
+    *,
+    namecode: str = "9D100163100000011",
+    use_column_fallback: bool = False,
+    condition_type: str = "HEADER_MATCH",
+) -> CsvMappingRule:
     condition = CsvMappingCondition(
         condition_id=1,
         rule_id=1,
         condition_group_no=1,
-        condition_type="HEADER_MATCH",
+        condition_type=condition_type,
         locator_type="HEADER_NAME",
         header_context=None,
         header_name="聴力",
@@ -123,6 +128,24 @@ def test_streaming_check_reads_saved_column_number_when_header_resolution_is_mis
     assert target["value_count"] == 1
     assert target["blank_count"] == 0
     assert result["preview_rows"][0]["cells"][0]["raw_value"] == "1"
+
+
+def test_streaming_check_reads_screen_created_source_column_rules(tmp_path: Path) -> None:
+    path = tmp_path / "screen-rule.csv"
+    write_csv(path, ["聴力", "1"])
+    header = read_csv_stream_header(path, data_start_row_no=2)
+
+    result = run_csv_mapping_data_check(
+        path,
+        stream_header=header,
+        rules=[mapping_rule(condition_type="SOURCE_COLUMN")],
+        normalize=lambda _rule, raw: normalized_code(raw),
+    )
+
+    assert result["targets"][0]["value_count"] == 1
+    assert result["preview_rows"][0]["value_count"] == 1
+    assert result["preview_rows"][0]["blank_count"] == 0
+    assert result["preview_rows"][0]["code_counts"] == [{"code_value": "2", "count": 1}]
 
 
 def test_streaming_check_counts_blank_rows_without_normalizing(tmp_path: Path) -> None:

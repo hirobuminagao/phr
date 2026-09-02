@@ -122,3 +122,14 @@ def test_multiple_value_columns_require_explicit_join_separator() -> None:
 
     assert result.values_by_role == {}
     assert result.errors == ("MULTIPLE_VALUE_SOURCES_REQUIRE_JOIN_SEPARATOR",)
+
+
+def test_screen_created_source_column_is_extracted_as_value() -> None:
+    source = condition(1, condition_type="SOURCE_COLUMN", column_no=1)
+    mapping = rule(source)
+
+    result = extract_rule_value(["画面設定の値"], mapping)
+
+    assert result.matched_condition_group_no == 1
+    assert result.values_by_role == {"VALUE": "画面設定の値"}
+    assert result.errors == ()

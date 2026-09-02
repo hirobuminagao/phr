@@ -8,6 +8,9 @@ from typing import Any
 from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingCondition, CsvMappingRule
 
 
+SOURCE_COLUMN_CONDITION_TYPES = {"HEADER_MATCH", "SOURCE_COLUMN"}
+
+
 @dataclass(frozen=True)
 class ExtractedCsvRuleValue:
     rule: CsvMappingRule
@@ -44,7 +47,7 @@ def _compare(value: str | None, operator: str | None, expected: str | None) -> b
 
 
 def _condition_matches(condition: CsvMappingCondition, row: list[str]) -> bool:
-    if condition.condition_type == "HEADER_MATCH":
+    if condition.condition_type in SOURCE_COLUMN_CONDITION_TYPES:
         return (condition.resolved_column_no or condition.column_no) is not None
     if condition.condition_type == "CELL_VALUE":
         value = _cell_value(row, condition.resolved_column_no or condition.column_no)
@@ -66,7 +69,7 @@ def _extract_role_values(
 ) -> tuple[dict[str, str | None], list[str]]:
     source_values: dict[str, list[str | None]] = {}
     for condition in conditions:
-        if condition.condition_type != "HEADER_MATCH":
+        if condition.condition_type not in SOURCE_COLUMN_CONDITION_TYPES:
             continue
         role = condition.source_role or "VALUE"
         source_values.setdefault(role, []).append(
