@@ -98,6 +98,9 @@
             <td>
               <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}">詳細</a>
               <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}/edit">編集</a>
+              {% if can_run_data_check %}
+              <a class="ghost-button compact-action-button" href="/admin/csv-mapping-templates/{{ row.csv_format_version_id }}/data-check">実データ確認</a>
+              {% endif %}
             </td>
           </tr>
           {% else %}

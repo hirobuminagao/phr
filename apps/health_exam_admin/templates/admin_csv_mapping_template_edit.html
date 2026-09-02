@@ -14,6 +14,9 @@
     {% if template %}
     <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}">詳細</a>
     <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/headers">ヘッダー確認</a>
+    {% if can_run_data_check %}
+    <a class="primary-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}/data-check">実データでチェック</a>
+    {% endif %}
     {% endif %}
     <a class="ghost-button" href="/">HOME</a>
   </nav>
