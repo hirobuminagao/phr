@@ -5475,11 +5475,21 @@
         preview.innerHTML = `<div class="empty-state">表プレビューの対象データがありません。</div>`;
         return;
       }
+      const sourceHeaderText = (target) => {
+        const sources = (target.rules || []).flatMap((rule) => rule.sources || []);
+        const valueSources = sources.filter((source) => (source.source_role || "VALUE") === "VALUE");
+        const displayedSources = valueSources.length ? valueSources : sources;
+        const labels = displayedSources.map((source) => {
+          const name = source.header_name || (source.column_no ? `${source.column_no}列目` : "");
+          return source.context && name ? `${source.context} / ${name}` : name;
+        }).filter(Boolean);
+        return [...new Set(labels)].join(" + ") || "固定値・参照列なし";
+      };
       preview.innerHTML = `<section class="csv-data-check-preview-section">
         <div class="section-heading"><div><h3>変換結果プレビュー</h3><p class="subtle">先頭${Math.min(previewRows.length, payload.preview_row_limit || previewRows.length)}行。各セルは raw → 変換後です。</p></div><span class="status-pill status-neutral">${previewTargets.length}項目</span></div>
         <div class="csv-data-check-preview-wrap"><table class="data-table compact-table csv-data-check-preview-table"><thead><tr><th>CSV行</th>${previewTargets.map((target) => {
           const codeSummary = (target.code_rows || []).map((code) => `<span>CD ${escapeHtml(code.code_value)}: <b>${code.count}</b> (${percentText(code.rate)})</span>`).join("");
-          return `<th><strong>${escapeHtml(target.target_name || target.target_namecode || target.target_field || target.key)}</strong><small>${escapeHtml(target.data_type || target.target_kind || "")}</small><div class="csv-data-check-column-totals"><span>値あり <b>${target.value_count || 0}</b> (${percentText(target.value_rate)})</span><span>空欄 <b>${target.blank_count || 0}</b> (${percentText(target.blank_rate)})</span><span class="${target.failure_count ? "is-error" : ""}">失敗 <b>${target.failure_count || 0}</b> (${percentText(target.failure_rate)})</span>${codeSummary ? `<div class="csv-data-check-column-code-counts">${codeSummary}</div>` : ""}</div></th>`;
+          return `<th><small class="csv-data-check-column-label">取り込み先</small><strong>${escapeHtml(target.target_name || target.target_namecode || target.target_field || target.key)}</strong><small>${escapeHtml(target.data_type || target.target_kind || "")}</small><div class="csv-data-check-column-source"><span>CSVヘッダー</span><strong>${escapeHtml(sourceHeaderText(target))}</strong></div><div class="csv-data-check-column-totals"><span>値あり <b>${target.value_count || 0}</b> (${percentText(target.value_rate)})</span><span>空欄 <b>${target.blank_count || 0}</b> (${percentText(target.blank_rate)})</span><span class="${target.failure_count ? "is-error" : ""}">失敗 <b>${target.failure_count || 0}</b> (${percentText(target.failure_rate)})</span>${codeSummary ? `<div class="csv-data-check-column-code-counts">${codeSummary}</div>` : ""}</div></th>`;
         }).join("")}</tr></thead><tbody>${previewRows.map((row) => {
           const cellsByKey = new Map((row.cells || []).map((cell) => [cell.target_key, cell]));
           return `<tr><th>${row.line_no}</th>${previewTargets.map((target) => {
