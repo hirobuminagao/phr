@@ -5380,6 +5380,7 @@
       conditionalConfig = cloneConditionalConfig(conditionalWorking);
       closeConditionalModal();
       renderSelectedTargets();
+      setComposerMessage("条件を反映しました。続けて「変更を保存」を押してください。");
     });
 
     applyButton?.addEventListener("click", () => {

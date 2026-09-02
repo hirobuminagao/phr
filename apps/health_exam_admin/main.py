@@ -19307,7 +19307,8 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                         )
                     requested_rule_ids = item.get("ruleIds")
                     if requested_rule_ids is not None and not isinstance(requested_rule_ids, list):
-                        continue
+                        conn.rollback()
+                        return JSONResponse({"message": "変更対象の条件ルールIDを読み取れません。"}, status_code=400)
                     existing_rule_ids = [
                         value for value in (_optional_int(existing_rule_id) for existing_rule_id in (requested_rule_ids or [])) if value
                     ]
@@ -19329,7 +19330,11 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                             str(row.get("edit_capability") or "").upper() != "CONDITIONAL_FIXED"
                             for row in existing_rows
                         ):
-                            continue
+                            conn.rollback()
+                            return JSONResponse(
+                                {"message": "変更対象の条件分岐ルールが見つからないか、画面編集できない状態です。画面を再読み込みしてください。"},
+                                status_code=409,
+                            )
                         cur.execute(
                             f"DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_conditions` WHERE `csv_exam_result_mapping_rule_id` IN ({placeholders})",
                             tuple(existing_rule_ids),
@@ -19538,7 +19543,10 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                 saved_count += 1
             if saved_count == 0:
                 conn.rollback()
-                return JSONResponse({"message": "保存できるマッピングがありません。"}, status_code=400)
+                return JSONResponse(
+                    {"message": "保存できるマッピングがありません。入力内容を確認してください。"},
+                    status_code=400,
+                )
             log_audit(
                 cur,
                 request=request,

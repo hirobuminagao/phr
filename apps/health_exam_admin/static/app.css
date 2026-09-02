@@ -7606,9 +7606,10 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-conditional-blank strong,
 .csv-template-conditional-blank small { display: block; }
 .csv-template-conditional-branch-list { display: grid; gap: 12px; }
-.csv-template-conditional-branch { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(150px, 0.8fr) auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid #d7e2ef; border-radius: 8px; background: #fff; }
+.csv-template-conditional-branch { display: grid; grid-template-columns: 90px minmax(180px, 1.2fr) minmax(140px, 0.9fr) minmax(160px, 0.9fr) auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid #d7e2ef; border-radius: 8px; background: #fff; }
 .csv-template-conditional-branch label span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .csv-template-conditional-branch__number { align-self: center; font-weight: 800; }
+.csv-template-conditional-branch [data-csv-template-conditional-remove] { min-width: 72px; white-space: nowrap; }
 @media (max-width: 760px) {
   .csv-template-conditional-blank,
   .csv-template-conditional-branch { grid-template-columns: 1fr; }
