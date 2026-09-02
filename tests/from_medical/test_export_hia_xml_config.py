@@ -60,6 +60,7 @@ class FakeCursor:
     def __init__(self, rows: list[dict[str, object]] | None = None) -> None:
         self.rows = rows or []
         self.execute_calls: list[tuple[str, tuple[object, ...]]] = []
+        self.rowcount = 0
 
     def execute(self, sql: str, params: tuple[object, ...]) -> None:
         self.execute_calls.append((sql, params))
@@ -148,6 +149,23 @@ def test_exported_list_cases_remain_excluded_without_reexport(tmp_path: Path) ->
 
     assert export_hia_xml.validate_export_list_cases(cursor, config=config) is None
     assert "'EXPORT_ERROR', 'EXPORTED'" not in cursor.execute_calls[0][0]
+
+
+def test_restore_export_list_retry_cases_clears_case_export_error(tmp_path: Path) -> None:
+    config_path = write_config(tmp_path / "export.yml", event_id=2)
+    config = export_hia_xml.load_config(
+        args_for(config_path, xml_export_list_id=72, include_exported=True)
+    )
+    cursor = FakeCursor()
+
+    export_hia_xml.restore_export_list_retry_cases(cursor, config=config)
+
+    retry_sql, retry_params = cursor.execute_calls[0]
+    assert "xelc.list_case_status = 'EXPORT_ERROR'" in retry_sql
+    assert "THEN 'EXPORTED'" in retry_sql
+    assert "ELSE 'PENDING'" in retry_sql
+    assert retry_params == (72, 2)
+    assert "export_readiness_status" in cursor.execute_calls[2][0]
 
 
 def test_requires_explicit_scope(tmp_path: Path) -> None:

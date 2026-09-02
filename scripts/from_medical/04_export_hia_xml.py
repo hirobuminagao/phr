@@ -598,6 +598,36 @@ def validate_export_list_cases(cur: Any, *, config: ExportConfig) -> str | None:
     return f"XML_EXPORT_LIST_CASE_INVALID: {preview}"
 
 
+def restore_export_list_retry_cases(cur: Any, *, config: ExportConfig) -> None:
+    if config.selectors.xml_export_list_id is None:
+        return
+    cur.execute(
+        f"""
+        UPDATE {qname(config.health_db)}.exam_export_cases eec
+        INNER JOIN {qname(config.health_db)}.ops_xml_export_list_cases xelc
+          ON xelc.exam_export_case_id = eec.exam_export_case_id
+         AND xelc.xml_export_list_id = %s
+         AND xelc.list_case_status = 'EXPORT_ERROR'
+         AND xelc.removed_at IS NULL
+        SET
+          eec.xml_export_status = CASE
+            WHEN EXISTS (
+              SELECT 1
+              FROM {qname(config.health_db)}.xml_export_members xem
+              WHERE xem.ledger_type = 'CASE'
+                AND xem.ledger_id = eec.exam_export_case_id
+            ) THEN 'EXPORTED'
+            ELSE 'PENDING'
+          END,
+          eec.updated_at = CURRENT_TIMESTAMP(3)
+        WHERE eec.event_id = %s
+          AND eec.xml_export_status = 'ERROR'
+        """,
+        (config.selectors.xml_export_list_id, config.selectors.event_id),
+    )
+    refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.selectors.event_id)
+
+
 def mark_export_list_finished(cur: Any, *, config: ExportConfig, run_id: int, summary: ExportSummary) -> None:
     if config.selectors.xml_export_list_id is None:
         return
@@ -698,6 +728,7 @@ def insert_history(cur: Any, *, config: ExportConfig, run_id: int, group: list[d
                 UPDATE {qname(config.health_db)}.ops_xml_export_list_cases
                 SET
                   list_case_status = 'EXPORTED',
+                  export_error_reason = NULL,
                   exported_xml_export_member_id = %s,
                   exported_at = CURRENT_TIMESTAMP(3),
                   updated_at = CURRENT_TIMESTAMP(3)
@@ -922,6 +953,7 @@ def run(config: ExportConfig, *, db_prefix: str) -> ExportSummary:
                 conn.commit()
             try:
                 if run_id is not None and writes_official_export_state(config):
+                    restore_export_list_retry_cases(cur, config=config)
                     validation_error = validate_export_list_cases(cur, config=config)
                     if validation_error:
                         summary.errors += 1
