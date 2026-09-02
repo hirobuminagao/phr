@@ -54,6 +54,46 @@ def get_norm_variant(
     return dict(row) if row is not None else None
 
 
+def get_canonical_norm_variant(
+    cur: Any,
+    *,
+    result_code_oid: str | None,
+    normalized_code: str | None,
+    master_db: str = PHR_MASTER,
+) -> dict[str, Any] | None:
+    """Return the canonical row for an already-decided result code."""
+
+    oid = _compact_text(result_code_oid)
+    code = _compact_text(normalized_code)
+    if oid is None or code is None:
+        return None
+
+    cur.execute(
+        f"""
+        SELECT
+            variant_id,
+            result_code_oid,
+            raw_token_norm,
+            raw_value_utf8,
+            normalized_code,
+            code_system,
+            display_name,
+            is_canonical,
+            priority
+        FROM `{master_db}`.`norm_variants`
+        WHERE result_code_oid = %s
+          AND BINARY normalized_code = BINARY %s
+          AND is_canonical = 1
+          AND is_active = 1
+        ORDER BY priority, variant_id
+        LIMIT 1
+        """,
+        (oid, code),
+    )
+    row = cur.fetchone()
+    return dict(row) if row is not None else None
+
+
 def get_norm_variants(
     cur: Any,
     keys: Iterable[tuple[str | None, str | None]],

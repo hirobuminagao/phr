@@ -18755,7 +18755,7 @@ async def api_csv_mapping_template_data_check_run(
                 master_db=master_db(),
             )
             item_cache: dict[str, Mapping[str, Any] | None] = {}
-            normalized_cache: dict[tuple[str, str, str | None], Any] = {}
+            normalized_cache: dict[tuple[str, str, str | None, bool], Any] = {}
             for rule in rules:
                 if rule.target_kind != "EXAM_ITEM_VALUE" or not rule.target_namecode:
                     continue
@@ -18765,7 +18765,8 @@ async def api_csv_mapping_template_data_check_run(
 
             def normalize_for_check(rule: Any, raw_value: str) -> Any:
                 namecode = str(rule.target_namecode or "")
-                cache_key = (namecode, raw_value, rule.raw_unit)
+                value_is_canonical_code = str(rule.value_source_type or "").upper() == "FIXED"
+                cache_key = (namecode, raw_value, rule.raw_unit, value_is_canonical_code)
                 item = item_cache.get(namecode)
                 data_type = str((item or {}).get("data_type") or (item or {}).get("xml_value_type") or "").upper()
                 cacheable = data_type in {"CD", "CO"}
@@ -18779,6 +18780,7 @@ async def api_csv_mapping_template_data_check_run(
                     raw_value=raw_value,
                     raw_unit=rule.raw_unit,
                     exam_item=item_cache[namecode],
+                    value_is_canonical_code=value_is_canonical_code,
                     dev_db=dev_db(),
                     master_db=master_db(),
                 )
@@ -19404,6 +19406,56 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                         )
                     saved_count += 1
                     continue
+                requested_rule_ids = item.get("ruleIds")
+                converting_conditional_group = (
+                    isinstance(requested_rule_ids, list)
+                    and bool(str(item.get("groupCode") or "").strip())
+                )
+                if converting_conditional_group:
+                    conditional_rule_ids = [
+                        value
+                        for value in (_optional_int(existing_rule_id) for existing_rule_id in requested_rule_ids)
+                        if value
+                    ]
+                    if not conditional_rule_ids:
+                        conn.rollback()
+                        return JSONResponse({"message": "変更対象の条件分岐ルールを読み取れません。"}, status_code=400)
+                    placeholders = ", ".join(["%s"] * len(conditional_rule_ids))
+                    cur.execute(
+                        f"""
+                        SELECT `csv_exam_result_mapping_rule_id`, `rule_origin_type`, `edit_capability`,
+                               `selection_group_code`
+                        FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                        WHERE `csv_format_version_id` = %s
+                          AND `csv_exam_result_mapping_rule_id` IN ({placeholders})
+                        """,
+                        (csv_format_version_id, *conditional_rule_ids),
+                    )
+                    conditional_rows = [dict(row) for row in cur.fetchall()]
+                    requested_group_code = str(item.get("groupCode") or "").strip()
+                    if (
+                        len(conditional_rows) != len(conditional_rule_ids)
+                        or any(
+                            str(row.get("rule_origin_type") or "").upper() != "SCREEN"
+                            or str(row.get("edit_capability") or "").upper() != "CONDITIONAL_FIXED"
+                            or str(row.get("selection_group_code") or "").strip() != requested_group_code
+                            for row in conditional_rows
+                        )
+                    ):
+                        conn.rollback()
+                        return JSONResponse(
+                            {"message": "1:1へ戻す対象の条件分岐ルールが一致しません。画面を再読み込みしてください。"},
+                            status_code=409,
+                        )
+                    cur.execute(
+                        f"DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_conditions` WHERE `csv_exam_result_mapping_rule_id` IN ({placeholders})",
+                        tuple(conditional_rule_ids),
+                    )
+                    cur.execute(
+                        f"DELETE FROM {qname(master_db())}.`csv_exam_result_mapping_rules` WHERE `csv_format_version_id` = %s AND `csv_exam_result_mapping_rule_id` IN ({placeholders})",
+                        (csv_format_version_id, *conditional_rule_ids),
+                    )
+                    rule_id = None
                 if rule_id:
                     cur.execute(
                         f"""

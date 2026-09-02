@@ -1,6 +1,38 @@
 from scripts.lib.examination.value_normalizer import mhlw_text_byte_length, normalize_exam_item_value
 
 
+class CanonicalCursor:
+    def __init__(self) -> None:
+        self.params = None
+
+    def execute(self, _sql, params) -> None:
+        self.params = params
+
+    def fetchone(self):
+        return {
+            "normalized_code": "2",
+            "code_system": "1.2.392.200119.6.2001",
+            "display_name": "異常所見なし",
+        }
+
+
+def test_fixed_canonical_code_is_not_reinterpreted_as_raw_value() -> None:
+    cur = CanonicalCursor()
+
+    result = normalize_exam_item_value(
+        cur,
+        namecode="9A110160700000011",
+        raw_value="2",
+        exam_item={"data_type": "CD", "result_code_oid": "1.2.392.200119.6.2001"},
+        value_is_canonical_code=True,
+    )
+
+    assert cur.params == ("1.2.392.200119.6.2001", "2")
+    assert result.code_value == "2"
+    assert result.code_display == "異常所見なし"
+    assert result.normalize_reason == "FIXED_CANONICAL_CODE"
+
+
 def test_normalize_numeric_less_than_symbol_preserves_raw_and_uses_threshold() -> None:
     result = normalize_exam_item_value(
         None,

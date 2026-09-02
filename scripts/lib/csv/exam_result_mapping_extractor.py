@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+import unicodedata
 
 from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingCondition, CsvMappingRule
 
@@ -36,13 +37,18 @@ def _compare(value: str | None, operator: str | None, expected: str | None) -> b
         return value is not None and value != ""
     if op == "EMPTY":
         return value is None or value == ""
+    comparable_value = unicodedata.normalize("NFKC", value or "").strip()
+    comparable_expected = unicodedata.normalize("NFKC", expected or "").strip()
     if op == "EQUALS":
-        return (value or "") == (expected or "")
+        return comparable_value == comparable_expected
     if op == "NOT_EQUALS":
-        return (value or "") != (expected or "")
+        return comparable_value != comparable_expected
     if op == "IN":
-        expected_values = {part.strip() for part in (expected or "").split(",")}
-        return (value or "") in expected_values
+        expected_values = {
+            unicodedata.normalize("NFKC", part).strip()
+            for part in (expected or "").split(",")
+        }
+        return comparable_value in expected_values
     return False
 
 

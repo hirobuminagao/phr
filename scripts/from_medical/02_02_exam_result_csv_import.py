@@ -842,6 +842,7 @@ def insert_exam_item_value(
         raw_value=raw_value,
         raw_unit=rule.raw_unit,
         exam_item=item,
+        value_is_canonical_code=rule.value_source_type == "FIXED",
         dev_db=config.dev_db,
         master_db=config.master_db,
     )

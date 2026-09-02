@@ -16,7 +16,7 @@ import re
 from typing import Any, Mapping
 
 from scripts.lib.db.lookup.exam_item_master import get_exam_item
-from scripts.lib.db.lookup.norm_variant import get_norm_variant
+from scripts.lib.db.lookup.norm_variant import get_canonical_norm_variant, get_norm_variant
 from scripts.lib.db.schemas import DEV_PHR, PHR_MASTER
 from scripts.lib.identity.base_norm import base_normalize
 
@@ -294,6 +294,7 @@ def normalize_exam_item_value(
     raw_value: Any,
     raw_unit: str | None = None,
     exam_item: Mapping[str, Any] | None = None,
+    value_is_canonical_code: bool = False,
     dev_db: str = DEV_PHR,
     master_db: str = PHR_MASTER,
 ) -> NormalizedExamValue:
@@ -355,6 +356,29 @@ def normalize_exam_item_value(
                 raw_value_type=data_type,
                 raw_unit=unit,
                 reason="RESULT_CODE_OID_MISSING",
+            )
+        if value_is_canonical_code:
+            canonical = get_canonical_norm_variant(
+                cur,
+                result_code_oid=result_code_oid,
+                normalized_code=value,
+                master_db=master_db,
+            )
+            if canonical is None:
+                return _error(
+                    raw_value=raw_text,
+                    raw_value_type=data_type,
+                    raw_unit=unit,
+                    reason="CANONICAL_CODE_NOT_FOUND",
+                )
+            return _ok(
+                raw_value=raw_text,
+                raw_value_type=data_type,
+                raw_unit=unit,
+                code_system=_compact_text(canonical.get("code_system")),
+                code_value=_compact_text(canonical.get("normalized_code")),
+                code_display=_compact_text(canonical.get("display_name")),
+                normalize_reason="FIXED_CANONICAL_CODE",
             )
         variant = get_norm_variant(
             cur,

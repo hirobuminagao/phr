@@ -112,6 +112,39 @@ def test_conditional_not_equals_skips_blank_when_not_empty_is_combined() -> None
     assert blank.errors == ("NO_CONDITION_GROUP_MATCHED",)
 
 
+def test_conditional_comparison_treats_fullwidth_and_ascii_as_same_value() -> None:
+    equals_mapping = rule(
+        condition(
+            1,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="EQUALS",
+            expected_value="A",
+        ),
+        value_source_type="FIXED",
+        fixed_value="2",
+    )
+    not_equals_mapping = rule(
+        condition(
+            1,
+            condition_type="CELL_VALUE",
+            column_no=1,
+            source_role="QUALIFIER",
+            operator="NOT_EQUALS",
+            expected_value="A",
+        ),
+        value_source_type="FIXED",
+        fixed_value="1",
+    )
+
+    equals_result = extract_rule_value(["Ａ"], equals_mapping)
+    not_equals_result = extract_rule_value(["Ａ"], not_equals_mapping)
+
+    assert equals_result.values_by_role["VALUE"] == "2"
+    assert not_equals_result.values_by_role == {}
+
+
 def test_blank_output_does_not_overlap_guarded_not_equals_branch() -> None:
     blank_mapping = rule(
         condition(
