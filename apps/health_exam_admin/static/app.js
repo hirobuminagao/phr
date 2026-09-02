@@ -4471,7 +4471,7 @@
           list.innerHTML = `<span class="status-pill status-ready">MISSING 100%の項目なし</span>`;
           return;
         }
-        list.innerHTML = items.map((item) => {
+        const renderCandidate = (item, { compact = false } = {}) => {
           const xmlLabel = Number(item.xml_ledger_count || 0) > 0
             ? `XMLあり ${escapeHtml(String(item.xml_ledger_count))}件`
             : "XMLなし";
@@ -4481,10 +4481,38 @@
             : "";
           const sourceMissing = ` / XML ${escapeHtml(String(item.xml_missing_count || 0))}/${escapeHtml(String(item.xml_subject_count || 0))}・CSV ${escapeHtml(String(item.csv_missing_count || 0))}/${escapeHtml(String(item.csv_subject_count || 0))}`;
           return item.is_mapped
-            ? `<span class="status-pill status-ready">${scopeLabel} / ${escapeHtml(item.item_name || item.namecode)} / マッピング済み / ${xmlLabel}</span>`
-            : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${scopeLabel} / ${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")}${legalDetail}${sourceMissing} / ${xmlLabel}</small></button>`;
-        },
-        ).join("");
+            ? `<span class="csv-template-missing-candidate is-mapped"><strong>${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")} / マッピング済み / ${xmlLabel}</small></span>`
+            : `<button type="button" class="ghost-button compact-action-button csv-template-missing-target-button csv-template-missing-candidate" data-csv-template-missing-target-namecode="${escapeHtml(item.namecode || "")}"><strong>${compact ? "" : `${scopeLabel} / `}${escapeHtml(item.item_name || item.namecode)}</strong><small>${escapeHtml(item.namecode || "")}${compact ? ` / ${xmlLabel}` : `${legalDetail}${sourceMissing} / ${xmlLabel}`}</small></button>`;
+        };
+        const legalGroups = new Map();
+        const specificItems = [];
+        items.forEach((item) => {
+          if (item.check_scope !== "ARTICLE44" || !item.legal_detail_no) {
+            specificItems.push(item);
+            return;
+          }
+          const key = String(item.legal_detail_no);
+          if (!legalGroups.has(key)) legalGroups.set(key, []);
+          legalGroups.get(key).push(item);
+        });
+        const legalMarkup = Array.from(legalGroups.entries()).map(([detailNo, candidates]) => {
+          const mappedCount = candidates.filter((candidate) => candidate.is_mapped).length;
+          const first = candidates[0] || {};
+          const detailName = String(first.legal_detail_name || "法定チェック").replace(/^法定チェック:\s*/, "");
+          const sourceMissing = `XML ${escapeHtml(String(first.xml_missing_count || 0))}/${escapeHtml(String(first.xml_subject_count || 0))}・CSV ${escapeHtml(String(first.csv_missing_count || 0))}/${escapeHtml(String(first.csv_subject_count || 0))}`;
+          return `
+            <section class="csv-template-missing-group ${mappedCount ? "has-mapped-candidate" : ""}">
+              <header>
+                <div><strong>${escapeHtml(detailNo)} / ${escapeHtml(detailName)}</strong><small>${sourceMissing}</small></div>
+                <span class="status-pill ${mappedCount ? "status-ready" : "status-pending"}">${mappedCount ? `候補設定あり ${mappedCount}/${candidates.length}` : `未設定 0/${candidates.length}`}</span>
+              </header>
+              <div class="csv-template-missing-group__candidates">${candidates.map((candidate) => renderCandidate(candidate, { compact: true })).join("")}</div>
+            </section>`;
+        }).join("");
+        const specificMarkup = specificItems.length
+          ? `<section class="csv-template-missing-specific"><strong>特定健診項目</strong><div class="csv-template-missing-group__candidates">${specificItems.map((item) => renderCandidate(item)).join("")}</div></section>`
+          : "";
+        list.innerHTML = legalMarkup + specificMarkup;
       } catch (error) {
         if (summary) summary.textContent = "法定・特定健診の不足状況を取得できませんでした。";
         if (list) list.innerHTML = apiErrorMarkup(error, "MISSING項目を取得できませんでした。");
