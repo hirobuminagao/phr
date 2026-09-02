@@ -9,6 +9,25 @@
 
 ## 事象1: XML author取込漏れ
 
+XMLを再取り込みする前に、健診項目マスタへauthor親子定義を反映する。
+
+Windows実行環境（`dev_phr`）:
+
+```text
+sql/migrations/dev_phr/20260901_001_dev_phr_add_annex2_author_item_code.sql
+sql/seed/dev_phr/0007_dev_phr__exam_item_master_annex2_authors.sql
+```
+
+ローカルDocker（`m4_dev_phr`）:
+
+```text
+sql/migrations/m4_dev_phr/20260902_001_m4_dev_phr_add_annex2_author_item_code.sql
+sql/seed/m4_dev_phr/0001_m4_dev_phr__exam_item_master_annex2_authors.sql
+```
+
+既に列が存在する環境ではmigrationを再実行せず、seedのみ適用する。適用後は
+`annex2_author_item_code IS NOT NULL` が18件であることを確認してから再取り込みへ進む。
+
 修正前の対象確認:
 
 ```bash

@@ -6676,7 +6676,8 @@ def load_subscriber_match_candidate_rows(
         FROM {qname(dev_db())}.subscribers AS s
         {address_join_sql}
         LEFT JOIN {qname(work_other_db())}.hia_dashboard_status AS hds
-          ON hds.hia_subscriber_id = s.hia_subscriber_id
+          ON CONVERT(hds.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+           = CONVERT(s.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
          AND hds.is_active = 1
         LEFT JOIN (
           SELECT
@@ -7290,7 +7291,8 @@ def author_missing_candidate_exists_sql(case_alias: str) -> str:
             ON author_parent_value.ledger_type = 'EXAM'
            AND author_parent_value.ledger_id = author_source.source_exam_ledger_id
           INNER JOIN {qname(dev_db())}.exam_item_master AS author_parent_item
-            ON author_parent_item.namecode = author_parent_value.namecode
+            ON CONVERT(author_parent_item.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+             = CONVERT(author_parent_value.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
            AND author_parent_item.annex2_author_item_code IS NOT NULL
           WHERE author_source.exam_export_case_id = {case_alias}.exam_export_case_id
             AND author_source.source_type = 'XML'
@@ -7299,7 +7301,8 @@ def author_missing_candidate_exists_sql(case_alias: str) -> str:
               FROM {qname(health_db())}.exam_item_values AS expected_author_value
               WHERE expected_author_value.ledger_type = 'EXAM'
                 AND expected_author_value.ledger_id = author_source.source_exam_ledger_id
-                AND expected_author_value.namecode = author_parent_item.annex2_author_item_code
+                AND CONVERT(expected_author_value.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                  = CONVERT(author_parent_item.annex2_author_item_code USING utf8mb4) COLLATE utf8mb4_unicode_ci
             )
         )
     """
@@ -7582,7 +7585,9 @@ def load_exam_export_case_rows(
           ) AS ranked_dashboard
           WHERE ranked_dashboard.dashboard_rank = 1
         ) AS hds
-          ON hds.hia_subscriber_id = COALESCE(NULLIF(eec.hia_subscriber_id, ''), s.hia_subscriber_id)
+          ON CONVERT(hds.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+           = CONVERT(COALESCE(NULLIF(eec.hia_subscriber_id, ''), s.hia_subscriber_id) USING utf8mb4)
+             COLLATE utf8mb4_unicode_ci
         LEFT JOIN (
           SELECT
             exam_export_case_id,
