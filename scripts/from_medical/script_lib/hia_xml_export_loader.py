@@ -267,7 +267,8 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
           EXISTS (
             SELECT 1
             FROM {qname(dev_db)}.exam_item_master author_parent
-            WHERE author_parent.annex2_author_item_code = ecv.namecode
+            WHERE CONVERT(author_parent.annex2_author_item_code USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                = CONVERT(ecv.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
           ) AS is_author_item,
           ecv.negation_ind,
           ecv.occurrence_no,
@@ -275,14 +276,18 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
         FROM {qname(health_db)}.exam_export_case_values ecv
         INNER JOIN {qname(health_db)}.exam_export_cases eec
           ON eec.exam_export_case_id = ecv.exam_export_case_id
-        LEFT JOIN {qname(dev_db)}.exam_item_master em ON em.namecode = ecv.namecode
+        LEFT JOIN {qname(dev_db)}.exam_item_master em
+          ON CONVERT(em.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+           = CONVERT(ecv.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
         LEFT JOIN {qname(master_db)}.exam_item_output_policies AS fpolicy
           ON fpolicy.exam_facility_id = eec.exam_facility_id
-         AND fpolicy.namecode = ecv.namecode
+         AND CONVERT(fpolicy.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+           = CONVERT(ecv.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
          AND fpolicy.is_active = 1
         LEFT JOIN {qname(master_db)}.exam_item_output_policies AS gpolicy
           ON gpolicy.exam_facility_id = 0
-         AND gpolicy.namecode = ecv.namecode
+         AND CONVERT(gpolicy.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+           = CONVERT(ecv.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
          AND gpolicy.is_active = 1
         WHERE ecv.exam_export_case_id = %s
           AND ecv.namecode IS NOT NULL
