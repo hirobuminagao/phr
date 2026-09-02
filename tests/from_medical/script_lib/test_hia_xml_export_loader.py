@@ -156,3 +156,25 @@ def test_fetch_candidates_can_filter_by_facility_code() -> None:
 
     assert "ef.exam_facility_code IN" in cur.sql
     assert cur.params == (2, "0123456789", "9876543210")
+
+
+def test_fetch_candidates_does_not_repeat_cases_exported_by_same_list() -> None:
+    class Cursor:
+        def execute(self, sql: str, params: tuple[object, ...]) -> None:
+            self.sql = sql
+            self.params = params
+
+        def fetchall(self) -> list[dict]:
+            return []
+
+    cur = Cursor()
+    fetch_candidates(
+        cur,
+        selectors=ExportSelectors(event_id=2, xml_export_list_id=72, include_exported=True),
+        health_db="health_exam_result",
+        master_db="phr_master",
+    )
+
+    assert "'SELECTED', 'READY', 'EXPORT_ERROR'" in cur.sql
+    assert "'EXPORT_ERROR', 'EXPORTED'" not in cur.sql
+    assert "eec.export_readiness_status IN ('EXPORT_READY', 'APPROVED_WITH_REASON', 'EXPORTED')" in cur.sql

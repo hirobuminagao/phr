@@ -120,8 +120,6 @@ def fetch_candidates(
     filters = ["eec.event_id = %s"]
     if selectors.xml_export_list_id is not None:
         list_case_statuses = "'SELECTED', 'READY', 'EXPORT_ERROR'"
-        if selectors.include_exported:
-            list_case_statuses += ", 'EXPORTED'"
         filters.append(
             "EXISTS ("
             f"SELECT 1 FROM {qname(health_db)}.ops_xml_export_list_cases xelc "

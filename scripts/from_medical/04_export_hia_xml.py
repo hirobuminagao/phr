@@ -516,8 +516,6 @@ def validate_export_list_cases(cur: Any, *, config: ExportConfig) -> str | None:
     if config.selectors.xml_export_list_id is None:
         return None
     list_case_statuses = "'SELECTED', 'READY', 'EXPORT_ERROR'"
-    if config.selectors.include_exported:
-        list_case_statuses += ", 'EXPORTED'"
     cur.execute(
         f"""
         SELECT
