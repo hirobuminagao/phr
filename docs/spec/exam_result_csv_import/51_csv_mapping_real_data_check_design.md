@@ -1,5 +1,7 @@
 # CSVマッピング実データチェック設計
 
+2026-09-02 初期実装済み。実装正は `scripts/lib/csv/mapping_data_check.py` と `apps/health_exam_admin` のdata-check画面/APIを参照する。
+
 ## 1. 目的
 
 CSVマッピングテンプレートへ設定したルールを実CSVへ仮適用し、本取込前に変換結果の妥当性を確認する。

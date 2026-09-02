@@ -161,7 +161,7 @@ def row_sha256(row: List[str]) -> str:
     return _json_sha256([str(cell) if cell is not None else None for cell in row])
 
 
-def _build_header_columns(
+def build_header_columns(
     header_rows: List[List[str]],
     active_header_row_no: int | None,
 ) -> List[CsvHeaderColumn]:
@@ -245,7 +245,7 @@ def load_csv_result(
     )
     loader.load()
     header_rows = loader.get_headers()
-    header_columns = _build_header_columns(header_rows, active_header_row_no)
+    header_columns = build_header_columns(header_rows, active_header_row_no)
     header_set_without_hash = CsvHeaderSet(
         header_rows=header_rows,
         active_header_row_no=active_header_row_no,

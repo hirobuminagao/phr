@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set title = "CSVマッピング実データチェック" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">CSV Mapping Data Check</p>
+    <h1>実データでマッピングをチェック</h1>
+    <p class="subtle">{{ template.mapping_version }} / {{ template.exam_facility_display_name or template.exam_facility_name or "健診機関未設定" }}</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/admin/csv-mapping-templates/{{ template.csv_format_version_id }}">詳細へ戻る</a>
+    <a class="ghost-button" href="/admin/csv-mapping-templates">一覧へ戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page csv-data-check-page" data-csv-data-check data-template-id="{{ template.csv_format_version_id }}">
+  <section class="summary-grid csv-data-check-template-summary">
+    <article class="summary-card"><small>テンプレート</small><strong>{{ template.mapping_version }}</strong><span>{{ "有効" if template.is_active else "無効・確認中" }}</span></article>
+    <article class="summary-card"><small>保存済みルール</small><strong>{{ rule_count }}件</strong><span>有効ルールを使用</span></article>
+    <article class="summary-card"><small>CSV構造</small><strong>data {{ template.data_start_row_no }}行目〜</strong><span>{{ template.header_structure_type }} / 最大 {{ max_rows }}行</span></article>
+    <article class="summary-card"><small>データ保持</small><strong>保存しません</strong><span>チェック終了時に破棄</span></article>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div><h2>チェックするCSV</h2><p class="subtle">基準ヘッダーとの差分を確認してから、保存済みマッピングを仮適用します。</p></div>
+    </div>
+    <div class="csv-data-check-upload" data-csv-data-check-dropzone>
+      <div><strong>CSVを選択またはドラッグ＆ドロップ</strong><small>UTF-8 / UTF-8 BOM / CP932、50MBまで</small></div>
+      <input type="file" accept=".csv,.txt,text/csv" data-csv-data-check-file>
+    </div>
+    <div class="csv-data-check-file-state" data-csv-data-check-file-state>CSVを選択してください。</div>
+    <div data-csv-data-check-header-result hidden></div>
+    <div class="button-row csv-data-check-actions"><button type="button" data-csv-data-check-run disabled>変換結果をチェック</button></div>
+  </section>
+
+  <section class="panel" data-csv-data-check-result hidden>
+    <div class="section-heading">
+      <div><h2>チェック結果</h2><p class="subtle">割合の分母は実際に処理した行数です。</p></div>
+    </div>
+    <div data-csv-data-check-overview></div>
+    <div class="csv-data-check-targets" data-csv-data-check-targets></div>
+  </section>
+</main>
+{% endblock %}

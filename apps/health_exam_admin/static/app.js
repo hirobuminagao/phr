@@ -5385,4 +5385,111 @@
       document.querySelector("#external-feedback-member-picker-modal [data-modal-close]")?.click();
     });
   }
+
+  const csvDataCheck = document.querySelector("[data-csv-data-check]");
+  if (csvDataCheck) {
+    const templateId = csvDataCheck.getAttribute("data-template-id") || "";
+    const fileInput = csvDataCheck.querySelector("[data-csv-data-check-file]");
+    const dropzone = csvDataCheck.querySelector("[data-csv-data-check-dropzone]");
+    const fileState = csvDataCheck.querySelector("[data-csv-data-check-file-state]");
+    const headerResult = csvDataCheck.querySelector("[data-csv-data-check-header-result]");
+    const runButton = csvDataCheck.querySelector("[data-csv-data-check-run]");
+    const resultPanel = csvDataCheck.querySelector("[data-csv-data-check-result]");
+    const overview = csvDataCheck.querySelector("[data-csv-data-check-overview]");
+    const targets = csvDataCheck.querySelector("[data-csv-data-check-targets]");
+    let selectedFile = null;
+    let headerComparison = null;
+
+    const postCsvFile = async (url, file, extra = {}) => {
+      const body = new FormData();
+      body.append("csv_file", file, file.name);
+      Object.entries(extra).forEach(([key, value]) => body.append(key, String(value)));
+      const token = cookieValue("phr_app_csrf");
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { Accept: "application/json", ...(token ? { "x-csrf-token": token } : {}) },
+        body,
+      });
+      const bodyText = await response.text();
+      let payload = null;
+      try { payload = bodyText ? JSON.parse(bodyText) : {}; } catch (_error) { payload = null; }
+      if (!response.ok) throw createApiError(response, payload, bodyText);
+      return payload || {};
+    };
+    const percentText = (value) => `${Number(value || 0).toFixed(2)}%`;
+    const statusLabel = (status) => ({ MATCHED: "一致", ORDER_ONLY: "列順のみ差異", ADDED: "追加", MISSING: "欠落", CONTEXT_CHANGED: "context差異", AMBIGUOUS: "重複・曖昧" }[status] || status || "-");
+
+    const renderHeaderComparison = (payload) => {
+      const comparison = payload.comparison || {};
+      const counts = comparison.counts || {};
+      const differences = (comparison.rows || []).filter((row) => row.status !== "MATCHED");
+      headerResult.hidden = false;
+      headerResult.innerHTML = `
+        <div class="csv-data-check-header-summary ${comparison.is_exact ? "is-exact" : "has-difference"}">
+          <div><strong>${comparison.is_exact ? "基準ヘッダーと一致" : "基準ヘッダーとの差分あり"}</strong><small>${escapeHtml(payload.encoding || "-")} / 基準 ${comparison.registered_count || 0}列 / CSV ${comparison.uploaded_count || 0}列</small></div>
+          <div class="button-row"><span class="status-pill status-ready">一致 ${counts.MATCHED || 0}</span>${counts.ORDER_ONLY ? `<span class="status-pill status-pending">列順 ${counts.ORDER_ONLY}</span>` : ""}${counts.MISSING ? `<span class="status-pill status-danger">欠落 ${counts.MISSING}</span>` : ""}${counts.ADDED ? `<span class="status-pill status-neutral">追加 ${counts.ADDED}</span>` : ""}${counts.CONTEXT_CHANGED ? `<span class="status-pill status-pending">context ${counts.CONTEXT_CHANGED}</span>` : ""}${counts.AMBIGUOUS ? `<span class="status-pill status-danger">曖昧 ${counts.AMBIGUOUS}</span>` : ""}</div>
+        </div>
+        ${differences.length ? `<details class="csv-data-check-header-differences"><summary>差分 ${differences.length}件を確認</summary><div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>状態</th><th>基準</th><th>アップロード</th></tr></thead><tbody>${differences.slice(0, 200).map((row) => `<tr><td>${escapeHtml(statusLabel(row.status))}</td><td>${escapeHtml(row.registered ? `${row.registered.column_no}列目 ${row.registered.context ? `${row.registered.context} / ` : ""}${row.registered.name}` : "-")}</td><td>${escapeHtml(row.uploaded ? `${row.uploaded.column_no}列目 ${row.uploaded.context ? `${row.uploaded.context} / ` : ""}${row.uploaded.name}` : "-")}</td></tr>`).join("")}</tbody></table></div></details>` : ""}
+        ${comparison.is_exact ? "" : `<label class="csv-data-check-confirm"><input type="checkbox" data-csv-data-check-confirm>差分を確認し、このCSVでチェックを続ける</label>`}`;
+      const confirm = headerResult.querySelector("[data-csv-data-check-confirm]");
+      runButton.disabled = !comparison.is_exact;
+      confirm?.addEventListener("change", () => { runButton.disabled = !confirm.checked; });
+    };
+
+    const inspectFile = async (file) => {
+      selectedFile = file;
+      headerComparison = null;
+      resultPanel.hidden = true;
+      runButton.disabled = true;
+      fileState.textContent = `${file.name} / ${(file.size / 1024 / 1024).toFixed(2)}MB を確認しています...`;
+      headerResult.hidden = true;
+      try {
+        const payload = await postCsvFile(`/api/admin/csv-mapping-templates/${templateId}/data-check/header`, file);
+        headerComparison = payload.comparison || {};
+        fileState.textContent = `${file.name} / ${(file.size / 1024 / 1024).toFixed(2)}MB`;
+        renderHeaderComparison(payload);
+      } catch (error) {
+        fileState.innerHTML = apiErrorMarkup(error, "CSVヘッダーを確認できませんでした。");
+      }
+    };
+
+    const renderOverview = (payload) => {
+      overview.innerHTML = `<div class="summary-grid csv-data-check-overview-grid">
+        <article class="summary-card"><small>CSVデータ行</small><strong>${payload.total_data_rows || 0}行</strong><span>空行 ${payload.empty_rows || 0}</span></article>
+        <article class="summary-card"><small>処理対象</small><strong>${payload.processed_rows || 0}行</strong><span>未処理 ${payload.omitted_rows || 0}</span></article>
+        <article class="summary-card"><small>マッピング項目</small><strong>${payload.target_count || 0}件</strong><span>保存済み有効ルール</span></article>
+        <article class="summary-card"><small>表示エラー</small><strong>${payload.error_samples_shown || 0}行</strong><span>集計は全対象行</span></article>
+      </div>`;
+    };
+    const renderTarget = (target, index) => {
+      const codeTable = (target.code_rows || []).length ? `<div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>変換後</th><th>件数・割合</th><th>raw内訳</th></tr></thead><tbody>${target.code_rows.map((row) => `<tr><td><strong>${escapeHtml(target.data_type || "CD")} ${escapeHtml(row.code_value)}</strong><small>${escapeHtml(row.code_display || "-")}</small></td><td><strong>${row.count}</strong><small>${percentText(row.rate)}</small></td><td>${(row.raw_values || []).map((raw) => `<span class="csv-data-check-raw-chip">${escapeHtml(raw.raw_value || "(空欄)")} ${raw.count}件</span>`).join("")}</td></tr>`).join("")}</tbody></table></div>` : "";
+      const samples = target.samples || [];
+      const sampleTable = samples.length ? `<details class="csv-data-check-samples"><summary>実値プレビュー ${samples.length}件${target.omitted_error_count ? ` / エラー省略 ${target.omitted_error_count}件` : ""}</summary><div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>CSV行</th><th>raw</th><th>変換後</th><th>状態・理由</th></tr></thead><tbody>${samples.map((sample) => `<tr><td>${sample.line_no}</td><td>${escapeHtml((sample.raw_values || []).join(" / ") || "(空欄)")}</td><td>${(sample.results || []).map((result) => `<strong>${escapeHtml(result.code_value || result.normalized_value || "-")}</strong>${result.code_display ? `<small>${escapeHtml(result.code_display)}</small>` : ""}`).join("") || "-"}</td><td><span class="status-pill ${sample.status === "OK" ? "status-ready" : "status-danger"}">${escapeHtml(sample.status)}</span><small>${escapeHtml(sample.reason || "-")}</small></td></tr>`).join("")}</tbody></table></div></details>` : "";
+      return `<details class="csv-data-check-target" ${index < 3 ? "open" : ""}><summary><div><small>${escapeHtml(target.data_type || target.target_kind)}</small><strong>${escapeHtml(target.target_name || target.target_namecode || target.target_field || target.key)}</strong><span>${escapeHtml(target.target_namecode || target.target_field || "")}</span></div><div class="csv-data-check-target-metrics"><span>値あり <strong>${target.value_count}</strong> (${percentText(target.value_rate)})</span><span>空欄 <strong>${target.blank_count}</strong> (${percentText(target.blank_rate)})</span><span class="${target.failure_count ? "is-error" : ""}">失敗 <strong>${target.failure_count}</strong> (${percentText(target.failure_rate)})</span></div></summary><div class="csv-data-check-target-body"><div class="csv-data-check-rule-list">${(target.rules || []).map((rule) => `<div><strong>${escapeHtml(rule.rule_key)}</strong><small>${escapeHtml(rule.value_source_type)}${rule.fixed_value ? ` / 固定値 ${escapeHtml(rule.fixed_value)}` : ""} / ${escapeHtml(rule.selection_mode)}</small></div>`).join("")}</div>${codeTable}${sampleTable}</div></details>`;
+    };
+
+    fileInput?.addEventListener("change", () => { if (fileInput.files?.[0]) inspectFile(fileInput.files[0]); });
+    ["dragenter", "dragover"].forEach((name) => dropzone?.addEventListener(name, (event) => { event.preventDefault(); dropzone.classList.add("is-dragging"); }));
+    ["dragleave", "drop"].forEach((name) => dropzone?.addEventListener(name, (event) => { event.preventDefault(); dropzone.classList.remove("is-dragging"); }));
+    dropzone?.addEventListener("drop", (event) => { const file = event.dataTransfer?.files?.[0]; if (file) inspectFile(file); });
+    runButton?.addEventListener("click", async () => {
+      if (!selectedFile) return;
+      runButton.disabled = true;
+      runButton.textContent = "チェック中...";
+      const confirmed = headerComparison?.is_exact || headerResult.querySelector("[data-csv-data-check-confirm]")?.checked;
+      try {
+        const payload = await postCsvFile(`/api/admin/csv-mapping-templates/${templateId}/data-check/run`, selectedFile, { header_mismatch_confirmed: confirmed ? "1" : "0" });
+        renderOverview(payload);
+        targets.innerHTML = (payload.targets || []).map(renderTarget).join("") || `<div class="empty-state">チェック対象の有効ルールがありません。</div>`;
+        resultPanel.hidden = false;
+        resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (error) {
+        targets.innerHTML = apiErrorMarkup(error, "変換結果をチェックできませんでした。");
+        resultPanel.hidden = false;
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = "変換結果をチェック";
+      }
+    });
+  }
 })();

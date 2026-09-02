@@ -30,6 +30,14 @@ from mysql.connector import IntegrityError
 from starlette.background import BackgroundTask
 
 from scripts.lib.csv.csv_loader import load_csv_result
+from scripts.lib.csv.mapping_data_check import (
+    MAX_DATA_ROWS as CSV_MAPPING_DATA_CHECK_MAX_ROWS,
+    compare_csv_headers,
+    read_csv_stream_header,
+    run_csv_mapping_data_check,
+)
+from scripts.lib.db.lookup.csv_exam_result_mapping import load_csv_mapping_rules
+from scripts.lib.db.lookup.exam_item_master import get_exam_item
 from scripts.lib.db.config import load_mysql_base_params
 from scripts.lib.db.schemas import CSV_MAPPING_LAB
 from scripts.lib.db.lookup.event import get_event_insurer_number, get_event_year
@@ -38,6 +46,7 @@ from scripts.lib.etl.metrics import RunMetrics
 from scripts.lib.etl.runs import finish_run, start_run
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK, STATUS_OK
+from scripts.lib.examination.value_normalizer import normalize_exam_item_value
 from scripts.lib.examination.report_classification import fiscal_year_end_date
 from scripts.from_medical.script_lib.article44_checker import check_article44
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
@@ -18499,10 +18508,230 @@ def admin_csv_mapping_template_detail(request: Request, csv_format_version_id: i
             "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
             "mapped_header_count": sum(1 for column in header_columns if column.get("is_mapped")),
             "unmapped_header_count": sum(1 for column in header_columns if not column.get("is_mapped")),
+            "can_run_data_check": can_manage_business_settings(user),
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
     )
+
+
+CSV_MAPPING_DATA_CHECK_MAX_BYTES = 50 * 1024 * 1024
+
+
+async def save_csv_mapping_data_check_upload(csv_file: UploadFile) -> str:
+    suffix = Path(str(csv_file.filename or "upload.csv")).suffix.lower()
+    if suffix not in {".csv", ".txt"}:
+        raise ValueError("CSVファイルを選択してください。")
+    total = 0
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
+            tmp_path = tmp.name
+            while True:
+                chunk = await csv_file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > CSV_MAPPING_DATA_CHECK_MAX_BYTES:
+                    raise ValueError("CSVファイルは50MB以下にしてください。")
+                tmp.write(chunk)
+        if total == 0:
+            raise ValueError("CSVファイルが空です。")
+        return tmp_path
+    except Exception:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+        raise
+
+
+def csv_mapping_data_check_header_for_template(path: str, template: Mapping[str, Any]) -> Any:
+    return read_csv_stream_header(
+        path,
+        data_start_row_no=int(template.get("data_start_row_no") or 2),
+        delimiter=str(template.get("delimiter") or ","),
+        quote_char=str(template.get("quote_char") or '"'),
+        active_header_row_no=(
+            int(template["active_header_row_no"])
+            if template.get("active_header_row_no") is not None
+            else None
+        ),
+    )
+
+
+@app.get("/admin/csv-mapping-templates/{csv_format_version_id}/data-check", response_class=HTMLResponse)
+def admin_csv_mapping_template_data_check(request: Request, csv_format_version_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            rules = load_csv_mapping_template_rules(cur, csv_format_version_id=csv_format_version_id) if template else []
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    if not template:
+        return RedirectResponse(
+            f"/admin/csv-mapping-templates?error={quote('対象テンプレートがありません。')}",
+            status_code=303,
+        )
+    return templates.TemplateResponse(
+        "admin_csv_mapping_template_data_check.html",
+        {
+            "request": request,
+            "user": user,
+            "template": template,
+            "rule_count": len(rules),
+            "max_rows": CSV_MAPPING_DATA_CHECK_MAX_ROWS,
+        },
+    )
+
+
+@app.post("/api/admin/csv-mapping-templates/{csv_format_version_id}/data-check/header", response_class=JSONResponse)
+async def api_csv_mapping_template_data_check_header(
+    request: Request,
+    csv_format_version_id: int,
+    csv_file: UploadFile = File(...),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_manage_business_settings(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+    tmp_path: str | None = None
+    try:
+        tmp_path = await save_csv_mapping_data_check_upload(csv_file)
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            conn.commit()
+        if not template:
+            return JSONResponse({"message": "対象テンプレートがありません。"}, status_code=404)
+        stream_header = csv_mapping_data_check_header_for_template(tmp_path, template)
+        comparison = compare_csv_headers(stream_header, template.get("header_snapshot_json"))
+        return JSONResponse(
+            {
+                "file_name": csv_file.filename,
+                "encoding": stream_header.encoding,
+                "header_sha256": stream_header.header_set.header_sha256,
+                "comparison": comparison,
+            }
+        )
+    except (UnicodeDecodeError, csv.Error, ValueError) as exc:
+        return JSONResponse({"message": str(exc)}, status_code=400)
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/api/admin/csv-mapping-templates/{csv_format_version_id}/data-check/run", response_class=JSONResponse)
+async def api_csv_mapping_template_data_check_run(
+    request: Request,
+    csv_format_version_id: int,
+    csv_file: UploadFile = File(...),
+    header_mismatch_confirmed: str = Form("0"),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインしてください。"}, status_code=401)
+    if not can_manage_business_settings(user):
+        return JSONResponse({"message": "権限がありません。"}, status_code=403)
+    tmp_path: str | None = None
+    try:
+        tmp_path = await save_csv_mapping_data_check_upload(csv_file)
+        params = load_mysql_base_params(db_prefix())
+        with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
+            if not template:
+                conn.rollback()
+                return JSONResponse({"message": "対象テンプレートがありません。"}, status_code=404)
+            stream_header = csv_mapping_data_check_header_for_template(tmp_path, template)
+            comparison = compare_csv_headers(stream_header, template.get("header_snapshot_json"))
+            if not comparison["is_exact"] and header_mismatch_confirmed != "1":
+                conn.rollback()
+                return JSONResponse(
+                    {"message": "基準ヘッダーとの差分を確認してから実行してください。", "comparison": comparison},
+                    status_code=409,
+                )
+            csv_result = stream_header.as_load_result(
+                tmp_path,
+                delimiter=str(template.get("delimiter") or ","),
+                quote_char=str(template.get("quote_char") or '"'),
+            )
+            rules = load_csv_mapping_rules(
+                cur,
+                csv_format_version_id=csv_format_version_id,
+                csv_result=csv_result,
+                master_db=master_db(),
+            )
+            item_cache: dict[str, Mapping[str, Any] | None] = {}
+            normalized_cache: dict[tuple[str, str, str | None], Any] = {}
+            for rule in rules:
+                if rule.target_kind != "EXAM_ITEM_VALUE" or not rule.target_namecode:
+                    continue
+                namecode = str(rule.target_namecode)
+                if namecode not in item_cache:
+                    item_cache[namecode] = get_exam_item(cur, namecode, dev_db=dev_db())
+
+            def normalize_for_check(rule: Any, raw_value: str) -> Any:
+                namecode = str(rule.target_namecode or "")
+                cache_key = (namecode, raw_value, rule.raw_unit)
+                item = item_cache.get(namecode)
+                data_type = str((item or {}).get("data_type") or (item or {}).get("xml_value_type") or "").upper()
+                cacheable = data_type in {"CD", "CO"}
+                if cacheable and cache_key in normalized_cache:
+                    return normalized_cache[cache_key]
+                if namecode not in item_cache:
+                    item_cache[namecode] = get_exam_item(cur, namecode, dev_db=dev_db())
+                normalized = normalize_exam_item_value(
+                    cur,
+                    namecode=namecode,
+                    raw_value=raw_value,
+                    raw_unit=rule.raw_unit,
+                    exam_item=item_cache[namecode],
+                    dev_db=dev_db(),
+                    master_db=master_db(),
+                )
+                if cacheable:
+                    normalized_cache[cache_key] = normalized
+                return normalized
+
+            result = run_csv_mapping_data_check(
+                tmp_path,
+                stream_header=stream_header,
+                rules=rules,
+                normalize=normalize_for_check,
+                delimiter=str(template.get("delimiter") or ","),
+                quote_char=str(template.get("quote_char") or '"'),
+            )
+            for target in result["targets"]:
+                item = item_cache.get(str(target.get("target_namecode") or ""))
+                target["target_name"] = (
+                    str(item.get("item_name") or "") if item else str(target.get("target_field") or target.get("target_namecode") or "")
+                )
+                if item and not target.get("data_type"):
+                    target["data_type"] = str(item.get("data_type") or item.get("xml_value_type") or "")
+            conn.commit()
+        result["comparison"] = comparison
+        result["file_name"] = csv_file.filename
+        result["template"] = {
+            "csv_format_version_id": csv_format_version_id,
+            "mapping_version": template.get("mapping_version"),
+            "is_active": bool(template.get("is_active")),
+        }
+        return JSONResponse(result)
+    except (UnicodeDecodeError, csv.Error, ValueError) as exc:
+        return JSONResponse({"message": str(exc)}, status_code=400)
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
 
 
 @app.get("/admin/csv-mapping-templates/{csv_format_version_id}/edit", response_class=HTMLResponse)
