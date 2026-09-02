@@ -11,7 +11,7 @@ from scripts.lib.db.lookup.csv_exam_result_mapping import CsvMappingCondition, C
 from scripts.lib.examination.value_normalizer import NormalizedExamValue
 
 
-def mapping_rule(*, namecode: str = "9D100163100000011") -> CsvMappingRule:
+def mapping_rule(*, namecode: str = "9D100163100000011", use_column_fallback: bool = False) -> CsvMappingRule:
     condition = CsvMappingCondition(
         condition_id=1,
         rule_id=1,
@@ -21,12 +21,12 @@ def mapping_rule(*, namecode: str = "9D100163100000011") -> CsvMappingRule:
         header_context=None,
         header_name="聴力",
         header_occurrence=1,
-        column_no=None,
+        column_no=1 if use_column_fallback else None,
         operator=None,
         expected_value=None,
         source_role="VALUE",
         priority=1,
-        resolved_column_no=1,
+        resolved_column_no=None if use_column_fallback else 1,
     )
     return CsvMappingRule(
         rule_id=1,
@@ -103,6 +103,26 @@ def test_streaming_check_uses_processed_row_count_as_code_rate_denominator(tmp_p
     }
     assert target["code_rows"][1]["code_value"] == "1"
     assert target["code_rows"][1]["rate"] == 33.33
+    assert result["preview_rows"][0]["cells"][0]["raw_value"] == "1"
+    assert result["preview_rows"][0]["cells"][0]["output_value"] == "2"
+
+
+def test_streaming_check_reads_saved_column_number_when_header_resolution_is_missing(tmp_path: Path) -> None:
+    path = tmp_path / "column-fallback.csv"
+    write_csv(path, ["別名ヘッダー", "1"])
+    header = read_csv_stream_header(path, data_start_row_no=2)
+
+    result = run_csv_mapping_data_check(
+        path,
+        stream_header=header,
+        rules=[mapping_rule(use_column_fallback=True)],
+        normalize=lambda _rule, raw: normalized_code(raw),
+    )
+
+    target = result["targets"][0]
+    assert target["value_count"] == 1
+    assert target["blank_count"] == 0
+    assert result["preview_rows"][0]["cells"][0]["raw_value"] == "1"
 
 
 def test_streaming_check_counts_blank_rows_without_normalizing(tmp_path: Path) -> None:

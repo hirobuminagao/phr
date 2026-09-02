@@ -19,6 +19,7 @@ from scripts.lib.examination.value_normalizer import NormalizedExamValue
 MAX_DATA_ROWS = 10_000
 MAX_SAMPLES_PER_TARGET = 100
 MAX_ERROR_SAMPLES = 1_000
+MAX_PREVIEW_ROWS = 100
 
 
 @dataclass(frozen=True)
@@ -321,6 +322,7 @@ def run_csv_mapping_data_check(
     empty_rows = 0
     omitted_rows = 0
     global_error_state = {"count": 0}
+    preview_rows: list[dict[str, Any]] = []
 
     for line_no, row in iter_csv_data_rows(
         path,
@@ -338,6 +340,7 @@ def run_csv_mapping_data_check(
             continue
         processed_rows += 1
         extracted_by_rule = {result.rule.rule_id: result for result in extract_row_values(row, rules)}
+        preview_cells: list[dict[str, Any]] = []
 
         for key, target_rules in rules_by_target.items():
             target = targets[key]
@@ -371,6 +374,16 @@ def run_csv_mapping_data_check(
                         reason=configuration_errors[0],
                         global_error_state=global_error_state,
                     )
+                preview_cells.append(
+                    {
+                        "target_key": key,
+                        "raw_value": None,
+                        "output_value": None,
+                        "output_display": None,
+                        "status": "ERROR" if configuration_errors else "BLANK",
+                        "reason": configuration_errors[0] if configuration_errors else None,
+                    }
+                )
                 continue
 
             target["value_count"] += 1
@@ -386,6 +399,16 @@ def run_csv_mapping_data_check(
                     status="CONFLICT",
                     reason="MULTIPLE_RULE_MATCH",
                     global_error_state=global_error_state,
+                )
+                preview_cells.append(
+                    {
+                        "target_key": key,
+                        "raw_value": " / ".join(str(result.values_by_role.get("VALUE") or "") for result in values),
+                        "output_value": None,
+                        "output_display": None,
+                        "status": "CONFLICT",
+                        "reason": "MULTIPLE_RULE_MATCH",
+                    }
                 )
                 continue
 
@@ -429,6 +452,30 @@ def run_csv_mapping_data_check(
                 reason=reason,
                 global_error_state=global_error_state,
             )
+            output_values = [
+                str(normalized.code_value or normalized.normalized_value or extracted.values_by_role.get("VALUE") or "")
+                if normalized
+                else str(extracted.values_by_role.get("VALUE") or "")
+                for extracted, normalized in generated
+            ]
+            output_displays = [
+                str(normalized.code_display or "")
+                for _, normalized in generated
+                if normalized and normalized.code_display
+            ]
+            preview_cells.append(
+                {
+                    "target_key": key,
+                    "raw_value": " / ".join(str(result.values_by_role.get("VALUE") or "") for result in values),
+                    "output_value": " / ".join(value for value in output_values if value),
+                    "output_display": " / ".join(output_displays),
+                    "status": "ERROR" if failed else "OK",
+                    "reason": reason,
+                }
+            )
+
+        if len(preview_rows) < MAX_PREVIEW_ROWS:
+            preview_rows.append({"line_no": line_no, "cells": preview_cells})
 
     serialized_targets = []
     for target in targets.values():
@@ -466,5 +513,7 @@ def run_csv_mapping_data_check(
         "omitted_rows": omitted_rows,
         "target_count": len(serialized_targets),
         "error_samples_shown": global_error_state["count"],
+        "preview_row_limit": MAX_PREVIEW_ROWS,
+        "preview_rows": preview_rows,
         "targets": serialized_targets,
     }

@@ -45,7 +45,7 @@ def _compare(value: str | None, operator: str | None, expected: str | None) -> b
 
 def _condition_matches(condition: CsvMappingCondition, row: list[str]) -> bool:
     if condition.condition_type == "HEADER_MATCH":
-        return condition.resolved_column_no is not None
+        return (condition.resolved_column_no or condition.column_no) is not None
     if condition.condition_type == "CELL_VALUE":
         value = _cell_value(row, condition.resolved_column_no or condition.column_no)
         return _compare(value, condition.operator, condition.expected_value)
@@ -69,7 +69,9 @@ def _extract_role_values(
         if condition.condition_type != "HEADER_MATCH":
             continue
         role = condition.source_role or "VALUE"
-        source_values.setdefault(role, []).append(_cell_value(row, condition.resolved_column_no))
+        source_values.setdefault(role, []).append(
+            _cell_value(row, condition.resolved_column_no or condition.column_no)
+        )
 
     values_by_role: dict[str, str | None] = {}
     for role, values in source_values.items():

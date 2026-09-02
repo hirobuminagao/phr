@@ -5396,6 +5396,7 @@
     const runButton = csvDataCheck.querySelector("[data-csv-data-check-run]");
     const resultPanel = csvDataCheck.querySelector("[data-csv-data-check-result]");
     const overview = csvDataCheck.querySelector("[data-csv-data-check-overview]");
+    const preview = csvDataCheck.querySelector("[data-csv-data-check-preview]");
     const targets = csvDataCheck.querySelector("[data-csv-data-check-targets]");
     let selectedFile = null;
     let headerComparison = null;
@@ -5467,6 +5468,27 @@
       const sampleTable = samples.length ? `<details class="csv-data-check-samples"><summary>実値プレビュー ${samples.length}件${target.omitted_error_count ? ` / エラー省略 ${target.omitted_error_count}件` : ""}</summary><div class="table-wrap"><table class="data-table compact-table"><thead><tr><th>CSV行</th><th>raw</th><th>変換後</th><th>状態・理由</th></tr></thead><tbody>${samples.map((sample) => `<tr><td>${sample.line_no}</td><td>${escapeHtml((sample.raw_values || []).join(" / ") || "(空欄)")}</td><td>${(sample.results || []).map((result) => `<strong>${escapeHtml(result.code_value || result.normalized_value || "-")}</strong>${result.code_display ? `<small>${escapeHtml(result.code_display)}</small>` : ""}`).join("") || "-"}</td><td><span class="status-pill ${sample.status === "OK" ? "status-ready" : "status-danger"}">${escapeHtml(sample.status)}</span><small>${escapeHtml(sample.reason || "-")}</small></td></tr>`).join("")}</tbody></table></div></details>` : "";
       return `<details class="csv-data-check-target" ${index < 3 ? "open" : ""}><summary><div><small>${escapeHtml(target.data_type || target.target_kind)}</small><strong>${escapeHtml(target.target_name || target.target_namecode || target.target_field || target.key)}</strong><span>${escapeHtml(target.target_namecode || target.target_field || "")}</span></div><div class="csv-data-check-target-metrics"><span>値あり <strong>${target.value_count}</strong> (${percentText(target.value_rate)})</span><span>空欄 <strong>${target.blank_count}</strong> (${percentText(target.blank_rate)})</span><span class="${target.failure_count ? "is-error" : ""}">失敗 <strong>${target.failure_count}</strong> (${percentText(target.failure_rate)})</span></div></summary><div class="csv-data-check-target-body"><div class="csv-data-check-rule-list">${(target.rules || []).map((rule) => `<div><strong>${escapeHtml(rule.rule_key)}</strong><small>${escapeHtml(rule.value_source_type)}${rule.fixed_value ? ` / 固定値 ${escapeHtml(rule.fixed_value)}` : ""} / ${escapeHtml(rule.selection_mode)}</small></div>`).join("")}</div>${codeTable}${sampleTable}</div></details>`;
     };
+    const renderPreview = (payload) => {
+      const previewRows = payload.preview_rows || [];
+      const previewTargets = payload.targets || [];
+      if (!previewRows.length || !previewTargets.length) {
+        preview.innerHTML = `<div class="empty-state">表プレビューの対象データがありません。</div>`;
+        return;
+      }
+      preview.innerHTML = `<section class="csv-data-check-preview-section">
+        <div class="section-heading"><div><h3>変換結果プレビュー</h3><p class="subtle">先頭${Math.min(previewRows.length, payload.preview_row_limit || previewRows.length)}行。各セルは raw → 変換後です。</p></div><span class="status-pill status-neutral">${previewTargets.length}項目</span></div>
+        <div class="csv-data-check-preview-wrap"><table class="data-table compact-table csv-data-check-preview-table"><thead><tr><th>CSV行</th>${previewTargets.map((target) => `<th><strong>${escapeHtml(target.target_name || target.target_namecode || target.target_field || target.key)}</strong><small>${escapeHtml(target.data_type || target.target_kind || "")}</small></th>`).join("")}</tr></thead><tbody>${previewRows.map((row) => {
+          const cellsByKey = new Map((row.cells || []).map((cell) => [cell.target_key, cell]));
+          return `<tr><th>${row.line_no}</th>${previewTargets.map((target) => {
+            const cell = cellsByKey.get(target.key) || {};
+            const raw = cell.raw_value == null || cell.raw_value === "" ? "(空欄)" : cell.raw_value;
+            const output = cell.output_value || "-";
+            const stateClass = cell.status === "ERROR" || cell.status === "CONFLICT" ? " is-error" : cell.status === "BLANK" ? " is-blank" : "";
+            return `<td class="${stateClass}"><small class="csv-data-check-preview-raw">${escapeHtml(raw)}</small><strong>${escapeHtml(output)}</strong>${cell.output_display ? `<small>${escapeHtml(cell.output_display)}</small>` : ""}${cell.reason ? `<small class="csv-data-check-preview-error">${escapeHtml(cell.reason)}</small>` : ""}</td>`;
+          }).join("")}</tr>`;
+        }).join("")}</tbody></table></div>
+      </section>`;
+    };
 
     fileInput?.addEventListener("change", () => { if (fileInput.files?.[0]) inspectFile(fileInput.files[0]); });
     ["dragenter", "dragover"].forEach((name) => dropzone?.addEventListener(name, (event) => { event.preventDefault(); dropzone.classList.add("is-dragging"); }));
@@ -5480,6 +5502,7 @@
       try {
         const payload = await postCsvFile(`/api/admin/csv-mapping-templates/${templateId}/data-check/run`, selectedFile, { header_mismatch_confirmed: confirmed ? "1" : "0" });
         renderOverview(payload);
+        renderPreview(payload);
         targets.innerHTML = (payload.targets || []).map(renderTarget).join("") || `<div class="empty-state">チェック対象の有効ルールがありません。</div>`;
         resultPanel.hidden = false;
         resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
