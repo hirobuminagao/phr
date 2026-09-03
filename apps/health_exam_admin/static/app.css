@@ -6812,6 +6812,17 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #f8fbfd;
 }
 
+.subscriber-match-selected-ledger > div.subscriber-match-insurer-mismatch {
+  border-color: #d99a3d;
+  background: #fff4d8;
+  box-shadow: inset 4px 0 0 #c47a12;
+}
+
+.subscriber-match-insurer-warning {
+  color: #8a4b00 !important;
+  font-weight: 900;
+}
+
 .subscriber-match-selected-ledger span {
   display: block;
   margin-bottom: 4px;

@@ -1,11 +1,23 @@
 from inspect import getsource
 
 from apps.health_exam_admin.main import (
+    insurer_number_matches_event,
     load_subscriber_match_candidate_rows,
     load_subscriber_match_resolution_counts,
     load_subscriber_match_resolved_rows,
     subscriber_match_issue_where_parts,
 )
+
+
+def test_insurer_number_match_ignores_leading_zeroes() -> None:
+    assert insurer_number_matches_event("06139463", "6139463") is True
+    assert insurer_number_matches_event("6139463", "06139463") is True
+
+
+def test_insurer_number_match_detects_difference_and_missing_source() -> None:
+    assert insurer_number_matches_event("06139463", "06139464") is False
+    assert insurer_number_matches_event(None, "06139463") is False
+    assert insurer_number_matches_event("06139463", None) is None
 
 
 class Cursor:

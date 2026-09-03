@@ -3910,6 +3910,16 @@ def load_event_options(cur: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in cur.fetchall()]
 
 
+def insurer_number_matches_event(source_value: Any, event_value: Any) -> bool | None:
+    event_result = normalize_insurer_number(None if event_value is None else str(event_value))
+    if not event_result.get("ok"):
+        return None
+    source_result = normalize_insurer_number(None if source_value is None else str(source_value))
+    if not source_result.get("ok"):
+        return False
+    return source_result.get("match") == event_result.get("match")
+
+
 def load_subscriber_match_resolution_counts(cur: Any, *, event_id: int | str) -> dict[str, int]:
     cur.execute(
         f"""
@@ -20471,6 +20481,16 @@ def subscriber_match_review(request: Request) -> Response:
                 selected_ledger = load_exam_ledger_detail(cur, exam_ledger_id=selected_ledger_id)
             elif rows:
                 selected_ledger = load_exam_ledger_detail(cur, exam_ledger_id=int(rows[0]["exam_ledger_id"]))
+            selected_event = next(
+                (event for event in event_options if str(event.get("event_id")) == str(filters["event_id"])),
+                None,
+            )
+            if selected_ledger is not None:
+                selected_ledger["event_insurer_number"] = (selected_event or {}).get("insurer_number")
+                selected_ledger["insurer_number_matches_event"] = insurer_number_matches_event(
+                    selected_ledger.get("insurer_number"),
+                    selected_ledger.get("event_insurer_number"),
+                )
             candidate_rows = load_subscriber_match_candidate_rows(
                 cur,
                 ledger=selected_ledger,
