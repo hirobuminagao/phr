@@ -1184,6 +1184,23 @@ def load_app_error_log_detail(cur: Any, *, log_id: str) -> dict[str, Any] | None
     return dict(row) if row else None
 
 
+def format_app_error_log_text(row: Mapping[str, Any]) -> str:
+    query_string = str(row.get("query_string") or "")
+    request_target = f"{row.get('method') or '-'} {row.get('path') or '-'}"
+    if query_string:
+        request_target += f"?{query_string}"
+    return (
+        f"ログID: {row.get('log_id') or '-'}\n"
+        f"日時: {row.get('created_at') or '-'}\n"
+        f"リクエスト: {request_target}\n"
+        f"ステータス: {row.get('status_code') or '-'}\n"
+        f"例外: {row.get('exception_type') or '-'}: {row.get('exception_message') or '-'}\n"
+        f"利用者: {row.get('employee_no') or '-'}\n"
+        f"IP: {row.get('client_ip') or '-'}\n\n"
+        f"{row.get('traceback_text') or ''}"
+    )
+
+
 def upsert_app_setting(
     cur: Any,
     *,
@@ -22245,6 +22262,30 @@ def admin_error_log_detail(request: Request, log_id: str) -> Response:
             "row": row,
             "error": None,
         },
+    )
+
+
+@app.get("/admin/error-logs/{log_id}/download")
+def admin_error_log_download(request: Request, log_id: str) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=app_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        row = load_app_error_log_detail(cur, log_id=log_id)
+        cur.close()
+    if not row:
+        return Response("エラーログが見つかりません。", status_code=404, media_type="text/plain; charset=utf-8")
+
+    safe_log_id = re.sub(r"[^A-Za-z0-9_-]", "_", log_id)
+    return Response(
+        "\ufeff" + format_app_error_log_text(row),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe_log_id}.txt"'},
     )
 
 

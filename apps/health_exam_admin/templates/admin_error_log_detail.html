@@ -27,7 +27,10 @@
         <h2>{{ row.log_id }}</h2>
         <p class="subtle">{{ row.created_at }} / {{ row.method }} {{ row.path }}</p>
       </div>
-      <button type="button" class="ghost-button compact-action-button" data-copy-target="#admin-error-log-copy-text">ログをコピー</button>
+      <div class="top-actions">
+        <button type="button" class="ghost-button compact-action-button" data-copy-target="#admin-error-log-copy-text">ログをコピー</button>
+        <a class="ghost-button compact-action-button" href="/admin/error-logs/{{ row.log_id|url_quote }}/download">ログをダウンロード</a>
+      </div>
       {% if row.resolved_at %}
       <span class="status-pill status-ready">対応済み</span>
       {% else %}
