@@ -7650,6 +7650,7 @@ def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
           SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
           FROM {qname(health_db())}.exam_export_cases
           WHERE subscriber_id IS NOT NULL
+            AND case_lifecycle_status = 'ACTIVE'
           GROUP BY event_id, subscriber_id
         ) AS subcase
           ON subcase.event_id = eec.event_id
@@ -7724,6 +7725,7 @@ def load_exam_export_case_summary(cur: Any, *, filters: dict[str, str]) -> dict[
           SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
           FROM {qname(health_db())}.exam_export_cases
           WHERE subscriber_id IS NOT NULL
+            AND case_lifecycle_status = 'ACTIVE'
           GROUP BY event_id, subscriber_id
         ) AS subcase
           ON subcase.event_id = eec.event_id
@@ -7885,6 +7887,7 @@ def load_exam_export_case_rows(
           SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
           FROM {qname(health_db())}.exam_export_cases
           WHERE subscriber_id IS NOT NULL
+            AND case_lifecycle_status = 'ACTIVE'
           GROUP BY event_id, subscriber_id
         ) AS subcase
           ON subcase.event_id = eec.event_id
@@ -7985,6 +7988,7 @@ def load_exam_export_case_page_ids(
           SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
           FROM {qname(health_db())}.exam_export_cases
           WHERE subscriber_id IS NOT NULL
+            AND case_lifecycle_status = 'ACTIVE'
           GROUP BY event_id, subscriber_id
         ) AS subcase
           ON subcase.event_id = eec.event_id
