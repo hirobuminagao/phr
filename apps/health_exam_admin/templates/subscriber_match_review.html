@@ -7,6 +7,7 @@
     <h1>加入者突合NG修正</h1>
   </div>
   <nav class="top-actions">
+    <a class="ghost-button" href="/subscriber-match-resolved">解決済み一覧</a>
     <a class="ghost-button" href="/exam-ledgers?subscriber_match_filter=PARTIAL_MATCHED">健診結果一覧（受領）</a>
     <a class="ghost-button" href="/exam-processing">健診結果処理</a>
     <a class="ghost-button" href="/">HOME</a>
@@ -292,6 +293,10 @@
           <input name="candidate_name_kana" value="{{ candidate_filters.name_kana or '' }}" autocomplete="off" placeholder="氏名カナ">
         </label>
         <label>
+          <span>生年月日</span>
+          <input name="candidate_birth" value="{{ candidate_filters.birth or '' }}" autocomplete="off" inputmode="numeric" placeholder="YYYYMMDD">
+        </label>
+        <label>
           <span>記号</span>
           <input name="candidate_insurance_symbol" value="{{ candidate_filters.insurance_symbol or '' }}" autocomplete="off" placeholder="保険証記号">
         </label>
@@ -320,9 +325,8 @@
                   <span class="help-icon-button" aria-label="突合確定ボタンの説明">?</span>
                 </span>
                 <div class="help-popover hover-help-popover help-popover-right">
-                  <strong>確定ボタンの違い</strong>
-                  <p><span>突合だけ確定:</span> この受領ledgerを選択した加入者へ紐付けます。CSV/XML由来の出力用基本情報は変更しません。</p>
-                  <p><span>加入者情報も適用:</span> 突合確定に加えて、subscribers由来の氏名カナ、記号、番号、枝番、郵便番号、住所を出力用基本情報へ反映します。空値では上書きしません。</p>
+                  <strong>加入者情報の適用</strong>
+                  <p>この受領ledgerを選択した加入者へ紐付け、subscribers由来の氏名カナ、記号、番号、枝番、郵便番号、住所を出力用基本情報へ反映します。受領rawは保持し、空値では上書きしません。</p>
                 </div>
               </th>
             </tr>
@@ -333,14 +337,23 @@
               <td>
                 <strong>{{ candidate.name_kana_full or "カナなし" }}</strong>
                 <small>{{ candidate.name_kanji_full or "氏名なし" }} / subscriber {{ candidate.subscriber_id }}</small>
-                <small>{{ candidate.birth or "-" }} / 性別 {{ gender_code_label(candidate.gender_code) }}</small>
-                <small>記号 {{ candidate.insurance_symbol_export or candidate.insurance_symbol or "-" }} / 番号 {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
+                <div class="subscriber-candidate-match-fields">
+                  <span class="{{ 'is-match' if selected_ledger.name_kana_match and candidate.name_kana_full_match == selected_ledger.name_kana_match else '' }}">カナ {{ candidate.name_kana_full or "-" }}</span>
+                  <span class="{{ 'is-match' if selected_ledger.birthdate and candidate.birth|string == selected_ledger.birthdate|string else '' }}">生年月日 {{ candidate.birth or "-" }}</span>
+                  <span class="{{ 'is-match' if selected_ledger.gender_code and candidate.gender_code|string == selected_ledger.gender_code|string else '' }}">性別 {{ gender_code_label(candidate.gender_code) }}</span>
+                  <span class="{{ 'is-match' if selected_ledger.insurance_symbol_match and candidate.insurance_symbol_match == selected_ledger.insurance_symbol_match else '' }}">記号 {{ candidate.insurance_symbol_export or candidate.insurance_symbol or "-" }}</span>
+                  <span class="{{ 'is-match' if selected_ledger.insurance_number_match and candidate.insurance_number_match == selected_ledger.insurance_number_match else '' }}">番号 {{ candidate.insurance_number or "-" }}</span>
+                  <span class="{{ 'is-match' if selected_ledger.insurance_branch_number_match and candidate.insurance_branchnumber|string == selected_ledger.insurance_branch_number_match|string else '' }}">枝番 {{ candidate.insurance_branchnumber or "-" }}</span>
+                </div>
                 <small>〒 {{ candidate.subscriber_postal_code or "-" }} / {{ candidate.subscriber_address_line or "-" }}{{ candidate.subscriber_building or "" }}</small>
               </td>
               <td>
                 <strong>score {{ candidate.match_score or 0 }}</strong>
-                <small>HIA {{ candidate.hia_subscriber_id or "-" }} / person_id_custom {{ candidate.person_id_custom or "-" }}</small>
-                <small>{{ candidate.insurer_number or "-" }} / {{ candidate.insurance_symbol or "-" }} / {{ candidate.insurance_number or "-" }} / 枝番 {{ candidate.insurance_branchnumber or "-" }}</small>
+                <div class="subscriber-candidate-match-fields">
+                  <span class="{{ 'is-match' if selected_ledger.hia_subscriber_id and candidate.hia_subscriber_id == selected_ledger.hia_subscriber_id else '' }}">HIA {{ candidate.hia_subscriber_id or "-" }}</span>
+                  <span class="{{ 'is-match' if selected_ledger.person_id_custom and candidate.person_id_custom == selected_ledger.person_id_custom else '' }}">person ID {{ candidate.person_id_custom or "-" }}</span>
+                  <span class="{{ 'is-match' if selected_ledger.insurer_number and candidate.insurer_number == selected_ledger.insurer_number else '' }}">保険者 {{ candidate.insurer_number or "-" }}</span>
+                </div>
                 <small>続柄 {{ candidate.relationship_name or "-" }} / 喪失 {{ candidate.qualification_lost_date or "-" }} / 社員 {{ candidate.employee_code or "-" }}</small>
               </td>
               <td>
@@ -373,13 +386,12 @@
                   <input type="hidden" name="subscriber_id" value="{{ candidate.subscriber_id }}">
                   <input name="note" required placeholder="確定理由">
                   <div class="subscriber-match-confirm-actions">
-                    <button class="ghost-button" type="submit" name="apply_subscriber_values" value="0" data-confirm-message="この加入者で突合だけ確定します。">突合だけ確定</button>
                     <button
                       type="submit"
                       name="apply_subscriber_values"
                       value="1"
                       data-confirm-message="この加入者で確定し、以下の加入者情報を出力用基本情報へ適用します。&#10;&#10;氏名カナ: {{ candidate.name_kana_full or '-' }}&#10;記号: {{ candidate.insurance_symbol_export or candidate.insurance_symbol or '-' }}&#10;番号: {{ candidate.insurance_number or '-' }}&#10;枝番: {{ candidate.insurance_branchnumber or '-' }}&#10;郵便番号: {{ candidate.subscriber_postal_code or '-' }}&#10;住所: {{ (candidate.subscriber_address_line or '-') ~ (candidate.subscriber_building or '') }}"
-                    >加入者情報も適用</button>
+                    >加入者情報を適用</button>
                   </div>
                 </form>
               </td>

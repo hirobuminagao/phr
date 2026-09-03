@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% set title = "加入者突合 解決済み一覧" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">SUBSCRIBER MATCH HISTORY</p>
+    <h1>加入者突合 解決済み一覧</h1>
+    <p>突合画面で手動確定し、現在もその突合が有効なledgerを確認します。</p>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/subscriber-match-review">加入者突合へ戻る</a>
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>解決実績</h2>
+        <p class="subtle">同じ加入者を複数ledgerへ確定した場合、人数とledger数は異なります。</p>
+      </div>
+      <div class="top-actions">
+        <span class="status-pill status-ready">{{ resolution_counts.resolved_person_count or 0 }}人</span>
+        <span class="status-pill status-muted">{{ resolution_counts.resolved_ledger_count or 0 }} ledger</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel filter-panel">
+    <form method="get" action="/subscriber-match-resolved" class="ledger-filter-form">
+      <div class="ledger-filter-row ledger-filter-row-primary">
+        <label><span>イベント</span><select name="event_id">
+          {% for event in event_options %}<option value="{{ event.event_id }}" {% if event_id|string == event.event_id|string %}selected{% endif %}>{{ event.event_name or ("event " ~ event.event_id) }}</option>{% endfor %}
+        </select></label>
+        <label><span>キーワード</span><input name="q" value="{{ query }}" autocomplete="off" placeholder="HIA ID / 氏名 / カナ / 記号 / 番号 / ledger ID"></label>
+        <label><span>表示件数</span><input name="limit" value="{{ limit }}" inputmode="numeric"></label>
+        <div class="filter-actions"><button type="submit">検索</button><a class="ghost-button" href="/subscriber-match-resolved">クリア</a></div>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading"><div><h2>現在有効な手動突合</h2><p class="subtle">{{ rows|length }}件を表示しています。</p></div></div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead><tr><th>対象者</th><th>受診情報</th><th>確定内容</th><th>担当・日時</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td><strong>{{ row.name_full_raw or row.name_kana_raw or "氏名なし" }}</strong><small>{{ row.name_kana_raw or "-" }} / 生年月日 {{ row.birthdate or "-" }}</small><small>HIA {{ row.hia_subscriber_id or "-" }} / subscriber {{ row.subscriber_id }}</small><small>記号 {{ row.insurance_symbol_raw or "-" }} / 番号 {{ row.insurance_number_raw or "-" }}</small></td>
+            <td><strong>ledger {{ row.exam_ledger_id }}</strong><small>{{ row.facility_name or "健診機関なし" }} / {{ row.facility_code or "-" }}</small><small>受診日 {{ row.exam_date or "-" }}</small></td>
+            <td><strong>{{ "加入者情報も適用" if row.applied_subscriber_export_values else "突合だけ確定" }}</strong><small>{{ row.note or "理由記載なし" }}</small></td>
+            <td><strong>ユーザーID {{ row.changed_by_app_user_id or "-" }}</strong><small>{{ row.changed_at or "-" }}</small></td>
+          </tr>
+          {% else %}<tr><td colspan="4">条件に一致する解決済みledgerはありません。</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

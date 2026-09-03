@@ -6822,10 +6822,32 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .subscriber-candidate-search {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(120px, 0.8fr)) auto;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(120px, 0.8fr)) auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 12px;
+}
+
+.subscriber-candidate-match-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 5px 0;
+}
+
+.subscriber-candidate-match-fields span {
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.subscriber-candidate-match-fields span.is-match {
+  background: #dff5ea;
+  color: #075f4d;
+  font-weight: 800;
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .subscriber-candidate-search label,

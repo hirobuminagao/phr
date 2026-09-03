@@ -3907,6 +3907,63 @@ def load_subscriber_match_resolution_counts(cur: Any, *, event_id: int | str) ->
     return {key: int(row.get(key) or 0) for key in ("resolved_person_count", "resolved_ledger_count")}
 
 
+def load_subscriber_match_resolved_rows(
+    cur: Any,
+    *,
+    event_id: int | str,
+    query: str = "",
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    where_parts = [
+        "el.event_id = %s",
+        "el.subscriber_match_status = 'MATCHED'",
+        "el.subscriber_match_method = 'manual'",
+        "el.subscriber_id IS NOT NULL",
+        "latest.new_subscriber_match_status = 'MATCHED'",
+        "latest.new_subscriber_match_method = 'manual'",
+    ]
+    params: list[Any] = [event_id]
+    query = query.strip()
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            "(el.hia_subscriber_id LIKE %s OR el.person_id_custom LIKE %s "
+            "OR el.name_full_raw LIKE %s OR el.name_kana_raw LIKE %s "
+            "OR el.insurance_symbol_raw LIKE %s OR el.insurance_number_raw LIKE %s "
+            "OR CAST(el.exam_ledger_id AS CHAR) LIKE %s)"
+        )
+        params.extend([like] * 7)
+    cur.execute(
+        f"""
+        SELECT
+          el.exam_ledger_id, el.event_id, el.subscriber_id,
+          el.hia_subscriber_id, el.person_id_custom,
+          el.name_full_raw, el.name_kana_raw, el.birthdate,
+          el.insurance_symbol_raw, el.insurance_number_raw,
+          el.facility_code, el.facility_name, el.exam_date,
+          latest.applied_subscriber_export_values,
+          latest.applied_fields_json, latest.note,
+          latest.changed_by_app_user_id, latest.changed_at
+        FROM {qname(health_db())}.exam_ledgers AS el
+        INNER JOIN (
+          SELECT a1.*
+          FROM {qname(health_db())}.exam_ledger_subscriber_match_audit_logs AS a1
+          INNER JOIN (
+            SELECT exam_ledger_id, MAX(exam_ledger_subscriber_match_audit_log_id) AS max_id
+            FROM {qname(health_db())}.exam_ledger_subscriber_match_audit_logs
+            GROUP BY exam_ledger_id
+          ) AS latest_ids
+            ON latest_ids.max_id = a1.exam_ledger_subscriber_match_audit_log_id
+        ) AS latest ON latest.exam_ledger_id = el.exam_ledger_id
+        WHERE {" AND ".join(where_parts)}
+        ORDER BY latest.changed_at DESC, el.exam_ledger_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]:
     cur.execute(
         f"""
@@ -20353,6 +20410,7 @@ def subscriber_match_review(request: Request) -> Response:
     candidate_query = request.query_params.get("candidate_q", "").strip()
     candidate_filters = {
         "name_kana": request.query_params.get("candidate_name_kana", "").strip(),
+        "birth": request.query_params.get("candidate_birth", "").strip(),
         "insurance_symbol": request.query_params.get("candidate_insurance_symbol", "").strip(),
         "insurance_number": request.query_params.get("candidate_insurance_number", "").strip(),
         "employee_code": request.query_params.get("candidate_employee_code", "").strip(),
@@ -20419,6 +20477,42 @@ def subscriber_match_review(request: Request) -> Response:
             "limit": limit,
             "message": request.query_params.get("message", ""),
             "error": request.query_params.get("error", ""),
+        },
+    )
+
+
+@app.get("/subscriber-match-resolved", response_class=HTMLResponse)
+def subscriber_match_resolved(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    event_id = request.query_params.get("event_id", "2")
+    query = request.query_params.get("q", "").strip()
+    limit = parse_positive_int(request.query_params.get("limit", "500"), default=500, maximum=2000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            event_options = load_event_options(cur)
+            rows = load_subscriber_match_resolved_rows(cur, event_id=event_id, query=query, limit=limit)
+            resolution_counts = load_subscriber_match_resolution_counts(cur, event_id=event_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return templates.TemplateResponse(
+        "subscriber_match_resolved.html",
+        {
+            "request": request,
+            "user": user,
+            "event_options": event_options,
+            "event_id": event_id,
+            "query": query,
+            "limit": limit,
+            "rows": rows,
+            "resolution_counts": resolution_counts,
         },
     )
 
