@@ -1281,6 +1281,52 @@ def log_audit(
     )
 
 
+def log_audit_many(
+    cur: Any,
+    *,
+    request: Request,
+    user: dict[str, Any] | None,
+    action_code: str,
+    targets: Sequence[tuple[str | None, str | None, str | None, dict[str, Any] | None]],
+) -> None:
+    if not targets:
+        return
+    app_user_id = None if not user else int(user["app_user_id"])
+    employee_no = None if not user else str(user.get("employee_no") or "")
+    ip_address = client_ip(request)
+    user_agent = request.headers.get("user-agent")
+    cur.executemany(
+        f"""
+        INSERT INTO {qname(app_db())}.app_audit_logs (
+          app_user_id,
+          employee_no,
+          action_code,
+          target_schema,
+          target_table,
+          target_id,
+          after_json,
+          client_ip,
+          user_agent
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        [
+            (
+                app_user_id,
+                employee_no,
+                action_code,
+                target_schema,
+                target_table,
+                target_id,
+                json.dumps(after or {}, ensure_ascii=False),
+                ip_address,
+                user_agent,
+            )
+            for target_schema, target_table, target_id, after in targets
+        ],
+    )
+
+
 def log_app_operation(
     *,
     request: Request,
@@ -3938,6 +3984,28 @@ def load_subscriber_match_resolution_counts(cur: Any, *, event_id: int | str) ->
     return {key: int(row.get(key) or 0) for key in ("resolved_person_count", "resolved_ledger_count")}
 
 
+def load_subscriber_match_workload_counts(cur: Any, *, event_id: int | str) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT COUNT(DISTINCT el.exam_ledger_id) AS listed_ledger_count
+        FROM {qname(health_db())}.exam_ledgers AS el
+        WHERE el.event_id = %s
+          AND NOT (
+            COALESCE(el.subscriber_match_status, '') = 'MATCHED'
+            AND COALESCE(el.subscriber_match_method, '') = 'identity_hash'
+          )
+          AND NOT (
+            el.source_type IN ('PAPER', 'MANUAL')
+            AND el.subscriber_match_status = 'MANUAL_CONFIRMED'
+            AND el.subscriber_id IS NOT NULL
+          )
+        """,
+        (event_id,),
+    )
+    row = dict(cur.fetchone() or {})
+    return {"listed_ledger_count": int(row.get("listed_ledger_count") or 0)}
+
+
 def load_subscriber_match_resolved_rows(
     cur: Any,
     *,
@@ -4023,6 +4091,7 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
         **case_row,
         **dict(cur.fetchone() or {}),
         **load_subscriber_match_resolution_counts(cur, event_id=event_id),
+        **load_subscriber_match_workload_counts(cur, event_id=event_id),
     }
     return {key: int(value or 0) for key, value in values.items()}
 
@@ -20908,22 +20977,26 @@ def exam_export_cases(request: Request) -> Response:
             )
             summary_filter_urls = build_exam_export_case_summary_filter_urls(filters, limit=limit)
             if audit_enabled(cur):
-                for row in rows:
-                    log_audit(
-                        cur,
-                        request=request,
-                        user=user,
-                        action_code="PERSONAL_INFO_VIEW_EXAM_EXPORT_CASE",
-                        target_schema=health_db(),
-                        target_table="exam_export_cases",
-                        target_id=str(row.get("exam_export_case_id") or ""),
-                        after={
-                            "exam_export_case_id": row.get("exam_export_case_id"),
-                            "hia_subscriber_id": row.get("hia_subscriber_id"),
-                            "subscriber_id": row.get("subscriber_id"),
-                            "exam_date": str(row.get("exam_date") or ""),
-                        },
-                    )
+                log_audit_many(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="PERSONAL_INFO_VIEW_EXAM_EXPORT_CASE",
+                    targets=[
+                        (
+                            health_db(),
+                            "exam_export_cases",
+                            str(row.get("exam_export_case_id") or ""),
+                            {
+                                "exam_export_case_id": row.get("exam_export_case_id"),
+                                "hia_subscriber_id": row.get("hia_subscriber_id"),
+                                "subscriber_id": row.get("subscriber_id"),
+                                "exam_date": str(row.get("exam_date") or ""),
+                            },
+                        )
+                        for row in rows
+                    ],
+                )
             conn.commit()
         except Exception:
             conn.rollback()

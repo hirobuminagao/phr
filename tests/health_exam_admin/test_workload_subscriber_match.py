@@ -6,6 +6,7 @@ from apps.health_exam_admin.main import (
     load_subscriber_match_candidate_rows,
     load_subscriber_match_resolution_counts,
     load_subscriber_match_resolved_rows,
+    load_subscriber_match_workload_counts,
     subscriber_match_issue_where_parts,
 )
 
@@ -41,7 +42,7 @@ class Cursor:
         self.params = params
 
     def fetchone(self) -> dict[str, object]:
-        return {"resolved_person_count": 12, "resolved_ledger_count": 15}
+        return {"resolved_person_count": 12, "resolved_ledger_count": 15, "listed_ledger_count": 171}
 
     def fetchall(self) -> list[dict[str, object]]:
         return []
@@ -56,6 +57,18 @@ def test_load_subscriber_match_resolution_counts_uses_manual_unique_people() -> 
     assert "COUNT(DISTINCT new_subscriber_id)" in cursor.sql
     assert "COUNT(DISTINCT exam_ledger_id)" in cursor.sql
     assert "new_subscriber_match_method = 'manual'" in cursor.sql
+    assert cursor.params == (2,)
+
+
+def test_load_subscriber_match_workload_counts_uses_all_listed_ledgers() -> None:
+    cursor = Cursor()
+
+    result = load_subscriber_match_workload_counts(cursor, event_id=2)
+
+    assert result == {"listed_ledger_count": 171}
+    assert "COUNT(DISTINCT el.exam_ledger_id)" in cursor.sql
+    assert "subscriber_match_method, '') = 'identity_hash'" in cursor.sql
+    assert "MANUAL_CONFIRMED" in cursor.sql
     assert cursor.params == (2,)
 
 
