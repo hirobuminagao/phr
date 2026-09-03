@@ -6483,10 +6483,15 @@ def subscriber_match_issue_where_parts(
         where_parts.append(
             """
             (
-              el.subscriber_match_status IS NULL
-              OR el.subscriber_match_status <> 'MATCHED'
-              OR el.subscriber_match_method IS NULL
-              OR el.subscriber_match_method NOT IN ('identity_hash', 'manual')
+              NOT (
+                COALESCE(el.subscriber_match_status, '') = 'MATCHED'
+                AND COALESCE(el.subscriber_match_method, '') IN ('identity_hash', 'manual')
+              )
+              AND NOT (
+                el.source_type IN ('PAPER', 'MANUAL')
+                AND el.subscriber_match_status = 'MANUAL_CONFIRMED'
+                AND el.subscriber_id IS NOT NULL
+              )
             )
             """
         )
@@ -9134,8 +9139,14 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
           SUM(CASE WHEN el.source_type IN ('PAPER', 'MANUAL') THEN 1 ELSE 0 END) AS manual_source_count,
           SUM(
             CASE
-              WHEN el.subscriber_match_status = 'MATCHED'
-               AND el.subscriber_match_method = 'identity_hash'
+              WHEN (
+                el.subscriber_match_status = 'MATCHED'
+                AND el.subscriber_match_method IN ('identity_hash', 'manual')
+              ) OR (
+                el.source_type IN ('PAPER', 'MANUAL')
+                AND el.subscriber_match_status = 'MANUAL_CONFIRMED'
+                AND el.subscriber_id IS NOT NULL
+              )
                 THEN 0
               ELSE 1
             END
@@ -9462,8 +9473,14 @@ def load_facility_summary_detail(
           SUM(CASE WHEN el.check_status = 'NG' THEN 1 ELSE 0 END) AS source_ng_count,
           SUM(
             CASE
-              WHEN el.subscriber_match_status = 'MATCHED'
-               AND el.subscriber_match_method = 'identity_hash'
+              WHEN (
+                el.subscriber_match_status = 'MATCHED'
+                AND el.subscriber_match_method IN ('identity_hash', 'manual')
+              ) OR (
+                el.source_type IN ('PAPER', 'MANUAL')
+                AND el.subscriber_match_status = 'MANUAL_CONFIRMED'
+                AND el.subscriber_id IS NOT NULL
+              )
                 THEN 0
               ELSE 1
             END
