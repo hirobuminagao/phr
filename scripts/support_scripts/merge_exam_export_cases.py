@@ -23,6 +23,22 @@ from scripts.from_medical.script_lib.case_insurer_resolution import (
 )
 
 
+AUTOMATIC_REVIEW_STATUSES = {"NEEDS_CONFIRMATION", "RESOLVED_BY_SOURCE_VALUE", "NONE"}
+
+
+def review_is_automatic(row: dict[str, Any]) -> bool:
+    return (
+        row.get("source_status") in AUTOMATIC_REVIEW_STATUSES
+        and not row.get("source_note")
+        and row.get("source_reviewed_by") is None
+        and int(row.get("source_human_audit_count") or 0) == 0
+        and row.get("target_status") in AUTOMATIC_REVIEW_STATUSES
+        and not row.get("target_note")
+        and row.get("target_reviewed_by") is None
+        and int(row.get("target_human_audit_count") or 0) == 0
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Diagnose or merge duplicate exam export cases.")
     parser.add_argument("--target-case-id", type=int, required=True)
@@ -121,10 +137,31 @@ def merge_cases(
             ledgers=ledger_rows,
         )
 
-        review_conflicts = _count(
-            cur,
+        cur.execute(
             f"""
-            SELECT COUNT(*) AS count_value
+            SELECT
+              source_item.exam_case_check_review_item_id AS source_review_id,
+              target_item.exam_case_check_review_item_id AS target_review_id,
+              source_item.check_scope,
+              source_item.check_item_code,
+              source_item.review_status AS source_status,
+              source_item.review_note AS source_note,
+              source_item.reviewed_by_app_user_id AS source_reviewed_by,
+              target_item.review_status AS target_status,
+              target_item.review_note AS target_note,
+              target_item.reviewed_by_app_user_id AS target_reviewed_by,
+              (
+                SELECT COUNT(*)
+                FROM {qname(health_db)}.exam_case_check_review_item_audit_logs source_audit
+                WHERE source_audit.exam_case_check_review_item_id = source_item.exam_case_check_review_item_id
+                  AND (source_audit.changed_by_app_user_id IS NOT NULL OR source_audit.source <> 'CHECK_EXAM_RESULTS')
+              ) AS source_human_audit_count,
+              (
+                SELECT COUNT(*)
+                FROM {qname(health_db)}.exam_case_check_review_item_audit_logs target_audit
+                WHERE target_audit.exam_case_check_review_item_id = target_item.exam_case_check_review_item_id
+                  AND (target_audit.changed_by_app_user_id IS NOT NULL OR target_audit.source <> 'CHECK_EXAM_RESULTS')
+              ) AS target_human_audit_count
             FROM {qname(health_db)}.exam_case_check_review_items source_item
             INNER JOIN {qname(health_db)}.exam_case_check_review_items target_item
               ON target_item.exam_export_case_id = %s
@@ -134,6 +171,8 @@ def merge_cases(
             """,
             (target_case_id, source_case_id),
         )
+        review_overlaps = [dict(row) for row in cur.fetchall()]
+        manual_review_conflicts = [row for row in review_overlaps if not review_is_automatic(row)]
         correction_conflicts = _count(
             cur,
             f"""
@@ -146,10 +185,10 @@ def merge_cases(
             """,
             (target_case_id, source_case_id),
         )
-        if review_conflicts or correction_conflicts:
+        if manual_review_conflicts or correction_conflicts:
             raise ValueError(
                 "CASE_MERGE_MANUAL_STATE_CONFLICT: "
-                f"review_items={review_conflicts} corrections={correction_conflicts}"
+                f"review_items={len(manual_review_conflicts)} corrections={correction_conflicts}"
             )
 
         tables = {
@@ -187,9 +226,34 @@ def merge_cases(
             "resolved_insurer_number": resolved_insurer_number,
             "allowed_insurer_numbers": sorted(insurer_context.allowed_insurer_numbers),
             "source_counts": counts,
+            "automatic_review_overlaps": [
+                {
+                    "check_scope": row["check_scope"],
+                    "check_item_code": row["check_item_code"],
+                    "target_status": row["target_status"],
+                    "source_status": row["source_status"],
+                }
+                for row in review_overlaps
+            ],
         }
         if not apply:
             return result
+
+        for overlap in review_overlaps:
+            cur.execute(
+                f"""
+                UPDATE {qname(health_db)}.exam_case_check_review_item_audit_logs
+                SET exam_case_check_review_item_id = %s,
+                    exam_export_case_id = %s
+                WHERE exam_case_check_review_item_id = %s
+                """,
+                (overlap["target_review_id"], target_case_id, overlap["source_review_id"]),
+            )
+            cur.execute(
+                f"DELETE FROM {qname(health_db)}.exam_case_check_review_items "
+                "WHERE exam_case_check_review_item_id = %s",
+                (overlap["source_review_id"],),
+            )
 
         for table in ("exam_export_case_sources", "exam_case_check_review_items", "exam_case_basic_info_corrections", "manual_exam_entry_drafts"):
             cur.execute(
