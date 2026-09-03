@@ -27,8 +27,14 @@
   {% if case.case_lifecycle_status == 'MERGED' %}
   <div class="alert">
     このcaseは統合済みです。
-    {% if case.merged_into_case_id %}<a href="/exam-export-cases/{{ case.merged_into_case_id }}">統合先 case {{ case.merged_into_case_id }} を表示</a>{% endif %}
-    {% if case.merge_operation_reason %}<small>{{ case.merge_operation_reason }}</small>{% endif %}
+    {% if case.successor_case_id %}<a href="/exam-export-cases/{{ case.successor_case_id }}">統合先 case {{ case.successor_case_id }} を表示</a>{% endif %}
+    {% if case.lifecycle_close_reason %}<small>{{ case.lifecycle_close_reason }}</small>{% endif %}
+  </div>
+  {% elif case.case_lifecycle_status == 'SUPERSEDED' %}
+  <div class="alert">
+    このcaseは健診機関の再解決により差し替え済みです。
+    {% if case.successor_case_id %}<a href="/exam-export-cases/{{ case.successor_case_id }}">差し替え先 case {{ case.successor_case_id }} を表示</a>{% endif %}
+    {% if case.lifecycle_close_reason %}<small>{{ case.lifecycle_close_reason }}</small>{% endif %}
   </div>
   {% endif %}
 
@@ -41,6 +47,7 @@
     <div class="detail-status-stack">
       <span class="status-pill {{ 'status-ready' if case.export_readiness_status == 'EXPORT_READY' else 'status-pending' if case.export_readiness_status == 'APPROVED_WITH_REASON' else 'status-danger' if case.export_readiness_status == 'BLOCKED' else 'status-muted' }}">{{ case.export_readiness_status }}</span>
       {% if case.case_lifecycle_status == 'MERGED' %}<span class="status-pill status-danger">統合済み</span>{% endif %}
+      {% if case.case_lifecycle_status == 'SUPERSEDED' %}<span class="status-pill status-warning">差し替え済み</span>{% endif %}
       <span class="status-pill {{ 'status-ready' if case.legal_check_result == 'OK' else 'status-danger' if case.legal_check_result == 'NG' else 'status-pending' }}">法定 {{ case.legal_check_result or "未判定" }}</span>
       <span class="status-pill {{ check_result_status_class(case.specific_check_result_display) }}">特定 {{ check_result_label(case.specific_check_result_display) or "未判定" }}</span>
       {% if case.author_recovered_count %}<span class="status-pill status-ready">author補完 {{ case.author_recovered_count }}件</span>{% endif %}

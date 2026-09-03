@@ -264,10 +264,10 @@ def merge_cases(
             f"""
             UPDATE {qname(health_db)}.exam_export_cases
             SET case_lifecycle_status = 'MERGED',
-                merged_into_case_id = %s,
-                merged_at = CURRENT_TIMESTAMP(3),
-                merged_by_app_user_id = %s,
-                merge_operation_reason = %s,
+                successor_case_id = %s,
+                lifecycle_closed_at = CURRENT_TIMESTAMP(3),
+                lifecycle_closed_by_app_user_id = %s,
+                lifecycle_close_reason = %s,
                 case_status = 'MERGED',
                 export_readiness_status = 'BLOCKED',
                 export_readiness_reason = %s

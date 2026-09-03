@@ -62,10 +62,12 @@ python scripts/support_scripts/capture_snapshot.py --incident-id 1 --phase AFTER
 
 保険者番号の補正前後などで同じ受診が複数caseへ分裂した場合は、通常のcase生成でsourceを移動せず、専用コマンドを使う。
 
-事前に次のmigrationを適用する。
+事前に次のmigrationを順番に適用する。既存のACTIVE重複caseがある場合は、001適用後に統合してから002を適用する。
 
 ```text
 sql/migrations/health_exam_result/20260903_001_health_exam_result_add_case_lifecycle.sql
+sql/migrations/health_exam_result/20260903_002_health_exam_result_enforce_active_case_identity.sql
+sql/migrations/health_exam_result/20260903_003_health_exam_result_generalize_case_lifecycle.sql
 ```
 
 最初は必ずdry-runする。
@@ -79,3 +81,13 @@ python scripts/support_scripts/merge_exam_export_cases.py \
 
 表示されたidentity、source件数、レビュー・補正競合、出力履歴を確認後、同じ引数へ `--apply` を追加して実行する。
 統合元caseは削除されず `MERGED` となり、過去の出力リスト・XML出力履歴も元case IDのまま保持される。
+
+## 健診機関再解決後の旧case整理
+
+`supersede_orphaned_exam_export_cases.py` は、健診機関IDの再解決後にsource・採用値が空で残った旧caseを検出する。dry-runを既定とし、本番出力履歴、人手review、基本情報補正、手入力draft、移行先の曖昧さがあるcaseは更新しない。
+
+```powershell
+python scripts/support_scripts/supersede_orphaned_exam_export_cases.py --event-id 2
+```
+
+確認済みの旧caseだけを適用する場合は `--old-case-id` を繰り返し指定する。全候補を適用する場合も `--apply --all-eligible` の明示が必要である。旧caseは削除せず `SUPERSEDED` とし、未出力の出力リスト掲載は履歴を残して解除する。

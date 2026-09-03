@@ -2596,6 +2596,7 @@ def search_person_selection_subscribers(
         LEFT JOIN {qname(health_db())}.exam_export_cases AS eec
           ON eec.event_id = %s
          AND eec.subscriber_id = s.id
+         AND eec.case_lifecycle_status = 'ACTIVE'
         WHERE {" AND ".join(where_parts)}
         GROUP BY
           s.id,
@@ -4213,7 +4214,8 @@ def load_monthly_exam_ng_report(cur: Any, *, event_id: str, exam_month: str) -> 
             ON eiv.id = eecv.source_exam_item_value_id
           LEFT JOIN {qname(health_db())}.exam_ledgers AS el
             ON el.exam_ledger_id = eiv.ledger_id AND eiv.ledger_type = 'EXAM'
-          WHERE eec.event_id = %s {month_clause}
+          WHERE eec.event_id = %s
+            AND eec.case_lifecycle_status = 'ACTIVE' {month_clause}
           GROUP BY eec.exam_export_case_id, eec.facility_code
         ) AS source_mix
         GROUP BY source_mix.facility_code
@@ -4241,6 +4243,7 @@ def load_monthly_exam_ng_report(cur: Any, *, event_id: str, exam_month: str) -> 
         INNER JOIN {qname(health_db())}.exam_export_cases AS eec
           ON eec.exam_export_case_id = cri.exam_export_case_id
         WHERE eec.event_id = %s
+          AND eec.case_lifecycle_status = 'ACTIVE'
           AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
           {month_clause}
         GROUP BY cri.check_scope, cri.check_item_code,
@@ -6956,6 +6959,7 @@ def load_subscriber_match_candidate_rows(
             COUNT(*) AS case_count
           FROM {qname(health_db())}.exam_export_cases
           WHERE event_id = %s
+            AND case_lifecycle_status = 'ACTIVE'
           GROUP BY subscriber_id
         ) AS case_summary
           ON case_summary.subscriber_id = s.id
@@ -6991,6 +6995,7 @@ def load_subscriber_match_candidate_rows(
             ) AS ecr
               ON ecr.exam_export_case_id = eec.exam_export_case_id
             WHERE eec.event_id = %s
+              AND eec.case_lifecycle_status = 'ACTIVE'
           ) AS ranked_cases
           WHERE row_num = 1
         ) AS latest_case
@@ -8370,6 +8375,7 @@ def load_facility_summary_month_options(cur: Any, *, event_id: str | None = None
             COUNT(*) AS case_count
           FROM {qname(health_db())}.exam_export_cases
           WHERE exam_date IS NOT NULL
+            AND case_lifecycle_status = 'ACTIVE'
             {case_event_clause}
           GROUP BY DATE_FORMAT(exam_date, '%Y-%m')
         ) AS months
@@ -8909,6 +8915,7 @@ def update_exam_case_basic_info_correction(
         SELECT *
         FROM {qname(health_db())}.exam_export_cases
         WHERE exam_export_case_id = %s
+          AND case_lifecycle_status = 'ACTIVE'
         LIMIT 1
         """,
         (exam_export_case_id,),
@@ -10090,6 +10097,7 @@ def load_ops_xml_export_list_cases(cur: Any, *, xml_export_list_id: int) -> list
           ON ef.exam_facility_id = eec.exam_facility_id
         WHERE xelc.xml_export_list_id = %s
           AND xelc.removed_at IS NULL
+          AND eec.case_lifecycle_status = 'ACTIVE'
         ORDER BY ef.exam_facility_code, eec.exam_date, eec.name_kana_export_value, xelc.xml_export_list_case_id
         """,
         (xml_export_list_id,),
@@ -11846,6 +11854,7 @@ def resolve_manual_exam_entry_insurer_number(
             FROM {qname(health_db())}.exam_export_cases
             WHERE exam_export_case_id = %s
               AND event_id = %s
+              AND case_lifecycle_status = 'ACTIVE'
             LIMIT 1
             """,
             (exam_export_case_id, event_id),
@@ -12231,6 +12240,7 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
               AND exam_date = %s
               AND exam_facility_id = %s
               AND COALESCE(insurer_number_export_value, insurer_number) = %s
+              AND case_lifecycle_status = 'ACTIVE'
             ORDER BY exam_export_case_id DESC
             LIMIT 10
             """,
@@ -12263,6 +12273,7 @@ def build_manual_exam_draft_case_match_check(cur: Any, *, draft_id: int) -> dict
             FROM {qname(health_db())}.exam_export_cases
             WHERE event_id = %s
               AND subscriber_id = %s
+              AND case_lifecycle_status = 'ACTIVE'
             ORDER BY exam_date DESC, exam_export_case_id DESC
             LIMIT 10
             """,
@@ -17318,9 +17329,9 @@ def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str
           {('s.employee_code' if 'employee_code' in subscriber_columns else 'NULL')} AS employee_code,
           {('s.qualification_lost_date' if 'qualification_lost_date' in subscriber_columns else 'NULL')} AS qualification_lost_date,
           s.updated_at,
-          (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id) AS latest_exam_date,
+          (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id AND eec.case_lifecycle_status = 'ACTIVE') AS latest_exam_date,
           {event_count_expr} AS event_count,
-          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id) AS case_count
+          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id AND eec.case_lifecycle_status = 'ACTIVE') AS case_count
         FROM {qname(dev_db())}.subscribers s
         WHERE {' AND '.join(where)}
         ORDER BY latest_exam_date DESC, s.id DESC
@@ -17440,16 +17451,16 @@ def load_subscriber_reference_events(cur: Any, *, subscriber_id: int) -> list[di
           {person_event_select},
           (SELECT COUNT(*) FROM {qname(health_db())}.exam_ledgers el WHERE el.event_id = ev.event_id AND el.subscriber_id = %s) AS ledger_count,
           (SELECT GROUP_CONCAT(DISTINCT el.source_type ORDER BY el.source_type SEPARATOR ' / ') FROM {qname(health_db())}.exam_ledgers el WHERE el.event_id = ev.event_id AND el.subscriber_id = %s) AS source_types,
-          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS case_count,
-          (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS latest_exam_date,
-          (SELECT GROUP_CONCAT(DISTINCT eec.export_readiness_status ORDER BY eec.export_readiness_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS readiness_statuses,
-          (SELECT GROUP_CONCAT(DISTINCT eec.check_status ORDER BY eec.check_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS check_statuses,
-          (SELECT GROUP_CONCAT(DISTINCT eec.xml_export_status ORDER BY eec.xml_export_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s) AS xml_statuses
+          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s AND eec.case_lifecycle_status = 'ACTIVE') AS case_count,
+          (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s AND eec.case_lifecycle_status = 'ACTIVE') AS latest_exam_date,
+          (SELECT GROUP_CONCAT(DISTINCT eec.export_readiness_status ORDER BY eec.export_readiness_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s AND eec.case_lifecycle_status = 'ACTIVE') AS readiness_statuses,
+          (SELECT GROUP_CONCAT(DISTINCT eec.check_status ORDER BY eec.check_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s AND eec.case_lifecycle_status = 'ACTIVE') AS check_statuses,
+          (SELECT GROUP_CONCAT(DISTINCT eec.xml_export_status ORDER BY eec.xml_export_status SEPARATOR ' / ') FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s AND eec.case_lifecycle_status = 'ACTIVE') AS xml_statuses
         FROM {qname(dev_db())}.event ev
         {person_event_join}
         WHERE {person_event_where}
            EXISTS (SELECT 1 FROM {qname(health_db())}.exam_ledgers el WHERE el.event_id = ev.event_id AND el.subscriber_id = %s)
-           OR EXISTS (SELECT 1 FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s)
+           OR EXISTS (SELECT 1 FROM {qname(health_db())}.exam_export_cases eec WHERE eec.event_id = ev.event_id AND eec.subscriber_id = %s AND eec.case_lifecycle_status = 'ACTIVE')
         ORDER BY ev.event_year DESC, ev.event_id DESC
         """,
         (subscriber_id,) * (10 if has_person_event else 9),

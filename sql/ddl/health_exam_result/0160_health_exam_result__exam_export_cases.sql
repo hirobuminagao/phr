@@ -57,11 +57,11 @@ CREATE TABLE `health_exam_result`.`exam_export_cases` (
   `source_mode` varchar(32) NOT NULL DEFAULT 'UNKNOWN' COMMENT 'XML_ONLY/CSV_ONLY/PAPER_ONLY/XML_CSV/CSV_PAPER/XML_PAPER/XML_CSV_PAPER/MULTI_SOURCE等',
   `case_status` varchar(32) NOT NULL DEFAULT 'PENDING',
   `case_reason` text DEFAULT NULL,
-  `case_lifecycle_status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'case lifecycle: ACTIVE/MERGED',
-  `merged_into_case_id` bigint unsigned DEFAULT NULL COMMENT 'MERGED時の統合先case ID',
-  `merged_at` datetime(3) DEFAULT NULL COMMENT 'case統合日時',
-  `merged_by_app_user_id` bigint unsigned DEFAULT NULL COMMENT 'case統合を実行したapp user ID。保守CLIではNULL',
-  `merge_operation_reason` text DEFAULT NULL COMMENT 'case統合理由',
+  `case_lifecycle_status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'case lifecycle: ACTIVE/MERGED/SUPERSEDED',
+  `successor_case_id` bigint unsigned DEFAULT NULL COMMENT 'MERGED/SUPERSEDED時の移行先ACTIVE case ID',
+  `lifecycle_closed_at` datetime(3) DEFAULT NULL COMMENT 'ACTIVE以外へ移行した日時',
+  `lifecycle_closed_by_app_user_id` bigint unsigned DEFAULT NULL COMMENT 'lifecycle終了を実行したapp user ID。保守CLIではNULL',
+  `lifecycle_close_reason` text DEFAULT NULL COMMENT '統合・差し替え等でACTIVEを終了した理由',
   `active_case_guard` tinyint GENERATED ALWAYS AS (
     CASE WHEN `case_lifecycle_status` = 'ACTIVE' THEN 1 ELSE NULL END
   ) STORED COMMENT '同一受診のACTIVE case一意制約用',
@@ -108,15 +108,15 @@ CREATE TABLE `health_exam_result`.`exam_export_cases` (
   KEY `idx_exam_export_cases_source_mode` (`source_mode`),
   KEY `idx_exam_export_cases_case_status` (`case_status`),
   KEY `idx_exam_export_cases_lifecycle` (`case_lifecycle_status`),
-  KEY `idx_exam_export_cases_merged_into` (`merged_into_case_id`),
+  KEY `idx_exam_export_cases_successor` (`successor_case_id`),
   KEY `idx_exam_export_cases_merge_status` (`merge_status`),
   KEY `idx_exam_export_cases_value_build_status` (`value_build_status`),
   KEY `idx_exam_export_cases_check_status` (`check_status`),
   KEY `idx_exam_export_cases_export_status` (`xml_export_status`),
   KEY `idx_exam_export_cases_exported_at` (`xml_exported_at`),
   KEY `idx_exam_export_cases_readiness` (`export_readiness_status`),
-  CONSTRAINT `fk_exam_export_cases_merged_into`
-    FOREIGN KEY (`merged_into_case_id`)
+  CONSTRAINT `fk_exam_export_cases_successor`
+    FOREIGN KEY (`successor_case_id`)
     REFERENCES `health_exam_result`.`exam_export_cases` (`exam_export_case_id`)
 ) ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

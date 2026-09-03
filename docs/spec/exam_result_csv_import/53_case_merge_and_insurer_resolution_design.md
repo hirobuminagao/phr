@@ -54,18 +54,18 @@ ZIP名、IX08、個人XML `receiver`、出力リストの保険者単位は同�
 ## 5. Caseライフサイクル
 
 `merge_status` はsource内容の結合判定に既に使用しているため、case自体の統合状態には流用しない。
-`exam_export_cases` に次の専用列を追加する。
+`exam_export_cases` に次のライフサイクル列を持つ。統合専用名へ閉じず、統合と差し替えを区別して記録する。
 
 | column | meaning |
 | --- | --- |
-| `case_lifecycle_status` | `ACTIVE` / `MERGED` |
-| `merged_into_case_id` | 統合先の有効case ID |
-| `merged_at` | 統合日時 |
-| `merged_by_app_user_id` | 操作者。保守CLIではNULL可 |
-| `merge_operation_reason` | 統合理由 |
-| `active_case_guard` | `ACTIVE`だけ1、`MERGED`はNULLとなる生成列 |
+| `case_lifecycle_status` | `ACTIVE` / `MERGED` / `SUPERSEDED` |
+| `successor_case_id` | 統合先または差し替え先の有効case ID |
+| `lifecycle_closed_at` | ACTIVE以外へ移行した日時 |
+| `lifecycle_closed_by_app_user_id` | 操作者。保守CLIではNULL可 |
+| `lifecycle_close_reason` | 統合・差し替え理由 |
+| `active_case_guard` | `ACTIVE`だけ1、それ以外はNULLとなる生成列 |
 
-`MERGED` caseは詳細・監査・過去出力履歴の参照対象には残すが、次から除外する。
+`ACTIVE`以外のcaseは詳細・監査・過去出力履歴の参照対象には残すが、次から除外する。
 
 - case重複判定と通常upsert
 - case値作成
@@ -76,6 +76,8 @@ ZIP名、IX08、個人XML `receiver`、出力リストの保険者単位は同�
 
 統合先は必ず `ACTIVE` とし、自己参照、循環参照、統合済みcaseへの統合を禁止する。
 既存の保険者番号込みnatural uniqueは廃止し、`event_id + subscriber_id + exam_date + exam_facility_id + active_case_guard` を一意にする。これにより同じ受診の `ACTIVE` caseは1件だけに制限しつつ、過去の `MERGED` caseは複数保持できる。
+
+`MERGED` は同一受診identityのcase統合、`SUPERSEDED` は健診機関再解決等によって旧caseが空になり、新caseへ差し替えられた状態とする。両者を同じ意味では扱わない。
 
 ## 6. Source所有権
 
@@ -132,7 +134,7 @@ case再生成ではaggregateの `manual_export_*` を保存値として盲目的
 - 通常case作成とcase限定再生成への適用
 - `upsert_sources()` の所有権競合停止
 - 明示的case統合サービスとdry-run対応の保守CLI
-- case値、チェック、readiness、出力候補、XML出力の `MERGED` 除外
+- case値、チェック、readiness、出力候補、XML出力の非 `ACTIVE` 除外
 - 理由ありOK、解消済み、基本情報補正の再生成テスト
 - 単一番号、複数番号、全桁0、許可外番号、複数候補、既存重複のテスト
 
@@ -150,6 +152,7 @@ case再生成ではaggregateの `manual_export_*` を保存値として盲目的
 1. `20260903_001_health_exam_result_add_case_lifecycle.sql` を適用し、case統合状態を保持できるようにする。
 2. 既存の同一受診ACTIVE caseを調査し、`merge_exam_export_cases.py` で明示的に統合する。
 3. `20260903_002_health_exam_result_enforce_active_case_identity.sql` を適用し、ACTIVE caseの再重複を禁止する。
+4. `20260903_003_health_exam_result_generalize_case_lifecycle.sql` を適用し、統合専用列を汎用的な終了・移行先列へ改名する。
 
 既存重複をmigration内で自動統合しない。統合先、レビュー、補正値、出力履歴を確認してから保守操作として統合する。
 
@@ -162,3 +165,13 @@ case 51072を統合先、case 123073を統合元とする案は、実行環境�
 
 補修時は旧MANUAL 6759の `REVERTED_TO_DRAFT` を復活させず、実行環境で確認された対象XML ledgerと、現在有効なMANUAL ledgerだけを統合対象にする。
 case値作成、caseチェック、readiness、XML候補判定は統合先caseに限定して順番に再実行する。
+
+## 12. 健診機関再解決後に空になった旧case
+
+健診機関IDの再解決によってsourceが新caseへ所属し、旧caseだけが残った場合は `MERGED` ではなく `SUPERSEDED` とする。専用テーブルは追加せず、case lifecycleと移行先参照で履歴を保持する。
+
+自動整理候補は、同一event・subscriber・受診日・受領施設コードで、健診機関IDだけが異なるcaseの組とする。旧caseはACTIVE sourceと採用値がともに0件、新caseは両方が存在し、移行先候補が1件に決まることを必須とする。旧caseに本番出力履歴、人手review、基本情報補正、手入力draftがある場合は自動適用しない。
+
+保守処理はdry-runを既定とし、適用時も条件をtransaction内で再確認する。source・採用値・過去の出力memberは移動または削除しない。未出力の出力リスト掲載は `REMOVED` にして履歴を残す。
+
+通常のcase総数、READY/BLOCKED/ERROR、法定・特定健診NG、施設サマリー、工数、絞り込み候補、出力候補は `case_lifecycle_status = 'ACTIVE'` のみを対象とする。過去に発生したエラーの監査・履歴集計では `MERGED` / `SUPERSEDED` も参照可能とする。
