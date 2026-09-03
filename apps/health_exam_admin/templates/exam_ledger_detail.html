@@ -207,6 +207,11 @@
             <td>
               <strong>{{ item.raw_value if item.raw_value is not none else "空" }}</strong>
               <small>{{ item.raw_value_type or "-" }} {{ item.raw_unit or "" }}</small>
+              {% if item.text_byte_count is defined %}
+              <small class="exam-item-text-size {{ 'is-over-limit' if item.text_byte_limit_exceeded else '' }}">
+                {{ item.text_character_count }}文字 / {{ item.text_byte_count }}バイト（上限{{ item.text_byte_limit }}）
+              </small>
+              {% endif %}
             </td>
             <td>
               <strong>{{ item.normalized_value if item.normalized_value is not none else item.nullflavor or "-" }}</strong>

@@ -46,7 +46,11 @@ from scripts.lib.etl.metrics import RunMetrics
 from scripts.lib.etl.runs import finish_run, start_run
 from scripts.lib.examination.lookup import qname
 from scripts.lib.examination.models import RESULT_NG, RESULT_OK, STATUS_OK
-from scripts.lib.examination.value_normalizer import normalize_exam_item_value
+from scripts.lib.examination.value_normalizer import (
+    MHLW_TEXT_MAX_BYTES,
+    mhlw_text_byte_length,
+    normalize_exam_item_value,
+)
 from scripts.lib.examination.report_classification import fiscal_year_end_date
 from scripts.from_medical.script_lib.article44_checker import check_article44
 from scripts.from_medical.script_lib.article44_required_namecodes import fetch_article44_required_namecodes
@@ -7178,7 +7182,17 @@ def load_exam_item_value_rows(cur: Any, *, exam_ledger_id: int) -> list[dict[str
         """,
         (exam_ledger_id,),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        value_type = str(row.get("raw_value_type") or "").strip().upper()
+        if value_type not in {"ST", "TX"}:
+            continue
+        raw_text = "" if row.get("raw_value") is None else str(row["raw_value"])
+        row["text_character_count"] = len(raw_text)
+        row["text_byte_count"] = mhlw_text_byte_length(raw_text)
+        row["text_byte_limit"] = MHLW_TEXT_MAX_BYTES
+        row["text_byte_limit_exceeded"] = row["text_byte_count"] > MHLW_TEXT_MAX_BYTES
+    return rows
 
 
 def search_exam_ledger_candidates(

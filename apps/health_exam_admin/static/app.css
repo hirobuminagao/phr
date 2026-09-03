@@ -7067,6 +7067,16 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   background: #fff6f6;
 }
 
+.exam-item-text-size {
+  margin-top: 5px;
+  font-weight: 700;
+}
+
+.exam-item-text-size.is-over-limit {
+  color: var(--danger);
+  font-weight: 900;
+}
+
 .case-placeholder-table th:nth-child(1),
 .case-placeholder-table td:nth-child(1) {
   width: 180px;
