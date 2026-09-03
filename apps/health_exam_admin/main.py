@@ -6691,7 +6691,9 @@ def load_subscriber_match_candidate_rows(
     include_other_insurers = str(candidate_filters.get("include_other_insurers") or "0").strip() == "1"
     if not include_other_insurers and event_id:
         filter_parts.append(
-            f"s.insurer_number = (SELECT e.insurer_number FROM {qname(dev_db())}.event AS e WHERE e.event_id = %s LIMIT 1)"
+            f"CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci = "
+            f"(SELECT CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci "
+            f"FROM {qname(dev_db())}.event AS e WHERE e.event_id = %s LIMIT 1)"
         )
         filter_params.append(event_id)
     candidate_subscriber_ids = tuple(

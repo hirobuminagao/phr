@@ -1,4 +1,7 @@
+from inspect import getsource
+
 from apps.health_exam_admin.main import (
+    load_subscriber_match_candidate_rows,
     load_subscriber_match_resolution_counts,
     load_subscriber_match_resolved_rows,
     subscriber_match_issue_where_parts,
@@ -64,3 +67,10 @@ def test_resolved_rows_require_current_manual_match_and_filter_query() -> None:
     assert "el.name_full_raw LIKE %s" in cursor.sql
     assert cursor.params[0] == 2
     assert cursor.params[-1] == 100
+
+
+def test_candidate_insurer_scope_uses_explicit_collation() -> None:
+    source = getsource(load_subscriber_match_candidate_rows)
+
+    assert "CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
+    assert "CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
