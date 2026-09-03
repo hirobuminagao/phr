@@ -14850,6 +14850,62 @@ def admin_case_list_performance(request: Request) -> Response:
     )
 
 
+@app.get("/admin/case-list-performance/download.json")
+def admin_case_list_performance_download(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    selected_event_id = _optional_int(request.query_params.get("event_id"))
+    selected_page_code = request.query_params.get("page_code", "").strip()
+    limit = parse_positive_int(request.query_params.get("limit"), default=500, maximum=5000)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        rows = load_page_performance_rows(
+            cur,
+            page_code=selected_page_code,
+            event_id=selected_event_id,
+            limit=limit,
+        )
+        cur.close()
+    exported_rows = [
+        {
+            "log_id": row.get("app_page_performance_log_id"),
+            "created_at": str(row.get("created_at") or ""),
+            "page_code": row.get("page_code"),
+            "request_path": row.get("request_path"),
+            "event_id": row.get("event_id"),
+            "page_number": row.get("page_number"),
+            "row_limit": row.get("row_limit"),
+            "row_count": row.get("row_count"),
+            "total_count": row.get("total_count"),
+            "total_seconds": float(row.get("total_seconds") or 0),
+            "phase_timings": row.get("phase_timings") or {},
+            "active_filter_keys": row.get("active_filter_keys") or [],
+            "app_user_id": row.get("app_user_id"),
+        }
+        for row in rows
+    ]
+    payload = {
+        "exported_at": datetime.now().isoformat(timespec="seconds"),
+        "filters": {
+            "page_code": selected_page_code or None,
+            "event_id": selected_event_id,
+            "limit": limit,
+        },
+        "record_count": len(exported_rows),
+        "records": exported_rows,
+    }
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="page_performance_{timestamp}.json"'},
+    )
+
+
 @app.get("/reports/monthly-exam-ng-summary", response_class=HTMLResponse)
 def monthly_exam_ng_summary(request: Request) -> Response:
     user = require_user(request)

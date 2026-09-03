@@ -222,12 +222,6 @@
         <div><strong>業務工数・増員試算</strong><small>想定条件とDB実績から全件処理時の工数、必要人数を比較する</small></div>
       </a>
       {% endif %}
-      {% if "users.manage" in user.permissions %}
-      <a class="home-menu-card" href="/admin/case-list-performance">
-        <span class="status-pill status-warning">管理者</span>
-        <div><strong>画面性能履歴</strong><small>実際に画面を開いた際の処理時間を、画面・イベント別に確認する</small></div>
-      </a>
-      {% endif %}
     </div>
   </section>
 
@@ -264,6 +258,7 @@
       <a class="home-menu-card" href="/admin/security"><span class="status-pill status-ready">利用可</span><div><strong>セキュリティ</strong><small>自動ログアウト、個人情報監査ログ設定を管理する</small></div></a>
       <a class="home-menu-card" href="/admin/audit-logs"><span class="status-pill status-ready">利用可</span><div><strong>監査ログ</strong><small>個人情報閲覧、設定変更などの操作履歴を確認する</small></div></a>
       <a class="home-menu-card" href="/admin/error-logs"><span class="status-pill status-ready">利用可</span><div><strong>画面エラー一覧</strong><small>Internal ErrorのログID、発生画面、例外内容を確認する</small></div></a>
+      <a class="home-menu-card" href="/admin/case-list-performance"><span class="status-pill status-ready">利用可</span><div><strong>画面性能履歴</strong><small>実際に画面を開いた際の処理時間を、画面・イベント別に確認する</small></div></a>
       <a class="home-menu-card" href="/admin/etl-runs"><span class="status-pill status-ready">利用可</span><div><strong>実行中処理</strong><small>running中の処理確認、長期化したrunの停止扱い</small></div></a>
     </div>
   </section>

@@ -13,6 +13,12 @@
       <label>表示件数<input type="number" name="limit" min="1" max="500" value="{{ limit }}"></label>
       <div class="filter-actions"><button type="submit">検索</button><a class="ghost-button" href="/admin/case-list-performance">クリア</a></div>
     </form>
+    <form method="get" action="/admin/case-list-performance/download.json" class="filter-actions">
+      <input type="hidden" name="page_code" value="{{ selected_page_code }}">
+      <input type="hidden" name="event_id" value="{{ selected_event_id or '' }}">
+      <input type="hidden" name="limit" value="{{ limit }}">
+      <button type="submit" class="ghost-button">履歴をダウンロード</button>
+    </form>
   </section>
   <section class="panel">
     <div class="section-heading"><div><h2>実際の表示履歴</h2><p class="subtle">検索値や氏名などの個人情報は記録していません。</p></div><span class="status-pill status-muted">{{ rows|length }}件</span></div>
