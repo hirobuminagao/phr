@@ -7753,10 +7753,10 @@ def load_exam_export_case_rows(
     limit: int = 200,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    where_sql, params = build_exam_export_case_where(filters)
-    order_sql = "eec.updated_at DESC, eec.exam_export_case_id DESC"
-    if filters.get("duplicate_subscriber") == "1":
-        order_sql = "eec.subscriber_id, eec.exam_date DESC, eec.exam_facility_id, eec.exam_export_case_id DESC"
+    page_case_ids = load_exam_export_case_page_ids(cur, filters=filters, limit=limit, offset=offset)
+    if not page_case_ids:
+        return []
+    page_placeholders = ", ".join(["%s"] * len(page_case_ids))
     subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
     subscriber_name_full_expr = "s.name_kanji_full" if "name_kanji_full" in subscriber_columns else "s.name_full_match"
     subscriber_select = lambda column, alias=None: (
@@ -7854,6 +7854,7 @@ def load_exam_export_case_rows(
             FROM {qname(health_db())}.exam_check_results
             WHERE ledger_type = 'EXPORT_CASE'
               AND exam_export_case_id IS NOT NULL
+              AND exam_export_case_id IN ({page_placeholders})
             GROUP BY exam_export_case_id
           ) AS latest
             ON latest.max_id = r1.id
@@ -7888,6 +7889,7 @@ def load_exam_export_case_rows(
             SUM(CASE WHEN source_type = 'CSV' THEN 1 ELSE 0 END) AS csv_count,
             SUM(CASE WHEN source_type = 'PAPER' THEN 1 ELSE 0 END) AS paper_count
           FROM {qname(health_db())}.exam_export_case_sources
+          WHERE exam_export_case_id IN ({page_placeholders})
           GROUP BY exam_export_case_id
         ) AS src
           ON src.exam_export_case_id = eec.exam_export_case_id
@@ -7910,11 +7912,10 @@ def load_exam_export_case_rows(
         ) AS subcase
           ON subcase.event_id = eec.event_id
          AND subcase.subscriber_id = eec.subscriber_id
-        {where_sql}
-        ORDER BY {order_sql}
-        LIMIT %s OFFSET %s
+        WHERE eec.exam_export_case_id IN ({page_placeholders})
+        ORDER BY FIELD(eec.exam_export_case_id, {page_placeholders})
         """,
-        (*params, limit, offset),
+        (*page_case_ids, *page_case_ids, *page_case_ids, *page_case_ids),
     )
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
@@ -7924,6 +7925,58 @@ def load_exam_export_case_rows(
             row.get("specific_reason_summary"),
         )
     return rows
+
+
+def load_exam_export_case_page_ids(
+    cur: Any,
+    *,
+    filters: dict[str, str],
+    limit: int,
+    offset: int,
+) -> list[int]:
+    where_sql, params = build_exam_export_case_where(filters)
+    order_sql = "eec.updated_at DESC, eec.exam_export_case_id DESC"
+    if filters.get("duplicate_subscriber") == "1":
+        order_sql = "eec.subscriber_id, eec.exam_date DESC, eec.exam_facility_id, eec.exam_export_case_id DESC"
+    cur.execute(
+        f"""
+        SELECT eec.exam_export_case_id
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        LEFT JOIN (
+          SELECT r1.*
+          FROM {qname(health_db())}.exam_check_results AS r1
+          INNER JOIN (
+            SELECT exam_export_case_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXPORT_CASE'
+              AND exam_export_case_id IS NOT NULL
+            GROUP BY exam_export_case_id
+          ) AS latest ON latest.max_id = r1.id
+        ) AS ecr ON ecr.exam_export_case_id = eec.exam_export_case_id
+        LEFT JOIN {qname(dev_db())}.subscribers AS s ON s.id = eec.subscriber_id
+        LEFT JOIN (
+          SELECT event_id, exam_facility_id, MAX(expected_source_mode) AS expected_source_mode
+          FROM {qname(master_db())}.medical_folder_aliases
+          WHERE is_active = 1
+          GROUP BY event_id, exam_facility_id
+        ) AS mfa
+          ON mfa.event_id = eec.event_id
+         AND mfa.exam_facility_id = eec.exam_facility_id
+        LEFT JOIN (
+          SELECT event_id, subscriber_id, COUNT(*) AS subscriber_case_count
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE subscriber_id IS NOT NULL
+          GROUP BY event_id, subscriber_id
+        ) AS subcase
+          ON subcase.event_id = eec.event_id
+         AND subcase.subscriber_id = eec.subscriber_id
+        {where_sql}
+        ORDER BY {order_sql}
+        LIMIT %s OFFSET %s
+        """,
+        (*params, limit, offset),
+    )
+    return [int(row["exam_export_case_id"]) for row in cur.fetchall()]
 
 
 EXAM_EXPORT_CASE_CSV_PERMISSION = "exam_export_cases.csv_download"
