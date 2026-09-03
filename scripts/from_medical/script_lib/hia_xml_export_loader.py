@@ -163,6 +163,7 @@ def fetch_candidates(
         filters.append("eec.export_readiness_status IN ('EXPORT_READY', 'APPROVED_WITH_REASON', 'EXPORTED')")
     else:
         filters.append("eec.export_readiness_status IN ('EXPORT_READY', 'APPROVED_WITH_REASON')")
+    filters.append("eec.case_lifecycle_status = 'ACTIVE'")
     limit_sql = ""
     if selectors.limit:
         limit_sql = "LIMIT %s"

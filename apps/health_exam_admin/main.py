@@ -2424,6 +2424,7 @@ def load_person_selection_cases_for_subscriber(
         FROM {qname(health_db())}.exam_export_cases
         WHERE event_id = %s
           AND subscriber_id = %s
+          AND case_lifecycle_status = 'ACTIVE'
         ORDER BY exam_date DESC, exam_export_case_id DESC
         LIMIT %s
         """,
@@ -2493,6 +2494,7 @@ def load_manual_exam_entry_cases_for_subscriber(
           ON src.exam_export_case_id = eec.exam_export_case_id
         WHERE eec.event_id = %s
           AND eec.subscriber_id = %s
+          AND eec.case_lifecycle_status = 'ACTIVE'
         ORDER BY eec.exam_date DESC, eec.exam_export_case_id DESC
         LIMIT %s
         """,
@@ -4153,6 +4155,7 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
           SUM(CASE WHEN export_readiness_status = 'APPROVED_WITH_REASON' THEN 1 ELSE 0 END) AS approved_with_reason_count
         FROM {qname(health_db())}.exam_export_cases
         WHERE event_id = %s
+          AND case_lifecycle_status = 'ACTIVE'
         """,
         (event_id,),
     )
@@ -7427,7 +7430,7 @@ def search_exam_ledger_candidates(
 
 
 def build_exam_export_case_where(filters: dict[str, str]) -> tuple[str, list[Any]]:
-    where_parts: list[str] = []
+    where_parts: list[str] = ["eec.case_lifecycle_status = 'ACTIVE'"]
     params: list[Any] = []
     event_id = filters.get("event_id", "").strip()
     legal_check_result = filters.get("legal_check_result", "").strip()
@@ -8253,7 +8256,7 @@ def build_exam_export_case_summary_filter_urls(filters: dict[str, str], *, limit
 
 
 def load_exam_export_case_month_options(cur: Any, *, event_id: str | None = None, limit: int = 36) -> list[dict[str, Any]]:
-    where_parts = ["exam_date IS NOT NULL"]
+    where_parts = ["exam_date IS NOT NULL", "case_lifecycle_status = 'ACTIVE'"]
     params: list[Any] = []
     event_text = str(event_id or "").strip()
     if event_text:
@@ -8277,7 +8280,7 @@ def load_exam_export_case_month_options(cur: Any, *, event_id: str | None = None
 
 
 def load_exam_export_case_facility_options(cur: Any, *, event_id: str | None = None, limit: int = 2000) -> list[dict[str, Any]]:
-    where_parts = ["eec.exam_facility_id IS NOT NULL"]
+    where_parts = ["eec.exam_facility_id IS NOT NULL", "eec.case_lifecycle_status = 'ACTIVE'"]
     params: list[Any] = []
     event_text = str(event_id or "").strip()
     if event_text:
@@ -9376,7 +9379,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
     fr_params: list[Any] = []
     el_where_parts: list[str] = []
     el_params: list[Any] = []
-    eec_where_parts: list[str] = []
+    eec_where_parts: list[str] = ["eec.case_lifecycle_status = 'ACTIVE'"]
     eec_params: list[Any] = []
     eiv_where_parts = ["(eiv.normalize_status = 'ERROR' OR eiv.validation_status = 'INVALID')"]
     eiv_params: list[Any] = []
@@ -9906,6 +9909,7 @@ def load_facility_summary_detail(
           ON ecr.exam_export_case_id = eec.exam_export_case_id
         WHERE eec.event_id = %s
           AND eec.facility_code = %s
+          AND eec.case_lifecycle_status = 'ACTIVE'
           {month_clause.replace('el.exam_date', 'eec.exam_date')}
         GROUP BY
           COALESCE(ecr.legal_check_result, 'PENDING'),
@@ -9935,6 +9939,7 @@ def load_facility_summary_detail(
           ON eec.exam_export_case_id = cri.exam_export_case_id
         WHERE eec.event_id = %s
           AND eec.facility_code = %s
+          AND eec.case_lifecycle_status = 'ACTIVE'
           AND cri.check_scope = 'SPECIFIC_HEALTH'
           AND cri.review_status <> 'RESOLVED_BY_SOURCE_VALUE'
           {month_clause.replace('el.exam_date', 'eec.exam_date')}
@@ -10096,7 +10101,7 @@ def load_export_case_add_candidates(
     filters: Mapping[str, Any],
     limit: int = 80,
 ) -> list[dict[str, Any]]:
-    where_parts = ["eec.event_id = %s"]
+    where_parts = ["eec.event_id = %s", "eec.case_lifecycle_status = 'ACTIVE'"]
     params: list[Any] = [event_id]
     query = filters.get("case_q", "").strip()
     facility_query = filters.get("facility_q", "").strip()
@@ -10241,6 +10246,7 @@ def add_export_case_to_list(
           ON xel.xml_export_list_id = %s
          AND xel.event_id = eec.event_id
         WHERE eec.exam_export_case_id = %s
+          AND eec.case_lifecycle_status = 'ACTIVE'
         LIMIT 1
         """,
         (xml_export_list_id, exam_export_case_id),
@@ -10624,6 +10630,7 @@ def load_case_rebuild_cases(cur: Any, *, event_id: int, subscriber_id: int) -> l
           ON cv.exam_export_case_id = eec.exam_export_case_id
         WHERE eec.event_id = %s
           AND eec.subscriber_id = %s
+          AND eec.case_lifecycle_status = 'ACTIVE'
         GROUP BY eec.exam_export_case_id
         ORDER BY eec.exam_date DESC, eec.exam_facility_id, eec.exam_export_case_id DESC
         """,
@@ -10724,7 +10731,11 @@ def load_case_rebuild_scope_subscriber_ids(
     exam_facility_id: int | None,
     exam_month: str,
 ) -> tuple[int, ...]:
-    case_filters = ["eec.event_id = %s", "eec.subscriber_id IS NOT NULL"]
+    case_filters = [
+        "eec.event_id = %s",
+        "eec.subscriber_id IS NOT NULL",
+        "eec.case_lifecycle_status = 'ACTIVE'",
+    ]
     ledger_filters = [
         "el.event_id = %s",
         "el.source_type IN ('XML', 'CSV', 'PAPER', 'MANUAL')",
@@ -10781,7 +10792,9 @@ def load_case_rebuild_month_options(cur: Any, *, event_id: int, limit: int = 36)
         FROM (
           SELECT DATE_FORMAT(exam_date, '%Y-%m') AS exam_month
           FROM {qname(health_db())}.exam_export_cases
-          WHERE event_id = %s AND exam_date IS NOT NULL
+          WHERE event_id = %s
+            AND exam_date IS NOT NULL
+            AND case_lifecycle_status = 'ACTIVE'
           UNION
           SELECT DATE_FORMAT(exam_date, '%Y-%m') AS exam_month
           FROM {qname(health_db())}.exam_ledgers

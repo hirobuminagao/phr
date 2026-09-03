@@ -19,13 +19,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.lib.db.config import load_mysql_base_params
-from scripts.lib.db.lookup.event import get_event_insurer_number, get_event_year
+from scripts.lib.db.lookup.event import get_event_year
 from scripts.lib.db.mysql import connect_ctx, dict_cursor
 from scripts.lib.examination.report_classification import classify_report_codes_by_age, fiscal_year_end_date
 from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import start_run as etl_start_run
 from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
+from scripts.from_medical.script_lib.case_insurer_resolution import (
+    load_event_insurer_context,
+    resolve_case_insurer_number,
+)
 
 
 HEALTH_DB = "health_exam_result"
@@ -227,13 +231,6 @@ def case_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def canonical_event_insurer_number(value: Any) -> str:
-    digits = re.sub(r"\D", "", str(value or ""))
-    if not digits or len(digits) > 8 or set(digits) == {"0"}:
-        raise ValueError(f"event insurer_number is invalid: {value!r}")
-    return digits.zfill(8)
-
-
 def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, Any]]:
     target_keys: list[dict[str, Any]] = []
     if config.case_ids:
@@ -251,6 +248,7 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
             FROM {qname(config.health_db)}.`exam_export_cases`
             WHERE event_id = %s
               AND exam_export_case_id IN ({placeholders})
+              AND case_lifecycle_status = 'ACTIVE'
             """,
             (config.event_id, *config.case_ids),
         )
@@ -687,6 +685,67 @@ def reapply_basic_info_corrections(cur: Any, config: BuildCaseConfig, *, case_id
         )
 
 
+def load_existing_case_insurer_corrections(
+    cur: Any,
+    config: BuildCaseConfig,
+    *,
+    event_id: int,
+    subscriber_id: int,
+    exam_date: Any,
+    exam_facility_id: int,
+) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT correction.normalized_value AS insurer_number_export_value
+        FROM {qname(config.health_db)}.exam_export_cases AS existing_case
+        INNER JOIN {qname(config.health_db)}.exam_case_basic_info_corrections AS correction
+          ON correction.exam_export_case_id = existing_case.exam_export_case_id
+         AND correction.field_code = 'insurer_number'
+         AND correction.correction_status = 'ACTIVE'
+        WHERE existing_case.event_id = %s
+          AND existing_case.subscriber_id = %s
+          AND existing_case.exam_date = %s
+          AND existing_case.exam_facility_id = %s
+          AND existing_case.case_lifecycle_status = 'ACTIVE'
+        """,
+        (event_id, subscriber_id, exam_date, exam_facility_id),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def resolve_group_insurer_number(
+    cur: Any,
+    config: BuildCaseConfig,
+    *,
+    group: list[dict[str, Any]],
+    primary: dict[str, Any],
+) -> str:
+    insurer_context = load_event_insurer_context(
+        cur,
+        event_id=config.event_id,
+        exam_date=primary["exam_date"],
+        dev_db=config.dev_db,
+    )
+    cur.execute(
+        f"SELECT insurer_number FROM {qname(config.dev_db)}.subscribers WHERE id = %s LIMIT 1",
+        (primary["subscriber_id"],),
+    )
+    subscriber_row = cur.fetchone()
+    correction_candidates = load_existing_case_insurer_corrections(
+        cur,
+        config,
+        event_id=config.event_id,
+        subscriber_id=int(primary["subscriber_id"]),
+        exam_date=primary["exam_date"],
+        exam_facility_id=int(primary["exam_facility_id"]),
+    )
+    return resolve_case_insurer_number(
+        context=insurer_context,
+        subscriber_insurer_number=(subscriber_row or {}).get("insurer_number"),
+        ledgers=[*correction_candidates, *group],
+    )
+
+
 def upsert_case(cur: Any, config: BuildCaseConfig, params: dict[str, Any]) -> tuple[int, str]:
     cur.execute(
         f"""
@@ -696,6 +755,7 @@ def upsert_case(cur: Any, config: BuildCaseConfig, params: dict[str, Any]) -> tu
           AND `subscriber_id` = %s
           AND `exam_date` = %s
           AND `exam_facility_id` = %s
+          AND `case_lifecycle_status` = 'ACTIVE'
         ORDER BY `exam_export_case_id`
         """,
         (
@@ -721,6 +781,32 @@ def upsert_case(cur: Any, config: BuildCaseConfig, params: dict[str, Any]) -> tu
             tuple(params[column] for column in CASE_COLUMNS if column != "event_id") + (case_id,),
         )
         return case_id, "updated"
+    cur.execute(
+        f"""
+        SELECT `exam_export_case_id`
+        FROM {qname(config.health_db)}.`exam_export_cases`
+        WHERE `event_id` = %s
+          AND `subscriber_id` = %s
+          AND `exam_date` = %s
+          AND `exam_facility_id` = %s
+          AND `insurer_number` = %s
+          AND `case_lifecycle_status` = 'MERGED'
+        LIMIT 1
+        """,
+        (
+            params["event_id"],
+            params["subscriber_id"],
+            params["exam_date"],
+            params["exam_facility_id"],
+            params["insurer_number"],
+        ),
+    )
+    merged = cur.fetchone()
+    if merged:
+        raise RuntimeError(
+            "CASE_NATURAL_KEY_MERGED: "
+            f"case_id={merged['exam_export_case_id']} insurer_number={params['insurer_number']}"
+        )
     columns_sql = ", ".join(f"`{column}`" for column in CASE_COLUMNS)
     placeholders = ", ".join(["%s"] * len(CASE_COLUMNS))
     update_columns = [column for column in CASE_COLUMNS if column not in {"event_id", "subscriber_id", "exam_date", "exam_facility_id", "insurer_number"}]
@@ -799,13 +885,28 @@ def upsert_sources(
         priority, role, reason = source_role(row, primary, group)
         cur.execute(
             f"""
+            SELECT `exam_export_case_id`
+            FROM {qname(config.health_db)}.`exam_export_case_sources`
+            WHERE `source_exam_ledger_id` = %s
+            LIMIT 1
+            """,
+            (row["exam_ledger_id"],),
+        )
+        owner = cur.fetchone()
+        if owner and int(owner["exam_export_case_id"]) != case_id:
+            raise RuntimeError(
+                "CASE_SOURCE_OWNERSHIP_CONFLICT: "
+                f"ledger_id={row['exam_ledger_id']} owner_case_id={owner['exam_export_case_id']} "
+                f"requested_case_id={case_id}"
+            )
+        cur.execute(
+            f"""
             INSERT INTO {qname(config.health_db)}.`exam_export_case_sources` (
                 `exam_export_case_id`, `source_exam_ledger_id`, `source_type`,
                 `file_receipt_id`, `source_priority`, `source_role`, `source_status`, `source_reason`
             )
             VALUES (%s, %s, %s, %s, %s, %s, 'ACTIVE', %s)
             ON DUPLICATE KEY UPDATE
-                `exam_export_case_id` = VALUES(`exam_export_case_id`),
                 `source_type` = VALUES(`source_type`),
                 `file_receipt_id` = VALUES(`file_receipt_id`),
                 `source_priority` = VALUES(`source_priority`),
@@ -845,23 +946,26 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
                 dry_run=config.dry_run,
                 limit_rows=config.limit_groups or None,
             )
-        event_insurer_number = canonical_event_insurer_number(
-            get_event_insurer_number(cur, event_id=config.event_id, dev_db=config.dev_db)
-        )
         rows = fetch_source_ledgers(cur, config)
-        for row in rows:
-            row["insurer_number"] = event_insurer_number
         groups = select_groups(rows, config.limit_groups)
         summary.source_ledgers = len(rows)
         summary.candidate_groups = len(groups)
         if config.dry_run:
-            summary.review_required = sum(1 for group in groups if merge_status(group)[0] == "REVIEW_REQUIRED")
+            for group in groups:
+                primary = choose_primary(group)
+                resolve_group_insurer_number(cur, config, group=group, primary=primary)
+                if merge_status(group)[0] == "REVIEW_REQUIRED":
+                    summary.review_required += 1
             print(summary.message())
             return summary
 
         event_year = get_event_year(cur, event_id=config.event_id, dev_db=config.dev_db)
         for group in groups:
             primary = choose_primary(group)
+            resolved_insurer_number = resolve_group_insurer_number(cur, config, group=group, primary=primary)
+            for row in group:
+                row["insurer_number"] = resolved_insurer_number
+            primary["insurer_number_export_value"] = resolved_insurer_number
             report_codes = resolve_report_codes(group, event_year=event_year)
             params = case_params(primary, group, run_id, report_codes=report_codes)
             case_id, action = upsert_case(cur, config, params)
@@ -873,6 +977,15 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
                 summary.review_required += 1
             summary.sources_upserted += upsert_sources(cur, config, case_id=case_id, group=group, primary=primary)
             reapply_basic_info_corrections(cur, config, case_id=case_id)
+            cur.execute(
+                f"""
+                UPDATE {qname(config.health_db)}.exam_export_cases
+                SET insurer_number = %s,
+                    insurer_number_export_value = %s
+                WHERE exam_export_case_id = %s
+                """,
+                (resolved_insurer_number, resolved_insurer_number, case_id),
+            )
             reopen_export_error(cur, config, case_id=case_id)
 
         if config.case_ids:

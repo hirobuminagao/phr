@@ -522,6 +522,7 @@ def validate_export_list_cases(cur: Any, *, config: ExportConfig) -> str | None:
           xelc.xml_export_list_case_id,
           xelc.exam_export_case_id,
           eec.event_id AS case_event_id,
+          eec.case_lifecycle_status,
           eec.export_readiness_status,
           eec.export_readiness_reason,
           eec.xml_export_status,
@@ -561,6 +562,8 @@ def validate_export_list_cases(cur: Any, *, config: ExportConfig) -> str | None:
         reason = ""
         if row.get("case_event_id") is None:
             reason = "CASE_NOT_FOUND"
+        elif row.get("case_lifecycle_status") != "ACTIVE":
+            reason = f"CASE_NOT_ACTIVE: {row.get('case_lifecycle_status') or 'UNKNOWN'}"
         elif int(row["case_event_id"]) != config.selectors.event_id:
             reason = f"CASE_EVENT_MISMATCH: case_event_id={row['case_event_id']}"
         elif not int(row.get("has_active_source") or 0):

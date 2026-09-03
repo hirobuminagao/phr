@@ -24,6 +24,13 @@
   {% if error %}
   <div class="alert">{{ error }}</div>
   {% endif %}
+  {% if case.case_lifecycle_status == 'MERGED' %}
+  <div class="alert">
+    このcaseは統合済みです。
+    {% if case.merged_into_case_id %}<a href="/exam-export-cases/{{ case.merged_into_case_id }}">統合先 case {{ case.merged_into_case_id }} を表示</a>{% endif %}
+    {% if case.merge_operation_reason %}<small>{{ case.merge_operation_reason }}</small>{% endif %}
+  </div>
+  {% endif %}
 
   <section class="panel ledger-detail-head">
     <div>
@@ -33,6 +40,7 @@
     </div>
     <div class="detail-status-stack">
       <span class="status-pill {{ 'status-ready' if case.export_readiness_status == 'EXPORT_READY' else 'status-pending' if case.export_readiness_status == 'APPROVED_WITH_REASON' else 'status-danger' if case.export_readiness_status == 'BLOCKED' else 'status-muted' }}">{{ case.export_readiness_status }}</span>
+      {% if case.case_lifecycle_status == 'MERGED' %}<span class="status-pill status-danger">統合済み</span>{% endif %}
       <span class="status-pill {{ 'status-ready' if case.legal_check_result == 'OK' else 'status-danger' if case.legal_check_result == 'NG' else 'status-pending' }}">法定 {{ case.legal_check_result or "未判定" }}</span>
       <span class="status-pill {{ check_result_status_class(case.specific_check_result_display) }}">特定 {{ check_result_label(case.specific_check_result_display) or "未判定" }}</span>
       {% if case.author_recovered_count %}<span class="status-pill status-ready">author補完 {{ case.author_recovered_count }}件</span>{% endif %}

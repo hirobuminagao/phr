@@ -1081,6 +1081,7 @@ def fetch_target_case_ledgers(
           birthdate
         FROM {qname(health_db)}.exam_export_cases
         WHERE event_id = %s
+          AND case_lifecycle_status = 'ACTIVE'
           AND value_build_status = 'READY'
           AND subscriber_match_status = 'MATCHED'
           {case_filter}

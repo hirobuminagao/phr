@@ -15,7 +15,7 @@
 
 ## Documents
 
-2026-09-02時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。出力リストと個人case一覧の直近の画面・検索挙動は `45_export_list_and_case_filter_current_spec.md`、月次NG報告の設計は `49_monthly_ng_and_rescue_reporting_design.md`、CSVマッピングの実データdry-run検証は `51_csv_mapping_real_data_check_design.md` を参照する。
+2026-09-03時点の現在正は、決定事項が `03_decisions.md`、実装到達点と未実装範囲が `38_health_exam_remaining_implementation_summary.md`、管理画面スコープと優先度が `42_admin_screen_scope_and_priority.md` である。出力リストと個人case一覧の直近の画面・検索挙動は `45_export_list_and_case_filter_current_spec.md`、月次NG報告の設計は `49_monthly_ng_and_rescue_reporting_design.md`、CSVマッピングの実データdry-run検証は `51_csv_mapping_real_data_check_design.md`、case統合と複数保険者番号を含む解決仕様は `53_case_merge_and_insurer_resolution_design.md` を参照する。
 実際のカラム・処理挙動は適用対象のDDL、migration、seed、コードを優先する。
 `05_design_history.md` は協議履歴、`30_pre_implementation_review.md` は実装着手時の基準点であり、旧案や当時の未決事項が残っていても現在正とは限らない。
 
@@ -116,6 +116,9 @@
 - `52_csv_mapping_conditional_branch_editor_design.md`
   - CSVマッピング編集モーダルへ条件分岐を追加し、別モーダルで空欄時の処理、比較条件、固定出力値を設定する初期実装仕様。
   - 空欄設定を条件一覧と分離すること、同一targetの複数固定値ruleを一まとまりで保存・再編集すること、聴力判定normalize追加を整理する。
+- `53_case_merge_and_insurer_resolution_design.md`
+  - 保険者番号相違で分裂したcaseを履歴保持したまま統合する設計。
+  - 複数保険者番号を持つ健保のevent許可集合、case保険者番号の解決順、source所有権、統合済みcaseの除外範囲、再生成時の人手判断維持を整理する。
 
 ## ADR Policy
 

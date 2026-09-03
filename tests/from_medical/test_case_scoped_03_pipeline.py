@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 
+from scripts.from_medical.script_lib.case_insurer_resolution import canonical_insurer_number
+
 
 build_cases = importlib.import_module("scripts.from_medical.03_01_build_exam_export_cases")
 build_values = importlib.import_module("scripts.from_medical.03_02_build_exam_export_case_values")
@@ -26,6 +28,15 @@ class UpdateCursor:
 
     def execute(self, sql: str, params: tuple[object, ...]) -> None:
         self.calls.append((sql, params))
+
+
+class SourceOwnerCursor(UpdateCursor):
+    def __init__(self, owner_case_id: int) -> None:
+        super().__init__()
+        self.owner_case_id = owner_case_id
+
+    def fetchone(self) -> dict[str, object]:
+        return {"exam_export_case_id": self.owner_case_id}
 
 
 def test_build_cases_filters_sources_by_existing_case_key() -> None:
@@ -165,7 +176,7 @@ def test_case_grouping_does_not_split_on_insurer_number() -> None:
 
 
 def test_event_insurer_number_is_canonical_eight_digits() -> None:
-    assert build_cases.canonical_event_insurer_number("6139463") == "06139463"
+    assert canonical_insurer_number("6139463") == "06139463"
 
 
 def test_upsert_case_reuses_existing_case_when_only_insurer_differs() -> None:
@@ -223,6 +234,33 @@ def test_upsert_case_rejects_ambiguous_existing_cases() -> None:
         assert str(exc) == "DUPLICATE_CASE_IDENTITY: case_ids=3446,51072"
     else:
         raise AssertionError("duplicate cases must not be merged implicitly")
+
+
+def test_upsert_sources_does_not_move_ledger_from_another_case() -> None:
+    cur = SourceOwnerCursor(owner_case_id=123073)
+    config = build_cases.BuildCaseConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        dev_db="dev_phr",
+        dry_run=False,
+        limit_groups=0,
+    )
+    ledger = {
+        "exam_ledger_id": 173,
+        "source_type": "XML",
+        "file_receipt_id": 10,
+    }
+
+    try:
+        build_cases.upsert_sources(cur, config, case_id=3446, group=[ledger], primary=ledger)
+    except RuntimeError as exc:
+        assert str(exc) == (
+            "CASE_SOURCE_OWNERSHIP_CONFLICT: "
+            "ledger_id=173 owner_case_id=123073 requested_case_id=3446"
+        )
+    else:
+        raise AssertionError("normal case rebuild must not transfer source ownership")
+    assert len(cur.calls) == 1
 
 
 def test_build_values_filters_cases_by_case_id() -> None:

@@ -104,7 +104,7 @@ def validate_config(config: BuildValueConfig) -> None:
 
 
 def fetch_cases(cur: Any, config: BuildValueConfig) -> list[dict[str, Any]]:
-    filters = ["`event_id` = %s"]
+    filters = ["`event_id` = %s", "`case_lifecycle_status` = 'ACTIVE'"]
     params: list[Any] = [config.event_id]
     if not config.include_review_required:
         filters.append("`merge_status` <> 'REVIEW_REQUIRED'")

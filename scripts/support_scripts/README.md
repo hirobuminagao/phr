@@ -57,3 +57,25 @@ python scripts/support_scripts/capture_snapshot.py --incident-id 1 --phase AFTER
 既定では`queries/001.sql`を実行します。事象を追加するときは`support_incidents`へ登録し、同じ事象IDを3桁にしたSQLファイルを`queries`へ追加します。
 
 抽出SQLは`target_type`と`target_id`を必ず返します。`event_id`、`exam_export_case_id`、`source_exam_ledger_id`、`reprocess_required`、`reexport_required`を返すと検索用列にも保存され、SELECT結果全体は`JSON`として保持されます。
+
+## 重複した健診caseの統合
+
+保険者番号の補正前後などで同じ受診が複数caseへ分裂した場合は、通常のcase生成でsourceを移動せず、専用コマンドを使う。
+
+事前に次のmigrationを適用する。
+
+```text
+sql/migrations/health_exam_result/20260903_001_health_exam_result_add_case_lifecycle.sql
+```
+
+最初は必ずdry-runする。
+
+```bash
+python scripts/support_scripts/merge_exam_export_cases.py \
+  --target-case-id 51072 \
+  --source-case-id 123073 \
+  --reason "保険者番号補正前後に分裂した同一受診caseの統合"
+```
+
+表示されたidentity、source件数、レビュー・補正競合、出力履歴を確認後、同じ引数へ `--apply` を追加して実行する。
+統合元caseは削除されず `MERGED` となり、過去の出力リスト・XML出力履歴も元case IDのまま保持される。

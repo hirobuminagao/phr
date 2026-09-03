@@ -816,14 +816,10 @@ XML import側も同じ `exam_ledgers` へ保存する。XML原本に住所・郵
 | `postal_code_completed_value` | XML出力用に整形済みの補完候補郵便番号 |
 
 保険者番号は他の基本情報と異なり、eventとの整合性判定を行う。
-初期実装では `event.insurer_number` を正とし、CSV/受領ファイル側に保険者番号がある場合は8桁正規化後にevent値と比較する。
-event値と一致すれば `insurer_number_source = SOURCE`、`insurer_number_completion_status = NOT_NEEDED` とする。
-CSV/受領ファイル側に保険者番号がない場合は `event.insurer_number` を採用し、`insurer_number_source = EVENT`、`insurer_number_completion_status = FILLED_FROM_EVENT` とする。
-CSV/受領ファイル側に保険者番号がありevent値と異なる場合は `CONFLICT` とし、import行の `row_reason` にもエラーとして残す。
-
-`dev_phr.fund_insurer_numbers` には同一健保の複数保険者番号が存在し得る。
-特例退職者等の扱いは健保ごとの運用判断が必要なため、初期実装では `fund_insurer_numbers` に存在する別番号であっても自動許可しない。
-複数保険者番号を許可するeventルールは後続で追加する。
+現在正のcase作成・統合仕様では `event.insurer_number` を無条件な固定値として扱わず、eventの所属健保と許可保険者番号集合を解決する入口として使う。
+同一健保が複数番号を持つ場合は、対象受診日に有効な `dev_phr.fund_insurer_numbers` を許可集合とし、加入者突合済み値、手動補正値、許可集合内の受領値、単一候補event補完の順で1件へ解決する。
+複数候補を1件に特定できない場合や許可外番号だけが存在する場合は推測せず停止する。
+詳細は `53_case_merge_and_insurer_resolution_design.md` を正とする。
 
 XML exporterは原本住所を優先し、原本住所がない場合に `address_completed_value` を使う。
 保険者番号は `insurer_number_export_value` があればそれを使い、なければ原本 `insurer_number` をXML出力normへ通す。

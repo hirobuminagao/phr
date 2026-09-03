@@ -136,7 +136,8 @@ def refresh_export_case_readiness(
             ELSE NULL
           END,
           `updated_at` = CURRENT_TIMESTAMP(3)
-        WHERE eec.`event_id` = %s{case_filter}
+        WHERE eec.`event_id` = %s
+          AND eec.`case_lifecycle_status` = 'ACTIVE'{case_filter}
         """,
         params,
     )
@@ -189,6 +190,7 @@ def refresh_export_case_readiness(
           END,
           `updated_at` = CURRENT_TIMESTAMP(3)
         WHERE `event_id` = %s
+          AND `case_lifecycle_status` = 'ACTIVE'
           {"AND `exam_export_case_id` = %s" if exam_export_case_id is not None else ""}
         """,
         params,
