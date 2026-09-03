@@ -4163,6 +4163,17 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
     case_row = dict(cur.fetchone() or {})
     cur.execute(
         f"""
+        SELECT COUNT(DISTINCT exam_facility_id) AS alias_facility_count
+        FROM {qname(master_db())}.medical_folder_aliases
+        WHERE event_id = %s
+          AND is_active = 1
+          AND exam_facility_id IS NOT NULL
+        """,
+        (event_id,),
+    )
+    alias_row = dict(cur.fetchone() or {})
+    cur.execute(
+        f"""
         SELECT
           SUM(CASE WHEN entry_purpose = 'PAPER_ONLY' AND applied_exam_ledger_id IS NOT NULL THEN 1 ELSE 0 END) AS paper_only_count,
           SUM(CASE WHEN entry_purpose = 'SUPPLEMENT' AND applied_exam_ledger_id IS NOT NULL THEN 1 ELSE 0 END) AS supplement_count
@@ -4173,6 +4184,7 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
     )
     values = {
         **case_row,
+        **alias_row,
         **dict(cur.fetchone() or {}),
         **load_subscriber_match_resolution_counts(cur, event_id=event_id),
         **load_subscriber_match_workload_counts(cur, event_id=event_id),
