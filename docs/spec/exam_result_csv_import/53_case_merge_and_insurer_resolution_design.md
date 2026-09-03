@@ -145,7 +145,15 @@ case再生成ではaggregateの `manual_export_*` を保存値として盲目的
 - 管理画面からの汎用case統合操作
 - event許可保険者番号を直接編集する新画面
 
-## 10. 初回補修対象の扱い
+## 10. Migration適用順
+
+1. `20260903_001_health_exam_result_add_case_lifecycle.sql` を適用し、case統合状態を保持できるようにする。
+2. 既存の同一受診ACTIVE caseを調査し、`merge_exam_export_cases.py` で明示的に統合する。
+3. `20260903_002_health_exam_result_enforce_active_case_identity.sql` を適用し、ACTIVE caseの再重複を禁止する。
+
+既存重複をmigration内で自動統合しない。統合先、レビュー、補正値、出力履歴を確認してから保守操作として統合する。
+
+## 11. 初回補修対象の扱い
 
 case 51072を統合先、case 123073を統合元とする案は、実行環境でdry-run診断した後に確定する。
 本設計の実装では実データを変更しない。

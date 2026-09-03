@@ -13,12 +13,11 @@ ALTER TABLE `health_exam_result`.`exam_export_cases`
     GENERATED ALWAYS AS (
       CASE WHEN `case_lifecycle_status` = 'ACTIVE' THEN 1 ELSE NULL END
     ) STORED COMMENT '同一受診のACTIVE case一意制約用' AFTER `merge_operation_reason`,
-  DROP INDEX `uq_exam_export_cases_natural`,
-  ADD UNIQUE KEY `uq_exam_export_cases_active_natural` (
-    `event_id`, `subscriber_id`, `exam_date`, `exam_facility_id`, `active_case_guard`
-  ),
   ADD KEY `idx_exam_export_cases_lifecycle` (`case_lifecycle_status`),
   ADD KEY `idx_exam_export_cases_merged_into` (`merged_into_case_id`),
   ADD CONSTRAINT `fk_exam_export_cases_merged_into`
     FOREIGN KEY (`merged_into_case_id`)
     REFERENCES `health_exam_result`.`exam_export_cases` (`exam_export_case_id`);
+
+-- 既存のACTIVE重複caseを明示的に統合した後、002で新しい一意制約を有効化する。
+-- 既存のuq_exam_export_cases_naturalは、それまでは残しておく。
