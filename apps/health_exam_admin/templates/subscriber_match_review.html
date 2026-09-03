@@ -24,6 +24,19 @@
   <div class="alert">{{ error }}</div>
   {% endif %}
 
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>解決状況</h2>
+        <p class="subtle">このイベントで加入者を手動確定した実績です。同じ加入者を複数ledgerで確定しても人数は重複しません。</p>
+      </div>
+      <div class="top-actions">
+        <span class="status-pill status-ready">解決済み {{ resolution_counts.resolved_person_count or 0 }}人</span>
+        <span class="status-pill status-muted">{{ resolution_counts.resolved_ledger_count or 0 }} ledger</span>
+      </div>
+    </div>
+  </section>
+
   <section class="panel filter-panel">
     <div class="section-heading">
       <div>

@@ -3889,6 +3889,24 @@ def load_event_options(cur: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_subscriber_match_resolution_counts(cur: Any, *, event_id: int | str) -> dict[str, int]:
+    cur.execute(
+        f"""
+        SELECT
+          COUNT(DISTINCT new_subscriber_id) AS resolved_person_count,
+          COUNT(DISTINCT exam_ledger_id) AS resolved_ledger_count
+        FROM {qname(health_db())}.exam_ledger_subscriber_match_audit_logs
+        WHERE event_id = %s
+          AND new_subscriber_match_status = 'MATCHED'
+          AND new_subscriber_match_method = 'manual'
+          AND new_subscriber_id IS NOT NULL
+        """,
+        (event_id,),
+    )
+    row = dict(cur.fetchone() or {})
+    return {key: int(row.get(key) or 0) for key in ("resolved_person_count", "resolved_ledger_count")}
+
+
 def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]:
     cur.execute(
         f"""
@@ -3913,7 +3931,11 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
         """,
         (event_id,),
     )
-    values = {**case_row, **dict(cur.fetchone() or {})}
+    values = {
+        **case_row,
+        **dict(cur.fetchone() or {}),
+        **load_subscriber_match_resolution_counts(cur, event_id=event_id),
+    }
     return {key: int(value or 0) for key, value in values.items()}
 
 
@@ -20327,6 +20349,7 @@ def subscriber_match_review(request: Request) -> Response:
             folder_aliases = load_subscriber_match_issue_folder_alias_rows(cur, filters=filters)
             exam_month_options = load_subscriber_match_issue_month_options(cur, filters=filters)
             rows = load_subscriber_match_issue_rows(cur, filters=filters, limit=limit)
+            resolution_counts = load_subscriber_match_resolution_counts(cur, event_id=filters["event_id"])
             selected_ledger = None
             if selected_ledger_id:
                 selected_ledger = load_exam_ledger_detail(cur, exam_ledger_id=selected_ledger_id)
@@ -20368,6 +20391,7 @@ def subscriber_match_review(request: Request) -> Response:
             "event_options": event_options,
             "filters": filters,
             "rows": rows,
+            "resolution_counts": resolution_counts,
             "folder_aliases": folder_aliases,
             "exam_month_options": exam_month_options,
             "selected_exam_months": split_filter_values(filters.get("exam_month")),
