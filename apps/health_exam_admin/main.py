@@ -14,6 +14,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import time
 import traceback
 import zipfile
 from datetime import date, datetime
@@ -20914,6 +20915,16 @@ def exam_ledger_search(request: Request) -> Response:
 
 @app.get("/exam-export-cases", response_class=HTMLResponse)
 def exam_export_cases(request: Request) -> Response:
+    started_at = time.perf_counter()
+    phase_started_at = started_at
+    timings: dict[str, float] = {}
+
+    def record_timing(name: str) -> None:
+        nonlocal phase_started_at
+        now = time.perf_counter()
+        timings[name] = round(now - phase_started_at, 3)
+        phase_started_at = now
+
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -20952,22 +20963,34 @@ def exam_export_cases(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             event_options = load_event_options(cur)
+            record_timing("events")
             case_facility_options = load_exam_export_case_facility_options(cur, event_id=filters["event_id"])
+            record_timing("facilities")
             exam_month_options = load_exam_export_case_month_options(cur, event_id=filters["event_id"])
+            record_timing("months")
             selected_case_exam_items = load_export_candidate_exam_items(
                 cur,
                 namecodes=split_filter_values(filters["exam_item_namecodes"]),
             )
+            record_timing("selected_items")
+            base_filters = exam_export_case_base_filters(filters)
             unfiltered_total_count = load_exam_export_case_count(
                 cur,
-                filters=exam_export_case_base_filters(filters),
+                filters=base_filters,
             )
-            total_count = load_exam_export_case_count(cur, filters=filters)
+            record_timing("unfiltered_count")
+            if has_exam_export_case_detail_filters(filters):
+                total_count = load_exam_export_case_count(cur, filters=filters)
+                record_timing("filtered_count")
+            else:
+                total_count = unfiltered_total_count
             page_count = max(1, (total_count + limit - 1) // limit)
             page = min(page, page_count)
             offset = (page - 1) * limit
             rows = load_exam_export_case_rows(cur, filters=filters, limit=limit, offset=offset)
+            record_timing("rows")
             summary = load_exam_export_case_summary(cur, filters=filters)
+            record_timing("summary")
             pagination = build_exam_export_case_pagination(
                 filters,
                 total_count=total_count,
@@ -20997,7 +21020,19 @@ def exam_export_cases(request: Request) -> Response:
                         for row in rows
                     ],
                 )
+            record_timing("audit")
             conn.commit()
+            record_timing("commit")
+            LOGGER.info(
+                "exam_export_cases timing event_id=%s page=%s limit=%s rows=%s total=%s phases=%s total_seconds=%.3f",
+                filters["event_id"],
+                page,
+                limit,
+                len(rows),
+                total_count,
+                timings,
+                time.perf_counter() - started_at,
+            )
         except Exception:
             conn.rollback()
             raise
