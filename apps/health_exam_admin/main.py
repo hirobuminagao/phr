@@ -6681,12 +6681,19 @@ def load_subscriber_match_candidate_rows(
         filter_params.append(like)
     candidate_birth = str(candidate_filters.get("birth") or "").strip()
     if candidate_birth:
-        filter_parts.append("CAST(s.birth AS CHAR) LIKE %s")
-        filter_params.append(f"%{candidate_birth}%")
+        candidate_birth_digits = re.sub(r"\D", "", candidate_birth)
+        filter_parts.append("REPLACE(CAST(s.birth AS CHAR), '-', '') LIKE %s")
+        filter_params.append(f"%{candidate_birth_digits or candidate_birth}%")
     candidate_hia_subscriber_id = str(candidate_filters.get("hia_subscriber_id") or "").strip()
     if candidate_hia_subscriber_id:
         filter_parts.append("s.hia_subscriber_id LIKE %s")
         filter_params.append(f"%{candidate_hia_subscriber_id}%")
+    include_other_insurers = str(candidate_filters.get("include_other_insurers") or "0").strip() == "1"
+    if not include_other_insurers and event_id:
+        filter_parts.append(
+            f"s.insurer_number = (SELECT e.insurer_number FROM {qname(dev_db())}.event AS e WHERE e.event_id = %s LIMIT 1)"
+        )
+        filter_params.append(event_id)
     candidate_subscriber_ids = tuple(
         int(value)
         for value in (candidate_filters.get("subscriber_ids") or ())
@@ -20414,6 +20421,7 @@ def subscriber_match_review(request: Request) -> Response:
         "insurance_symbol": request.query_params.get("candidate_insurance_symbol", "").strip(),
         "insurance_number": request.query_params.get("candidate_insurance_number", "").strip(),
         "employee_code": request.query_params.get("candidate_employee_code", "").strip(),
+        "include_other_insurers": request.query_params.get("candidate_include_other_insurers", "0").strip(),
     }
     limit = parse_positive_int(filters["limit"], default=200, maximum=1000)
     params = load_mysql_base_params(db_prefix())

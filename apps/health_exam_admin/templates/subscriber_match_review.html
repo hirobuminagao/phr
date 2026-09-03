@@ -243,6 +243,8 @@
           <span>受領側</span>
           <strong>{{ selected_ledger.name_kana_raw or "カナなし" }}</strong>
           <small>{{ selected_ledger.name_full_raw or "氏名なし" }} / {{ selected_ledger.birthdate or "生年月日なし" }} / 性別 {{ gender_code_label(selected_ledger.gender_code) }}</small>
+          <small>{{ selected_ledger.facility_name or "健診機関なし" }} / 受診日 {{ selected_ledger.exam_date or "-" }}</small>
+          <small>形式 {{ selected_ledger.source_type or "-" }}{% if selected_ledger.mapping_version %} / {{ selected_ledger.mapping_version }}{% endif %}</small>
         </div>
         <div>
           <span>保険情報</span>
@@ -308,6 +310,13 @@
           <span>社員番号</span>
           <input name="candidate_employee_code" value="{{ candidate_filters.employee_code or '' }}" autocomplete="off" placeholder="社員番号">
         </label>
+        <fieldset class="subscriber-candidate-insurer-scope">
+          <legend>別の保険者</legend>
+          <div class="segmented-control" role="group" aria-label="別の保険者を検索対象に含めるか">
+            <label><input type="radio" name="candidate_include_other_insurers" value="0" {% if candidate_filters.include_other_insurers != '1' %}checked{% endif %}><span>含めない</span></label>
+            <label><input type="radio" name="candidate_include_other_insurers" value="1" {% if candidate_filters.include_other_insurers == '1' %}checked{% endif %}><span>含める</span></label>
+          </div>
+        </fieldset>
         <button type="submit">候補検索</button>
       </form>
 
