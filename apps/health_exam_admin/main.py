@@ -6895,6 +6895,18 @@ def _subscriber_export_update_values(subscriber: Mapping[str, Any]) -> tuple[dic
     updates: dict[str, Any] = {}
     applied_fields: list[str] = []
 
+    insurer = normalize_insurer_number(
+        str(subscriber.get("insurer_number") or "")
+    ) if subscriber.get("insurer_number") else {}
+    insurer_match = insurer.get("match")
+    insurer_export = zero_pad(str(insurer_match), 8) if insurer.get("ok") and insurer_match else None
+    if insurer_export:
+        updates["insurer_number_export_value"] = insurer_export
+        updates["insurer_number_source"] = "SUBSCRIBER"
+        updates["insurer_number_completion_status"] = "FILLED_FROM_SUBSCRIBER"
+        updates["insurer_number_completion_reason"] = "subscriber search apply"
+        applied_fields.append("insurer_number")
+
     kana = normalize_name_kana_full(str(subscriber.get("name_kana_full") or "")) if subscriber.get("name_kana_full") else {}
     if kana.get("ok") and kana.get("field_norm"):
         updates["name_kana_export_value"] = kana.get("field_norm")

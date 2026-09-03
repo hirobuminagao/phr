@@ -250,6 +250,7 @@
           <span>受領した保険証情報</span>
           <strong>{{ selected_ledger.insurer_number or "-" }} / {{ selected_ledger.insurance_symbol_raw or "-" }} / {{ selected_ledger.insurance_number_raw or "-" }}</strong>
           <small>保険者番号: 受領 {{ selected_ledger.insurer_number or "-" }} / イベント {{ selected_ledger.event_insurer_number or "-" }}</small>
+          <small>補完状態 {{ selected_ledger.insurer_number_completion_status or "-" }} / {{ selected_ledger.insurer_number_completion_reason or "理由なし" }}</small>
           {% if selected_ledger.insurer_number_matches_event is sameas false %}<small class="subscriber-match-insurer-warning">イベントの保険者番号と相違</small>{% endif %}
           <small>HIA {{ selected_ledger.hia_subscriber_id or "-" }} / person_id_custom {{ selected_ledger.person_id_custom or "-" }}</small>
         </div>
@@ -337,7 +338,7 @@
                 </span>
                 <div class="help-popover hover-help-popover help-popover-right">
                   <strong>加入者情報の適用</strong>
-                  <p>この受領ledgerを選択した加入者へ紐付け、subscribers由来の氏名カナ、記号、番号、枝番、郵便番号、住所を出力用基本情報へ反映します。受領rawは保持し、空値では上書きしません。</p>
+                  <p>この受領ledgerを選択した加入者へ紐付け、subscribers由来の保険者番号、氏名カナ、記号、番号、枝番、郵便番号、住所を出力用基本情報へ反映します。受領rawは保持し、空値では上書きしません。</p>
                 </div>
               </th>
             </tr>
@@ -401,7 +402,7 @@
                       type="submit"
                       name="apply_subscriber_values"
                       value="1"
-                      data-confirm-message="この加入者で確定し、以下の加入者情報を出力用基本情報へ適用します。&#10;&#10;氏名カナ: {{ candidate.name_kana_full or '-' }}&#10;記号: {{ candidate.insurance_symbol_export or candidate.insurance_symbol or '-' }}&#10;番号: {{ candidate.insurance_number or '-' }}&#10;枝番: {{ candidate.insurance_branchnumber or '-' }}&#10;郵便番号: {{ candidate.subscriber_postal_code or '-' }}&#10;住所: {{ (candidate.subscriber_address_line or '-') ~ (candidate.subscriber_building or '') }}"
+                      data-confirm-message="この加入者で確定し、以下の加入者情報を出力用基本情報へ適用します。&#10;&#10;保険者番号: {{ candidate.insurer_number or '-' }}&#10;氏名カナ: {{ candidate.name_kana_full or '-' }}&#10;記号: {{ candidate.insurance_symbol_export or candidate.insurance_symbol or '-' }}&#10;番号: {{ candidate.insurance_number or '-' }}&#10;枝番: {{ candidate.insurance_branchnumber or '-' }}&#10;郵便番号: {{ candidate.subscriber_postal_code or '-' }}&#10;住所: {{ (candidate.subscriber_address_line or '-') ~ (candidate.subscriber_building or '') }}"
                     >加入者情報を適用</button>
                   </div>
                 </form>

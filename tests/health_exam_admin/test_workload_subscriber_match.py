@@ -1,6 +1,7 @@
 from inspect import getsource
 
 from apps.health_exam_admin.main import (
+    _subscriber_export_update_values,
     insurer_number_matches_event,
     load_subscriber_match_candidate_rows,
     load_subscriber_match_resolution_counts,
@@ -18,6 +19,16 @@ def test_insurer_number_match_detects_difference_and_missing_source() -> None:
     assert insurer_number_matches_event("06139463", "06139464") is False
     assert insurer_number_matches_event(None, "06139463") is False
     assert insurer_number_matches_event("06139463", None) is None
+
+
+def test_subscriber_apply_sets_insurer_export_without_replacing_raw() -> None:
+    updates, applied_fields = _subscriber_export_update_values({"insurer_number": "6139463"})
+
+    assert updates["insurer_number_export_value"] == "06139463"
+    assert updates["insurer_number_source"] == "SUBSCRIBER"
+    assert updates["insurer_number_completion_status"] == "FILLED_FROM_SUBSCRIBER"
+    assert "insurer_number" not in updates
+    assert applied_fields == ["insurer_number"]
 
 
 class Cursor:
