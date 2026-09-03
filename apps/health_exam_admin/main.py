@@ -1374,7 +1374,7 @@ def load_page_performance_rows(
     *,
     page_code: str = "",
     event_id: int | None = None,
-    limit: int = 100,
+    limit: int | None = 100,
 ) -> list[dict[str, Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
@@ -1385,6 +1385,9 @@ def load_page_performance_rows(
         where_parts.append("performance.event_id = %s")
         params.append(event_id)
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    limit_sql = " LIMIT %s" if limit is not None else ""
+    if limit is not None:
+        params.append(limit)
     cur.execute(
         f"""
         SELECT performance.*, users.employee_no
@@ -1393,9 +1396,9 @@ def load_page_performance_rows(
           ON users.app_user_id = performance.app_user_id
         {where_sql}
         ORDER BY performance.app_page_performance_log_id DESC
-        LIMIT %s
+        {limit_sql}
         """,
-        (*params, limit),
+        tuple(params),
     )
     rows = [dict(row) for row in cur.fetchall()]
     for row in rows:
@@ -6928,11 +6931,6 @@ def load_subscriber_match_candidate_rows(
           {subscriber_select("qualification_lost_date")},
           {subscriber_select("employee_code")},
           {address_select_sql},
-          hds.status AS hia_dashboard_status,
-          hds.medical_institution AS hia_dashboard_medical_institution,
-          hds.reservation_date AS hia_dashboard_reservation_date,
-          hds.exam_date AS hia_dashboard_exam_date,
-          hds.course_name AS hia_dashboard_course_name,
           case_summary.case_count AS candidate_case_count,
           latest_case.exam_export_case_id AS candidate_latest_case_id,
           latest_case.facility_name AS candidate_latest_case_facility_name,
@@ -7791,11 +7789,6 @@ def load_exam_export_case_rows(
           eec.name_kana_raw,
           eec.birthdate,
           eec.gender_code,
-          hds.status AS hia_dashboard_status,
-          hds.medical_institution AS hia_dashboard_medical_institution,
-          hds.reservation_date AS hia_dashboard_reservation_date,
-          hds.exam_date AS hia_dashboard_exam_date,
-          hds.course_name AS hia_dashboard_course_name,
           s.insurer_number AS subscriber_insurer_number,
           s.insurance_symbol AS subscriber_insurance_symbol,
           s.insurance_symbol_export AS subscriber_insurance_symbol_export,
@@ -7863,25 +7856,6 @@ def load_exam_export_case_rows(
         LEFT JOIN {qname(dev_db())}.subscribers AS s
           ON s.id = eec.subscriber_id
         LEFT JOIN (
-          SELECT *
-          FROM (
-            SELECT
-              hds1.*,
-              ROW_NUMBER() OVER (
-                PARTITION BY hds1.hia_subscriber_id
-                ORDER BY hds1.updated_at DESC, hds1.hia_dashboard_person_id DESC
-              ) AS dashboard_rank
-            FROM {qname(work_other_db())}.hia_dashboard_status AS hds1
-            WHERE hds1.is_active = 1
-              AND hds1.hia_subscriber_id IS NOT NULL
-              AND hds1.hia_subscriber_id <> ''
-          ) AS ranked_dashboard
-          WHERE ranked_dashboard.dashboard_rank = 1
-        ) AS hds
-          ON CONVERT(hds.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
-           = CONVERT(COALESCE(NULLIF(eec.hia_subscriber_id, ''), s.hia_subscriber_id) USING utf8mb4)
-             COLLATE utf8mb4_unicode_ci
-        LEFT JOIN (
           SELECT
             exam_export_case_id,
             COUNT(*) AS source_count,
@@ -7918,6 +7892,7 @@ def load_exam_export_case_rows(
         (*page_case_ids, *page_case_ids, *page_case_ids, *page_case_ids),
     )
     rows = [dict(row) for row in cur.fetchall()]
+    enrich_exam_export_case_rows_with_dashboard(cur, rows)
     for row in rows:
         row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
         row["specific_check_result_display"] = normalize_specific_check_result(
@@ -7925,6 +7900,47 @@ def load_exam_export_case_rows(
             row.get("specific_reason_summary"),
         )
     return rows
+
+
+def enrich_exam_export_case_rows_with_dashboard(cur: Any, rows: list[dict[str, Any]]) -> None:
+    hia_ids = sorted(
+        {
+            str(row.get("hia_subscriber_id") or row.get("subscriber_hia_subscriber_id") or "").strip()
+            for row in rows
+            if str(row.get("hia_subscriber_id") or row.get("subscriber_hia_subscriber_id") or "").strip()
+        }
+    )
+    dashboard_by_hia_id: dict[str, dict[str, Any]] = {}
+    if hia_ids:
+        placeholders = ", ".join(["%s"] * len(hia_ids))
+        cur.execute(
+            f"""
+            SELECT
+              hia_subscriber_id,
+              status,
+              medical_institution,
+              reservation_date,
+              exam_date,
+              course_name
+            FROM {qname(work_other_db())}.hia_dashboard_status
+            WHERE is_active = 1
+              AND hia_subscriber_id IN ({placeholders})
+            ORDER BY hia_subscriber_id, updated_at DESC, hia_dashboard_person_id DESC
+            """,
+            tuple(hia_ids),
+        )
+        for dashboard_row in cur.fetchall():
+            key = str(dashboard_row.get("hia_subscriber_id") or "").strip()
+            if key and key not in dashboard_by_hia_id:
+                dashboard_by_hia_id[key] = dict(dashboard_row)
+    for row in rows:
+        key = str(row.get("hia_subscriber_id") or row.get("subscriber_hia_subscriber_id") or "").strip()
+        dashboard = dashboard_by_hia_id.get(key, {})
+        row["hia_dashboard_status"] = dashboard.get("status")
+        row["hia_dashboard_medical_institution"] = dashboard.get("medical_institution")
+        row["hia_dashboard_reservation_date"] = dashboard.get("reservation_date")
+        row["hia_dashboard_exam_date"] = dashboard.get("exam_date")
+        row["hia_dashboard_course_name"] = dashboard.get("course_name")
 
 
 def load_exam_export_case_page_ids(
@@ -14912,7 +14928,6 @@ def admin_case_list_performance_download(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     selected_event_id = _optional_int(request.query_params.get("event_id"))
     selected_page_code = request.query_params.get("page_code", "").strip()
-    limit = parse_positive_int(request.query_params.get("limit"), default=500, maximum=5000)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
@@ -14920,7 +14935,7 @@ def admin_case_list_performance_download(request: Request) -> Response:
             cur,
             page_code=selected_page_code,
             event_id=selected_event_id,
-            limit=limit,
+            limit=None,
         )
         cur.close()
     exported_rows = [
@@ -14946,7 +14961,6 @@ def admin_case_list_performance_download(request: Request) -> Response:
         "filters": {
             "page_code": selected_page_code or None,
             "event_id": selected_event_id,
-            "limit": limit,
         },
         "record_count": len(exported_rows),
         "records": exported_rows,
