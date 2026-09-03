@@ -222,6 +222,12 @@
         <div><strong>業務工数・増員試算</strong><small>想定条件とDB実績から全件処理時の工数、必要人数を比較する</small></div>
       </a>
       {% endif %}
+      {% if "users.manage" in user.permissions %}
+      <a class="home-menu-card" href="/admin/case-list-performance">
+        <span class="status-pill status-warning">管理者</span>
+        <div><strong>画面性能履歴</strong><small>実際に画面を開いた際の処理時間を、画面・イベント別に確認する</small></div>
+      </a>
+      {% endif %}
     </div>
   </section>
 

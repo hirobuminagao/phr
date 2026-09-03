@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `app_page_performance_logs` (
+  `app_page_performance_log_id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `page_code` VARCHAR(100) NOT NULL,
+  `request_path` VARCHAR(255) NOT NULL,
+  `event_id` BIGINT NULL,
+  `page_number` INT UNSIGNED NOT NULL DEFAULT 1,
+  `row_limit` INT UNSIGNED NOT NULL DEFAULT 0,
+  `row_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `total_count` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `total_seconds` DECIMAL(12,3) NOT NULL,
+  `phase_timings_json` JSON NOT NULL,
+  `active_filter_keys_json` JSON NOT NULL,
+  `app_user_id` BIGINT UNSIGNED NULL,
+  `client_ip` VARCHAR(64) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`app_page_performance_log_id`),
+  KEY `idx_app_page_performance_page_created` (`page_code`, `created_at`),
+  KEY `idx_app_page_performance_event_created` (`event_id`, `created_at`),
+  KEY `idx_app_page_performance_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

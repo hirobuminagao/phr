@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% set title = "画面性能履歴" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">ADMIN UTILITY</p><h1>画面性能履歴</h1><p class="subtle">実際に画面を開いた際の処理時間を記録します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/exam-export-cases">case一覧</a><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page">
+  <section class="panel">
+    <form method="get" class="ledger-filter-form">
+      <label>画面<select name="page_code"><option value="">すべて</option>{% for code in page_codes %}<option value="{{ code }}" {% if code == selected_page_code %}selected{% endif %}>{{ code }}</option>{% endfor %}</select></label>
+      <label>イベント<select name="event_id"><option value="">すべて</option>{% for event in events %}<option value="{{ event.event_id }}" {% if event.event_id == selected_event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / ID {{ event.event_id }}</option>{% endfor %}</select></label>
+      <label>表示件数<input type="number" name="limit" min="1" max="500" value="{{ limit }}"></label>
+      <div class="filter-actions"><button type="submit">検索</button><a class="ghost-button" href="/admin/case-list-performance">クリア</a></div>
+    </form>
+  </section>
+  <section class="panel">
+    <div class="section-heading"><div><h2>実際の表示履歴</h2><p class="subtle">検索値や氏名などの個人情報は記録していません。</p></div><span class="status-pill status-muted">{{ rows|length }}件</span></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>日時・画面</th><th>表示対象</th><th>合計</th><th>処理別時間</th><th>利用者</th></tr></thead><tbody>
+      {% for row in rows %}
+      <tr>
+        <td><strong>{{ row.created_at }}</strong><small>{{ row.page_code }} / event {{ row.event_id or '-' }}</small></td>
+        <td><strong>{{ row.row_count }} / {{ row.total_count }}件</strong><small>{{ row.row_limit }}件/ページ・{{ row.page_number }}ページ / 絞り込み {{ row.active_filter_keys|length }}項目</small></td>
+        <td><strong>{{ row.total_seconds }}秒</strong></td>
+        <td>{% for name, seconds in row.phase_timings.items() %}<span class="status-pill status-muted">{{ name }} {{ seconds }}秒</span>{% endfor %}</td>
+        <td><strong>{{ row.employee_no or ('ID ' ~ row.app_user_id) }}</strong></td>
+      </tr>
+      {% else %}<tr><td colspan="5">表示履歴はまだありません。対象画面を開くと記録されます。</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+</main>
+{% endblock %}

@@ -1328,6 +1328,82 @@ def log_audit_many(
     )
 
 
+def log_page_performance(
+    cur: Any,
+    *,
+    request: Request,
+    user: dict[str, Any] | None,
+    page_code: str,
+    event_id: int | str | None,
+    page_number: int,
+    row_limit: int,
+    row_count: int,
+    total_count: int,
+    total_seconds: float,
+    phase_timings: Mapping[str, float],
+    active_filter_keys: Sequence[str] = (),
+) -> None:
+    cur.execute(
+        f"""
+        INSERT INTO {qname(app_db())}.app_page_performance_logs (
+          page_code, request_path, event_id, page_number, row_limit, row_count,
+          total_count, total_seconds, phase_timings_json, active_filter_keys_json,
+          app_user_id, client_ip
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            page_code,
+            request.url.path,
+            event_id,
+            page_number,
+            row_limit,
+            row_count,
+            total_count,
+            total_seconds,
+            json.dumps(dict(phase_timings), ensure_ascii=False),
+            json.dumps(list(active_filter_keys), ensure_ascii=False),
+            None if not user else int(user["app_user_id"]),
+            client_ip(request),
+        ),
+    )
+
+
+def load_page_performance_rows(
+    cur: Any,
+    *,
+    page_code: str = "",
+    event_id: int | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    if page_code:
+        where_parts.append("performance.page_code = %s")
+        params.append(page_code)
+    if event_id is not None:
+        where_parts.append("performance.event_id = %s")
+        params.append(event_id)
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    cur.execute(
+        f"""
+        SELECT performance.*, users.employee_no
+        FROM {qname(app_db())}.app_page_performance_logs AS performance
+        LEFT JOIN {qname(app_db())}.app_users AS users
+          ON users.app_user_id = performance.app_user_id
+        {where_sql}
+        ORDER BY performance.app_page_performance_log_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    for row in rows:
+        row["phase_timings"] = json.loads(row.get("phase_timings_json") or "{}")
+        row["active_filter_keys"] = json.loads(row.get("active_filter_keys_json") or "[]")
+    return rows
+
+
 def log_app_operation(
     *,
     request: Request,
@@ -14737,6 +14813,43 @@ def admin_workload_estimate(request: Request) -> Response:
     )
 
 
+@app.get("/admin/case-list-performance", response_class=HTMLResponse)
+def admin_case_list_performance(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, "users.manage"):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    selected_event_id = _optional_int(request.query_params.get("event_id"))
+    selected_page_code = request.query_params.get("page_code", "").strip()
+    limit = parse_positive_int(request.query_params.get("limit"), default=100, maximum=500)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        rows = load_page_performance_rows(
+            cur,
+            page_code=selected_page_code,
+            event_id=selected_event_id,
+            limit=limit,
+        )
+        page_codes = sorted({str(row.get("page_code") or "") for row in rows if row.get("page_code")})
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_case_list_performance.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "selected_event_id": selected_event_id,
+            "selected_page_code": selected_page_code,
+            "limit": limit,
+            "rows": rows,
+            "page_codes": page_codes,
+        },
+    )
+
+
 @app.get("/reports/monthly-exam-ng-summary", response_class=HTMLResponse)
 def monthly_exam_ng_summary(request: Request) -> Response:
     user = require_user(request)
@@ -20953,10 +21066,10 @@ def exam_export_cases(request: Request) -> Response:
         "author_import_status": request.query_params.get("author_import_status", ""),
         "exam_item_namecodes": request.query_params.get("exam_item_namecodes", ""),
         "exam_item_match_mode": request.query_params.get("exam_item_match_mode", "any"),
-        "limit": request.query_params.get("limit", "500"),
+        "limit": request.query_params.get("limit", "100"),
         "page": request.query_params.get("page", "1"),
     }
-    limit = parse_positive_int(filters["limit"], default=500, maximum=5000)
+    limit = parse_positive_int(filters["limit"], default=100, maximum=5000)
     page = parse_positive_int(filters["page"], default=1, maximum=1000000)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
@@ -21021,8 +21134,28 @@ def exam_export_cases(request: Request) -> Response:
                     ],
                 )
             record_timing("audit")
+            load_total_seconds = round(time.perf_counter() - started_at, 3)
+            log_page_performance(
+                cur,
+                request=request,
+                user=user,
+                page_code="EXAM_EXPORT_CASE_LIST",
+                event_id=filters["event_id"],
+                page_number=page,
+                row_limit=limit,
+                row_count=len(rows),
+                total_count=total_count,
+                total_seconds=load_total_seconds,
+                phase_timings=timings,
+                active_filter_keys=[
+                    key
+                    for key, value in filters.items()
+                    if key not in {"event_id", "limit", "page"} and str(value or "").strip()
+                ],
+            )
             conn.commit()
             record_timing("commit")
+            logged_total_seconds = round(time.perf_counter() - started_at, 3)
             LOGGER.info(
                 "exam_export_cases timing event_id=%s page=%s limit=%s rows=%s total=%s phases=%s total_seconds=%.3f",
                 filters["event_id"],
@@ -21031,7 +21164,7 @@ def exam_export_cases(request: Request) -> Response:
                 len(rows),
                 total_count,
                 timings,
-                time.perf_counter() - started_at,
+                logged_total_seconds,
             )
         except Exception:
             conn.rollback()
