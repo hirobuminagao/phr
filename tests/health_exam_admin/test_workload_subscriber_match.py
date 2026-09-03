@@ -74,3 +74,4 @@ def test_candidate_insurer_scope_uses_explicit_collation() -> None:
 
     assert "CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
     assert "CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
+    assert source.index("if not where_parts and not filter_parts:") < source.index("include_other_insurers =")

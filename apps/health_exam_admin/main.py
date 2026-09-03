@@ -6705,14 +6705,6 @@ def load_subscriber_match_candidate_rows(
     if candidate_hia_subscriber_id:
         filter_parts.append("s.hia_subscriber_id LIKE %s")
         filter_params.append(f"%{candidate_hia_subscriber_id}%")
-    include_other_insurers = str(candidate_filters.get("include_other_insurers") or "0").strip() == "1"
-    if not include_other_insurers and event_id:
-        filter_parts.append(
-            f"CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci = "
-            f"(SELECT CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci "
-            f"FROM {qname(dev_db())}.event AS e WHERE e.event_id = %s LIMIT 1)"
-        )
-        filter_params.append(event_id)
     candidate_subscriber_ids = tuple(
         int(value)
         for value in (candidate_filters.get("subscriber_ids") or ())
@@ -6723,6 +6715,14 @@ def load_subscriber_match_candidate_rows(
         filter_params.extend(candidate_subscriber_ids)
     if not where_parts and not filter_parts:
         return []
+    include_other_insurers = str(candidate_filters.get("include_other_insurers") or "0").strip() == "1"
+    if not include_other_insurers and event_id:
+        filter_parts.append(
+            f"CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci = "
+            f"(SELECT CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci "
+            f"FROM {qname(dev_db())}.event AS e WHERE e.event_id = %s LIMIT 1)"
+        )
+        filter_params.append(event_id)
     where_sql_parts: list[str] = []
     if where_parts:
         where_sql_parts.append("(" + " OR ".join(f"({part})" for part in where_parts) + ")")
