@@ -42,7 +42,12 @@ class Cursor:
         self.params = params
 
     def fetchone(self) -> dict[str, object]:
-        return {"resolved_person_count": 12, "resolved_ledger_count": 15, "listed_ledger_count": 171}
+        return {
+            "resolved_person_count": 12,
+            "resolved_ledger_count": 15,
+            "current_confirmation_ledger_count": 156,
+            "listed_ledger_count": 171,
+        }
 
     def fetchall(self) -> list[dict[str, object]]:
         return []
@@ -60,16 +65,21 @@ def test_load_subscriber_match_resolution_counts_uses_manual_unique_people() -> 
     assert cursor.params == (2,)
 
 
-def test_load_subscriber_match_workload_counts_uses_all_listed_ledgers() -> None:
+def test_load_subscriber_match_workload_counts_adds_resolved_and_current_ledgers() -> None:
     cursor = Cursor()
 
     result = load_subscriber_match_workload_counts(cursor, event_id=2)
 
-    assert result == {"listed_ledger_count": 171}
-    assert "COUNT(DISTINCT el.exam_ledger_id)" in cursor.sql
-    assert "subscriber_match_method, '') = 'identity_hash'" in cursor.sql
+    assert result == {
+        "resolved_ledger_count": 15,
+        "current_confirmation_ledger_count": 156,
+        "listed_ledger_count": 171,
+    }
+    assert "resolved.resolved_ledger_count + current_issues.current_confirmation_ledger_count" in cursor.sql
+    assert "new_subscriber_match_method = 'manual'" in cursor.sql
+    assert "subscriber_match_method, '') IN ('identity_hash', 'manual')" in cursor.sql
     assert "MANUAL_CONFIRMED" in cursor.sql
-    assert cursor.params == (2,)
+    assert cursor.params == (2, 2)
 
 
 def test_default_subscriber_match_issues_exclude_confirmed_manual_ledgers() -> None:

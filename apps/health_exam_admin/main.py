@@ -4070,23 +4070,41 @@ def load_subscriber_match_resolution_counts(cur: Any, *, event_id: int | str) ->
 def load_subscriber_match_workload_counts(cur: Any, *, event_id: int | str) -> dict[str, int]:
     cur.execute(
         f"""
-        SELECT COUNT(DISTINCT el.exam_ledger_id) AS listed_ledger_count
-        FROM {qname(health_db())}.exam_ledgers AS el
-        WHERE el.event_id = %s
-          AND NOT (
-            COALESCE(el.subscriber_match_status, '') = 'MATCHED'
-            AND COALESCE(el.subscriber_match_method, '') = 'identity_hash'
-          )
-          AND NOT (
-            el.source_type IN ('PAPER', 'MANUAL')
-            AND el.subscriber_match_status = 'MANUAL_CONFIRMED'
-            AND el.subscriber_id IS NOT NULL
-          )
+        SELECT
+          resolved.resolved_ledger_count,
+          current_issues.current_confirmation_ledger_count,
+          resolved.resolved_ledger_count + current_issues.current_confirmation_ledger_count
+            AS listed_ledger_count
+        FROM (
+          SELECT COUNT(DISTINCT exam_ledger_id) AS resolved_ledger_count
+          FROM {qname(health_db())}.exam_ledger_subscriber_match_audit_logs
+          WHERE event_id = %s
+            AND new_subscriber_match_status = 'MATCHED'
+            AND new_subscriber_match_method = 'manual'
+            AND new_subscriber_id IS NOT NULL
+        ) AS resolved
+        CROSS JOIN (
+          SELECT COUNT(DISTINCT el.exam_ledger_id) AS current_confirmation_ledger_count
+          FROM {qname(health_db())}.exam_ledgers AS el
+          WHERE el.event_id = %s
+            AND NOT (
+              COALESCE(el.subscriber_match_status, '') = 'MATCHED'
+              AND COALESCE(el.subscriber_match_method, '') IN ('identity_hash', 'manual')
+            )
+            AND NOT (
+              el.source_type IN ('PAPER', 'MANUAL')
+              AND el.subscriber_match_status = 'MANUAL_CONFIRMED'
+              AND el.subscriber_id IS NOT NULL
+            )
+        ) AS current_issues
         """,
-        (event_id,),
+        (event_id, event_id),
     )
     row = dict(cur.fetchone() or {})
-    return {"listed_ledger_count": int(row.get("listed_ledger_count") or 0)}
+    return {
+        key: int(row.get(key) or 0)
+        for key in ("resolved_ledger_count", "current_confirmation_ledger_count", "listed_ledger_count")
+    }
 
 
 def load_subscriber_match_resolved_rows(

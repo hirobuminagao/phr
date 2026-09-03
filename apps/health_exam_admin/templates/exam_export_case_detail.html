@@ -9,7 +9,7 @@
   </div>
   <nav class="top-actions">
     <a class="ghost-button" href="/exam-export-cases?event_id={{ case.event_id }}&facility_q={{ case.facility_name|url_quote }}&limit=500">case一覧へ戻る</a>
-    <a class="ghost-button" href="/facility-summary?event_id={{ case.event_id }}">健診機関サマリー</a>
+    <a class="ghost-button" href="/facility-summary?event_id={{ case.event_id }}">作業用健診機関サマリ</a>
     <a class="ghost-button" href="/">HOME</a>
     <form method="post" action="/logout">
       <button class="ghost-button" type="submit">ログアウト</button>
@@ -189,7 +189,7 @@
     <div class="section-heading">
       <div>
         <h2>確認対象</h2>
-        <p class="subtle">この個人caseで不足・確認が必要な業務チェック項目です。健診機関への連絡は健診機関サマリーで整理し、ここでは個人caseごとの出力判断を記録します。</p>
+        <p class="subtle">この個人caseで不足・確認が必要な業務チェック項目です。健診機関への連絡は作業用健診機関サマリで整理し、ここでは個人caseごとの出力判断を記録します。</p>
       </div>
     </div>
     {% if placeholders %}
