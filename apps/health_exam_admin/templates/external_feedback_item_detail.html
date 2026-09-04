@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set title = "指摘case明細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">External Feedback</p>
+    <h1>指摘case明細</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/external-feedback">指摘一覧</a>
+    {% if item.exam_export_case_id %}<a class="ghost-button" href="/exam-export-cases/{{ item.exam_export_case_id }}">case</a>{% endif %}
+    <a class="ghost-button" href="/">HOME</a>
+  </nav>
+</header>
+
+<main class="page export-page">
+  {% if message %}<div class="notice">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <h2>case明細 {{ item.external_feedback_item_id }}</h2>
+        <p class="subtle">受領 {{ item.external_feedback_report_id }} / {{ external_feedback_source_label(item.feedback_source) }}</p>
+      </div>
+      <span class="status-pill status-pending">{{ external_feedback_status_label(item.handling_status) }}</span>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card"><span>対象者</span><strong>{{ item.name_kana_export_value or item.name_full_raw or "未特定" }}</strong><small>HIA {{ item.hia_subscriber_id or "-" }}</small></div>
+      <div class="summary-card"><span>case</span><strong>{{ item.exam_export_case_id or "未紐付" }}</strong><small>{{ item.facility_name or "-" }}</small></div>
+      <div class="summary-card"><span>受診日</span><strong>{{ item.exam_date or "-" }}</strong><small>{{ item.source_xml_file_name or "" }}</small></div>
+      <div class="summary-card"><span>指摘項目</span><strong>{{ details|length }}</strong><small>このcase内</small></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading">
+      <div><h2>指摘項目</h2><p class="subtle">同じcaseに届いた指摘を項目単位で管理します。</p></div>
+    </div>
+    <div class="table-panel">
+      <table class="data-table">
+        <thead><tr><th>ID・種類</th><th>対象</th><th>指摘内容</th><th>値</th><th>状態・対応</th></tr></thead>
+        <tbody>
+          {% for detail in details %}
+          <tr>
+            <td><strong>{{ detail.external_feedback_item_detail_id }}</strong><small>{{ external_feedback_detail_type_label(detail.detail_type) }} / {{ detail.issue_level }}</small></td>
+            <td><strong>{{ detail.basic_field_code or detail.namecode or "その他" }}</strong><small>{{ detail.section_code or "" }} {{ detail.check_item_code or "" }}</small></td>
+            <td><strong>{{ detail.external_error_code or "-" }}</strong><small>{{ detail.external_message }}</small></td>
+            <td><small>指摘値 {{ detail.reported_value or "-" }}</small><small>期待値 {{ detail.expected_value or "-" }}</small><small>修正後 {{ detail.corrected_value or "-" }}</small></td>
+            <td><span class="status-pill status-pending">{{ external_feedback_status_label(detail.handling_status) }}</span><small>{{ detail.resolution_note or "" }}</small></td>
+          </tr>
+          {% else %}<tr><td colspan="5">指摘項目はまだありません。</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if can_edit %}
+  <section class="panel">
+    <div class="section-heading"><div><h2>指摘項目を追加</h2><p class="subtle">基本情報、健診項目、その他から種類を選びます。</p></div></div>
+    <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details" class="stack-form">
+      <div class="form-grid">
+        <label><span>種類</span><select name="detail_type"><option value="BASIC_INFO">基本情報</option><option value="EXAM_ITEM">健診項目</option><option value="OTHER">その他</option></select></label>
+        <label><span>基本情報フィールド</span><input name="basic_field_code" placeholder="address / insurer_number など"></label>
+        <label><span>namecode</span><input name="namecode" placeholder="健診項目の場合は必須"></label>
+        <label><span>section</span><input name="section_code" placeholder="01010 / 01030 / 01060"></label>
+        <label><span>業務チェックID</span><input name="check_item_code"></label>
+        <label><span>重要度</span><select name="issue_level"><option value="ERROR">エラー</option><option value="WARNING">警告</option><option value="INFO">情報</option></select></label>
+        <label><span>状態</span><select name="handling_status"><option value="OPEN">未対応</option><option value="CONFIRMED">確認済み</option><option value="FIX_PLANNED">修正予定</option><option value="WAITING_RESUBMISSION">再提出待ち</option><option value="RESUBMITTED">再提出済み</option><option value="RESOLVED">解決済み</option><option value="WONT_FIX">対応しない</option></select></label>
+        <label><span>外部エラーコード</span><input name="external_error_code"></label>
+      </div>
+      <label><span>指摘内容</span><textarea name="external_message" rows="3" required></textarea></label>
+      <div class="form-grid">
+        <label><span>指摘値</span><input name="reported_value"></label>
+        <label><span>期待値</span><input name="expected_value"></label>
+        <label><span>修正後の値</span><input name="corrected_value"></label>
+      </div>
+      <label><span>対応メモ</span><textarea name="resolution_note" rows="2"></textarea></label>
+      <div class="action-row"><button type="submit">指摘項目を追加</button></div>
+    </form>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

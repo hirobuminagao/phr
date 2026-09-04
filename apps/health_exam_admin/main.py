@@ -1714,9 +1714,15 @@ def external_feedback_category_label(category: str | None) -> str:
     return labels.get(category or "", category or "")
 
 
+def external_feedback_detail_type_label(detail_type: str | None) -> str:
+    labels = {"BASIC_INFO": "基本情報", "EXAM_ITEM": "健診項目", "OTHER": "その他"}
+    return labels.get(detail_type or "", detail_type or "")
+
+
 templates.env.globals["external_feedback_status_label"] = external_feedback_status_label
 templates.env.globals["external_feedback_source_label"] = external_feedback_source_label
 templates.env.globals["external_feedback_category_label"] = external_feedback_category_label
+templates.env.globals["external_feedback_detail_type_label"] = external_feedback_detail_type_label
 
 PREFECTURE_OPTIONS = [
     "北海道",
@@ -3128,6 +3134,7 @@ def create_external_feedback_from_form(cur: Any, *, form: Mapping[str, Any], use
         ),
     )
     item_id = int(cur.lastrowid)
+    create_external_feedback_item_detail(cur, item_id=item_id, form=form, user=user)
     cur.execute(
         f"""
         INSERT INTO {qname(health_db())}.ops_external_feedback_item_audit_logs (
@@ -3143,6 +3150,113 @@ def create_external_feedback_from_form(cur: Any, *, form: Mapping[str, Any], use
         ),
     )
     return report_id, item_id
+
+
+def external_feedback_detail_type_from_form(form: Mapping[str, Any]) -> str:
+    detail_type = str(form.get("detail_type") or "").strip().upper()
+    if detail_type in {"BASIC_INFO", "EXAM_ITEM", "OTHER"}:
+        return detail_type
+    category = str(form.get("issue_category") or "").strip().upper()
+    if category in {"SUBSCRIBER", "BASIC_INFO"}:
+        return "BASIC_INFO"
+    return "EXAM_ITEM" if category == "EXAM_ITEM" else "OTHER"
+
+
+def create_external_feedback_item_detail(
+    cur: Any, *, item_id: int, form: Mapping[str, Any], user: dict[str, Any]
+) -> int:
+    detail_type = external_feedback_detail_type_from_form(form)
+    basic_field_code = str(form.get("basic_field_code") or "").strip()
+    namecode = str(form.get("namecode") or "").strip()
+    if detail_type == "BASIC_INFO" and not basic_field_code:
+        basic_field_code = str(form.get("check_item_code") or "").strip()
+    if detail_type == "EXAM_ITEM" and not namecode:
+        raise ValueError("健診項目の指摘にはnamecodeが必要です。")
+    external_message = str(form.get("external_message") or "").strip()
+    if not external_message:
+        raise ValueError("指摘内容を入力してください。")
+    actor = fund_delivery_actor(user)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_item_details (
+          external_feedback_item_id, detail_type, basic_field_code,
+          namecode, section_code, check_item_code,
+          issue_level, handling_status, external_error_code, external_message,
+          reported_value, expected_value, corrected_value, resolution_note,
+          created_by, updated_by
+        ) VALUES (
+          %s, %s, NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''),
+          %s, %s, NULLIF(%s, ''), %s, NULLIF(%s, ''), NULLIF(%s, ''),
+          NULLIF(%s, ''), NULLIF(%s, ''), %s, %s
+        )
+        """,
+        (
+            item_id,
+            detail_type,
+            basic_field_code,
+            namecode,
+            str(form.get("section_code") or "").strip(),
+            str(form.get("check_item_code") or "").strip(),
+            str(form.get("issue_level") or "ERROR"),
+            str(form.get("handling_status") or "OPEN"),
+            str(form.get("external_error_code") or "").strip(),
+            external_message,
+            str(form.get("reported_value") or "").strip(),
+            str(form.get("expected_value") or "").strip(),
+            str(form.get("corrected_value") or "").strip(),
+            str(form.get("resolution_note") or "").strip(),
+            actor,
+            actor,
+        ),
+    )
+    detail_id = int(cur.lastrowid)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_item_audit_logs (
+          external_feedback_item_id, action_type, after_status, after_json, changed_by
+        ) VALUES (%s, 'DETAIL_CREATE', %s, %s, %s)
+        """,
+        (
+            item_id,
+            str(form.get("handling_status") or "OPEN"),
+            json.dumps({"detail_id": detail_id, "detail_type": detail_type}, ensure_ascii=False),
+            actor,
+        ),
+    )
+    return detail_id
+
+
+def load_external_feedback_item_detail(
+    cur: Any, *, item_id: int
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    cur.execute(
+        f"""
+        SELECT i.*, r.feedback_source, r.feedback_scope, r.received_at, r.received_from,
+               r.channel, r.summary, eec.hia_subscriber_id, eec.name_kana_export_value,
+               eec.name_full_raw, eec.exam_date, ef.exam_facility_name AS facility_name
+        FROM {qname(health_db())}.ops_external_feedback_items i
+        JOIN {qname(health_db())}.ops_external_feedback_reports r
+          ON r.external_feedback_report_id = i.external_feedback_report_id
+        LEFT JOIN {qname(health_db())}.exam_export_cases eec
+          ON eec.exam_export_case_id = i.exam_export_case_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = eec.exam_facility_id
+        WHERE i.external_feedback_item_id = %s
+        """,
+        (item_id,),
+    )
+    item = cur.fetchone()
+    if not item:
+        return None, []
+    cur.execute(
+        f"""
+        SELECT * FROM {qname(health_db())}.ops_external_feedback_item_details
+        WHERE external_feedback_item_id = %s
+        ORDER BY external_feedback_item_detail_id
+        """,
+        (item_id,),
+    )
+    return dict(item), [dict(row) for row in cur.fetchall()]
 
 
 def build_hia_download_import_config(raw: dict[str, Any]) -> HiaDownloadImportConfig:
@@ -15915,6 +16029,69 @@ async def create_external_feedback(request: Request) -> Response:
     )
     return RedirectResponse(
         f"/external-feedback?message={quote(f'外部指摘を登録しました。report={report_id} item={item_id}')}",
+        status_code=303,
+    )
+
+
+@app.get("/external-feedback/items/{item_id}", response_class=HTMLResponse)
+def external_feedback_item_detail(request: Request, item_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        item, details = load_external_feedback_item_detail(dict_cursor(conn), item_id=item_id)
+    if item is None:
+        return HTMLResponse("指摘case明細が見つかりません。", status_code=404)
+    return templates.TemplateResponse(
+        "external_feedback_item_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "item": item,
+            "details": details,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+            "can_edit": has_any_permission(user, ("hia_upload_status.edit", "users.manage")),
+        },
+    )
+
+
+@app.post("/external-feedback/items/{item_id}/details", response_class=HTMLResponse)
+async def create_external_feedback_detail(request: Request, item_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            item, _ = load_external_feedback_item_detail(cur, item_id=item_id)
+            if item is None:
+                raise ValueError("指摘case明細が見つかりません。")
+            detail_id = create_external_feedback_item_detail(cur, item_id=item_id, form=form, user=user)
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(
+                f"/external-feedback/items/{item_id}?error={quote(str(exc))}", status_code=303
+            )
+    log_app_operation(
+        request=request,
+        user=user,
+        action_code="EXTERNAL_FEEDBACK_DETAIL_CREATE",
+        target_schema=health_db(),
+        target_table="ops_external_feedback_item_details",
+        target_id=str(detail_id),
+        after={"external_feedback_item_id": item_id},
+    )
+    return RedirectResponse(
+        f"/external-feedback/items/{item_id}?message={quote('指摘項目を追加しました。')}",
         status_code=303,
     )
 

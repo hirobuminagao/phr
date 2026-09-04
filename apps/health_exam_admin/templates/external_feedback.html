@@ -354,6 +354,7 @@
               <small>{{ item.source_zip_file_name or "" }} {{ item.source_xml_file_name or "" }}</small>
             </td>
             <td>
+              <a class="ghost-button" href="/external-feedback/items/{{ item.external_feedback_item_id }}">明細</a>
               {% if item.exam_export_case_id %}
                 <a class="ghost-button" href="/exam-export-cases/{{ item.exam_export_case_id }}">case</a>
               {% else %}
