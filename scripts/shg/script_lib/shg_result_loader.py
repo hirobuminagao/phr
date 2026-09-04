@@ -31,6 +31,7 @@ from scripts.lib.db.schemas import WORK_OTHER
 
 SHG_RESULT_SELECT_SQL = """
 SELECT
+    id,
     shg_year,
     identity_hash,
     usage_ticket_number,
@@ -39,7 +40,7 @@ SELECT
     exam_weight_kg
 FROM shg_result
 WHERE identity_hash IS NOT NULL
-ORDER BY identity_hash, shg_year ASC
+ORDER BY identity_hash, shg_year DESC, id DESC
 """
 
 
@@ -89,6 +90,7 @@ def normalize_db_row(row: Any) -> dict[str, Any]:
         row_dict = {}
 
     return {
+        "id": row_dict.get("id"),
         "shg_year": row_dict.get("shg_year"),
         "identity_hash": (row_dict.get("identity_hash") or "").strip(),
         "usage_ticket_number": (row_dict.get("usage_ticket_number") or "").strip(),
@@ -96,6 +98,20 @@ def normalize_db_row(row: Any) -> dict[str, Any]:
         "exam_waist_cm": row_dict.get("exam_waist_cm"),
         "exam_weight_kg": row_dict.get("exam_weight_kg"),
     }
+
+
+def build_latest_shg_result_map(rows: list[Any]) -> dict[str, dict[str, Any]]:
+    """identity_hashごとに最新年度のSHG結果を1件だけ採用する。"""
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        normalized = normalize_db_row(row)
+        identity_hash = normalized["identity_hash"]
+        if not identity_hash:
+            continue
+
+        # SQLは年度・IDの新しい順。同一人物の最初の行を採用する。
+        result.setdefault(identity_hash, normalized)
+    return result
 
 
 def load_shg_result_from_mysql() -> dict[str, dict[str, Any]]:
@@ -112,21 +128,9 @@ def load_shg_result_from_mysql() -> dict[str, dict[str, Any]]:
         dict[identity_hash, normalized_row]
     """
     params = load_mysql_base_params()
-    result: dict[str, dict[str, Any]] = {}
-
     with connect_ctx(params, database=WORK_OTHER, autocommit=False) as conn:
         cursor = dict_cursor(conn)
         cursor.execute(SHG_RESULT_SELECT_SQL)
         rows = cursor.fetchall()
 
-    for row in rows:
-        normalized = normalize_db_row(row)
-        identity_hash = normalized["identity_hash"]
-
-        if not identity_hash:
-            continue
-
-        # SQL側で shg_year ASC にしているため、同一 identity_hash は最新年度で上書きされる。
-        result[identity_hash] = normalized
-
-    return result
+    return build_latest_shg_result_map(rows)

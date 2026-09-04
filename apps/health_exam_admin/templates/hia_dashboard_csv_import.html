@@ -13,14 +13,25 @@
     <div class="section-heading"><div><h2>更新ファイル</h2><p class="subtle">イベントは保険者番号を選ぶために使います。更新範囲は選択した保険者番号全体です。</p></div></div>
     <form method="post" action="/utilities/hia-dashboard-csv" enctype="multipart/form-data" class="hia-dashboard-csv-form" data-processing-form data-processing-message="ダッシュボードCSVを処理しています">
       <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
-      <div class="form-grid three-columns">
+      <div class="form-grid hia-dashboard-source-grid">
         <label>対象イベント
           <select name="event_id" required onchange="window.location.href='/utilities/hia-dashboard-csv?event_id='+encodeURIComponent(this.value)">
             {% for event in events %}<option value="{{ event.event_id }}" {% if selected_event and event.event_id == selected_event.event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / {{ event.insurer_number or '保険者未設定' }}</option>{% endfor %}
           </select>
         </label>
         <label>保険者番号<input value="{{ selected_event.insurer_number if selected_event else '' }}" readonly></label>
-        <label>CSVファイル<input type="file" name="csv_file" accept=".csv,text/csv" required></label>
+      </div>
+
+      <div class="xml-drop-zone hia-dashboard-csv-drop-zone" data-file-drop-zone>
+        <label>
+          <span>CSVファイル</span>
+          <input type="file" name="csv_file" accept=".csv,text/csv" required data-file-drop-input>
+          <span class="file-picker-button">ファイルを選択</span>
+        </label>
+        <div class="xml-drop-message">
+          <strong>ここにCSVをドロップ</strong>
+          <small data-file-drop-name>またはクリックしてファイルを選択</small>
+        </div>
       </div>
 
       <fieldset class="hia-dashboard-import-scope">

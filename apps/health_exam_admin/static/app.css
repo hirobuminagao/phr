@@ -1407,8 +1407,12 @@ a.home-menu-card.is-navigating {
   gap: 20px;
 }
 
-.hia-dashboard-csv-form .form-grid.three-columns {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.hia-dashboard-source-grid {
+  grid-template-columns: minmax(320px, 1.4fr) minmax(220px, 0.6fr);
+}
+
+.hia-dashboard-csv-drop-zone {
+  width: 100%;
 }
 
 .hia-dashboard-import-scope {
@@ -1429,7 +1433,11 @@ a.home-menu-card.is-navigating {
 }
 
 @media (max-width: 900px) {
-  .hia-dashboard-csv-form .form-grid.three-columns {
+  .hia-dashboard-source-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hia-dashboard-csv-drop-zone {
     grid-template-columns: 1fr;
   }
 }
