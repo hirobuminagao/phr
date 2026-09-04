@@ -669,12 +669,28 @@ def test_build_value_map_falls_back_to_single_non_article44_section_row() -> Non
     assert value.numeric_value == Decimal("170")
 
 
-def test_build_value_map_returns_duplicate_when_no_article44_section_and_multiple_rows() -> None:
+def test_build_value_map_prefers_specific_health_section_when_article44_section_is_missing() -> None:
     value = _build_value_map(
         (required("x", ExpectedValueType.ST),),
         [
             row(namecode="x", raw_value_type="ST", raw_value="a", section_code="01010", id=1),
             row(namecode="x", raw_value_type="ST", raw_value="b", section_code="01060", id=2),
+        ],
+    )["x"]
+
+    assert isinstance(value, STValue)
+    assert value.is_valid is True
+    assert value.raw_text == "a"
+    assert value.invalid_reason is None
+
+
+def test_build_value_map_returns_duplicate_within_specific_health_section() -> None:
+    value = _build_value_map(
+        (required("x", ExpectedValueType.ST),),
+        [
+            row(namecode="x", raw_value_type="ST", raw_value="a", section_code="01010", id=1),
+            row(namecode="x", raw_value_type="ST", raw_value="b", section_code="01010", id=2),
+            row(namecode="x", raw_value_type="ST", raw_value="c", section_code="01060", id=3),
         ],
     )["x"]
 

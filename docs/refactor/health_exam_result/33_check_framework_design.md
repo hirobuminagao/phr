@@ -571,7 +571,7 @@ section_code_system
 section_name
 ```
 
-Article44のValueMap生成では、同一namecodeが複数sectionに存在する場合、労働安全衛生法健診結果セクションを表す `section_code='01030'` を優先する。
+Article44のValueMap生成では、同一namecodeが複数sectionに存在する場合、労働安全衛生法健診結果セクションを表す `section_code='01030'` を優先する。01030がなければ、特定健診・問診結果セクション `section_code='01010'` を優先する。
 
 現行方針は以下とする。
 
@@ -582,17 +582,23 @@ Article44のValueMap生成では、同一namecodeが複数sectionに存在する
 01030が複数件
     → DUPLICATE_NAMECODE
 
-01030が無く、他sectionが1件
+01030が無く、01010が1件
+    → 01010を採用
+
+01030が無く、01010が複数件
+    → DUPLICATE_NAMECODE
+
+01030と01010が無く、他sectionが1件
     → 互換性のため採用
 
-01030が無く、他sectionが複数件
+01030と01010が無く、他sectionが複数件
     → DUPLICATE_NAMECODE
 ```
 
 この方針により、特定健診セクションやがん検診セクションに同じnamecodeが存在しても、Article44判定では労働安全衛生法健診セクションの値を優先できる。
 
-`section_code` がNULLまたは空の場合は、01030以外のsectionと同じfallback候補として扱う。
-ただし、01030が存在する場合はNULL sectionの行を採用しない。
+`section_code` がNULLまたは空の場合は、01030・01010以外のsectionと同じfallback候補として扱う。
+ただし、01030または01010が存在する場合はNULL sectionの行を採用しない。
 
 section情報は値の出自を識別するためのimportメタ情報であり、`PQValue` / `CDValue` / `STValue` へは伝播させない。
 
@@ -705,11 +711,13 @@ STValue(
 第2層の重複検知責務は以下とする。
 
 - DB一括取得結果をnamecodeごとに集約する。
-- namecodeごとの取得行から `section_code='01030'` を優先する。
+- namecodeごとの取得行から `section_code='01030'`、次に `section_code='01010'` を優先する。
 - 01030が1件だけ存在する場合は、その行を採用し、他sectionの同一namecodeは重複扱いしない。
 - 01030が複数件存在する場合は重複として検知する。
-- 01030が存在せず、他sectionの同一namecodeが1件だけ存在する場合は互換性のため採用する。
-- 01030が存在せず、他sectionの同一namecodeが複数件存在する場合は重複として検知する。
+- 01030が存在せず、01010が1件だけ存在する場合は、その行を採用し、他sectionの同一namecodeは重複扱いしない。
+- 優先された01010が複数件存在する場合は重複として検知する。
+- 01030と01010が存在せず、他sectionの同一namecodeが1件だけ存在する場合は互換性のため採用する。
+- 01030と01010が存在せず、他sectionの同一namecodeが複数件存在する場合は重複として検知する。
 - 重複の場合、その採用候補集合の件数を `duplicate_count` へ設定する。
 - 重複時は期待値型に対応するValue型を返す。
 - `value_state` は `PRESENT` とする。

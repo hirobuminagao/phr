@@ -11,7 +11,8 @@
 `exam_export_case_values` にはsection列がなかった。XML出力時は `exam_item_master.cda_section_code_default`
 からsectionを再決定していたため、受領時のsectionが失われていた。
 
-法定チェックは `01030` を優先し、`01030` がなければ対象namecodeの候補数で判定する。
+法定チェックは `01030` を優先し、なければ `01010` を優先する。
+別sectionに同じnamecodeがあっても重複NGにせず、選択された同一section内に複数ある場合だけ重複とする。
 このチェック上の選択規則と、XMLへ全採用値を出力する規則は分離する。
 
 ## 設計
@@ -21,7 +22,7 @@
 3. XML出力はcase値の `section_code` を最優先する。
 4. 既存caseは `source_exam_item_value_id` からsectionを埋め戻す。
 5. 埋め戻せない旧データだけ、採用元、項目マスタ、`01990` の順でフォールバックする。
-6. 法定チェックはcase値に保持したsectionを参照するが、既存の `01030` 優先規則は変更しない。
+6. 法定チェックはcase値に保持したsectionを参照し、`01030`、`01010`、その他の順で候補を選ぶ。
 
 ## 同一namecodeの扱い
 
@@ -30,7 +31,7 @@ XML取込の `occurrence_no` はsection単位ではなく、同じnamecode全体
 `01010` の occurrence 1 と `01060` の occurrence 2 は別のcase値として保持され、出力時にsection別に配置される。
 
 同一section内に同じnamecodeが複数ある場合も、occurrence順を維持して出力する。
-法定チェックで複数候補をエラーとするかはチェック仕様で判断し、出力時のsection欠落とは混同しない。
+法定チェックは別sectionの重複をエラーにせず、優先された同一section内の複数候補だけをエラーにする。
 
 ## 互換性と再処理
 

@@ -23,6 +23,7 @@ from scripts.lib.examination.lookup import qname
 
 
 ARTICLE44_SECTION_CODE = "01030"
+SPECIFIC_HEALTH_SECTION_CODE = "01010"
 
 
 def load_article44_value_map(
@@ -133,11 +134,15 @@ def _build_value_map(
 def _select_article44_section_rows(
     rows: tuple[Mapping[str, object], ...],
 ) -> tuple[Mapping[str, object], ...]:
-    article44_rows = tuple(
-        row for row in rows if _section_code(row) == ARTICLE44_SECTION_CODE
-    )
-    if article44_rows:
-        return article44_rows
+    for preferred_section_code in (
+        ARTICLE44_SECTION_CODE,
+        SPECIFIC_HEALTH_SECTION_CODE,
+    ):
+        preferred_rows = tuple(
+            row for row in rows if _section_code(row) == preferred_section_code
+        )
+        if preferred_rows:
+            return preferred_rows
     return rows
 
 
