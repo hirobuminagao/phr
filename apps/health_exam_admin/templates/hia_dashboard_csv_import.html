@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% set title = "HIAダッシュボードCSV更新" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Utility</p><h1>HIAダッシュボードCSV更新</h1><p class="subtle">HIAの補助状態を、保険者単位のCSVから更新します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page">
+  {% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading"><div><h2>更新ファイル</h2><p class="subtle">イベントは保険者番号を選ぶために使います。更新範囲は選択した保険者番号全体です。</p></div></div>
+    <form method="post" action="/utilities/hia-dashboard-csv" enctype="multipart/form-data" class="hia-dashboard-csv-form" data-processing-form data-processing-message="ダッシュボードCSVを処理しています">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+      <div class="form-grid three-columns">
+        <label>対象イベント
+          <select name="event_id" required onchange="window.location.href='/utilities/hia-dashboard-csv?event_id='+encodeURIComponent(this.value)">
+            {% for event in events %}<option value="{{ event.event_id }}" {% if selected_event and event.event_id == selected_event.event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / {{ event.insurer_number or '保険者未設定' }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>保険者番号<input value="{{ selected_event.insurer_number if selected_event else '' }}" readonly></label>
+        <label>CSVファイル<input type="file" name="csv_file" accept=".csv,text/csv" required></label>
+      </div>
+
+      <fieldset class="hia-dashboard-import-scope">
+        <legend>取込方式</legend>
+        <div class="segmented-control">
+          <label><input type="radio" name="import_scope" value="full" {% if selected_import_scope|default('full') == 'full' %}checked{% endif %}><span>全件更新</span></label>
+          <label><input type="radio" name="import_scope" value="partial" {% if selected_import_scope|default('full') == 'partial' %}checked{% endif %}><span>CSV掲載者のみ更新</span></label>
+        </div>
+        <p class="form-note">全件更新では、CSVに存在しない同一保険者の既存行を非アクティブ化します。CSV掲載者のみ更新では、CSVにいない人の状態を変更しません。</p>
+      </fieldset>
+
+      <div class="button-row">
+        <button type="submit" name="action" value="preview" class="ghost-button">事前確認</button>
+        <button type="submit" name="action" value="apply">更新を実行</button>
+      </div>
+    </form>
+  </section>
+
+  {% if result %}
+  <section class="panel">
+    <div class="section-heading"><div><h2>{{ '事前確認結果' if result.action == 'preview' else '更新結果' }}</h2><p class="subtle">{{ result.file_name }} / 保険者 {{ result.insurer_number }} / {{ '全件更新' if result.import_scope == 'full' else 'CSV掲載者のみ更新' }}</p></div><span class="status-pill {{ 'status-ready' if result.ok else 'status-danger' }}">{{ 'OK' if result.ok else 'ERROR' }}</span></div>
+    <pre>{{ result.output }}</pre>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

@@ -10578,6 +10578,74 @@ EXAM_PROCESSING_STEPS: tuple[dict[str, str], ...] = (
     },
 )
 EXAM_PROCESSING_STEP_MAP = {step["key"]: step for step in EXAM_PROCESSING_STEPS}
+HIA_DASHBOARD_CSV_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
+
+def normalize_hia_dashboard_insurer_number(value: Any) -> str:
+    result = normalize_insurer_number(None if value is None else str(value))
+    match = str(result.get("match") or "")
+    if not result.get("ok") or not match or match == "0":
+        raise ValueError("選択eventに有効な保険者番号が設定されていません。")
+    return match.zfill(8)
+
+
+def build_hia_dashboard_import_command(
+    *,
+    input_dir: Path,
+    dry_run: bool,
+    partial_import: bool,
+) -> list[str]:
+    command = [
+        sys.executable,
+        str(REPO_ROOT / "scripts" / "hia" / "import_dashboard_csv.py"),
+        "--input",
+        str(input_dir),
+        "--work-db",
+        work_other_db(),
+        "--dev-db",
+        dev_db(),
+        "--db-prefix",
+        db_prefix(),
+    ]
+    if dry_run:
+        command.append("--dry-run")
+    if partial_import:
+        command.append("--partial-import")
+    return command
+
+
+def run_hia_dashboard_csv_import(
+    *,
+    upload_path: Path,
+    insurer_number: str,
+    dry_run: bool,
+    partial_import: bool,
+) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory(prefix="hia_dashboard_csv_") as temp_root:
+        input_dir = Path(temp_root) / insurer_number
+        input_dir.mkdir(parents=True)
+        staged_path = input_dir / upload_path.name
+        shutil.copy2(upload_path, staged_path)
+        completed = subprocess.run(
+            build_hia_dashboard_import_command(
+                input_dir=input_dir,
+                dry_run=dry_run,
+                partial_import=partial_import,
+            ),
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=60 * 30,
+            check=False,
+        )
+    output = "\n".join(
+        part.strip() for part in (completed.stdout, completed.stderr) if part and part.strip()
+    )
+    return {
+        "ok": completed.returncode == 0,
+        "returncode": completed.returncode,
+        "output": output or "(出力なし)",
+    }
 
 
 def run_exam_processing_step(
@@ -14104,6 +14172,129 @@ def index(request: Request) -> HTMLResponse:
     if isinstance(user, RedirectResponse):
         return user
     return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
+
+
+@app.get("/utilities/hia-dashboard-csv", response_class=HTMLResponse)
+def hia_dashboard_csv_import(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    selected_event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        selected_event = next(
+            (event for event in events if int(event["event_id"]) == selected_event_id),
+            events[0] if events else None,
+        )
+        cur.close()
+    return templates.TemplateResponse(
+        "hia_dashboard_csv_import.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "selected_event": selected_event,
+            "result": None,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/utilities/hia-dashboard-csv", response_class=HTMLResponse)
+async def run_hia_dashboard_csv_import_from_screen(
+    request: Request,
+    event_id: int = Form(...),
+    import_scope: str = Form("full"),
+    action: str = Form("preview"),
+    csv_file: UploadFile = File(...),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        selected_event = next((event for event in events if int(event["event_id"]) == event_id), None)
+        cur.close()
+
+    error: str | None = None
+    result: dict[str, Any] | None = None
+    safe_name = Path(csv_file.filename or "").name
+    if selected_event is None:
+        error = "選択eventが見つかりません。"
+    elif import_scope not in {"full", "partial"}:
+        error = "取込方式が不正です。"
+    elif action not in {"preview", "apply"}:
+        error = "実行方法が不正です。"
+    elif not safe_name.lower().endswith(".csv"):
+        error = "CSVファイルを選択してください。"
+
+    upload_path: Path | None = None
+    try:
+        insurer_number = (
+            normalize_hia_dashboard_insurer_number(selected_event.get("insurer_number"))
+            if selected_event is not None and error is None
+            else ""
+        )
+        if error is None:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
+                upload_path = Path(temp_file.name)
+                uploaded_size = 0
+                while chunk := await csv_file.read(1024 * 1024):
+                    uploaded_size += len(chunk)
+                    if uploaded_size > HIA_DASHBOARD_CSV_MAX_UPLOAD_BYTES:
+                        raise ValueError("CSVファイルは100MB以下にしてください。")
+                    temp_file.write(chunk)
+            if uploaded_size == 0:
+                raise ValueError("CSVファイルが空です。")
+            result = run_hia_dashboard_csv_import(
+                upload_path=upload_path,
+                insurer_number=insurer_number,
+                dry_run=action == "preview",
+                partial_import=import_scope == "partial",
+            )
+            result.update(
+                {
+                    "file_name": safe_name,
+                    "insurer_number": insurer_number,
+                    "import_scope": import_scope,
+                    "action": action,
+                }
+            )
+            if not result["ok"]:
+                error = "事前確認に失敗しました。" if action == "preview" else "更新に失敗しました。"
+    except ValueError as exc:
+        error = str(exc)
+    finally:
+        if upload_path is not None:
+            upload_path.unlink(missing_ok=True)
+
+    message = None
+    if result and result["ok"]:
+        message = "事前確認が完了しました。" if action == "preview" else "ダッシュボードCSVを更新しました。"
+    return templates.TemplateResponse(
+        "hia_dashboard_csv_import.html",
+        {
+            "request": request,
+            "user": user,
+            "events": events,
+            "selected_event": selected_event,
+            "selected_import_scope": import_scope,
+            "result": result,
+            "message": message,
+            "error": error,
+        },
+        status_code=400 if error and result is None else 200,
+    )
 
 
 @app.get("/support/mhlw-zip-format", response_class=HTMLResponse)

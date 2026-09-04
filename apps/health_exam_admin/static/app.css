@@ -1402,6 +1402,38 @@ a.home-menu-card.is-navigating {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.hia-dashboard-csv-form {
+  display: grid;
+  gap: 20px;
+}
+
+.hia-dashboard-csv-form .form-grid.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hia-dashboard-import-scope {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.hia-dashboard-import-scope legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.hia-dashboard-import-scope .form-note {
+  margin: 10px 0 0;
+}
+
+@media (max-width: 900px) {
+  .hia-dashboard-csv-form .form-grid.three-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 .person-selection-form {
   display: grid;
   gap: 18px;
