@@ -32,8 +32,42 @@
           <label><span>任意区切り文字</span><input name="custom_delimiter" value="{{ form.custom_delimiter or '' }}" placeholder="例: |"></label>
           <label class="checkbox-line"><input type="checkbox" name="has_header" value="1" {% if form.has_header == '1' %}checked{% endif %}><span>先頭行はヘッダー</span></label>
         </div>
-        <div class="person-id-column-grid">
-          {% for index in range(8) %}<label><span>{{ index + 1 }}列目</span><select name="col_{{ index }}">{% for value, label in column_options %}<option value="{{ value }}" {% if form.columns[index] == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{% endfor %}
+        <div class="person-selection-column-editor" data-person-column-editor>
+          <div class="person-selection-column-editor-head">
+            <div><strong>列割当</strong><small>貼り付けた列に、どの項目が入っているかを指定します。</small></div>
+            <span class="person-column-editing-status" data-person-column-editing-status hidden></span>
+            <div class="button-row">
+              <button type="button" class="ghost-button compact-action-button" data-person-column-mode="assign">項目編集</button>
+              <button type="button" class="ghost-button compact-action-button" data-person-column-mode="reorder">入れ替え</button>
+              <button type="button" class="compact-action-button" data-person-column-done hidden>編集完了</button>
+            </div>
+          </div>
+          <div class="person-selection-column-cards" data-person-column-cards>
+          {% for index in range(8) %}
+            {% set current_value = form.columns[index] %}
+            {% set label_ns = namespace(text="未使用") %}
+            {% for value, label in column_options %}{% if current_value == value %}{% set label_ns.text = label %}{% endif %}{% endfor %}
+            <div class="person-column-card" data-person-column-card data-column-index="{{ index }}" draggable="false">
+              <input type="hidden" name="col_{{ index }}" value="{{ current_value }}" data-person-column-input>
+              <span class="person-column-card-order">{{ index + 1 }}列目</span>
+              <strong data-person-column-label>{{ label_ns.text }}</strong>
+              <button type="button" class="ghost-button compact-action-button" data-person-column-open hidden>選択</button>
+            </div>
+          {% endfor %}
+          </div>
+        </div>
+
+        <div id="person-column-picker-modal" class="edit-modal" hidden>
+          <section class="edit-modal__panel person-column-picker-modal" role="dialog" aria-modal="true" aria-labelledby="person-column-picker-title">
+            <header class="edit-modal__header">
+              <div><p class="eyebrow">COLUMN</p><h2 id="person-column-picker-title">項目を選択</h2><p class="subtle" data-person-column-picker-target>列を選択してください。</p></div>
+              <button type="button" class="ghost-button" data-person-column-picker-close>閉じる</button>
+            </header>
+            <div class="person-column-picker-options">
+              {% for value, label in column_options %}<button type="button" class="person-column-picker-option" data-person-column-option data-value="{{ value }}" data-label="{{ label }}"><span>{{ label }}</span><small data-person-column-option-usage></small></button>{% endfor %}
+            </div>
+            <footer class="edit-modal__footer"><button type="button" class="ghost-button" data-person-column-picker-cancel>キャンセル</button><button type="button" data-person-column-picker-apply>決定</button></footer>
+          </section>
         </div>
         <label class="textarea-block"><span>貼り付け内容</span><textarea name="raw_text" rows="9" spellcheck="false" placeholder="保険者番号&#9;記号&#9;番号&#9;生年月日">{{ form.raw_text or '' }}</textarea></label>
       </section>

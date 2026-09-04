@@ -1447,19 +1447,6 @@ a.home-menu-card.is-navigating {
   gap: 18px;
 }
 
-.person-id-column-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 16px 0;
-}
-
-@media (max-width: 900px) {
-  .person-id-column-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 .person-selection-mode {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
