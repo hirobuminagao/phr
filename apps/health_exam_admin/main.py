@@ -10637,6 +10637,8 @@ EXAM_PROCESSING_STEPS: tuple[dict[str, str], ...] = (
 )
 EXAM_PROCESSING_STEP_MAP = {step["key"]: step for step in EXAM_PROCESSING_STEPS}
 HIA_DASHBOARD_CSV_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+HIA_DASHBOARD_PLAN_TTL_SECONDS = 60 * 60
+HIA_DASHBOARD_PLAN_ROOT = Path(tempfile.gettempdir()) / "phr_hia_dashboard_plans"
 
 
 def normalize_hia_dashboard_insurer_number(value: Any) -> str:
@@ -10652,6 +10654,8 @@ def build_hia_dashboard_import_command(
     input_dir: Path,
     dry_run: bool,
     partial_import: bool,
+    plan_output: Path | None = None,
+    plan_input: Path | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -10669,6 +10673,10 @@ def build_hia_dashboard_import_command(
         command.append("--dry-run")
     if partial_import:
         command.append("--partial-import")
+    if plan_output is not None:
+        command.extend(["--plan-output", str(plan_output)])
+    if plan_input is not None:
+        command.extend(["--plan-input", str(plan_input)])
     return command
 
 
@@ -10678,17 +10686,22 @@ def run_hia_dashboard_csv_import(
     insurer_number: str,
     dry_run: bool,
     partial_import: bool,
+    plan_output: Path | None = None,
+    plan_input: Path | None = None,
 ) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="hia_dashboard_csv_") as temp_root:
         input_dir = Path(temp_root) / insurer_number
         input_dir.mkdir(parents=True)
-        staged_path = input_dir / upload_path.name
-        shutil.copy2(upload_path, staged_path)
+        if plan_input is None:
+            staged_path = input_dir / upload_path.name
+            shutil.copy2(upload_path, staged_path)
         completed = subprocess.run(
             build_hia_dashboard_import_command(
                 input_dir=input_dir,
                 dry_run=dry_run,
                 partial_import=partial_import,
+                plan_output=plan_output,
+                plan_input=plan_input,
             ),
             cwd=REPO_ROOT,
             text=True,
@@ -10704,6 +10717,40 @@ def run_hia_dashboard_csv_import(
         "returncode": completed.returncode,
         "output": output or "(出力なし)",
     }
+
+
+def cleanup_hia_dashboard_plans(*, token: str | None = None) -> None:
+    HIA_DASHBOARD_PLAN_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if token is not None and not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+        return
+    now = time.time()
+    targets = [HIA_DASHBOARD_PLAN_ROOT / token] if token else list(HIA_DASHBOARD_PLAN_ROOT.iterdir())
+    for target in targets:
+        if not target.is_dir():
+            continue
+        if token is not None or now - target.stat().st_mtime > HIA_DASHBOARD_PLAN_TTL_SECONDS:
+            shutil.rmtree(target, ignore_errors=True)
+
+
+def load_hia_dashboard_plan(token: str, *, app_user_id: int) -> tuple[Path, dict[str, Any]]:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+        raise ValueError("事前確認情報が不正です。もう一度事前確認してください。")
+    plan_dir = HIA_DASHBOARD_PLAN_ROOT / token
+    metadata_path = plan_dir / "metadata.json"
+    plan_path = plan_dir / "plan.json"
+    if not metadata_path.is_file() or not plan_path.is_file():
+        raise ValueError("事前確認情報の有効期限が切れています。もう一度事前確認してください。")
+    if time.time() - plan_dir.stat().st_mtime > HIA_DASHBOARD_PLAN_TTL_SECONDS:
+        cleanup_hia_dashboard_plans(token=token)
+        raise ValueError("事前確認情報の有効期限が切れています。もう一度事前確認してください。")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if int(metadata.get("app_user_id") or 0) != app_user_id:
+        raise ValueError("この事前確認情報は利用できません。")
+    actual_sha256 = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+    if not secrets.compare_digest(str(metadata.get("plan_sha256") or ""), actual_sha256):
+        cleanup_hia_dashboard_plans(token=token)
+        raise ValueError("事前確認情報の整合性を確認できません。もう一度事前確認してください。")
+    return plan_path, metadata
 
 
 def run_exam_processing_step(
@@ -14239,6 +14286,7 @@ def hia_dashboard_csv_import(request: Request) -> Response:
         return user
     if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    cleanup_hia_dashboard_plans()
     selected_event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
@@ -14269,7 +14317,8 @@ async def run_hia_dashboard_csv_import_from_screen(
     event_id: int = Form(...),
     import_scope: str = Form("full"),
     action: str = Form("preview"),
-    csv_file: UploadFile = File(...),
+    csv_file: UploadFile | None = File(None),
+    preview_token: str = Form(""),
 ) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
@@ -14286,24 +14335,38 @@ async def run_hia_dashboard_csv_import_from_screen(
 
     error: str | None = None
     result: dict[str, Any] | None = None
-    safe_name = Path(csv_file.filename or "").name
+    cleanup_hia_dashboard_plans()
+    safe_name = Path(csv_file.filename or "").name if csv_file is not None else ""
     if selected_event is None:
         error = "選択eventが見つかりません。"
     elif import_scope not in {"full", "partial"}:
         error = "取込方式が不正です。"
-    elif action not in {"preview", "apply"}:
+    elif action not in {"preview", "apply", "discard"}:
         error = "実行方法が不正です。"
-    elif not safe_name.lower().endswith(".csv"):
+    elif action == "preview" and not safe_name.lower().endswith(".csv"):
         error = "CSVファイルを選択してください。"
 
     upload_path: Path | None = None
+    created_plan_token: str | None = None
+    retain_created_plan = False
     try:
+        if error is None and action == "discard":
+            cleanup_hia_dashboard_plans(token=preview_token)
+            return RedirectResponse(
+                f"/utilities/hia-dashboard-csv?event_id={event_id}&message={quote('事前確認データを破棄しました。')}",
+                status_code=303,
+            )
         insurer_number = (
             normalize_hia_dashboard_insurer_number(selected_event.get("insurer_number"))
             if selected_event is not None and error is None
             else ""
         )
-        if error is None:
+        if error is None and action == "preview":
+            token = secrets.token_urlsafe(32)
+            created_plan_token = token
+            plan_dir = HIA_DASHBOARD_PLAN_ROOT / token
+            plan_dir.mkdir(mode=0o700, parents=True)
+            plan_path = plan_dir / "plan.json"
             with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
                 upload_path = Path(temp_file.name)
                 uploaded_size = 0
@@ -14319,7 +14382,38 @@ async def run_hia_dashboard_csv_import_from_screen(
                 insurer_number=insurer_number,
                 dry_run=action == "preview",
                 partial_import=import_scope == "partial",
+                plan_output=plan_path,
             )
+            if not result["ok"] or not plan_path.is_file():
+                cleanup_hia_dashboard_plans(token=token)
+                if result["ok"]:
+                    result["ok"] = False
+                    result["output"] = f"{result['output']}\n更新計画を作成できませんでした。"
+            else:
+                metadata = {
+                    "app_user_id": int(user["app_user_id"]),
+                    "event_id": event_id,
+                    "insurer_number": insurer_number,
+                    "import_scope": import_scope,
+                    "file_name": safe_name,
+                    "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+                }
+                metadata_path = plan_dir / "metadata.json"
+                metadata_path.write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
+                metadata_path.chmod(0o600)
+                result["preview_token"] = token
+                retain_created_plan = True
+        elif error is None:
+            plan_path, metadata = load_hia_dashboard_plan(preview_token, app_user_id=int(user["app_user_id"]))
+            if int(metadata["event_id"]) != event_id or metadata["import_scope"] != import_scope:
+                raise ValueError("事前確認後に条件が変更されています。もう一度事前確認してください。")
+            safe_name = str(metadata["file_name"])
+            insurer_number = str(metadata["insurer_number"])
+            result = run_hia_dashboard_csv_import(
+                upload_path=Path(), insurer_number=insurer_number, dry_run=False,
+                partial_import=import_scope == "partial", plan_input=plan_path,
+            )
+        if result is not None:
             result.update(
                 {
                     "file_name": safe_name,
@@ -14335,6 +14429,10 @@ async def run_hia_dashboard_csv_import_from_screen(
     finally:
         if upload_path is not None:
             upload_path.unlink(missing_ok=True)
+        if action == "apply":
+            cleanup_hia_dashboard_plans(token=preview_token)
+        if created_plan_token is not None and not retain_created_plan:
+            cleanup_hia_dashboard_plans(token=created_plan_token)
 
     message = None
     if result and result["ok"]:

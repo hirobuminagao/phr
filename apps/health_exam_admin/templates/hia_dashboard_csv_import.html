@@ -13,6 +13,7 @@
     <div class="section-heading"><div><h2>更新ファイル</h2><p class="subtle">イベントは保険者番号を選ぶために使います。更新範囲は選択した保険者番号全体です。</p></div></div>
     <form method="post" action="/utilities/hia-dashboard-csv" enctype="multipart/form-data" class="hia-dashboard-csv-form" data-processing-form data-processing-message="ダッシュボードCSVを処理しています">
       <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+      <input type="hidden" name="preview_token" value="{{ result.preview_token if result and result.action == 'preview' and result.ok else '' }}">
       <div class="form-grid hia-dashboard-source-grid">
         <label>対象イベント
           <select name="event_id" required onchange="window.location.href='/utilities/hia-dashboard-csv?event_id='+encodeURIComponent(this.value)">
@@ -25,7 +26,7 @@
       <div class="xml-drop-zone hia-dashboard-csv-drop-zone" data-file-drop-zone>
         <label>
           <span>CSVファイル</span>
-          <input type="file" name="csv_file" accept=".csv,text/csv" required data-file-drop-input>
+          <input type="file" name="csv_file" accept=".csv,text/csv" {% if not result or result.action != 'preview' or not result.ok %}required{% endif %} data-file-drop-input>
           <span class="file-picker-button">ファイルを選択</span>
         </label>
         <div class="xml-drop-message">
@@ -45,7 +46,8 @@
 
       <div class="button-row">
         <button type="submit" name="action" value="preview" class="ghost-button">事前確認</button>
-        <button type="submit" name="action" value="apply">更新を実行</button>
+        {% if result and result.action == 'preview' and result.ok %}<button type="submit" name="action" value="discard" class="ghost-button">確認内容を破棄</button>{% endif %}
+        <button type="submit" name="action" value="apply" {% if not result or result.action != 'preview' or not result.ok %}disabled{% endif %}>確認済み内容を更新</button>
       </div>
     </form>
   </section>

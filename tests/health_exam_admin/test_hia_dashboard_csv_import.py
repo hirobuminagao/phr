@@ -45,6 +45,17 @@ def test_full_dashboard_import_omits_partial_flag() -> None:
     assert "--partial-import" not in command
 
 
+def test_dashboard_import_command_can_reuse_prepared_plan() -> None:
+    command = build_hia_dashboard_import_command(
+        input_dir=Path("/tmp/import/06139463"),
+        dry_run=False,
+        partial_import=False,
+        plan_input=Path("/tmp/plan.json"),
+    )
+
+    assert command[command.index("--plan-input") + 1] == "/tmp/plan.json"
+
+
 def test_dashboard_import_stages_one_file_under_insurer_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

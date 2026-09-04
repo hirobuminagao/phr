@@ -80,6 +80,8 @@ class Config:
     dry_run: bool
     limit: int
     deactivate_missing: bool
+    plan_output: Path | None = None
+    plan_input: Path | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -96,6 +98,8 @@ def parse_args() -> argparse.Namespace:
         help="Treat input as filtered/partial CSV and keep rows not seen in the import active.",
     )
     parser.add_argument("--db-prefix", default="PHR_DB_")
+    parser.add_argument("--plan-output", help="Write normalized rows for a later apply run.")
+    parser.add_argument("--plan-input", help="Apply normalized rows without reading the source CSV again.")
     return parser.parse_args()
 
 
@@ -595,96 +599,85 @@ def deactivate_missing_rows(cur: Any, *, work_db: str, insurer_number: str, run_
     return len(target_ids)
 
 
-def process_csv(cur: Any, *, config: Config, csv_path: Path, insurer_number: str, run_id: int) -> RunMetrics:
+def process_normalized_rows(
+    cur: Any,
+    *,
+    config: Config,
+    rows: Any,
+    insurer_number: str,
+    run_id: int,
+    src_file: str,
+) -> RunMetrics:
     metrics = RunMetrics(files=1)
-    with csv_path.open("r", encoding="utf-8-sig", newline="") as fp:
-        reader = csv.DictReader(fp)
-        for row_no, raw in enumerate(reader, start=1):
-            if config.limit and metrics.rows_seen >= config.limit:
-                break
-            metrics.rows_seen += 1
-            try:
-                normalized = normalize_dashboard_row(raw, insurer_number=insurer_number, cur=cur, dev_db=config.dev_db)
+    for row_no, normalized in enumerate(rows, start=1):
+        if config.limit and metrics.rows_seen >= config.limit:
+            break
+        metrics.rows_seen += 1
+        try:
+            existing = fetch_existing_status(
+                cur,
+                work_db=config.work_db,
+                snapshot_identity_key=str(normalized["snapshot_identity_key"]),
+            )
+            if existing is None and normalized.get("legacy_snapshot_identity_key") != normalized.get("snapshot_identity_key"):
                 existing = fetch_existing_status(
                     cur,
                     work_db=config.work_db,
-                    snapshot_identity_key=str(normalized["snapshot_identity_key"]),
+                    snapshot_identity_key=str(normalized["legacy_snapshot_identity_key"]),
                 )
-                if existing is None and normalized.get("legacy_snapshot_identity_key") != normalized.get("snapshot_identity_key"):
-                    existing = fetch_existing_status(
-                        cur,
-                        work_db=config.work_db,
-                        snapshot_identity_key=str(normalized["legacy_snapshot_identity_key"]),
-                    )
-                if existing is None:
-                    hia_dashboard_person_id = 0
-                    if not config.dry_run:
-                        hia_dashboard_person_id = insert_status(
-                            cur,
-                            work_db=config.work_db,
-                            normalized=normalized,
-                            run_id=run_id,
-                        )
-                    metrics.rows_inserted += 1
-                else:
-                    hia_dashboard_person_id = int(existing["hia_dashboard_person_id"])
-                    if existing.get("row_sha256") == normalized.get("row_sha256"):
-                        if not config.dry_run:
-                            if existing.get("snapshot_identity_key") != normalized.get("snapshot_identity_key"):
-                                update_status(
-                                    cur,
-                                    work_db=config.work_db,
-                                    hia_dashboard_person_id=hia_dashboard_person_id,
-                                    normalized=normalized,
-                                    run_id=run_id,
-                                )
-                            else:
-                                touch_status(cur, work_db=config.work_db, hia_dashboard_person_id=hia_dashboard_person_id, run_id=run_id)
-                        metrics.rows_unchanged += 1
-                    else:
-                        diffs = diff_status_columns(existing, normalized)
-                        if not config.dry_run:
-                            insert_history_rows(
-                                cur,
-                                work_db=config.work_db,
-                                hia_dashboard_person_id=hia_dashboard_person_id,
-                                run_id=run_id,
-                                diffs=diffs,
-                            )
-                            update_status(
-                                cur,
-                                work_db=config.work_db,
-                                hia_dashboard_person_id=hia_dashboard_person_id,
-                                normalized=normalized,
-                                run_id=run_id,
-                            )
-                        metrics.rows_updated += 1
-                if not config.dry_run and hia_dashboard_person_id:
-                    insert_reminder_events(
-                        cur,
-                        work_db=config.work_db,
-                        hia_dashboard_person_id=hia_dashboard_person_id,
-                        run_id=run_id,
-                        normalized=normalized,
-                    )
-            except Exception as exc:
-                metrics.errors += 1
-                metrics.rows_skipped += 1
+            if existing is None:
+                hia_dashboard_person_id = 0
                 if not config.dry_run:
-                    etl_log_error(
-                        cur,
-                        run_id,
-                        phase=ETL_PHASE,
-                        source=ETL_SOURCE,
-                        insurer_number=insurer_number,
-                        src_file=str(csv_path),
-                        row_no=row_no,
-                        line_no=row_no,
-                        field="ROW",
-                        field_value=json.dumps(raw, ensure_ascii=False, sort_keys=True),
-                        error_code=type(exc).__name__,
-                        message=str(exc),
-                    )
+                    hia_dashboard_person_id = insert_status(cur, work_db=config.work_db, normalized=normalized, run_id=run_id)
+                metrics.rows_inserted += 1
+            else:
+                hia_dashboard_person_id = int(existing["hia_dashboard_person_id"])
+                if existing.get("row_sha256") == normalized.get("row_sha256"):
+                    if not config.dry_run:
+                        if existing.get("snapshot_identity_key") != normalized.get("snapshot_identity_key"):
+                            update_status(cur, work_db=config.work_db, hia_dashboard_person_id=hia_dashboard_person_id, normalized=normalized, run_id=run_id)
+                        else:
+                            touch_status(cur, work_db=config.work_db, hia_dashboard_person_id=hia_dashboard_person_id, run_id=run_id)
+                    metrics.rows_unchanged += 1
+                else:
+                    diffs = diff_status_columns(existing, normalized)
+                    if not config.dry_run:
+                        insert_history_rows(cur, work_db=config.work_db, hia_dashboard_person_id=hia_dashboard_person_id, run_id=run_id, diffs=diffs)
+                        update_status(cur, work_db=config.work_db, hia_dashboard_person_id=hia_dashboard_person_id, normalized=normalized, run_id=run_id)
+                    metrics.rows_updated += 1
+            if not config.dry_run and hia_dashboard_person_id:
+                insert_reminder_events(cur, work_db=config.work_db, hia_dashboard_person_id=hia_dashboard_person_id, run_id=run_id, normalized=normalized)
+        except Exception as exc:
+            metrics.errors += 1
+            metrics.rows_skipped += 1
+            if not config.dry_run:
+                etl_log_error(
+                    cur, run_id, phase=ETL_PHASE, source=ETL_SOURCE, insurer_number=insurer_number,
+                    src_file=src_file, row_no=row_no, line_no=row_no, field="ROW",
+                    field_value=json.dumps(normalized, ensure_ascii=False, sort_keys=True),
+                    error_code=type(exc).__name__, message=str(exc),
+                )
+    return metrics
+
+
+def process_csv(cur: Any, *, config: Config, csv_path: Path, insurer_number: str, run_id: int) -> RunMetrics:
+    normalized_rows: list[dict[str, Any]] = []
+    parse_errors = 0
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as fp:
+        reader = csv.DictReader(fp)
+        for raw in reader:
+            if config.limit and len(normalized_rows) >= config.limit:
+                break
+            try:
+                normalized_rows.append(normalize_dashboard_row(raw, insurer_number=insurer_number, cur=cur, dev_db=config.dev_db))
+            except Exception:
+                parse_errors += 1
+    if config.plan_output is not None and parse_errors == 0:
+        config.plan_output.write_text(json.dumps({"insurer_number": insurer_number, "rows": normalized_rows}, ensure_ascii=False), encoding="utf-8")
+        config.plan_output.chmod(0o600)
+    metrics = process_normalized_rows(cur, config=config, rows=normalized_rows, insurer_number=insurer_number, run_id=run_id, src_file=str(csv_path))
+    metrics.errors += parse_errors
+    metrics.rows_skipped += parse_errors
     return metrics
 
 
@@ -707,6 +700,29 @@ def run(config: Config, *, db_prefix: str) -> int:
     params = load_mysql_base_params(db_prefix)
     with connect_ctx(params, database=config.work_db) as conn:
         cur = dict_cursor(conn)
+        if config.plan_input is not None:
+            plan = json.loads(config.plan_input.read_text(encoding="utf-8"))
+            insurer_number = str(plan["insurer_number"])
+            run_id = etl_start_run(
+                cur, phase=ETL_PHASE, source=ETL_SOURCE, db_schema=config.work_db, db_path="",
+                input_base=str(config.plan_input.parent), input_file=str(config.plan_input),
+                insurer_number=insurer_number, dry_run=False, limit_rows=config.limit or None,
+            )
+            conn.commit()
+            metrics = process_normalized_rows(
+                cur, config=config, rows=plan["rows"], insurer_number=insurer_number,
+                run_id=run_id, src_file=str(config.plan_input),
+            )
+            if config.deactivate_missing:
+                metrics.rows_updated += deactivate_missing_rows(cur, work_db=config.work_db, insurer_number=insurer_number, run_id=run_id)
+            etl_finish_run(cur, run_id, metrics, status_override="success" if metrics.errors == 0 else None)
+            conn.commit()
+            print(
+                "hia_dashboard_import "
+                f"plan={config.plan_input.name} rows={metrics.rows_seen} inserted={metrics.rows_inserted} "
+                f"updated={metrics.rows_updated} unchanged={metrics.rows_unchanged} errors={metrics.errors} dry_run=False"
+            )
+            return 0
         for target_dir in iter_target_dirs(config):
             insurer_number = insurer_number_from_dir(target_dir)
             for csv_path in sorted(target_dir.glob("*.csv")):
@@ -761,7 +777,11 @@ def main() -> int:
         dry_run=bool(args.dry_run),
         limit=int(args.limit or 0),
         deactivate_missing=not bool(args.partial_import),
+        plan_output=None if not args.plan_output else Path(args.plan_output),
+        plan_input=None if not args.plan_input else Path(args.plan_input),
     )
+    if config.plan_input is not None and config.dry_run:
+        raise ValueError("--plan-input cannot be combined with --dry-run")
     return run(config, db_prefix=args.db_prefix)
 
 
