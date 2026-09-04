@@ -7034,13 +7034,30 @@ def load_subscriber_match_candidate_rows(
           latest_case.xml_export_status AS candidate_latest_case_xml_export_status,
           latest_case.legal_check_result AS candidate_latest_case_legal_check_result,
           latest_case.specific_check_result AS candidate_latest_case_specific_check_result,
+          hds.status AS hia_dashboard_status,
+          hds.medical_institution AS hia_dashboard_medical_institution,
+          hds.reservation_date AS hia_dashboard_reservation_date,
+          hds.exam_date AS hia_dashboard_exam_date,
+          hds.course_name AS hia_dashboard_course_name,
           ({score_sql}) AS match_score
         FROM {qname(dev_db())}.subscribers AS s
         {address_join_sql}
         LEFT JOIN {qname(work_other_db())}.hia_dashboard_status AS hds
-          ON CONVERT(hds.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
-           = CONVERT(s.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
-         AND hds.is_active = 1
+          ON hds.hia_dashboard_person_id = (
+            SELECT hds_latest.hia_dashboard_person_id
+            FROM {qname(work_other_db())}.hia_dashboard_status AS hds_latest
+            WHERE hds_latest.is_active = 1
+              AND (
+                hds_latest.subscribers_id = s.id
+                OR (
+                  hds_latest.subscribers_id IS NULL
+                  AND CONVERT(hds_latest.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                    = CONVERT(s.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                )
+              )
+            ORDER BY hds_latest.updated_at DESC, hds_latest.hia_dashboard_person_id DESC
+            LIMIT 1
+          )
         LEFT JOIN (
           SELECT
             subscriber_id,

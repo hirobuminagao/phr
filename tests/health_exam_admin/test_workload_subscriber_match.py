@@ -121,3 +121,12 @@ def test_candidate_insurer_scope_uses_explicit_collation() -> None:
     assert "CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
     assert "CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
     assert source.index("if not where_parts and not filter_parts:") < source.index("include_other_insurers =")
+
+
+def test_candidate_rows_include_latest_active_dashboard_status() -> None:
+    source = getsource(load_subscriber_match_candidate_rows)
+
+    assert "hds.status AS hia_dashboard_status" in source
+    assert "hds.medical_institution AS hia_dashboard_medical_institution" in source
+    assert "hds_latest.subscribers_id = s.id" in source
+    assert "ORDER BY hds_latest.updated_at DESC" in source
