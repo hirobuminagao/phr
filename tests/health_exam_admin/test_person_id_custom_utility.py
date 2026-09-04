@@ -18,6 +18,22 @@ def test_build_person_id_custom_without_database_lookup() -> None:
     assert row["reason"] == ""
 
 
+def test_build_person_id_custom_accepts_non_zero_padded_birthdate() -> None:
+    row = build_person_id_custom_row(
+        row_no=1,
+        raw_line="06139463\t123\t456\t1977/3/10",
+        parsed={
+            "insurer_number": "06139463",
+            "insurance_symbol": "123",
+            "insurance_number": "456",
+            "birthdate": "1977/3/10",
+        },
+    )
+
+    assert row["ok"] is True
+    assert row["person_id_custom"]
+
+
 def test_bulk_rows_can_use_fixed_insurer_number() -> None:
     rows = parse_person_id_custom_rows(
         raw_text="123\t456\t19900102\n789\t012\t19851231",

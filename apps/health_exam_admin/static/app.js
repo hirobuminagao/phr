@@ -2277,12 +2277,13 @@
   const personIdResults = document.querySelector("[data-person-id-custom-results]");
   if (personIdResults) {
     const resultRows = Array.from(personIdResults.querySelectorAll("[data-person-id-result]"));
-    const successfulIds = resultRows.map((row) => row.dataset.personId || "").filter(Boolean);
+    const resultIds = resultRows.map((row) => row.dataset.personId || "");
 
     personIdResults.querySelector("[data-person-id-copy]")?.addEventListener("click", async () => {
-      if (!successfulIds.length) return;
-      const copied = await copyTextToClipboard(successfulIds.join("\n"));
-      if (!copied) window.prompt("person_id_custom一覧", successfulIds.join("\n"));
+      if (!resultIds.length) return;
+      const text = resultIds.join("\n");
+      const copied = await copyTextToClipboard(text);
+      if (!copied) window.prompt("person_id_custom一覧（エラー行は空欄）", text);
     });
 
     personIdResults.querySelector("[data-person-id-download]")?.addEventListener("click", () => {

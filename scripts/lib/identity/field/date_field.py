@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import re
 
 from scripts.lib.identity.base_norm import base_normalize
 from scripts.lib.identity.primitive.dates import (
@@ -78,6 +79,38 @@ def normalize_date_to_ymd_and_compact(raw: str | date | None, *, purpose: str) -
             "ok": False,
             "missing": True,
             "reason": "missing_raw_or_base_norm",
+        }
+
+    # 区切り付き西暦日は、数字だけにする前に各要素を判定する。
+    # 月日がゼロ埋めされていない YYYY/M/D、YYYY-M-D も受け付ける。
+    separated = re.fullmatch(r"(\d{4})[./-](\d{1,2})[./-](\d{1,2})", base.strip())
+    if separated:
+        parsed = tuple(int(part) for part in separated.groups())
+        try:
+            date(parsed[0], parsed[1], parsed[2])
+        except ValueError:
+            parsed = None
+        if parsed is None or not _in_purpose_range(parsed, purpose=purpose):
+            return {
+                "field_name": purpose,
+                "raw": raw,
+                "base_norm": base,
+                "field_norm": None,
+                "match": None,
+                "ok": False,
+                "missing": True,
+                "reason": "invalid_date_value",
+            }
+        year, month, day = parsed
+        return {
+            "field_name": purpose,
+            "raw": raw,
+            "base_norm": base,
+            "field_norm": to_yyyy_mm_dd(year, month, day),
+            "match": to_yyyymmdd(year, month, day),
+            "ok": True,
+            "missing": False,
+            "reason": None,
         }
 
     digits_only = extract_digits(base)

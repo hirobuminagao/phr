@@ -79,7 +79,7 @@
   {% if rows %}
   <section class="panel" data-person-id-custom-results>
     {% set success_count = rows|selectattr('ok')|list|length %}
-    <div class="section-heading"><div><h2>作成結果</h2><p class="subtle">成功 {{ success_count }}件 / 全{{ rows|length }}件</p></div><div class="button-row"><button type="button" class="ghost-button" data-person-id-copy>成功IDをコピー</button><button type="button" data-person-id-download>CSVダウンロード</button></div></div>
+    <div class="section-heading"><div><h2>作成結果</h2><p class="subtle">成功 {{ success_count }}件 / 全{{ rows|length }}件。コピー時はエラー行を空欄のまま保持します。</p></div><div class="button-row"><button type="button" class="ghost-button" data-person-id-copy>結果をコピー</button><button type="button" data-person-id-download>CSVダウンロード</button></div></div>
     <div class="table-wrap"><table class="data-table"><thead><tr><th>行</th><th>状態</th><th>入力</th><th>person_id_custom</th></tr></thead><tbody>
       {% for row in rows %}<tr data-person-id-result data-row-no="{{ row.row_no }}" data-insurer="{{ row.parsed.insurer_number }}" data-symbol="{{ row.parsed.insurance_symbol }}" data-number="{{ row.parsed.insurance_number }}" data-birthdate="{{ row.parsed.birthdate }}" data-person-id="{{ row.person_id_custom or '' }}" data-reason="{{ row.reason }}">
         <td>{{ row.row_no }}</td>

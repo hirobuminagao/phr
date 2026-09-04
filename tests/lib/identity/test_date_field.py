@@ -22,6 +22,17 @@ def test_normalize_birthdate_keeps_standard_date_inputs() -> None:
     assert result["reason"] is None
 
 
+def test_normalize_birthdate_accepts_non_zero_padded_date_parts() -> None:
+    slash_result = normalize_birthdate("1977/3/10")
+    hyphen_result = normalize_birthdate("1977-3-10")
+
+    assert slash_result["ok"] is True
+    assert slash_result["field_norm"] == "1977-03-10"
+    assert slash_result["match"] == "19770310"
+    assert hyphen_result["ok"] is True
+    assert hyphen_result["field_norm"] == "1977-03-10"
+
+
 def test_normalize_birthdate_rejects_year_month_like_serial_false_positive() -> None:
     result = normalize_birthdate("202605")
 
