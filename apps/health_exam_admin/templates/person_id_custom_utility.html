@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% set title = "person_id_custom作成" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Utility / Identity</p><h1>person_id_custom作成</h1><p class="subtle">健診対象や加入者登録に関係なく、保険情報と生年月日から共通IDを作成します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/">HOME</a><form method="post" action="/logout"><button class="ghost-button" type="submit">ログアウト</button></form></nav>
+</header>
+<main class="page">
+  <section class="panel">
+    <div class="section-heading"><div><h2>入力</h2><p class="subtle">DBには保存しません。一人入力またはExcel貼り付けに対応します。</p></div></div>
+    <form method="post" action="/utilities/person-id-custom" class="person-selection-form">
+      <div class="person-selection-mode">
+        <label class="choice-card{% if form.input_mode == 'single' %} is-selected{% endif %}"><input type="radio" name="input_mode" value="single" {% if form.input_mode == 'single' %}checked{% endif %}><span><strong>一人分を作成</strong><small>4項目を入力して1件生成します。</small></span></label>
+        <label class="choice-card{% if form.input_mode != 'single' %} is-selected{% endif %}"><input type="radio" name="input_mode" value="bulk" {% if form.input_mode != 'single' %}checked{% endif %}><span><strong>複数まとめて作成</strong><small>Excelから貼り付けて一括生成します。</small></span></label>
+      </div>
+
+      <section class="person-selection-subpanel" data-person-input-panel="single">
+        <h3>一人分の情報</h3>
+        <div class="form-grid four-columns">
+          <label><span>保険者番号</span><input name="single_insurer_number" value="{{ form.single.insurer_number or '' }}"></label>
+          <label><span>記号</span><input name="single_insurance_symbol" value="{{ form.single.insurance_symbol or '' }}"></label>
+          <label><span>番号</span><input name="single_insurance_number" value="{{ form.single.insurance_number or '' }}"></label>
+          <label><span>生年月日</span><input name="single_birthdate" value="{{ form.single.birthdate or '' }}" placeholder="YYYYMMDD / YYYY-MM-DD"></label>
+        </div>
+      </section>
+
+      <section class="person-selection-subpanel" data-person-input-panel="bulk">
+        <div class="section-heading"><div><h3>Excel貼り付け</h3><p class="subtle">列の並びに合わせて項目を選択してください。</p></div></div>
+        <div class="form-grid four-columns">
+          <label><span>固定の保険者番号</span><input name="fixed_insurer_number" value="{{ form.fixed_insurer_number or '' }}" placeholder="各行に列がない場合に使用"></label>
+          <label><span>区切り文字</span><select name="delimiter"><option value="tab" {% if form.delimiter == 'tab' %}selected{% endif %}>タブ（Excel）</option><option value="comma" {% if form.delimiter == 'comma' %}selected{% endif %}>カンマ</option><option value="space" {% if form.delimiter == 'space' %}selected{% endif %}>空白</option><option value="custom" {% if form.delimiter == 'custom' %}selected{% endif %}>任意</option></select></label>
+          <label><span>任意区切り文字</span><input name="custom_delimiter" value="{{ form.custom_delimiter or '' }}" placeholder="例: |"></label>
+          <label class="checkbox-line"><input type="checkbox" name="has_header" value="1" {% if form.has_header == '1' %}checked{% endif %}><span>先頭行はヘッダー</span></label>
+        </div>
+        <div class="person-id-column-grid">
+          {% for index in range(8) %}<label><span>{{ index + 1 }}列目</span><select name="col_{{ index }}">{% for value, label in column_options %}<option value="{{ value }}" {% if form.columns[index] == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{% endfor %}
+        </div>
+        <label class="textarea-block"><span>貼り付け内容</span><textarea name="raw_text" rows="9" spellcheck="false" placeholder="保険者番号&#9;記号&#9;番号&#9;生年月日">{{ form.raw_text or '' }}</textarea></label>
+      </section>
+
+      <div class="form-actions"><button type="submit">person_id_customを作成</button><a class="ghost-button" href="/utilities/person-id-custom">クリア</a></div>
+    </form>
+  </section>
+
+  {% if rows %}
+  <section class="panel" data-person-id-custom-results>
+    {% set success_count = rows|selectattr('ok')|list|length %}
+    <div class="section-heading"><div><h2>作成結果</h2><p class="subtle">成功 {{ success_count }}件 / 全{{ rows|length }}件</p></div><div class="button-row"><button type="button" class="ghost-button" data-person-id-copy>成功IDをコピー</button><button type="button" data-person-id-download>CSVダウンロード</button></div></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>行</th><th>状態</th><th>入力</th><th>person_id_custom</th></tr></thead><tbody>
+      {% for row in rows %}<tr data-person-id-result data-row-no="{{ row.row_no }}" data-insurer="{{ row.parsed.insurer_number }}" data-symbol="{{ row.parsed.insurance_symbol }}" data-number="{{ row.parsed.insurance_number }}" data-birthdate="{{ row.parsed.birthdate }}" data-person-id="{{ row.person_id_custom or '' }}" data-reason="{{ row.reason }}">
+        <td>{{ row.row_no }}</td>
+        <td><span class="status-pill {{ 'status-ready' if row.ok else 'status-danger' }}">{{ '作成済み' if row.ok else 'エラー' }}</span>{% if row.reason %}<small>{{ row.reason }}</small>{% endif %}</td>
+        <td><small>保険者 {{ row.parsed.insurer_number or '-' }}</small><small>記号 {{ row.parsed.insurance_symbol or '-' }} / 番号 {{ row.parsed.insurance_number or '-' }}</small><small>生年月日 {{ row.parsed.birthdate or '-' }}</small></td>
+        <td>{% if row.person_id_custom %}<code data-person-id-custom-value>{{ row.person_id_custom }}</code>{% else %}-{% endif %}</td>
+      </tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

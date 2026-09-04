@@ -2274,6 +2274,45 @@
     setEmptyVisible();
   }
 
+  const personIdResults = document.querySelector("[data-person-id-custom-results]");
+  if (personIdResults) {
+    const resultRows = Array.from(personIdResults.querySelectorAll("[data-person-id-result]"));
+    const successfulIds = resultRows.map((row) => row.dataset.personId || "").filter(Boolean);
+
+    personIdResults.querySelector("[data-person-id-copy]")?.addEventListener("click", async () => {
+      if (!successfulIds.length) return;
+      const copied = await copyTextToClipboard(successfulIds.join("\n"));
+      if (!copied) window.prompt("person_id_custom一覧", successfulIds.join("\n"));
+    });
+
+    personIdResults.querySelector("[data-person-id-download]")?.addEventListener("click", () => {
+      const csvCell = (value) => `"${String(value || "").replaceAll('"', '""')}"`;
+      const header = ["row_no", "insurer_number", "insurance_symbol", "insurance_number", "birthdate", "person_id_custom", "status", "reason"];
+      const lines = [header.map(csvCell).join(",")];
+      for (const row of resultRows) {
+        lines.push([
+          row.dataset.rowNo,
+          row.dataset.insurer,
+          row.dataset.symbol,
+          row.dataset.number,
+          row.dataset.birthdate,
+          row.dataset.personId,
+          row.dataset.personId ? "OK" : "ERROR",
+          row.dataset.reason,
+        ].map(csvCell).join(","));
+      }
+      const blob = new Blob(["\ufeff", lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "person_id_custom_results.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    });
+  }
+
   const personColumnEditor = document.querySelector("[data-person-column-editor]");
   if (personColumnEditor) {
     const cardsContainer = personColumnEditor.querySelector("[data-person-column-cards]");

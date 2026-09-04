@@ -117,7 +117,7 @@ from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symb
 from scripts.lib.identity.field.insurer_number import normalize_insurer_number
 from scripts.lib.identity.field.name_kana import normalize_name_kana_full
 from scripts.lib.identity.field.ticket_identifier import normalize_ticket_identifier
-from scripts.lib.identity.generator import generate_identity_bundle
+from scripts.lib.identity.generator import generate_identity_bundle, generate_person_id_custom
 from scripts.lib.identity.primitive.digits import zero_pad
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
@@ -2190,6 +2190,64 @@ PERSON_SELECTION_COLUMNS = (
     ("facility_code", "健診機関コード"),
     ("employee_code", "社員番号"),
 )
+
+PERSON_ID_CUSTOM_COLUMNS = (
+    ("unused", "未使用"),
+    ("insurer_number", "保険者番号"),
+    ("insurance_symbol", "記号"),
+    ("insurance_number", "番号"),
+    ("birthdate", "生年月日"),
+)
+
+
+def build_person_id_custom_row(*, row_no: int, raw_line: str, parsed: Mapping[str, Any]) -> dict[str, Any]:
+    values = {
+        "insurer_number": str(parsed.get("insurer_number") or "").strip(),
+        "insurance_symbol": str(parsed.get("insurance_symbol") or "").strip(),
+        "insurance_number": str(parsed.get("insurance_number") or "").strip(),
+        "birthdate": str(parsed.get("birthdate") or "").strip(),
+    }
+    result = generate_person_id_custom(
+        birthdate=values["birthdate"],
+        insurer_number_raw=values["insurer_number"],
+        insurance_symbol_raw=values["insurance_symbol"],
+        insurance_number_raw=values["insurance_number"],
+    )
+    return {
+        "row_no": row_no,
+        "raw_line": raw_line,
+        "parsed": values,
+        "ok": bool(result.get("ok")),
+        "person_id_custom": result.get("value"),
+        "reason": str(result.get("reason") or ""),
+    }
+
+
+def parse_person_id_custom_rows(
+    *,
+    raw_text: str,
+    delimiter: str,
+    custom_delimiter: str,
+    has_header: bool,
+    column_map: list[str],
+    fixed_insurer_number: str,
+) -> list[dict[str, Any]]:
+    # 入力との行対応を維持するため、途中の空行もエラー行として残す。
+    lines = raw_text.splitlines()
+    if has_header and lines:
+        lines = lines[1:]
+    rows: list[dict[str, Any]] = []
+    for row_no, line in enumerate(lines, start=1):
+        parsed: dict[str, str] = {}
+        parts = split_person_selection_line(line, delimiter=delimiter, custom_delimiter=custom_delimiter)
+        for index, value in enumerate(parts):
+            field = column_map[index] if index < len(column_map) else "unused"
+            if field != "unused" and field not in parsed:
+                parsed[field] = value.strip()
+        if not parsed.get("insurer_number") and fixed_insurer_number:
+            parsed["insurer_number"] = fixed_insurer_number
+        rows.append(build_person_id_custom_row(row_no=row_no, raw_line=line, parsed=parsed))
+    return rows
 
 
 PERSON_SELECTION_STATUS_LABELS = {
@@ -17875,6 +17933,89 @@ def subscriber_reference_detail(request: Request, subscriber_id: int) -> Respons
 @app.post("/utilities/subscribers/{subscriber_id}/full", response_class=HTMLResponse)
 def subscriber_reference_full_detail(request: Request, subscriber_id: int) -> Response:
     return render_subscriber_reference_detail(request, subscriber_id=subscriber_id, full=True)
+
+
+def person_id_custom_form_context(
+    *,
+    request: Request,
+    user: Mapping[str, Any],
+    form: Mapping[str, Any] | None = None,
+    rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    default_form = {
+        "input_mode": "bulk",
+        "fixed_insurer_number": "",
+        "delimiter": "tab",
+        "custom_delimiter": "",
+        "has_header": "0",
+        "raw_text": "",
+        "single": {},
+        "columns": ["insurer_number", "insurance_symbol", "insurance_number", "birthdate", "unused", "unused", "unused", "unused"],
+    }
+    return {
+        "request": request,
+        "user": user,
+        "column_options": PERSON_ID_CUSTOM_COLUMNS,
+        "form": dict(form or default_form),
+        "rows": rows or [],
+    }
+
+
+@app.get("/utilities/person-id-custom", response_class=HTMLResponse)
+def person_id_custom_utility(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    return templates.TemplateResponse(
+        "person_id_custom_utility.html",
+        person_id_custom_form_context(request=request, user=user),
+    )
+
+
+@app.post("/utilities/person-id-custom", response_class=HTMLResponse)
+async def resolve_person_id_custom_utility(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    posted = await read_form(request)
+    input_mode = str(posted.get("input_mode") or "bulk")
+    fixed_insurer_number = str(posted.get("fixed_insurer_number") or "").strip()
+    delimiter = str(posted.get("delimiter") or "tab")
+    custom_delimiter = str(posted.get("custom_delimiter") or "")
+    has_header = str(posted.get("has_header") or "") == "1"
+    raw_text = str(posted.get("raw_text") or "")
+    columns = [str(posted.get(f"col_{index}") or "unused") for index in range(8)]
+    single = {
+        "insurer_number": str(posted.get("single_insurer_number") or fixed_insurer_number).strip(),
+        "insurance_symbol": str(posted.get("single_insurance_symbol") or "").strip(),
+        "insurance_number": str(posted.get("single_insurance_number") or "").strip(),
+        "birthdate": str(posted.get("single_birthdate") or "").strip(),
+    }
+    if input_mode == "single":
+        rows = [build_person_id_custom_row(row_no=1, raw_line="", parsed=single)]
+    else:
+        rows = parse_person_id_custom_rows(
+            raw_text=raw_text,
+            delimiter=delimiter,
+            custom_delimiter=custom_delimiter,
+            has_header=has_header,
+            column_map=columns,
+            fixed_insurer_number=fixed_insurer_number,
+        )
+    form = {
+        "input_mode": input_mode,
+        "fixed_insurer_number": fixed_insurer_number,
+        "delimiter": delimiter,
+        "custom_delimiter": custom_delimiter,
+        "has_header": "1" if has_header else "0",
+        "raw_text": raw_text,
+        "single": single,
+        "columns": columns,
+    }
+    return templates.TemplateResponse(
+        "person_id_custom_utility.html",
+        person_id_custom_form_context(request=request, user=user, form=form, rows=rows),
+    )
 
 
 @app.get("/utilities/person-selection", response_class=HTMLResponse)
