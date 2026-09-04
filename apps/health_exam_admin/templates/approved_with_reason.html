@@ -57,10 +57,14 @@
           </div></section>
         </div>
       </form>
-      <div class="case-filter-footer"><a class="ghost-button" href="/utilities/approved-with-reason">クリア</a><button type="submit" class="ghost-button" form="approved-reason-filter-form" formaction="/utilities/approved-with-reason.csv">同じ条件でCSV出力</button><button type="submit" form="approved-reason-filter-form">この条件で絞り込む</button></div>
+      <div class="case-filter-footer"><a class="ghost-button" href="/utilities/approved-with-reason">クリア</a><button type="submit" form="approved-reason-filter-form">この条件で絞り込む</button></div>
     </section>
   </div>
   <section class="panel">
+    <div class="section-heading">
+      <div><h2>候補一覧</h2><p class="subtle">現在の絞り込み条件に一致した人を表示しています。</p></div>
+      <a class="ghost-button" href="{{ csv_url }}">表示中の候補をCSV出力</a>
+    </div>
     <div class="table-panel">
       <table class="data-table">
         <thead><tr><th>基本情報</th><th>健診機関・受診日</th><th>法定</th><th>特定健診</th><th>現在の状態</th><th>操作</th></tr></thead>

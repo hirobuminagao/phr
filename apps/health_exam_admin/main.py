@@ -18456,6 +18456,9 @@ def approved_with_reason_utility(request: Request) -> Response:
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=True) as conn:
         rows = load_approved_with_reason_rows(dict_cursor(conn), filters=filters)
+    csv_query = urlencode(
+        {key: value for key, value in filters.items() if value and key != "exam_facility_display"}
+    )
     return templates.TemplateResponse(
         "approved_with_reason.html",
         {
@@ -18464,6 +18467,7 @@ def approved_with_reason_utility(request: Request) -> Response:
             "rows": rows,
             "filters": filters,
             "prefecture_options": PREFECTURE_OPTIONS,
+            "csv_url": f"/utilities/approved-with-reason.csv?{csv_query}" if csv_query else "/utilities/approved-with-reason.csv",
         },
     )
 
