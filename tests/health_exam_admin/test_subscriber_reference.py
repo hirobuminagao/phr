@@ -1,8 +1,20 @@
 from apps.health_exam_admin.main import (
+    load_subscriber_reference_history,
     load_subscriber_reference_search_rows,
     mask_subscriber_text,
     subscriber_reference_pii_level,
 )
+
+
+class SubscriberHistoryCursor:
+    def __init__(self) -> None:
+        self.sql = ""
+
+    def execute(self, sql, params=()) -> None:
+        self.sql = sql
+
+    def fetchall(self):
+        return []
 
 
 class SubscriberSearchCursor:
@@ -109,3 +121,16 @@ def test_subscriber_search_includes_latest_active_dashboard_status() -> None:
     assert "LEFT JOIN" in cur.search_sql
     assert "ORDER BY candidate.exam_date DESC, candidate.exam_export_case_id DESC" in cur.search_sql
     assert cur.search_params == ("%HIA-10%",)
+
+
+def test_subscriber_history_values_are_selected_only_for_full_display(monkeypatch) -> None:
+    monkeypatch.setattr("apps.health_exam_admin.main.manual_exam_entry_table_exists", lambda *args: True)
+    masked_cursor = SubscriberHistoryCursor()
+    full_cursor = SubscriberHistoryCursor()
+
+    load_subscriber_reference_history(masked_cursor, subscriber_id=10, include_values=False)
+    load_subscriber_reference_history(full_cursor, subscriber_id=10, include_values=True)
+
+    assert "old_value" not in masked_cursor.sql
+    assert "new_value" not in masked_cursor.sql
+    assert "old_value, new_value" in full_cursor.sql

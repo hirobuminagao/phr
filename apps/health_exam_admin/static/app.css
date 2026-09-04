@@ -9308,6 +9308,13 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   gap: 20px;
 }
 
+.subscriber-history-value {
+  min-width: 150px;
+  max-width: 280px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .subscriber-list-display-mode {
   display: flex;
   flex-direction: column;

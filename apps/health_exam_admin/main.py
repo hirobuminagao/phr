@@ -17912,14 +17912,21 @@ def load_subscriber_reference_dashboard(cur: Any, *, subscriber_id: int) -> list
     return [dict(row) for row in cur.fetchall()]
 
 
-def load_subscriber_reference_history(cur: Any, *, subscriber_id: int) -> list[dict[str, Any]]:
+def load_subscriber_reference_history(
+    cur: Any,
+    *,
+    subscriber_id: int,
+    include_values: bool = False,
+) -> list[dict[str, Any]]:
     if not manual_exam_entry_table_exists(cur, dev_db(), "subscriber_audit"):
         return []
+    value_columns = ", old_value, new_value" if include_values else ""
     cur.execute(
         f"""
         SELECT audit_id, field, changed_at, source,
                CASE WHEN note IS NULL OR note = '' THEN 0 ELSE 1 END AS has_note,
                change_run_id
+               {value_columns}
         FROM {qname(dev_db())}.subscriber_audit
         WHERE subscriber_id = %s
         ORDER BY audit_id DESC
@@ -17966,7 +17973,15 @@ def render_subscriber_reference_detail(request: Request, *, subscriber_id: int, 
             return RedirectResponse("/utilities/subscribers?error=加入者が見つかりません。", status_code=303)
         events = load_subscriber_reference_events(cur, subscriber_id=subscriber_id)
         dashboard_rows = load_subscriber_reference_dashboard(cur, subscriber_id=subscriber_id)
-        history_rows = load_subscriber_reference_history(cur, subscriber_id=subscriber_id) if can_view_subscriber_history(user) else []
+        history_rows = (
+            load_subscriber_reference_history(
+                cur,
+                subscriber_id=subscriber_id,
+                include_values=display_mode == "FULL",
+            )
+            if can_view_subscriber_history(user)
+            else []
+        )
         view_history_rows = load_subscriber_reference_view_history(cur, subscriber_id=subscriber_id) if can_view_subscriber_history(user) else []
         if audit_enabled(cur):
             log_audit(
