@@ -52,6 +52,58 @@ def test_official_file_names() -> None:
     assert person_xml_file_name("0123456789", "20260730", 0, 1) == "h01234567892026073001000001.xml"
 
 
+def test_same_namecode_is_emitted_in_each_source_section() -> None:
+    facility = Facility("0123456789", "テスト健診機関")
+    person = Person("06139463", "1", "2", "ヤマダ　タロウ", "1", "19800102", "20260603", "10", "010")
+    namecode = "9N001000000000001"
+    items = [
+        ExamItem(
+            namecode,
+            "01010",
+            "ST",
+            "特定健診側",
+            display_name="テスト項目",
+            occurrence_no=1,
+            section_code_system="1.2.392.200119.6.1010",
+            section_name="特定健診・問診結果セクション",
+        ),
+        ExamItem(
+            namecode,
+            "01060",
+            "ST",
+            "がん検診側",
+            display_name="テスト項目",
+            occurrence_no=2,
+            section_code_system="1.2.392.200119.6.1010",
+            section_name="がん検診結果セクション",
+        ),
+    ]
+
+    root = ElementTree.fromstring(xml_bytes(build_clinical_document(person, facility, items, "20260730")))
+    ns = {"h": "urn:hl7-org:v3"}
+    sections = root.findall(".//h:section", ns)
+    values_by_section: dict[str, str] = {}
+    for section in sections:
+        section_code = section.find("h:code", ns)
+        observation_code = section.find(".//h:observation/h:code", ns)
+        value = section.find(".//h:observation/h:value", ns)
+        if (
+            section_code is not None
+            and observation_code is not None
+            and observation_code.get("code") == namecode
+            and value is not None
+        ):
+            values_by_section[str(section_code.get("code"))] = value.text or ""
+
+    assert values_by_section == {"01010": "特定健診側", "01060": "がん検診側"}
+    section_names = {
+        str(code.get("code")): str(code.get("displayName"))
+        for section in sections
+        if (code := section.find("h:code", ns)) is not None
+    }
+    assert section_names["01060"] == "がん検診結果セクション"
+
+
 def test_coded_values_do_not_emit_normalized_value_as_value_body() -> None:
     facility = Facility("0123456789", "テスト健診機関")
     person = Person("06139463", "1", "2", "ヤマダ　タロウ", "1", "19800102", "20260603", "10", "010")

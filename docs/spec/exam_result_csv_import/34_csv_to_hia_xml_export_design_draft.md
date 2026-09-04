@@ -968,7 +968,7 @@ XML出力では、複数sourceを統合した `exam_export_case_values` の採�
 | `CD` / `CO` | `code_value` | `code_system`, `code_display` |
 | `ST` / `TX` | `normalized_value` | なし |
 
-- `namecode`、`section_code`、`section_code_system`、`section_name` は `exam_item_values` の値を使う。
+- `namecode`、`section_code`、`section_code_system`、`section_name` は採用元の `exam_item_values` から `exam_export_case_values` へ複写し、case値のsnapshotを使う。
 - 同一namecodeの複数値は `occurrence_no` の順で出力する。
 - `namecode_display_name`、`jun_no` は表示名と出力順に利用する。
 - `xml_method_code` など `exam_item_values` にないXMLメタデータだけ `dev_phr.exam_item_master` から補う。

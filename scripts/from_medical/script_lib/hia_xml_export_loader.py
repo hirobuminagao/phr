@@ -238,7 +238,20 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
         f"""
         SELECT
           ecv.namecode,
-          COALESCE(NULLIF(em.cda_section_code_default, ''), '01990') AS section_code,
+          COALESCE(
+            NULLIF(ecv.section_code, ''),
+            NULLIF(source_eiv.section_code, ''),
+            NULLIF(em.cda_section_code_default, ''),
+            '01990'
+          ) AS section_code,
+          COALESCE(
+            NULLIF(ecv.section_code_system, ''),
+            NULLIF(source_eiv.section_code_system, '')
+          ) AS section_code_system,
+          COALESCE(
+            NULLIF(ecv.section_name, ''),
+            NULLIF(source_eiv.section_name, '')
+          ) AS section_name,
           COALESCE(em.xml_value_type, 'ST') AS value_type,
           CASE
             WHEN COALESCE(em.xml_value_type, 'ST') IN ('CD', 'CO') THEN NULL
@@ -278,6 +291,8 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
         LEFT JOIN {qname(dev_db)}.exam_item_master em
           ON CONVERT(em.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
            = CONVERT(ecv.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        LEFT JOIN {qname(health_db)}.exam_item_values source_eiv
+          ON source_eiv.id = ecv.source_exam_item_value_id
         LEFT JOIN {qname(master_db)}.exam_item_output_policies AS fpolicy
           ON fpolicy.exam_facility_id = eec.exam_facility_id
          AND CONVERT(fpolicy.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
@@ -332,6 +347,10 @@ def fetch_valid_items(cur: Any, *, ledger_id: int, health_db: str, dev_db: str, 
             negation_ind=None if row["negation_ind"] is None else bool(row["negation_ind"]),
             occurrence_no=int(row["occurrence_no"] or 1),
             jun_no=None if row["jun_no"] is None else int(row["jun_no"]),
+            section_code_system=None
+            if row.get("section_code_system") is None
+            else str(row["section_code_system"]),
+            section_name=None if row.get("section_name") is None else str(row["section_name"]),
         )
         for row in cur.fetchall()
     ]

@@ -100,6 +100,8 @@ def test_fetch_valid_items_passes_annex2_and_source_metadata() -> None:
                 {
                     "namecode": "2A040000001930102",
                     "section_code": "01010",
+                    "section_code_system": "1.2.392.200119.6.1010",
+                    "section_name": "特定健診・問診結果セクション",
                     "value_type": "PQ",
                     "normalized_value": "34.6",
                     "normalized_unit": "%",
@@ -133,6 +135,12 @@ def test_fetch_valid_items_passes_annex2_and_source_metadata() -> None:
     assert item.series_group_identifier == "2A020161001930149"
     assert item.series_group_relation_code == "COMP"
     assert item.author_item_code == "9N516000000000049"
+    assert item.section_code_system == "1.2.392.200119.6.1010"
+    assert item.section_name == "特定健診・問診結果セクション"
+    compact_sql = " ".join(cur.sql.split())
+    assert "NULLIF(ecv.section_code, '')" in compact_sql
+    assert "source_eiv.section_code" in compact_sql
+    assert "source_eiv.id = ecv.source_exam_item_value_id" in compact_sql
     assert "annex2_series_group_identifier" in cur.sql
     assert "annex2_author_item_code" in cur.sql
 

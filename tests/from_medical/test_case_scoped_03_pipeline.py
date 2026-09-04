@@ -30,6 +30,15 @@ class UpdateCursor:
         self.calls.append((sql, params))
 
 
+class InsertCursor(UpdateCursor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.insert: tuple[str, list[tuple[object, ...]]] | None = None
+
+    def executemany(self, sql: str, rows: list[tuple[object, ...]]) -> None:
+        self.insert = (sql, rows)
+
+
 class SourceOwnerCursor(UpdateCursor):
     def __init__(self, owner_case_id: int) -> None:
         super().__init__()
@@ -37,6 +46,48 @@ class SourceOwnerCursor(UpdateCursor):
 
     def fetchone(self) -> dict[str, object]:
         return {"exam_export_case_id": self.owner_case_id}
+
+
+def test_insert_case_values_keeps_source_section_snapshot() -> None:
+    cur = InsertCursor()
+    config = build_values.BuildValueConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        master_db="phr_master",
+        dry_run=False,
+        limit_cases=0,
+        include_review_required=False,
+        case_ids=(),
+    )
+    item = {
+        "event_id": 2,
+        "subscriber_id": 100,
+        "hia_subscriber_id": "HIA-100",
+        "namecode": "9N001000000000001",
+        "occurrence_no": 2,
+        "section_code": "01060",
+        "section_code_system": "1.2.392.200119.6.1010",
+        "section_name": "がん検診セクション",
+        "normalized_value": "値",
+        "source_role": "PRIMARY",
+    }
+
+    inserted = build_values.insert_case_values(
+        cur,
+        config,
+        case_row={"exam_export_case_id": 10},
+        selected=[(item, "XML_PRIMARY")],
+        run_id=20,
+    )
+
+    assert inserted == 1
+    assert cur.insert is not None
+    sql, rows = cur.insert
+    assert "`section_code`, `section_code_system`, `section_name`" in " ".join(sql.split())
+    values = dict(zip(build_values.VALUE_COLUMNS, rows[0], strict=True))
+    assert values["section_code"] == "01060"
+    assert values["section_code_system"] == "1.2.392.200119.6.1010"
+    assert values["section_name"] == "がん検診セクション"
 
 
 def test_build_cases_filters_sources_by_existing_case_key() -> None:

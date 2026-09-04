@@ -84,6 +84,8 @@ class ExamItem:
     negation_ind: bool | None = None
     occurrence_no: int = 1
     jun_no: int | None = None
+    section_code_system: str | None = None
+    section_name: str | None = None
 
 
 class XmlValidationError(ValueError):
@@ -302,12 +304,34 @@ def build_clinical_document(person: Person, facility: Facility, items: Iterable[
         grouped.setdefault(item.section_code or "01990", []).append(item)
 
     for section_code in sorted(grouped):
+        section_items = sorted(
+            grouped[section_code],
+            key=lambda i: (i.jun_no is None, i.jun_no or 0, i.namecode, i.occurrence_no),
+        )
         section = ET.SubElement(ET.SubElement(structured, _h("component")), _h("section"))
-        section_name = "検査・問診結果セクション" if section_code == "01010" else "任意追加項目セクション" if section_code == "01990" else section_code
-        ET.SubElement(section, _h("code"), {"code": section_code, "codeSystem": OID_SECTION_CODE, "displayName": section_name})
+        section_name = next(
+            (item.section_name for item in section_items if item.section_name),
+            "検査・問診結果セクション"
+            if section_code == "01010"
+            else "任意追加項目セクション"
+            if section_code == "01990"
+            else section_code,
+        )
+        section_code_system = next(
+            (item.section_code_system for item in section_items if item.section_code_system),
+            OID_SECTION_CODE,
+        )
+        ET.SubElement(
+            section,
+            _h("code"),
+            {
+                "code": section_code,
+                "codeSystem": section_code_system,
+                "displayName": section_name,
+            },
+        )
         ET.SubElement(section, _h("title")).text = section_name
         ET.SubElement(section, _h("text"))
-        section_items = sorted(grouped[section_code], key=lambda i: (i.jun_no is None, i.jun_no or 0, i.namecode, i.occurrence_no))
         emitted_groups: set[str] = set()
         for item in section_items:
             group_identifier = item.series_group_identifier

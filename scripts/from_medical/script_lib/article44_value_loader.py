@@ -64,7 +64,7 @@ def load_article44_value_map(
               cv.`normalized_value`,
               cv.`normalized_unit`,
               cv.`code_value`,
-              im.`cda_section_code_default` AS section_code
+              COALESCE(NULLIF(cv.`section_code`, ''), im.`cda_section_code_default`) AS section_code
             FROM {qname(result_db)}.exam_export_case_values AS cv
             LEFT JOIN {qname(dev_db)}.exam_item_master AS im
               ON im.`namecode` = cv.`namecode`
