@@ -115,12 +115,19 @@ def test_resolved_rows_require_current_manual_match_and_filter_query() -> None:
     assert cursor.params[-1] == 100
 
 
-def test_candidate_insurer_scope_uses_explicit_collation() -> None:
+def test_candidate_insurer_scope_uses_normalized_number_comparison() -> None:
     source = getsource(load_subscriber_match_candidate_rows)
 
-    assert "CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
-    assert "CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci" in source
+    assert "TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(s.insurer_number, ''), '[^0-9]', ''))" in source
+    assert "TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(e.insurer_number, ''), '[^0-9]', ''))" in source
     assert source.index("if not where_parts and not filter_parts:") < source.index("include_other_insurers =")
+
+
+def test_candidate_rows_restore_search_values_from_received_raw_fields() -> None:
+    source = getsource(load_subscriber_match_candidate_rows)
+
+    assert 'normalize_name_kana_full(str(ledger.get("name_kana_raw")))' in source
+    assert 'normalize_insurance_number(str(ledger.get("insurance_number_raw")))' in source
 
 
 def test_candidate_rows_include_latest_active_dashboard_status() -> None:

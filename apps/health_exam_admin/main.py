@@ -7003,6 +7003,18 @@ def load_subscriber_match_candidate_rows(
     score_parts: list[str] = []
     score_params: list[Any] = []
     if ledger:
+        ledger_name_kana_match = str(ledger.get("name_kana_match") or "").strip()
+        if not ledger_name_kana_match and ledger.get("name_kana_raw"):
+            kana_result = normalize_name_kana_full(str(ledger.get("name_kana_raw")))
+            ledger_name_kana_match = str(kana_result.get("match") or "") if kana_result.get("ok") else ""
+        ledger_insurance_number_match = str(ledger.get("insurance_number_match") or "").strip()
+        if not ledger_insurance_number_match and ledger.get("insurance_number_raw"):
+            number_result = normalize_insurance_number(str(ledger.get("insurance_number_raw")))
+            ledger_insurance_number_match = str(number_result.get("match") or "") if number_result.get("ok") else ""
+        ledger_insurer_number_match = ""
+        if ledger.get("insurer_number"):
+            insurer_result = normalize_insurer_number(str(ledger.get("insurer_number")))
+            ledger_insurer_number_match = str(insurer_result.get("match") or "") if insurer_result.get("ok") else ""
         if ledger.get("hia_subscriber_id"):
             where_parts.append("s.hia_subscriber_id = %s")
             params.append(ledger.get("hia_subscriber_id"))
@@ -7018,16 +7030,21 @@ def load_subscriber_match_candidate_rows(
             params.append(ledger.get("person_id_custom"))
             score_parts.append("CASE WHEN s.person_id_custom = %s THEN 70 ELSE 0 END")
             score_params.append(ledger.get("person_id_custom"))
-        if ledger.get("insurer_number") and ledger.get("insurance_number_match"):
-            where_parts.append("(s.insurer_number = %s AND s.insurance_number_match = %s)")
-            params.extend([ledger.get("insurer_number"), ledger.get("insurance_number_match")])
-            score_parts.append("CASE WHEN s.insurer_number = %s AND s.insurance_number_match = %s THEN 50 ELSE 0 END")
-            score_params.extend([ledger.get("insurer_number"), ledger.get("insurance_number_match")])
-        if ledger.get("birthdate") and ledger.get("name_kana_match"):
+        if ledger_insurer_number_match and ledger_insurance_number_match:
+            subscriber_insurer_match_sql = (
+                "TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(s.insurer_number, ''), '[^0-9]', ''))"
+            )
+            where_parts.append(f"({subscriber_insurer_match_sql} = %s AND s.insurance_number_match = %s)")
+            params.extend([ledger_insurer_number_match, ledger_insurance_number_match])
+            score_parts.append(
+                f"CASE WHEN {subscriber_insurer_match_sql} = %s AND s.insurance_number_match = %s THEN 50 ELSE 0 END"
+            )
+            score_params.extend([ledger_insurer_number_match, ledger_insurance_number_match])
+        if ledger.get("birthdate") and ledger_name_kana_match:
             where_parts.append("(s.birth = %s AND s.name_kana_full_match = %s)")
-            params.extend([ledger.get("birthdate"), ledger.get("name_kana_match")])
+            params.extend([ledger.get("birthdate"), ledger_name_kana_match])
             score_parts.append("CASE WHEN s.birth = %s AND s.name_kana_full_match = %s THEN 40 ELSE 0 END")
-            score_params.extend([ledger.get("birthdate"), ledger.get("name_kana_match")])
+            score_params.extend([ledger.get("birthdate"), ledger_name_kana_match])
     query = query.strip()
     if query:
         like = f"%{query}%"
@@ -7089,8 +7106,8 @@ def load_subscriber_match_candidate_rows(
     include_other_insurers = str(candidate_filters.get("include_other_insurers") or "0").strip() == "1"
     if not include_other_insurers and event_id:
         filter_parts.append(
-            f"CONVERT(s.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci = "
-            f"(SELECT CONVERT(e.insurer_number USING utf8mb4) COLLATE utf8mb4_unicode_ci "
+            f"TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(s.insurer_number, ''), '[^0-9]', '')) = "
+            f"(SELECT TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(e.insurer_number, ''), '[^0-9]', '')) "
             f"FROM {qname(dev_db())}.event AS e WHERE e.event_id = %s LIMIT 1)"
         )
         filter_params.append(event_id)
@@ -8979,30 +8996,39 @@ def load_approved_with_reason_rows(
     cur.execute(
         f"""
         SELECT
-          cri.exam_case_check_review_item_id,
-          cri.event_id,
           cri.exam_export_case_id,
-          cri.check_scope,
-          cri.check_item_code,
-          cri.check_item_name,
-          cri.validation_reason,
-          cri.review_note,
-          cri.reviewed_at,
-          cri.reviewed_by_app_user_id,
-          eec.hia_subscriber_id,
-          eec.subscriber_id,
-          eec.insurance_symbol_export_value,
-          eec.insurance_number_export_value,
-          eec.name_full_raw,
-          eec.name_kana_export_value,
-          s.qualification_lost_date,
-          eec.exam_date,
-          eec.case_status,
-          eec.export_readiness_status,
-          eec.xml_export_status,
-          eec.case_lifecycle_status,
-          ef.exam_facility_code,
-          ef.exam_facility_name
+          MAX(cri.event_id) AS event_id,
+          COUNT(*) AS approved_item_count,
+          SUM(cri.check_scope = 'ARTICLE44') AS legal_reason_count,
+          SUM(cri.check_scope = 'SPECIFIC_HEALTH') AS specific_reason_count,
+          GROUP_CONCAT(
+            CASE WHEN cri.check_scope = 'ARTICLE44' THEN CONCAT(
+              COALESCE(NULLIF(cri.check_item_name, ''), cri.check_item_code),
+              ' [', cri.check_item_code, ']：', COALESCE(NULLIF(cri.review_note, ''), '理由未入力')
+            ) END ORDER BY cri.check_item_code SEPARATOR '\n'
+          ) AS legal_reasons,
+          GROUP_CONCAT(
+            CASE WHEN cri.check_scope = 'SPECIFIC_HEALTH' THEN CONCAT(
+              COALESCE(NULLIF(cri.check_item_name, ''), cri.check_item_code),
+              ' [', cri.check_item_code, ']：', COALESCE(NULLIF(cri.review_note, ''), '理由未入力')
+            ) END ORDER BY cri.check_item_code SEPARATOR '\n'
+          ) AS specific_reasons,
+          MAX(cri.reviewed_at) AS latest_reviewed_at,
+          GROUP_CONCAT(DISTINCT cri.reviewed_by_app_user_id ORDER BY cri.reviewed_by_app_user_id) AS reviewed_by_app_user_ids,
+          MAX(eec.hia_subscriber_id) AS hia_subscriber_id,
+          MAX(eec.subscriber_id) AS subscriber_id,
+          MAX(eec.insurance_symbol_export_value) AS insurance_symbol_export_value,
+          MAX(eec.insurance_number_export_value) AS insurance_number_export_value,
+          MAX(eec.name_full_raw) AS name_full_raw,
+          MAX(eec.name_kana_export_value) AS name_kana_export_value,
+          MAX(s.qualification_lost_date) AS qualification_lost_date,
+          MAX(eec.exam_date) AS exam_date,
+          MAX(eec.case_status) AS case_status,
+          MAX(eec.export_readiness_status) AS export_readiness_status,
+          MAX(eec.xml_export_status) AS xml_export_status,
+          MAX(eec.case_lifecycle_status) AS case_lifecycle_status,
+          MAX(ef.exam_facility_code) AS exam_facility_code,
+          MAX(ef.exam_facility_name) AS exam_facility_name
         FROM {qname(health_db())}.exam_case_check_review_items cri
         JOIN {qname(health_db())}.exam_export_cases eec
           ON eec.exam_export_case_id = cri.exam_export_case_id
@@ -9011,7 +9037,8 @@ def load_approved_with_reason_rows(
         LEFT JOIN {qname(master_db())}.exam_facilities ef
           ON ef.exam_facility_id = eec.exam_facility_id
         WHERE {' AND '.join(where_parts)}
-        ORDER BY cri.reviewed_at DESC, cri.exam_export_case_id, cri.check_scope, cri.check_item_code
+        GROUP BY cri.exam_export_case_id
+        ORDER BY latest_reviewed_at DESC, cri.exam_export_case_id
         LIMIT %s
         """,
         tuple(params),
@@ -9025,9 +9052,9 @@ def build_approved_with_reason_csv(rows: list[dict[str, Any]]) -> str:
     writer.writerow(
         [
             "event_id", "case_id", "subscriber_id", "HIA加入者ID", "記号", "番号", "氏名カナ", "氏名",
-            "資格喪失日", "健診機関コード", "健診機関名", "受診日", "理由区分", "チェック種別",
-            "チェック項目ID", "チェック項目名", "元の判定理由",
-            "理由ありOKの理由", "判断日時", "判断者ID", "case状態", "出力可否状態",
+            "資格喪失日", "健診機関コード", "健診機関名", "受診日", "理由ありOK項目数",
+            "法定件数", "法定の理由", "特定健診件数", "特定健診の理由",
+            "最終判断日時", "判断者ID", "case状態", "出力可否状態",
             "XML出力状態", "caseライフサイクル",
         ]
     )
@@ -9038,10 +9065,10 @@ def build_approved_with_reason_csv(rows: list[dict[str, Any]]) -> str:
                 row.get("hia_subscriber_id"), row.get("insurance_symbol_export_value"),
                 row.get("insurance_number_export_value"), row.get("name_kana_export_value"),
                 row.get("name_full_raw"), row.get("qualification_lost_date"), row.get("exam_facility_code"),
-                row.get("exam_facility_name"), row.get("exam_date"), "健診項目", row.get("check_scope"),
-                row.get("check_item_code"),
-                row.get("check_item_name"), row.get("validation_reason"), row.get("review_note"),
-                row.get("reviewed_at"), row.get("reviewed_by_app_user_id"), row.get("case_status"),
+                row.get("exam_facility_name"), row.get("exam_date"), row.get("approved_item_count"),
+                row.get("legal_reason_count"), row.get("legal_reasons"),
+                row.get("specific_reason_count"), row.get("specific_reasons"),
+                row.get("latest_reviewed_at"), row.get("reviewed_by_app_user_ids"), row.get("case_status"),
                 row.get("export_readiness_status"), row.get("xml_export_status"), row.get("case_lifecycle_status"),
             ]
         )

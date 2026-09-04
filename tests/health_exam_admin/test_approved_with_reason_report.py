@@ -69,21 +69,34 @@ def test_approved_with_reason_query_supports_person_and_facility_filters() -> No
     assert cur.params[-4:] == ("10", "30", "2026-08-31", 5000)
 
 
-def test_approved_with_reason_csv_keeps_one_row_per_review_item() -> None:
+def test_approved_with_reason_csv_keeps_one_row_per_case_with_split_reasons() -> None:
     content = build_approved_with_reason_csv(
         [
             {
                 "event_id": 2,
                 "exam_export_case_id": 10,
-                "check_scope": "ARTICLE44",
-                "check_item_code": "4403004001",
-                "check_item_name": "視力",
-                "review_note": "医師判断により実施省略",
+                "approved_item_count": 2,
+                "legal_reason_count": 1,
+                "legal_reasons": "視力 [4403004001]：医師判断により実施省略",
+                "specific_reason_count": 1,
+                "specific_reasons": "尿糖 [4410001001]：妊娠中のため未実施",
                 "export_readiness_status": "EXPORTED",
             }
         ]
     )
 
-    assert "理由ありOKの理由" in content
+    assert "法定の理由" in content
+    assert "特定健診の理由" in content
     assert "医師判断により実施省略" in content
+    assert "妊娠中のため未実施" in content
     assert "EXPORTED" in content
+
+
+def test_approved_with_reason_query_groups_review_items_by_case() -> None:
+    cur = Cursor([])
+
+    load_approved_with_reason_rows(cur, filters={})
+
+    assert "GROUP BY cri.exam_export_case_id" in cur.sql
+    assert "AS legal_reasons" in cur.sql
+    assert "AS specific_reasons" in cur.sql
