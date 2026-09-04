@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set title = "理由ありOK一覧" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Case Review</p><h1>理由ありOK一覧</h1><p class="subtle">caseの出力状態に関係なく、現在有効な理由ありOKを表示します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/exam-export-cases">個人case一覧</a><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page export-page">
+  <section class="panel">
+    <form method="get" action="/utilities/approved-with-reason" class="stack-form">
+      <div class="form-grid">
+        <label><span>イベントID</span><input name="event_id" value="{{ filters.event_id }}" inputmode="numeric" placeholder="例: 2"></label>
+        <label><span>チェック種別</span><select name="check_scope"><option value="">すべて</option><option value="ARTICLE44" {% if filters.check_scope == 'ARTICLE44' %}selected{% endif %}>法定</option><option value="SPECIFIC_HEALTH" {% if filters.check_scope == 'SPECIFIC_HEALTH' %}selected{% endif %}>特定健診</option></select></label>
+        <label><span>現在の出力状態</span><select name="export_readiness_status"><option value="">すべて</option>{% for value in ['PENDING', 'EXPORT_READY', 'APPROVED_WITH_REASON', 'BLOCKED', 'EXPORTED'] %}<option value="{{ value }}" {% if filters.export_readiness_status == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>
+        <label><span>記号</span><input name="insurance_symbol" value="{{ filters.insurance_symbol }}"></label>
+        <label><span>番号</span><input name="insurance_number" value="{{ filters.insurance_number }}"></label>
+        <label><span>氏名カナ</span><input name="name_kana" value="{{ filters.name_kana }}"></label>
+        <label><span>氏名</span><input name="name_full" value="{{ filters.name_full }}"></label>
+        <label><span>資格</span><select name="qualification_lost_status"><option value="">すべて</option><option value="ACTIVE" {% if filters.qualification_lost_status == 'ACTIVE' %}selected{% endif %}>資格あり</option><option value="LOST" {% if filters.qualification_lost_status == 'LOST' %}selected{% endif %}>資格喪失</option></select></label>
+        <label><span>資格喪失日</span><input type="date" name="qualification_lost_date" value="{{ filters.qualification_lost_date }}"></label>
+        <label><span>HIA ID</span><input name="hia_subscriber_id" value="{{ filters.hia_subscriber_id }}"></label>
+        <label><span>subscriber ID</span><input name="subscriber_id" value="{{ filters.subscriber_id }}" inputmode="numeric"></label>
+        <label><span>case ID</span><input name="case_id" value="{{ filters.case_id }}" inputmode="numeric"></label>
+        <label class="input-with-action"><span>健診機関</span><span class="inline-input-action"><input id="approved-reason-facility-display" name="exam_facility_display" value="{{ filters.exam_facility_display }}" readonly placeholder="未指定"><input id="approved-reason-facility-id" type="hidden" name="exam_facility_id" value="{{ filters.exam_facility_id }}"><button type="button" class="ghost-button compact-action-button" data-modal-open="approved-reason-facility-modal" data-alias-facility-picker-open data-target-input="approved-reason-facility-id" data-target-display-input="approved-reason-facility-display" data-target-value="exam_facility_id">選択</button></span></label>
+        <label><span>キーワード</span><input name="q" value="{{ filters.q }}" placeholder="項目 / 理由 / 健診機関"></label>
+      </div>
+      <div class="action-row"><button type="submit">絞り込む</button><button type="submit" class="ghost-button" formaction="/utilities/approved-with-reason.csv">同じ条件でCSV出力</button><a class="ghost-button" href="/utilities/approved-with-reason">クリア</a></div>
+    </form>
+    <div class="action-row">
+      <span class="status-pill status-neutral">{{ rows|length }}項目</span>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="table-panel">
+      <table class="data-table">
+        <thead><tr><th>case・対象者</th><th>健診機関・受診日</th><th>理由区分</th><th>チェック区分</th><th>対象項目</th><th>理由ありOK</th><th>現在の状態</th><th>操作</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>
+              <strong>{{ row.name_full_raw or row.name_kana_export_value or '氏名なし' }}</strong>
+              <small>{{ row.name_kana_export_value or '-' }}</small>
+              <small>記号 {{ row.insurance_symbol_export_value or '-' }} / 番号 {{ row.insurance_number_export_value or '-' }}</small>
+              <small>HIA {{ row.hia_subscriber_id or '-' }} / subscriber {{ row.subscriber_id or '-' }}</small>
+              <small>case {{ row.exam_export_case_id }} / event {{ row.event_id }}</small>
+              <small>資格喪失日 {{ row.qualification_lost_date or '-' }}</small>
+            </td>
+            <td><strong>{{ row.exam_facility_name or '-' }}</strong><small>{{ row.exam_facility_code or '' }} / {{ row.exam_date or '-' }}</small></td>
+            <td><strong>健診項目</strong></td>
+            <td><strong>{{ case_check_scope_label(row.check_scope) }}</strong><small>{{ row.check_scope }}</small></td>
+            <td><strong>{{ row.check_item_name or row.check_item_code }}</strong><small>{{ row.check_item_code }}</small><small>{{ row.validation_reason or '' }}</small></td>
+            <td><strong>{{ row.review_note or '-' }}</strong><small>{{ row.reviewed_at or '-' }} / user {{ row.reviewed_by_app_user_id or '-' }}</small></td>
+            <td><span class="status-pill status-ready">{{ row.export_readiness_status or '-' }}</span><small>case {{ row.case_status or '-' }}</small><small>XML {{ row.xml_export_status or '-' }} / {{ row.case_lifecycle_status or '-' }}</small></td>
+            <td><a class="ghost-button" href="/exam-export-cases/{{ row.exam_export_case_id }}">case</a></td>
+          </tr>
+          {% else %}<tr><td colspan="8">現在有効な理由ありOKはありません。</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div id="approved-reason-facility-modal" class="edit-modal" hidden data-alias-facility-picker-modal data-prefer-alias-registered="1">
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="approved-reason-facility-title">
+      <div class="edit-modal__head"><div><p class="eyebrow">Facility Picker</p><h2 id="approved-reason-facility-title">健診機関を選択</h2></div><button type="button" class="ghost-button" data-modal-close>閉じる</button></div>
+      <div class="export-facility-search alias-facility-search">
+        <label class="alias-facility-search__code"><span>コード</span><input data-alias-facility-search-code data-modal-focus></label>
+        <label class="alias-facility-search__prefecture"><span>都道府県</span><input data-alias-facility-search-prefecture list="approved-reason-prefectures"><datalist id="approved-reason-prefectures">{% for prefecture in prefecture_options %}<option value="{{ prefecture }}"></option>{% endfor %}</datalist></label>
+        <label class="alias-facility-search__keyword"><span>キーワード</span><input data-alias-facility-search-keyword placeholder="名称 / 住所"></label>
+        <button type="button" class="primary-button" data-alias-facility-search>検索</button>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel"><table class="data-table compact-table"><thead><tr><th>健診機関</th><th>ID/コード</th><th>所在地</th><th>操作</th></tr></thead><tbody data-alias-facility-results><tr><td colspan="4">コードまたはキーワードで検索してください。</td></tr></tbody></table></div>
+    </section>
+  </div>
+</main>
+{% endblock %}

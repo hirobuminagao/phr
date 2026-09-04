@@ -8915,6 +8915,139 @@ def load_exam_export_case_placeholders(cur: Any, *, exam_export_case_id: int) ->
     return rows
 
 
+def load_approved_with_reason_rows(
+    cur: Any, *, filters: Mapping[str, str], limit: int = 5000
+) -> list[dict[str, Any]]:
+    where_parts = ["cri.review_status = 'APPROVED_WITH_REASON'"]
+    params: list[Any] = []
+    event_id = _optional_int(filters.get("event_id"))
+    check_scope = filters.get("check_scope", "").strip().upper()
+    export_readiness_status = filters.get("export_readiness_status", "").strip().upper()
+    query = filters.get("q", "").strip()
+    if event_id:
+        where_parts.append("cri.event_id = %s")
+        params.append(event_id)
+    if check_scope:
+        where_parts.append("cri.check_scope = %s")
+        params.append(check_scope)
+    if export_readiness_status:
+        where_parts.append("eec.export_readiness_status = %s")
+        params.append(export_readiness_status)
+    partial_fields = {
+        "insurance_symbol": ("eec.insurance_symbol_raw", "eec.insurance_symbol_export_value"),
+        "insurance_number": ("eec.insurance_number_raw", "eec.insurance_number_export_value"),
+        "name_kana": ("eec.name_kana_raw", "eec.name_kana_export_value"),
+        "name_full": ("eec.name_full_raw",),
+        "hia_subscriber_id": ("eec.hia_subscriber_id",),
+    }
+    for key, columns in partial_fields.items():
+        value = filters.get(key, "").strip()
+        if not value:
+            continue
+        where_parts.append("(" + " OR ".join(f"{column} LIKE %s" for column in columns) + ")")
+        params.extend([f"%{value}%"] * len(columns))
+    case_id = filters.get("case_id", "").strip()
+    if case_id:
+        where_parts.append("CAST(eec.exam_export_case_id AS CHAR) = %s")
+        params.append(case_id)
+    subscriber_id = filters.get("subscriber_id", "").strip()
+    if subscriber_id:
+        where_parts.append("CAST(eec.subscriber_id AS CHAR) = %s")
+        params.append(subscriber_id)
+    facility_id = filters.get("exam_facility_id", "").strip()
+    if facility_id:
+        where_parts.append("eec.exam_facility_id = %s")
+        params.append(facility_id)
+    qualification_lost_status = filters.get("qualification_lost_status", "").strip()
+    if qualification_lost_status == "LOST":
+        where_parts.append("s.qualification_lost_date IS NOT NULL")
+    elif qualification_lost_status == "ACTIVE":
+        where_parts.append("s.qualification_lost_date IS NULL")
+    qualification_lost_date = filters.get("qualification_lost_date", "").strip()
+    if qualification_lost_date:
+        where_parts.append("s.qualification_lost_date = %s")
+        params.append(qualification_lost_date)
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            "(CAST(cri.exam_export_case_id AS CHAR) LIKE %s OR eec.hia_subscriber_id LIKE %s "
+            "OR eec.name_kana_export_value LIKE %s OR cri.check_item_code LIKE %s "
+            "OR cri.check_item_name LIKE %s OR cri.review_note LIKE %s OR ef.exam_facility_name LIKE %s)"
+        )
+        params.extend([like] * 7)
+    params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          cri.exam_case_check_review_item_id,
+          cri.event_id,
+          cri.exam_export_case_id,
+          cri.check_scope,
+          cri.check_item_code,
+          cri.check_item_name,
+          cri.validation_reason,
+          cri.review_note,
+          cri.reviewed_at,
+          cri.reviewed_by_app_user_id,
+          eec.hia_subscriber_id,
+          eec.subscriber_id,
+          eec.insurance_symbol_export_value,
+          eec.insurance_number_export_value,
+          eec.name_full_raw,
+          eec.name_kana_export_value,
+          s.qualification_lost_date,
+          eec.exam_date,
+          eec.case_status,
+          eec.export_readiness_status,
+          eec.xml_export_status,
+          eec.case_lifecycle_status,
+          ef.exam_facility_code,
+          ef.exam_facility_name
+        FROM {qname(health_db())}.exam_case_check_review_items cri
+        JOIN {qname(health_db())}.exam_export_cases eec
+          ON eec.exam_export_case_id = cri.exam_export_case_id
+        LEFT JOIN {qname(dev_db())}.subscribers s
+          ON s.id = eec.subscriber_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = eec.exam_facility_id
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY cri.reviewed_at DESC, cri.exam_export_case_id, cri.check_scope, cri.check_item_code
+        LIMIT %s
+        """,
+        tuple(params),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def build_approved_with_reason_csv(rows: list[dict[str, Any]]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerow(
+        [
+            "event_id", "case_id", "subscriber_id", "HIA加入者ID", "記号", "番号", "氏名カナ", "氏名",
+            "資格喪失日", "健診機関コード", "健診機関名", "受診日", "理由区分", "チェック種別",
+            "チェック項目ID", "チェック項目名", "元の判定理由",
+            "理由ありOKの理由", "判断日時", "判断者ID", "case状態", "出力可否状態",
+            "XML出力状態", "caseライフサイクル",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row.get("event_id"), row.get("exam_export_case_id"), row.get("subscriber_id"),
+                row.get("hia_subscriber_id"), row.get("insurance_symbol_export_value"),
+                row.get("insurance_number_export_value"), row.get("name_kana_export_value"),
+                row.get("name_full_raw"), row.get("qualification_lost_date"), row.get("exam_facility_code"),
+                row.get("exam_facility_name"), row.get("exam_date"), "健診項目", row.get("check_scope"),
+                row.get("check_item_code"),
+                row.get("check_item_name"), row.get("validation_reason"), row.get("review_note"),
+                row.get("reviewed_at"), row.get("reviewed_by_app_user_id"), row.get("case_status"),
+                row.get("export_readiness_status"), row.get("xml_export_status"), row.get("case_lifecycle_status"),
+            ]
+        )
+    return output.getvalue()
+
+
 def load_placeholder_related_namecodes(
     cur: Any,
     *,
@@ -18276,6 +18409,61 @@ def person_id_custom_utility(request: Request) -> Response:
     return templates.TemplateResponse(
         "person_id_custom_utility.html",
         person_id_custom_form_context(request=request, user=user),
+    )
+
+
+@app.get("/utilities/approved-with-reason", response_class=HTMLResponse)
+def approved_with_reason_utility(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filter_keys = (
+        "event_id", "check_scope", "export_readiness_status", "insurance_symbol",
+        "insurance_number", "name_kana", "name_full", "qualification_lost_status",
+        "qualification_lost_date", "hia_subscriber_id", "subscriber_id", "case_id",
+        "exam_facility_id", "exam_facility_display", "q",
+    )
+    filters = {key: str(request.query_params.get(key) or "").strip() for key in filter_keys}
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        rows = load_approved_with_reason_rows(dict_cursor(conn), filters=filters)
+    return templates.TemplateResponse(
+        "approved_with_reason.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "filters": filters,
+            "prefecture_options": PREFECTURE_OPTIONS,
+        },
+    )
+
+
+@app.get("/utilities/approved-with-reason.csv")
+def approved_with_reason_csv(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    filter_keys = (
+        "event_id", "check_scope", "export_readiness_status", "insurance_symbol",
+        "insurance_number", "name_kana", "name_full", "qualification_lost_status",
+        "qualification_lost_date", "hia_subscriber_id", "subscriber_id", "case_id",
+        "exam_facility_id", "q",
+    )
+    filters = {key: str(request.query_params.get(key) or "").strip() for key in filter_keys}
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        rows = load_approved_with_reason_rows(dict_cursor(conn), filters=filters, limit=50000)
+    content = "\ufeff" + build_approved_with_reason_csv(rows)
+    filename = f"approved_with_reason_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([content.encode("utf-8")]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
