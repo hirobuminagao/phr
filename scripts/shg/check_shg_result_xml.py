@@ -111,7 +111,8 @@ from scripts.shg.script_lib.xml_io import (
 # Use shared SHG result loader
 # ------------------------------------------------------------
 from scripts.shg.script_lib.shg_result_loader import (
-    load_shg_result_from_mysql,
+    load_shg_result_candidates_from_mysql,
+    select_shg_result_candidate,
 )
 
 # ------------------------------------------------------------
@@ -321,7 +322,7 @@ def main() -> None:
     input_root_dir.mkdir(parents=True, exist_ok=True)
     output_root_dir.mkdir(parents=True, exist_ok=True)
 
-    shg_result_map = load_shg_result_from_mysql()
+    shg_result_candidates = load_shg_result_candidates_from_mysql()
 
 
     from datetime import datetime
@@ -364,7 +365,12 @@ def main() -> None:
                 gender=str(basic.get("gender") or ""),
             )
 
-            db_row = shg_result_map.get(str(identity_hash), {}) if identity_hash else {}
+            guidance = extract_90010_guidance(root)
+            candidates = shg_result_candidates.get(str(identity_hash), []) if identity_hash else []
+            db_row = select_shg_result_candidate(
+                candidates,
+                xml_health_checkup_date=guidance.get("health_checkup_date") if guidance else None,
+            )
 
             ticket_fix_result = build_ticket_fix_result(
                 xml_ticket_no=basic.get("ticket_no", ""),
@@ -387,7 +393,6 @@ def main() -> None:
             final_waist_cm, final_weight_kg = extract_final_measurements(root)
             support_summary = extract_support_summary(root)
             process_events = extract_process_events(root)
-            guidance = extract_90010_guidance(root)
 
             outcome_point_block_fix_result = apply_outcome_total_point_block_fix(
                 root=root,
@@ -790,7 +795,7 @@ def main() -> None:
     print("[OK] SHG XML check completed")
     print(f"[INFO] input_root_dir={input_root_dir}")
     print(f"[INFO] out_dir={out_dir}")
-    print(f"[INFO] shg_result loaded={len(shg_result_map)}")
+    print(f"[INFO] shg_result loaded={len(shg_result_candidates)}")
     print(f"[INFO] xml scanned={len(xml_paths)}")
     print(f"[INFO] export_shg_rows={len(export_shg_rows)}")
 

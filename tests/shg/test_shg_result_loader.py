@@ -1,6 +1,8 @@
 from scripts.shg.script_lib.shg_result_loader import (
     SHG_RESULT_SELECT_SQL,
+    build_shg_result_candidate_map,
     build_latest_shg_result_map,
+    select_shg_result_candidate,
 )
 
 
@@ -35,3 +37,29 @@ def test_same_year_uses_newest_id_and_empty_identity_is_ignored() -> None:
 
 def test_query_orders_candidates_from_newest_to_oldest() -> None:
     assert "ORDER BY identity_hash, shg_year DESC, id DESC" in SHG_RESULT_SELECT_SQL
+
+
+def test_xml_health_checkup_date_selects_matching_older_year() -> None:
+    candidates = build_shg_result_candidate_map(
+        [
+            {"id": 30, "identity_hash": "person-a", "shg_year": 2025, "health_checkup_date": "2025-06-01"},
+            {"id": 20, "identity_hash": "person-a", "shg_year": 2024, "health_checkup_date": "2024-05-20"},
+        ]
+    )["person-a"]
+
+    selected = select_shg_result_candidate(candidates, xml_health_checkup_date="20240520")
+
+    assert selected["id"] == 20
+
+
+def test_missing_date_match_falls_back_to_latest_year() -> None:
+    candidates = build_shg_result_candidate_map(
+        [
+            {"id": 30, "identity_hash": "person-a", "shg_year": 2025, "health_checkup_date": "2025-06-01"},
+            {"id": 20, "identity_hash": "person-a", "shg_year": 2024, "health_checkup_date": "2024-05-20"},
+        ]
+    )["person-a"]
+
+    selected = select_shg_result_candidate(candidates, xml_health_checkup_date="20230101")
+
+    assert selected["id"] == 30

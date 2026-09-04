@@ -36,6 +36,7 @@ SELECT
     identity_hash,
     usage_ticket_number,
     expiration_date,
+    health_checkup_date,
     exam_waist_cm,
     exam_weight_kg
 FROM shg_result
@@ -95,6 +96,7 @@ def normalize_db_row(row: Any) -> dict[str, Any]:
         "identity_hash": (row_dict.get("identity_hash") or "").strip(),
         "usage_ticket_number": (row_dict.get("usage_ticket_number") or "").strip(),
         "expiration_date": format_xml_yyyymmdd(row_dict.get("expiration_date")),
+        "health_checkup_date": format_xml_yyyymmdd(row_dict.get("health_checkup_date")),
         "exam_waist_cm": row_dict.get("exam_waist_cm"),
         "exam_weight_kg": row_dict.get("exam_weight_kg"),
     }
@@ -112,6 +114,41 @@ def build_latest_shg_result_map(rows: list[Any]) -> dict[str, dict[str, Any]]:
         # SQLは年度・IDの新しい順。同一人物の最初の行を採用する。
         result.setdefault(identity_hash, normalized)
     return result
+
+
+def build_shg_result_candidate_map(rows: list[Any]) -> dict[str, list[dict[str, Any]]]:
+    """identity_hashごとに新しい順のSHG結果候補を保持する。"""
+    result: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        normalized = normalize_db_row(row)
+        identity_hash = normalized["identity_hash"]
+        if identity_hash:
+            result.setdefault(identity_hash, []).append(normalized)
+    return result
+
+
+def select_shg_result_candidate(
+    candidates: list[dict[str, Any]],
+    *,
+    xml_health_checkup_date: Any,
+) -> dict[str, Any]:
+    """XML健診日と一致する候補を優先し、なければ最新年度を採用する。"""
+    normalized_xml_date = format_xml_yyyymmdd(xml_health_checkup_date)
+    if normalized_xml_date:
+        for candidate in candidates:
+            if candidate.get("health_checkup_date") == normalized_xml_date:
+                return candidate
+    return candidates[0] if candidates else {}
+
+
+def load_shg_result_candidates_from_mysql() -> dict[str, list[dict[str, Any]]]:
+    """XML健診日との照合用に、identity_hashごとの全候補を読み込む。"""
+    params = load_mysql_base_params()
+    with connect_ctx(params, database=WORK_OTHER, autocommit=False) as conn:
+        cursor = dict_cursor(conn)
+        cursor.execute(SHG_RESULT_SELECT_SQL)
+        rows = cursor.fetchall()
+    return build_shg_result_candidate_map(rows)
 
 
 def load_shg_result_from_mysql() -> dict[str, dict[str, Any]]:
