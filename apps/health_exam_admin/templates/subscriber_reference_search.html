@@ -33,11 +33,22 @@
   <section class="panel">
     <div class="section-heading"><div><h2>検索結果</h2><p class="subtle">{% if searched %}{{ rows|length }}件{% else %}条件を入力して検索してください。{% endif %}</p></div></div>
     {% if rows %}
-    <div class="table-wrap"><table class="data-table subscriber-reference-table"><thead><tr><th>加入者</th><th>個人情報</th><th>資格・健診</th><th>関連</th><th>操作</th></tr></thead><tbody>
+    <div class="table-wrap"><table class="data-table subscriber-reference-table"><thead><tr><th>加入者</th><th>個人情報</th><th>資格・健診</th><th>HIAダッシュボード</th><th>関連</th><th>操作</th></tr></thead><tbody>
       {% for row in rows %}<tr>
         <td><strong>ID {{ row.subscriber_id }}</strong><small>HIA {{ row.hia_subscriber_id or '-' }}</small><small>保険者 {{ row.insurer_number or '-' }}</small></td>
         <td><strong>{{ row.name_display }}</strong><small>{{ row.birth_display }}</small><small>{{ row.insurance_display }}</small></td>
         <td><strong>{{ '資格喪失' if row.qualification_lost_date else '資格中' }}</strong><small>最新健診 {{ row.latest_exam_date or '-' }}</small><small>更新 {{ row.updated_at or '-' }}</small></td>
+        <td class="subscriber-dashboard-summary">
+          {% if row.dashboard_status %}
+          <span class="status-pill status-ready">{{ row.dashboard_status }}</span>
+          <small>予約 {{ row.dashboard_reservation_date or '-' }} / 受診 {{ row.dashboard_exam_date or '-' }}</small>
+          <strong>{{ row.dashboard_medical_institution or '-' }}</strong>
+          <small>{{ row.dashboard_course_name or '-' }}</small>
+          <small>更新 {{ row.dashboard_updated_at or '-' }}</small>
+          {% else %}
+          <span class="status-pill status-muted">未登録</span>
+          {% endif %}
+        </td>
         <td><strong>event {{ row.event_count }}</strong><small>case {{ row.case_count }}</small></td>
         <td><div class="compact-action-row"><a class="ghost-button compact-action-button" href="/utilities/subscribers/{{ row.subscriber_id }}">マスク表示</a>{% if can_open_full %}<form method="post" action="/utilities/subscribers/{{ row.subscriber_id }}/full"><button class="compact-action-button" type="submit">完全表示</button></form>{% endif %}</div></td>
       </tr>{% endfor %}

@@ -9159,6 +9159,19 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   display: block;
 }
 
+.subscriber-dashboard-summary {
+  min-width: 260px;
+}
+
+.subscriber-dashboard-summary > strong {
+  display: block;
+  margin-top: 6px;
+}
+
+.subscriber-dashboard-summary > small {
+  margin-top: 4px;
+}
+
 .subscriber-pii-level-control {
   max-width: 560px;
 }

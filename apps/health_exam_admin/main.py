@@ -17552,8 +17552,31 @@ def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str
           s.updated_at,
           (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id AND eec.case_lifecycle_status = 'ACTIVE') AS latest_exam_date,
           {event_count_expr} AS event_count,
-          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id AND eec.case_lifecycle_status = 'ACTIVE') AS case_count
+          (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id AND eec.case_lifecycle_status = 'ACTIVE') AS case_count,
+          dashboard.status AS dashboard_status,
+          dashboard.reservation_date AS dashboard_reservation_date,
+          dashboard.exam_date AS dashboard_exam_date,
+          dashboard.medical_institution AS dashboard_medical_institution,
+          dashboard.course_name AS dashboard_course_name,
+          dashboard.updated_at AS dashboard_updated_at
         FROM {qname(dev_db())}.subscribers s
+        LEFT JOIN (
+          SELECT ranked.subscribers_id, ranked.status, ranked.reservation_date,
+                 ranked.exam_date, ranked.medical_institution, ranked.course_name,
+                 ranked.updated_at
+          FROM (
+            SELECT hds.subscribers_id, hds.status, hds.reservation_date,
+                   hds.exam_date, hds.medical_institution, hds.course_name,
+                   hds.updated_at,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY hds.subscribers_id
+                     ORDER BY hds.updated_at DESC, hds.hia_dashboard_person_id DESC
+                   ) AS row_no
+            FROM {qname(work_other_db())}.hia_dashboard_status hds
+            WHERE hds.is_active = 1
+          ) ranked
+          WHERE ranked.row_no = 1
+        ) dashboard ON dashboard.subscribers_id = s.id
         WHERE {' AND '.join(where)}
         ORDER BY latest_exam_date DESC, s.id DESC
         LIMIT 100
