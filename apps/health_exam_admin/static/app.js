@@ -2278,12 +2278,31 @@
   if (personIdResults) {
     const resultRows = Array.from(personIdResults.querySelectorAll("[data-person-id-result]"));
     const resultIds = resultRows.map((row) => row.dataset.personId || "");
+    const copyDialog = document.querySelector("[data-person-id-copy-dialog]");
+    let copyDialogTimer = 0;
+
+    const closeCopyDialog = () => {
+      window.clearTimeout(copyDialogTimer);
+      if (copyDialog?.open) copyDialog.close();
+    };
+    copyDialog?.querySelector("[data-person-id-copy-dialog-close]")?.addEventListener("click", closeCopyDialog);
+    copyDialog?.addEventListener("click", (event) => {
+      if (event.target === copyDialog) closeCopyDialog();
+    });
 
     personIdResults.querySelector("[data-person-id-copy]")?.addEventListener("click", async () => {
       if (!resultIds.length) return;
       const text = resultIds.join("\n");
       const copied = await copyTextToClipboard(text);
-      if (!copied) window.prompt("person_id_custom一覧（エラー行は空欄）", text);
+      if (!copied) {
+        window.prompt("person_id_custom一覧（エラー行は空欄）", text);
+        return;
+      }
+      if (copyDialog?.showModal) {
+        closeCopyDialog();
+        copyDialog.showModal();
+        copyDialogTimer = window.setTimeout(closeCopyDialog, 2500);
+      }
     });
 
     personIdResults.querySelector("[data-person-id-download]")?.addEventListener("click", () => {

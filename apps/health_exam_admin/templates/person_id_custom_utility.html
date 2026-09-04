@@ -90,5 +90,14 @@
     </tbody></table></div>
   </section>
   {% endif %}
+
+  <dialog class="copy-complete-dialog" data-person-id-copy-dialog aria-labelledby="person-id-copy-dialog-title">
+    <div class="copy-complete-dialog__body">
+      <span class="status-pill status-ready">完了</span>
+      <h2 id="person-id-copy-dialog-title">コピーしました</h2>
+      <p>元の行順を保ったままクリップボードへコピーしました。</p>
+      <button type="button" data-person-id-copy-dialog-close>OK</button>
+    </div>
+  </dialog>
 </main>
 {% endblock %}
