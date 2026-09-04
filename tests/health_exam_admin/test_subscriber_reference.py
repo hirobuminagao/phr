@@ -35,7 +35,9 @@ class SubscriberSearchCursor:
                 "employee_code": "E10",
                 "qualification_lost_date": None,
                 "updated_at": "2026-09-04 10:00:00",
+                "latest_case_id": 501,
                 "latest_exam_date": "2026-08-20",
+                "latest_exam_facility_name": "札幌健診センター",
                 "event_count": 1,
                 "case_count": 1,
                 "dashboard_status": "受診済み",
@@ -99,8 +101,11 @@ def test_subscriber_search_includes_latest_active_dashboard_status() -> None:
     assert len(rows) == 1
     assert rows[0]["dashboard_status"] == "受診済み"
     assert rows[0]["dashboard_medical_institution"] == "札幌健診センター"
+    assert rows[0]["latest_case_id"] == 501
+    assert rows[0]["latest_exam_facility_name"] == "札幌健診センター"
     assert "ROW_NUMBER() OVER" in cur.search_sql
     assert "PARTITION BY hds.subscribers_id" in cur.search_sql
     assert "WHERE hds.is_active = 1" in cur.search_sql
     assert "LEFT JOIN" in cur.search_sql
+    assert "ORDER BY candidate.exam_date DESC, candidate.exam_export_case_id DESC" in cur.search_sql
     assert cur.search_params == ("%HIA-10%",)

@@ -17550,7 +17550,9 @@ def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str
           {('s.employee_code' if 'employee_code' in subscriber_columns else 'NULL')} AS employee_code,
           {('s.qualification_lost_date' if 'qualification_lost_date' in subscriber_columns else 'NULL')} AS qualification_lost_date,
           s.updated_at,
-          (SELECT MAX(eec.exam_date) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id AND eec.case_lifecycle_status = 'ACTIVE') AS latest_exam_date,
+          latest_case.exam_export_case_id AS latest_case_id,
+          latest_case.exam_date AS latest_exam_date,
+          COALESCE(latest_facility.exam_facility_name, latest_case.facility_name) AS latest_exam_facility_name,
           {event_count_expr} AS event_count,
           (SELECT COUNT(*) FROM {qname(health_db())}.exam_export_cases eec WHERE eec.subscriber_id = s.id AND eec.case_lifecycle_status = 'ACTIVE') AS case_count,
           dashboard.status AS dashboard_status,
@@ -17577,6 +17579,17 @@ def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str
           ) ranked
           WHERE ranked.row_no = 1
         ) dashboard ON dashboard.subscribers_id = s.id
+        LEFT JOIN {qname(health_db())}.exam_export_cases latest_case
+          ON latest_case.exam_export_case_id = (
+            SELECT candidate.exam_export_case_id
+            FROM {qname(health_db())}.exam_export_cases candidate
+            WHERE candidate.subscriber_id = s.id
+              AND candidate.case_lifecycle_status = 'ACTIVE'
+            ORDER BY candidate.exam_date DESC, candidate.exam_export_case_id DESC
+            LIMIT 1
+          )
+        LEFT JOIN {qname(master_db())}.exam_facilities latest_facility
+          ON latest_facility.exam_facility_id = latest_case.exam_facility_id
         WHERE {' AND '.join(where)}
         ORDER BY latest_exam_date DESC, s.id DESC
         LIMIT 100
