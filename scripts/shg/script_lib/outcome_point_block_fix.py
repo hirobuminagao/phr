@@ -44,7 +44,7 @@ MOTIVATION_GUIDANCE_CODE = "2"
 """動機付け最終の場合にブロック削除をしないリスト"""
 OUTCOME_TOTAL_POINT_DELETE_EXCLUDED_INSURER_NUMBERS = {
     "06380216",
-    "06139463",
+    # "06139463",  # トランス・コスモス健康保険組合（確認中のため一時解除）
     "06132518",
     "06137723",
     "06132294",
