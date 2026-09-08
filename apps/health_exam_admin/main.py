@@ -5990,12 +5990,14 @@ def save_csv_mapping_template_header_columns(cur: Any, *, csv_format_version_id:
         UPDATE {qname(master_db())}.`csv_format_versions`
            SET `header_sha256` = %s,
                `header_snapshot_json` = %s,
-               `header_hash_status` = 'VERIFIED'
+               `header_hash_status` = 'VERIFIED',
+               `character_encoding` = %s
          WHERE `csv_format_version_id` = %s
         """,
         (
             csv_result.header_set.header_sha256,
             json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")),
+            csv_result.encoding,
             csv_format_version_id,
         ),
     )
@@ -6054,7 +6056,7 @@ async def import_csv_mapping_template_header_upload(
             tmp_path,
             header_count=header_count,
             delimiter=str(template.get("delimiter") or ","),
-            encoding=str(template.get("character_encoding") or "") or None,
+            encoding=None,
             quote_char=str(template.get("quote_char") or '"'),
             active_header_row_no=(
                 int(template["active_header_row_no"])
@@ -6073,6 +6075,7 @@ async def import_csv_mapping_template_header_upload(
             "file_name": csv_file.filename,
             "column_count": len(csv_result.header_set.normalized_columns),
             "header_sha256": csv_result.header_set.header_sha256,
+            "character_encoding": csv_result.encoding,
         }
         log_audit(
             cur,
@@ -21268,7 +21271,7 @@ async def admin_csv_mapping_template_headers_compare(
                     tmp_path,
                     header_count=header_count,
                     delimiter=str(template.get("delimiter") or ","),
-                    encoding=str(template.get("character_encoding") or "") or None,
+                    encoding=None,
                     quote_char=str(template.get("quote_char") or '"'),
                     active_header_row_no=(
                         int(template["active_header_row_no"])
