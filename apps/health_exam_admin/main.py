@@ -5202,6 +5202,7 @@ def load_csv_mapping_template_alias_rows(
           mfa.`alias_id`,
           mfa.`event_id`,
           ev.`event_name`,
+          ev.`result_root_path`,
           mfa.`src_folder_raw`,
           mfa.`dst_folder_norm`,
           mfa.`expected_source_mode`,
@@ -5229,6 +5230,11 @@ def load_csv_mapping_template_alias_rows(
     for row in rows:
         row["expected_source_mode_label"] = source_mode_label(row.get("expected_source_mode"))
         row["is_current_template"] = int(row.get("csv_format_version_id") or 0) == int(csv_format_version_id)
+        row["facility_folder_name"] = row.get("src_folder_raw") or row.get("dst_folder_norm")
+        row["facility_folder_copy_value"] = join_display_path(
+            row.get("result_root_path"),
+            row.get("facility_folder_name"),
+        )
     return rows
 
 
@@ -20075,6 +20081,15 @@ def admin_csv_mapping_template_data_check(request: Request, csv_format_version_i
         try:
             template = load_csv_mapping_template_detail(cur, csv_format_version_id=csv_format_version_id)
             rules = load_csv_mapping_template_rules(cur, csv_format_version_id=csv_format_version_id) if template else []
+            alias_rows = (
+                load_csv_mapping_template_alias_rows(
+                    cur,
+                    csv_format_version_id=csv_format_version_id,
+                    exam_facility_id=_optional_int(template.get("exam_facility_id")),
+                )
+                if template
+                else []
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -20092,6 +20107,11 @@ def admin_csv_mapping_template_data_check(request: Request, csv_format_version_i
             "template": template,
             "rule_count": len(rules),
             "max_rows": CSV_MAPPING_DATA_CHECK_MAX_ROWS,
+            "facility_folder_rows": [
+                row
+                for row in alias_rows
+                if row.get("is_active") and row.get("facility_folder_copy_value")
+            ],
         },
     )
 
@@ -20268,6 +20288,15 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
                 if template
                 else []
             )
+            alias_rows = (
+                load_csv_mapping_template_alias_rows(
+                    cur,
+                    csv_format_version_id=csv_format_version_id,
+                    exam_facility_id=_optional_int(template.get("exam_facility_id")),
+                )
+                if template
+                else []
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -20289,6 +20318,11 @@ def admin_csv_mapping_template_edit(request: Request, csv_format_version_id: int
             "target_groups": target_groups,
             "header_columns": header_columns,
             "header_preview": build_csv_mapping_template_header_preview_payload(template, header_columns),
+            "facility_folder_rows": [
+                row
+                for row in alias_rows
+                if row.get("is_active") and row.get("facility_folder_copy_value")
+            ],
             "ledger_field_options": CSV_MAPPING_LAB_LEDGER_FIELD_OPTIONS,
             "can_run_data_check": can_manage_business_settings(user),
             "message": request.query_params.get("message"),

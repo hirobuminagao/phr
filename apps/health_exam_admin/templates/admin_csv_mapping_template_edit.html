@@ -104,6 +104,22 @@
         </span>
         <small>無効にするとscan/importの対象外です。</small>
       </div>
+      {% if mode == "edit" %}
+      <div class="form-field csv-template-folder-path-field">
+        <span>健診機関の受領フォルダパス</span>
+        {% for folder in facility_folder_rows %}
+        <span class="csv-template-folder-path-row">
+          <code id="csv-template-folder-path-{{ loop.index }}">{{ folder.facility_folder_copy_value }}</code>
+          <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-template-folder-path-{{ loop.index }}">コピー</button>
+        </span>
+        {% if facility_folder_rows|length > 1 %}
+        <small>{{ folder.event_name or ('event ' ~ folder.event_id) }}{% if folder.is_current_template %} / このテンプレートを設定済み{% endif %}</small>
+        {% endif %}
+        {% else %}
+        <code class="is-muted">alias未設定</code>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
       <div class="button-row">
         <button class="primary-button" type="submit">{{ "作成" if mode == "new" else "基本情報を保存" }}</button>

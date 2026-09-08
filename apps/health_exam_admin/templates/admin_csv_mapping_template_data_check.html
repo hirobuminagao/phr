@@ -23,6 +23,26 @@
     <article class="summary-card"><small>データ保持</small><strong>保存しません</strong><span>チェック終了時に破棄</span></article>
   </section>
 
+  <section class="panel csv-data-check-folder-panel">
+    <div>
+      <h2>健診機関の受領フォルダパス</h2>
+      <p class="subtle">チェックするCSVの保存場所です。</p>
+    </div>
+    <div class="csv-data-check-folder-path-list">
+      {% for folder in facility_folder_rows %}
+      <div class="csv-data-check-folder-path-item">
+        <code id="csv-data-check-folder-path-{{ loop.index }}">{{ folder.facility_folder_copy_value }}</code>
+        <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-data-check-folder-path-{{ loop.index }}">コピー</button>
+        {% if facility_folder_rows|length > 1 %}
+        <small>{{ folder.event_name or ('event ' ~ folder.event_id) }}{% if folder.is_current_template %} / このテンプレートを設定済み{% endif %}</small>
+        {% endif %}
+      </div>
+      {% else %}
+      <code class="is-muted">alias未設定</code>
+      {% endfor %}
+    </div>
+  </section>
+
   <section class="panel">
     <div class="section-heading">
       <div><h2>チェックするCSV</h2><p class="subtle">基準ヘッダーとの差分を確認してから、保存済みマッピングを仮適用します。</p></div>
