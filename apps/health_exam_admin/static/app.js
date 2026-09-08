@@ -4837,7 +4837,7 @@
         const headerLabel = draft.headers.map((header) => `${header.columnNo}列目 ${header.headerName || "-"}`).join(" + ");
         return `
           <article class="csv-template-target-draft-card" data-csv-template-target-draft-id="${escapeHtml(draft.id)}">
-            <span class="status-pill ${draft.mode === "many" ? "status-pending" : "status-ready"}">${draft.mode === "many" ? "1:n 結合" : "1:1"}</span>
+            <span class="status-pill ${draft.mode === "many" ? "status-pending" : "status-ready"}">${draft.mode === "many" ? "n:1 結合" : "1:1"}</span>
             <div>
               <strong>${escapeHtml(draft.targetName || draft.targetCode || "-")}</strong>
               <small>${escapeHtml(draft.targetKind)} / ${escapeHtml(draft.targetMeta || "-")}</small>
