@@ -6506,6 +6506,108 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_zip_password_admin_rows(cur: Any, *, query: str, include_inactive: bool) -> list[dict[str, Any]]:
+    where_parts: list[str] = []
+    params: list[Any] = []
+    if not include_inactive:
+        where_parts.append("is_active = 1")
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """(
+              facility_code LIKE %s
+              OR facility_folder_name LIKE %s
+              OR zip_name LIKE %s
+              OR zip_sha256 LIKE %s
+              OR note LIKE %s
+            )"""
+        )
+        params.extend([like] * 5)
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    cur.execute(
+        f"""
+        SELECT
+          zip_password_id, scope_type, facility_code, facility_folder_name,
+          zip_name, zip_sha256, priority, is_active, note, created_at, updated_at
+        FROM {qname(work_other_db())}.medi_zip_passwords
+        {where_sql}
+        ORDER BY is_active DESC,
+                 CASE scope_type WHEN 'FACILITY' THEN 1 WHEN 'ZIP_NAME' THEN 2 ELSE 3 END,
+                 updated_at DESC, zip_password_id DESC
+        LIMIT 1000
+        """,
+        tuple(params),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def parse_admin_zip_password_form(form: dict[str, str]) -> tuple[dict[str, Any], str | None]:
+    values: dict[str, Any] = {
+        "zip_password_id": parse_positive_int(
+            str(form.get("zip_password_id") or "0"), default=0, maximum=999999999
+        ),
+        "scope_type": str(form.get("scope_type") or "FACILITY").strip().upper(),
+        "facility_code": str(form.get("facility_code") or "").strip() or None,
+        "facility_folder_name": str(form.get("facility_folder_name") or "").strip() or None,
+        "zip_name": str(form.get("zip_name") or "").strip() or None,
+        "zip_sha256": str(form.get("zip_sha256") or "").strip().lower() or None,
+        "password_text": str(form.get("zip_password") or ""),
+        "note": str(form.get("note") or "").strip() or None,
+        "is_active": 1 if str(form.get("is_active") or "") == "1" else 0,
+    }
+    scope_type = values["scope_type"]
+    if scope_type not in {"FACILITY", "ZIP_NAME", "ZIP_SHA256"}:
+        return values, "適用範囲が不正です。"
+    if not values["password_text"] or len(values["password_text"]) > 255:
+        return values, "パスワードを1〜255文字で入力してください。"
+    if scope_type == "FACILITY" and not values["facility_code"] and not values["facility_folder_name"]:
+        return values, "健診機関コードまたは受領フォルダ名を入力してください。"
+    if scope_type == "ZIP_NAME" and not values["zip_name"]:
+        return values, "ZIPファイル名を入力してください。"
+    if scope_type == "ZIP_SHA256" and not re.fullmatch(r"[0-9a-f]{64}", values["zip_sha256"] or ""):
+        return values, "SHA-256を64桁の16進数で入力してください。"
+    return values, None
+
+
+def zip_password_priority(scope_type: str) -> int:
+    return {"ZIP_SHA256": 10, "ZIP_NAME": 20, "FACILITY": 30}[scope_type]
+
+
+def save_zip_password_record(
+    *, request: Request, user: dict[str, Any], values: dict[str, Any]
+) -> Response:
+    scope_type = values["scope_type"]
+    facility_code = values["facility_code"] if scope_type == "FACILITY" else None
+    facility_folder = values["facility_folder_name"] if scope_type == "FACILITY" else None
+    zip_name = values["zip_name"] if scope_type == "ZIP_NAME" else None
+    zip_sha256 = values["zip_sha256"] if scope_type == "ZIP_SHA256" else None
+    priority = zip_password_priority(scope_type)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=work_other_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            cur.execute(
+                f"INSERT INTO {qname(work_other_db())}.medi_zip_passwords "
+                "(scope_type, facility_code, facility_folder_name, zip_name, zip_sha256, "
+                "password_text, priority, is_active, note) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (scope_type, facility_code, facility_folder, zip_name, zip_sha256,
+                 values["password_text"], priority, values["is_active"], values["note"]),
+            )
+            password_id = int(cur.lastrowid)
+            log_audit(
+                cur, request=request, user=user, action_code="SAVE_ZIP_PASSWORD",
+                target_schema=work_other_db(), target_table="medi_zip_passwords",
+                target_id=str(password_id), after={"scope_type": scope_type},
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+    return RedirectResponse("/admin/zip-passwords?message=登録しました。", status_code=303)
+
+
 def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200) -> list[dict[str, Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
@@ -16076,6 +16178,104 @@ def file_receipts(request: Request) -> Response:
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
+    )
+
+
+@app.get("/admin/zip-passwords", response_class=HTMLResponse)
+def admin_zip_passwords(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    query = request.query_params.get("q", "").strip()
+    include_inactive = request.query_params.get("include_inactive", "") == "1"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=work_other_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        rows = load_zip_password_admin_rows(cur, query=query, include_inactive=include_inactive)
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_zip_passwords.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "query": query,
+            "include_inactive": include_inactive,
+            "can_edit": can_manage_business_settings(user),
+            "can_reveal": has_permission(user, SYSTEM_SETTINGS_PERMISSION),
+            "revealed_password_id": None,
+            "revealed_password": None,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@app.post("/admin/zip-passwords/save")
+async def save_admin_zip_password(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    values, error = parse_admin_zip_password_form(form)
+    if error:
+        return RedirectResponse(f"/admin/zip-passwords?error={quote(error)}", status_code=303)
+    return save_zip_password_record(request=request, user=user, values=values)
+
+
+@app.post("/admin/zip-passwords/{password_id}/reveal", response_class=HTMLResponse)
+async def reveal_admin_zip_password(request: Request, password_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    expected_key = os.getenv("PHR_ZIP_PASSWORD_VIEW_KEY", "5555") or "5555"
+    if not secrets.compare_digest(str(form.get("view_key") or ""), expected_key):
+        return RedirectResponse("/admin/zip-passwords?error=確認キーが違います。", status_code=303)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=work_other_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        cur.execute(
+            f"SELECT password_text FROM {qname(work_other_db())}.medi_zip_passwords WHERE zip_password_id = %s",
+            (password_id,),
+        )
+        password_row = cur.fetchone()
+        rows = load_zip_password_admin_rows(cur, query="", include_inactive=True)
+        if password_row:
+            log_audit(
+                cur,
+                request=request,
+                user=user,
+                action_code="REVEAL_ZIP_PASSWORD",
+                target_schema=work_other_db(),
+                target_table="medi_zip_passwords",
+                target_id=str(password_id),
+                after={"password_revealed": True},
+            )
+        conn.commit()
+        cur.close()
+    return templates.TemplateResponse(
+        "admin_zip_passwords.html",
+        {
+            "request": request,
+            "user": user,
+            "rows": rows,
+            "query": "",
+            "include_inactive": True,
+            "can_edit": can_manage_business_settings(user),
+            "can_reveal": True,
+            "revealed_password_id": password_id if password_row else None,
+            "revealed_password": password_row.get("password_text") if password_row else None,
+            "message": None,
+            "error": None if password_row else "対象のパスワードがありません。",
+        },
+        headers={"Cache-Control": "no-store"},
     )
 
 
