@@ -7253,8 +7253,10 @@ def load_subscriber_match_candidate_rows(
     include_other_insurers = str(candidate_filters.get("include_other_insurers") or "0").strip() == "1"
     if not include_other_insurers and event_id:
         filter_parts.append(
-            f"TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(s.insurer_number, ''), '[^0-9]', '')) = "
-            f"(SELECT TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(e.insurer_number, ''), '[^0-9]', '')) "
+            f"CONVERT(TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(s.insurer_number, ''), '[^0-9]', '')) "
+            f"USING utf8mb4) COLLATE utf8mb4_unicode_ci = "
+            f"(SELECT CONVERT(TRIM(LEADING '0' FROM REGEXP_REPLACE(COALESCE(e.insurer_number, ''), '[^0-9]', '')) "
+            f"USING utf8mb4) COLLATE utf8mb4_unicode_ci "
             f"FROM {qname(dev_db())}.event AS e WHERE e.event_id = %s LIMIT 1)"
         )
         filter_params.append(event_id)
@@ -7326,7 +7328,8 @@ def load_subscriber_match_candidate_rows(
             FROM {qname(work_other_db())}.hia_dashboard_status AS hds_latest
             WHERE hds_latest.is_active = 1
               AND (
-                hds_latest.subscribers_id = s.id
+                CONVERT(hds_latest.subscribers_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                  = CONVERT(s.id USING utf8mb4) COLLATE utf8mb4_unicode_ci
                 OR (
                   hds_latest.subscribers_id IS NULL
                   AND CONVERT(hds_latest.hia_subscriber_id USING utf8mb4) COLLATE utf8mb4_unicode_ci
