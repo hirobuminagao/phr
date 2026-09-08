@@ -31,11 +31,9 @@
     <div class="csv-data-check-folder-path-list">
       {% for folder in facility_folder_rows %}
       <div class="csv-data-check-folder-path-item">
+        <small>{{ folder.event_name or ('event ' ~ folder.event_id) }}{% if folder.is_current_template %} / このテンプレートを設定済み{% endif %}</small>
         <code id="csv-data-check-folder-path-{{ loop.index }}">{{ folder.facility_folder_copy_value }}</code>
         <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-data-check-folder-path-{{ loop.index }}">コピー</button>
-        {% if facility_folder_rows|length > 1 %}
-        <small>{{ folder.event_name or ('event ' ~ folder.event_id) }}{% if folder.is_current_template %} / このテンプレートを設定済み{% endif %}</small>
-        {% endif %}
       </div>
       {% else %}
       <code class="is-muted">alias未設定</code>

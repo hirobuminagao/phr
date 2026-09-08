@@ -108,13 +108,11 @@
       <div class="form-field csv-template-folder-path-field">
         <span>健診機関の受領フォルダパス</span>
         {% for folder in facility_folder_rows %}
+        <small class="csv-template-folder-event-name">{{ folder.event_name or ('event ' ~ folder.event_id) }}{% if folder.is_current_template %} / このテンプレートを設定済み{% endif %}</small>
         <span class="csv-template-folder-path-row">
           <code id="csv-template-folder-path-{{ loop.index }}">{{ folder.facility_folder_copy_value }}</code>
           <button type="button" class="ghost-button compact-action-button" data-copy-target="#csv-template-folder-path-{{ loop.index }}">コピー</button>
         </span>
-        {% if facility_folder_rows|length > 1 %}
-        <small>{{ folder.event_name or ('event ' ~ folder.event_id) }}{% if folder.is_current_template %} / このテンプレートを設定済み{% endif %}</small>
-        {% endif %}
         {% else %}
         <code class="is-muted">alias未設定</code>
         {% endfor %}
