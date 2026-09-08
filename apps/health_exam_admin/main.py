@@ -3370,6 +3370,8 @@ def safe_form_debug(form: dict[str, str]) -> dict[str, str]:
     for key, value in form.items():
         if key == CSRF_FIELD_NAME:
             safe[key] = "<csrf>"
+        elif "password" in key.lower() or key.lower() == "view_key":
+            safe[key] = "<redacted>"
         else:
             safe[key] = value
     return safe
@@ -6455,6 +6457,7 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
           COALESCE(ledger_counts.ng_count, 0) AS ng_count,
           COALESCE(ledger_counts.pending_count, 0) AS pending_count,
           fr.facility_code,
+          fr.submitter_facility_code,
           fr.facility_name,
           fr.exam_facility_id,
           fr.matched_csv_format_version_id,
@@ -6464,7 +6467,23 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
           fr.first_seen_at,
           fr.last_seen_at,
           fr.processed_at,
-          fr.updated_at
+          fr.updated_at,
+          EXISTS (
+            SELECT 1
+            FROM {qname(work_other_db())}.medi_zip_passwords AS mzp
+            WHERE mzp.is_active = 1
+              AND (
+                (mzp.scope_type = 'ZIP_SHA256' AND mzp.zip_sha256 = fr.file_sha256)
+                OR (mzp.scope_type = 'ZIP_NAME' AND mzp.zip_name = fr.file_name)
+                OR (
+                  mzp.scope_type = 'FACILITY'
+                  AND (
+                    mzp.facility_code IN (fr.facility_code, fr.submitter_facility_code)
+                    OR mzp.facility_folder_name = SUBSTRING_INDEX(REPLACE(fr.relative_path, CHAR(92), '/'), '/', 1)
+                  )
+                )
+              )
+          ) AS has_zip_password
         FROM {qname(health_db())}.file_receipts AS fr
         LEFT JOIN (
           SELECT
@@ -16052,8 +16071,285 @@ def file_receipts(request: Request) -> Response:
             "limit": limit,
             "event_options": event_options,
             "unknown_scan_folders": unknown_scan_folders,
+            "can_manage_zip_passwords": can_run_exam_processing(user),
+            "can_view_zip_passwords": has_permission(user, SYSTEM_SETTINGS_PERMISSION),
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
         },
     )
+
+
+@app.post("/file-receipts/{file_receipt_id}/zip-password")
+async def save_file_receipt_zip_password(request: Request, file_receipt_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_run_exam_processing(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+
+    form = await read_form(request)
+    scope_type = str(form.get("scope_type") or "ZIP_SHA256").strip().upper()
+    password_text = str(form.get("zip_password") or "")
+    note = str(form.get("note") or "").strip()
+    return_event_id = parse_positive_int(str(form.get("event_id") or "2"), default=2, maximum=999999)
+    if scope_type not in {"ZIP_SHA256", "ZIP_NAME", "FACILITY"}:
+        return RedirectResponse(
+            f"/file-receipts?event_id={return_event_id}&error={quote('パスワードの適用範囲が不正です。')}",
+            status_code=303,
+        )
+    if not password_text or len(password_text) > 255:
+        return RedirectResponse(
+            f"/file-receipts?event_id={return_event_id}&error={quote('パスワードを1〜255文字で入力してください。')}",
+            status_code=303,
+        )
+
+    params = load_mysql_base_params(db_prefix())
+    try:
+        with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            try:
+                cur.execute(
+                    f"""
+                    SELECT id, event_id, file_type, file_name, file_sha256, relative_path,
+                           facility_code, submitter_facility_code, facility_name, status
+                    FROM {qname(health_db())}.file_receipts
+                    WHERE id = %s
+                    FOR UPDATE
+                    """,
+                    (file_receipt_id,),
+                )
+                receipt = cur.fetchone()
+                if not receipt:
+                    raise ValueError("対象の受領ファイルが見つかりません。")
+                if str(receipt.get("file_type") or "").upper() != "ZIP":
+                    raise ValueError("ZIPファイルにのみパスワードを登録できます。")
+
+                relative_parts = [
+                    part for part in re.split(r"[\\/]+", str(receipt.get("relative_path") or "")) if part
+                ]
+                facility_folder = relative_parts[0] if relative_parts else None
+                facility_code = (
+                    str(receipt.get("facility_code") or "").strip()
+                    or str(receipt.get("submitter_facility_code") or "").strip()
+                    or None
+                )
+                if scope_type == "FACILITY" and not facility_code and not facility_folder:
+                    raise ValueError("健診機関を特定できないため、健診機関単位では登録できません。")
+
+                scope_values = {
+                    "facility_code": facility_code if scope_type == "FACILITY" else None,
+                    "facility_folder_name": facility_folder if scope_type == "FACILITY" else None,
+                    "zip_name": str(receipt.get("file_name") or "") if scope_type == "ZIP_NAME" else None,
+                    "zip_sha256": str(receipt.get("file_sha256") or "") if scope_type == "ZIP_SHA256" else None,
+                }
+                if scope_type == "ZIP_SHA256":
+                    match_sql = "scope_type = 'ZIP_SHA256' AND zip_sha256 = %s"
+                    match_params = (scope_values["zip_sha256"],)
+                    priority = 10
+                elif scope_type == "ZIP_NAME":
+                    match_sql, match_params = "scope_type = 'ZIP_NAME' AND zip_name = %s", (scope_values["zip_name"],)
+                    priority = 20
+                else:
+                    match_sql = "scope_type = 'FACILITY' AND facility_code <=> %s AND facility_folder_name <=> %s"
+                    match_params = (scope_values["facility_code"], scope_values["facility_folder_name"])
+                    priority = 30
+
+                cur.execute(
+                    f"""
+                    SELECT zip_password_id
+                    FROM {qname(work_other_db())}.medi_zip_passwords
+                    WHERE {match_sql}
+                    ORDER BY is_active DESC, priority, zip_password_id
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    match_params,
+                )
+                existing = cur.fetchone()
+                operator_note = f"画面登録: {user.get('employee_no') or '-'}"
+                stored_note = " / ".join(part for part in (note, operator_note) if part)[:255]
+                if existing:
+                    password_id = int(existing["zip_password_id"])
+                    cur.execute(
+                        f"""
+                        UPDATE {qname(work_other_db())}.medi_zip_passwords
+                        SET password_text = %s, priority = %s, is_active = 1, note = %s
+                        WHERE zip_password_id = %s
+                        """,
+                        (password_text, priority, stored_note, password_id),
+                    )
+                else:
+                    cur.execute(
+                        f"""
+                        INSERT INTO {qname(work_other_db())}.medi_zip_passwords (
+                          scope_type, facility_code, facility_folder_name, zip_name, zip_sha256,
+                          password_text, priority, is_active, note
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s)
+                        """,
+                        (
+                            scope_type,
+                            scope_values["facility_code"],
+                            scope_values["facility_folder_name"],
+                            scope_values["zip_name"],
+                            scope_values["zip_sha256"],
+                            password_text,
+                            priority,
+                            stored_note,
+                        ),
+                    )
+                    password_id = int(cur.lastrowid)
+
+                if audit_enabled(cur):
+                    log_audit(
+                        cur,
+                        request=request,
+                        user=user,
+                        action_code="SAVE_ZIP_PASSWORD",
+                        target_schema=work_other_db(),
+                        target_table="medi_zip_passwords",
+                        target_id=str(password_id),
+                        after={
+                            "file_receipt_id": file_receipt_id,
+                            "scope_type": scope_type,
+                            "password_registered": True,
+                        },
+                    )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                cur.close()
+    except ValueError as exc:
+        return RedirectResponse(
+            f"/file-receipts?event_id={return_event_id}&error={quote(str(exc))}",
+            status_code=303,
+        )
+
+    message = "ZIPパスワードを登録しました。WAITING_PASSWORDのファイルは次回のXML取り込みで再処理されます。"
+    return RedirectResponse(
+        f"/file-receipts?event_id={return_event_id}&message={quote(message)}",
+        status_code=303,
+    )
+
+
+@app.post("/api/file-receipts/{file_receipt_id}/zip-password/reveal")
+async def reveal_file_receipt_zip_password(request: Request, file_receipt_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return JSONResponse({"message": "ログインが必要です。"}, status_code=401)
+    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return JSONResponse({"message": "パスワードを表示する権限がありません。"}, status_code=403)
+
+    form = await read_form(request)
+    submitted_key = str(form.get("view_key") or "")
+    expected_key = os.getenv("PHR_ZIP_PASSWORD_VIEW_KEY", "5555") or "5555"
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            if not secrets.compare_digest(submitted_key, expected_key):
+                if audit_enabled(cur):
+                    log_audit(
+                        cur,
+                        request=request,
+                        user=user,
+                        action_code="REVEAL_ZIP_PASSWORD_DENIED",
+                        target_schema=health_db(),
+                        target_table="file_receipts",
+                        target_id=str(file_receipt_id),
+                        after={"reason": "VIEW_KEY_MISMATCH"},
+                    )
+                conn.commit()
+                return JSONResponse({"message": "確認キーが違います。"}, status_code=403)
+
+            cur.execute(
+                f"""
+                SELECT id, file_type, file_name, file_sha256, relative_path,
+                       facility_code, submitter_facility_code
+                FROM {qname(health_db())}.file_receipts
+                WHERE id = %s
+                """,
+                (file_receipt_id,),
+            )
+            receipt = cur.fetchone()
+            if not receipt or str(receipt.get("file_type") or "").upper() != "ZIP":
+                return JSONResponse({"message": "対象のZIPファイルが見つかりません。"}, status_code=404)
+
+            relative_parts = [
+                part for part in re.split(r"[\\/]+", str(receipt.get("relative_path") or "")) if part
+            ]
+            facility_folder = relative_parts[0] if relative_parts else None
+            facility_codes = [
+                value
+                for value in (
+                    str(receipt.get("facility_code") or "").strip(),
+                    str(receipt.get("submitter_facility_code") or "").strip(),
+                )
+                if value
+            ]
+            placeholders = ", ".join(["%s"] * len(facility_codes)) or "NULL"
+            cur.execute(
+                f"""
+                SELECT zip_password_id, scope_type, password_text
+                FROM {qname(work_other_db())}.medi_zip_passwords
+                WHERE is_active = 1
+                  AND (
+                    (scope_type = 'ZIP_SHA256' AND zip_sha256 = %s)
+                    OR (scope_type = 'ZIP_NAME' AND zip_name = %s)
+                    OR (
+                      scope_type = 'FACILITY'
+                      AND (
+                        facility_code IN ({placeholders})
+                        OR facility_folder_name = %s
+                      )
+                    )
+                  )
+                ORDER BY
+                  CASE scope_type
+                    WHEN 'ZIP_SHA256' THEN 1
+                    WHEN 'ZIP_NAME' THEN 2
+                    WHEN 'FACILITY' THEN 3
+                    ELSE 9
+                  END,
+                  priority,
+                  zip_password_id
+                LIMIT 1
+                """,
+                (
+                    str(receipt.get("file_sha256") or ""),
+                    str(receipt.get("file_name") or ""),
+                    *facility_codes,
+                    facility_folder,
+                ),
+            )
+            password_row = cur.fetchone()
+            if not password_row:
+                return JSONResponse({"message": "有効なパスワード設定が見つかりません。"}, status_code=404)
+            if audit_enabled(cur):
+                log_audit(
+                    cur,
+                    request=request,
+                    user=user,
+                    action_code="REVEAL_ZIP_PASSWORD",
+                    target_schema=work_other_db(),
+                    target_table="medi_zip_passwords",
+                    target_id=str(password_row["zip_password_id"]),
+                    after={"file_receipt_id": file_receipt_id, "scope_type": password_row["scope_type"]},
+                )
+            conn.commit()
+            return JSONResponse(
+                {
+                    "password": str(password_row.get("password_text") or ""),
+                    "scope_type": str(password_row.get("scope_type") or ""),
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
 
 
 @app.get("/hia/fund-delivery", response_class=HTMLResponse)

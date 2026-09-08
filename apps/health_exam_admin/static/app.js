@@ -82,9 +82,17 @@
           </div>` : `<small>${escapeHtml(error?.message || "")}</small>`}
       </div>`;
   };
-  const fetchJson = async (url) => {
+  const fetchJson = async (url, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    headers.set("Accept", "application/json");
+    const method = String(options.method || "GET").toUpperCase();
+    const token = cookieValue("phr_app_csrf");
+    if (token && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+      headers.set("x-csrf-token", token);
+    }
     const response = await fetch(url, {
-      headers: { Accept: "application/json" },
+      ...options,
+      headers,
     });
     let payload = null;
     let bodyText = "";
@@ -882,6 +890,90 @@
 
   for (const button of document.querySelectorAll("[data-modal-close]")) {
     button.addEventListener("click", () => closeModal(button.closest(".edit-modal")));
+  }
+
+  const zipPasswordModal = document.querySelector("[data-zip-password-modal]");
+  if (zipPasswordModal) {
+    const form = zipPasswordModal.querySelector("[data-zip-password-form]");
+    const target = zipPasswordModal.querySelector("[data-zip-password-target]");
+    const eventInput = zipPasswordModal.querySelector("[data-zip-password-event-id]");
+    for (const button of document.querySelectorAll("[data-zip-password-open]")) {
+      button.addEventListener("click", () => {
+        const receiptId = button.getAttribute("data-file-receipt-id") || "";
+        if (form) {
+          form.action = `/file-receipts/${encodeURIComponent(receiptId)}/zip-password`;
+          const passwordInput = form.querySelector("input[name='zip_password']");
+          const noteInput = form.querySelector("input[name='note']");
+          const scopeInput = form.querySelector("select[name='scope_type']");
+          if (passwordInput) passwordInput.value = "";
+          if (noteInput) noteInput.value = "";
+          if (scopeInput) scopeInput.value = "ZIP_SHA256";
+        }
+        if (eventInput) eventInput.value = button.getAttribute("data-event-id") || "2";
+        if (target) {
+          const fileName = button.getAttribute("data-file-name") || "-";
+          const facilityName = button.getAttribute("data-facility-name") || "未設定";
+          target.textContent = `${fileName} / ${facilityName}`;
+        }
+      });
+    }
+  }
+
+  const zipPasswordRevealModal = document.querySelector("[data-zip-password-reveal-modal]");
+  if (zipPasswordRevealModal) {
+    const form = zipPasswordRevealModal.querySelector("[data-zip-password-reveal-form]");
+    const target = zipPasswordRevealModal.querySelector("[data-zip-password-reveal-target]");
+    const result = zipPasswordRevealModal.querySelector("[data-zip-password-reveal-result]");
+    const value = zipPasswordRevealModal.querySelector("[data-zip-password-reveal-value]");
+    const scope = zipPasswordRevealModal.querySelector("[data-zip-password-reveal-scope]");
+    const errorRoot = zipPasswordRevealModal.querySelector("[data-zip-password-reveal-error]");
+    let receiptId = "";
+    const scopeLabels = {
+      ZIP_SHA256: "このファイルに設定",
+      ZIP_NAME: "同じファイル名に設定",
+      FACILITY: "健診機関に設定",
+    };
+    const clearReveal = () => {
+      const keyInput = form?.querySelector("input[name='view_key']");
+      if (keyInput) keyInput.value = "";
+      if (value) value.textContent = "";
+      if (scope) scope.textContent = "";
+      if (result) result.hidden = true;
+      if (errorRoot) {
+        errorRoot.hidden = true;
+        errorRoot.textContent = "";
+      }
+    };
+    for (const button of document.querySelectorAll("[data-zip-password-reveal-open]")) {
+      button.addEventListener("click", () => {
+        receiptId = button.getAttribute("data-file-receipt-id") || "";
+        clearReveal();
+        if (target) target.textContent = button.getAttribute("data-file-name") || "-";
+      });
+    }
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!receiptId) return;
+      if (result) result.hidden = true;
+      if (errorRoot) errorRoot.hidden = true;
+      try {
+        const payload = await fetchJson(
+          `/api/file-receipts/${encodeURIComponent(receiptId)}/zip-password/reveal`,
+          { method: "POST", body: new FormData(form) },
+        );
+        if (value) value.textContent = String(payload.password || "");
+        if (scope) scope.textContent = scopeLabels[payload.scope_type] || String(payload.scope_type || "");
+        if (result) result.hidden = false;
+      } catch (error) {
+        if (errorRoot) {
+          errorRoot.textContent = String(error?.message || "パスワードを表示できませんでした。");
+          errorRoot.hidden = false;
+        }
+      }
+    });
+    for (const closeButton of zipPasswordRevealModal.querySelectorAll("[data-modal-close]")) {
+      closeButton.addEventListener("click", clearReveal);
+    }
   }
 
   const exportExamItemModal = document.querySelector("[data-export-exam-item-modal]");

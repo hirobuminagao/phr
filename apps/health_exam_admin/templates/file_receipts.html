@@ -17,6 +17,8 @@
 </header>
 
 <main class="page">
+  {% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
   <section class="panel filter-panel">
     <div class="section-heading">
       <div>
@@ -56,6 +58,7 @@
           <button type="button" class="{{ 'is-active' if filters.status == 'DISCOVERED' else '' }}" data-server-filter-toggle="status" data-filter-value="DISCOVERED">DISCOVERED</button>
           <button type="button" class="{{ 'is-active' if filters.status == 'IMPORTED' else '' }}" data-server-filter-toggle="status" data-filter-value="IMPORTED">IMPORTED</button>
           <button type="button" class="{{ 'is-active' if filters.status == 'WAITING_CONFIRM' else '' }}" data-server-filter-toggle="status" data-filter-value="WAITING_CONFIRM">WAITING</button>
+          <button type="button" class="{{ 'is-active' if filters.status == 'WAITING_PASSWORD' else '' }}" data-server-filter-toggle="status" data-filter-value="WAITING_PASSWORD">パスワード待ち</button>
           <button type="button" class="{{ 'is-active' if filters.status == 'ERROR' else '' }}" data-server-filter-toggle="status" data-filter-value="ERROR">ERROR</button>
         </div>
       </fieldset>
@@ -139,6 +142,7 @@
             <th>状態</th>
             <th>scan/import</th>
             <th>メッセージ</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -171,16 +175,45 @@
               <strong>{{ row.facility_name or "未設定" }}</strong>
               <small>{{ row.facility_code or "" }}</small>
             </td>
-            <td><span class="status-pill {{ 'status-ready' if row.status == 'IMPORTED' else 'status-pending' if row.status == 'WAITING_CONFIRM' else 'status-muted' }}">{{ row.status }}</span></td>
+            <td><span class="status-pill {{ 'status-ready' if row.status == 'IMPORTED' else 'status-pending' if row.status in ['WAITING_CONFIRM', 'WAITING_PASSWORD'] else 'status-muted' }}">{{ row.status }}</span></td>
             <td>
               <strong>run {{ row.etl_run_id or "-" }}</strong>
               <small>初回 {{ row.first_seen_at or "-" }} / 処理 {{ row.processed_at or "-" }}</small>
             </td>
             <td><small>{{ row.summary_message or "" }}</small></td>
+            <td>
+              {% if row.file_type == 'ZIP' %}
+                <span class="status-pill {{ 'status-ready' if row.has_zip_password else 'status-muted' }}">
+                  {{ '設定済み' if row.has_zip_password else '未設定' }}
+                </span>
+                {% if can_manage_zip_passwords %}
+                <button
+                  type="button"
+                  class="ghost-button compact-action-button"
+                  data-modal-open="zip-password-modal"
+                  data-zip-password-open
+                  data-file-receipt-id="{{ row.id }}"
+                  data-event-id="{{ row.event_id }}"
+                  data-file-name="{{ row.file_name }}"
+                  data-facility-name="{{ row.facility_name or row.facility_code or '未設定' }}"
+                >{{ '変更' if row.has_zip_password else '設定' }}</button>
+                {% endif %}
+                {% if row.has_zip_password and can_view_zip_passwords %}
+                <button
+                  type="button"
+                  class="ghost-button compact-action-button"
+                  data-modal-open="zip-password-reveal-modal"
+                  data-zip-password-reveal-open
+                  data-file-receipt-id="{{ row.id }}"
+                  data-file-name="{{ row.file_name }}"
+                >表示</button>
+                {% endif %}
+              {% else %}-{% endif %}
+            </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="8">対象ファイルはありません。</td>
+            <td colspan="9">対象ファイルはありません。</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -188,4 +221,78 @@
     </div>
   </section>
 </main>
+
+{% if can_manage_zip_passwords %}
+<div id="zip-password-modal" class="edit-modal" hidden data-zip-password-modal>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <section class="edit-modal__panel manual-draft-delete-modal" role="dialog" aria-modal="true" aria-labelledby="zip-password-modal-title">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">ZIP PASSWORD</p>
+        <h2 id="zip-password-modal-title">ZIPパスワードを設定</h2>
+        <p class="subtle" data-zip-password-target></p>
+      </div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+    <form method="post" data-zip-password-form class="stack-form">
+      <input type="hidden" name="_csrf_token" value="">
+      <input type="hidden" name="event_id" value="{{ filters.event_id }}" data-zip-password-event-id>
+      <label>
+        <span>適用範囲</span>
+        <select name="scope_type">
+          <option value="ZIP_SHA256">このファイルだけ（推奨）</option>
+          <option value="ZIP_NAME">同じファイル名</option>
+          <option value="FACILITY">この健診機関</option>
+        </select>
+      </label>
+      <label>
+        <span>パスワード</span>
+        <input type="password" name="zip_password" maxlength="255" autocomplete="new-password" required data-modal-focus>
+      </label>
+      <label>
+        <span>メモ</span>
+        <input name="note" maxlength="180" placeholder="入手元や確認日など。パスワードは書かないでください">
+      </label>
+      <p class="subtle">パスワードの内容は画面・監査ログには表示しません。登録後の自動再実行は行いません。</p>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
+        <button type="submit" class="primary-button">登録</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endif %}
+
+{% if can_view_zip_passwords %}
+<div id="zip-password-reveal-modal" class="edit-modal" hidden data-zip-password-reveal-modal>
+  <div class="edit-modal__backdrop" data-modal-close></div>
+  <section class="edit-modal__panel manual-draft-delete-modal" role="dialog" aria-modal="true" aria-labelledby="zip-password-reveal-title">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">ADMIN ONLY</p>
+        <h2 id="zip-password-reveal-title">ZIPパスワードを表示</h2>
+        <p class="subtle" data-zip-password-reveal-target></p>
+      </div>
+      <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+    </div>
+    <form data-zip-password-reveal-form class="stack-form">
+      <label>
+        <span>確認キー</span>
+        <input type="password" name="view_key" inputmode="numeric" autocomplete="off" required data-modal-focus>
+      </label>
+      <div class="alert alert-error" hidden data-zip-password-reveal-error></div>
+      <div class="status-panel" hidden data-zip-password-reveal-result>
+        <small>登録パスワード</small>
+        <strong data-zip-password-reveal-value></strong>
+        <small data-zip-password-reveal-scope></small>
+      </div>
+      <p class="subtle">表示操作は成功・失敗とも監査ログへ記録します。</p>
+      <div class="edit-modal__actions">
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+        <button type="submit" class="primary-button">表示する</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endif %}
 {% endblock %}
