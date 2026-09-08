@@ -7827,6 +7827,40 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-template-conditional-summary small { display: block; }
 .csv-template-conditional-summary small { margin-top: 3px; color: var(--muted); }
 
+[data-csv-template-multi-target-list] {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.csv-template-multi-target-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  border: 1px solid #b8c8d8;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.csv-template-multi-target-chip.status-ready { border-color: #7fc6ad; background: #eaf8f2; }
+.csv-template-multi-target-chip.status-pending { border-color: #e2b967; background: #fff8e8; }
+.csv-template-multi-target-chip.is-focused { outline: 2px solid var(--primary); outline-offset: 1px; }
+.csv-template-multi-target-chip__focus,
+.csv-template-multi-target-chip__remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+}
+.csv-template-multi-target-chip__focus { align-self: stretch; padding: 6px 10px 6px 12px; }
+.csv-template-multi-target-chip__remove { align-self: stretch; width: 34px; border-left: 1px solid currentColor; font-size: 18px; }
+.csv-template-multi-target-chip__focus:hover,
+.csv-template-multi-target-chip__remove:hover { background: rgb(255 255 255 / 55%); }
+
 .csv-template-conditional-modal { z-index: 95; }
 .csv-template-conditional-modal__panel { width: min(900px, calc(100vw - 32px)); }
 .csv-template-conditional-blank,

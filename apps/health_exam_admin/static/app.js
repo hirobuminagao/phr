@@ -4620,6 +4620,10 @@
     const draftSaveMessage = document.querySelector("[data-csv-template-target-save-message]");
     const ruleEditButtons = Array.from(document.querySelectorAll("[data-csv-template-rule-edit]"));
     const ruleDeleteButtons = Array.from(document.querySelectorAll("[data-csv-template-rule-delete]"));
+    const ruleDeleteModal = document.querySelector("#csv-template-rule-delete-confirm-modal");
+    const ruleDeleteConfirmLabel = ruleDeleteModal?.querySelector("[data-csv-template-rule-delete-confirm-label]");
+    const ruleDeleteConfirmButton = ruleDeleteModal?.querySelector("[data-csv-template-rule-delete-confirm]");
+    let activeRuleDeleteButton = null;
     const headerSearchInput = csvTemplateTargetModal.querySelector("[data-csv-template-header-search-input]");
     const headerCandidateList = csvTemplateTargetModal.querySelector("[data-csv-template-header-candidate-list]");
     const headerCandidateCards = Array.from(csvTemplateTargetModal.querySelectorAll("[data-csv-template-header-candidate]"));
@@ -4638,6 +4642,8 @@
     const modalTitle = csvTemplateTargetModal.querySelector("#csv-template-target-item-title");
     const modalLead = csvTemplateTargetModal.querySelector(".edit-modal__head .subtle");
     const conditionalSummary = csvTemplateTargetModal.querySelector("[data-csv-template-conditional-summary]");
+    const multiTargetSummary = csvTemplateTargetModal.querySelector("[data-csv-template-multi-target-summary]");
+    const multiTargetList = csvTemplateTargetModal.querySelector("[data-csv-template-multi-target-list]");
     const conditionalSummaryText = csvTemplateTargetModal.querySelector("[data-csv-template-conditional-summary-text]");
     const conditionalOpenButton = csvTemplateTargetModal.querySelector("[data-csv-template-conditional-open]");
     const conditionalBranchesElement = conditionalModal?.querySelector("[data-csv-template-conditional-branches]");
@@ -4661,6 +4667,7 @@
     let editingRuleIds = [];
     let editingGroupCode = "";
     let conditionalConfig = { blankPolicy: "SKIP", blankOutputValue: "", branches: [] };
+    let multiTargets = [];
     let conditionalWorking = null;
     let searchTimer = null;
     const templateIdMatch = window.location.pathname.match(/\/admin\/csv-mapping-templates\/(\d+)\/edit/);
@@ -4692,6 +4699,28 @@
         : [],
     });
 
+    const rememberMultiTargetConfig = () => {
+      if (targetMode !== "multi-target" || !focusedItem) return;
+      const selected = multiTargets.find((item) => item.namecode === focusedItem.namecode);
+      if (selected) selected.conditional = cloneConditionalConfig(conditionalConfig);
+    };
+
+    const renderMultiTargetSummary = () => {
+      if (!multiTargetSummary || !multiTargetList) return;
+      multiTargetSummary.hidden = targetMode !== "multi-target";
+      if (targetMode !== "multi-target") return;
+      multiTargetList.innerHTML = multiTargets.length
+        ? multiTargets.map((item) => {
+          const type = String(item.xml_value_type || "").toUpperCase();
+          const ready = !["CD", "CO"].includes(type) || Boolean(item.conditional?.branches?.length);
+          return `<span class="csv-template-multi-target-chip ${ready ? "status-ready" : "status-pending"}${focusedItem?.namecode === item.namecode ? " is-focused" : ""}">
+            <button type="button" class="csv-template-multi-target-chip__focus" data-csv-template-multi-target-focus="${escapeHtml(item.namecode)}">${escapeHtml(item.item_name || item.namecode)} / ${escapeHtml(type)}${ready ? "" : "（条件未設定）"}</button>
+            <button type="button" class="csv-template-multi-target-chip__remove" data-csv-template-multi-target-remove="${escapeHtml(item.namecode)}" aria-label="${escapeHtml(item.item_name || item.namecode)}を外す">×</button>
+          </span>`;
+        }).join(" ")
+        : "項目を2つ以上選択してください。";
+    };
+
     const conditionalCodeOptions = () => {
       if (!focusedItem || !["CD", "CO"].includes(String(focusedItem.xml_value_type || "").toUpperCase())) return [];
       const rows = Array.isArray(focusedItem.standard_code_rows) ? focusedItem.standard_code_rows : [];
@@ -4717,8 +4746,11 @@
 
     const renderConditionalSummary = () => {
       if (!conditionalSummary) return;
-      conditionalSummary.hidden = targetMode !== "conditional";
-      if (targetMode !== "conditional") return;
+      const multiTargetConditional = targetMode === "multi-target"
+        && focusedItem
+        && ["CD", "CO"].includes(String(focusedItem.xml_value_type || "").toUpperCase());
+      conditionalSummary.hidden = targetMode !== "conditional" && !multiTargetConditional;
+      if (conditionalSummary.hidden) return;
       const blankLabel = conditionalConfig.blankPolicy === "OUTPUT"
         ? `空欄: ${conditionalConfig.blankOutputValue || "登録値未設定"}を出力`
         : "空欄: 出力しない";
@@ -4726,7 +4758,7 @@
       const branchLabel = conditionalConfig.branches.length
         ? conditionalConfig.branches.map((branch) => `${branch.expectedValue}${operatorLabels[branch.operator] || ""} → ${branch.outputValue || "未設定"}`).join(" / ")
         : "条件未設定";
-      if (conditionalSummaryText) conditionalSummaryText.textContent = `${blankLabel} / ${branchLabel}`;
+      if (conditionalSummaryText) conditionalSummaryText.textContent = `${multiTargetConditional ? `${focusedItem.item_name || focusedItem.namecode}: ` : ""}${blankLabel} / ${branchLabel}`;
       if (conditionalOpenButton) conditionalOpenButton.textContent = conditionalConfig.branches.length ? "条件を変更" : "条件を設定";
     };
 
@@ -4780,7 +4812,7 @@
       conditionalWorking = null;
     };
 
-    const saveTemplateMappingItem = async (item, button) => {
+    const saveTemplateMappingItems = async (items, button) => {
       if (!csvTemplateId) {
         setComposerMessage("先に基本情報を保存してください。");
         return;
@@ -4789,12 +4821,13 @@
         button.disabled = true;
         button.classList.add("disabled");
       }
-      setComposerMessage(item.ruleId ? "変更を保存中..." : "マッピングを保存中...");
+      const editing = items.some((item) => item.ruleId);
+      setComposerMessage(editing ? "変更を保存中..." : "マッピングを保存中...");
       try {
         const payload = await postJson(`/api/admin/csv-mapping-templates/${csvTemplateId}/screen-rules`, {
-          items: [item],
+          items,
         });
-        const message = payload?.message || (item.ruleId ? "マッピングを変更しました。" : "マッピングを追加しました。");
+        const message = payload?.message || (editing ? "マッピングを変更しました。" : `${items.length}項目のマッピングを追加しました。`);
         window.location.href = `${window.location.pathname}?message=${encodeURIComponent(message)}`;
       } catch (error) {
         setComposerMessage(error.message || "保存でエラーが発生しました。");
@@ -4804,6 +4837,8 @@
         }
       }
     };
+
+    const saveTemplateMappingItem = (item, button) => saveTemplateMappingItems([item], button);
 
     const updateDraftSaveState = () => {
       if (!draftSaveButton) return;
@@ -4822,6 +4857,7 @@
       editingRuleIds = [];
       editingGroupCode = "";
       conditionalConfig = { blankPolicy: "SKIP", blankOutputValue: "", branches: [] };
+      multiTargets = [];
       selectedHeaders = [];
       setTargetKind(nextKind);
     };
@@ -4934,6 +4970,7 @@
           : "CDまたはCOの健診項目を選択すると設定できます";
       }
       renderConditionalSummary();
+      renderMultiTargetSummary();
       if (detailToggle) {
         detailToggle.disabled = !selectedTarget();
         detailToggle.classList.toggle("disabled", !selectedTarget());
@@ -4941,7 +4978,11 @@
       if (selectedCount) selectedCount.textContent = `${selectedHeaders.length}件`;
       if (applyButton) {
         const conditionalReady = targetMode !== "conditional" || conditionalConfig.branches.length > 0;
-        const disabled = !selectedTarget() || selectedHeaders.length === 0 || !conditionalReady;
+        const multiTargetReady = targetMode !== "multi-target" || (
+          multiTargets.length >= 2
+          && multiTargets.every((item) => !["CD", "CO"].includes(String(item.xml_value_type || "").toUpperCase()) || item.conditional?.branches?.length)
+        );
+        const disabled = !selectedTarget() || selectedHeaders.length === 0 || !conditionalReady || !multiTargetReady;
         applyButton.disabled = disabled;
         applyButton.classList.toggle("disabled", disabled);
       }
@@ -4967,7 +5008,9 @@
         return;
       }
       results.innerHTML = targetItems.map((item) => {
-        const isSelected = focusedItem && focusedItem.namecode === item.namecode;
+        const isSelected = targetMode === "multi-target"
+          ? multiTargets.some((selected) => selected.namecode === item.namecode)
+          : focusedItem && focusedItem.namecode === item.namecode;
         const meta = [item.namecode, item.xml_value_type, item.display_unit, item.method_name].filter(Boolean).join(" / ");
         return `
           <button type="button" class="csv-mapping-exam-item-option${isSelected ? " is-selected" : ""}" data-csv-template-target-namecode="${escapeHtml(item.namecode || "")}">
@@ -5017,6 +5060,21 @@
     const selectTemplateTargetItem = (namecode) => {
       const item = targetItems.find((candidate) => candidate.namecode === namecode);
       if (!item) return;
+      if (targetMode === "multi-target") {
+        rememberMultiTargetConfig();
+        let selected = multiTargets.find((candidate) => candidate.namecode === namecode);
+        if (!selected) {
+          selected = { ...item, conditional: { blankPolicy: "SKIP", blankOutputValue: "", branches: [] } };
+          multiTargets.push(selected);
+        }
+        focusedItem = item;
+        focusedLedger = null;
+        conditionalConfig = cloneConditionalConfig(selected.conditional);
+        renderTargetDetail(item);
+        renderSelectedTargets();
+        renderTargetResults();
+        return;
+      }
       if (focusedItem?.namecode && focusedItem.namecode !== item.namecode) {
         conditionalConfig = { blankPolicy: "SKIP", blankOutputValue: "", branches: [] };
       }
@@ -5275,9 +5333,17 @@
       button.addEventListener("click", () => {
         const nextMode = button.getAttribute("data-csv-template-target-mode") || "one";
         if (nextMode === "conditional" && button.disabled) return;
+        rememberMultiTargetConfig();
         targetMode = nextMode;
+        if (targetMode === "multi-target") {
+          if (focusedItem && !multiTargets.some((item) => item.namecode === focusedItem.namecode)) {
+            multiTargets = [{ ...focusedItem, conditional: cloneConditionalConfig(conditionalConfig) }];
+          }
+        } else {
+          multiTargets = [];
+        }
         modeButtons.forEach((modeButton) => modeButton.classList.toggle("is-selected", modeButton === button));
-        if (["one", "conditional"].includes(targetMode) && selectedHeaders.length > 1) {
+        if (["one", "conditional", "multi-target"].includes(targetMode) && selectedHeaders.length > 1) {
           selectedHeaders = selectedHeaders.slice(0, 1);
         }
         renderSelectedTargets();
@@ -5393,7 +5459,7 @@
       const alreadySelected = selectedHeaders.some((selected) => selected.columnNo === header.columnNo);
       if (alreadySelected) {
         selectedHeaders = selectedHeaders.filter((selected) => selected.columnNo !== header.columnNo);
-      } else if (["one", "conditional"].includes(targetMode)) {
+      } else if (["one", "conditional", "multi-target"].includes(targetMode)) {
         selectedHeaders = [header];
       } else {
         selectedHeaders = [...selectedHeaders, header];
@@ -5411,6 +5477,36 @@
       selectedHeaders = selectedHeaders.filter((header) => header.columnNo !== removeButton.getAttribute("data-csv-template-target-remove"));
       renderSelectedTargets();
       renderHeaderCandidateCards();
+    });
+
+    multiTargetList?.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const remove = target.closest("[data-csv-template-multi-target-remove]");
+      if (remove) {
+        const namecode = remove.getAttribute("data-csv-template-multi-target-remove") || "";
+        multiTargets = multiTargets.filter((item) => item.namecode !== namecode);
+        if (focusedItem?.namecode === namecode) {
+          const next = multiTargets[0] || null;
+          focusedItem = next;
+          conditionalConfig = cloneConditionalConfig(next?.conditional || {});
+          renderTargetDetail(next);
+        }
+        renderSelectedTargets();
+        renderTargetResults();
+        return;
+      }
+      const focus = target.closest("[data-csv-template-multi-target-focus]");
+      if (!focus) return;
+      const namecode = focus.getAttribute("data-csv-template-multi-target-focus") || "";
+      rememberMultiTargetConfig();
+      const item = multiTargets.find((candidate) => candidate.namecode === namecode);
+      if (!item) return;
+      focusedItem = item;
+      conditionalConfig = cloneConditionalConfig(item.conditional);
+      renderTargetDetail(item);
+      renderSelectedTargets();
+      renderTargetResults();
     });
 
     conditionalOpenButton?.addEventListener("click", openConditionalModal);
@@ -5465,12 +5561,37 @@
         return;
       }
       conditionalConfig = cloneConditionalConfig(conditionalWorking);
+      rememberMultiTargetConfig();
       closeConditionalModal();
       renderSelectedTargets();
       setComposerMessage("条件を反映しました。続けて「変更を保存」を押してください。");
     });
 
     applyButton?.addEventListener("click", () => {
+      rememberMultiTargetConfig();
+      if (targetMode === "multi-target") {
+        if (!selectedHeaders.length || multiTargets.length < 2) return;
+        const items = multiTargets.map((item) => {
+          const valueType = String(item.xml_value_type || "").toUpperCase();
+          const conditional = ["CD", "CO"].includes(valueType);
+          return {
+            ruleId: null,
+            ruleIds: [],
+            groupCode: "",
+            mode: conditional ? "conditional" : "one",
+            targetKind: "EXAM_ITEM_VALUE",
+            targetName: item.item_name,
+            targetCode: item.namecode,
+            targetMeta: `${item.namecode || "-"} / ${item.category_name || "-"} / ${item.xml_value_type || "-"}`,
+            targetCategory: item.category_name || "",
+            targetValueType: item.xml_value_type || "",
+            headers: [...selectedHeaders],
+            conditional: conditional ? cloneConditionalConfig(item.conditional) : null,
+          };
+        });
+        saveTemplateMappingItems(items, applyButton);
+        return;
+      }
       const target = selectedTarget();
       if (!target || !selectedHeaders.length) return;
       const targetName = targetKind === "LEDGER_FIELD" ? focusedLedger.label : focusedItem.item_name;
@@ -5539,19 +5660,40 @@
       });
     });
 
+    const closeRuleDeleteModal = () => {
+      if (ruleDeleteModal) ruleDeleteModal.hidden = true;
+      activeRuleDeleteButton = null;
+    };
+
     ruleDeleteButtons.forEach((button) => {
-      button.addEventListener("click", async () => {
-        const ruleId = button.getAttribute("data-csv-template-rule-delete") || "";
-        if (!csvTemplateId || !ruleId) return;
+      button.addEventListener("click", () => {
         const label = button.getAttribute("data-csv-template-rule-delete-label") || "このルール";
-        if (!window.confirm(`${label} を削除します。よろしいですか？`)) return;
+        activeRuleDeleteButton = button;
+        if (ruleDeleteConfirmLabel) ruleDeleteConfirmLabel.textContent = label;
+        if (ruleDeleteModal) ruleDeleteModal.hidden = false;
+      });
+    });
+
+    ruleDeleteModal?.querySelectorAll("[data-csv-template-rule-delete-cancel]").forEach((button) => {
+      button.addEventListener("click", closeRuleDeleteModal);
+    });
+
+    ruleDeleteConfirmButton?.addEventListener("click", async () => {
+        const button = activeRuleDeleteButton;
+        const ruleId = button?.getAttribute("data-csv-template-rule-delete") || "";
+        if (!button || !csvTemplateId || !ruleId) return;
         button.disabled = true;
         button.classList.add("disabled");
+        ruleDeleteConfirmButton.disabled = true;
         setComposerMessage("マッピングルールを削除中...");
         try {
+          const token = cookieValue("phr_app_csrf");
           const response = await fetch(`/api/admin/csv-mapping-templates/${csvTemplateId}/screen-rules/${encodeURIComponent(ruleId)}`, {
             method: "DELETE",
-            headers: { Accept: "application/json" },
+            headers: {
+              Accept: "application/json",
+              ...(token ? { "x-csrf-token": token } : {}),
+            },
           });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(payload.message || "削除でエラーが発生しました。");
@@ -5561,8 +5703,8 @@
           setComposerMessage(error.message || "削除でエラーが発生しました。");
           button.disabled = false;
           button.classList.remove("disabled");
+          ruleDeleteConfirmButton.disabled = false;
         }
-      });
     });
 
     csvTemplateTargetModal.addEventListener("click", (event) => {

@@ -402,7 +402,7 @@
       <div>
         <p class="eyebrow">Mapping Target</p>
         <h2 id="csv-template-target-item-title">登録先項目を追加</h2>
-        <p class="subtle">追加する健診項目を1つ選び、方式を決めてCSVヘッダー候補をセットします。</p>
+        <p class="subtle">方式を選び、取り込み先の健診項目とCSVヘッダー候補をセットします。</p>
       </div>
       <button type="button" class="ghost-button" data-modal-close>閉じる</button>
     </div>
@@ -414,6 +414,7 @@
           <button type="button" class="is-selected" data-csv-template-target-mode="one">1:1</button>
           <button type="button" data-csv-template-target-mode="many">n:1 結合</button>
           <button type="button" data-csv-template-target-mode="conditional">条件分岐</button>
+          <button type="button" data-csv-template-target-mode="multi-target">1:n 複数項目</button>
         </div>
         <button type="button" class="ghost-button csv-template-detail-toggle" data-csv-template-target-detail-toggle disabled>項目詳細</button>
       </div>
@@ -424,6 +425,13 @@
           <small data-csv-template-conditional-summary-text>条件を設定してください。</small>
         </div>
         <button type="button" class="ghost-button" data-csv-template-conditional-open>条件を設定</button>
+      </section>
+
+      <section class="csv-template-conditional-summary" data-csv-template-multi-target-summary hidden>
+        <div>
+          <strong>選択済みターゲット</strong>
+          <small data-csv-template-multi-target-list>項目を2つ以上選択してください。</small>
+        </div>
       </section>
 
       <div class="csv-template-composer-layout">
@@ -641,6 +649,28 @@
     <div class="edit-modal__actions csv-template-composer-actions">
       <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
       <button type="button" class="primary-button" data-csv-template-ledger-apply disabled>マッピングに追加</button>
+    </div>
+  </section>
+</div>
+
+<div id="csv-template-rule-delete-confirm-modal" class="edit-modal" hidden>
+  <div class="edit-modal__backdrop" data-csv-template-rule-delete-cancel></div>
+  <section class="edit-modal__panel manual-draft-delete-modal" role="dialog" aria-modal="true" aria-labelledby="csv-template-rule-delete-confirm-title">
+    <div class="edit-modal__head">
+      <div>
+        <p class="eyebrow">DELETE MAPPING</p>
+        <h2 id="csv-template-rule-delete-confirm-title">マッピングを削除します</h2>
+        <p class="subtle">条件分岐の場合は、同じ条件グループのルールをまとめて削除します。</p>
+      </div>
+      <button type="button" class="ghost-button" data-csv-template-rule-delete-cancel>閉じる</button>
+    </div>
+    <div class="status-panel status-panel--danger">
+      <strong data-csv-template-rule-delete-confirm-label>マッピング</strong>
+      <p class="subtle">このマッピングを削除してよろしいですか？</p>
+    </div>
+    <div class="edit-modal__actions">
+      <button type="button" class="ghost-button" data-csv-template-rule-delete-cancel>キャンセル</button>
+      <button type="button" class="danger-button" data-csv-template-rule-delete-confirm>削除する</button>
     </div>
   </section>
 </div>

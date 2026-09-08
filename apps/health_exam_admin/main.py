@@ -20640,6 +20640,7 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
             has_edit_capability = manual_exam_entry_column_exists(
                 cur, master_db(), "csv_exam_result_mapping_rules", "edit_capability"
             )
+            requested_target_keys: set[tuple[str, str]] = set()
             for index, item in enumerate(items, start=1):
                 if not isinstance(item, Mapping):
                     continue
@@ -20687,6 +20688,48 @@ async def api_save_csv_mapping_template_screen_rules(request: Request, csv_forma
                     continue
                 if target_kind == "EXAM_ITEM_VALUE" and not re.fullmatch(r"[0-9A-Z]{17}", target_code):
                     continue
+                target_key = (target_kind, target_code)
+                if target_key in requested_target_keys:
+                    conn.rollback()
+                    return JSONResponse(
+                        {"message": f"同じ取り込み先が複数指定されています: {item.get('targetName') or target_code}"},
+                        status_code=409,
+                    )
+                requested_target_keys.add(target_key)
+                requested_rule_ids = item.get("ruleIds")
+                if requested_rule_ids is not None and not isinstance(requested_rule_ids, list):
+                    conn.rollback()
+                    return JSONResponse({"message": "変更対象のルールIDを読み取れません。"}, status_code=400)
+                editable_rule_ids = [
+                    value for value in (_optional_int(candidate) for candidate in (requested_rule_ids or [])) if value
+                ]
+                if rule_id and rule_id not in editable_rule_ids:
+                    editable_rule_ids.append(rule_id)
+                target_column = "target_namecode" if target_kind == "EXAM_ITEM_VALUE" else "target_field"
+                exclusion_sql = ""
+                conflict_params: list[Any] = [csv_format_version_id, target_kind, target_code]
+                if editable_rule_ids:
+                    exclusion_sql = f" AND `csv_exam_result_mapping_rule_id` NOT IN ({', '.join(['%s'] * len(editable_rule_ids))})"
+                    conflict_params.extend(editable_rule_ids)
+                cur.execute(
+                    f"""
+                    SELECT `csv_exam_result_mapping_rule_id`
+                    FROM {qname(master_db())}.`csv_exam_result_mapping_rules`
+                    WHERE `csv_format_version_id` = %s
+                      AND `target_kind` = %s
+                      AND `{target_column}` = %s
+                      AND `is_active` = 1
+                      {exclusion_sql}
+                    LIMIT 1
+                    """,
+                    tuple(conflict_params),
+                )
+                if cur.fetchone():
+                    conn.rollback()
+                    return JSONResponse(
+                        {"message": f"取り込み先「{item.get('targetName') or target_code}」には既に有効なマッピングがあります。既存ルールを編集または削除してください。"},
+                        status_code=409,
+                    )
                 target_part = csv_mapping_screen_rule_key_part(target_code)
                 rule_key = f"screen.{csv_format_version_id}.{target_kind.lower()}.{target_part}.{datetime.now().strftime('%Y%m%d%H%M%S%f')}.{index}"
                 method_structure_type = "MULTI_COLUMN_JOIN" if mode == "many" else "SINGLE_COLUMN"
@@ -21172,7 +21215,7 @@ async def api_delete_csv_mapping_template_screen_rule(
                 target_schema=master_db(),
                 target_table="csv_exam_result_mapping_rules",
                 target_id=str(rule_id),
-                before={"rule": dict(rule), "deleted_rule_ids": delete_rule_ids},
+                after={"deleted_rule": dict(rule), "deleted_rule_ids": delete_rule_ids},
             )
             conn.commit()
         except Exception:
