@@ -308,10 +308,27 @@ BASIC_INFO_CORRECTION_FIELDS: dict[str, dict[str, Any]] = {
         "case_reason_column": "address_completion_reason",
     },
 }
+
+
+def excel_column_label(column_no: Any) -> str:
+    try:
+        number = int(column_no)
+    except (TypeError, ValueError):
+        return "-"
+    if number < 1:
+        return "-"
+    label = ""
+    while number:
+        number, remainder = divmod(number - 1, 26)
+        label = chr(65 + remainder) + label
+    return label
+
+
 app = FastAPI(title="PHR Health Exam Admin")
 app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
 templates = Jinja2Templates(directory=APP_ROOT / "templates")
 templates.env.filters["url_quote"] = lambda value: quote(str(value or ""), safe="")
+templates.env.filters["excel_column"] = excel_column_label
 templates.env.globals["static_asset_version"] = max(
     (APP_ROOT / "static" / "app.css").stat().st_mtime_ns,
     (APP_ROOT / "static" / "app.js").stat().st_mtime_ns,

@@ -50,6 +50,17 @@
     '"': "&quot;",
     "'": "&#39;",
   }[char]));
+  const excelColumnLabel = (columnNo) => {
+    let number = Number.parseInt(String(columnNo || ""), 10);
+    if (!Number.isFinite(number) || number < 1) return "-";
+    let label = "";
+    while (number > 0) {
+      number -= 1;
+      label = String.fromCharCode(65 + (number % 26)) + label;
+      number = Math.floor(number / 26);
+    }
+    return label;
+  };
   const createApiError = (response, payload, bodyText) => {
     const detail = payload?.message || payload?.detail || bodyText.slice(0, 160);
     const error = new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
@@ -4994,7 +5005,7 @@
         <article class="csv-template-target-selected-card">
           <div>
             <strong>${escapeHtml(header.headerName || "-")}</strong>
-            <small>${escapeHtml(header.columnNo || "-")}列目 / ${escapeHtml(header.headerContext || "contextなし")}</small>
+            <small>${escapeHtml(header.columnNo || "-")}列目（${escapeHtml(excelColumnLabel(header.columnNo))}列） / ${escapeHtml(header.headerContext || "contextなし")}</small>
           </div>
           <button type="button" class="ghost-button compact-action-button" data-csv-template-target-remove="${escapeHtml(header.columnNo || "")}">外す</button>
         </article>
@@ -5182,7 +5193,7 @@
         <article class="csv-template-target-selected-card">
           <div>
             <strong>${escapeHtml(header.headerName || "-")}</strong>
-            <small>${escapeHtml(header.columnNo || "-")}列目 / ${escapeHtml(header.headerContext || "contextなし")}</small>
+            <small>${escapeHtml(header.columnNo || "-")}列目（${escapeHtml(excelColumnLabel(header.columnNo))}列） / ${escapeHtml(header.headerContext || "contextなし")}</small>
           </div>
           <button type="button" class="ghost-button compact-action-button" data-csv-template-ledger-header-remove="${escapeHtml(header.columnNo || "")}">外す</button>
         </article>

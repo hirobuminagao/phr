@@ -481,7 +481,7 @@
                 data-header-context="{{ column.context or column.header_context or '' }}"
                 data-filter-text="{{ column.column_no }} {{ column.name or column.header_name or '' }} {{ column.context or column.header_context or '' }} {{ column.context_summary or '' }}"
               >
-                <span>{{ column.column_no }}列目</span>
+                <span>{{ column.column_no }}列目（{{ column.column_no|excel_column }}列）</span>
                 <strong>{{ column.name or column.header_name or "-" }}</strong>
                 <small>{{ column.context or column.header_context or "contextなし" }}</small>
               </button>
@@ -623,7 +623,7 @@
                 data-header-context="{{ column.context or column.header_context or '' }}"
                 data-filter-text="{{ column.column_no }} {{ column.name or column.header_name or '' }} {{ column.context or column.header_context or '' }} {{ column.context_summary or '' }}"
               >
-                <span>{{ column.column_no }}列目</span>
+                <span>{{ column.column_no }}列目（{{ column.column_no|excel_column }}列）</span>
                 <strong>{{ column.name or column.header_name or "-" }}</strong>
                 <small>{{ column.context or column.header_context or "contextなし" }}</small>
               </button>
