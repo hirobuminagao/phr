@@ -20366,6 +20366,16 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
+            existing_template = load_csv_mapping_template_detail(
+                cur,
+                csv_format_version_id=csv_format_version_id,
+            )
+            if not existing_template:
+                conn.rollback()
+                return RedirectResponse(
+                    f"/admin/csv-mapping-templates?error={quote(f'csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。')}",
+                    status_code=303,
+                )
             cur.execute(
                 f"""
                 UPDATE {qname(master_db())}.`csv_format_versions`
@@ -20393,12 +20403,6 @@ async def update_admin_csv_mapping_template(request: Request, csv_format_version
                     csv_format_version_id,
                 ),
             )
-            if cur.rowcount == 0:
-                conn.rollback()
-                return RedirectResponse(
-                    f"/admin/csv-mapping-templates?error={quote(f'csv_format_version_id={csv_format_version_id} のテンプレートが見つかりません。')}",
-                    status_code=303,
-                )
             header_import_result = None
             if csv_file_name:
                 template_for_header_import = {
