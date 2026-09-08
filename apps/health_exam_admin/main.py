@@ -21019,8 +21019,10 @@ async def toggle_admin_csv_mapping_template_active(request: Request, csv_format_
                 target_schema=master_db(),
                 target_table="csv_format_versions",
                 target_id=str(csv_format_version_id),
-                before=before,
-                after={"is_active": next_active},
+                after={
+                    "before": before,
+                    "after": {"is_active": next_active},
+                },
             )
             conn.commit()
         except Exception:
@@ -21104,8 +21106,10 @@ async def assign_admin_csv_mapping_template_alias(request: Request, csv_format_v
                 target_schema=master_db(),
                 target_table="medical_folder_aliases",
                 target_id=str(alias_id),
-                before=before,
-                after={"csv_format_version_id": csv_format_version_id},
+                after={
+                    "before": before,
+                    "after": {"csv_format_version_id": csv_format_version_id},
+                },
             )
             conn.commit()
         except Exception:
