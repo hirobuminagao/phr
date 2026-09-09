@@ -1,5 +1,8 @@
+import pytest
+
 from apps.health_exam_admin.main import (
     create_external_feedback_item_detail,
+    ensure_external_feedback_report_editable,
     external_feedback_detail_type_from_form,
 )
 
@@ -57,3 +60,12 @@ def test_exam_item_detail_requires_namecode() -> None:
         assert "namecode" in str(exc)
     else:
         raise AssertionError("namecodeなしの健診項目が登録されました")
+
+
+def test_carried_over_report_is_read_only() -> None:
+    with pytest.raises(ValueError, match="変更できません"):
+        ensure_external_feedback_report_editable({"report_status": "CARRIED_OVER"})
+
+
+def test_active_report_is_editable() -> None:
+    ensure_external_feedback_report_editable({"report_status": "IN_PROGRESS"})

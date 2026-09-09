@@ -303,8 +303,13 @@ DB実数ベースは運用途中の累積値であり、未受領・未処理の
 | --- | --- |
 | case総数 | 選択イベントの `exam_export_cases` 件数 |
 | 施設数 | caseに存在する `exam_facility_id` の異なり数 |
-| 法定NG | `check_status = NG` のcase件数 |
-| NG施設 | 法定NG caseに存在する健診機関の異なり数 |
+| XML法定NG | XML ledgerごとの最新sourceチェックが `legal_check_result = NG` の件数。CSV補完や理由ありOKでcaseが解消しても残る |
+| CSV法定NG | CSV ledgerごとの最新sourceチェックが `legal_check_result = NG` の件数 |
+| CSVで補完 | XML sourceが法定NG、CSV sourceを併用し、現在のcase法定チェックがNGではないcase件数 |
+| NG施設 | XML法定NG ledgerに存在する健診機関の異なり数 |
+| 現在も法定NG | 現在のACTIVE caseで `check_status = NG` の件数。現在の滞留確認用であり、工数の発生率には使わない |
+
+結果修正のDB実数にはXML法定NGとCSV法定NGの合計を使う。これは人単位ではなく、実際に確認対象となった受領ledger単位の作業発生数である。
 | 理由ありOK | `export_readiness_status = APPROVED_WITH_REASON` のcase件数 |
 | 紙のみ | `entry_purpose = PAPER_ONLY` かつ正式ledger反映済みの手入力件数 |
 | 補正手入力 | `entry_purpose = SUPPLEMENT` かつ正式ledger反映済みの手入力件数 |

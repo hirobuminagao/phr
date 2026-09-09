@@ -1699,6 +1699,7 @@ def external_feedback_status_label(status: str | None) -> str:
         "RESOLVED": "解決済み",
         "CLOSED": "クローズ",
         "CANCELLED": "取消",
+        "CARRIED_OVER": "引き継ぎ済み",
         "CONFIRMED": "確認済み",
         "FIX_PLANNED": "修正予定",
         "WAITING_RESUBMISSION": "再提出待ち",
@@ -2814,6 +2815,8 @@ def load_external_feedback_report_rows(cur: Any, *, limit: int = 80) -> list[dic
           fdl.list_name AS fund_delivery_list_name,
           r.fund_delivery_run_id,
           fdr.output_zip_name AS fund_delivery_zip_name,
+          r.copied_from_report_id,
+          r.carried_over_to_report_id,
           r.created_by,
           r.created_at,
           COUNT(i.external_feedback_item_id) AS item_count,
@@ -2848,6 +2851,8 @@ def load_external_feedback_report_rows(cur: Any, *, limit: int = 80) -> list[dic
           fdl.list_name,
           r.fund_delivery_run_id,
           fdr.output_zip_name,
+          r.copied_from_report_id,
+          r.carried_over_to_report_id,
           r.created_by,
           r.created_at
         ORDER BY r.external_feedback_report_id DESC
@@ -3248,7 +3253,7 @@ def load_external_feedback_item_detail(
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     cur.execute(
         f"""
-        SELECT i.*, r.feedback_source, r.feedback_scope, r.received_at, r.received_from,
+        SELECT i.*, r.feedback_source, r.feedback_scope, r.report_status, r.received_at, r.received_from,
                r.channel, r.summary, eec.hia_subscriber_id, eec.name_kana_export_value,
                eec.name_full_raw, eec.exam_date, ef.exam_facility_name AS facility_name
         FROM {qname(health_db())}.ops_external_feedback_items i
@@ -3274,6 +3279,420 @@ def load_external_feedback_item_detail(
         (item_id,),
     )
     return dict(item), [dict(row) for row in cur.fetchall()]
+
+
+EXTERNAL_FEEDBACK_TERMINAL_REPORT_STATUSES = {"CARRIED_OVER", "CLOSED", "CANCELLED"}
+
+
+def ensure_external_feedback_report_editable(report: Mapping[str, Any]) -> None:
+    if str(report.get("report_status") or "") in EXTERNAL_FEEDBACK_TERMINAL_REPORT_STATUSES:
+        raise ValueError("この指摘箱は引き継ぎまたは終了済みのため変更できません。")
+
+
+def create_external_feedback_report(cur: Any, *, form: Mapping[str, Any], user: dict[str, Any]) -> int:
+    actor = fund_delivery_actor(user)
+    summary = str(form.get("summary") or "").strip()
+    if not summary:
+        raise ValueError("指摘箱の件名を入力してください。")
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_reports (
+          event_id, feedback_source, feedback_scope, report_status,
+          received_at, received_from, channel, summary,
+          source_file_name, source_file_path, xml_export_list_id, xml_export_zip_id,
+          fund_delivery_list_id, fund_delivery_run_id, created_by, updated_by
+        ) VALUES (
+          %s, %s, %s, 'OPEN', NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''), %s,
+          NULLIF(%s, ''), NULLIF(%s, ''), %s, %s, %s, %s, %s, %s
+        )
+        """,
+        (
+            _optional_int(form.get("event_id")),
+            str(form.get("feedback_source") or "HIA_UPLOAD"),
+            str(form.get("feedback_scope") or "CASE"),
+            str(form.get("received_at") or "").strip(),
+            str(form.get("received_from") or "").strip(),
+            str(form.get("channel") or "").strip(),
+            summary,
+            str(form.get("source_file_name") or "").strip(),
+            str(form.get("source_file_path") or "").strip(),
+            _optional_int(form.get("xml_export_list_id")),
+            _optional_int(form.get("xml_export_zip_id")),
+            _optional_int(form.get("fund_delivery_list_id")),
+            _optional_int(form.get("fund_delivery_run_id")),
+            actor,
+            actor,
+        ),
+    )
+    return int(cur.lastrowid)
+
+
+def load_external_feedback_report_detail(cur: Any, *, report_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT r.*, src.summary AS copied_from_summary, dst.summary AS carried_over_to_summary
+        FROM {qname(health_db())}.ops_external_feedback_reports r
+        LEFT JOIN {qname(health_db())}.ops_external_feedback_reports src
+          ON src.external_feedback_report_id = r.copied_from_report_id
+        LEFT JOIN {qname(health_db())}.ops_external_feedback_reports dst
+          ON dst.external_feedback_report_id = r.carried_over_to_report_id
+        WHERE r.external_feedback_report_id = %s
+        """,
+        (report_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def load_external_feedback_report_items(cur: Any, *, report_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT i.*, eec.hia_subscriber_id, eec.name_kana_export_value, eec.name_full_raw,
+               eec.exam_date, eec.export_readiness_status, eec.export_readiness_reason,
+               ef.exam_facility_name AS facility_name,
+               COUNT(d.external_feedback_item_detail_id) AS detail_count,
+               SUM(CASE WHEN d.handling_status = 'RESOLVED' THEN 1 ELSE 0 END) AS resolved_detail_count,
+               SUM(CASE WHEN d.handling_status <> 'RESOLVED' THEN 1 ELSE 0 END) AS unresolved_detail_count
+        FROM {qname(health_db())}.ops_external_feedback_items i
+        LEFT JOIN {qname(health_db())}.ops_external_feedback_item_details d
+          ON d.external_feedback_item_id = i.external_feedback_item_id
+        LEFT JOIN {qname(health_db())}.exam_export_cases eec
+          ON eec.exam_export_case_id = i.exam_export_case_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id = eec.exam_facility_id
+        WHERE i.external_feedback_report_id = %s
+        GROUP BY i.external_feedback_item_id
+        ORDER BY i.external_feedback_item_id
+        """,
+        (report_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_external_feedback_output_lists(cur: Any, *, event_id: int | None) -> list[dict[str, Any]]:
+    if not event_id:
+        return []
+    cur.execute(
+        f"""
+        SELECT xml_export_list_id, list_name, list_status
+        FROM {qname(health_db())}.ops_xml_export_lists
+        WHERE event_id = %s AND list_status NOT IN ('CANCELLED')
+        ORDER BY xml_export_list_id DESC
+        LIMIT 100
+        """,
+        (event_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def add_external_feedback_item(cur: Any, *, report_id: int, form: Mapping[str, Any], user: dict[str, Any]) -> int:
+    report = load_external_feedback_report_detail(cur, report_id=report_id)
+    if not report:
+        raise ValueError("指摘箱が見つかりません。")
+    ensure_external_feedback_report_editable(report)
+    case_id = _optional_int(form.get("exam_export_case_id"))
+    if not case_id:
+        raise ValueError("case IDを指定してください。")
+    cur.execute(
+        f"""
+        SELECT event_id FROM {qname(health_db())}.exam_export_cases
+        WHERE exam_export_case_id = %s AND case_lifecycle_status = 'ACTIVE'
+        """,
+        (case_id,),
+    )
+    case = cur.fetchone()
+    if not case:
+        raise ValueError("有効なcaseが見つかりません。")
+    report_event_id = _optional_int(report.get("event_id"))
+    if report_event_id and int(case["event_id"]) != report_event_id:
+        raise ValueError("指摘箱とcaseのイベントが一致しません。")
+    cur.execute(
+        f"""
+        SELECT external_feedback_item_id
+        FROM {qname(health_db())}.ops_external_feedback_items
+        WHERE external_feedback_report_id = %s AND exam_export_case_id = %s
+        LIMIT 1
+        """,
+        (report_id, case_id),
+    )
+    existing = cur.fetchone()
+    if existing:
+        return int(existing["external_feedback_item_id"])
+    actor = fund_delivery_actor(user)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_items (
+          external_feedback_report_id, event_id, exam_export_case_id,
+          issue_level, issue_category, handling_status, created_by, updated_by
+        ) VALUES (%s, %s, %s, 'ERROR', 'OTHER', 'OPEN', %s, %s)
+        """,
+        (report_id, int(case["event_id"]), case_id, actor, actor),
+    )
+    item_id = int(cur.lastrowid)
+    cur.execute(
+        f"""INSERT INTO {qname(health_db())}.ops_external_feedback_item_audit_logs
+        (external_feedback_item_id, action_type, after_status, after_json, changed_by)
+        VALUES (%s, 'CREATE', 'OPEN', %s, %s)""",
+        (item_id, json.dumps({"report_id": report_id, "case_id": case_id}), actor),
+    )
+    return item_id
+
+
+def add_external_feedback_bulk_items(
+    cur: Any,
+    *,
+    report_id: int,
+    form: Mapping[str, Any],
+    user: dict[str, Any],
+) -> tuple[list[dict[str, Any]], int, int]:
+    report = load_external_feedback_report_detail(cur, report_id=report_id)
+    if not report:
+        raise ValueError("指摘箱が見つかりません。")
+    ensure_external_feedback_report_editable(report)
+    event_id = _optional_int(report.get("event_id"))
+    if not event_id:
+        raise ValueError("対象者をまとめて追加するには、指摘箱のイベントIDが必要です。")
+    raw_text = str(form.get("raw_text") or "")
+    if not raw_text.strip():
+        raise ValueError("対象者リストを貼り付けてください。")
+    delimiter = str(form.get("delimiter") or "tab")
+    custom_delimiter = str(form.get("custom_delimiter") or "")
+    has_header = str(form.get("has_header") or "") == "1"
+    columns = [str(form.get(f"col_{index}") or "unused") for index in range(8)]
+    rows = parse_person_selection_paste(
+        raw_text=raw_text,
+        delimiter=delimiter,
+        custom_delimiter=custom_delimiter,
+        has_header=has_header,
+        column_map=columns,
+        fixed_insurer_number="",
+    )
+    rows = resolve_person_selection_rows(cur, event_id=event_id, rows=rows)
+    added_count = 0
+    existing_count = 0
+    for row in rows:
+        cases = row.get("case_candidates") or []
+        if str(row.get("status") or "") != "READY":
+            continue
+        if len(cases) != 1:
+            row["status"] = "MULTIPLE" if cases else "CASE_NOT_FOUND"
+            row["reason"] = "case候補を1件に特定できません"
+            continue
+        case_id = int(cases[0]["exam_export_case_id"])
+        cur.execute(
+            f"""
+            SELECT external_feedback_item_id
+            FROM {qname(health_db())}.ops_external_feedback_items
+            WHERE external_feedback_report_id=%s AND exam_export_case_id=%s
+            LIMIT 1
+            """,
+            (report_id, case_id),
+        )
+        existed = cur.fetchone() is not None
+        item_id = add_external_feedback_item(
+            cur,
+            report_id=report_id,
+            form={"exam_export_case_id": str(case_id)},
+            user=user,
+        )
+        row["added_item_id"] = item_id
+        row["added_case_id"] = case_id
+        if existed:
+            row["add_result"] = "EXISTING"
+            existing_count += 1
+        else:
+            row["add_result"] = "ADDED"
+            added_count += 1
+    return rows, added_count, existing_count
+
+
+def refresh_external_feedback_statuses(cur: Any, *, item_id: int, actor: str) -> None:
+    cur.execute(
+        f"""
+        SELECT i.external_feedback_report_id,
+               COUNT(d.external_feedback_item_detail_id) AS detail_count,
+               SUM(CASE WHEN d.handling_status <> 'RESOLVED' THEN 1 ELSE 0 END) AS unresolved_count
+        FROM {qname(health_db())}.ops_external_feedback_items i
+        LEFT JOIN {qname(health_db())}.ops_external_feedback_item_details d
+          ON d.external_feedback_item_id = i.external_feedback_item_id
+        WHERE i.external_feedback_item_id = %s
+        GROUP BY i.external_feedback_item_id
+        """,
+        (item_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return
+    item_status = "RESOLVED" if int(row.get("detail_count") or 0) > 0 and int(row.get("unresolved_count") or 0) == 0 else "IN_PROGRESS"
+    cur.execute(
+        f"""UPDATE {qname(health_db())}.ops_external_feedback_items
+        SET handling_status=%s, resolved_at=IF(%s='RESOLVED', CURRENT_TIMESTAMP(3), NULL),
+            resolved_by=IF(%s='RESOLVED', %s, NULL), updated_by=%s
+        WHERE external_feedback_item_id=%s""",
+        (item_status, item_status, item_status, actor, actor, item_id),
+    )
+    report_id = int(row["external_feedback_report_id"])
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS item_count,
+               SUM(CASE WHEN handling_status <> 'RESOLVED' THEN 1 ELSE 0 END) AS unresolved_count
+        FROM {qname(health_db())}.ops_external_feedback_items
+        WHERE external_feedback_report_id = %s
+        """,
+        (report_id,),
+    )
+    report_counts = cur.fetchone() or {}
+    report_status = "RESOLVED" if int(report_counts.get("item_count") or 0) > 0 and int(report_counts.get("unresolved_count") or 0) == 0 else "IN_PROGRESS"
+    cur.execute(
+        f"""UPDATE {qname(health_db())}.ops_external_feedback_reports
+        SET report_status=%s, updated_by=%s WHERE external_feedback_report_id=%s
+          AND report_status NOT IN ('CARRIED_OVER','CLOSED','CANCELLED')""",
+        (report_status, actor, report_id),
+    )
+
+
+def update_external_feedback_detail(cur: Any, *, item_id: int, detail_id: int, form: Mapping[str, Any], user: dict[str, Any]) -> None:
+    item, _ = load_external_feedback_item_detail(cur, item_id=item_id)
+    if not item:
+        raise ValueError("指摘対象者が見つかりません。")
+    ensure_external_feedback_report_editable(item)
+    status = str(form.get("handling_status") or "").strip()
+    allowed = {"OPEN", "CONFIRMED", "FIX_PLANNED", "WAITING_RESUBMISSION", "RESUBMITTED", "RESOLVED", "WONT_FIX", "CANCELLED"}
+    if status not in allowed:
+        raise ValueError("指摘項目の状態が不正です。")
+    actor = fund_delivery_actor(user)
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.ops_external_feedback_item_details
+        SET handling_status=%s, corrected_value=NULLIF(%s,''), resolution_note=NULLIF(%s,''),
+            resolved_at=IF(%s='RESOLVED', CURRENT_TIMESTAMP(3), NULL),
+            resolved_by=IF(%s='RESOLVED', %s, NULL), updated_by=%s
+        WHERE external_feedback_item_detail_id=%s AND external_feedback_item_id=%s
+        """,
+        (status, str(form.get("corrected_value") or "").strip(), str(form.get("resolution_note") or "").strip(), status, status, actor, actor, detail_id, item_id),
+    )
+    if cur.rowcount != 1:
+        raise ValueError("指摘項目が見つかりません。")
+    refresh_external_feedback_statuses(cur, item_id=item_id, actor=actor)
+
+
+def carry_over_external_feedback_report(cur: Any, *, report_id: int, user: dict[str, Any]) -> int:
+    cur.execute(
+        f"SELECT * FROM {qname(health_db())}.ops_external_feedback_reports WHERE external_feedback_report_id=%s FOR UPDATE",
+        (report_id,),
+    )
+    report = cur.fetchone()
+    if not report:
+        raise ValueError("指摘箱が見つかりません。")
+    ensure_external_feedback_report_editable(report)
+    actor = fund_delivery_actor(user)
+    cur.execute(
+        f"""
+        INSERT INTO {qname(health_db())}.ops_external_feedback_reports (
+          event_id, feedback_source, feedback_scope, report_status, received_at, received_from,
+          channel, summary, source_file_name, source_file_path, xml_export_list_id, xml_export_zip_id,
+          fund_delivery_list_id, fund_delivery_run_id, copied_from_report_id, created_by, updated_by
+        ) VALUES (%s,%s,%s,'OPEN',CURRENT_TIMESTAMP(3),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """,
+        (report.get("event_id"), report.get("feedback_source"), report.get("feedback_scope"), report.get("received_from"), report.get("channel"), f"{report.get('summary') or '外部指摘'}（未解決引き継ぎ）", report.get("source_file_name"), report.get("source_file_path"), report.get("xml_export_list_id"), report.get("xml_export_zip_id"), report.get("fund_delivery_list_id"), report.get("fund_delivery_run_id"), report_id, actor, actor),
+    )
+    new_report_id = int(cur.lastrowid)
+    cur.execute(
+        f"""
+        SELECT i.* FROM {qname(health_db())}.ops_external_feedback_items i
+        WHERE i.external_feedback_report_id=%s AND (
+          NOT EXISTS (SELECT 1 FROM {qname(health_db())}.ops_external_feedback_item_details d0 WHERE d0.external_feedback_item_id=i.external_feedback_item_id)
+          OR EXISTS (SELECT 1 FROM {qname(health_db())}.ops_external_feedback_item_details d1 WHERE d1.external_feedback_item_id=i.external_feedback_item_id AND d1.handling_status <> 'RESOLVED')
+        ) ORDER BY i.external_feedback_item_id
+        """,
+        (report_id,),
+    )
+    source_items = [dict(row) for row in cur.fetchall()]
+    if not source_items:
+        raise ValueError("引き継ぐ未解決の対象者がありません。")
+    for source_item in source_items:
+        old_item_id = int(source_item["external_feedback_item_id"])
+        cur.execute(
+            f"""
+            INSERT INTO {qname(health_db())}.ops_external_feedback_items (
+              external_feedback_report_id,event_id,exam_export_case_id,xml_export_list_case_id,
+              xml_export_member_id,xml_export_zip_id,fund_delivery_list_member_id,fund_delivery_member_id,
+              issue_level,issue_category,handling_status,external_error_code,external_message,namecode,
+              check_item_code,source_xml_file_name,source_zip_file_name,reported_value,resolution_note,
+              assigned_to,copied_from_item_id,created_by,updated_by
+            ) SELECT %s,event_id,exam_export_case_id,xml_export_list_case_id,xml_export_member_id,xml_export_zip_id,
+              fund_delivery_list_member_id,fund_delivery_member_id,issue_level,issue_category,'OPEN',external_error_code,
+              external_message,namecode,check_item_code,source_xml_file_name,source_zip_file_name,reported_value,
+              resolution_note,assigned_to,external_feedback_item_id,%s,%s
+            FROM {qname(health_db())}.ops_external_feedback_items WHERE external_feedback_item_id=%s
+            """,
+            (new_report_id, actor, actor, old_item_id),
+        )
+        new_item_id = int(cur.lastrowid)
+        cur.execute(
+            f"""
+            INSERT INTO {qname(health_db())}.ops_external_feedback_item_details (
+              external_feedback_item_id,detail_type,basic_field_code,namecode,section_code,check_item_code,
+              issue_level,handling_status,external_error_code,external_message,reported_value,expected_value,
+              corrected_value,resolution_note,copied_from_detail_id,created_by,updated_by
+            ) SELECT %s,detail_type,basic_field_code,namecode,section_code,check_item_code,issue_level,handling_status,
+              external_error_code,external_message,reported_value,expected_value,corrected_value,resolution_note,
+              external_feedback_item_detail_id,%s,%s
+            FROM {qname(health_db())}.ops_external_feedback_item_details
+            WHERE external_feedback_item_id=%s AND handling_status <> 'RESOLVED'
+            """,
+            (new_item_id, actor, actor, old_item_id),
+        )
+    cur.execute(
+        f"""UPDATE {qname(health_db())}.ops_external_feedback_reports
+        SET report_status='CARRIED_OVER', carried_over_to_report_id=%s, updated_by=%s
+        WHERE external_feedback_report_id=%s""",
+        (new_report_id, actor, report_id),
+    )
+    return new_report_id
+
+
+def add_resolved_feedback_items_to_export_list(cur: Any, *, report_id: int, item_ids: list[int], xml_export_list_id: int, user: dict[str, Any]) -> int:
+    report = load_external_feedback_report_detail(cur, report_id=report_id)
+    if not report:
+        raise ValueError("指摘箱が見つかりません。")
+    if not item_ids:
+        raise ValueError("追加する解決済み対象者を選択してください。")
+    added_count = 0
+    for item_id in item_ids:
+        cur.execute(
+            f"""
+            SELECT i.exam_export_case_id, i.handling_status, eec.export_readiness_status,
+                   COUNT(d.external_feedback_item_detail_id) AS detail_count,
+                   SUM(CASE WHEN d.handling_status <> 'RESOLVED' THEN 1 ELSE 0 END) AS unresolved_count
+            FROM {qname(health_db())}.ops_external_feedback_items i
+            LEFT JOIN {qname(health_db())}.ops_external_feedback_item_details d ON d.external_feedback_item_id=i.external_feedback_item_id
+            LEFT JOIN {qname(health_db())}.exam_export_cases eec ON eec.exam_export_case_id=i.exam_export_case_id
+            WHERE i.external_feedback_item_id=%s AND i.external_feedback_report_id=%s
+            GROUP BY i.external_feedback_item_id
+            """,
+            (item_id, report_id),
+        )
+        item = cur.fetchone()
+        if not item or not item.get("exam_export_case_id") or int(item.get("detail_count") or 0) == 0 or int(item.get("unresolved_count") or 0) != 0:
+            raise ValueError(f"item {item_id} は未解決のため出力リストへ追加できません。")
+        if str(item.get("export_readiness_status") or "") not in {"EXPORT_READY", "APPROVED_WITH_REASON", "EXPORTED"}:
+            raise ValueError(f"item {item_id} のcaseは出力可能な状態ではありません。")
+        result = add_export_case_to_list(cur, xml_export_list_id=xml_export_list_id, exam_export_case_id=int(item["exam_export_case_id"]), user=user)
+        cur.execute(
+            f"""SELECT xml_export_list_case_id FROM {qname(health_db())}.ops_xml_export_list_cases
+            WHERE xml_export_list_id=%s AND exam_export_case_id=%s""",
+            (xml_export_list_id, int(item["exam_export_case_id"])),
+        )
+        list_case = cur.fetchone()
+        cur.execute(
+            f"""UPDATE {qname(health_db())}.ops_external_feedback_items
+            SET reoutput_xml_export_list_case_id=%s, updated_by=%s WHERE external_feedback_item_id=%s""",
+            (list_case["xml_export_list_case_id"], fund_delivery_actor(user), item_id),
+        )
+        if result in {"added", "readded"}:
+            added_count += 1
+    return added_count
 
 
 def build_hia_download_import_config(raw: dict[str, Any]) -> HiaDownloadImportConfig:
@@ -4372,6 +4791,79 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
     case_row = dict(cur.fetchone() or {})
     cur.execute(
         f"""
+        SELECT
+          COUNT(*) AS source_legal_checked_ledger_count,
+          SUM(CASE WHEN source_checks.legal_check_result = 'NG' THEN 1 ELSE 0 END) AS source_legal_ng_ledger_count,
+          COUNT(DISTINCT CASE
+            WHEN source_checks.legal_check_result = 'NG' THEN source_checks.exam_facility_id
+          END) AS source_legal_ng_facility_count,
+          SUM(CASE WHEN source_checks.source_type = 'XML' THEN 1 ELSE 0 END) AS xml_legal_checked_ledger_count,
+          SUM(CASE WHEN source_checks.source_type = 'XML' AND source_checks.legal_check_result = 'NG' THEN 1 ELSE 0 END) AS xml_legal_ng_ledger_count,
+          COUNT(DISTINCT CASE
+            WHEN source_checks.source_type = 'XML' AND source_checks.legal_check_result = 'NG'
+            THEN source_checks.exam_facility_id
+          END) AS xml_legal_ng_facility_count,
+          SUM(CASE WHEN source_checks.source_type = 'CSV' THEN 1 ELSE 0 END) AS csv_legal_checked_ledger_count,
+          SUM(CASE WHEN source_checks.source_type = 'CSV' AND source_checks.legal_check_result = 'NG' THEN 1 ELSE 0 END) AS csv_legal_ng_ledger_count
+        FROM (
+          SELECT el.exam_ledger_id, el.source_type, el.exam_facility_id, ecr.legal_check_result
+          FROM {qname(health_db())}.exam_check_results AS ecr
+          INNER JOIN (
+            SELECT exam_ledger_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXAM'
+              AND exam_ledger_id IS NOT NULL
+              AND event_id = %s
+            GROUP BY exam_ledger_id
+          ) AS latest ON latest.max_id = ecr.id
+          INNER JOIN {qname(health_db())}.exam_ledgers AS el
+            ON el.exam_ledger_id = ecr.exam_ledger_id
+          WHERE el.event_id = %s
+            AND el.source_type IN ('XML', 'CSV')
+            AND ecr.legal_check_result IN ('OK', 'NG')
+        ) AS source_checks
+        """,
+        (event_id, event_id),
+    )
+    source_check_row = dict(cur.fetchone() or {})
+    cur.execute(
+        f"""
+        SELECT COUNT(DISTINCT eec.exam_export_case_id) AS csv_followed_case_count
+        FROM {qname(health_db())}.exam_export_cases AS eec
+        INNER JOIN {qname(health_db())}.exam_export_case_sources AS xml_source
+          ON xml_source.exam_export_case_id = eec.exam_export_case_id
+         AND xml_source.source_type = 'XML'
+         AND xml_source.source_status = 'ACTIVE'
+        INNER JOIN (
+          SELECT ecr.exam_ledger_id, ecr.legal_check_result
+          FROM {qname(health_db())}.exam_check_results AS ecr
+          INNER JOIN (
+            SELECT exam_ledger_id, MAX(id) AS max_id
+            FROM {qname(health_db())}.exam_check_results
+            WHERE ledger_type = 'EXAM'
+              AND exam_ledger_id IS NOT NULL
+              AND event_id = %s
+            GROUP BY exam_ledger_id
+          ) AS latest ON latest.max_id = ecr.id
+        ) AS xml_check
+          ON xml_check.exam_ledger_id = xml_source.source_exam_ledger_id
+         AND xml_check.legal_check_result = 'NG'
+        WHERE eec.event_id = %s
+          AND eec.case_lifecycle_status = 'ACTIVE'
+          AND eec.check_status = 'OK'
+          AND EXISTS (
+            SELECT 1
+            FROM {qname(health_db())}.exam_export_case_sources AS csv_source
+            WHERE csv_source.exam_export_case_id = eec.exam_export_case_id
+              AND csv_source.source_type = 'CSV'
+              AND csv_source.source_status = 'ACTIVE'
+          )
+        """,
+        (event_id, event_id),
+    )
+    csv_follow_row = dict(cur.fetchone() or {})
+    cur.execute(
+        f"""
         SELECT COUNT(DISTINCT exam_facility_id) AS alias_facility_count
         FROM {qname(master_db())}.medical_folder_aliases
         WHERE event_id = %s
@@ -4393,6 +4885,8 @@ def load_workload_estimate_actuals(cur: Any, *, event_id: int) -> dict[str, int]
     )
     values = {
         **case_row,
+        **source_check_row,
+        **csv_follow_row,
         **alias_row,
         **dict(cur.fetchone() or {}),
         **load_subscriber_match_resolution_counts(cur, event_id=event_id),
@@ -16880,7 +17374,13 @@ async def create_external_feedback(request: Request) -> Response:
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            report_id, item_id = create_external_feedback_from_form(cur, form=form, user=user)
+            report_id = create_external_feedback_report(cur, form=form, user=user)
+            prefilled_case_id = _optional_int(form.get("exam_export_case_id"))
+            item_id = (
+                add_external_feedback_item(cur, report_id=report_id, form=form, user=user)
+                if prefilled_case_id
+                else None
+            )
             conn.commit()
         except Exception as exc:
             conn.rollback()
@@ -16890,14 +17390,147 @@ async def create_external_feedback(request: Request) -> Response:
         user=user,
         action_code="EXTERNAL_FEEDBACK_CREATE",
         target_schema=health_db(),
-        target_table="ops_external_feedback_items",
-        target_id=str(item_id),
-        after={"external_feedback_report_id": report_id, "external_feedback_item_id": item_id},
+        target_table="ops_external_feedback_reports",
+        target_id=str(report_id),
+        after={"external_feedback_report_id": report_id},
     )
-    return RedirectResponse(
-        f"/external-feedback?message={quote(f'外部指摘を登録しました。report={report_id} item={item_id}')}",
-        status_code=303,
+    message = "指摘箱を作成しました。"
+    if item_id:
+        message += " 対象者を1人追加済みです。"
+    else:
+        message += " 対象者を追加してください。"
+    return RedirectResponse(f"/external-feedback/reports/{report_id}?message={quote(message)}", status_code=303)
+
+
+@app.get("/external-feedback/reports/{report_id}", response_class=HTMLResponse)
+def external_feedback_report_detail(request: Request, report_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload.perform", "hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        report = load_external_feedback_report_detail(cur, report_id=report_id)
+        if report is None:
+            return HTMLResponse("指摘箱が見つかりません。", status_code=404)
+        items = load_external_feedback_report_items(cur, report_id=report_id)
+        output_lists = load_external_feedback_output_lists(cur, event_id=_optional_int(report.get("event_id")))
+    return templates.TemplateResponse(
+        "external_feedback_report_detail.html",
+        {"request": request, "user": user, "report": report, "items": items, "output_lists": output_lists,
+         "message": request.query_params.get("message"), "error": request.query_params.get("error"),
+         "can_edit": has_any_permission(user, ("hia_upload_status.edit", "users.manage")),
+         "is_read_only": str(report.get("report_status") or "") in EXTERNAL_FEEDBACK_TERMINAL_REPORT_STATUSES,
+         "bulk_rows": [], "bulk_form": {}, "column_options": PERSON_SELECTION_COLUMNS},
     )
+
+
+@app.post("/external-feedback/reports/{report_id}/items", response_class=HTMLResponse)
+async def external_feedback_report_item_add(request: Request, report_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        try:
+            item_id = add_external_feedback_item(dict_cursor(conn), report_id=report_id, form=form, user=user)
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback/reports/{report_id}?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/external-feedback/reports/{report_id}?message={quote('対象者を追加しました。')}", status_code=303)
+
+
+@app.post("/external-feedback/reports/{report_id}/items/bulk", response_class=HTMLResponse)
+async def external_feedback_report_items_bulk_add(request: Request, report_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        try:
+            bulk_rows, added_count, existing_count = add_external_feedback_bulk_items(
+                cur, report_id=report_id, form=form, user=user
+            )
+            conn.commit()
+            report = load_external_feedback_report_detail(cur, report_id=report_id)
+            if report is None:
+                raise ValueError("指摘箱が見つかりません。")
+            items = load_external_feedback_report_items(cur, report_id=report_id)
+            output_lists = load_external_feedback_output_lists(cur, event_id=_optional_int(report.get("event_id")))
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback/reports/{report_id}?error={quote(str(exc))}", status_code=303)
+    return templates.TemplateResponse(
+        "external_feedback_report_detail.html",
+        {
+            "request": request,
+            "user": user,
+            "report": report,
+            "items": items,
+            "output_lists": output_lists,
+            "bulk_rows": bulk_rows,
+            "bulk_added_count": added_count,
+            "bulk_existing_count": existing_count,
+            "bulk_form": form,
+            "column_options": PERSON_SELECTION_COLUMNS,
+            "message": f"新規{added_count}人を追加しました。登録済み{existing_count}人です。",
+            "error": None,
+            "can_edit": True,
+            "is_read_only": False,
+        },
+    )
+
+
+@app.post("/external-feedback/reports/{report_id}/carry-over", response_class=HTMLResponse)
+async def external_feedback_report_carry_over(request: Request, report_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        try:
+            new_report_id = carry_over_external_feedback_report(dict_cursor(conn), report_id=report_id, user=user)
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback/reports/{report_id}?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/external-feedback/reports/{new_report_id}?message={quote(f'未解決項目を箱 {new_report_id} へ引き継ぎました。')}", status_code=303)
+
+
+@app.post("/external-feedback/reports/{report_id}/export-list", response_class=HTMLResponse)
+async def external_feedback_report_export_list_add(request: Request, report_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    raw_form = await request.form()
+    form = {key: str(value) for key, value in raw_form.multi_items()}
+    list_id = _optional_int(form.get("xml_export_list_id"))
+    item_ids = [int(value) for value in raw_form.getlist("item_ids") if str(value).isdigit()]
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        try:
+            if not list_id:
+                raise ValueError("追加先の出力リストを選択してください。")
+            count = add_resolved_feedback_items_to_export_list(dict_cursor(conn), report_id=report_id, item_ids=item_ids, xml_export_list_id=list_id, user=user)
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback/reports/{report_id}?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/external-feedback/reports/{report_id}?message={quote(f'解決済みcaseを出力リストへ追加しました（新規・復帰 {count}件）。')}", status_code=303)
 
 
 @app.get("/external-feedback/items/{item_id}", response_class=HTMLResponse)
@@ -16941,7 +17574,9 @@ async def create_external_feedback_detail(request: Request, item_id: int) -> Res
             item, _ = load_external_feedback_item_detail(cur, item_id=item_id)
             if item is None:
                 raise ValueError("指摘case明細が見つかりません。")
+            ensure_external_feedback_report_editable(item)
             detail_id = create_external_feedback_item_detail(cur, item_id=item_id, form=form, user=user)
+            refresh_external_feedback_statuses(cur, item_id=item_id, actor=fund_delivery_actor(user))
             conn.commit()
         except Exception as exc:
             conn.rollback()
@@ -16961,6 +17596,25 @@ async def create_external_feedback_detail(request: Request, item_id: int) -> Res
         f"/external-feedback/items/{item_id}?message={quote('指摘項目を追加しました。')}",
         status_code=303,
     )
+
+
+@app.post("/external-feedback/items/{item_id}/details/{detail_id}", response_class=HTMLResponse)
+async def external_feedback_detail_update(request: Request, item_id: int, detail_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        try:
+            update_external_feedback_detail(dict_cursor(conn), item_id=item_id, detail_id=detail_id, form=form, user=user)
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback/items/{item_id}?error={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/external-feedback/items/{item_id}?message={quote('指摘項目を更新しました。')}", status_code=303)
 
 
 def load_csv_mapping_lab_files(cur: Any, *, limit: int = 50) -> list[dict[str, Any]]:

@@ -3,7 +3,7 @@ CREATE TABLE `health_exam_result`.`ops_external_feedback_reports` (
   `event_id` bigint DEFAULT NULL,
   `feedback_source` varchar(32) NOT NULL COMMENT 'HIA_UPLOAD/FUND_DELIVERY/EMPLOYER_DELIVERY/MANUAL',
   `feedback_scope` varchar(32) NOT NULL DEFAULT 'CASE' COMMENT 'OUTPUT_LIST/ZIP/XML/CASE/OTHER',
-  `report_status` varchar(32) NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN/IN_PROGRESS/RESOLVED/CLOSED/CANCELLED',
+  `report_status` varchar(32) NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN/IN_PROGRESS/RESOLVED/CARRIED_OVER/CLOSED/CANCELLED',
   `received_at` datetime(3) DEFAULT NULL,
   `received_from` varchar(255) DEFAULT NULL,
   `channel` varchar(64) DEFAULT NULL COMMENT 'MAIL/PHONE/WEB/FILE/MANUAL等',
@@ -14,6 +14,8 @@ CREATE TABLE `health_exam_result`.`ops_external_feedback_reports` (
   `xml_export_zip_id` bigint unsigned DEFAULT NULL,
   `fund_delivery_list_id` bigint unsigned DEFAULT NULL,
   `fund_delivery_run_id` bigint unsigned DEFAULT NULL,
+  `copied_from_report_id` bigint unsigned DEFAULT NULL COMMENT '未解決引き継ぎ元の指摘箱ID',
+  `carried_over_to_report_id` bigint unsigned DEFAULT NULL COMMENT '未解決引き継ぎ先の指摘箱ID',
   `created_by` varchar(190) DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_by` varchar(190) DEFAULT NULL,
@@ -28,6 +30,8 @@ CREATE TABLE `health_exam_result`.`ops_external_feedback_reports` (
   KEY `idx_ops_external_feedback_reports_xml_zip` (`xml_export_zip_id`),
   KEY `idx_ops_external_feedback_reports_fund_list` (`fund_delivery_list_id`),
   KEY `idx_ops_external_feedback_reports_fund_run` (`fund_delivery_run_id`),
+  KEY `idx_ops_external_feedback_reports_copied_from` (`copied_from_report_id`),
+  KEY `idx_ops_external_feedback_reports_carried_over_to` (`carried_over_to_report_id`),
   CONSTRAINT `fk_ops_external_feedback_reports_xml_list`
     FOREIGN KEY (`xml_export_list_id`) REFERENCES `health_exam_result`.`ops_xml_export_lists` (`xml_export_list_id`),
   CONSTRAINT `fk_ops_external_feedback_reports_xml_zip`
@@ -51,6 +55,8 @@ CREATE TABLE `health_exam_result`.`ops_external_feedback_items` (
   `xml_export_zip_id` bigint unsigned DEFAULT NULL,
   `fund_delivery_list_member_id` bigint unsigned DEFAULT NULL,
   `fund_delivery_member_id` bigint unsigned DEFAULT NULL,
+  `copied_from_item_id` bigint unsigned DEFAULT NULL COMMENT '未解決引き継ぎ元の対象者ID',
+  `reoutput_xml_export_list_case_id` bigint unsigned DEFAULT NULL COMMENT '解消後に追加した出力リストcase ID',
   `issue_level` varchar(16) NOT NULL DEFAULT 'ERROR' COMMENT 'ERROR/WARNING/INFO',
   `issue_category` varchar(64) NOT NULL DEFAULT 'OTHER' COMMENT 'SUBSCRIBER/BASIC_INFO/EXAM_ITEM/XML_SCHEMA/UPLOAD/DELIVERY/OTHER',
   `handling_status` varchar(32) NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN/CONFIRMED/FIX_PLANNED/WAITING_RESUBMISSION/RESUBMITTED/RESOLVED/WONT_FIX/CANCELLED',
@@ -83,6 +89,8 @@ CREATE TABLE `health_exam_result`.`ops_external_feedback_items` (
   KEY `idx_ops_external_feedback_items_category` (`issue_category`, `issue_level`),
   KEY `idx_ops_external_feedback_items_namecode` (`namecode`),
   KEY `idx_ops_external_feedback_items_check_item` (`check_item_code`),
+  KEY `idx_ops_external_feedback_items_copied_from` (`copied_from_item_id`),
+  KEY `idx_ops_external_feedback_items_reoutput_case` (`reoutput_xml_export_list_case_id`),
   CONSTRAINT `fk_ops_external_feedback_items_report`
     FOREIGN KEY (`external_feedback_report_id`) REFERENCES `health_exam_result`.`ops_external_feedback_reports` (`external_feedback_report_id`),
   CONSTRAINT `fk_ops_external_feedback_items_case`
@@ -118,6 +126,9 @@ CREATE TABLE `health_exam_result`.`ops_external_feedback_item_details` (
   `expected_value` text DEFAULT NULL,
   `corrected_value` text DEFAULT NULL,
   `resolution_note` text DEFAULT NULL,
+  `copied_from_detail_id` bigint unsigned DEFAULT NULL COMMENT '未解決引き継ぎ元の指摘項目ID',
+  `resolved_at` datetime(3) DEFAULT NULL,
+  `resolved_by` varchar(190) DEFAULT NULL,
   `created_by` varchar(190) DEFAULT NULL,
   `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_by` varchar(190) DEFAULT NULL,
@@ -126,6 +137,7 @@ CREATE TABLE `health_exam_result`.`ops_external_feedback_item_details` (
   KEY `idx_ops_external_feedback_item_details_item` (`external_feedback_item_id`),
   KEY `idx_ops_external_feedback_item_details_type_status` (`detail_type`, `handling_status`),
   KEY `idx_ops_external_feedback_item_details_namecode` (`namecode`, `section_code`),
+  KEY `idx_ops_external_feedback_item_details_copied_from` (`copied_from_detail_id`),
   CONSTRAINT `fk_ops_external_feedback_item_details_item`
     FOREIGN KEY (`external_feedback_item_id`) REFERENCES `health_exam_result`.`ops_external_feedback_items` (`external_feedback_item_id`)
 ) ENGINE=InnoDB

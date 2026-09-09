@@ -44,4 +44,6 @@ case明細と受領単位の状態は当面明示更新を維持し、自動集�
 4. 種類を選び、同じcaseへ指摘項目を何件でも追加する。
 5. case詳細への導線から、実データの確認・修正へ進む。
 
-初期実装では追加と参照を対象とし、項目編集・状態の自動集約・一括登録は次段階とする。
+初期実装後の再設計、状態集約、未解決引き継ぎ、再出力連携は
+`57_external_feedback_workflow_redesign.md` と
+`58_external_feedback_workflow_design_review.md` を正とする。

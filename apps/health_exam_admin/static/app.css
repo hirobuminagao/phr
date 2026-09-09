@@ -9559,3 +9559,10 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 .csv-data-check-column-code-counts span { white-space: nowrap; }
 @media (max-width: 1000px) { .csv-data-check-template-summary, .csv-data-check-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .csv-data-check-target > summary { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .csv-data-check-template-summary, .csv-data-check-overview-grid { grid-template-columns: 1fr; } .csv-data-check-folder-panel { grid-template-columns: 1fr; } .csv-data-check-upload { align-items: stretch; flex-direction: column; } .csv-data-check-upload input { width: 100%; } .csv-data-check-target-metrics { grid-template-columns: 1fr; } }
+.feedback-detail-entry-grid { display: grid; gap: 12px; }
+.feedback-detail-entry { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.feedback-detail-entry > summary { padding: 16px 18px; cursor: pointer; font-size: 17px; font-weight: 800; }
+.feedback-detail-entry[open] > summary { border-bottom: 1px solid var(--line); background: var(--surface-muted); }
+.feedback-detail-entry > form { padding: 18px; }
+.feedback-bulk-columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .feedback-bulk-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

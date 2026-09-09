@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% set title = "指摘case明細" %}
+{% set title = "指摘対象者詳細" %}
 {% block body %}
 <header class="topbar">
   <div>
     <p class="eyebrow">External Feedback</p>
-    <h1>指摘case明細</h1>
+    <h1>指摘対象者詳細</h1>
   </div>
   <nav class="top-actions">
-    <a class="ghost-button" href="/external-feedback">指摘一覧</a>
+    <a class="ghost-button" href="/external-feedback/reports/{{ item.external_feedback_report_id }}">指摘箱</a>
     {% if item.exam_export_case_id %}<a class="ghost-button" href="/exam-export-cases/{{ item.exam_export_case_id }}">case</a>{% endif %}
     <a class="ghost-button" href="/">HOME</a>
   </nav>
@@ -20,7 +20,7 @@
   <section class="panel">
     <div class="section-heading">
       <div>
-        <h2>case明細 {{ item.external_feedback_item_id }}</h2>
+        <h2>{{ item.name_kana_export_value or item.name_full_raw or "対象者未特定" }}</h2>
         <p class="subtle">受領 {{ item.external_feedback_report_id }} / {{ external_feedback_source_label(item.feedback_source) }}</p>
       </div>
       <span class="status-pill status-pending">{{ external_feedback_status_label(item.handling_status) }}</span>
@@ -47,7 +47,20 @@
             <td><strong>{{ detail.basic_field_code or detail.namecode or "その他" }}</strong><small>{{ detail.section_code or "" }} {{ detail.check_item_code or "" }}</small></td>
             <td><strong>{{ detail.external_error_code or "-" }}</strong><small>{{ detail.external_message }}</small></td>
             <td><small>指摘値 {{ detail.reported_value or "-" }}</small><small>期待値 {{ detail.expected_value or "-" }}</small><small>修正後 {{ detail.corrected_value or "-" }}</small></td>
-            <td><span class="status-pill status-pending">{{ external_feedback_status_label(detail.handling_status) }}</span><small>{{ detail.resolution_note or "" }}</small></td>
+            <td>
+              <span class="status-pill {{ 'status-ready' if detail.handling_status == 'RESOLVED' else 'status-pending' }}">{{ external_feedback_status_label(detail.handling_status) }}</span>
+              <small>{{ detail.resolution_note or "" }}</small>
+              {% if can_edit and item.report_status not in ['CARRIED_OVER','CLOSED','CANCELLED'] %}
+              <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details/{{ detail.external_feedback_item_detail_id }}" class="stack-form compact-feedback-update">
+                <select name="handling_status">
+                  {% for value, label in [('OPEN','未対応'),('CONFIRMED','確認済み'),('FIX_PLANNED','修正予定'),('WAITING_RESUBMISSION','再提出待ち'),('RESUBMITTED','再提出済み'),('RESOLVED','解決済み'),('WONT_FIX','対応しない'),('CANCELLED','取消')] %}<option value="{{ value }}" {% if detail.handling_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+                <input name="corrected_value" value="{{ detail.corrected_value or '' }}" placeholder="修正後の値">
+                <input name="resolution_note" value="{{ detail.resolution_note or '' }}" placeholder="対応メモ">
+                <button type="submit" class="ghost-button">更新</button>
+              </form>
+              {% endif %}
+            </td>
           </tr>
           {% else %}<tr><td colspan="5">指摘項目はまだありません。</td></tr>{% endfor %}
         </tbody>
@@ -55,29 +68,43 @@
     </div>
   </section>
 
-  {% if can_edit %}
+  {% if can_edit and item.report_status not in ['CARRIED_OVER','CLOSED','CANCELLED'] %}
   <section class="panel">
-    <div class="section-heading"><div><h2>指摘項目を追加</h2><p class="subtle">基本情報、健診項目、その他から種類を選びます。</p></div></div>
-    <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details" class="stack-form">
-      <div class="form-grid">
-        <label><span>種類</span><select name="detail_type"><option value="BASIC_INFO">基本情報</option><option value="EXAM_ITEM">健診項目</option><option value="OTHER">その他</option></select></label>
-        <label><span>基本情報フィールド</span><input name="basic_field_code" placeholder="address / insurer_number など"></label>
-        <label><span>namecode</span><input name="namecode" placeholder="健診項目の場合は必須"></label>
-        <label><span>section</span><input name="section_code" placeholder="01010 / 01030 / 01060"></label>
-        <label><span>業務チェックID</span><input name="check_item_code"></label>
-        <label><span>重要度</span><select name="issue_level"><option value="ERROR">エラー</option><option value="WARNING">警告</option><option value="INFO">情報</option></select></label>
-        <label><span>状態</span><select name="handling_status"><option value="OPEN">未対応</option><option value="CONFIRMED">確認済み</option><option value="FIX_PLANNED">修正予定</option><option value="WAITING_RESUBMISSION">再提出待ち</option><option value="RESUBMITTED">再提出済み</option><option value="RESOLVED">解決済み</option><option value="WONT_FIX">対応しない</option></select></label>
-        <label><span>外部エラーコード</span><input name="external_error_code"></label>
-      </div>
-      <label><span>指摘内容</span><textarea name="external_message" rows="3" required></textarea></label>
-      <div class="form-grid">
-        <label><span>指摘値</span><input name="reported_value"></label>
-        <label><span>期待値</span><input name="expected_value"></label>
-        <label><span>修正後の値</span><input name="corrected_value"></label>
-      </div>
-      <label><span>対応メモ</span><textarea name="resolution_note" rows="2"></textarea></label>
-      <div class="action-row"><button type="submit">指摘項目を追加</button></div>
-    </form>
+    <div class="section-heading"><div><h2>指摘内容を追加</h2><p class="subtle">追加する内容に合わせて、基本情報・健診項目・その他を選びます。</p></div></div>
+    <div class="feedback-detail-entry-grid">
+    <details class="feedback-detail-entry" open>
+      <summary>基本情報を追加</summary>
+      <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details" class="stack-form">
+        <input type="hidden" name="detail_type" value="BASIC_INFO">
+        <label><span>基本情報フィールド</span><input name="basic_field_code" required placeholder="address / insurer_number など"></label>
+        <label><span>指摘内容</span><textarea name="external_message" rows="2" required></textarea></label>
+        <div class="form-grid"><label><span>指摘値</span><input name="reported_value"></label><label><span>期待値</span><input name="expected_value"></label><label><span>修正後の値</span><input name="corrected_value"></label></div>
+        <label><span>対応メモ</span><textarea name="resolution_note" rows="2"></textarea></label>
+        <div class="action-row"><button type="submit">基本情報の指摘を追加</button></div>
+      </form>
+    </details>
+    <details class="feedback-detail-entry">
+      <summary>健診項目を追加</summary>
+      <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details" class="stack-form">
+        <input type="hidden" name="detail_type" value="EXAM_ITEM">
+        <div class="form-grid"><label><span>namecode</span><input name="namecode" required></label><label><span>section</span><input name="section_code" placeholder="01010 / 01030 / 01060"></label><label><span>業務チェックID</span><input name="check_item_code"></label></div>
+        <label><span>指摘内容</span><textarea name="external_message" rows="2" required></textarea></label>
+        <div class="form-grid"><label><span>指摘値</span><input name="reported_value"></label><label><span>期待値</span><input name="expected_value"></label><label><span>修正後の値</span><input name="corrected_value"></label></div>
+        <label><span>対応メモ</span><textarea name="resolution_note" rows="2"></textarea></label>
+        <div class="action-row"><button type="submit">健診項目の指摘を追加</button></div>
+      </form>
+    </details>
+    <details class="feedback-detail-entry">
+      <summary>その他を追加</summary>
+      <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details" class="stack-form">
+        <input type="hidden" name="detail_type" value="OTHER">
+        <div class="form-grid"><label><span>重要度</span><select name="issue_level"><option value="ERROR">エラー</option><option value="WARNING">警告</option><option value="INFO">情報</option></select></label><label><span>外部エラーコード</span><input name="external_error_code"></label></div>
+        <label><span>指摘内容</span><textarea name="external_message" rows="2" required></textarea></label>
+        <label><span>対応メモ</span><textarea name="resolution_note" rows="2"></textarea></label>
+        <div class="action-row"><button type="submit">その他の指摘を追加</button></div>
+      </form>
+    </details>
+    </div>
   </section>
   {% endif %}
 </main>
