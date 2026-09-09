@@ -1794,7 +1794,9 @@ def resolve_xml_basic_facility(
     return result
 
 
-def resolve_zip_password(cur: Any, config: ImportConfig, file_receipt: Mapping[str, Any]) -> bytes | None:
+def resolve_zip_password_candidates(
+    cur: Any, config: ImportConfig, file_receipt: Mapping[str, Any]
+) -> list[bytes]:
     facility_codes = [
         compact_text(file_receipt.get("facility_code")),
         compact_text(file_receipt.get("submitter_facility_code")),
@@ -1832,15 +1834,18 @@ def resolve_zip_password(cur: Any, config: ImportConfig, file_receipt: Mapping[s
           END,
           priority,
           zip_password_id
-        LIMIT 1
         """,
         tuple(params),
     )
-    row = cur.fetchone()
-    if not row:
-        return None
-    password = compact_text(row.get("password_text") if isinstance(row, Mapping) else row[0])
-    return password.encode("utf-8") if password is not None else None
+    passwords: list[bytes] = []
+    seen: set[str] = set()
+    for row in cur.fetchall():
+        password = compact_text(row.get("password_text") if isinstance(row, Mapping) else row[0])
+        if password is None or password in seen:
+            continue
+        seen.add(password)
+        passwords.append(password.encode("utf-8"))
+    return passwords
 
 
 def is_encrypted_zip_info(info: zipfile.ZipInfo) -> bool:
@@ -1855,6 +1860,21 @@ def read_zip_member(zf: zipfile.ZipFile, info: zipfile.ZipInfo, password: bytes 
         if "password" in message or "encrypted" in message or "decrypt" in message:
             raise ZipDecryptError(type(exc).__name__) from exc
         raise
+
+
+def select_zip_password(
+    zf: zipfile.ZipFile,
+    encrypted_infos: list[zipfile.ZipInfo],
+    password_candidates: list[bytes],
+) -> bytes:
+    for candidate_password in password_candidates:
+        try:
+            for info in encrypted_infos:
+                read_zip_member(zf, info, candidate_password)
+        except ZipDecryptError:
+            continue
+        return candidate_password
+    raise ZipDecryptError("password candidates exhausted")
 
 
 def read_candidates_from_file(
@@ -1880,11 +1900,13 @@ def read_candidates_from_file(
                 target_infos.append(info)
             elif info.filename.lower().endswith(".xml"):
                 excluded += 1
+        encrypted_infos = [info for info in target_infos if is_encrypted_zip_info(info)]
         password: bytes | None = None
-        if any(is_encrypted_zip_info(info) for info in target_infos):
-            password = resolve_zip_password(cur, config, file_receipt)
-            if password is None:
+        if encrypted_infos:
+            password_candidates = resolve_zip_password_candidates(cur, config, file_receipt)
+            if not password_candidates:
                 raise ZipPasswordNotFoundError
+            password = select_zip_password(zf, encrypted_infos, password_candidates)
         for info in target_infos:
             candidates.append(
                 XmlCandidate(

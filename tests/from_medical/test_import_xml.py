@@ -134,6 +134,61 @@ def test_fetch_file_receipts_filters_by_alias() -> None:
     assert "fr.medical_folder_alias_id = %s" in sql
     assert params[-1] == 12
 
+
+def test_resolve_zip_password_candidates_keeps_priority_order_and_deduplicates() -> None:
+    cur = FakeCursor(
+        [
+            {"password_text": "sha-password"},
+            {"password_text": "facility-password"},
+            {"password_text": "sha-password"},
+            {"password_text": ""},
+        ]
+    )
+    config = SimpleNamespace(work_db="work_other")
+
+    passwords = import_xml.resolve_zip_password_candidates(
+        cur,
+        config,
+        {
+            "file_sha256": "a" * 64,
+            "file_name": "result.zip",
+            "source_path": "/tmp/result.zip",
+            "facility_code": "0110119674",
+            "submitter_facility_code": None,
+            "relative_path": "facility/02_健診結果（編集）/result.zip",
+        },
+    )
+
+    assert passwords == [b"sha-password", b"facility-password"]
+    sql, _ = cur.execute_calls[-1]
+    assert "LIMIT 1" not in sql
+    assert "WHEN 'ZIP_SHA256' THEN 1" in sql
+
+
+def test_select_zip_password_tries_candidates_until_one_opens_all_members(monkeypatch) -> None:
+    attempts: list[tuple[object, bytes | None]] = []
+
+    def fake_read_zip_member(zf, info, password):
+        attempts.append((info, password))
+        if password == b"old-password":
+            raise import_xml.ZipDecryptError("wrong password")
+        return b"xml"
+
+    monkeypatch.setattr(import_xml, "read_zip_member", fake_read_zip_member)
+
+    selected = import_xml.select_zip_password(
+        object(),
+        ["h1.xml", "h2.xml"],
+        [b"old-password", b"current-password"],
+    )
+
+    assert selected == b"current-password"
+    assert attempts == [
+        ("h1.xml", b"old-password"),
+        ("h1.xml", b"current-password"),
+        ("h2.xml", b"current-password"),
+    ]
+
     def fetchone(self) -> dict[str, object] | None:
         return self.rows[0] if self.rows else None
 

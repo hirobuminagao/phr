@@ -6541,12 +6541,58 @@ def load_zip_password_admin_rows(cur: Any, *, query: str, include_inactive: bool
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_zip_password_alias_options(cur: Any) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          mfa.alias_id,
+          mfa.event_id,
+          mfa.src_folder_raw,
+          mfa.exam_facility_id,
+          ef.exam_facility_code,
+          COALESCE(ef.exam_facility_display_name, ef.exam_facility_name, mfa.dst_folder_norm) AS facility_name
+        FROM {qname(master_db())}.medical_folder_aliases AS mfa
+        LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        WHERE mfa.is_active = 1
+          AND mfa.manual_judgement = 0
+          AND mfa.exam_facility_id IS NOT NULL
+        ORDER BY mfa.event_id DESC, facility_name, mfa.src_folder_raw, mfa.alias_id
+        """
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def resolve_zip_password_alias(cur: Any, alias_id: int) -> dict[str, Any] | None:
+    cur.execute(
+        f"""
+        SELECT
+          mfa.alias_id,
+          mfa.src_folder_raw,
+          ef.exam_facility_code
+        FROM {qname(master_db())}.medical_folder_aliases AS mfa
+        JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        WHERE mfa.alias_id = %s
+          AND mfa.is_active = 1
+          AND mfa.manual_judgement = 0
+        LIMIT 1
+        """,
+        (alias_id,),
+    )
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
 def parse_admin_zip_password_form(form: dict[str, str]) -> tuple[dict[str, Any], str | None]:
     values: dict[str, Any] = {
         "zip_password_id": parse_positive_int(
             str(form.get("zip_password_id") or "0"), default=0, maximum=999999999
         ),
         "scope_type": str(form.get("scope_type") or "FACILITY").strip().upper(),
+        "medical_folder_alias_id": parse_positive_int(
+            str(form.get("medical_folder_alias_id") or "0"), default=0, maximum=999999999
+        ),
         "facility_code": str(form.get("facility_code") or "").strip() or None,
         "facility_folder_name": str(form.get("facility_folder_name") or "").strip() or None,
         "zip_name": str(form.get("zip_name") or "").strip() or None,
@@ -6560,8 +6606,8 @@ def parse_admin_zip_password_form(form: dict[str, str]) -> tuple[dict[str, Any],
         return values, "適用範囲が不正です。"
     if not values["password_text"] or len(values["password_text"]) > 255:
         return values, "パスワードを1〜255文字で入力してください。"
-    if scope_type == "FACILITY" and not values["facility_code"] and not values["facility_folder_name"]:
-        return values, "健診機関コードまたは受領フォルダ名を入力してください。"
+    if scope_type == "FACILITY" and not values["medical_folder_alias_id"]:
+        return values, "受領aliasを選択してください。"
     if scope_type == "ZIP_NAME" and not values["zip_name"]:
         return values, "ZIPファイル名を入力してください。"
     if scope_type == "ZIP_SHA256" and not re.fullmatch(r"[0-9a-f]{64}", values["zip_sha256"] or ""):
@@ -6586,6 +6632,16 @@ def save_zip_password_record(
     with connect_ctx(params, database=work_other_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
+            if scope_type == "FACILITY":
+                alias = resolve_zip_password_alias(cur, int(values["medical_folder_alias_id"]))
+                if alias is None:
+                    conn.rollback()
+                    return RedirectResponse(
+                        f"/admin/zip-passwords?error={quote('選択した受領aliasを確認できません。')}",
+                        status_code=303,
+                    )
+                facility_code = str(alias.get("exam_facility_code") or "").strip() or None
+                facility_folder = str(alias.get("src_folder_raw") or "").strip() or None
             cur.execute(
                 f"INSERT INTO {qname(work_other_db())}.medi_zip_passwords "
                 "(scope_type, facility_code, facility_folder_name, zip_name, zip_sha256, "
@@ -16319,6 +16375,7 @@ def admin_zip_passwords(request: Request) -> Response:
     with connect_ctx(params, database=work_other_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
         rows = load_zip_password_admin_rows(cur, query=query, include_inactive=include_inactive)
+        alias_options = load_zip_password_alias_options(cur)
         cur.close()
     return templates.TemplateResponse(
         "admin_zip_passwords.html",
@@ -16326,6 +16383,7 @@ def admin_zip_passwords(request: Request) -> Response:
             "request": request,
             "user": user,
             "rows": rows,
+            "alias_options": alias_options,
             "query": query,
             "include_inactive": include_inactive,
             "can_edit": can_manage_business_settings(user),
@@ -16372,6 +16430,7 @@ async def reveal_admin_zip_password(request: Request, password_id: int) -> Respo
         )
         password_row = cur.fetchone()
         rows = load_zip_password_admin_rows(cur, query="", include_inactive=True)
+        alias_options = load_zip_password_alias_options(cur)
         if password_row:
             log_audit(
                 cur,
@@ -16391,6 +16450,7 @@ async def reveal_admin_zip_password(request: Request, password_id: int) -> Respo
             "request": request,
             "user": user,
             "rows": rows,
+            "alias_options": alias_options,
             "query": "",
             "include_inactive": True,
             "can_edit": can_manage_business_settings(user),
