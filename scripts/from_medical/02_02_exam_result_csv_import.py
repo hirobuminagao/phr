@@ -83,7 +83,8 @@ class ImportConfig:
     dry_run: bool
     limit: int
     include_imported: bool
-    file_receipt_id: int | None
+    file_receipt_id: int | None = None
+    medical_folder_alias_id: int | None = None
 
 
 @dataclass
@@ -124,6 +125,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--file-receipt-id", type=int, default=None)
+    parser.add_argument("--medical-folder-alias-id", type=int, default=None)
     parser.add_argument("--include-imported", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_EXAM_RESULT_DB)
@@ -283,7 +285,11 @@ def start_import_run(cur: Any, *, config: ImportConfig) -> int:
         source=ETL_SOURCE,
         db_schema=config.health_db,
         db_path=config.health_db,
-        input_base=f"event_id={config.event_id}" if config.event_id is not None else None,
+        input_base=(
+            f"event_id={config.event_id}; medical_folder_alias_id={config.medical_folder_alias_id}"
+            if config.event_id is not None and config.medical_folder_alias_id is not None
+            else f"event_id={config.event_id}" if config.event_id is not None else None
+        ),
         input_file=None,
         insurer_number=None,
         dry_run=config.dry_run,
@@ -336,6 +342,9 @@ def fetch_csv_file_receipts(cur: Any, *, config: ImportConfig) -> list[dict[str,
     if config.file_receipt_id is not None:
         where.append("id = %s")
         params.append(config.file_receipt_id)
+    if config.medical_folder_alias_id is not None:
+        where.append("medical_folder_alias_id = %s")
+        params.append(config.medical_folder_alias_id)
     limit_sql = ""
     if config.limit:
         limit_sql = "LIMIT %s"
@@ -1235,6 +1244,7 @@ def main() -> int:
         limit=int(args.limit or 0),
         include_imported=bool(args.include_imported),
         file_receipt_id=args.file_receipt_id,
+        medical_folder_alias_id=args.medical_folder_alias_id,
     )
     params = load_mysql_base_params(args.db_prefix)
     with connect_ctx(params, database=config.health_db, autocommit=False) as conn:

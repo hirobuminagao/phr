@@ -24,6 +24,7 @@ from scripts.lib.etl import RunMetrics
 from scripts.lib.etl import finish_run as etl_finish_run
 from scripts.lib.etl import start_run as etl_start_run
 from scripts.from_medical.script_lib.export_case_readiness import refresh_export_case_readiness
+from scripts.from_medical.script_lib.case_id_file import load_case_id_file
 
 
 HEALTH_DB = "health_exam_result"
@@ -79,6 +80,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit-cases", type=int, default=0)
     parser.add_argument("--case-id", type=int, action="append", default=[])
+    parser.add_argument("--case-id-file", default=None)
     parser.add_argument("--include-review-required", action="store_true")
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
@@ -538,6 +540,10 @@ def build_case_values(conn: Any, config: BuildValueConfig) -> BuildValueSummary:
 
 def main() -> int:
     args = parse_args()
+    file_case_ids = load_case_id_file(args.case_id_file, event_id=args.event_id)
+    explicit_case_ids = tuple(args.case_id or ())
+    if file_case_ids and explicit_case_ids:
+        raise ValueError("case-id and case-id-file cannot be combined")
     config = BuildValueConfig(
         event_id=args.event_id,
         health_db=args.health_db,
@@ -545,7 +551,7 @@ def main() -> int:
         dry_run=bool(args.dry_run),
         limit_cases=int(args.limit_cases or 0),
         include_review_required=bool(args.include_review_required),
-        case_ids=tuple(args.case_id or ()),
+        case_ids=file_case_ids or explicit_case_ids,
     )
     validate_config(config)
     params = load_mysql_base_params(args.db_prefix)

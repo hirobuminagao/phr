@@ -119,6 +119,12 @@
 - `53_case_merge_and_insurer_resolution_design.md`
   - 保険者番号相違で分裂したcaseを履歴保持したまま統合する設計。
   - 複数保険者番号を持つ健保のevent許可集合、case保険者番号の解決順、source所有権、統合済みcaseの除外範囲、再生成時の人手判断維持を整理する。
+- `54_alias_scoped_exam_processing_design.md`
+  - eventと受領フォルダaliasを指定し、scanからcaseチェックまで施設単位で再実行する設計。
+  - receiptのalias系譜、同一受診の全source再結合、新規・既存case IDの後続引き渡しを整理する。
+- `55_alias_scoped_exam_processing_design_review.md`
+  - alias単位処理設計をデータ欠落、複数施設ZIP、Windows実行、DB肥大化の観点から独立レビューする。
+  - 却下案、実装条件、重点テストとレビュー順序を整理する。
 
 ## ADR Policy
 

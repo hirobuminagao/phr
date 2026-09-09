@@ -100,6 +100,7 @@ class CheckConfig:
     verbose: bool
     ledger_type: str
     case_ids: tuple[int, ...] = ()
+    medical_folder_alias_id: int | None = None
 
 
 @dataclass
@@ -206,7 +207,11 @@ def start_check_run(cur: Any, config: CheckConfig) -> int:
         source=ETL_SOURCE,
         db_schema=config.health_db,
         db_path=config.health_db,
-        input_base=f"event_id={config.event_id}",
+        input_base=(
+            f"event_id={config.event_id}; medical_folder_alias_id={config.medical_folder_alias_id}"
+            if config.medical_folder_alias_id is not None
+            else f"event_id={config.event_id}"
+        ),
         input_file=None,
         insurer_number=None,
         dry_run=config.dry_run,
@@ -1015,8 +1020,16 @@ def fetch_target_exam_ledgers(
     health_db: str,
     event_id: int,
     limit: int = 0,
+    medical_folder_alias_id: int | None = None,
 ) -> list[dict[str, Any]]:
     params: list[Any] = [event_id]
+    alias_filter = ""
+    if medical_folder_alias_id is not None:
+        alias_filter = (
+            f"AND file_receipt_id IN (SELECT id FROM {qname(health_db)}.file_receipts "
+            "WHERE event_id = %s AND medical_folder_alias_id = %s)"
+        )
+        params.extend([event_id, medical_folder_alias_id])
     limit_sql = ""
     if limit:
         limit_sql = "LIMIT %s"
@@ -1043,6 +1056,7 @@ def fetch_target_exam_ledgers(
             OR (source_type IN ('PAPER', 'MANUAL') AND row_status = 'READY')
           )
           AND COALESCE(row_status, '') <> 'REVERTED_TO_DRAFT'
+          {alias_filter}
         ORDER BY exam_ledger_id
         {limit_sql}
         """,
@@ -1100,6 +1114,7 @@ def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[st
             health_db=config.health_db,
             event_id=config.event_id,
             limit=config.limit,
+            medical_folder_alias_id=config.medical_folder_alias_id,
             case_ids=config.case_ids,
         )
     if config.ledger_type == LEDGER_TYPE_EXAM:
@@ -1128,6 +1143,7 @@ def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[st
         health_db=config.health_db,
         event_id=config.event_id,
         limit=0,
+        medical_folder_alias_id=config.medical_folder_alias_id,
     )
     case_ledgers = fetch_target_case_ledgers(
         cur,

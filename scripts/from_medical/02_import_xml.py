@@ -138,6 +138,7 @@ class ImportConfig:
     chunk_size_mb: int
     input: InputConfig
     zip: ZipConfig
+    medical_folder_alias_id: int | None = None
 
 
 @dataclass
@@ -262,6 +263,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Import discovered ZIP/XML files into XML ledger tables.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Import config YAML path.")
     parser.add_argument("--event-id", type=int, default=None, help="Override event_id.")
+    parser.add_argument("--medical-folder-alias-id", type=int, default=None, help="Import receipts from this alias only.")
     parser.add_argument("--etl-run-id", type=int, default=None, help="Limit input file_receipts to a specific scan run.")
     parser.add_argument("--dry-run", action="store_true", help="Read and report without DB writes. DB reads are still required.")
     parser.add_argument("--limit", type=int, default=None, help="Override maximum file_receipts to process. 0 means unlimited.")
@@ -321,6 +323,7 @@ def load_import_config(path: str | Path) -> ImportConfig:
             exclude_keywords=tuple(str(v).lower() for v in raw_zip.get("exclude_keywords") or ("schema", "xsd")),
             keep_work=bool(raw_zip.get("keep_work", False)),
         ),
+        medical_folder_alias_id=None,
     )
 
 
@@ -350,6 +353,7 @@ def resolve_config(args: argparse.Namespace) -> ImportConfig:
             exclude_keywords=config.zip.exclude_keywords,
             keep_work=True if args.keep_work else config.zip.keep_work,
         ),
+        medical_folder_alias_id=args.medical_folder_alias_id,
     )
 
 
@@ -1184,6 +1188,10 @@ def fetch_file_receipts(cur: Any, config: ImportConfig) -> list[dict[str, Any]]:
     if config.input.etl_run_id is not None:
         etl_filter = "AND fr.etl_run_id = %s"
         params.append(config.input.etl_run_id)
+    alias_filter = ""
+    if config.medical_folder_alias_id is not None:
+        alias_filter = "AND fr.medical_folder_alias_id = %s"
+        params.append(config.medical_folder_alias_id)
     limit_sql = ""
     if config.limit:
         limit_sql = "LIMIT %s"
@@ -1197,6 +1205,7 @@ def fetch_file_receipts(cur: Any, config: ImportConfig) -> list[dict[str, Any]]:
           AND {status_filter}
           AND fr.file_type IN ({type_placeholders})
           {etl_filter}
+          {alias_filter}
         ORDER BY fr.id
         {limit_sql}
         """,
@@ -1212,7 +1221,11 @@ def start_import_run(cur: Any, config: ImportConfig) -> int:
         source=ETL_SOURCE,
         db_schema=config.health_db,
         db_path=config.health_db,
-        input_base=f"event_id={config.event_id}",
+        input_base=(
+            f"event_id={config.event_id}; medical_folder_alias_id={config.medical_folder_alias_id}"
+            if config.medical_folder_alias_id is not None
+            else f"event_id={config.event_id}"
+        ),
         input_file=None,
         insurer_number=None,
         dry_run=config.dry_run,

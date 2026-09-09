@@ -57,10 +57,21 @@
       <div class="form-grid four-columns">
         <label>
           対象event
-          <select name="event_id">
+          <select name="event_id" onchange="window.location.href='/exam-processing?event_id=' + encodeURIComponent(this.value)">
             {% for event in events %}
             <option value="{{ event.event_id }}" {% if event.event_id == selected_event_id %}selected{% endif %}>
               {{ event.event_name or ("event " ~ event.event_id) }} / {{ event.insurer_number or "-" }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          対象受領フォルダ
+          <select name="medical_folder_alias_id">
+            <option value="">event全体</option>
+            {% for alias in processing_aliases %}
+            <option value="{{ alias.alias_id }}" {% if alias.alias_id == selected_alias_id %}selected{% endif %}>
+              {{ alias.facility_name }} / {{ alias.src_folder_raw }}
             </option>
             {% endfor %}
           </select>
@@ -85,6 +96,7 @@
           </label>
         </div>
       </div>
+      {% if selected_alias %}<p class="form-note">対象alias: {{ selected_alias.src_folder_raw }} / {{ selected_alias.facility_name }} / ID {{ selected_alias.alias_id }}</p>{% endif %}
       <p class="form-note">※同じファイルとして再取込できるのは中身が完全に同じ場合です。1文字でも違う場合は別ファイル扱いになります。</p>
     </form>
   </section>

@@ -107,6 +107,25 @@ class FakeCursor:
         return self.fetchone_result
 
 
+def test_fetch_csv_file_receipts_filters_by_alias() -> None:
+    cur = FakeCursor()
+    config = csv_import.ImportConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        dev_db="dev_phr",
+        master_db="phr_master",
+        dry_run=False,
+        limit=0,
+        include_imported=False,
+        medical_folder_alias_id=12,
+    )
+
+    csv_import.fetch_csv_file_receipts(cur, config=config)
+
+    assert "medical_folder_alias_id = %s" in cur.sql
+    assert cur.params[-1] == 12
+
+
 def test_fetch_csv_file_receipts_excludes_discovered() -> None:
     cur = FakeCursor()
     config = csv_import.ImportConfig(

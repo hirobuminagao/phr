@@ -11203,6 +11203,9 @@ def run_exam_processing_step(
     include_imported: bool = False,
     case_ids: tuple[int, ...] = (),
     subscriber_ids: tuple[int, ...] = (),
+    medical_folder_alias_id: int | None = None,
+    case_id_file: Path | None = None,
+    case_id_output: Path | None = None,
 ) -> dict[str, Any]:
     step = EXAM_PROCESSING_STEP_MAP.get(step_key)
     if not step:
@@ -11233,6 +11236,14 @@ def run_exam_processing_step(
         cmd.append("--dry-run")
     if include_imported and step_key in {"import_xml", "import_csv"}:
         cmd.append("--include-imported")
+    if medical_folder_alias_id is not None and step_key in {
+        "scan_files", "import_xml", "import_csv", "check_sources", "build_cases"
+    }:
+        cmd.extend(["--medical-folder-alias-id", str(medical_folder_alias_id)])
+    if case_id_output is not None and step_key == "build_cases":
+        cmd.extend(["--case-id-output", str(case_id_output)])
+    if case_id_file is not None and step_key in {"build_values", "check_cases"}:
+        cmd.extend(["--case-id-file", str(case_id_file)])
     if case_ids and step_key in {"build_cases", "build_values", "check_cases"}:
         for case_id in case_ids:
             cmd.extend(["--case-id", str(case_id)])
@@ -11258,6 +11269,40 @@ def run_exam_processing_step(
         "ok": completed.returncode == 0,
         "output": output or "(出力なし)",
     }
+
+
+def load_exam_processing_aliases(cur: Any, *, event_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT
+          mfa.alias_id,
+          mfa.event_id,
+          mfa.src_folder_raw,
+          mfa.dst_folder_norm,
+          mfa.exam_facility_id,
+          mfa.expected_source_mode,
+          ef.exam_facility_code,
+          COALESCE(ef.exam_facility_display_name, ef.exam_facility_name, mfa.dst_folder_norm) AS facility_name
+        FROM {qname(master_db())}.medical_folder_aliases AS mfa
+        LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_id = mfa.exam_facility_id
+        WHERE mfa.event_id = %s
+          AND mfa.is_active = 1
+          AND mfa.manual_judgement = 0
+          AND mfa.exam_facility_id IS NOT NULL
+        ORDER BY facility_name, mfa.src_folder_raw, mfa.alias_id
+        """,
+        (event_id,),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def selected_exam_processing_alias(
+    aliases: Sequence[Mapping[str, Any]], alias_id: int | None
+) -> dict[str, Any] | None:
+    if alias_id is None:
+        return None
+    return next((dict(row) for row in aliases if int(row.get("alias_id") or 0) == alias_id), None)
 
 
 def load_case_rebuild_cases(cur: Any, *, event_id: int, subscriber_id: int) -> list[dict[str, Any]]:
@@ -15225,11 +15270,14 @@ def exam_processing(request: Request) -> Response:
     if not can_run_exam_processing(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     selected_event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
+    selected_alias_id = _optional_int(request.query_params.get("medical_folder_alias_id"))
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
             events = load_event_options(cur)
+            processing_aliases = load_exam_processing_aliases(cur, event_id=selected_event_id)
+            selected_alias = selected_exam_processing_alias(processing_aliases, selected_alias_id)
             recent_runs = load_recent_exam_processing_runs(cur, event_id=selected_event_id)
             running_runs = load_running_exam_processing_runs(cur, event_id=selected_event_id)
             unknown_scan_folders = load_unknown_scan_folder_rows(cur, event_id=str(selected_event_id))
@@ -15244,6 +15292,9 @@ def exam_processing(request: Request) -> Response:
             "user": user,
             "events": events,
             "selected_event_id": selected_event_id,
+            "processing_aliases": processing_aliases,
+            "selected_alias_id": selected_alias_id if selected_alias else None,
+            "selected_alias": selected_alias,
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
             "running_runs": running_runs,
@@ -15598,6 +15649,7 @@ async def run_exam_processing(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await request.form()
     event_id = parse_positive_int(str(form.get("event_id") or ""), default=2, maximum=999999)
+    medical_folder_alias_id = _optional_int(form.get("medical_folder_alias_id"))
     dry_run = str(form.get("dry_run") or "") == "1"
     include_imported = str(form.get("include_imported") or "") == "1"
     limit = parse_positive_int(str(form.get("limit") or ""), default=0, maximum=100000)
@@ -15620,6 +15672,8 @@ async def run_exam_processing(request: Request) -> Response:
         cur = dict_cursor(conn)
         try:
             running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
+            processing_aliases = load_exam_processing_aliases(cur, event_id=event_id)
+            selected_alias = selected_exam_processing_alias(processing_aliases, medical_folder_alias_id)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -15629,23 +15683,88 @@ async def run_exam_processing(request: Request) -> Response:
             f"/exam-processing?event_id={event_id}&error={quote('このeventで別の健診結果処理が実行中です。管理者の実行中処理画面で確認してください。')}",
             status_code=303,
         )
-    results: list[dict[str, Any]] = []
-    for step_key in step_keys:
-        result = run_exam_processing_step(
-            step_key=step_key,
-            event_id=event_id,
-            dry_run=dry_run,
-            limit=limit,
-            include_imported=include_imported,
+    if medical_folder_alias_id is not None and selected_alias is None:
+        return RedirectResponse(
+            f"/exam-processing?event_id={event_id}&error={quote('選択した受領aliasは、このeventで実行できません。')}",
+            status_code=303,
         )
-        results.append(result)
-        if not result["ok"]:
-            break
+    if medical_folder_alias_id is not None:
+        if "build_values" in step_keys and "build_cases" not in step_keys:
+            return RedirectResponse(
+                f"/exam-processing?event_id={event_id}&medical_folder_alias_id={medical_folder_alias_id}"
+                f"&error={quote('alias単位ではcase更新を含めて実行してください。')}",
+                status_code=303,
+            )
+        if "check_cases" in step_keys and not {"build_cases", "build_values"}.issubset(step_keys):
+            return RedirectResponse(
+                f"/exam-processing?event_id={event_id}&medical_folder_alias_id={medical_folder_alias_id}"
+                f"&error={quote('alias単位のcaseチェックは、case更新とcase値更新を含めて実行してください。')}",
+                status_code=303,
+            )
+    results: list[dict[str, Any]] = []
+    case_id_path = Path(tempfile.gettempdir()) / f"phr-alias-cases-{secrets.token_hex(12)}.json"
+    try:
+        for step_key in step_keys:
+            result = run_exam_processing_step(
+                step_key=step_key,
+                event_id=event_id,
+                dry_run=dry_run,
+                limit=limit,
+                include_imported=include_imported,
+                medical_folder_alias_id=medical_folder_alias_id,
+                case_id_output=case_id_path if medical_folder_alias_id is not None else None,
+                case_id_file=(
+                    case_id_path
+                    if medical_folder_alias_id is not None and step_key in {"build_values", "check_cases"}
+                    else None
+                ),
+            )
+            results.append(result)
+            if not result["ok"]:
+                break
+            if medical_folder_alias_id is not None and step_key == "build_cases":
+                if dry_run:
+                    results.append(
+                        {
+                            "step_key": "alias_dry_run_complete",
+                            "label": "alias dry-run",
+                            "returncode": 0,
+                            "ok": True,
+                            "output": "dry-runではcase IDを確定しないため、case値更新以降は実行していません。",
+                        }
+                    )
+                    break
+                if not case_id_path.is_file():
+                    results.append(
+                        {
+                            "step_key": "alias_case_scope_missing",
+                            "label": "case後続処理",
+                            "returncode": 1,
+                            "ok": False,
+                            "output": "case更新結果の対象IDを確認できないため、case値更新以降を停止しました。",
+                        }
+                    )
+                    break
+                manifest = json.loads(case_id_path.read_text(encoding="utf-8"))
+                if not manifest.get("case_ids"):
+                    results.append(
+                        {
+                            "step_key": "alias_case_scope_empty",
+                            "label": "case後続処理",
+                            "returncode": 0,
+                            "ok": True,
+                            "output": "caseを作成・更新できるledgerがないため、case値更新以降をスキップしました。",
+                        }
+                    )
+                    break
+    finally:
+        case_id_path.unlink(missing_ok=True)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
             events = load_event_options(cur)
+            processing_aliases = load_exam_processing_aliases(cur, event_id=event_id)
             recent_runs = load_recent_exam_processing_runs(cur, event_id=event_id)
             running_runs = load_running_exam_processing_runs(cur, event_id=event_id)
             unknown_scan_folders = load_unknown_scan_folder_rows(cur, event_id=str(event_id))
@@ -15662,6 +15781,9 @@ async def run_exam_processing(request: Request) -> Response:
             "user": user,
             "events": events,
             "selected_event_id": event_id,
+            "processing_aliases": processing_aliases,
+            "selected_alias_id": medical_folder_alias_id,
+            "selected_alias": selected_alias,
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
             "running_runs": running_runs,

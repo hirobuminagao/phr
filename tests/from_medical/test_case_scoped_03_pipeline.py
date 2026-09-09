@@ -214,6 +214,70 @@ def test_build_cases_can_target_subscriber_before_case_exists() -> None:
     assert params == (2, 100)
 
 
+def test_build_cases_alias_scope_expands_to_all_sources_for_same_visit() -> None:
+    cur = SequentialCursor(
+        [[
+            {
+                "event_id": 2,
+                "exam_ledger_id": 10,
+                "source_type": "CSV",
+                "subscriber_id": 100,
+                "resolved_subscriber_id": 100,
+                "exam_date": "2026-06-01",
+                "resolved_exam_date": "2026-06-01",
+                "exam_facility_id": 70,
+                "resolved_exam_facility_id": 70,
+                "insurer_number": "06139463",
+                "resolved_insurer_number": "06139463",
+                "source_medical_folder_alias_id": 12,
+                "manual_exam_export_case_id": None,
+            },
+            {
+                "event_id": 2,
+                "exam_ledger_id": 11,
+                "source_type": "MANUAL",
+                "subscriber_id": 100,
+                "resolved_subscriber_id": 100,
+                "exam_date": "2026-06-01",
+                "resolved_exam_date": "2026-06-01",
+                "exam_facility_id": 70,
+                "resolved_exam_facility_id": 70,
+                "insurer_number": "06139463",
+                "resolved_insurer_number": "06139463",
+                "source_medical_folder_alias_id": None,
+                "manual_exam_export_case_id": None,
+            },
+            {
+                "event_id": 2,
+                "exam_ledger_id": 12,
+                "source_type": "XML",
+                "subscriber_id": 200,
+                "resolved_subscriber_id": 200,
+                "exam_date": "2026-06-02",
+                "resolved_exam_date": "2026-06-02",
+                "exam_facility_id": 80,
+                "resolved_exam_facility_id": 80,
+                "insurer_number": "06139463",
+                "resolved_insurer_number": "06139463",
+                "source_medical_folder_alias_id": 13,
+                "manual_exam_export_case_id": None,
+            },
+        ]]
+    )
+    config = build_cases.BuildCaseConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        dev_db="dev_phr",
+        dry_run=False,
+        limit_groups=0,
+        medical_folder_alias_id=12,
+    )
+
+    rows = build_cases.fetch_source_ledgers(cur, config)
+
+    assert [row["exam_ledger_id"] for row in rows] == [10, 11]
+
+
 def test_case_grouping_does_not_split_on_insurer_number() -> None:
     rows = [
         {"event_id": 2, "subscriber_id": 100, "exam_date": "2026-06-01", "exam_facility_id": 70, "insurer_number": "00000000"},

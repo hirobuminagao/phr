@@ -98,6 +98,42 @@ class FakeCursor:
     def executemany(self, sql: str, params: list[tuple[object, ...]]) -> None:
         self.executemany_calls.append((sql, params))
 
+    def fetchall(self) -> list[dict[str, object]]:
+        return self.rows
+
+
+def test_fetch_file_receipts_filters_by_alias() -> None:
+    cur = FakeCursor()
+    config = import_xml.ImportConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        dev_db="dev_phr",
+        master_db="phr_master",
+        work_db="work_other",
+        dry_run=False,
+        limit=0,
+        chunk_size_mb=8,
+        input=import_xml.InputConfig(
+            file_status="READY",
+            file_statuses=("READY",),
+            file_types=("XML", "ZIP"),
+            etl_run_id=None,
+        ),
+        zip=import_xml.ZipConfig(
+            target_xml_pattern="h*.xml",
+            exclude_prefixes=("ix08", "su08"),
+            exclude_keywords=("schema", "xsd"),
+            keep_work=False,
+        ),
+        medical_folder_alias_id=12,
+    )
+
+    import_xml.fetch_file_receipts(cur, config)
+
+    sql, params = cur.execute_calls[-1]
+    assert "fr.medical_folder_alias_id = %s" in sql
+    assert params[-1] == 12
+
     def fetchone(self) -> dict[str, object] | None:
         return self.rows[0] if self.rows else None
 

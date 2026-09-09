@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -46,6 +48,8 @@ class BuildCaseConfig:
     limit_groups: int
     case_ids: tuple[int, ...] = ()
     subscriber_ids: tuple[int, ...] = ()
+    medical_folder_alias_id: int | None = None
+    case_id_output: str | None = None
 
 
 @dataclass
@@ -60,6 +64,7 @@ class BuildCaseSummary:
     review_required: int = 0
     skipped: int = 0
     errors: int = 0
+    processed_case_ids: list[int] = field(default_factory=list)
 
     def to_metrics(self) -> RunMetrics:
         return RunMetrics(
@@ -191,6 +196,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-groups", type=int, default=0)
     parser.add_argument("--case-id", type=int, action="append", default=[])
     parser.add_argument("--subscriber-id", type=int, action="append", default=[])
+    parser.add_argument("--medical-folder-alias-id", type=int, default=None)
+    parser.add_argument("--case-id-output", default=None)
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_DB)
     parser.add_argument("--dev-db", default="dev_phr")
@@ -218,6 +225,8 @@ def validate_config(config: BuildCaseConfig) -> None:
         raise ValueError("subscriber_id must be positive")
     if config.case_ids and config.subscriber_ids:
         raise ValueError("case_id and subscriber_id cannot be specified together")
+    if config.medical_folder_alias_id is not None and (config.case_ids or config.subscriber_ids):
+        raise ValueError("medical_folder_alias_id cannot be combined with case_id or subscriber_id")
     qname(config.health_db)
     qname(config.dev_db)
 
@@ -283,6 +292,7 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
         f"""
         SELECT
           el.*,
+          fr.medical_folder_alias_id AS source_medical_folder_alias_id,
           d.`exam_export_case_id` AS manual_exam_export_case_id,
           COALESCE(
             el.`subscriber_id`,
@@ -337,6 +347,8 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
           COALESCE(el.`facility_code`, eec.`facility_code`) AS resolved_facility_code,
           COALESCE(el.`facility_name`, eec.`facility_name`) AS resolved_facility_name
         FROM {qname(config.health_db)}.`exam_ledgers` AS el
+        LEFT JOIN {qname(config.health_db)}.`file_receipts` AS fr
+          ON fr.`id` = el.`file_receipt_id`
         LEFT JOIN {qname(config.health_db)}.`manual_exam_entry_drafts` AS d
           ON el.`source_type` IN ('PAPER', 'MANUAL')
          AND CAST(d.`manual_exam_entry_draft_id` AS CHAR) = JSON_UNQUOTE(JSON_EXTRACT(el.`raw_row_json`, '$.manual_exam_entry_draft_id'))
@@ -384,6 +396,13 @@ def fetch_source_ledgers(cur: Any, config: BuildCaseConfig) -> list[dict[str, An
             row["exam_facility_id"] = row.get("resolved_exam_facility_id")
             row["facility_code"] = row.get("resolved_facility_code")
             row["facility_name"] = row.get("resolved_facility_name")
+    if config.medical_folder_alias_id is not None:
+        scoped_keys = {
+            case_key(row)
+            for row in rows
+            if int(row.get("source_medical_folder_alias_id") or 0) == config.medical_folder_alias_id
+        }
+        rows = [row for row in rows if case_key(row) in scoped_keys]
     return rows
 
 
@@ -864,6 +883,15 @@ def reopen_export_error(cur: Any, config: BuildCaseConfig, *, case_id: int) -> i
     return int(cur.rowcount or 0)
 
 
+def write_case_id_output(path_text: str, *, event_id: int, case_ids: Iterable[int]) -> None:
+    path = Path(path_text).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"event_id": event_id, "case_ids": sorted({int(value) for value in case_ids})}
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
 def source_role(row: dict[str, Any], primary: dict[str, Any], group: list[dict[str, Any]]) -> tuple[int, str, str]:
     if int(row["exam_ledger_id"]) == int(primary["exam_ledger_id"]):
         return 10, "PRIMARY", "primary source for case"
@@ -940,7 +968,11 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
                 source=ETL_SOURCE,
                 db_schema=config.health_db,
                 db_path=config.health_db,
-                input_base=f"event_id={config.event_id}",
+                input_base=(
+                    f"event_id={config.event_id}; medical_folder_alias_id={config.medical_folder_alias_id}"
+                    if config.medical_folder_alias_id is not None
+                    else f"event_id={config.event_id}"
+                ),
                 input_file=None,
                 insurer_number=None,
                 dry_run=config.dry_run,
@@ -969,6 +1001,7 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
             report_codes = resolve_report_codes(group, event_year=event_year)
             params = case_params(primary, group, run_id, report_codes=report_codes)
             case_id, action = upsert_case(cur, config, params)
+            summary.processed_case_ids.append(case_id)
             if action == "inserted":
                 summary.cases_inserted += 1
             else:
@@ -988,18 +1021,29 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
             )
             reopen_export_error(cur, config, case_id=case_id)
 
-        if config.case_ids:
-            for case_id in config.case_ids:
+        readiness_case_ids = (
+            tuple(summary.processed_case_ids)
+            if config.medical_folder_alias_id is not None
+            else config.case_ids
+        )
+        if readiness_case_ids:
+            for case_id in readiness_case_ids:
                 refresh_export_case_readiness(
                     cur,
                     health_db=config.health_db,
                     event_id=config.event_id,
                     exam_export_case_id=case_id,
                 )
-        else:
+        elif config.medical_folder_alias_id is None:
             refresh_export_case_readiness(cur, health_db=config.health_db, event_id=config.event_id)
         etl_finish_run(cur, run_id, summary.to_metrics(), extra_notes=summary.message())
     conn.commit()
+    if config.case_id_output:
+        write_case_id_output(
+            config.case_id_output,
+            event_id=config.event_id,
+            case_ids=summary.processed_case_ids,
+        )
     print(summary.message())
     return summary
 
@@ -1014,6 +1058,8 @@ def main() -> int:
         limit_groups=int(args.limit_groups or 0),
         case_ids=tuple(args.case_id or ()),
         subscriber_ids=tuple(args.subscriber_id or ()),
+        medical_folder_alias_id=args.medical_folder_alias_id,
+        case_id_output=args.case_id_output,
     )
     validate_config(config)
     params = load_mysql_base_params(args.db_prefix)

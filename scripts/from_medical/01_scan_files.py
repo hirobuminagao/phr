@@ -69,6 +69,7 @@ class ScanConfig:
     limit: int
     chunk_size_mb: int
     dry_run: bool
+    medical_folder_alias_id: int | None = None
 
 
 @dataclass
@@ -86,6 +87,7 @@ class ScanSummary:
     files_target: int = 0
     files_inserted: int = 0
     files_duplicate: int = 0
+    file_aliases_backfilled: int = 0
     files_skipped: int = 0
     csv_format_matched: int = 0
     csv_format_not_found: int = 0
@@ -108,6 +110,7 @@ class ScanSummary:
             f"active={self.aliases_active}",
             f"inserted={self.files_inserted}",
             f"duplicate={self.files_duplicate}",
+            f"alias_backfilled={self.file_aliases_backfilled}",
             f"skipped={self.files_skipped}",
             f"csv_format_matched={self.csv_format_matched}",
             f"errors={self.errors}",
@@ -166,6 +169,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Scan medical result files into file_receipts.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="Scan config YAML path.")
     parser.add_argument("--event-id", type=int, default=None, help="Override dev_phr.event.event_id.")
+    parser.add_argument("--medical-folder-alias-id", type=int, default=None, help="Scan only this folder alias.")
     parser.add_argument("--dry-run", action="store_true", help="Scan and report without DB writes.")
     parser.add_argument("--limit", type=int, default=None, help="Override maximum target files to process. 0 means unlimited.")
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
@@ -189,6 +193,7 @@ def load_scan_config(path: str | Path) -> ScanConfig:
         limit=int(data.get("limit", 0) or 0),
         chunk_size_mb=int(data.get("chunk_size_mb", 8) or 8),
         dry_run=bool(data.get("dry_run", False)),
+        medical_folder_alias_id=None,
     )
 
 
@@ -202,6 +207,7 @@ def resolve_config(args: argparse.Namespace) -> ScanConfig:
         limit=args.limit if args.limit is not None else config.limit,
         chunk_size_mb=args.chunk_size_mb if args.chunk_size_mb is not None else config.chunk_size_mb,
         dry_run=True if args.dry_run else config.dry_run,
+        medical_folder_alias_id=args.medical_folder_alias_id,
     )
 
 
@@ -212,7 +218,11 @@ def start_scan_run(cur: Any, *, config: ScanConfig) -> int:
         source=ETL_SOURCE,
         db_schema=config.health_db,
         db_path=config.health_db,
-        input_base=f"event_id={config.event_id}",
+        input_base=(
+            f"event_id={config.event_id}; medical_folder_alias_id={config.medical_folder_alias_id}"
+            if config.medical_folder_alias_id is not None
+            else f"event_id={config.event_id}"
+        ),
         input_file=None,
         insurer_number=None,
         dry_run=config.dry_run,
@@ -275,7 +285,18 @@ def get_result_root_path(cur: Any, *, dev_db: str, event_id: int) -> str | None:
     return text or None
 
 
-def fetch_aliases(cur: Any, *, master_db: str, event_id: int) -> list[dict[str, Any]]:
+def fetch_aliases(
+    cur: Any,
+    *,
+    master_db: str,
+    event_id: int,
+    medical_folder_alias_id: int | None = None,
+) -> list[dict[str, Any]]:
+    alias_filter = ""
+    params: list[Any] = [event_id]
+    if medical_folder_alias_id is not None:
+        alias_filter = "AND mfa.alias_id = %s"
+        params.append(medical_folder_alias_id)
     cur.execute(
         f"""
         SELECT
@@ -293,9 +314,10 @@ def fetch_aliases(cur: Any, *, master_db: str, event_id: int) -> list[dict[str, 
         LEFT JOIN `{master_db}`.`exam_facilities` ef
           ON ef.exam_facility_id = mfa.exam_facility_id
         WHERE mfa.event_id = %s
+          {alias_filter}
         ORDER BY mfa.src_folder_raw
         """,
-        (event_id,),
+        tuple(params),
     )
     return list(cur.fetchall())
 
@@ -342,10 +364,12 @@ def relative_to_root(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
-def receipt_exists(cur: Any, *, event_id: int, relative_path: str, file_sha256: str) -> bool:
+def find_existing_receipt(
+    cur: Any, *, event_id: int, relative_path: str, file_sha256: str
+) -> dict[str, Any] | None:
     cur.execute(
         """
-        SELECT id
+        SELECT id, medical_folder_alias_id
         FROM file_receipts
         WHERE event_id = %s
           AND relative_path = %s
@@ -354,7 +378,22 @@ def receipt_exists(cur: Any, *, event_id: int, relative_path: str, file_sha256: 
         """,
         (event_id, relative_path, file_sha256),
     )
-    return cur.fetchone() is not None
+    row = cur.fetchone()
+    return dict(row) if row is not None else None
+
+
+def backfill_receipt_alias_if_missing(cur: Any, *, receipt_id: int, medical_folder_alias_id: int) -> bool:
+    cur.execute(
+        """
+        UPDATE file_receipts
+        SET medical_folder_alias_id = %s,
+            last_seen_at = CURRENT_TIMESTAMP(3)
+        WHERE id = %s
+          AND medical_folder_alias_id IS NULL
+        """,
+        (medical_folder_alias_id, receipt_id),
+    )
+    return int(cur.rowcount or 0) == 1
 
 
 def insert_file_receipt(
@@ -370,6 +409,7 @@ def insert_file_receipt(
     run_id: int,
     insurer_number: str | None,
     exam_facility_id: int | None,
+    medical_folder_alias_id: int,
     facility_code: str | None,
     facility_name: str | None,
     actual_header_sha256: str | None,
@@ -394,6 +434,7 @@ def insert_file_receipt(
             facility_code,
             facility_name,
             exam_facility_id,
+            medical_folder_alias_id,
             actual_header_sha256,
             actual_character_encoding,
             matched_csv_format_version_id,
@@ -407,7 +448,7 @@ def insert_file_receipt(
             received_at
         )
         VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, %s, %s, %s, %s,
             CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
         )
         """,
@@ -425,6 +466,7 @@ def insert_file_receipt(
             facility_code,
             facility_name,
             exam_facility_id,
+            medical_folder_alias_id,
             actual_header_sha256,
             actual_character_encoding,
             matched_csv_format_version_id,
@@ -580,7 +622,20 @@ def scan_alias_files(
                 )
             continue
 
-        if receipt_exists(cur, event_id=event_id, relative_path=rel_path, file_sha256=file_hash):
+        existing_receipt = find_existing_receipt(
+            cur,
+            event_id=event_id,
+            relative_path=rel_path,
+            file_sha256=file_hash,
+        )
+        if existing_receipt is not None:
+            if existing_receipt.get("medical_folder_alias_id") is None:
+                if dry_run or backfill_receipt_alias_if_missing(
+                    cur,
+                    receipt_id=int(existing_receipt["id"]),
+                    medical_folder_alias_id=int(alias["alias_id"]),
+                ):
+                    summary.file_aliases_backfilled += 1
             summary.files_duplicate += 1
             continue
 
@@ -655,6 +710,7 @@ def scan_alias_files(
                 run_id=run_id,
                 insurer_number=insurer_number,
                 exam_facility_id=exam_facility_id,
+                medical_folder_alias_id=int(alias["alias_id"]),
                 facility_code=alias.get("exam_facility_code"),
                 facility_name=alias.get("exam_facility_name"),
                 actual_header_sha256=actual_header_sha256,
@@ -753,20 +809,39 @@ def run_scan(conn: Any, config: ScanConfig) -> ScanSummary:
                     conn.commit()
                 return summary
 
-            aliases = fetch_aliases(cur, master_db=config.master_db, event_id=config.event_id)
+            aliases = fetch_aliases(
+                cur,
+                master_db=config.master_db,
+                event_id=config.event_id,
+                medical_folder_alias_id=config.medical_folder_alias_id,
+            )
+            if config.medical_folder_alias_id is not None and not aliases:
+                raise ValueError(
+                    "MEDICAL_FOLDER_ALIAS_NOT_FOUND_OR_EVENT_MISMATCH: "
+                    f"event_id={config.event_id} alias_id={config.medical_folder_alias_id}"
+                )
+            if config.medical_folder_alias_id is not None:
+                selected_alias = aliases[0]
+                if int(selected_alias.get("is_active") or 0) != 1:
+                    raise ValueError(f"MEDICAL_FOLDER_ALIAS_INACTIVE: alias_id={config.medical_folder_alias_id}")
+                if int(selected_alias.get("manual_judgement") or 0) == 1:
+                    raise ValueError(f"MEDICAL_FOLDER_ALIAS_REQUIRES_REVIEW: alias_id={config.medical_folder_alias_id}")
+                if selected_alias.get("exam_facility_id") is None:
+                    raise ValueError(f"MEDICAL_FOLDER_ALIAS_FACILITY_MISSING: alias_id={config.medical_folder_alias_id}")
             summary.aliases_total = len(aliases)
             summary.aliases_active = sum(int(row.get("is_active") or 0) == 1 for row in aliases)
             summary.aliases_inactive = summary.aliases_total - summary.aliases_active
             summary.aliases_manual = sum(int(row.get("manual_judgement") or 0) == 1 for row in aliases)
             alias_names = {str(row["src_folder_raw"]) for row in aliases}
-            scan_unknown_folders(
-                cur,
-                run_id=run_id,
-                root=root,
-                alias_names=alias_names,
-                summary=summary,
-                dry_run=config.dry_run,
-            )
+            if config.medical_folder_alias_id is None:
+                scan_unknown_folders(
+                    cur,
+                    run_id=run_id,
+                    root=root,
+                    alias_names=alias_names,
+                    summary=summary,
+                    dry_run=config.dry_run,
+                )
 
             keep_scanning = True
             for alias in aliases:

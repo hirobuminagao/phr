@@ -18,6 +18,7 @@ from scripts.from_medical.script_lib.check_exam_results import DEV_PHR_DB
 from scripts.from_medical.script_lib.check_exam_results import HEALTH_EXAM_RESULT_DB
 from scripts.from_medical.script_lib.check_exam_results import LEDGER_TYPE_EXPORT_CASE
 from scripts.from_medical.script_lib.check_exam_results import run
+from scripts.from_medical.script_lib.case_id_file import load_case_id_file
 
 
 def parse_args() -> argparse.Namespace:
@@ -28,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--case-id", type=int, action="append", default=[])
+    parser.add_argument("--case-id-file", default=None)
     parser.add_argument("--db-prefix", default="PHR_DB_")
     parser.add_argument("--health-db", default=HEALTH_EXAM_RESULT_DB)
     parser.add_argument("--dev-db", default=DEV_PHR_DB)
@@ -37,6 +39,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    file_case_ids = load_case_id_file(args.case_id_file, event_id=args.event_id)
+    explicit_case_ids = tuple(args.case_id or ())
+    if file_case_ids and explicit_case_ids:
+        raise ValueError("case-id and case-id-file cannot be combined")
     config = CheckConfig(
         event_id=args.event_id,
         health_db=args.health_db,
@@ -45,7 +51,7 @@ def main() -> int:
         limit=int(args.limit or 0),
         verbose=bool(args.verbose),
         ledger_type=LEDGER_TYPE_EXPORT_CASE,
-        case_ids=tuple(args.case_id or ()),
+        case_ids=file_case_ids or explicit_case_ids,
     )
     summary = run(config, db_prefix=args.db_prefix)
     summary.print()
