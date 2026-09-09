@@ -19,7 +19,8 @@ def test_readiness_excludes_resolved_and_excluded_reviews_from_approval_aggregat
 
     refresh_export_case_readiness(cur, health_db="health_exam_result", event_id=2)
 
-    approval_sql, approval_params = cur.calls[0]
+    assert cur.calls[0] == ("SET SESSION group_concat_max_len = 65535", ())
+    approval_sql, approval_params = cur.calls[1]
     assert approval_params == (2,)
     assert approval_sql.count("NOT IN ('RESOLVED_BY_SOURCE_VALUE', 'EXCLUDED')") == 8
     assert approval_sql.count("cri.`review_status` = 'APPROVED_WITH_REASON'") == 3
@@ -37,10 +38,10 @@ def test_readiness_can_update_one_case_without_touching_other_event_cases() -> N
         exam_export_case_id=3446,
     )
 
-    assert len(cur.calls) == 2
-    assert all(params == (2, 3446) for _sql, params in cur.calls)
-    assert "eec.`exam_export_case_id` = %s" in cur.calls[0][0]
-    assert "`exam_export_case_id` = %s" in cur.calls[1][0]
+    assert len(cur.calls) == 3
+    assert all(params == (2, 3446) for _sql, params in cur.calls[1:])
+    assert "eec.`exam_export_case_id` = %s" in cur.calls[1][0]
+    assert "`exam_export_case_id` = %s" in cur.calls[2][0]
 
 
 def test_fetch_target_case_ledgers_can_limit_by_case_ids() -> None:

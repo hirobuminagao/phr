@@ -14,6 +14,9 @@ def refresh_export_case_readiness(
     event_id: int,
     exam_export_case_id: int | None = None,
 ) -> int:
+    # MySQL defaults GROUP_CONCAT to 1024 bytes, which is too small when a case
+    # contains several reviewed check items. Keep the aggregate within TEXT.
+    cur.execute("SET SESSION group_concat_max_len = 65535", ())
     case_filter = " AND eec.`exam_export_case_id` = %s" if exam_export_case_id is not None else ""
     params: tuple[Any, ...] = (event_id, exam_export_case_id) if exam_export_case_id is not None else (event_id,)
     cur.execute(
