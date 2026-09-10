@@ -113,22 +113,52 @@ def decode_csv(raw: bytes) -> tuple[str, str]:
     raise ValueError("文字コードを判定できません。UTF-8またはShift_JISのCSVを指定してください。")
 
 
+def validate_headers(headers: list[str]) -> int:
+    base_count = len(BASE_HEADERS)
+    if headers[:base_count] != list(BASE_HEADERS):
+        raise ValueError("CSVヘッダーの固定35列が一致しません。")
+    option_headers = headers[base_count:]
+    if len(option_headers) % len(OPTION_HEADERS) != 0:
+        raise ValueError(
+            f"CSVのオプションヘッダーが3列1組ではありません（実際{len(option_headers)}列）。"
+        )
+    option_slot_count = len(option_headers) // len(OPTION_HEADERS)
+    if option_slot_count > OPTION_SLOT_COUNT:
+        raise ValueError(
+            f"CSVのオプションは最大{OPTION_SLOT_COUNT}組です（実際{option_slot_count}組）。"
+        )
+    if option_headers != list(OPTION_HEADERS) * option_slot_count:
+        raise ValueError("CSVのオプションヘッダーが一致しません。")
+    return option_slot_count
+
+
 def parse_csv(raw: bytes, *, event_id: int) -> dict[str, Any]:
     text, encoding = decode_csv(raw)
     rows = list(csv.reader(io.StringIO(text, newline="")))
-    expected = list(BASE_HEADERS) + list(OPTION_HEADERS) * OPTION_SLOT_COUNT
     if not rows:
         raise ValueError("CSVファイルが空です。")
-    if rows[0] != expected:
-        raise ValueError(f"CSVヘッダーが一致しません。期待59列、実際{len(rows[0])}列です。")
+    header_option_slot_count = validate_headers(rows[0])
 
     parsed: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     seen_ids: set[int] = set()
     for line_no, values in enumerate(rows[1:], 2):
         try:
-            if len(values) != len(expected):
-                raise ValueError(f"列数が不正です（期待{len(expected)}、実際{len(values)}）")
+            if len(values) < len(BASE_HEADERS):
+                raise ValueError(
+                    f"固定項目の列数が不足しています（必要{len(BASE_HEADERS)}、実際{len(values)}）"
+                )
+            option_values = values[len(BASE_HEADERS):]
+            if len(option_values) % len(OPTION_HEADERS) != 0:
+                raise ValueError(
+                    f"オプション列が3列1組ではありません（実際{len(option_values)}列）"
+                )
+            row_option_slot_count = len(option_values) // len(OPTION_HEADERS)
+            if row_option_slot_count > header_option_slot_count:
+                raise ValueError(
+                    "データ行のオプション数がヘッダーのオプション数を超えています"
+                    f"（ヘッダー{header_option_slot_count}組、データ{row_option_slot_count}組）"
+                )
             base = dict(zip(BASE_HEADERS, values[: len(BASE_HEADERS)]))
             reservation_id = _uint(base["id"], "id", maximum=18_446_744_073_709_551_615)
             if reservation_id is None:
@@ -193,9 +223,10 @@ def parse_csv(raw: bytes, *, event_id: int) -> dict[str, Any]:
             if record["reservation_hospital_id"] is None:
                 raise ValueError("hospital_idは必須です")
             options = []
-            offset = len(BASE_HEADERS)
             for slot in range(OPTION_SLOT_COUNT):
-                code, name, price = values[offset + slot * 3 : offset + slot * 3 + 3]
+                start = slot * len(OPTION_HEADERS)
+                option_group = option_values[start : start + len(OPTION_HEADERS)]
+                code, name, price = option_group if len(option_group) == len(OPTION_HEADERS) else ("", "", "")
                 options.append({
                     "option_slot_no": slot + 1,
                     "option_hia_code": _text(code),
@@ -207,7 +238,13 @@ def parse_csv(raw: bytes, *, event_id: int) -> dict[str, Any]:
             parsed.append({"line_no": line_no, "record": record, "options": options})
         except ValueError as exc:
             errors.append({"line_no": line_no, "message": str(exc)})
-    return {"encoding": encoding, "rows": parsed, "errors": errors, "row_count": len(rows) - 1}
+    return {
+        "encoding": encoding,
+        "header_option_slot_count": header_option_slot_count,
+        "rows": parsed,
+        "errors": errors,
+        "row_count": len(rows) - 1,
+    }
 
 
 def build_plan(cur: Any, parsed: dict[str, Any]) -> dict[str, Any]:
