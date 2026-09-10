@@ -13,6 +13,9 @@ def test_person_event_progress_uses_person_event_without_health_result_tables() 
     assert "load_subscriber_reservation_candidates" in source
     assert "exam_ledgers" not in source
     assert "exam_export_cases" not in source
+    assert "reservation_status_raw IN" in source
+    assert "HIA_DASHBOARD_STATUS" in source
+    assert "per_page: int = 30" in source
 
 
 def test_person_event_progress_route_uses_subscriber_reference_permission() -> None:
@@ -30,3 +33,7 @@ def test_person_event_progress_template_has_base_progress_columns() -> None:
     assert "HIAダッシュボード" in template
     assert "加入者詳細" in template
     assert "健診結果" not in template
+    assert "予約システムの状態（複数選択）" in template
+    assert "HIAダッシュボードの状態（複数選択）" in template
+    assert "状態を更新" in template
+    assert "data-checkbox-choice-card" in template

@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from apps.health_exam_admin.main import load_reservation_site_record_list, reservation_status_label
+from apps.health_exam_admin.main import (
+    load_reservation_site_month_options,
+    load_reservation_site_record_list,
+    reservation_status_label,
+)
 
 
 class ReservationListCursor:
@@ -32,7 +36,7 @@ def test_reservation_site_record_list_filters_and_pages() -> None:
         query_params={
             "event_id": "2",
             "status": "3",
-            "exam_month": "2026-08",
+            "exam_month": "2026-08,2026-09",
             "created_from": "2026-07-01",
             "created_to": "2026-07-31",
             "facility_link": "UNMAPPED",
@@ -49,11 +53,11 @@ def test_reservation_site_record_list_filters_and_pages() -> None:
     assert "r.event_id = %s" in count_sql
     assert "r.exam_facility_id IS NULL" in count_sql
     assert "reservation_site_record_options" in count_sql
-    assert "DATE_FORMAT(r.reservation_date, '%Y-%m') = %s" in count_sql
+    assert "DATE_FORMAT(r.reservation_date, '%Y-%m') IN (%s, %s)" in count_sql
     assert "r.source_created_at >= %s" in count_sql
     assert "r.source_created_at < DATE_ADD(%s, INTERVAL 1 DAY)" in count_sql
     assert "LIMIT %s OFFSET %s" in rows_sql
-    assert count_params == (2, "3", "2026-08", "2026-07-01 00:00:00", "2026-07-31", "%胃カメラ%", "%胃カメラ%")
+    assert count_params == (2, "3", "2026-08", "2026-09", "2026-07-01 00:00:00", "2026-07-31", "%胃カメラ%", "%胃カメラ%")
     assert rows_params[-2:] == (100, 100)
 
 
@@ -62,6 +66,18 @@ def test_reservation_status_labels() -> None:
     assert reservation_status_label("3") == "予約確定"
     assert reservation_status_label("4") == "受診済み"
     assert reservation_status_label("5") == "キャンセル"
+
+
+def test_reservation_month_options_use_event_and_reservation_counts() -> None:
+    cur = ReservationListCursor()
+
+    load_reservation_site_month_options(cur, event_id="2")
+
+    sql, params = cur.calls[0]
+    assert "event_id = %s" in sql
+    assert "COUNT(*) AS reservation_count" in sql
+    assert "cancelled_count" in sql
+    assert params == (2, 36)
 
 
 def test_reservation_site_record_page_has_search_and_list() -> None:
@@ -73,4 +89,6 @@ def test_reservation_site_record_page_has_search_and_list() -> None:
     assert "受診日（開始）" in template
     assert "予約登録日（開始）" in template
     assert "受診月" in template
+    assert "data-month-picker" in template
+    assert "予約 {{ option.reservation_count }}" in template
     assert "/utilities/reservation-site-csv" in template

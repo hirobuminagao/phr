@@ -6,14 +6,28 @@
   <nav class="top-actions"><a class="ghost-button" href="/utilities/reservation-site-records?event_id={{ event_id }}">予約データ一覧</a><a class="ghost-button" href="/utilities/subscribers">加入者情報確認</a><a class="ghost-button" href="/">HOME</a></nav>
 </header>
 <main class="page">
+  {% if message %}<div class="notice success">{{ message }}</div>{% endif %}
   <section class="panel filter-panel">
     <form method="get" action="/utilities/person-event-progress" class="stack-form">
       <div class="form-grid two-column-grid">
         <label><span>イベント</span><select name="event_id" required>{% for event in events %}<option value="{{ event.event_id }}" {% if event.event_id == event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / ID {{ event.event_id }}</option>{% endfor %}</select></label>
         <label><span>加入者検索</span><input name="query" value="{{ query }}" placeholder="HIA ID / subscriber ID / 氏名 / 記号 / 番号"></label>
       </div>
+      <div class="person-event-filter-groups">
+        <fieldset><legend>予約システムの状態（複数選択）</legend><div class="person-event-status-options">
+          {% for value, label in [('1','仮予約'),('3','予約確定'),('4','受診済み'),('5','キャンセル')] %}
+          <label class="choice-card person-event-status-card {{ 'is-selected' if value in selected_reservation_statuses else '' }}" data-checkbox-choice-card><input type="checkbox" name="reservation_status" value="{{ value }}" {% if value in selected_reservation_statuses %}checked{% endif %}><span><strong>{{ label }}</strong><small>状態 {{ value }}</small></span></label>
+          {% endfor %}
+        </div></fieldset>
+        <fieldset><legend>HIAダッシュボードの状態（複数選択）</legend><div class="person-event-status-options">
+          {% for status in dashboard_status_options %}
+          <label class="choice-card person-event-status-card {{ 'is-selected' if status in selected_dashboard_statuses else '' }}" data-checkbox-choice-card><input type="checkbox" name="dashboard_status" value="{{ status }}" {% if status in selected_dashboard_statuses %}checked{% endif %}><span><strong>{{ status }}</strong></span></label>
+          {% else %}<p class="subtle">同期済みのダッシュボード状態がありません。</p>{% endfor %}
+        </div></fieldset>
+      </div>
       <div class="action-row"><a class="ghost-button" href="/utilities/person-event-progress?event_id={{ event_id }}">クリア</a><button type="submit">検索</button></div>
     </form>
+    {% if can_sync %}<form method="post" action="/utilities/person-event-progress/sync" class="inline-form"><input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}"><input type="hidden" name="event_id" value="{{ event_id }}"><button type="submit" class="ghost-button">状態を更新</button></form>{% endif %}
   </section>
 
   <section class="summary-grid">
@@ -35,7 +49,7 @@
     </table></div>
     {% if page_count > 1 %}<nav class="pagination" aria-label="ページ移動">
       {% set query_string = 'event_id=' ~ event_id ~ '&query=' ~ query|urlencode %}
-      <a class="ghost-button {% if page <= 1 %}disabled{% endif %}" {% if page > 1 %}href="?{{ query_string }}&page={{ page - 1 }}"{% endif %}>前へ</a><span>{{ page }} / {{ page_count }}</span><a class="ghost-button {% if page >= page_count %}disabled{% endif %}" {% if page < page_count %}href="?{{ query_string }}&page={{ page + 1 }}"{% endif %}>次へ</a>
+      <a class="ghost-button {% if page <= 1 %}disabled{% endif %}" {% if page > 1 %}href="?{{ query_string }}{% for value in selected_reservation_statuses %}&reservation_status={{ value|urlencode }}{% endfor %}{% for value in selected_dashboard_statuses %}&dashboard_status={{ value|urlencode }}{% endfor %}&page={{ page - 1 }}"{% endif %}>前へ</a><span>{{ page }} / {{ page_count }}</span><a class="ghost-button {% if page >= page_count %}disabled{% endif %}" {% if page < page_count %}href="?{{ query_string }}{% for value in selected_reservation_statuses %}&reservation_status={{ value|urlencode }}{% endfor %}{% for value in selected_dashboard_statuses %}&dashboard_status={{ value|urlencode }}{% endfor %}&page={{ page + 1 }}"{% endif %}>次へ</a>
     </nav>{% endif %}
   </section>
 </main>

@@ -4758,6 +4758,30 @@ def reservation_status_label(value: Any) -> str:
 templates.env.globals["reservation_status_label"] = reservation_status_label
 
 
+def load_reservation_site_month_options(
+    cur: Any, *, event_id: str = "", limit: int = 36
+) -> list[dict[str, Any]]:
+    where = ["reservation_date IS NOT NULL"]
+    params: list[Any] = []
+    if event_id:
+        where.append("event_id = %s")
+        params.append(_optional_int(event_id))
+    cur.execute(
+        f"""
+        SELECT DATE_FORMAT(reservation_date, '%Y-%m') AS exam_month,
+               COUNT(*) AS reservation_count,
+               SUM(reservation_status_raw = '5') AS cancelled_count
+        FROM {qname(work_other_db())}.reservation_site_records
+        WHERE {' AND '.join(where)}
+        GROUP BY DATE_FORMAT(reservation_date, '%Y-%m')
+        ORDER BY exam_month DESC
+        LIMIT %s
+        """,
+        tuple([*params, limit]),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
 def load_reservation_site_record_list(
     cur: Any, *, query_params: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -4800,9 +4824,10 @@ def load_reservation_site_record_list(
     if filters["date_to"]:
         clauses.append("r.reservation_date <= %s")
         params.append(filters["date_to"])
-    if filters["exam_month"]:
-        clauses.append("DATE_FORMAT(r.reservation_date, '%Y-%m') = %s")
-        params.append(filters["exam_month"])
+    exam_months = split_filter_values(filters["exam_month"])
+    if exam_months:
+        clauses.append(f"DATE_FORMAT(r.reservation_date, '%Y-%m') IN ({', '.join(['%s'] * len(exam_months))})")
+        params.extend(exam_months)
     if filters["created_from"]:
         clauses.append("r.source_created_at >= %s")
         params.append(f"{filters['created_from']} 00:00:00")
@@ -15892,6 +15917,12 @@ async def run_hia_dashboard_csv_import_from_screen(
             )
             if not result["ok"]:
                 error = "事前確認に失敗しました。" if action == "preview" else "更新に失敗しました。"
+            elif action == "apply":
+                try:
+                    result["person_event_sync"] = sync_person_event_base_status(event_id=event_id)
+                except Exception as sync_exc:
+                    LOGGER.exception("person_event base sync failed after dashboard import")
+                    result["person_event_sync_warning"] = f"進捗情報の同期に失敗しました: {sync_exc}"
     except ValueError as exc:
         error = str(exc)
     finally:
@@ -15955,10 +15986,12 @@ def reservation_site_records(request: Request) -> Response:
         cur = dict_cursor(conn)
         events = load_event_options(cur)
         result = load_reservation_site_record_list(cur, query_params=request.query_params)
+        month_options = load_reservation_site_month_options(cur, event_id=result["filters"]["event_id"])
         cur.close()
     return templates.TemplateResponse(
         "reservation_site_records.html",
-        {"request": request, "user": user, "events": events, **result},
+        {"request": request, "user": user, "events": events, "month_options": month_options,
+         "selected_exam_months": split_filter_values(result["filters"]["exam_month"]), **result},
     )
 
 
@@ -20448,9 +20481,8 @@ def load_person_event_progress_rows(
     query: str = "",
     reservation_status: str = "",
     dashboard_status: str = "",
-    attention_only: bool = False,
     page: int = 1,
-    per_page: int = 100,
+    per_page: int = 30,
 ) -> dict[str, Any]:
     where = ["pe.event_id = %s"]
     params: list[Any] = [event_id]
@@ -20463,6 +20495,39 @@ def load_person_event_progress_rows(
             "OR s.insurance_symbol LIKE %s OR s.insurance_number LIKE %s)"
         )
         params.extend([like] * 6)
+    reservation_statuses = split_filter_values(reservation_status)
+    if reservation_statuses:
+        placeholders = ", ".join(["%s"] * len(reservation_statuses))
+        where.append(
+            f"""EXISTS (
+              SELECT 1 FROM {qname(work_other_db())}.reservation_site_records r
+              WHERE r.event_id=pe.event_id
+                AND r.applicant_birthday=s.birth
+                AND r.reservation_status_raw IN ({placeholders})
+                AND (
+                  (r.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
+                   AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
+                  OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+                      AND CONVERT(r.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                      AND CONVERT(r.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+                  OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+                      AND CONVERT(r.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+                )
+            )"""
+        )
+        params.extend(reservation_statuses)
+    dashboard_statuses = split_filter_values(dashboard_status)
+    if dashboard_statuses:
+        placeholders = ", ".join(["%s"] * len(dashboard_statuses))
+        where.append(
+            f"""EXISTS (
+              SELECT 1 FROM {qname(dev_db())}.person_event_status_items dashboard_filter
+              WHERE dashboard_filter.person_event_id=pe.person_event_id
+                AND dashboard_filter.item_code='HIA_DASHBOARD_STATUS'
+                AND dashboard_filter.value_code IN ({placeholders})
+            )"""
+        )
+        params.extend(dashboard_statuses)
     where_sql = " AND ".join(where)
     cur.execute(
         f"SELECT COUNT(*) AS total_count FROM {qname(dev_db())}.person_event pe "
@@ -20500,7 +20565,6 @@ def load_person_event_progress_rows(
     )
     rows = [dict(row) for row in cur.fetchall()]
     reservations = load_subscriber_reservation_candidates(cur, subscribers=rows, event_id=event_id)
-    filtered_rows: list[dict[str, Any]] = []
     for row in rows:
         candidates = reservations.get(int(row["subscriber_id"]), [])
         active = [item for item in candidates if str(item.get("reservation_status_raw") or "") != "5"]
@@ -20515,20 +20579,52 @@ def load_person_event_progress_rows(
             row["attention_codes"].append("有効予約が複数")
         if len(candidates) > 1:
             row["attention_codes"].append("予約候補が複数")
-        if reservation_status and not any(str(item.get("reservation_status_raw") or "") == reservation_status for item in candidates):
-            continue
-        if dashboard_status and str(row.get("hia_dashboard_status") or "") != dashboard_status:
-            continue
-        if attention_only and not row["attention_codes"]:
-            continue
-        filtered_rows.append(row)
     return {
-        "rows": filtered_rows,
+        "rows": rows,
         "total_count": total_count,
         "page": page,
         "page_count": page_count,
         "per_page": per_page,
     }
+
+
+def load_person_event_dashboard_status_options(cur: Any, *, event_id: int) -> list[str]:
+    cur.execute(
+        f"""
+        SELECT DISTINCT value_code
+        FROM {qname(dev_db())}.person_event_status_items
+        WHERE event_id=%s AND item_code='HIA_DASHBOARD_STATUS'
+          AND value_code IS NOT NULL AND value_code<>''
+        ORDER BY value_code
+        """,
+        (event_id,),
+    )
+    return [str(row.get("value_code")) for row in cur.fetchall() if row.get("value_code")]
+
+
+def sync_person_event_base_status(*, event_id: int) -> dict[str, str]:
+    from scripts.health_exam_event.sync_person_event_hia_dashboard_status import (
+        SyncConfig as DashboardSyncConfig,
+        sync_person_event_hia_dashboard_status,
+    )
+    from scripts.health_exam_event.sync_person_event_population import (
+        SyncConfig as PopulationSyncConfig,
+        sync_person_event_population,
+    )
+
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=False) as conn:
+        population = sync_person_event_population(
+            conn, PopulationSyncConfig(event_id=event_id, dev_db=dev_db(), dry_run=False)
+        )
+    with connect_ctx(params, database=work_other_db(), autocommit=False) as conn:
+        dashboard = sync_person_event_hia_dashboard_status(
+            conn,
+            DashboardSyncConfig(
+                event_id=event_id, work_db=work_other_db(), dev_db=dev_db(), dry_run=False
+            ),
+        )
+    return {"population": population.to_message(), "dashboard": dashboard.to_message()}
 
 
 def render_subscriber_reference_detail(request: Request, *, subscriber_id: int, full: bool) -> Response:
@@ -20626,6 +20722,8 @@ def person_event_progress(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     params = load_mysql_base_params(db_prefix())
     query = str(request.query_params.get("query") or "").strip()
+    reservation_status = ",".join(request.query_params.getlist("reservation_status"))
+    dashboard_status = ",".join(request.query_params.getlist("dashboard_status"))
     page = parse_positive_int(request.query_params.get("page"), default=1, maximum=100000)
     pii_level = subscriber_reference_pii_level(user)
     with connect_ctx(params, database=dev_db(), autocommit=False) as conn:
@@ -20633,9 +20731,13 @@ def person_event_progress(request: Request) -> Response:
         events = load_event_options(cur)
         default_event_id = int(events[0]["event_id"]) if events else 0
         event_id = parse_positive_int(request.query_params.get("event_id"), default=default_event_id, maximum=999999)
-        result = load_person_event_progress_rows(cur, event_id=event_id, query=query, page=page) if event_id else {
-            "rows": [], "total_count": 0, "page": 1, "page_count": 1, "per_page": 100
+        result = load_person_event_progress_rows(
+            cur, event_id=event_id, query=query, reservation_status=reservation_status,
+            dashboard_status=dashboard_status, page=page
+        ) if event_id else {
+            "rows": [], "total_count": 0, "page": 1, "page_count": 1, "per_page": 30
         }
+        dashboard_status_options = load_person_event_dashboard_status_options(cur, event_id=event_id) if event_id else []
         for row in result["rows"]:
             if pii_level == "HIDDEN":
                 row["name_kanji_full"] = None
@@ -20660,7 +20762,25 @@ def person_event_progress(request: Request) -> Response:
         cur.close()
     return templates.TemplateResponse(
         "person_event_progress.html",
-        {"request": request, "user": user, "events": events, "event_id": event_id, "query": query, **result},
+        {"request": request, "user": user, "events": events, "event_id": event_id, "query": query,
+         "selected_reservation_statuses": split_filter_values(reservation_status),
+         "selected_dashboard_statuses": split_filter_values(dashboard_status),
+         "dashboard_status_options": dashboard_status_options,
+         "can_sync": can_manage_business_settings(user), "message": request.query_params.get("message"), **result},
+    )
+
+
+@app.post("/utilities/person-event-progress/sync")
+def sync_person_event_progress(request: Request, event_id: int = Form(...)) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    sync_person_event_base_status(event_id=event_id)
+    return RedirectResponse(
+        f"/utilities/person-event-progress?event_id={event_id}&message={quote('対象者とダッシュボード状態を更新しました。')}",
+        status_code=303,
     )
 
 
