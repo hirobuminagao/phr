@@ -20,6 +20,8 @@ event_id + subscriber_id = 1 person_event
 
 これはイベント内の人物サマリーであり、1回の受診を意味しない。年度内複数受診、再受領、XMLとCSVの複数sourceは潰さず、配下の予約、ledger、caseとして複数表示する。
 
+eventには将来、受診可能回数または必要受診回数が設定される可能性がある。初期版では「eventにつき1回」を固定ルールにせず、実受診回数と予約回数を数えて表示する。必要回数との充足判定はevent側の回数ルールが定義された段階で追加する。
+
 ### 2.2 受診単位
 
 受診の正本は次の優先順で扱う。
@@ -28,7 +30,17 @@ event_id + subscriber_id = 1 person_event
 2. `exam_ledgers`: case前またはcaseに束ねられた受領source
 3. `reservation_site_records`: 結果受領前の予約単位
 
-予約とcaseを無理に1行へ結合しない。予約日・施設・加入者が一致する場合は同じ受診グループとして表示し、曖昧な場合は別行のまま「要確認」とする。
+予約とcaseを無理に1行へ結合しない。予約日・施設・加入者が一致する場合は同じ受診グループ候補として表示し、曖昧な場合は別行のまま「要確認」とする。
+
+同じevent・同じ加入者に複数予約が存在することを正常系とする。特に次を想定する。
+
+```text
+施設Aを予約 -> キャンセル
+施設Bを再予約 -> 受診
+施設Bの結果をXML/CSVで受領
+```
+
+キャンセル予約は削除せず予約履歴として表示する。最新予約だけを取得して過去のキャンセルを隠したり、キャンセルと再予約を1件へ上書き統合したりしない。
 
 ## 3. 画面構成
 
@@ -58,9 +70,9 @@ URL案: `/utilities/person-event-progress`
 | 列 | 内容 |
 | --- | --- |
 | 加入者 | subscriber ID、HIA加入者ID、権限に応じた氏名・保険情報 |
-| 予約 | 最新予約日、予約状態、予約件数 |
+| 予約 | 有効予約、キャンセル、全予約の各件数、次回予約日 |
 | 結果受領 | ledger件数、XML/CSV/手入力、最新受領日 |
-| case | case件数、最新case ID、check/readiness |
+| case | case件数、実受診回数、最新case ID、check/readiness |
 | HIA出力 | 出力リスト、XML出力、アップロード状態 |
 | ダッシュボード | 最新状態、予約日、受診日、更新日時 |
 | 健保納品 | 未納品/候補/納品済み/再納品、最新納品日 |
@@ -89,7 +101,7 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 詳細内のタブ:
 
 1. **進捗**: 工程タイムラインと現在の要確認事項
-2. **受診・source**: 予約、ledger、caseの対応関係
+2. **受診・source**: 全予約、キャンセル、ledger、caseの対応関係
 3. **出力・納品**: 出力リスト、XML member/ZIP、HIA、健保納品履歴
 4. **履歴**: status itemの更新元runと閲覧監査
 
@@ -112,14 +124,14 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 | 工程 | 主な正本 | 完了の基本条件 | 注意状態 |
 | --- | --- | --- | --- |
 | 加入者 | `dev_phr.subscribers`, `person_event` | event母集団に存在 | 資格情報不足、重複候補 |
-| 予約 | `work_other.reservation_site_records` | 有効な予約が加入者へ紐付く | 仮予約、キャンセル、未突合、複数予約 |
+| 予約 | `work_other.reservation_site_records` | 有効な予約が加入者へ紐付く | 仮予約、キャンセル、未突合、同時に複数の有効予約 |
 | 結果受領 | `exam_ledgers` | 突合済みledgerが1件以上 | 未突合、import NG、施設不一致 |
 | case確認 | `exam_export_cases` | active caseのreadinessが出力可能 | BLOCKED、WAITING、複数active case |
 | HIA出力 | `ops_xml_export_list_cases`, `xml_export_members/zips` | XML member作成済み | EXPORT_ERROR、再出力待ち |
 | ダッシュボード | `hia_dashboard_status` | event対象の最新状態を取得 | caseとの受診日・施設不一致 |
 | 健保納品 | `fund_delivery_*` | person/yearの納品履歴あり | 候補未作成、除外、再納品待ち |
 
-`完了` は画面で独自に上書き保存せず、正本状態から同期する。同じ工程に複数行がある場合は最悪状態だけで潰さず、件数と代表状態を併記する。
+`完了` は画面で独自に上書き保存せず、正本状態から同期する。同じ工程に複数行がある場合は最悪状態だけで潰さず、件数と代表状態を併記する。複数予約・複数受診そのものはエラーにしない。互いに矛盾する有効予約、eventの回数ルール超過、同一受診と思われるcase重複だけを要確認とする。
 
 ## 5. 予約と加入者の紐付け
 
@@ -152,6 +164,23 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 
 候補が複数なら自動確定しない。予約CSVの原値は変更せず、確定した対応だけをlinkテーブルへ保存する。
 
+### 5.3 予約と実受診の対応
+
+予約と加入者の対応が確定しても、どの予約がどの実受診になったかは別問題である。加入者linkへcase IDを直接持たせず、必要になった段階で `work_other.reservation_site_exam_links` を追加する。
+
+主な列:
+
+- `reservation_site_record_id`
+- `exam_export_case_id`
+- `link_status`: `AUTO_MATCHED / CONFIRMED / UNMATCHED / MULTIPLE / CONFLICT`
+- `match_method`: `DATE_FACILITY / DATE_ONLY / MANUAL`
+- `match_reason`
+- `matched_at`, `matched_by_app_user_id`
+
+自動対応は、加入者確定済みかつevent・受診日・健診機関が一致する場合だけを基本とする。キャンセル予約は自動対応対象外とする。予約サイト施設IDが健診機関マスタへ未対応の場合、日付だけで自動確定せず候補表示に留める。
+
+同じ人が同じeventで複数回受診した場合は、それぞれ異なるcaseへ対応できる。1予約を複数caseへ結び付ける必要が生じた場合は、重複caseか分割受領かを確認し、通常の自動処理では確定しない。
+
 ## 6. 読み取りモデル
 
 一覧と詳細で取得方法を分ける。
@@ -162,9 +191,10 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 
 追加するstatus item案:
 
-- `RESERVATION_STATUS`, `RESERVATION_COUNT`, `LATEST_RESERVATION_ID`, `LATEST_RESERVATION_DATE`
+- `RESERVATION_STATUS`, `RESERVATION_COUNT`, `ACTIVE_RESERVATION_COUNT`, `CANCELLED_RESERVATION_COUNT`
+- `NEXT_RESERVATION_ID`, `NEXT_RESERVATION_DATE`, `LATEST_RESERVATION_UPDATED_AT`
 - `RESULT_RECEIVED_COUNT`, `MATCHED_LEDGER_COUNT`, `LATEST_EXAM_LEDGER_ID`
-- `ACTIVE_CASE_COUNT`, `LATEST_CASE_ID`, `CASE_READINESS_STATUS`
+- `ACTIVE_CASE_COUNT`, `EXAM_OCCURRENCE_COUNT`, `LATEST_CASE_ID`, `CASE_READINESS_STATUS`
 - `XML_EXPORT_STATUS`, `LATEST_XML_EXPORT_MEMBER_ID`, `HIA_UPLOAD_STATUS`
 - `HIA_DASHBOARD_STATUS`, `HIA_DASHBOARD_UPDATED_AT`
 - `FUND_DELIVERY_STATUS`, `LATEST_FUND_DELIVERY_RUN_ID`, `FUND_DELIVERED_AT`
@@ -184,11 +214,12 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 
 1. `sync_person_event_population`: eventの加入者母集団
 2. `sync_reservation_site_subscriber_links`: 予約の候補抽出・一意な自動突合
-3. `sync_person_event_reservation_status`: 予約状態
-4. `sync_person_event_status_items`: ledger・case状態（既存処理を責務別に整理）
-5. `sync_person_event_hia_dashboard_status`: ダッシュボード状態（既存）
-6. `sync_person_event_export_status`: XML出力・HIAアップロード状態
-7. `sync_person_event_fund_delivery_status`: 健保納品状態
+3. `sync_reservation_site_exam_links`: 予約と実受診の候補抽出・一意な自動対応
+4. `sync_person_event_reservation_status`: 有効予約・キャンセル・全予約の状態
+5. `sync_person_event_status_items`: ledger・case・受診回数（既存処理を責務別に整理）
+6. `sync_person_event_hia_dashboard_status`: ダッシュボード状態（既存）
+7. `sync_person_event_export_status`: XML出力・HIAアップロード状態
+8. `sync_person_event_fund_delivery_status`: 健保納品状態
 
 各処理は `--event-id` 必須、`--subscriber-id` 任意、`--dry-run` 対応とする。画面は同期を自動実行せず、最終同期日時を表示する。
 
@@ -206,7 +237,11 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 初期検知対象:
 
 - 予約はあるが加入者未確定
+- キャンセル後の再予約はあるが、古い予約を現在予約として表示している
+- 同時に有効な予約が複数あり、現在予約を一意に決められない
 - 予約とcaseで受診日または健診機関が不一致
+- 予約とcaseの対応候補が複数
+- eventに受診回数ルールがある場合の不足または超過
 - 受領済みだがactive caseなし
 - active caseが複数
 - 出力済みだがダッシュボードに反映なし
@@ -218,7 +253,9 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 
 ## 10. migration方針
 
-設計段階ではmigrationを作成しない。実装時に必要となる新規DB構造は、予約と加入者の確定関係を持つ `work_other.reservation_site_subscriber_links` の1テーブルを基本とする。
+設計段階ではmigrationを作成しない。実装時に必要となる新規DB構造は、予約と加入者の確定関係を持つ `work_other.reservation_site_subscriber_links` を必須とする。予約と実受診の明示的な対応が必要な段階で `work_other.reservation_site_exam_links` を追加する。
+
+eventの受診回数ルールは現時点で確定していないため、既存 `dev_phr.event` へ先行して固定列を追加しない。複数健診種別や期間別回数などの要件を確認してから、単純な必要回数列または別ルールテーブルを選ぶ。
 
 `person_event` 自体へ予約・case・納品ごとの固定列は追加しない。工程追加で横持ち列が増殖するのを避け、一覧用集約は既存 `person_event_status_items` を使う。
 
@@ -226,9 +263,10 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 
 1. 予約加入者linkテーブルと突合dry-run
 2. 予約突合結果の確認画面
-3. 領域別status item同期
-4. 健診進捗一覧
-5. 人×event詳細
-6. 不整合カードと既存画面リンク
-7. 実行環境データで件数・性能・誤突合を検証
-
+3. 有効予約・キャンセル・複数予約の集約
+4. 予約と実受診の対応候補表示
+5. 領域別status item同期
+6. 健診進捗一覧
+7. 人×event詳細
+8. 不整合カードと既存画面リンク
+9. 実行環境データで件数・性能・誤突合を検証
