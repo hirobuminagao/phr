@@ -11614,7 +11614,8 @@ def load_export_case_add_candidates(
     xml_export_list_id: int,
     event_id: int,
     filters: Mapping[str, Any],
-    limit: int = 80,
+    limit: int | None = 80,
+    ids_only: bool = False,
 ) -> list[dict[str, Any]]:
     where_parts = ["eec.event_id = %s", "eec.case_lifecycle_status = 'ACTIVE'"]
     params: list[Any] = [event_id]
@@ -11686,9 +11687,13 @@ def load_export_case_add_candidates(
     params.extend(readiness_values)
 
     where_sql = " AND ".join(where_parts)
-    cur.execute(
-        f"""
-        SELECT
+    select_sql = """
+          eec.exam_export_case_id,
+          eec.export_readiness_status,
+          eec.export_readiness_reason,
+          xelc.xml_export_list_case_id AS existing_list_case_id,
+          xelc.removed_at AS existing_removed_at
+    """ if ids_only else """
           eec.exam_export_case_id,
           eec.hia_subscriber_id,
           eec.person_id_custom,
@@ -11706,6 +11711,14 @@ def load_export_case_add_candidates(
           ef.exam_facility_name,
           xelc.xml_export_list_case_id AS existing_list_case_id,
           xelc.removed_at AS existing_removed_at
+    """
+    limit_sql = "LIMIT %s" if limit is not None else ""
+    query_params: tuple[Any, ...] = (xml_export_list_id, *params)
+    if limit is not None:
+        query_params = (*query_params, limit)
+    cur.execute(
+        f"""
+        SELECT {select_sql}
         FROM {qname(health_db())}.exam_export_cases eec
         LEFT JOIN {qname(master_db())}.exam_facilities ef
           ON ef.exam_facility_id = eec.exam_facility_id
@@ -11719,9 +11732,9 @@ def load_export_case_add_candidates(
           eec.exam_date,
           eec.name_kana_export_value,
           eec.exam_export_case_id
-        LIMIT %s
+        {limit_sql}
         """,
-        (xml_export_list_id, *params, limit),
+        query_params,
     )
     return [dict(row) for row in cur.fetchall()]
 
@@ -25430,6 +25443,21 @@ def export_list_candidate_return_url(
     return f"/export-lists/{xml_export_list_id}?{urlencode(query, doseq=True)}"
 
 
+def export_list_candidate_filters_from_query(return_query: str) -> dict[str, Any]:
+    parsed = parse_qs(return_query, keep_blank_values=False)
+    return {
+        "case_q": (parsed.get("case_q") or [""])[0],
+        "facility_q": (parsed.get("facility_q") or [""])[0],
+        "facility_codes": (parsed.get("facility_codes") or [""])[0],
+        "exam_month": (parsed.get("exam_month") or [""])[0],
+        "exam_item_namecodes": parsed.get("exam_item_namecode") or [],
+        "exam_item_match_mode": (parsed.get("exam_item_match_mode") or ["any"])[0],
+        "include_export_ready": (parsed.get("include_export_ready") or [""])[0],
+        "include_approved_with_reason": (parsed.get("include_approved_with_reason") or [""])[0],
+        "include_exported": (parsed.get("include_exported") or [""])[0],
+    }
+
+
 @app.post("/export-lists/{xml_export_list_id}/name", response_class=HTMLResponse)
 async def export_list_name_update(request: Request, xml_export_list_id: int) -> Response:
     user = require_user(request)
@@ -25549,8 +25577,8 @@ async def export_list_case_add(request: Request, xml_export_list_id: int) -> Res
     )
 
 
-@app.post("/export-lists/{xml_export_list_id}/cases/add-visible", response_class=HTMLResponse)
-async def export_list_visible_cases_add(request: Request, xml_export_list_id: int) -> Response:
+@app.post("/export-lists/{xml_export_list_id}/cases/add-filtered", response_class=HTMLResponse)
+async def export_list_filtered_cases_add(request: Request, xml_export_list_id: int) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -25559,49 +25587,86 @@ async def export_list_visible_cases_add(request: Request, xml_export_list_id: in
 
     form = await read_form(request)
     return_query = str(form.get("return_query") or "")
-    case_ids: list[int] = []
-    for raw_case_id in str(form.get("exam_export_case_ids") or "").split(","):
-        try:
-            case_id = int(raw_case_id.strip())
-        except ValueError:
-            continue
-        if case_id > 0 and case_id not in case_ids:
-            case_ids.append(case_id)
-    if not case_ids:
-        return RedirectResponse(
-            export_list_candidate_return_url(
-                xml_export_list_id=xml_export_list_id,
-                return_query=return_query,
-                error="追加できる候補がありません。",
-            ),
-            status_code=303,
-        )
-
     action_counts = {"added": 0, "readded": 0, "already": 0}
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         try:
-            for exam_export_case_id in case_ids:
-                action = add_export_case_to_list(
-                    cur,
-                    xml_export_list_id=xml_export_list_id,
-                    exam_export_case_id=exam_export_case_id,
-                    user=user,
+            export_list = load_xml_export_list_detail(cur, xml_export_list_id=xml_export_list_id)
+            if not export_list:
+                conn.rollback()
+                return RedirectResponse("/export-lists?error=出力リストが見つかりません。", status_code=303)
+            candidate_filters = export_list_candidate_filters_from_query(return_query)
+            candidates = load_export_case_add_candidates(
+                cur,
+                xml_export_list_id=xml_export_list_id,
+                event_id=int(export_list["event_id"]),
+                filters=candidate_filters,
+                limit=None,
+                ids_only=True,
+            )
+            case_ids = [int(row["exam_export_case_id"]) for row in candidates]
+            if not case_ids:
+                conn.rollback()
+                return RedirectResponse(
+                    export_list_candidate_return_url(
+                        xml_export_list_id=xml_export_list_id,
+                        return_query=return_query,
+                        error="追加できる候補がありません。",
+                    ),
+                    status_code=303,
                 )
-                action_counts[action] = action_counts.get(action, 0) + 1
+            operator = str(user.get("employee_no") or user.get("display_name") or "")
+            rows_to_add: list[tuple[Any, ...]] = []
+            for candidate in candidates:
+                if candidate.get("existing_list_case_id") is not None and candidate.get("existing_removed_at") is None:
+                    action_counts["already"] += 1
+                    continue
+                action = "readded" if candidate.get("existing_list_case_id") is not None else "added"
+                action_counts[action] += 1
+                rows_to_add.append(
+                    (
+                        xml_export_list_id,
+                        candidate["exam_export_case_id"],
+                        candidate.get("export_readiness_status"),
+                        candidate.get("export_readiness_reason"),
+                        operator,
+                    )
+                )
+            if rows_to_add:
+                cur.executemany(
+                    f"""
+                    INSERT INTO {qname(health_db())}.ops_xml_export_list_cases (
+                      xml_export_list_id, exam_export_case_id, list_case_status,
+                      export_readiness_status_snapshot, export_readiness_reason_snapshot,
+                      added_by
+                    ) VALUES (%s, %s, 'READY', %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                      list_case_status = 'READY',
+                      export_readiness_status_snapshot = VALUES(export_readiness_status_snapshot),
+                      export_readiness_reason_snapshot = VALUES(export_readiness_reason_snapshot),
+                      added_by = VALUES(added_by),
+                      added_at = CURRENT_TIMESTAMP(3),
+                      removed_by = NULL,
+                      removed_at = NULL,
+                      remove_reason = NULL,
+                      updated_at = CURRENT_TIMESTAMP(3)
+                    """,
+                    rows_to_add,
+                )
             if audit_enabled(cur):
                 log_audit(
                     cur,
                     request=request,
                     user=user,
-                    action_code="XML_EXPORT_LIST_VISIBLE_CASES_ADD",
+                    action_code="XML_EXPORT_LIST_FILTERED_CASES_ADD",
                     target_schema=health_db(),
                     target_table="ops_xml_export_list_cases",
                     target_id=str(xml_export_list_id),
                     after={
                         "xml_export_list_id": xml_export_list_id,
-                        "exam_export_case_ids": case_ids,
+                        "candidate_count": len(case_ids),
+                        "candidate_filters": candidate_filters,
                         "action_counts": action_counts,
                     },
                 )

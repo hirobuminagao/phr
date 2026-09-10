@@ -249,13 +249,12 @@
     <div class="candidate-bulk-actions">
       <div>
         <strong>検索結果 {{ add_candidates|length }}件</strong>
-        <small>現在表示している候補をまとめて追加します。</small>
+        <small>同じ検索条件に一致する候補をすべて追加します。画面表示は先頭80件です。</small>
       </div>
-      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/add-visible">
+      <form method="post" action="/export-lists/{{ export_list.xml_export_list_id }}/cases/add-filtered">
         <input type="hidden" name="return_query" value="{{ request.url.query }}">
-        <input type="hidden" name="exam_export_case_ids" value="{% for case in add_candidates %}{{ ',' if not loop.first else '' }}{{ case.exam_export_case_id }}{% endfor %}">
-        <button type="submit" {% if addable_candidate_count == 0 %}disabled aria-disabled="true"{% endif %}>
-          表示中をすべて追加（{{ addable_candidate_count }}件）
+        <button type="submit" {% if not add_candidates %}disabled aria-disabled="true"{% endif %}>
+          同じ条件をすべて追加
         </button>
       </form>
     </div>

@@ -307,13 +307,19 @@ def choose_by_rule(
 def choose_default(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str | None]:
     xml_candidates = [row for row in candidates if row["source_type"] == "XML"]
     if xml_candidates:
-        return xml_candidates[0], "XML_PRIMARY"
+        chosen = xml_candidates[0]
+        reason = "XML_PRIMARY" if chosen.get("source_role") == "PRIMARY" else "XML_SUPPLEMENT_FALLBACK"
+        return chosen, reason
     csv_candidates = [row for row in candidates if row["source_type"] == "CSV"]
     if csv_candidates:
-        return csv_candidates[0], "CSV_PRIMARY"
+        chosen = csv_candidates[0]
+        reason = "CSV_PRIMARY" if chosen.get("source_role") == "PRIMARY" else "CSV_SUPPLEMENT_FALLBACK"
+        return chosen, reason
     manual_candidates = [row for row in candidates if row["source_type"] in {"PAPER", "MANUAL"}]
     if manual_candidates:
-        return manual_candidates[0], "MANUAL_PRIMARY"
+        chosen = manual_candidates[0]
+        reason = "MANUAL_PRIMARY" if chosen.get("source_role") == "PRIMARY" else "MANUAL_SUPPLEMENT_FALLBACK"
+        return chosen, reason
     return None, None
 
 

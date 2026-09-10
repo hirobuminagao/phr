@@ -425,8 +425,8 @@ def select_groups(rows: Iterable[dict[str, Any]], limit: int) -> list[list[dict[
 def choose_primary(group: list[dict[str, Any]]) -> dict[str, Any]:
     xml_rows = [row for row in group if row["source_type"] == "XML"]
     if xml_rows:
-        return sorted(xml_rows, key=lambda row: (row.get("check_status") != "OK", row["exam_ledger_id"]))[0]
-    return sorted(group, key=lambda row: (row.get("check_status") != "OK", row["exam_ledger_id"]))[0]
+        return sorted(xml_rows, key=lambda row: (row.get("check_status") != "OK", -int(row["exam_ledger_id"])))[0]
+    return sorted(group, key=lambda row: (row.get("check_status") != "OK", -int(row["exam_ledger_id"])))[0]
 
 
 def source_mode(group: list[dict[str, Any]]) -> str:
@@ -466,7 +466,30 @@ def merge_status(group: list[dict[str, Any]]) -> tuple[str, str | None]:
         return "READY", "XML primary with CSV and paper supplement candidates"
     if mode == "MULTI_WITH_PAPER":
         return "READY", "multiple source ledgers with paper supplement candidate"
-    return "REVIEW_REQUIRED", "multiple source ledgers require manual review"
+    if len(group) > 1:
+        source_counts = ", ".join(
+            f"{source_type}={sum(1 for row in group if row['source_type'] == source_type)}"
+            for source_type in ("XML", "CSV", "PAPER", "MANUAL")
+            if any(row["source_type"] == source_type for row in group)
+        )
+        return "READY", f"multiple source ledgers merged by item ({source_counts})"
+    return "REVIEW_REQUIRED", "source ledger composition requires manual review"
+
+
+def mark_case_values_pending(cur: Any, config: BuildCaseConfig, *, case_id: int) -> None:
+    """Prevent a rebuilt case from being checked against its previous value snapshot."""
+    cur.execute(
+        f"""
+        UPDATE {qname(config.health_db)}.`exam_export_cases`
+        SET `value_build_status` = 'PENDING',
+            `value_build_reason` = 'case sources changed; rebuild required',
+            `check_status` = 'PENDING',
+            `check_reason` = NULL,
+            `updated_at` = CURRENT_TIMESTAMP(3)
+        WHERE `exam_export_case_id` = %s
+        """,
+        (case_id,),
+    )
 
 
 def case_params(
@@ -1009,6 +1032,7 @@ def build_cases(conn: Any, config: BuildCaseConfig) -> BuildCaseSummary:
             if params["merge_status"] == "REVIEW_REQUIRED":
                 summary.review_required += 1
             summary.sources_upserted += upsert_sources(cur, config, case_id=case_id, group=group, primary=primary)
+            mark_case_values_pending(cur, config, case_id=case_id)
             reapply_basic_info_corrections(cur, config, case_id=case_id)
             cur.execute(
                 f"""

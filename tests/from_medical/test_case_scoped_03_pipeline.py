@@ -90,6 +90,79 @@ def test_insert_case_values_keeps_source_section_snapshot() -> None:
     assert values["section_name"] == "がん検診セクション"
 
 
+def test_multiple_xml_ledgers_are_merged_by_item_without_manual_review() -> None:
+    group = [
+        {"source_type": "XML", "exam_ledger_id": 10},
+        {"source_type": "XML", "exam_ledger_id": 11},
+    ]
+
+    status, reason = build_cases.merge_status(group)
+
+    assert status == "READY"
+    assert reason == "multiple source ledgers merged by item (XML=2)"
+
+
+def test_choose_primary_prefers_ok_then_newest_xml_ledger() -> None:
+    group = [
+        {"source_type": "XML", "exam_ledger_id": 10, "check_status": "NG"},
+        {"source_type": "XML", "exam_ledger_id": 11, "check_status": "OK"},
+        {"source_type": "XML", "exam_ledger_id": 12, "check_status": "OK"},
+    ]
+
+    assert build_cases.choose_primary(group)["exam_ledger_id"] == 12
+
+
+def test_case_value_prefers_primary_xml_and_uses_supplement_for_missing_item() -> None:
+    primary = {
+        "source_type": "XML",
+        "source_role": "PRIMARY",
+        "namecode": "PRIMARY_ITEM",
+        "occurrence_no": 1,
+    }
+    supplement_same_item = {
+        "source_type": "XML",
+        "source_role": "SUPPLEMENT",
+        "namecode": "PRIMARY_ITEM",
+        "occurrence_no": 1,
+    }
+    supplement_only_item = {
+        "source_type": "XML",
+        "source_role": "SUPPLEMENT",
+        "namecode": "MISSING_FROM_PRIMARY",
+        "occurrence_no": 1,
+    }
+
+    selected, rules_applied, review_required = build_values.selected_values(
+        [primary, supplement_same_item, supplement_only_item],
+        {},
+    )
+
+    assert rules_applied == 0
+    assert review_required == []
+    assert selected == [
+        (supplement_only_item, "XML_SUPPLEMENT_FALLBACK"),
+        (primary, "XML_PRIMARY"),
+    ]
+
+
+def test_mark_case_values_pending_prevents_stale_case_check() -> None:
+    cur = UpdateCursor()
+    config = build_cases.BuildCaseConfig(
+        event_id=2,
+        health_db="health_exam_result",
+        dev_db="dev_phr",
+        dry_run=False,
+        limit_groups=0,
+    )
+
+    build_cases.mark_case_values_pending(cur, config, case_id=3446)
+
+    sql, params = cur.calls[0]
+    assert "`value_build_status` = 'PENDING'" in sql
+    assert "`check_status` = 'PENDING'" in sql
+    assert params == (3446,)
+
+
 def test_build_cases_filters_sources_by_existing_case_key() -> None:
     cur = SequentialCursor(
         [
