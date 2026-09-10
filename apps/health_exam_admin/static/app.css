@@ -6891,7 +6891,7 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 
 .subscriber-match-workspace {
   display: grid;
-  grid-template-columns: minmax(300px, 0.7fr) minmax(760px, 1.7fr);
+  grid-template-columns: minmax(260px, 0.55fr) minmax(820px, 1.85fr);
   gap: 16px;
   align-items: start;
 }

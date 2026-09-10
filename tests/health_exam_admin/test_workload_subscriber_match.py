@@ -140,3 +140,21 @@ def test_candidate_rows_include_latest_active_dashboard_status() -> None:
     assert "hds.medical_institution AS hia_dashboard_medical_institution" in source
     assert "CONVERT(hds_latest.subscribers_id USING utf8mb4)" in source
     assert "ORDER BY hds_latest.updated_at DESC" in source
+
+
+def test_candidate_rows_rank_by_score_then_existing_case() -> None:
+    source = getsource(load_subscriber_match_candidate_rows)
+
+    assert "normalize_name_kanji_full" in source
+    assert 'row["name_kanji_is_match"]' in source
+    assert "ORDER BY match_score DESC" in source
+    assert "(COALESCE(case_summary.case_count, 0) > 0) DESC" in source
+    assert "COALESCE(case_summary.case_count, 0) DESC" in source
+
+
+def test_candidate_rows_include_same_event_reservation_information() -> None:
+    source = getsource(load_subscriber_match_candidate_rows)
+
+    assert "load_subscriber_reservation_candidates" in source
+    assert "event_id=_optional_int(case_event_id)" in source
+    assert 'row["latest_reservation"]' in source

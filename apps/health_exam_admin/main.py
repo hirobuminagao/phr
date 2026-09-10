@@ -116,6 +116,7 @@ from scripts.lib.identity.field.insurance_number import normalize_insurance_numb
 from scripts.lib.identity.field.insurance_symbol import normalize_insurance_symbol
 from scripts.lib.identity.field.insurer_number import normalize_insurer_number
 from scripts.lib.identity.field.name_kana import normalize_name_kana_full
+from scripts.lib.identity.field.name_kanji import normalize_name_kanji_full
 from scripts.lib.identity.field.ticket_identifier import normalize_ticket_identifier
 from scripts.lib.identity.generator import generate_identity_bundle, generate_person_id_custom
 from scripts.reservation_site.importer import apply_plan as apply_reservation_site_plan
@@ -2651,6 +2652,7 @@ def search_person_selection_subscribers(
 
     subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
     subscriber_name_full_expr = "s.name_kanji_full" if "name_kanji_full" in subscriber_columns else "s.name_full_match"
+    subscriber_name_match_expr = "s.name_full_match" if "name_full_match" in subscriber_columns else subscriber_name_full_expr
     subscriber_select = lambda column, alias=None: (
         f"s.{column} AS {alias or column}" if column in subscriber_columns else f"NULL AS {alias or column}"
     )
@@ -8040,6 +8042,10 @@ def load_subscriber_match_candidate_rows(
     score_parts: list[str] = []
     score_params: list[Any] = []
     if ledger:
+        ledger_name_kanji_match = ""
+        if ledger.get("name_full_raw"):
+            kanji_result = normalize_name_kanji_full(str(ledger.get("name_full_raw")), cur=cur)
+            ledger_name_kanji_match = str(kanji_result.get("match") or "") if kanji_result.get("ok") else ""
         ledger_name_kana_match = str(ledger.get("name_kana_match") or "").strip()
         if not ledger_name_kana_match and ledger.get("name_kana_raw"):
             kana_result = normalize_name_kana_full(str(ledger.get("name_kana_raw")))
@@ -8086,6 +8092,9 @@ def load_subscriber_match_candidate_rows(
             params.extend([ledger.get("birthdate"), ledger_name_kana_match])
             score_parts.append("CASE WHEN s.birth = %s AND s.name_kana_full_match = %s THEN 40 ELSE 0 END")
             score_params.extend([ledger.get("birthdate"), ledger_name_kana_match])
+        if ledger_name_kanji_match:
+            score_parts.append(f"CASE WHEN {subscriber_name_match_expr} = %s THEN 30 ELSE 0 END")
+            score_params.append(ledger_name_kanji_match)
     query = query.strip()
     if query:
         like = f"%{query}%"
@@ -8193,6 +8202,7 @@ def load_subscriber_match_candidate_rows(
           s.name_kana_full,
           s.name_kana_full_match,
           {subscriber_name_full_expr} AS name_kanji_full,
+          {subscriber_name_match_expr} AS name_kanji_full_match,
           s.birth,
           s.gender_code,
           {subscriber_select("relationship_name")},
@@ -8281,7 +8291,10 @@ def load_subscriber_match_candidate_rows(
         ) AS latest_case
           ON latest_case.subscriber_id = s.id
         WHERE {" AND ".join(where_sql_parts)}
-        ORDER BY match_score DESC, s.id, {address_order_sql} hds.hia_dashboard_person_id DESC
+        ORDER BY match_score DESC,
+                 (COALESCE(case_summary.case_count, 0) > 0) DESC,
+                 COALESCE(case_summary.case_count, 0) DESC,
+                 s.id, {address_order_sql} hds.hia_dashboard_person_id DESC
         LIMIT %s
         """,
         (*score_params, case_event_id, case_event_id, *params, *filter_params, limit),
@@ -8304,6 +8317,17 @@ def load_subscriber_match_candidate_rows(
             row["insurance_number_is_match"] = bool(
                 ledger_insurance_number_match and candidate_number_match == ledger_insurance_number_match
             )
+            row["name_kanji_is_match"] = bool(
+                ledger_name_kanji_match
+                and str(row.get("name_kanji_full_match") or "") == ledger_name_kanji_match
+            )
+    reservation_candidates = load_subscriber_reservation_candidates(
+        cur, subscribers=rows, event_id=_optional_int(case_event_id)
+    )
+    for row in rows:
+        reservations = reservation_candidates.get(int(row["subscriber_id"]), [])
+        row["reservation_candidate_count"] = len(reservations)
+        row["latest_reservation"] = reservations[0] if reservations else None
     return rows
 
 
@@ -20034,6 +20058,7 @@ def load_subscriber_reservation_candidates(
     cur: Any,
     *,
     subscribers: list[Mapping[str, Any]],
+    event_id: int | None = None,
 ) -> dict[int, list[dict[str, Any]]]:
     result = {int(row["subscriber_id"]): [] for row in subscribers}
     if not subscribers or not manual_exam_entry_table_exists(cur, work_other_db(), "reservation_site_records"):
@@ -20067,11 +20092,12 @@ def load_subscriber_reservation_candidates(
                r.hia_member_id, r.applicant_birthday, r.applicant_fullname_kana_match,
                r.insurer_number_match, r.insurance_symbol_match, r.insurance_number_match
         FROM {qname(work_other_db())}.reservation_site_records r
-        WHERE {' OR '.join(predicates)}
+        WHERE ({' OR '.join(predicates)})
+          {"AND r.event_id = %s" if event_id else ""}
         ORDER BY r.reservation_date DESC, r.source_updated_at DESC, r.reservation_site_record_id DESC
         LIMIT 5000
         """,
-        tuple(params),
+        tuple([*params, event_id] if event_id else params),
     )
     reservations = [dict(row) for row in cur.fetchall()]
     for subscriber in subscribers:

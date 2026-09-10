@@ -331,6 +331,7 @@
               <th>照合・資格</th>
               <th>case</th>
               <th>ダッシュボード</th>
+              <th>予約システム</th>
               <th class="help-cell">
                 <span class="table-help-heading">
                   確定
@@ -350,6 +351,7 @@
                 <strong>{{ candidate.name_kana_full or "カナなし" }}</strong>
                 <small>{{ candidate.name_kanji_full or "氏名なし" }} / subscriber {{ candidate.subscriber_id }}</small>
                 <div class="subscriber-candidate-match-fields">
+                  <span class="{{ 'is-match' if candidate.name_kanji_is_match else '' }}">氏名 {{ candidate.name_kanji_full or "-" }}</span>
                   <span class="{{ 'is-match' if selected_ledger.name_kana_match and candidate.name_kana_full_match == selected_ledger.name_kana_match else '' }}">カナ {{ candidate.name_kana_full or "-" }}</span>
                   <span class="{{ 'is-match' if selected_ledger.birthdate and candidate.birth|string == selected_ledger.birthdate|string else '' }}">生年月日 {{ candidate.birth or "-" }}</span>
                   <span class="{{ 'is-match' if selected_ledger.gender_code and candidate.gender_code|string == selected_ledger.gender_code|string else '' }}">性別 {{ gender_code_label(candidate.gender_code) }}</span>
@@ -394,6 +396,17 @@
                 <small>{{ candidate.hia_dashboard_course_name or "コースなし" }}</small>
               </td>
               <td>
+                {% if candidate.latest_reservation %}
+                <strong>{{ candidate.latest_reservation.status_label }} / 予約 {{ candidate.latest_reservation.reservation_id }}</strong>
+                <small>予約 {{ candidate.latest_reservation.reservation_date or "-" }} {{ candidate.latest_reservation.start_time or "" }}</small>
+                <small>{{ candidate.latest_reservation.reservation_hospital_name or "予約施設なし" }}</small>
+                <small>{{ candidate.latest_reservation.course_name or "コースなし" }}</small>
+                <small>{{ candidate.latest_reservation.match_reason }} / 候補 {{ candidate.reservation_candidate_count }}件</small>
+                {% else %}
+                <strong>候補なし</strong><small>同一イベントの予約情報なし</small>
+                {% endif %}
+              </td>
+              <td>
                 <form method="post" action="/subscriber-match-review/{{ selected_ledger.exam_ledger_id }}/confirm" class="subscriber-match-confirm-form">
                   <input type="hidden" name="subscriber_id" value="{{ candidate.subscriber_id }}">
                   <input name="note" required placeholder="確定理由">
@@ -410,7 +423,7 @@
             </tr>
             {% else %}
             <tr>
-              <td colspan="5">候補が見つかりません。検索語を追加してください。</td>
+              <td colspan="6">候補が見つかりません。検索語を追加してください。</td>
             </tr>
             {% endfor %}
           </tbody>
