@@ -1071,9 +1071,25 @@ def fetch_target_case_ledgers(
     health_db: str,
     event_id: int,
     limit: int = 0,
+    medical_folder_alias_id: int | None = None,
     case_ids: tuple[int, ...] = (),
 ) -> list[dict[str, Any]]:
     params: list[Any] = [event_id]
+    alias_filter = ""
+    if medical_folder_alias_id is not None:
+        alias_filter = f"""
+          AND EXISTS (
+            SELECT 1
+            FROM {qname(health_db)}.exam_export_case_sources AS alias_source
+            INNER JOIN {qname(health_db)}.file_receipts AS alias_receipt
+              ON alias_receipt.id = alias_source.file_receipt_id
+            WHERE alias_source.exam_export_case_id = exam_export_cases.exam_export_case_id
+              AND alias_source.source_status = 'ACTIVE'
+              AND alias_receipt.event_id = %s
+              AND alias_receipt.medical_folder_alias_id = %s
+          )
+        """
+        params.extend([event_id, medical_folder_alias_id])
     case_filter = ""
     if case_ids:
         case_filter = f"AND exam_export_case_id IN ({', '.join(['%s'] * len(case_ids))})"
@@ -1098,6 +1114,7 @@ def fetch_target_case_ledgers(
           AND case_lifecycle_status = 'ACTIVE'
           AND value_build_status = 'READY'
           AND subscriber_match_status = 'MATCHED'
+          {alias_filter}
           {case_filter}
         ORDER BY exam_export_case_id
         {limit_sql}
@@ -1150,6 +1167,7 @@ def fetch_target_check_ledgers(cur: Any, *, config: CheckConfig) -> list[dict[st
         health_db=config.health_db,
         event_id=config.event_id,
         limit=0,
+        medical_folder_alias_id=config.medical_folder_alias_id,
     )
     ledgers = [*exam_ledgers, *case_ledgers]
     return ledgers[: config.limit] if config.limit else ledgers

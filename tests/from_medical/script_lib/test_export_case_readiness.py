@@ -60,6 +60,25 @@ def test_fetch_target_case_ledgers_can_limit_by_case_ids() -> None:
     assert params == (2, 3446, 3447)
 
 
+def test_fetch_target_case_ledgers_can_limit_by_medical_folder_alias() -> None:
+    cur = RecordingCursor()
+    cur.fetchall = lambda: []
+
+    fetch_target_case_ledgers(
+        cur,
+        health_db="health_exam_result",
+        event_id=2,
+        medical_folder_alias_id=73,
+    )
+
+    sql, params = cur.calls[0]
+    assert "exam_export_case_sources AS alias_source" in sql
+    assert "file_receipts AS alias_receipt" in sql
+    assert "alias_source.source_status = 'ACTIVE'" in sql
+    assert "alias_receipt.medical_folder_alias_id = %s" in sql
+    assert params == (2, 2, 73)
+
+
 def test_recheck_auto_resolves_previously_approved_missing_item(monkeypatch) -> None:
     monkeypatch.setattr(check_exam_results, "parse_article44_missing_placeholder_items", lambda *_args: [])
     monkeypatch.setattr(check_exam_results, "specific_missing_placeholder_items_from_details", lambda *_args: [])
