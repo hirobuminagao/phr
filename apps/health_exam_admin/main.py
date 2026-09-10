@@ -8032,6 +8032,7 @@ def load_subscriber_match_candidate_rows(
         return []
     subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
     subscriber_name_full_expr = "s.name_kanji_full" if "name_kanji_full" in subscriber_columns else "s.name_full_match"
+    subscriber_name_match_expr = "s.name_full_match" if "name_full_match" in subscriber_columns else subscriber_name_full_expr
     subscriber_select = lambda column, alias=None: (
         f"s.{column} AS {alias or column}" if column in subscriber_columns else f"NULL AS {alias or column}"
     )

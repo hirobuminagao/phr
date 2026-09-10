@@ -146,6 +146,7 @@ def test_candidate_rows_rank_by_score_then_existing_case() -> None:
     source = getsource(load_subscriber_match_candidate_rows)
 
     assert "normalize_name_kanji_full" in source
+    assert source.index("subscriber_name_match_expr =") < source.index("CASE WHEN {subscriber_name_match_expr}")
     assert 'row["name_kanji_is_match"]' in source
     assert "ORDER BY match_score DESC" in source
     assert "(COALESCE(case_summary.case_count, 0) > 0) DESC" in source
