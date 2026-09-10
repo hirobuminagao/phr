@@ -4767,6 +4767,9 @@ def load_reservation_site_record_list(
         "status": str(query_params.get("status") or "").strip(),
         "date_from": str(query_params.get("date_from") or "").strip(),
         "date_to": str(query_params.get("date_to") or "").strip(),
+        "exam_month": str(query_params.get("exam_month") or "").strip(),
+        "created_from": str(query_params.get("created_from") or "").strip(),
+        "created_to": str(query_params.get("created_to") or "").strip(),
         "hospital": str(query_params.get("hospital") or "").strip(),
         "facility_link": str(query_params.get("facility_link") or "ALL").strip().upper(),
         "insurer_number": str(query_params.get("insurer_number") or "").strip(),
@@ -4797,6 +4800,15 @@ def load_reservation_site_record_list(
     if filters["date_to"]:
         clauses.append("r.reservation_date <= %s")
         params.append(filters["date_to"])
+    if filters["exam_month"]:
+        clauses.append("DATE_FORMAT(r.reservation_date, '%Y-%m') = %s")
+        params.append(filters["exam_month"])
+    if filters["created_from"]:
+        clauses.append("r.source_created_at >= %s")
+        params.append(f"{filters['created_from']} 00:00:00")
+    if filters["created_to"]:
+        clauses.append("r.source_created_at < DATE_ADD(%s, INTERVAL 1 DAY)")
+        params.append(filters["created_to"])
     if filters["hospital"]:
         like = f"%{filters['hospital']}%"
         clauses.append("(CAST(r.reservation_hospital_id AS CHAR) LIKE %s OR r.reservation_hospital_name LIKE %s)")
@@ -20429,6 +20441,96 @@ def load_subscriber_reference_view_history(cur: Any, *, subscriber_id: int) -> l
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_person_event_progress_rows(
+    cur: Any,
+    *,
+    event_id: int,
+    query: str = "",
+    reservation_status: str = "",
+    dashboard_status: str = "",
+    attention_only: bool = False,
+    page: int = 1,
+    per_page: int = 100,
+) -> dict[str, Any]:
+    where = ["pe.event_id = %s"]
+    params: list[Any] = [event_id]
+    query = query.strip()
+    if query:
+        like = f"%{query}%"
+        where.append(
+            "(CAST(s.id AS CHAR) LIKE %s OR CAST(s.hia_subscriber_id AS CHAR) LIKE %s "
+            "OR s.name_kanji_full LIKE %s OR s.name_kana_full LIKE %s "
+            "OR s.insurance_symbol LIKE %s OR s.insurance_number LIKE %s)"
+        )
+        params.extend([like] * 6)
+    where_sql = " AND ".join(where)
+    cur.execute(
+        f"SELECT COUNT(*) AS total_count FROM {qname(dev_db())}.person_event pe "
+        f"INNER JOIN {qname(dev_db())}.subscribers s ON s.id=pe.subscriber_id WHERE {where_sql}",
+        tuple(params),
+    )
+    total_count = int((cur.fetchone() or {}).get("total_count") or 0)
+    page_count = max(1, (total_count + per_page - 1) // per_page)
+    page = min(max(1, page), page_count)
+    cur.execute(
+        f"""
+        SELECT pe.person_event_id, pe.event_id, pe.subscriber_id, pe.updated_at AS person_event_updated_at,
+               s.hia_subscriber_id, s.insurer_number, s.insurance_symbol, s.insurance_number,
+               s.insurance_symbol_match, s.insurance_number_match,
+               s.name_kanji_full, s.name_kana_full, s.name_kana_full_match, s.birth,
+               MAX(CASE WHEN psi.item_code='HIA_DASHBOARD_STATUS' THEN psi.value_code END) AS hia_dashboard_status,
+               MAX(CASE WHEN psi.item_code='HIA_RESERVATION_DATE' THEN psi.value_date END) AS hia_reservation_date,
+               MAX(CASE WHEN psi.item_code='HIA_EXAM_DATE' THEN psi.value_date END) AS hia_exam_date,
+               MAX(CASE WHEN psi.item_code='HIA_MEDICAL_INSTITUTION' THEN psi.value_text END) AS hia_medical_institution,
+               MAX(CASE WHEN psi.item_code='HIA_COURSE_NAME' THEN psi.value_text END) AS hia_course_name,
+               MAX(CASE WHEN psi.source_system='HIA_DASHBOARD' THEN psi.refreshed_at END) AS hia_refreshed_at
+        FROM {qname(dev_db())}.person_event pe
+        INNER JOIN {qname(dev_db())}.subscribers s ON s.id=pe.subscriber_id
+        LEFT JOIN {qname(dev_db())}.person_event_status_items psi
+          ON psi.person_event_id=pe.person_event_id AND psi.source_system='HIA_DASHBOARD'
+        WHERE {where_sql}
+        GROUP BY pe.person_event_id, pe.event_id, pe.subscriber_id, pe.updated_at,
+                 s.hia_subscriber_id, s.insurer_number, s.insurance_symbol, s.insurance_number,
+                 s.insurance_symbol_match, s.insurance_number_match,
+                 s.name_kanji_full, s.name_kana_full, s.name_kana_full_match, s.birth
+        ORDER BY pe.person_event_id
+        LIMIT %s OFFSET %s
+        """,
+        tuple([*params, per_page, (page - 1) * per_page]),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    reservations = load_subscriber_reservation_candidates(cur, subscribers=rows, event_id=event_id)
+    filtered_rows: list[dict[str, Any]] = []
+    for row in rows:
+        candidates = reservations.get(int(row["subscriber_id"]), [])
+        active = [item for item in candidates if str(item.get("reservation_status_raw") or "") != "5"]
+        cancelled = [item for item in candidates if str(item.get("reservation_status_raw") or "") == "5"]
+        latest = candidates[0] if candidates else None
+        row["reservation_candidate_count"] = len(candidates)
+        row["active_reservation_count"] = len(active)
+        row["cancelled_reservation_count"] = len(cancelled)
+        row["latest_reservation"] = latest
+        row["attention_codes"] = []
+        if len(active) > 1:
+            row["attention_codes"].append("有効予約が複数")
+        if len(candidates) > 1:
+            row["attention_codes"].append("予約候補が複数")
+        if reservation_status and not any(str(item.get("reservation_status_raw") or "") == reservation_status for item in candidates):
+            continue
+        if dashboard_status and str(row.get("hia_dashboard_status") or "") != dashboard_status:
+            continue
+        if attention_only and not row["attention_codes"]:
+            continue
+        filtered_rows.append(row)
+    return {
+        "rows": filtered_rows,
+        "total_count": total_count,
+        "page": page,
+        "page_count": page_count,
+        "per_page": per_page,
+    }
+
+
 def render_subscriber_reference_detail(request: Request, *, subscriber_id: int, full: bool) -> Response:
     user = require_user(request)
     if isinstance(user, RedirectResponse):
@@ -20512,6 +20614,53 @@ def subscriber_reference_search(request: Request) -> Response:
         {"request": request, "user": user, "filters": filters, "rows": rows, "searched": searched,
          "pii_level": pii_level, "display_mode": display_mode,
          "can_open_full": pii_level == "FULL", "error": request.query_params.get("error")},
+    )
+
+
+@app.get("/utilities/person-event-progress", response_class=HTMLResponse)
+def person_event_progress(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_view_subscriber_reference(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    query = str(request.query_params.get("query") or "").strip()
+    page = parse_positive_int(request.query_params.get("page"), default=1, maximum=100000)
+    pii_level = subscriber_reference_pii_level(user)
+    with connect_ctx(params, database=dev_db(), autocommit=False) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        default_event_id = int(events[0]["event_id"]) if events else 0
+        event_id = parse_positive_int(request.query_params.get("event_id"), default=default_event_id, maximum=999999)
+        result = load_person_event_progress_rows(cur, event_id=event_id, query=query, page=page) if event_id else {
+            "rows": [], "total_count": 0, "page": 1, "page_count": 1, "per_page": 100
+        }
+        for row in result["rows"]:
+            if pii_level == "HIDDEN":
+                row["name_kanji_full"] = None
+                row["name_kana_full"] = None
+                row["insurance_symbol"] = None
+                row["insurance_number"] = None
+                row["birth"] = None
+            else:
+                row["name_kanji_full"] = mask_subscriber_text(row.get("name_kanji_full"), keep_end=1)
+                row["name_kana_full"] = mask_subscriber_text(row.get("name_kana_full"), keep_end=2)
+                row["insurance_symbol"] = mask_subscriber_text(row.get("insurance_symbol"))
+                row["insurance_number"] = mask_subscriber_text(row.get("insurance_number"), keep_end=4)
+                birth = str(row.get("birth") or "")
+                row["birth"] = f"{birth[:4]}-**-**" if len(birth) >= 4 else None
+        if audit_enabled(cur):
+            log_audit(
+                cur, request=request, user=user, action_code="PERSONAL_INFO_VIEW_PERSON_EVENT_PROGRESS",
+                target_schema=dev_db(), target_table="person_event", target_id=str(event_id or ""),
+                after={"event_id": event_id, "query_used": bool(query), "result_count": len(result["rows"]), "display_mode": "HIDDEN" if pii_level == "HIDDEN" else "MASKED"},
+            )
+        conn.commit()
+        cur.close()
+    return templates.TemplateResponse(
+        "person_event_progress.html",
+        {"request": request, "user": user, "events": events, "event_id": event_id, "query": query, **result},
     )
 
 

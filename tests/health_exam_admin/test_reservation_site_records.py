@@ -32,6 +32,9 @@ def test_reservation_site_record_list_filters_and_pages() -> None:
         query_params={
             "event_id": "2",
             "status": "3",
+            "exam_month": "2026-08",
+            "created_from": "2026-07-01",
+            "created_to": "2026-07-31",
             "facility_link": "UNMAPPED",
             "option": "胃カメラ",
             "page": "2",
@@ -46,8 +49,11 @@ def test_reservation_site_record_list_filters_and_pages() -> None:
     assert "r.event_id = %s" in count_sql
     assert "r.exam_facility_id IS NULL" in count_sql
     assert "reservation_site_record_options" in count_sql
+    assert "DATE_FORMAT(r.reservation_date, '%Y-%m') = %s" in count_sql
+    assert "r.source_created_at >= %s" in count_sql
+    assert "r.source_created_at < DATE_ADD(%s, INTERVAL 1 DAY)" in count_sql
     assert "LIMIT %s OFFSET %s" in rows_sql
-    assert count_params == (2, "3", "%胃カメラ%", "%胃カメラ%")
+    assert count_params == (2, "3", "2026-08", "2026-07-01 00:00:00", "2026-07-31", "%胃カメラ%", "%胃カメラ%")
     assert rows_params[-2:] == (100, 100)
 
 
@@ -64,4 +70,7 @@ def test_reservation_site_record_page_has_search_and_list() -> None:
     assert "予約者・ID" in template
     assert "施設未紐付け" in template
     assert "予約一覧" in template
+    assert "受診日（開始）" in template
+    assert "予約登録日（開始）" in template
+    assert "受診月" in template
     assert "/utilities/reservation-site-csv" in template

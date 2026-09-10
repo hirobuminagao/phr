@@ -15,15 +15,18 @@
     <article class="summary-card"><span>施設未紐付け</span><strong>{{ summary.unmapped_count or 0 }}</strong><small>要確認</small></article>
   </section>
 
-  <section class="panel filter-panel">
-    <div class="section-heading"><div><h2>検索・絞り込み</h2><p class="subtle">入力した条件をすべて満たす予約を表示します。</p></div></div>
+  <details class="panel filter-panel" {% if filters.event_id or filters.query or filters.status or filters.date_from or filters.date_to or filters.exam_month or filters.created_from or filters.created_to or filters.hospital or filters.facility_link != 'ALL' or filters.insurer_number or filters.insurance_symbol or filters.insurance_number or filters.course or filters.option %}open{% endif %}>
+    <summary class="section-heading filter-panel-summary"><div><h2>検索・絞り込み</h2><p class="subtle">入力した条件をすべて満たす予約を表示します。</p></div><span class="ghost-button">開閉</span></summary>
     <form method="get" action="/utilities/reservation-site-records" class="stack-form">
       <div class="form-grid reservation-record-filter-grid">
         <label><span>イベント</span><select name="event_id"><option value="">すべて</option>{% for event in events %}<option value="{{ event.event_id }}" {% if filters.event_id == event.event_id|string %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / ID {{ event.event_id }}</option>{% endfor %}</select></label>
         <label><span>予約者・ID</span><input name="query" value="{{ filters.query }}" placeholder="予約ID / HIA ID / 氏名・カナ"></label>
         <label><span>予約状態</span><select name="status"><option value="">すべて</option>{% for value, label in [('1','仮予約'),('3','予約確定'),('4','受診済み'),('5','キャンセル')] %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-        <label><span>予約日（開始）</span><input type="date" name="date_from" value="{{ filters.date_from }}"></label>
-        <label><span>予約日（終了）</span><input type="date" name="date_to" value="{{ filters.date_to }}"></label>
+        <label><span>受診日（開始）</span><input type="date" name="date_from" value="{{ filters.date_from }}"></label>
+        <label><span>受診日（終了）</span><input type="date" name="date_to" value="{{ filters.date_to }}"></label>
+        <label><span>受診月</span><input type="month" name="exam_month" value="{{ filters.exam_month }}"></label>
+        <label><span>予約登録日（開始）</span><input type="date" name="created_from" value="{{ filters.created_from }}"></label>
+        <label><span>予約登録日（終了）</span><input type="date" name="created_to" value="{{ filters.created_to }}"></label>
         <label><span>予約施設</span><input name="hospital" value="{{ filters.hospital }}" placeholder="施設ID / 施設名"></label>
         <label><span>施設紐付け</span><select name="facility_link"><option value="ALL" {% if filters.facility_link == 'ALL' %}selected{% endif %}>すべて</option><option value="MAPPED" {% if filters.facility_link == 'MAPPED' %}selected{% endif %}>紐付け済み</option><option value="UNMAPPED" {% if filters.facility_link == 'UNMAPPED' %}selected{% endif %}>未紐付け</option></select></label>
         <label><span>保険者番号</span><input name="insurer_number" value="{{ filters.insurer_number }}"></label>
@@ -34,12 +37,12 @@
       </div>
       <div class="action-row"><a class="ghost-button" href="/utilities/reservation-site-records">クリア</a><button type="submit">検索</button></div>
     </form>
-  </section>
+  </details>
 
   <section class="panel">
     <div class="section-heading"><div><h2>予約一覧</h2><p class="subtle">1ページ100件。予約サイト側の最新状態を表示しています。</p></div><span class="status-pill status-neutral">{{ summary.total_count or 0 }}件</span></div>
     <div class="table-wrap reservation-record-table-wrap"><table class="data-table compact-table reservation-record-table">
-      <thead><tr><th>予約ID・状態</th><th>予約者</th><th>予約日時</th><th>予約施設</th><th>コース・オプション</th><th>保険情報</th><th>取込</th></tr></thead>
+      <thead><tr><th>予約ID・状態</th><th>予約者</th><th>受診予定</th><th>予約施設</th><th>コース・オプション</th><th>保険情報</th><th>予約登録・取込</th></tr></thead>
       <tbody>{% for row in rows %}<tr>
         <td><strong>{{ row.reservation_id }}</strong><span class="status-pill {{ 'status-warning' if row.reservation_status_raw == '5' else 'status-ready' }}">{{ reservation_status_label(row.reservation_status_raw) }}</span>{% if row.cancelled_at %}<small>取消 {{ row.cancelled_at }}</small>{% endif %}</td>
         <td><strong>{{ row.applicant_fullname or '-' }}</strong><small>{{ row.applicant_fullname_kana or '-' }}</small><small>HIA {{ row.hia_member_id or '-' }} / 申込者 {{ row.applicant_id or '-' }}</small><small>{{ row.applicant_birthday or '-' }} / 性別 {{ row.applicant_sex_raw or '-' }}</small></td>
@@ -47,11 +50,11 @@
         <td><strong>{{ row.reservation_hospital_name or '-' }}</strong><small>予約施設ID {{ row.reservation_hospital_id }}</small>{% if row.exam_facility_id %}<span class="status-pill status-ready">紐付け済み</span><small>{{ row.exam_facility_code or '-' }} / {{ row.exam_facility_name or '-' }}</small>{% else %}<span class="status-pill status-warning">未紐付け</span>{% endif %}</td>
         <td><strong>{{ row.course_name or '-' }}</strong><small>course {{ row.course_id or '-' }} / HIA {{ row.hia_course_code or '-' }}</small><small>{{ row.active_options or 'オプションなし' }}</small></td>
         <td><strong>{{ row.insurance_assoc_name or '-' }}</strong><small>保険者 {{ row.insurer_number_match or row.insurance_assoc_id_raw or '-' }}</small><small>記号 {{ row.insurance_symbol or '-' }} / 番号 {{ row.insurance_number or '-' }}</small></td>
-        <td><small>初回run {{ row.first_seen_run_id }}</small><small>最終run {{ row.last_seen_run_id }}</small><small>{{ row.source_updated_at or row.updated_at }}</small></td>
+        <td><strong>予約登録 {{ row.source_created_at or '-' }}</strong><small>予約更新 {{ row.source_updated_at or '-' }}</small><small>初回run {{ row.first_seen_run_id }} / 最終run {{ row.last_seen_run_id }}</small></td>
       </tr>{% else %}<tr><td colspan="7">条件に一致する予約はありません。</td></tr>{% endfor %}</tbody>
     </table></div>
     {% if page_count > 1 %}<nav class="pagination" aria-label="ページ移動">
-      {% set query_string = 'event_id=' ~ filters.event_id|urlencode ~ '&query=' ~ filters.query|urlencode ~ '&status=' ~ filters.status|urlencode ~ '&date_from=' ~ filters.date_from|urlencode ~ '&date_to=' ~ filters.date_to|urlencode ~ '&hospital=' ~ filters.hospital|urlencode ~ '&facility_link=' ~ filters.facility_link|urlencode ~ '&insurer_number=' ~ filters.insurer_number|urlencode ~ '&insurance_symbol=' ~ filters.insurance_symbol|urlencode ~ '&insurance_number=' ~ filters.insurance_number|urlencode ~ '&course=' ~ filters.course|urlencode ~ '&option=' ~ filters.option|urlencode %}
+      {% set query_string = 'event_id=' ~ filters.event_id|urlencode ~ '&query=' ~ filters.query|urlencode ~ '&status=' ~ filters.status|urlencode ~ '&date_from=' ~ filters.date_from|urlencode ~ '&date_to=' ~ filters.date_to|urlencode ~ '&exam_month=' ~ filters.exam_month|urlencode ~ '&created_from=' ~ filters.created_from|urlencode ~ '&created_to=' ~ filters.created_to|urlencode ~ '&hospital=' ~ filters.hospital|urlencode ~ '&facility_link=' ~ filters.facility_link|urlencode ~ '&insurer_number=' ~ filters.insurer_number|urlencode ~ '&insurance_symbol=' ~ filters.insurance_symbol|urlencode ~ '&insurance_number=' ~ filters.insurance_number|urlencode ~ '&course=' ~ filters.course|urlencode ~ '&option=' ~ filters.option|urlencode %}
       <a class="ghost-button {% if page <= 1 %}disabled{% endif %}" {% if page > 1 %}href="?{{ query_string }}&page={{ page - 1 }}"{% endif %}>前へ</a><span>{{ page }} / {{ page_count }}</span><a class="ghost-button {% if page >= page_count %}disabled{% endif %}" {% if page < page_count %}href="?{{ query_string }}&page={{ page + 1 }}"{% endif %}>次へ</a>
     </nav>{% endif %}
   </section>

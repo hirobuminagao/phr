@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set title = "健診進捗照会" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Utility</p><h1>健診進捗照会</h1><p class="subtle">イベント対象者を軸に、予約とHIAダッシュボードの現在状態を確認します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/utilities/reservation-site-records?event_id={{ event_id }}">予約データ一覧</a><a class="ghost-button" href="/utilities/subscribers">加入者情報確認</a><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page">
+  <section class="panel filter-panel">
+    <form method="get" action="/utilities/person-event-progress" class="stack-form">
+      <div class="form-grid two-column-grid">
+        <label><span>イベント</span><select name="event_id" required>{% for event in events %}<option value="{{ event.event_id }}" {% if event.event_id == event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / ID {{ event.event_id }}</option>{% endfor %}</select></label>
+        <label><span>加入者検索</span><input name="query" value="{{ query }}" placeholder="HIA ID / subscriber ID / 氏名 / 記号 / 番号"></label>
+      </div>
+      <div class="action-row"><a class="ghost-button" href="/utilities/person-event-progress?event_id={{ event_id }}">クリア</a><button type="submit">検索</button></div>
+    </form>
+  </section>
+
+  <section class="summary-grid">
+    <article class="summary-card"><span>イベント対象者</span><strong>{{ total_count }}</strong><small>{{ page }} / {{ page_count }}ページ</small></article>
+    <article class="summary-card"><span>表示中</span><strong>{{ rows|length }}</strong><small>1ページ {{ per_page }}件</small></article>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading"><div><h2>対象者一覧</h2><p class="subtle">予約は現時点の照合候補です。複数候補は自動確定していません。</p></div></div>
+    <div class="table-wrap"><table class="data-table compact-table">
+      <thead><tr><th>加入者</th><th>予約システム</th><th>HIAダッシュボード</th><th>確認</th><th>操作</th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <td><strong>subscriber {{ row.subscriber_id }}</strong><small>HIA {{ row.hia_subscriber_id or '-' }}</small><small>{{ row.name_kanji_full or '-' }} / {{ row.name_kana_full or '-' }}</small><small>{{ row.birth or '-' }} / 記号 {{ row.insurance_symbol or '-' }} / 番号 {{ row.insurance_number or '-' }}</small></td>
+        <td>{% if row.latest_reservation %}<strong>{{ row.latest_reservation.reservation_date or '-' }} {{ row.latest_reservation.status_label }}</strong><small>{{ row.latest_reservation.reservation_hospital_name or '-' }}</small><small>{{ row.latest_reservation.course_name or '-' }}</small><small>有効 {{ row.active_reservation_count }} / キャンセル {{ row.cancelled_reservation_count }} / 候補 {{ row.reservation_candidate_count }}</small>{% else %}<span class="status-pill status-neutral">候補なし</span>{% endif %}</td>
+        <td>{% if row.hia_dashboard_status %}<strong>{{ row.hia_dashboard_status }}</strong><small>予約日 {{ row.hia_reservation_date or '-' }} / 受診日 {{ row.hia_exam_date or '-' }}</small><small>{{ row.hia_medical_institution or '-' }}</small><small>{{ row.hia_course_name or '-' }} / 更新 {{ row.hia_refreshed_at or '-' }}</small>{% else %}<span class="status-pill status-neutral">情報なし</span>{% endif %}</td>
+        <td>{% if row.attention_codes %}{% for code in row.attention_codes %}<span class="status-pill status-warning">{{ code }}</span>{% endfor %}{% else %}<span class="status-pill status-ready">候補正常</span>{% endif %}</td>
+        <td><a class="ghost-button" href="/utilities/subscribers/{{ row.subscriber_id }}">加入者詳細</a></td>
+      </tr>{% else %}<tr><td colspan="5">対象者がありません。person_eventの母集団同期状況を確認してください。</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if page_count > 1 %}<nav class="pagination" aria-label="ページ移動">
+      {% set query_string = 'event_id=' ~ event_id ~ '&query=' ~ query|urlencode %}
+      <a class="ghost-button {% if page <= 1 %}disabled{% endif %}" {% if page > 1 %}href="?{{ query_string }}&page={{ page - 1 }}"{% endif %}>前へ</a><span>{{ page }} / {{ page_count }}</span><a class="ghost-button {% if page >= page_count %}disabled{% endif %}" {% if page < page_count %}href="?{{ query_string }}&page={{ page + 1 }}"{% endif %}>次へ</a>
+    </nav>{% endif %}
+  </section>
+</main>
+{% endblock %}
