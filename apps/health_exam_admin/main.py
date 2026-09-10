@@ -118,6 +118,9 @@ from scripts.lib.identity.field.insurer_number import normalize_insurer_number
 from scripts.lib.identity.field.name_kana import normalize_name_kana_full
 from scripts.lib.identity.field.ticket_identifier import normalize_ticket_identifier
 from scripts.lib.identity.generator import generate_identity_bundle, generate_person_id_custom
+from scripts.reservation_site.importer import apply_plan as apply_reservation_site_plan
+from scripts.reservation_site.importer import build_plan as build_reservation_site_plan
+from scripts.reservation_site.importer import parse_csv as parse_reservation_site_csv
 from scripts.lib.identity.primitive.digits import zero_pad
 from scripts.phr_app.script_lib.app_auth import (
     authenticate_user,
@@ -7035,6 +7038,106 @@ def load_zip_password_admin_rows(cur: Any, *, query: str, include_inactive: bool
     return [dict(row) for row in cur.fetchall()]
 
 
+def load_zip_password_error_rows(
+    cur: Any,
+    *,
+    query: str = "",
+    phase: str = "",
+    limit: int = 300,
+) -> list[dict[str, Any]]:
+    where_parts = [
+        """(
+          ee.error_code IN ('ZIP_PASSWORD_NOT_FOUND', 'ZIP_DECRYPT_FAILED')
+          OR (
+            ee.field = 'ZIP'
+            AND (
+              LOWER(COALESCE(ee.message, '')) LIKE '%password%'
+              OR LOWER(COALESCE(ee.message, '')) LIKE '%encrypted%'
+              OR LOWER(COALESCE(ee.message, '')) LIKE '%decrypt%'
+            )
+          )
+        )"""
+    ]
+    params: list[Any] = []
+    if phase:
+        where_parts.append("ee.phase = %s")
+        params.append(phase)
+    if query:
+        like = f"%{query}%"
+        where_parts.append(
+            """(
+              ee.src_file LIKE %s
+              OR ee.error_code LIKE %s
+              OR fr.file_name LIKE %s
+              OR fr.relative_path LIKE %s
+              OR fr.facility_name LIKE %s
+              OR ef.exam_facility_name LIKE %s
+              OR mfa.src_folder_raw LIKE %s
+            )"""
+        )
+        params.extend([like] * 7)
+    params.append(limit)
+    cur.execute(
+        f"""
+        SELECT
+          ee.error_id,
+          ee.run_id,
+          ee.phase,
+          ee.error_code,
+          ee.src_file,
+          ee.created_at,
+          er.status AS run_status,
+          fr.id AS file_receipt_id,
+          fr.event_id,
+          fr.file_name,
+          fr.relative_path,
+          fr.status AS file_status,
+          fr.summary_message,
+          fr.medical_folder_alias_id,
+          mfa.src_folder_raw,
+          COALESCE(
+            ef.exam_facility_display_name,
+            ef.exam_facility_name,
+            fr.facility_name,
+            mfa.dst_folder_norm
+          ) AS facility_name
+        FROM {qname(health_db())}.etl_errors AS ee
+        LEFT JOIN {qname(health_db())}.etl_runs AS er
+          ON er.run_id = ee.run_id
+        LEFT JOIN {qname(health_db())}.file_receipts AS fr
+          ON fr.id = (
+            SELECT MAX(fr2.id)
+            FROM {qname(health_db())}.file_receipts AS fr2
+            WHERE REPLACE(fr2.source_path, CHAR(92), '/') = REPLACE(ee.src_file, CHAR(92), '/')
+          )
+        LEFT JOIN {qname(master_db())}.medical_folder_aliases AS mfa
+          ON mfa.alias_id = fr.medical_folder_alias_id
+        LEFT JOIN {qname(master_db())}.exam_facilities AS ef
+          ON ef.exam_facility_id = COALESCE(fr.exam_facility_id, mfa.exam_facility_id)
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY ee.created_at DESC, ee.error_id DESC
+        LIMIT %s
+        """,
+        tuple(params),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    phase_labels = {
+        "SCAN_FILES": "scan",
+        "IMPORT_XML": "XML import",
+        "IMPORT_CSV_EXAM_RESULTS": "CSV import",
+    }
+    error_labels = {
+        "ZIP_PASSWORD_NOT_FOUND": "パスワード未登録",
+        "ZIP_DECRYPT_FAILED": "復号失敗",
+    }
+    for row in rows:
+        row["phase_label"] = phase_labels.get(str(row.get("phase") or ""), str(row.get("phase") or "不明"))
+        row["error_label"] = error_labels.get(
+            str(row.get("error_code") or ""), str(row.get("error_code") or "パスワード関連エラー")
+        )
+    return rows
+
+
 def load_zip_password_alias_options(cur: Any) -> list[dict[str, Any]]:
     cur.execute(
         f"""
@@ -11630,6 +11733,39 @@ EXAM_PROCESSING_STEP_MAP = {step["key"]: step for step in EXAM_PROCESSING_STEPS}
 HIA_DASHBOARD_CSV_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 HIA_DASHBOARD_PLAN_TTL_SECONDS = 60 * 60
 HIA_DASHBOARD_PLAN_ROOT = Path(tempfile.gettempdir()) / "phr_hia_dashboard_plans"
+RESERVATION_SITE_CSV_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+RESERVATION_SITE_PLAN_ROOT = Path(tempfile.gettempdir()) / "phr_reservation_site_plans"
+RESERVATION_SITE_PLAN_TTL_SECONDS = 60 * 60
+
+
+def cleanup_reservation_site_plans(*, token: str | None = None) -> None:
+    RESERVATION_SITE_PLAN_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if token is not None and not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+        return
+    now = time.time()
+    targets = [RESERVATION_SITE_PLAN_ROOT / token] if token else list(RESERVATION_SITE_PLAN_ROOT.iterdir())
+    for target in targets:
+        if not target.is_dir():
+            continue
+        if token is None and now - target.stat().st_mtime <= RESERVATION_SITE_PLAN_TTL_SECONDS:
+            continue
+        shutil.rmtree(target, ignore_errors=True)
+
+
+def load_reservation_site_plan(token: str, *, app_user_id: int) -> tuple[Path, dict[str, Any]]:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+        raise ValueError("事前確認情報が不正です。")
+    plan_dir = RESERVATION_SITE_PLAN_ROOT / token
+    plan_path = plan_dir / "plan.json"
+    metadata_path = plan_dir / "metadata.json"
+    if not plan_path.is_file() or not metadata_path.is_file():
+        raise ValueError("事前確認情報の有効期限が切れました。もう一度CSVを確認してください。")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if int(metadata.get("app_user_id") or 0) != app_user_id:
+        raise ValueError("別の利用者が作成した事前確認情報は使用できません。")
+    if hashlib.sha256(plan_path.read_bytes()).hexdigest() != metadata.get("plan_sha256"):
+        raise ValueError("事前確認情報が変更されています。もう一度CSVを確認してください。")
+    return plan_path, metadata
 
 
 def normalize_hia_dashboard_insurer_number(value: Any) -> str:
@@ -15489,6 +15625,122 @@ async def run_hia_dashboard_csv_import_from_screen(
     )
 
 
+@app.get("/utilities/reservation-site-csv", response_class=HTMLResponse)
+def reservation_site_csv_import(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    cleanup_reservation_site_plans()
+    selected_event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        selected_event = next((event for event in events if int(event["event_id"]) == selected_event_id), events[0] if events else None)
+        cur.close()
+    return templates.TemplateResponse(
+        "reservation_site_csv_import.html",
+        {"request": request, "user": user, "events": events, "selected_event": selected_event, "result": None,
+         "message": request.query_params.get("message"), "error": request.query_params.get("error")},
+    )
+
+
+@app.post("/utilities/reservation-site-csv", response_class=HTMLResponse)
+async def run_reservation_site_csv_import_from_screen(
+    request: Request,
+    event_id: int = Form(...),
+    action: str = Form("preview"),
+    csv_file: UploadFile | None = File(None),
+    preview_token: str = Form(""),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        selected_event = next((event for event in events if int(event["event_id"]) == event_id), None)
+        cur.close()
+    result: dict[str, Any] | None = None
+    error: str | None = None
+    safe_name = Path(csv_file.filename or "").name if csv_file is not None else ""
+    if selected_event is None:
+        error = "選択イベントが見つかりません。"
+    elif action not in {"preview", "apply", "discard"}:
+        error = "実行方法が不正です。"
+    elif action == "preview" and not safe_name.lower().endswith(".csv"):
+        error = "CSVファイルを選択してください。"
+    try:
+        if error is None and action == "discard":
+            cleanup_reservation_site_plans(token=preview_token)
+            return RedirectResponse(f"/utilities/reservation-site-csv?event_id={event_id}&message={quote('事前確認データを破棄しました。')}", status_code=303)
+        if error is None and action == "preview":
+            raw = bytearray()
+            while chunk := await csv_file.read(1024 * 1024):
+                raw.extend(chunk)
+                if len(raw) > RESERVATION_SITE_CSV_MAX_UPLOAD_BYTES:
+                    raise ValueError("CSVファイルは100MB以下にしてください。")
+            if not raw:
+                raise ValueError("CSVファイルが空です。")
+            parsed = parse_reservation_site_csv(bytes(raw), event_id=event_id)
+            with connect_ctx(params, database=work_other_db(), autocommit=False) as conn:
+                cur = dict_cursor(conn)
+                result = build_reservation_site_plan(cur, parsed)
+                conn.rollback()
+                cur.close()
+            token = secrets.token_urlsafe(32)
+            plan_dir = RESERVATION_SITE_PLAN_ROOT / token
+            plan_dir.mkdir(mode=0o700, parents=True)
+            plan_path = plan_dir / "plan.json"
+            plan_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+            plan_path.chmod(0o600)
+            metadata = {"app_user_id": int(user["app_user_id"]), "event_id": event_id, "file_name": safe_name,
+                        "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest()}
+            metadata_path = plan_dir / "metadata.json"
+            metadata_path.write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
+            metadata_path.chmod(0o600)
+            result["preview_token"] = token
+            result["action"] = "preview"
+            result["file_name"] = safe_name
+        elif error is None:
+            plan_path, metadata = load_reservation_site_plan(preview_token, app_user_id=int(user["app_user_id"]))
+            if int(metadata["event_id"]) != event_id:
+                raise ValueError("事前確認後にイベントが変更されています。")
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            with connect_ctx(params, database=work_other_db(), autocommit=False) as conn:
+                cur = dict_cursor(conn)
+                cur.execute(
+                    "INSERT INTO etl_runs (phase,source,db_schema,status,input_file,dry_run,files,rows_seen) VALUES ('import','reservation_site_csv',%s,'running',%s,0,1,%s)",
+                    (work_other_db(), metadata["file_name"], int(plan["row_count"])),
+                )
+                run_id = int(cur.lastrowid)
+                applied = apply_reservation_site_plan(cur, plan, run_id=run_id)
+                cur.execute(
+                    "UPDATE etl_runs SET status='success',finished_at=CURRENT_TIMESTAMP(3),rows_inserted=%s,rows_updated=%s,rows_unchanged=%s,rows_skipped=%s WHERE run_id=%s",
+                    (applied["inserted"], applied["updated"], applied["unchanged"], applied["stale"], run_id),
+                )
+                conn.commit()
+                cur.close()
+            cleanup_reservation_site_plans(token=preview_token)
+            result = {**plan, "action": "apply", "file_name": metadata["file_name"], "applied": applied, "run_id": run_id}
+    except Exception as exc:
+        error = str(exc)
+    message = None
+    if result is not None and not error:
+        message = "事前確認が完了しました。" if action == "preview" else "予約サイトCSVを更新しました。"
+    return templates.TemplateResponse(
+        "reservation_site_csv_import.html",
+        {"request": request, "user": user, "events": events, "selected_event": selected_event,
+         "result": result, "message": message, "error": error},
+        status_code=400 if error and result is None else 200,
+    )
+
+
 @app.get("/support/mhlw-zip-format", response_class=HTMLResponse)
 def support_mhlw_zip_format(request: Request) -> Response:
     user = require_user(request)
@@ -16865,10 +17117,15 @@ def admin_zip_passwords(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     query = request.query_params.get("q", "").strip()
     include_inactive = request.query_params.get("include_inactive", "") == "1"
+    error_query = request.query_params.get("error_q", "").strip()
+    error_phase = request.query_params.get("error_phase", "").strip()
+    if error_phase not in {"", "SCAN_FILES", "IMPORT_XML", "IMPORT_CSV_EXAM_RESULTS"}:
+        error_phase = ""
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=work_other_db(), autocommit=True) as conn:
         cur = dict_cursor(conn)
         rows = load_zip_password_admin_rows(cur, query=query, include_inactive=include_inactive)
+        password_error_rows = load_zip_password_error_rows(cur, query=error_query, phase=error_phase)
         alias_options = load_zip_password_alias_options(cur)
         cur.close()
     return templates.TemplateResponse(
@@ -16880,6 +17137,9 @@ def admin_zip_passwords(request: Request) -> Response:
             "alias_options": alias_options,
             "query": query,
             "include_inactive": include_inactive,
+            "password_error_rows": password_error_rows,
+            "error_query": error_query,
+            "error_phase": error_phase,
             "can_edit": can_manage_business_settings(user),
             "can_reveal": has_permission(user, SYSTEM_SETTINGS_PERMISSION),
             "revealed_password_id": None,
@@ -16924,6 +17184,7 @@ async def reveal_admin_zip_password(request: Request, password_id: int) -> Respo
         )
         password_row = cur.fetchone()
         rows = load_zip_password_admin_rows(cur, query="", include_inactive=True)
+        password_error_rows = load_zip_password_error_rows(cur)
         alias_options = load_zip_password_alias_options(cur)
         if password_row:
             log_audit(
@@ -16947,6 +17208,9 @@ async def reveal_admin_zip_password(request: Request, password_id: int) -> Respo
             "alias_options": alias_options,
             "query": "",
             "include_inactive": True,
+            "password_error_rows": password_error_rows,
+            "error_query": "",
+            "error_phase": "",
             "can_edit": can_manage_business_settings(user),
             "can_reveal": True,
             "revealed_password_id": password_id if password_row else None,

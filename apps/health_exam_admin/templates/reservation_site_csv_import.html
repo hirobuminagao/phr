@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set title = "予約サイトCSV取込" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Utility</p><h1>予約サイトCSV取込</h1><p class="subtle">予約IDを基準に、イベントの予約情報と追加オプションを更新します。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page">
+  {% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+  <section class="panel">
+    <div class="section-heading"><div><h2>更新ファイル</h2><p class="subtle">CSVに存在する予約だけを更新します。掲載されていない予約を削除・無効化しません。</p></div></div>
+    <form method="post" action="/utilities/reservation-site-csv" enctype="multipart/form-data" data-processing-form data-processing-message="予約サイトCSVを確認しています">
+      <input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}">
+      <input type="hidden" name="preview_token" value="{{ result.preview_token if result and result.action == 'preview' else '' }}">
+      <div class="form-grid">
+        <label>対象イベント<select name="event_id" required onchange="window.location.href='/utilities/reservation-site-csv?event_id='+encodeURIComponent(this.value)">{% for event in events %}<option value="{{ event.event_id }}" {% if selected_event and event.event_id == selected_event.event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / ID {{ event.event_id }}</option>{% endfor %}</select></label>
+      </div>
+      <div class="xml-drop-zone hia-dashboard-csv-drop-zone" data-file-drop-zone>
+        <label><span>CSVファイル</span><input type="file" name="csv_file" accept=".csv,text/csv" {% if not result or result.action != 'preview' %}required{% endif %} data-file-drop-input><span class="file-picker-button">ファイルを選択</span></label>
+        <div class="xml-drop-message"><strong>ここにCSVをドロップ</strong><small data-file-drop-name>またはクリックしてファイルを選択</small></div>
+      </div>
+      <div class="button-row">
+        <button type="submit" name="action" value="preview" class="ghost-button">事前確認</button>
+        {% if result and result.action == 'preview' %}<button type="submit" name="action" value="discard" class="ghost-button">確認内容を破棄</button>{% endif %}
+        <button type="submit" name="action" value="apply" {% if not result or result.action != 'preview' or result.errors %}disabled{% endif %}>確認済み内容を更新</button>
+      </div>
+    </form>
+  </section>
+  {% if result %}
+  <section class="panel">
+    <div class="section-heading"><div><h2>{{ '事前確認結果' if result.action == 'preview' else '更新結果' }}</h2><p class="subtle">{{ result.file_name }} / {{ result.encoding }} / {{ result.row_count }}行</p></div></div>
+    <div class="summary-grid compact-summary-grid">
+      <article><span>新規</span><strong>{{ result.counts.insert }}</strong></article><article><span>更新</span><strong>{{ result.counts.update }}</strong></article><article><span>変更なし</span><strong>{{ result.counts.unchanged }}</strong></article><article><span>古いデータ</span><strong>{{ result.counts.stale }}</strong></article><article><span>エラー</span><strong>{{ result.counts.error }}</strong></article>
+    </div>
+    {% if result.unmapped_facilities %}<h3>未紐付け健診機関</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>予約サイトID</th><th>予約サイト名称</th></tr></thead><tbody>{% for facility in result.unmapped_facilities %}<tr><td>{{ facility[0] }}</td><td>{{ facility[1] or '-' }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+    {% if result.errors %}<h3>取込エラー</h3><div class="table-wrap"><table class="data-table"><thead><tr><th>CSV行</th><th>内容</th></tr></thead><tbody>{% for item in result.errors %}<tr><td>{{ item.line_no }}</td><td>{{ item.message }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+    {% if result.action == 'apply' %}<p class="form-note">取込run ID: {{ result.run_id }}</p>{% endif %}
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
