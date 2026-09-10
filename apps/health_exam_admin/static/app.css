@@ -9643,9 +9643,42 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   gap: 8px;
 }
 
-.person-event-status-card {
-  min-height: 58px;
-  padding: 10px 12px;
+.person-event-filter-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 9px 11px;
+  border: 1px solid #cbd7e6;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.person-event-filter-card input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.person-event-filter-card span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.person-event-filter-card strong,
+.person-event-filter-card small {
+  overflow-wrap: anywhere;
+}
+
+.person-event-filter-card.is-selected {
+  border-color: var(--accent);
+  background: #e9f7f2;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 @media (max-width: 900px) {

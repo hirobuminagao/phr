@@ -131,6 +131,8 @@ def create_temp_dashboard_status(cur: Any, config: SyncConfig, insurer_number: s
     cur.execute(
         f"""
         CREATE TEMPORARY TABLE tmp_person_event_hia_dashboard_status AS
+        SELECT ranked.*
+        FROM (
         SELECT
           p.person_event_id,
           p.event_id,
@@ -150,12 +152,18 @@ def create_temp_dashboard_status(cur: Any, config: SyncConfig, insurer_number: s
           d.last_seen_run_id,
           d.inactive_at,
           d.inactive_reason,
-          d.updated_at
+          d.updated_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY p.person_event_id
+            ORDER BY d.is_active DESC, d.updated_at DESC, d.hia_dashboard_person_id DESC
+          ) AS dashboard_row_number
         FROM {work}.hia_dashboard_status AS d
         JOIN {dev}.person_event AS p
           ON p.event_id = %s
          AND p.subscriber_id = d.subscribers_id
         WHERE d.insurer_number = %s
+        ) AS ranked
+        WHERE ranked.dashboard_row_number = 1
         """,
         (config.event_id, insurer_number),
     )

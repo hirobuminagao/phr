@@ -91,3 +91,11 @@ python scripts/support_scripts/supersede_orphaned_exam_export_cases.py --event-i
 ```
 
 確認済みの旧caseだけを適用する場合は `--old-case-id` を繰り返し指定する。全候補を適用する場合も `--apply --all-eligible` の明示が必要である。旧caseは削除せず `SUPERSEDED` とし、未出力の出力リスト掲載は履歴を残して解除する。
+# HIAダッシュボード旧キー重複の整理
+
+HIA加入者IDによる現行キー行が存在する場合に限り、同じ保険者・同じHIA加入者IDの旧キー行を抽出する。標準はdry-run。`--apply` では旧行と、外部キーでCASCADEされる旧行側の変更・勧奨履歴を削除する。
+
+```bash
+python scripts/support_scripts/delete_duplicate_legacy_hia_dashboard_rows.py --insurer-number 06139463
+python scripts/support_scripts/delete_duplicate_legacy_hia_dashboard_rows.py --insurer-number 06139463 --apply
+```

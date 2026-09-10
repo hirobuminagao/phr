@@ -20591,13 +20591,23 @@ def load_person_event_progress_rows(
 def load_person_event_dashboard_status_options(cur: Any, *, event_id: int) -> list[str]:
     cur.execute(
         f"""
-        SELECT DISTINCT value_code
-        FROM {qname(dev_db())}.person_event_status_items
-        WHERE event_id=%s AND item_code='HIA_DASHBOARD_STATUS'
-          AND value_code IS NOT NULL AND value_code<>''
+        SELECT DISTINCT options.value_code
+        FROM (
+          SELECT value_code
+          FROM {qname(dev_db())}.person_event_status_items
+          WHERE event_id=%s AND item_code='HIA_DASHBOARD_STATUS'
+          UNION ALL
+          SELECT d.status AS value_code
+          FROM {qname(work_other_db())}.hia_dashboard_status d
+          INNER JOIN {qname(dev_db())}.event e
+            ON e.event_id=%s
+           AND CAST(d.insurer_number AS UNSIGNED)=CAST(e.insurer_number AS UNSIGNED)
+          WHERE d.is_active=1
+        ) AS options
+        WHERE options.value_code IS NOT NULL AND options.value_code<>''
         ORDER BY value_code
         """,
-        (event_id,),
+        (event_id, event_id),
     )
     return [str(row.get("value_code")) for row in cur.fetchall() if row.get("value_code")]
 
@@ -20766,7 +20776,8 @@ def person_event_progress(request: Request) -> Response:
          "selected_reservation_statuses": split_filter_values(reservation_status),
          "selected_dashboard_statuses": split_filter_values(dashboard_status),
          "dashboard_status_options": dashboard_status_options,
-         "can_sync": can_manage_business_settings(user), "message": request.query_params.get("message"), **result},
+         "can_sync": can_manage_business_settings(user), "message": request.query_params.get("message"),
+         "error": request.query_params.get("error"), **result},
     )
 
 
@@ -20777,7 +20788,14 @@ def sync_person_event_progress(request: Request, event_id: int = Form(...)) -> R
         return user
     if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
-    sync_person_event_base_status(event_id=event_id)
+    try:
+        sync_person_event_base_status(event_id=event_id)
+    except Exception as exc:
+        LOGGER.exception("person_event base sync failed from progress screen")
+        return RedirectResponse(
+            f"/utilities/person-event-progress?event_id={event_id}&error={quote(f'状態更新に失敗しました: {exc}')}",
+            status_code=303,
+        )
     return RedirectResponse(
         f"/utilities/person-event-progress?event_id={event_id}&message={quote('対象者とダッシュボード状態を更新しました。')}",
         status_code=303,

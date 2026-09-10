@@ -1,7 +1,12 @@
 from inspect import getsource
 from pathlib import Path
 
-from apps.health_exam_admin.main import load_person_event_progress_rows, person_event_progress
+from apps.health_exam_admin.main import (
+    load_person_event_dashboard_status_options,
+    load_person_event_progress_rows,
+    person_event_progress,
+)
+from scripts.health_exam_event.sync_person_event_hia_dashboard_status import create_temp_dashboard_status
 
 
 def test_person_event_progress_uses_person_event_without_health_result_tables() -> None:
@@ -37,3 +42,20 @@ def test_person_event_progress_template_has_base_progress_columns() -> None:
     assert "HIAダッシュボードの状態（複数選択）" in template
     assert "状態を更新" in template
     assert "data-checkbox-choice-card" in template
+
+
+def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:
+    source = getsource(create_temp_dashboard_status)
+
+    assert "ROW_NUMBER() OVER" in source
+    assert "PARTITION BY p.person_event_id" in source
+    assert "ORDER BY d.is_active DESC, d.updated_at DESC, d.hia_dashboard_person_id DESC" in source
+    assert "WHERE ranked.dashboard_row_number = 1" in source
+
+
+def test_dashboard_filter_options_fall_back_to_active_source_rows() -> None:
+    source = getsource(load_person_event_dashboard_status_options)
+
+    assert "person_event_status_items" in source
+    assert "hia_dashboard_status d" in source
+    assert "d.is_active=1" in source
