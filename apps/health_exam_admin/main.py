@@ -4709,6 +4709,125 @@ def load_event_options(cur: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in cur.fetchall()]
 
 
+def reservation_status_label(value: Any) -> str:
+    return {
+        "1": "仮予約",
+        "3": "予約確定",
+        "4": "受診済み",
+        "5": "キャンセル",
+    }.get(str(value or ""), str(value or "未設定"))
+
+
+templates.env.globals["reservation_status_label"] = reservation_status_label
+
+
+def load_reservation_site_record_list(
+    cur: Any, *, query_params: Mapping[str, Any]
+) -> dict[str, Any]:
+    filters = {
+        "event_id": str(query_params.get("event_id") or "").strip(),
+        "query": str(query_params.get("query") or "").strip(),
+        "status": str(query_params.get("status") or "").strip(),
+        "date_from": str(query_params.get("date_from") or "").strip(),
+        "date_to": str(query_params.get("date_to") or "").strip(),
+        "hospital": str(query_params.get("hospital") or "").strip(),
+        "facility_link": str(query_params.get("facility_link") or "ALL").strip().upper(),
+        "insurer_number": str(query_params.get("insurer_number") or "").strip(),
+        "insurance_symbol": str(query_params.get("insurance_symbol") or "").strip(),
+        "insurance_number": str(query_params.get("insurance_number") or "").strip(),
+        "course": str(query_params.get("course") or "").strip(),
+        "option": str(query_params.get("option") or "").strip(),
+    }
+    clauses = ["1=1"]
+    params: list[Any] = []
+    if filters["event_id"]:
+        clauses.append("r.event_id = %s")
+        params.append(_optional_int(filters["event_id"]))
+    if filters["query"]:
+        like = f"%{filters['query']}%"
+        clauses.append(
+            "(CAST(r.reservation_id AS CHAR) LIKE %s OR CAST(r.hia_member_id AS CHAR) LIKE %s "
+            "OR CAST(r.applicant_id AS CHAR) LIKE %s OR r.applicant_fullname LIKE %s "
+            "OR r.applicant_fullname_kana LIKE %s OR r.applicant_fullname_kana_match LIKE %s)"
+        )
+        params.extend([like] * 6)
+    if filters["status"]:
+        clauses.append("r.reservation_status_raw = %s")
+        params.append(filters["status"])
+    if filters["date_from"]:
+        clauses.append("r.reservation_date >= %s")
+        params.append(filters["date_from"])
+    if filters["date_to"]:
+        clauses.append("r.reservation_date <= %s")
+        params.append(filters["date_to"])
+    if filters["hospital"]:
+        like = f"%{filters['hospital']}%"
+        clauses.append("(CAST(r.reservation_hospital_id AS CHAR) LIKE %s OR r.reservation_hospital_name LIKE %s)")
+        params.extend([like, like])
+    if filters["facility_link"] == "MAPPED":
+        clauses.append("r.exam_facility_id IS NOT NULL")
+    elif filters["facility_link"] == "UNMAPPED":
+        clauses.append("r.exam_facility_id IS NULL")
+    if filters["insurer_number"]:
+        clauses.append("r.insurer_number_match LIKE %s")
+        params.append(f"%{filters['insurer_number'].lstrip('0')}%")
+    if filters["insurance_symbol"]:
+        clauses.append("r.insurance_symbol_match LIKE %s")
+        params.append(f"%{filters['insurance_symbol']}%")
+    if filters["insurance_number"]:
+        clauses.append("r.insurance_number_match LIKE %s")
+        params.append(f"%{filters['insurance_number']}%")
+    if filters["course"]:
+        like = f"%{filters['course']}%"
+        clauses.append("(CAST(r.course_id AS CHAR) LIKE %s OR r.course_name LIKE %s OR r.hia_course_code LIKE %s OR r.hia_course_name LIKE %s)")
+        params.extend([like] * 4)
+    if filters["option"]:
+        like = f"%{filters['option']}%"
+        clauses.append(
+            f"EXISTS (SELECT 1 FROM {qname(work_other_db())}.reservation_site_record_options ro "
+            "WHERE ro.reservation_site_record_id=r.reservation_site_record_id AND ro.is_active=1 "
+            "AND (ro.option_hia_code LIKE %s OR ro.option_name LIKE %s))"
+        )
+        params.extend([like, like])
+    where_sql = " AND ".join(clauses)
+    page = parse_positive_int(str(query_params.get("page") or "1"), default=1, maximum=100000)
+    per_page = 100
+    cur.execute(
+        f"""
+        SELECT COUNT(*) AS total_count,
+               SUM(r.reservation_status_raw='1') AS provisional_count,
+               SUM(r.reservation_status_raw='3') AS confirmed_count,
+               SUM(r.reservation_status_raw='4') AS visited_count,
+               SUM(r.reservation_status_raw='5') AS cancelled_count,
+               SUM(r.exam_facility_id IS NULL) AS unmapped_count
+        FROM {qname(work_other_db())}.reservation_site_records r
+        WHERE {where_sql}
+        """,
+        tuple(params),
+    )
+    summary = dict(cur.fetchone() or {})
+    total_count = int(summary.get("total_count") or 0)
+    page_count = max(1, (total_count + per_page - 1) // per_page)
+    page = min(page, page_count)
+    cur.execute(
+        f"""
+        SELECT r.*,
+               ef.exam_facility_code, ef.exam_facility_name,
+               (SELECT GROUP_CONCAT(CONCAT_WS(' ', ro.option_hia_code, ro.option_name) ORDER BY ro.option_slot_no SEPARATOR ' / ')
+                FROM {qname(work_other_db())}.reservation_site_record_options ro
+                WHERE ro.reservation_site_record_id=r.reservation_site_record_id AND ro.is_active=1) AS active_options
+        FROM {qname(work_other_db())}.reservation_site_records r
+        LEFT JOIN {qname(master_db())}.exam_facilities ef ON ef.exam_facility_id=r.exam_facility_id
+        WHERE {where_sql}
+        ORDER BY r.reservation_date DESC, r.reservation_id DESC
+        LIMIT %s OFFSET %s
+        """,
+        tuple([*params, per_page, (page - 1) * per_page]),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    return {"filters": filters, "summary": summary, "rows": rows, "page": page, "page_count": page_count, "per_page": per_page}
+
+
 def insurer_number_matches_event(source_value: Any, event_value: Any) -> bool | None:
     event_result = normalize_insurer_number(None if event_value is None else str(event_value))
     if not event_result.get("ok"):
@@ -15749,6 +15868,25 @@ def reservation_site_csv_import(request: Request) -> Response:
         "reservation_site_csv_import.html",
         {"request": request, "user": user, "events": events, "selected_event": selected_event, "result": None,
          "message": request.query_params.get("message"), "error": request.query_params.get("error")},
+    )
+
+
+@app.get("/utilities/reservation-site-records", response_class=HTMLResponse)
+def reservation_site_records(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=work_other_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        events = load_event_options(cur)
+        result = load_reservation_site_record_list(cur, query_params=request.query_params)
+        cur.close()
+    return templates.TemplateResponse(
+        "reservation_site_records.html",
+        {"request": request, "user": user, "events": events, **result},
     )
 
 
