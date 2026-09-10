@@ -9,7 +9,29 @@
   <section class="panel filter-panel">
     <form method="get" class="filter-form filter-form-wide">
       <label><span>イベント</span><select name="event_id">{% for event in events %}<option value="{{ event.event_id }}" {{ 'selected' if filters.event_id|string == event.event_id|string else '' }}>{{ event.event_name or ('event ' ~ event.event_id) }}</option>{% endfor %}</select></label>
-      <label><span>受診月</span><select name="exam_month">{% for option in month_options %}<option value="{{ option.exam_month }}" {{ 'selected' if filters.exam_month == option.exam_month else '' }}>{{ option.exam_month }} / case {{ option.case_count }}</option>{% endfor %}</select></label>
+      <label>
+        <span>受診月</span>
+        <span class="month-picker-field" data-month-picker>
+          <input name="exam_month" value="{{ filters.exam_month or '' }}" autocomplete="off" placeholder="YYYY-MM" data-month-picker-input>
+          <div class="month-picker-popover" data-month-picker-popover hidden>
+            <div class="month-picker-head">
+              <strong>受診月を選択</strong>
+              <button type="button" class="ghost-button compact-action-button" data-month-picker-clear>クリア</button>
+            </div>
+            <div class="month-picker-options">
+              {% for option in month_options %}
+              <label class="month-picker-option {{ 'is-selected' if option.exam_month in selected_exam_months else '' }}">
+                <input type="checkbox" value="{{ option.exam_month }}" {% if option.exam_month in selected_exam_months %}checked{% endif %} data-month-picker-option>
+                <span>{{ option.exam_month }}</span>
+                <small>source {{ option.source_count }} / case {{ option.case_count }}</small>
+              </label>
+              {% else %}
+              <p class="subtle">選択できる受診月がありません。</p>
+              {% endfor %}
+            </div>
+          </div>
+        </span>
+      </label>
       <div class="filter-actions"><button type="submit">集計</button></div>
     </form>
   </section>

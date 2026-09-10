@@ -4904,11 +4904,12 @@ def load_monthly_exam_ng_report(cur: Any, *, event_id: str, exam_month: str) -> 
         filters={"event_id": event_id, "exam_month": exam_month, "q": ""},
         limit=2000,
     )
+    exam_months = split_filter_values(exam_month)
     month_clause = ""
     params: list[Any] = [event_id]
-    if exam_month:
-        month_clause = " AND DATE_FORMAT(eec.exam_date, '%Y-%m') = %s"
-        params.append(exam_month)
+    if exam_months:
+        month_clause = f" AND DATE_FORMAT(eec.exam_date, '%Y-%m') IN ({', '.join(['%s'] * len(exam_months))})"
+        params.extend(exam_months)
 
     cur.execute(
         f"""
@@ -16776,6 +16777,7 @@ def monthly_exam_ng_summary(request: Request) -> Response:
             "user": user,
             "events": events,
             "month_options": month_options,
+            "selected_exam_months": split_filter_values(exam_month),
             "filters": {"event_id": event_id, "exam_month": exam_month},
             "report": report,
         },
