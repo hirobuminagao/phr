@@ -5,6 +5,7 @@ import pytest
 
 from apps.health_exam_admin.main import (
     add_external_feedback_bulk_items,
+    create_external_feedback_details_for_items,
     create_external_feedback_item_detail,
     ensure_external_feedback_report_editable,
     external_feedback_detail_type_from_form,
@@ -21,6 +22,29 @@ def test_external_feedback_bulk_entry_uses_person_selection_editor() -> None:
     assert "for index in range(12)" in template
     assert "for index in range(8)" not in template
     assert "range(12)" in getsource(add_external_feedback_bulk_items)
+
+
+def test_external_feedback_report_supports_bulk_detail_and_exam_item_search() -> None:
+    report_template = Path("apps/health_exam_admin/templates/external_feedback_report_detail.html").read_text(encoding="utf-8")
+    item_template = Path("apps/health_exam_admin/templates/external_feedback_item_detail.html").read_text(encoding="utf-8")
+    script = Path("apps/health_exam_admin/static/app.js").read_text(encoding="utf-8")
+
+    assert "data-feedback-bulk-detail-item" in report_template
+    assert "/details/bulk" in report_template
+    assert "data-feedback-exam-item-picker" in report_template
+    assert "data-feedback-exam-item-picker" in item_template
+    assert "/api/csv-mapping-lab/exam-items" in script
+
+
+def test_external_feedback_bulk_detail_requires_people() -> None:
+    with pytest.raises(ValueError, match="人を選択"):
+        create_external_feedback_details_for_items(
+            None,
+            report_id=4,
+            item_ids=[],
+            form={"detail_type": "OTHER", "external_message": "確認してください"},
+            user={},
+        )
 
 
 class Cursor:

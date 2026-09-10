@@ -6088,4 +6088,92 @@
       }
     });
   }
+
+  const feedbackBulkDetailItems = Array.from(document.querySelectorAll("[data-feedback-bulk-detail-item]"));
+  const feedbackBulkDetailOpen = document.querySelector("[data-feedback-bulk-detail-open]");
+  const feedbackBulkDetailModal = document.getElementById("external-feedback-bulk-detail-modal");
+  if (feedbackBulkDetailItems.length && feedbackBulkDetailOpen && feedbackBulkDetailModal) {
+    const selectedCount = feedbackBulkDetailModal.querySelector("[data-feedback-bulk-selected-count]");
+    const inputRoot = feedbackBulkDetailModal.querySelector("[data-feedback-bulk-item-inputs]");
+    const refreshSelection = () => {
+      const selected = feedbackBulkDetailItems.filter((input) => input.checked);
+      feedbackBulkDetailOpen.disabled = selected.length === 0;
+      if (selectedCount) selectedCount.textContent = String(selected.length);
+      if (inputRoot) {
+        inputRoot.innerHTML = selected.map((input) => `<input type="hidden" name="item_ids" value="${escapeHtml(input.value)}">`).join("");
+      }
+    };
+    feedbackBulkDetailItems.forEach((input) => input.addEventListener("change", refreshSelection));
+    feedbackBulkDetailOpen.addEventListener("click", refreshSelection);
+    refreshSelection();
+  }
+
+  for (const form of document.querySelectorAll("[data-feedback-detail-form]")) {
+    const typeSelect = form.querySelector("[data-feedback-detail-type]");
+    const fieldGroups = Array.from(form.querySelectorAll("[data-feedback-detail-fields]"));
+    if (!typeSelect || !fieldGroups.length) continue;
+    const refreshType = () => {
+      const selectedType = String(typeSelect.value || "BASIC_INFO");
+      fieldGroups.forEach((group) => {
+        const active = group.getAttribute("data-feedback-detail-fields") === selectedType;
+        group.hidden = !active;
+        group.querySelectorAll("input, select, textarea").forEach((input) => { input.disabled = !active; });
+      });
+    };
+    typeSelect.addEventListener("change", refreshType);
+    refreshType();
+  }
+
+  for (const picker of document.querySelectorAll("[data-feedback-exam-item-picker]")) {
+    const openButton = picker.querySelector("[data-feedback-exam-item-open]");
+    const panel = picker.querySelector("[data-feedback-exam-item-search-panel]");
+    const keywordInput = picker.querySelector("[data-feedback-exam-item-keyword]");
+    const searchButton = picker.querySelector("[data-feedback-exam-item-search]");
+    const results = picker.querySelector("[data-feedback-exam-item-results]");
+    const namecodeInput = picker.querySelector("[data-feedback-exam-item-namecode]");
+    const selected = picker.querySelector("[data-feedback-exam-item-selected]");
+    openButton?.addEventListener("click", () => {
+      if (panel) panel.hidden = false;
+      keywordInput?.focus();
+    });
+    const search = async () => {
+      const keyword = String(keywordInput?.value || "").trim();
+      if (!results) return;
+      if (!keyword) {
+        results.innerHTML = '<p class="subtle">キーワードを入力してください。</p>';
+        return;
+      }
+      results.innerHTML = '<p class="subtle">検索中...</p>';
+      try {
+        const payload = await fetchJson(`/api/csv-mapping-lab/exam-items?${new URLSearchParams({ keyword }).toString()}`);
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        results.innerHTML = items.map((item) => `
+          <button type="button" class="csv-mapping-exam-item-option" data-feedback-exam-item-result="${escapeHtml(item.namecode || "")}">
+            <strong>${escapeHtml(item.item_name || item.namecode || "-")}</strong>
+            <small>${escapeHtml([item.namecode, item.xml_value_type, item.category_name].filter(Boolean).join(" / "))}</small>
+          </button>`).join("") || '<p class="subtle">候補はありません。</p>';
+        for (const button of results.querySelectorAll("[data-feedback-exam-item-result]")) {
+          button.addEventListener("click", () => {
+            const namecode = button.getAttribute("data-feedback-exam-item-result") || "";
+            const item = items.find((candidate) => String(candidate.namecode || "") === namecode);
+            if (namecodeInput) namecodeInput.value = namecode;
+            if (selected) {
+              selected.innerHTML = `<strong>${escapeHtml(item?.item_name || namecode)}</strong><small>${escapeHtml(namecode)} / ${escapeHtml(item?.xml_value_type || "-")}</small>`;
+              selected.hidden = false;
+            }
+            if (panel) panel.hidden = true;
+          });
+        }
+      } catch (error) {
+        results.innerHTML = apiErrorMarkup(error, "健診項目を検索できませんでした。");
+      }
+    };
+    searchButton?.addEventListener("click", search);
+    keywordInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        search();
+      }
+    });
+  }
 })();

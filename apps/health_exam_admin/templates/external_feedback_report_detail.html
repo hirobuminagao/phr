@@ -115,12 +115,13 @@
   {% endif %}
 
   <section class="panel">
-    <div class="section-heading"><div><h2>人一覧</h2><p class="subtle">人を開いて、基本情報・健診項目・その他の指摘内容を登録します。</p></div><span class="status-pill status-neutral">{{ items|length }}人</span></div>
+    <div class="section-heading"><div><h2>人一覧</h2><p class="subtle">人を開いて個別に登録するか、複数人を選んで同じ指摘内容を追加します。</p></div><div class="button-row"><span class="status-pill status-neutral">{{ items|length }}人</span>{% if can_edit and not is_read_only %}<button type="button" class="ghost-button" data-feedback-bulk-detail-open data-modal-open="external-feedback-bulk-detail-modal" disabled>選択した人に指摘を追加</button>{% endif %}</div></div>
     {% if can_edit and output_lists %}<form method="post" action="/external-feedback/reports/{{ report.external_feedback_report_id }}/export-list" class="stack-form">{% endif %}
     <div class="table-panel"><table class="data-table">
-      <thead><tr><th>再出力選択</th><th>対象者</th><th>case</th><th>指摘項目</th><th>状態</th><th>再出力</th><th>操作</th></tr></thead>
+      <thead><tr><th>共通指摘</th><th>再出力選択</th><th>対象者</th><th>case</th><th>指摘項目</th><th>状態</th><th>再出力</th><th>操作</th></tr></thead>
       <tbody>
         {% for item in items %}<tr>
+          <td>{% if can_edit and not is_read_only %}<input type="checkbox" value="{{ item.external_feedback_item_id }}" data-feedback-bulk-detail-item aria-label="{{ item.name_kana_export_value or item.name_full_raw or '対象者' }}を共通指摘の対象にする">{% else %}-{% endif %}</td>
           <td>{% if item.detail_count and not item.unresolved_detail_count and item.exam_export_case_id %}<input type="checkbox" name="item_ids" value="{{ item.external_feedback_item_id }}" aria-label="再出力対象を選択">{% else %}-{% endif %}</td>
           <td><strong>{{ item.name_kana_export_value or item.name_full_raw or '未特定' }}</strong><small>HIA {{ item.hia_subscriber_id or '-' }}</small></td>
           <td><strong>{{ item.exam_export_case_id or '-' }}</strong><small>{{ item.facility_name or '-' }} / {{ item.exam_date or '-' }}</small></td>
@@ -128,11 +129,38 @@
           <td><span class="status-pill {{ 'status-ready' if item.handling_status == 'RESOLVED' else 'status-pending' }}">{{ external_feedback_status_label(item.handling_status) }}</span><small>case: {{ item.export_readiness_status or '-' }}</small></td>
           <td>{% if item.reoutput_xml_export_list_case_id %}<span class="status-pill status-ready">追加済み</span><small>list case {{ item.reoutput_xml_export_list_case_id }}</small>{% else %}-{% endif %}</td>
           <td><a class="ghost-button" href="/external-feedback/items/{{ item.external_feedback_item_id }}">対象者を開く</a>{% if item.exam_export_case_id %}<a class="ghost-button" href="/exam-export-cases/{{ item.exam_export_case_id }}">case</a>{% endif %}</td>
-        </tr>{% else %}<tr><td colspan="7">人はまだ追加されていません。</td></tr>{% endfor %}
+        </tr>{% else %}<tr><td colspan="8">人はまだ追加されていません。</td></tr>{% endfor %}
       </tbody>
     </table></div>
     {% if can_edit and output_lists %}<div class="action-row"><select name="xml_export_list_id" required><option value="">追加先の出力リストを選択</option>{% for list in output_lists %}<option value="{{ list.xml_export_list_id }}">{{ list.xml_export_list_id }} / {{ list.list_name }} / {{ list.list_status }}</option>{% endfor %}</select><button type="submit">選択した解決済みcaseを追加</button></div></form>{% endif %}
   </section>
+  {% if can_edit and not is_read_only %}
+  <div id="external-feedback-bulk-detail-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel feedback-bulk-detail-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-bulk-detail-title">
+      <div class="edit-modal__head"><div><p class="eyebrow">COMMON ISSUE</p><h2 id="feedback-bulk-detail-title">選択した人に指摘を追加</h2><p class="subtle"><strong data-feedback-bulk-selected-count>0</strong>人へ同じ内容を登録します。</p></div><button type="button" class="ghost-button" data-modal-close>閉じる</button></div>
+      <form method="post" action="/external-feedback/reports/{{ report.external_feedback_report_id }}/details/bulk" class="stack-form" data-feedback-detail-form>
+        <div data-feedback-bulk-item-inputs></div>
+        <label><span>指摘の種類</span><select name="detail_type" data-feedback-detail-type><option value="BASIC_INFO">基本情報</option><option value="EXAM_ITEM">健診項目</option><option value="OTHER">その他</option></select></label>
+        <div data-feedback-detail-fields="BASIC_INFO"><label><span>基本情報フィールド</span><input name="basic_field_code" placeholder="address / insurer_number など"></label></div>
+        <div data-feedback-detail-fields="EXAM_ITEM" hidden>
+          <div class="feedback-exam-item-picker" data-feedback-exam-item-picker>
+            <label><span>健診項目</span><input type="hidden" name="namecode" data-feedback-exam-item-namecode><button type="button" class="ghost-button" data-feedback-exam-item-open>健診項目を検索</button></label>
+            <div class="notice" data-feedback-exam-item-selected hidden></div>
+            <div class="feedback-exam-item-search" data-feedback-exam-item-search-panel hidden><div class="inline-form"><input data-feedback-exam-item-keyword placeholder="項目名 / namecode / カテゴリ"><button type="button" data-feedback-exam-item-search>検索</button></div><div class="export-exam-item-results" data-feedback-exam-item-results></div></div>
+          </div>
+          <div class="form-grid"><label><span>section</span><input name="section_code" placeholder="01010 / 01030 / 01060"></label><label><span>業務チェックID</span><input name="check_item_code"></label></div>
+        </div>
+        <div data-feedback-detail-fields="OTHER" hidden><label><span>外部エラーコード</span><input name="external_error_code"></label></div>
+        <label><span>重要度</span><select name="issue_level"><option value="ERROR">エラー</option><option value="WARNING">警告</option><option value="INFO">情報</option></select></label>
+        <label><span>指摘内容</span><textarea name="external_message" rows="3" required></textarea></label>
+        <div class="form-grid"><label><span>指摘値</span><input name="reported_value"></label><label><span>期待値</span><input name="expected_value"></label><label><span>修正後の値</span><input name="corrected_value"></label></div>
+        <label><span>対応メモ</span><textarea name="resolution_note" rows="2"></textarea></label>
+        <div class="edit-modal__foot"><button type="button" class="ghost-button" data-modal-close>キャンセル</button><button type="submit">選択した人に追加</button></div>
+      </form>
+    </section>
+  </div>
+  {% endif %}
   {% if can_edit and not is_read_only %}<section class="panel"><div class="section-heading"><div><h2>未解決を次の箱へ引き継ぐ</h2><p class="subtle">解決済みを残し、未解決だけを新しい箱へ複写します。</p></div><button type="button" class="danger-button" data-modal-open="carry-over-modal">未解決を引き継ぐ</button></div></section>
   <div id="carry-over-modal" class="edit-modal" hidden><div class="edit-modal__backdrop" data-modal-close></div><section class="edit-modal__panel" role="dialog" aria-modal="true"><div class="edit-modal__head"><h2>未解決を引き継ぎますか？</h2><button type="button" class="ghost-button" data-modal-close>閉じる</button></div><p>新しい指摘箱を作成し、この箱は参照専用になります。</p><div class="edit-modal__foot"><button type="button" class="ghost-button" data-modal-close>キャンセル</button><form method="post" action="/external-feedback/reports/{{ report.external_feedback_report_id }}/carry-over"><button type="submit" class="danger-button">引き継ぐ</button></form></div></section></div>{% endif %}
 </main>

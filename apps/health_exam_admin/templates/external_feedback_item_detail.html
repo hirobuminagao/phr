@@ -85,9 +85,14 @@
     </details>
     <details class="feedback-detail-entry">
       <summary>健診項目を追加</summary>
-      <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details" class="stack-form">
+      <form method="post" action="/external-feedback/items/{{ item.external_feedback_item_id }}/details" class="stack-form" data-feedback-detail-form>
         <input type="hidden" name="detail_type" value="EXAM_ITEM">
-        <div class="form-grid"><label><span>namecode</span><input name="namecode" required></label><label><span>section</span><input name="section_code" placeholder="01010 / 01030 / 01060"></label><label><span>業務チェックID</span><input name="check_item_code"></label></div>
+        <div class="feedback-exam-item-picker" data-feedback-exam-item-picker>
+          <label><span>健診項目</span><input type="hidden" name="namecode" data-feedback-exam-item-namecode required><button type="button" class="ghost-button" data-feedback-exam-item-open>健診項目を検索</button></label>
+          <div class="notice" data-feedback-exam-item-selected hidden></div>
+          <div class="feedback-exam-item-search" data-feedback-exam-item-search-panel hidden><div class="inline-form"><input data-feedback-exam-item-keyword placeholder="項目名 / namecode / カテゴリ"><button type="button" data-feedback-exam-item-search>検索</button></div><div class="export-exam-item-results" data-feedback-exam-item-results></div></div>
+        </div>
+        <div class="form-grid"><label><span>section</span><input name="section_code" placeholder="01010 / 01030 / 01060"></label><label><span>業務チェックID</span><input name="check_item_code"></label></div>
         <label><span>指摘内容</span><textarea name="external_message" rows="2" required></textarea></label>
         <div class="form-grid"><label><span>指摘値</span><input name="reported_value"></label><label><span>期待値</span><input name="expected_value"></label><label><span>修正後の値</span><input name="corrected_value"></label></div>
         <label><span>対応メモ</span><textarea name="resolution_note" rows="2"></textarea></label>

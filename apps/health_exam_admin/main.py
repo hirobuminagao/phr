@@ -3251,6 +3251,41 @@ def create_external_feedback_item_detail(
     return detail_id
 
 
+def create_external_feedback_details_for_items(
+    cur: Any,
+    *,
+    report_id: int,
+    item_ids: Sequence[int],
+    form: Mapping[str, Any],
+    user: dict[str, Any],
+) -> int:
+    unique_item_ids = list(dict.fromkeys(int(item_id) for item_id in item_ids if int(item_id) > 0))
+    if not unique_item_ids:
+        raise ValueError("指摘内容を反映する人を選択してください。")
+    report = load_external_feedback_report_detail(cur, report_id=report_id)
+    if not report:
+        raise ValueError("指摘箱が見つかりません。")
+    ensure_external_feedback_report_editable(report)
+    placeholders = ", ".join(["%s"] * len(unique_item_ids))
+    cur.execute(
+        f"""
+        SELECT external_feedback_item_id
+        FROM {qname(health_db())}.ops_external_feedback_items
+        WHERE external_feedback_report_id = %s
+          AND external_feedback_item_id IN ({placeholders})
+        """,
+        tuple([report_id, *unique_item_ids]),
+    )
+    valid_ids = {int(row["external_feedback_item_id"]) for row in cur.fetchall()}
+    if valid_ids != set(unique_item_ids):
+        raise ValueError("選択した人に、この指摘箱へ登録できない対象が含まれています。")
+    actor = fund_delivery_actor(user)
+    for item_id in unique_item_ids:
+        create_external_feedback_item_detail(cur, item_id=item_id, form=form, user=user)
+        refresh_external_feedback_statuses(cur, item_id=item_id, actor=actor)
+    return len(unique_item_ids)
+
+
 def load_external_feedback_item_detail(
     cur: Any, *, item_id: int
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
@@ -18030,6 +18065,41 @@ async def external_feedback_report_items_bulk_add(request: Request, report_id: i
             "can_edit": True,
             "is_read_only": False,
         },
+    )
+
+
+@app.post("/external-feedback/reports/{report_id}/details/bulk", response_class=HTMLResponse)
+async def external_feedback_report_details_bulk_add(request: Request, report_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    raw_form = await request.form()
+    form = {key: str(value) for key, value in raw_form.multi_items()}
+    item_ids = [int(value) for value in raw_form.getlist("item_ids") if str(value).isdigit()]
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        try:
+            count = create_external_feedback_details_for_items(
+                dict_cursor(conn), report_id=report_id, item_ids=item_ids, form=form, user=user
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback/reports/{report_id}?error={quote(str(exc))}", status_code=303)
+    log_app_operation(
+        request=request,
+        user=user,
+        action_code="EXTERNAL_FEEDBACK_DETAIL_BULK_CREATE",
+        target_schema=health_db(),
+        target_table="ops_external_feedback_item_details",
+        target_id=str(report_id),
+        after={"item_count": count, "detail_type": str(form.get("detail_type") or "")},
+    )
+    return RedirectResponse(
+        f"/external-feedback/reports/{report_id}?message={quote(f'{count}人に指摘内容を追加しました。')}",
+        status_code=303,
     )
 
 
