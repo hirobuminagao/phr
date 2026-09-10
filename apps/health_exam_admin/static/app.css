@@ -9291,18 +9291,24 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   min-width: 260px;
 }
 
+.subscriber-reservation-summary {
+  min-width: 240px;
+}
+
 .subscriber-latest-case-summary {
   min-width: 220px;
 }
 
 .subscriber-latest-case-summary > strong,
-.subscriber-dashboard-summary > strong {
+.subscriber-dashboard-summary > strong,
+.subscriber-reservation-summary > strong {
   display: block;
   margin-top: 6px;
 }
 
 .subscriber-latest-case-summary > small,
-.subscriber-dashboard-summary > small {
+.subscriber-dashboard-summary > small,
+.subscriber-reservation-summary > small {
   margin-top: 4px;
 }
 

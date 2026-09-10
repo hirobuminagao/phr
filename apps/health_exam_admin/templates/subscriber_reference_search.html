@@ -33,7 +33,7 @@
   <section class="panel">
     <div class="section-heading"><div><h2>検索結果</h2><p class="subtle">{% if searched %}{{ rows|length }}件{% else %}条件を入力して検索してください。{% endif %}</p></div></div>
     {% if rows %}
-    <div class="table-wrap"><table class="data-table subscriber-reference-table"><thead><tr><th>加入者</th><th>個人情報</th><th>資格・健診</th><th>HIAダッシュボード</th><th>関連</th><th>操作</th></tr></thead><tbody>
+    <div class="table-wrap"><table class="data-table subscriber-reference-table"><thead><tr><th>加入者</th><th>個人情報</th><th>資格・健診</th><th>予約サイト</th><th>HIAダッシュボード</th><th>関連</th><th>操作</th></tr></thead><tbody>
       {% for row in rows %}<tr>
         <td><strong>ID {{ row.subscriber_id }}</strong><small>HIA {{ row.hia_subscriber_id or '-' }}</small><small>保険者 {{ row.insurer_number or '-' }}</small></td>
         <td><strong>{{ row.name_display }}</strong><small>{{ row.birth_display }}</small><small>{{ row.insurance_display }}</small></td>
@@ -47,6 +47,15 @@
           <strong>case未登録</strong>
           {% endif %}
           <small>加入者更新 {{ row.updated_at or '-' }}</small>
+        </td>
+        <td class="subscriber-reservation-summary">
+          {% if row.latest_reservation %}
+          <span class="status-pill {{ 'status-warning' if row.latest_reservation.reservation_status_raw == '5' else 'status-ready' }}">照合候補 {{ row.reservation_candidate_count }}件</span>
+          <strong>{{ row.latest_reservation.status_label }}</strong>
+          <small>{{ row.latest_reservation.reservation_date or '-' }} {{ row.latest_reservation.start_time or '' }}</small>
+          <small>{{ row.latest_reservation.reservation_hospital_name or '予約施設未登録' }}</small>
+          <small>有効 {{ row.reservation_active_count }} / キャンセル {{ row.reservation_cancelled_count }}</small>
+          {% else %}<span class="status-pill status-muted">候補なし</span>{% endif %}
         </td>
         <td class="subscriber-dashboard-summary">
           {% if row.dashboard_status %}

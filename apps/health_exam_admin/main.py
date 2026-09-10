@@ -19646,6 +19646,104 @@ def subscriber_reference_filters(request: Request) -> dict[str, str]:
     }
 
 
+RESERVATION_STATUS_LABELS = {
+    "1": "仮予約",
+    "3": "予約確定",
+    "4": "受診済み",
+    "5": "キャンセル",
+}
+
+
+def _reservation_candidate_match(subscriber: Mapping[str, Any], reservation: Mapping[str, Any]) -> str | None:
+    hia_id = str(subscriber.get("hia_subscriber_id") or "").strip().lstrip("0")
+    reservation_hia_id = str(reservation.get("hia_member_id") or "").strip().lstrip("0")
+    birth = str(subscriber.get("birth") or "").strip()[:10]
+    reservation_birth = str(reservation.get("applicant_birthday") or "").strip()[:10]
+    if hia_id and reservation_hia_id and hia_id == reservation_hia_id and birth and birth == reservation_birth:
+        return "HIA加入者ID・生年月日"
+
+    insurer = str(subscriber.get("insurer_number") or "").strip().lstrip("0")
+    reservation_insurer = str(reservation.get("insurer_number_match") or "").strip().lstrip("0")
+    symbol = str(subscriber.get("insurance_symbol_match") or subscriber.get("insurance_symbol") or "").strip()
+    number = str(subscriber.get("insurance_number_match") or subscriber.get("insurance_number") or "").strip()
+    if (
+        insurer and insurer == reservation_insurer
+        and symbol and symbol == str(reservation.get("insurance_symbol_match") or "").strip()
+        and number and number == str(reservation.get("insurance_number_match") or "").strip()
+        and birth and birth == reservation_birth
+    ):
+        return "保険情報・生年月日"
+
+    kana = str(subscriber.get("name_kana_full_match") or subscriber.get("name_kana_full") or "").strip()
+    if (
+        insurer and insurer == reservation_insurer
+        and kana and kana == str(reservation.get("applicant_fullname_kana_match") or "").strip()
+        and birth and birth == reservation_birth
+    ):
+        return "氏名カナ・生年月日・保険者"
+    return None
+
+
+def load_subscriber_reservation_candidates(
+    cur: Any,
+    *,
+    subscribers: list[Mapping[str, Any]],
+) -> dict[int, list[dict[str, Any]]]:
+    result = {int(row["subscriber_id"]): [] for row in subscribers}
+    if not subscribers or not manual_exam_entry_table_exists(cur, work_other_db(), "reservation_site_records"):
+        return result
+    predicates: list[str] = []
+    params: list[Any] = []
+    for subscriber in subscribers:
+        hia_id = str(subscriber.get("hia_subscriber_id") or "").strip().lstrip("0")
+        insurer = str(subscriber.get("insurer_number") or "").strip().lstrip("0")
+        symbol = str(subscriber.get("insurance_symbol_match") or subscriber.get("insurance_symbol") or "").strip()
+        number = str(subscriber.get("insurance_number_match") or subscriber.get("insurance_number") or "").strip()
+        kana = str(subscriber.get("name_kana_full_match") or subscriber.get("name_kana_full") or "").strip()
+        birth = str(subscriber.get("birth") or "").strip()[:10]
+        if hia_id and birth:
+            predicates.append("(TRIM(LEADING '0' FROM CAST(r.hia_member_id AS CHAR)) = %s AND r.applicant_birthday = %s)")
+            params.extend((hia_id, birth))
+        if insurer and symbol and number and birth:
+            predicates.append("(TRIM(LEADING '0' FROM r.insurer_number_match) = %s AND r.insurance_symbol_match = %s AND r.insurance_number_match = %s AND r.applicant_birthday = %s)")
+            params.extend((insurer, symbol, number, birth))
+        if insurer and kana and birth:
+            predicates.append("(TRIM(LEADING '0' FROM r.insurer_number_match) = %s AND r.applicant_fullname_kana_match = %s AND r.applicant_birthday = %s)")
+            params.extend((insurer, kana, birth))
+    if not predicates:
+        return result
+    cur.execute(
+        f"""
+        SELECT r.reservation_site_record_id, r.reservation_id, r.event_id,
+               r.reservation_hospital_id, r.reservation_hospital_name, r.exam_facility_id,
+               r.course_id, r.course_name, r.reservation_date, r.start_time, r.end_time,
+               r.reservation_status_raw, r.cancelled_at, r.source_updated_at,
+               r.hia_member_id, r.applicant_birthday, r.applicant_fullname_kana_match,
+               r.insurer_number_match, r.insurance_symbol_match, r.insurance_number_match
+        FROM {qname(work_other_db())}.reservation_site_records r
+        WHERE {' OR '.join(predicates)}
+        ORDER BY r.reservation_date DESC, r.source_updated_at DESC, r.reservation_site_record_id DESC
+        LIMIT 5000
+        """,
+        tuple(params),
+    )
+    reservations = [dict(row) for row in cur.fetchall()]
+    for subscriber in subscribers:
+        subscriber_id = int(subscriber["subscriber_id"])
+        for reservation in reservations:
+            match_reason = _reservation_candidate_match(subscriber, reservation)
+            if not match_reason:
+                continue
+            candidate = dict(reservation)
+            candidate["match_reason"] = match_reason
+            candidate["status_label"] = RESERVATION_STATUS_LABELS.get(
+                str(candidate.get("reservation_status_raw") or ""),
+                str(candidate.get("reservation_status_raw") or "未設定"),
+            )
+            result[subscriber_id].append(candidate)
+    return result
+
+
 def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str], pii_level: str) -> list[dict[str, Any]]:
     subscriber_columns = manual_exam_entry_existing_columns(cur, dev_db(), "subscribers")
     where: list[str] = []
@@ -19679,11 +19777,11 @@ def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str
         SELECT
           s.id AS subscriber_id,
           s.hia_subscriber_id,
-          s.name_kana_full,
+          s.name_kana_full, s.name_kana_full_match,
           s.birth,
           s.insurer_number,
           s.insurance_symbol,
-          s.insurance_number,
+          s.insurance_number, s.insurance_symbol_match, s.insurance_number_match,
           {('s.employee_code' if 'employee_code' in subscriber_columns else 'NULL')} AS employee_code,
           {('s.qualification_lost_date' if 'qualification_lost_date' in subscriber_columns else 'NULL')} AS qualification_lost_date,
           s.updated_at,
@@ -19734,7 +19832,14 @@ def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str
         tuple(params),
     )
     rows = [dict(row) for row in cur.fetchall()]
+    reservation_candidates = load_subscriber_reservation_candidates(cur, subscribers=rows)
     for row in rows:
+        reservations = reservation_candidates.get(int(row["subscriber_id"]), [])
+        active_reservations = [item for item in reservations if str(item.get("reservation_status_raw") or "") != "5"]
+        row["reservation_candidate_count"] = len(reservations)
+        row["reservation_active_count"] = len(active_reservations)
+        row["reservation_cancelled_count"] = len(reservations) - len(active_reservations)
+        row["latest_reservation"] = active_reservations[0] if active_reservations else (reservations[0] if reservations else None)
         if pii_level == "HIDDEN":
             row["name_display"] = "非表示"
             row["birth_display"] = "非表示"
@@ -19752,6 +19857,9 @@ def load_subscriber_reference_search_rows(cur: Any, *, filters: Mapping[str, str
         row.pop("birth", None)
         row.pop("insurance_symbol", None)
         row.pop("insurance_number", None)
+        row.pop("name_kana_full_match", None)
+        row.pop("insurance_symbol_match", None)
+        row.pop("insurance_number_match", None)
     return rows
 
 
@@ -19763,7 +19871,8 @@ def load_subscriber_reference_detail(cur: Any, *, subscriber_id: int, display_mo
         SELECT
           s.id AS subscriber_id, s.hia_subscriber_id, s.person_id_custom, s.identity_hash,
           s.insurer_number, s.insurance_symbol, s.insurance_number, s.insurance_branchnumber,
-          {optional_select('name_kanji_full')}, s.name_kana_full, s.birth, s.gender_code,
+          {optional_select('name_kanji_full')}, s.name_kana_full, s.name_kana_full_match, s.birth, s.gender_code,
+          s.insurance_symbol_match, s.insurance_number_match,
           {optional_select('employee_code')}, {optional_select('employer_code')}, {optional_select('department_code')},
           {optional_select('qualification_acquired_date')}, {optional_select('qualification_lost_date')},
           {optional_select('last_change_run_id')}, s.created_at, s.updated_at,
@@ -19781,6 +19890,18 @@ def load_subscriber_reference_detail(cur: Any, *, subscriber_id: int, display_mo
     if not row:
         return None
     detail = dict(row)
+    detail["_reservation_identity"] = {
+        "subscriber_id": detail["subscriber_id"],
+        "hia_subscriber_id": detail.get("hia_subscriber_id"),
+        "insurer_number": detail.get("insurer_number"),
+        "insurance_symbol": detail.get("insurance_symbol"),
+        "insurance_number": detail.get("insurance_number"),
+        "insurance_symbol_match": detail.get("insurance_symbol_match"),
+        "insurance_number_match": detail.get("insurance_number_match"),
+        "name_kana_full": detail.get("name_kana_full"),
+        "name_kana_full_match": detail.get("name_kana_full_match"),
+        "birth": detail.get("birth"),
+    }
     contacts: list[dict[str, Any]] = []
     if manual_exam_entry_table_exists(cur, dev_db(), "subscriber_contact_points"):
         cur.execute(
@@ -19952,6 +20073,8 @@ def render_subscriber_reference_detail(request: Request, *, subscriber_id: int, 
         if not detail:
             conn.rollback()
             return RedirectResponse("/utilities/subscribers?error=加入者が見つかりません。", status_code=303)
+        reservation_identity = detail.pop("_reservation_identity")
+        reservation_rows = load_subscriber_reservation_candidates(cur, subscribers=[reservation_identity]).get(subscriber_id, [])
         events = load_subscriber_reference_events(cur, subscriber_id=subscriber_id)
         dashboard_rows = load_subscriber_reference_dashboard(cur, subscriber_id=subscriber_id)
         history_rows = (
@@ -19980,7 +20103,7 @@ def render_subscriber_reference_detail(request: Request, *, subscriber_id: int, 
         "subscriber_reference_detail.html",
         {
             "request": request, "user": user, "subscriber": detail, "events": events,
-            "dashboard_rows": dashboard_rows, "history_rows": history_rows,
+            "dashboard_rows": dashboard_rows, "reservation_rows": reservation_rows, "history_rows": history_rows,
             "view_history_rows": view_history_rows, "display_mode": display_mode,
             "can_open_full": pii_level == "FULL", "can_view_history": can_view_subscriber_history(user),
         },

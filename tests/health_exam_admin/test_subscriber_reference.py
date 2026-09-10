@@ -1,9 +1,36 @@
 from apps.health_exam_admin.main import (
+    _reservation_candidate_match,
     load_subscriber_reference_history,
     load_subscriber_reference_search_rows,
     mask_subscriber_text,
     subscriber_reference_pii_level,
 )
+
+
+def test_reservation_candidate_match_accepts_strong_insurance_identity() -> None:
+    subscriber = {
+        "hia_subscriber_id": None,
+        "insurer_number": "06139463",
+        "insurance_symbol_match": "ABC",
+        "insurance_number_match": "1234",
+        "birth": "1990-01-02",
+    }
+    reservation = {
+        "hia_member_id": None,
+        "insurer_number_match": "6139463",
+        "insurance_symbol_match": "ABC",
+        "insurance_number_match": "1234",
+        "applicant_birthday": "1990-01-02",
+    }
+
+    assert _reservation_candidate_match(subscriber, reservation) == "保険情報・生年月日"
+
+
+def test_reservation_candidate_match_does_not_trust_duplicate_hia_id_alone() -> None:
+    subscriber = {"hia_subscriber_id": "123", "birth": "1990-01-02"}
+    reservation = {"hia_member_id": 123, "applicant_birthday": "1991-02-03"}
+
+    assert _reservation_candidate_match(subscriber, reservation) is None
 
 
 class SubscriberHistoryCursor:
@@ -103,12 +130,13 @@ def test_admin_all_permissions_still_resolves_to_full() -> None:
 
 def test_subscriber_search_includes_latest_active_dashboard_status() -> None:
     cur = SubscriberSearchCursor()
-
-    rows = load_subscriber_reference_search_rows(
-        cur,
-        filters={"hia_subscriber_id": "HIA-10"},
-        pii_level="MASKED",
-    )
+    from unittest.mock import patch
+    with patch("apps.health_exam_admin.main.load_subscriber_reservation_candidates", return_value={10: []}):
+        rows = load_subscriber_reference_search_rows(
+            cur,
+            filters={"hia_subscriber_id": "HIA-10"},
+            pii_level="MASKED",
+        )
 
     assert len(rows) == 1
     assert rows[0]["dashboard_status"] == "受診済み"

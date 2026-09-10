@@ -20,6 +20,17 @@
     {% if subscriber.contacts %}<div class="subscriber-contact-list">{% for item in subscriber.contacts %}<span><strong>{{ item.contact_type }}</strong> {{ item.contact_value }}</span>{% endfor %}</div>{% endif %}
   </section>
 
+  <section class="panel"><div class="section-heading"><div><h2>予約システム情報</h2><p class="subtle">加入者情報から照合した予約候補です。確定紐付けではなく、キャンセルを含む履歴を表示します。</p></div><span class="status-pill">候補 {{ reservation_rows|length }}件</span></div>
+    {% if reservation_rows %}<div class="table-wrap"><table class="data-table"><thead><tr><th>予約ID・状態</th><th>予約日時</th><th>予約施設</th><th>コース</th><th>照合</th><th>更新</th></tr></thead><tbody>{% for row in reservation_rows %}<tr>
+      <td><strong>{{ row.reservation_id }}</strong><br><span class="status-pill {{ 'status-warning' if row.reservation_status_raw == '5' else 'status-ready' }}">{{ row.status_label }}</span>{% if row.cancelled_at %}<small>取消 {{ row.cancelled_at }}</small>{% endif %}</td>
+      <td><strong>{{ row.reservation_date or '-' }}</strong><small>{{ row.start_time or '-' }} - {{ row.end_time or '-' }}</small></td>
+      <td><strong>{{ row.reservation_hospital_name or '-' }}</strong><small>予約施設ID {{ row.reservation_hospital_id or '-' }} / 健診機関ID {{ row.exam_facility_id or '未対応' }}</small></td>
+      <td><strong>{{ row.course_name or '-' }}</strong><small>ID {{ row.course_id or '-' }}</small></td>
+      <td><span class="status-pill status-muted">候補</span><small>{{ row.match_reason }}</small><small>event {{ row.event_id }}</small></td>
+      <td>{{ row.source_updated_at or '-' }}</td>
+    </tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">照合できる予約情報はありません。</div>{% endif %}
+  </section>
+
   <section class="panel"><div class="section-heading"><div><h2>HIAダッシュボード</h2><p class="subtle">現在有効なダッシュボード行</p></div><span class="status-pill">{{ dashboard_rows|length }}件</span></div>
     {% if dashboard_rows %}<div class="table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>状態</th><th>日付</th><th>健診</th><th>run</th></tr></thead><tbody>{% for row in dashboard_rows %}<tr><td>{{ row.hia_dashboard_person_id }}</td><td><strong>{{ row.status or '-' }}</strong></td><td>予約 {{ row.reservation_date or '-' }}<br>受診 {{ row.exam_date or '-' }}</td><td>{{ row.medical_institution or '-' }}<br><small>{{ row.course_name or '-' }}</small></td><td>{{ row.first_seen_run_id }} → {{ row.last_seen_run_id }}<br><small>{{ row.updated_at }}</small></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="empty-state">有効なダッシュボード情報はありません。</div>{% endif %}
   </section>
