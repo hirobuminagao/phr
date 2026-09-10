@@ -8,6 +8,7 @@ from apps.health_exam_admin.main import (
     create_external_feedback_item_detail,
     ensure_external_feedback_report_editable,
     external_feedback_detail_type_from_form,
+    update_external_feedback_report,
 )
 
 
@@ -84,3 +85,41 @@ def test_carried_over_report_is_read_only() -> None:
 
 def test_active_report_is_editable() -> None:
     ensure_external_feedback_report_editable({"report_status": "IN_PROGRESS"})
+
+
+class ReportUpdateCursor:
+    def __init__(self, *, conflict_event_id: int | None = None) -> None:
+        self.calls: list[tuple[str, tuple[object, ...]]] = []
+        self.results = [
+            {"external_feedback_report_id": 5, "report_status": "OPEN"},
+            {"event_id": conflict_event_id} if conflict_event_id else None,
+        ]
+
+    def execute(self, sql: str, params: tuple[object, ...]) -> None:
+        self.calls.append((sql, params))
+
+    def fetchone(self) -> dict[str, object] | None:
+        return self.results.pop(0)
+
+
+def test_update_external_feedback_report_updates_box_and_items() -> None:
+    cur = ReportUpdateCursor()
+    update_external_feedback_report(
+        cur,
+        report_id=5,
+        form={"summary": "9月返却", "event_id": "2", "feedback_source": "HIA_UPLOAD", "feedback_scope": "CASE"},
+        user={"employee_number": "1107858"},
+    )
+    assert any("UPDATE" in sql and "ops_external_feedback_reports" in sql for sql, _ in cur.calls)
+    assert any("UPDATE" in sql and "ops_external_feedback_items" in sql for sql, _ in cur.calls)
+
+
+def test_update_external_feedback_report_rejects_member_event_conflict() -> None:
+    cur = ReportUpdateCursor(conflict_event_id=3)
+    with pytest.raises(ValueError, match="イベントID 3"):
+        update_external_feedback_report(
+            cur,
+            report_id=5,
+            form={"summary": "9月返却", "event_id": "2"},
+            user={},
+        )

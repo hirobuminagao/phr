@@ -11,10 +11,34 @@
   <section class="panel">
     <div class="section-heading">
       <div><h2>{{ report.summary }}</h2><p class="subtle">{{ external_feedback_source_label(report.feedback_source) }} / {{ report.received_from or '-' }} / event {{ report.event_id or '-' }}</p></div>
-      <span class="status-pill {{ 'status-ready' if report.report_status == 'RESOLVED' else 'status-muted' if is_read_only else 'status-pending' }}">{{ external_feedback_status_label(report.report_status) }}</span>
+      <div class="button-row">
+        <span class="status-pill {{ 'status-ready' if report.report_status == 'RESOLVED' else 'status-muted' if is_read_only else 'status-pending' }}">{{ external_feedback_status_label(report.report_status) }}</span>
+        {% if can_edit and not is_read_only %}<button type="button" class="ghost-button" data-modal-open="external-feedback-report-edit-modal">箱を編集</button>{% endif %}
+      </div>
     </div>
     {% if report.copied_from_report_id or report.carried_over_to_report_id %}<div class="notice">{% if report.copied_from_report_id %}<a href="/external-feedback/reports/{{ report.copied_from_report_id }}">引き継ぎ元 #{{ report.copied_from_report_id }}</a>{% endif %} {% if report.carried_over_to_report_id %}<a href="/external-feedback/reports/{{ report.carried_over_to_report_id }}">引き継ぎ先 #{{ report.carried_over_to_report_id }}</a>{% endif %}</div>{% endif %}
   </section>
+
+  {% if can_edit and not is_read_only %}
+  <div id="external-feedback-report-edit-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel" role="dialog" aria-modal="true" aria-labelledby="external-feedback-report-edit-title">
+      <div class="edit-modal__head"><div><p class="eyebrow">REPORT</p><h2 id="external-feedback-report-edit-title">指摘箱を編集</h2></div><button type="button" class="ghost-button" data-modal-close>閉じる</button></div>
+      <form method="post" action="/external-feedback/reports/{{ report.external_feedback_report_id }}/edit" class="stack-form">
+        <div class="form-grid">
+          <label><span>件名</span><input name="summary" value="{{ report.summary or '' }}" required></label>
+          <label><span>イベント</span><select name="event_id" required><option value="">選択してください</option>{% for event in event_options %}<option value="{{ event.event_id }}" {% if report.event_id|string == event.event_id|string %}selected{% endif %}>{{ event.event_name }} / {{ event.event_year }} / {{ event.insurer_number }}（ID {{ event.event_id }}）</option>{% endfor %}</select></label>
+          <label><span>指摘元</span><select name="feedback_source">{% for value, label in [('HIA_UPLOAD','HIAアップロード'),('FUND_DELIVERY','健保納品'),('EMPLOYER_DELIVERY','事業所納品'),('MANUAL','手動記帳')] %}<option value="{{ value }}" {% if report.feedback_source == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+          <label><span>対象単位</span><select name="feedback_scope">{% for value, label in [('CASE','case'),('XML','個人XML'),('ZIP','ZIP'),('OUTPUT_LIST','出力リスト'),('OTHER','その他')] %}<option value="{{ value }}" {% if report.feedback_scope == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+          <label><span>受領日時</span><input name="received_at" value="{{ report.received_at or '' }}" placeholder="YYYY-MM-DD hh:mm:ss"></label>
+          <label><span>受領元</span><input name="received_from" value="{{ report.received_from or '' }}"></label>
+          <label><span>チャネル</span><input name="channel" value="{{ report.channel or '' }}" placeholder="MAIL / WEB / PHONE"></label>
+        </div>
+        <div class="edit-modal__foot"><button type="button" class="ghost-button" data-modal-close>キャンセル</button><button type="submit">変更を保存</button></div>
+      </form>
+    </section>
+  </div>
+  {% endif %}
 
   {% if can_edit and not is_read_only %}
   <section class="panel">

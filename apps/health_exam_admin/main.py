@@ -3330,6 +3330,63 @@ def create_external_feedback_report(cur: Any, *, form: Mapping[str, Any], user: 
     return int(cur.lastrowid)
 
 
+def update_external_feedback_report(cur: Any, *, report_id: int, form: Mapping[str, Any], user: dict[str, Any]) -> None:
+    report = load_external_feedback_report_detail(cur, report_id=report_id)
+    if not report:
+        raise ValueError("指摘箱が見つかりません。")
+    ensure_external_feedback_report_editable(report)
+    summary = str(form.get("summary") or "").strip()
+    if not summary:
+        raise ValueError("指摘箱の件名を入力してください。")
+    event_id = _optional_int(form.get("event_id"))
+    if not event_id:
+        raise ValueError("イベントを選択してください。")
+    cur.execute(
+        f"""
+        SELECT DISTINCT eec.event_id
+        FROM {qname(health_db())}.ops_external_feedback_items i
+        JOIN {qname(health_db())}.exam_export_cases eec
+          ON eec.exam_export_case_id = i.exam_export_case_id
+        WHERE i.external_feedback_report_id = %s
+          AND eec.event_id <> %s
+        LIMIT 1
+        """,
+        (report_id, event_id),
+    )
+    conflict = cur.fetchone()
+    if conflict:
+        raise ValueError(f"登録済み対象者のイベントID {conflict['event_id']} と一致しないため変更できません。")
+    actor = fund_delivery_actor(user)
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.ops_external_feedback_reports
+        SET event_id=%s, feedback_source=%s, feedback_scope=%s,
+            received_at=NULLIF(%s, ''), received_from=NULLIF(%s, ''),
+            channel=NULLIF(%s, ''), summary=%s, updated_by=%s
+        WHERE external_feedback_report_id=%s
+        """,
+        (
+            event_id,
+            str(form.get("feedback_source") or "HIA_UPLOAD"),
+            str(form.get("feedback_scope") or "CASE"),
+            str(form.get("received_at") or "").strip(),
+            str(form.get("received_from") or "").strip(),
+            str(form.get("channel") or "").strip(),
+            summary,
+            actor,
+            report_id,
+        ),
+    )
+    cur.execute(
+        f"""
+        UPDATE {qname(health_db())}.ops_external_feedback_items
+        SET event_id=%s, updated_by=%s
+        WHERE external_feedback_report_id=%s
+        """,
+        (event_id, actor, report_id),
+    )
+
+
 def load_external_feedback_report_detail(cur: Any, *, report_id: int) -> dict[str, Any] | None:
     cur.execute(
         f"""
@@ -17730,13 +17787,45 @@ def external_feedback_report_detail(request: Request, report_id: int) -> Respons
             return HTMLResponse("指摘箱が見つかりません。", status_code=404)
         items = load_external_feedback_report_items(cur, report_id=report_id)
         output_lists = load_external_feedback_output_lists(cur, event_id=_optional_int(report.get("event_id")))
+        event_options = load_event_options(cur)
     return templates.TemplateResponse(
         "external_feedback_report_detail.html",
         {"request": request, "user": user, "report": report, "items": items, "output_lists": output_lists,
+         "event_options": event_options,
          "message": request.query_params.get("message"), "error": request.query_params.get("error"),
          "can_edit": has_any_permission(user, ("hia_upload_status.edit", "users.manage")),
          "is_read_only": str(report.get("report_status") or "") in EXTERNAL_FEEDBACK_TERMINAL_REPORT_STATUSES,
          "bulk_rows": [], "bulk_form": {}, "column_options": PERSON_SELECTION_COLUMNS},
+    )
+
+
+@app.post("/external-feedback/reports/{report_id}/edit", response_class=HTMLResponse)
+async def external_feedback_report_edit(request: Request, report_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("hia_upload_status.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    form = await read_form(request)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=False) as conn:
+        try:
+            update_external_feedback_report(dict_cursor(conn), report_id=report_id, form=form, user=user)
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return RedirectResponse(f"/external-feedback/reports/{report_id}?error={quote(str(exc))}", status_code=303)
+    log_app_operation(
+        request=request,
+        user=user,
+        action_code="EXTERNAL_FEEDBACK_REPORT_UPDATE",
+        target_schema=health_db(),
+        target_table="ops_external_feedback_reports",
+        target_id=str(report_id),
+        after={"event_id": _optional_int(form.get("event_id")), "summary": str(form.get("summary") or "")},
+    )
+    return RedirectResponse(
+        f"/external-feedback/reports/{report_id}?message={quote('指摘箱を更新しました。')}", status_code=303
     )
 
 
@@ -17780,6 +17869,7 @@ async def external_feedback_report_items_bulk_add(request: Request, report_id: i
                 raise ValueError("指摘箱が見つかりません。")
             items = load_external_feedback_report_items(cur, report_id=report_id)
             output_lists = load_external_feedback_output_lists(cur, event_id=_optional_int(report.get("event_id")))
+            event_options = load_event_options(cur)
         except Exception as exc:
             conn.rollback()
             return RedirectResponse(f"/external-feedback/reports/{report_id}?error={quote(str(exc))}", status_code=303)
@@ -17791,6 +17881,7 @@ async def external_feedback_report_items_bulk_add(request: Request, report_id: i
             "report": report,
             "items": items,
             "output_lists": output_lists,
+            "event_options": event_options,
             "bulk_rows": bulk_rows,
             "bulk_added_count": added_count,
             "bulk_existing_count": existing_count,
