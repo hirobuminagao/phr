@@ -353,8 +353,8 @@
                   <span class="{{ 'is-match' if selected_ledger.name_kana_match and candidate.name_kana_full_match == selected_ledger.name_kana_match else '' }}">カナ {{ candidate.name_kana_full or "-" }}</span>
                   <span class="{{ 'is-match' if selected_ledger.birthdate and candidate.birth|string == selected_ledger.birthdate|string else '' }}">生年月日 {{ candidate.birth or "-" }}</span>
                   <span class="{{ 'is-match' if selected_ledger.gender_code and candidate.gender_code|string == selected_ledger.gender_code|string else '' }}">性別 {{ gender_code_label(candidate.gender_code) }}</span>
-                  <span class="{{ 'is-match' if selected_ledger.insurance_symbol_match and candidate.insurance_symbol_match == selected_ledger.insurance_symbol_match else '' }}">記号 {{ candidate.insurance_symbol_export or candidate.insurance_symbol or "-" }}</span>
-                  <span class="{{ 'is-match' if selected_ledger.insurance_number_match and candidate.insurance_number_match == selected_ledger.insurance_number_match else '' }}">番号 {{ candidate.insurance_number or "-" }}</span>
+                  <span class="{{ 'is-match' if candidate.insurance_symbol_is_match else '' }}">記号 {{ candidate.insurance_symbol_export or candidate.insurance_symbol or "-" }}</span>
+                  <span class="{{ 'is-match' if candidate.insurance_number_is_match else '' }}">番号 {{ candidate.insurance_number or "-" }}</span>
                   <span class="{{ 'is-match' if selected_ledger.insurance_branch_number_match and candidate.insurance_branchnumber|string == selected_ledger.insurance_branch_number_match|string else '' }}">枝番 {{ candidate.insurance_branchnumber or "-" }}</span>
                 </div>
                 <small>〒 {{ candidate.subscriber_postal_code or "-" }} / {{ candidate.subscriber_address_line or "-" }}{{ candidate.subscriber_building or "" }}</small>

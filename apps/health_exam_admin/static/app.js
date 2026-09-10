@@ -892,6 +892,16 @@
     button.addEventListener("click", () => closeModal(button.closest(".edit-modal")));
   }
 
+  const zipPasswordAliasId = document.querySelector("[data-zip-password-alias-id]");
+  const zipPasswordAliasDisplay = document.querySelector("[data-zip-password-alias-display]");
+  for (const button of document.querySelectorAll("[data-zip-password-alias-select]")) {
+    button.addEventListener("click", () => {
+      if (zipPasswordAliasId) zipPasswordAliasId.value = button.getAttribute("data-alias-id") || "";
+      if (zipPasswordAliasDisplay) zipPasswordAliasDisplay.value = button.getAttribute("data-alias-display") || "";
+      closeModal(button.closest(".edit-modal"));
+    });
+  }
+
   const zipPasswordModal = document.querySelector("[data-zip-password-modal]");
   if (zipPasswordModal) {
     const form = zipPasswordModal.querySelector("[data-zip-password-form]");

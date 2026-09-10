@@ -5309,6 +5309,17 @@ a.home-menu-card.is-navigating {
   flex: 0 0 auto;
 }
 
+.zip-password-alias-field .picker-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.zip-password-alias-field .picker-input-row input {
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
 .facility-summary-table {
   min-width: 1340px;
 }

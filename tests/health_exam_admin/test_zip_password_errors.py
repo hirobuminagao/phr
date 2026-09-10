@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from apps.health_exam_admin.main import load_zip_password_error_rows
 
 
@@ -57,3 +59,12 @@ def test_zip_password_error_derives_parent_folder_when_alias_is_unknown() -> Non
     rows = load_zip_password_error_rows(cur)
 
     assert rows[0]["folder_path"] == r"C:\receive\clinic"
+
+
+def test_zip_password_registration_uses_searchable_alias_modal() -> None:
+    template = Path("apps/health_exam_admin/templates/admin_zip_passwords.html").read_text(encoding="utf-8")
+
+    assert 'name="medical_folder_alias_id" data-zip-password-alias-id' in template
+    assert 'data-live-filter-input="#zip-password-alias-picker-table"' in template
+    assert "data-zip-password-alias-select" in template
+    assert '<select name="medical_folder_alias_id">' not in template

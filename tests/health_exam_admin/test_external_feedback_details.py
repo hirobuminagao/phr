@@ -1,10 +1,25 @@
+from inspect import getsource
+from pathlib import Path
+
 import pytest
 
 from apps.health_exam_admin.main import (
+    add_external_feedback_bulk_items,
     create_external_feedback_item_detail,
     ensure_external_feedback_report_editable,
     external_feedback_detail_type_from_form,
 )
+
+
+def test_external_feedback_bulk_entry_uses_person_selection_editor() -> None:
+    template = Path("apps/health_exam_admin/templates/external_feedback_report_detail.html").read_text(encoding="utf-8")
+
+    assert "data-person-column-editor" in template
+    assert "data-person-column-mode=\"assign\"" in template
+    assert "data-person-column-mode=\"reorder\"" in template
+    assert "for index in range(12)" in template
+    assert "for index in range(8)" not in template
+    assert "range(12)" in getsource(add_external_feedback_bulk_items)
 
 
 class Cursor:

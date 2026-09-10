@@ -128,6 +128,9 @@ def test_candidate_rows_restore_search_values_from_received_raw_fields() -> None
 
     assert 'normalize_name_kana_full(str(ledger.get("name_kana_raw")))' in source
     assert 'normalize_insurance_number(str(ledger.get("insurance_number_raw")))' in source
+    assert 'normalize_insurance_symbol(str(ledger.get("insurance_symbol_raw")))' in source
+    assert 'row["insurance_symbol_is_match"]' in source
+    assert 'row["insurance_number_is_match"]' in source
 
 
 def test_candidate_rows_include_latest_active_dashboard_status() -> None:
@@ -135,5 +138,5 @@ def test_candidate_rows_include_latest_active_dashboard_status() -> None:
 
     assert "hds.status AS hia_dashboard_status" in source
     assert "hds.medical_institution AS hia_dashboard_medical_institution" in source
-    assert "hds_latest.subscribers_id = s.id" in source
+    assert "CONVERT(hds_latest.subscribers_id USING utf8mb4)" in source
     assert "ORDER BY hds_latest.updated_at DESC" in source

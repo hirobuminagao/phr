@@ -3461,7 +3461,7 @@ def add_external_feedback_bulk_items(
     delimiter = str(form.get("delimiter") or "tab")
     custom_delimiter = str(form.get("custom_delimiter") or "")
     has_header = str(form.get("has_header") or "") == "1"
-    columns = [str(form.get(f"col_{index}") or "unused") for index in range(8)]
+    columns = [str(form.get(f"col_{index}") or "unused") for index in range(12)]
     rows = parse_person_selection_paste(
         raw_text=raw_text,
         delimiter=delimiter,
@@ -7837,6 +7837,10 @@ def load_subscriber_match_candidate_rows(
         if not ledger_insurance_number_match and ledger.get("insurance_number_raw"):
             number_result = normalize_insurance_number(str(ledger.get("insurance_number_raw")))
             ledger_insurance_number_match = str(number_result.get("match") or "") if number_result.get("ok") else ""
+        ledger_insurance_symbol_match = str(ledger.get("insurance_symbol_match") or "").strip()
+        if not ledger_insurance_symbol_match and ledger.get("insurance_symbol_raw"):
+            symbol_result = normalize_insurance_symbol(str(ledger.get("insurance_symbol_raw")))
+            ledger_insurance_symbol_match = str(symbol_result.get("match") or "") if symbol_result.get("ok") else ""
         ledger_insurer_number_match = ""
         if ledger.get("insurer_number"):
             insurer_result = normalize_insurer_number(str(ledger.get("insurer_number")))
@@ -8071,7 +8075,25 @@ def load_subscriber_match_candidate_rows(
         """,
         (*score_params, case_event_id, case_event_id, *params, *filter_params, limit),
     )
-    return [dict(row) for row in cur.fetchall()]
+    rows = [dict(row) for row in cur.fetchall()]
+    if ledger:
+        for row in rows:
+            candidate_symbol_match = str(row.get("insurance_symbol_match") or "").strip()
+            if not candidate_symbol_match:
+                candidate_symbol_raw = row.get("insurance_symbol_export") or row.get("insurance_symbol")
+                symbol_result = normalize_insurance_symbol(str(candidate_symbol_raw or "")) if candidate_symbol_raw else {}
+                candidate_symbol_match = str(symbol_result.get("match") or "") if symbol_result.get("ok") else ""
+            candidate_number_match = str(row.get("insurance_number_match") or "").strip()
+            if not candidate_number_match and row.get("insurance_number"):
+                number_result = normalize_insurance_number(str(row.get("insurance_number")))
+                candidate_number_match = str(number_result.get("match") or "") if number_result.get("ok") else ""
+            row["insurance_symbol_is_match"] = bool(
+                ledger_insurance_symbol_match and candidate_symbol_match == ledger_insurance_symbol_match
+            )
+            row["insurance_number_is_match"] = bool(
+                ledger_insurance_number_match and candidate_number_match == ledger_insurance_number_match
+            )
+    return rows
 
 
 def load_subscriber_row(cur: Any, *, subscriber_id: int) -> dict[str, Any] | None:
