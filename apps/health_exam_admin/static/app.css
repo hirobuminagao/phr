@@ -5286,6 +5286,29 @@ a.home-menu-card.is-navigating {
   grid-column: 2 / 4;
 }
 
+.zip-password-error-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  max-width: 440px;
+}
+
+.zip-password-error-folder code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zip-password-error-folder .compact-action-button {
+  flex: 0 0 auto;
+}
+
 .facility-summary-table {
   min-width: 1340px;
 }

@@ -7091,11 +7091,31 @@ def load_zip_password_error_rows(
           fr.id AS file_receipt_id,
           fr.event_id,
           fr.file_name,
+          fr.file_sha256,
           fr.relative_path,
           fr.status AS file_status,
           fr.summary_message,
+          fr.facility_code,
+          fr.submitter_facility_code,
           fr.medical_folder_alias_id,
           mfa.src_folder_raw,
+          EXISTS (
+            SELECT 1
+            FROM {qname(work_other_db())}.medi_zip_passwords AS mzp
+            WHERE mzp.is_active = 1
+              AND (
+                (mzp.scope_type = 'ZIP_SHA256' AND mzp.zip_sha256 = fr.file_sha256)
+                OR (mzp.scope_type = 'ZIP_NAME' AND mzp.zip_name = COALESCE(fr.file_name, SUBSTRING_INDEX(REPLACE(ee.src_file, CHAR(92), '/'), '/', -1)))
+                OR (
+                  mzp.scope_type = 'FACILITY'
+                  AND (
+                    mzp.facility_code IN (fr.facility_code, fr.submitter_facility_code, ef.exam_facility_code)
+                    OR mzp.facility_folder_name = mfa.src_folder_raw
+                    OR mzp.facility_folder_name = SUBSTRING_INDEX(REPLACE(fr.relative_path, CHAR(92), '/'), '/', 1)
+                  )
+                )
+              )
+          ) AS has_active_zip_password,
           COALESCE(
             ef.exam_facility_display_name,
             ef.exam_facility_name,
@@ -7136,6 +7156,11 @@ def load_zip_password_error_rows(
         row["error_label"] = error_labels.get(
             str(row.get("error_code") or ""), str(row.get("error_code") or "パスワード関連エラー")
         )
+        folder_path = str(row.get("src_folder_raw") or "").strip()
+        if not folder_path:
+            source_file = str(row.get("src_file") or "").strip()
+            folder_path = re.sub(r"[\\/][^\\/]+$", "", source_file).rstrip("\\/") if source_file else ""
+        row["folder_path"] = folder_path
     return rows
 
 
