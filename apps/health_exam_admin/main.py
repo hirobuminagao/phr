@@ -16490,7 +16490,7 @@ def update_reservation_site_facility_mapping(
             status_code=303,
         )
     return RedirectResponse(
-        f"/utilities/reservation-site-facilities?hospital_id={reservation_hospital_id}&message={quote('健診機関を紐付けました。')}",
+        f"/utilities/reservation-site-facilities?message={quote('健診機関を紐付けました。')}",
         status_code=303,
     )
 
@@ -20997,6 +20997,7 @@ def load_person_event_progress_rows(
     query: str = "",
     reservation_status: str = "",
     dashboard_status: str = "",
+    exam_facility_id: int | None = None,
     page: int = 1,
     per_page: int = 30,
 ) -> dict[str, Any]:
@@ -21044,6 +21045,40 @@ def load_person_event_progress_rows(
             )"""
         )
         params.extend(dashboard_statuses)
+    if exam_facility_id:
+        where.append(
+            f"""(
+              EXISTS (
+                SELECT 1 FROM {qname(work_other_db())}.reservation_site_records facility_reservation
+                WHERE facility_reservation.event_id=pe.event_id
+                  AND facility_reservation.exam_facility_id=%s
+                  AND facility_reservation.applicant_birthday=s.birth
+                  AND (
+                    (facility_reservation.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
+                     AND CAST(facility_reservation.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
+                    OR (CAST(facility_reservation.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+                        AND CONVERT(facility_reservation.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                        AND CONVERT(facility_reservation.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+                    OR (CAST(facility_reservation.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+                        AND CONVERT(facility_reservation.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+                  )
+              )
+              OR EXISTS (
+                SELECT 1 FROM {qname(health_db())}.exam_ledgers facility_ledger
+                WHERE facility_ledger.event_id=pe.event_id
+                  AND facility_ledger.subscriber_id=pe.subscriber_id
+                  AND facility_ledger.exam_facility_id=%s
+              )
+              OR EXISTS (
+                SELECT 1 FROM {qname(health_db())}.exam_export_cases facility_case
+                WHERE facility_case.event_id=pe.event_id
+                  AND facility_case.subscriber_id=pe.subscriber_id
+                  AND facility_case.exam_facility_id=%s
+                  AND facility_case.case_lifecycle_status='ACTIVE'
+              )
+            )"""
+        )
+        params.extend([exam_facility_id] * 3)
     where_sql = " AND ".join(where)
     cur.execute(
         f"SELECT COUNT(*) AS total_count FROM {qname(dev_db())}.person_event pe "
@@ -21227,6 +21262,8 @@ def build_person_event_progress_pagination(
     query: str,
     reservation_statuses: Sequence[str],
     dashboard_statuses: Sequence[str],
+    exam_facility_id: int | None,
+    exam_facility_display: str,
     total_count: int,
     row_count: int,
     page: int,
@@ -21243,6 +21280,10 @@ def build_person_event_progress_pagination(
             params.append(("query", query))
         params.extend(("reservation_status", value) for value in reservation_statuses)
         params.extend(("dashboard_status", value) for value in dashboard_statuses)
+        if exam_facility_id:
+            params.append(("exam_facility_id", str(exam_facility_id)))
+            if exam_facility_display:
+                params.append(("exam_facility_display", exam_facility_display))
         params.append(("page", str(target_page)))
         return f"/utilities/person-event-progress?{urlencode(params)}"
 
@@ -21398,6 +21439,8 @@ def person_event_progress(request: Request) -> Response:
     query = str(request.query_params.get("query") or "").strip()
     reservation_status = ",".join(request.query_params.getlist("reservation_status"))
     dashboard_status = ",".join(request.query_params.getlist("dashboard_status"))
+    exam_facility_id = _optional_int(request.query_params.get("exam_facility_id"))
+    exam_facility_display = str(request.query_params.get("exam_facility_display") or "").strip()
     page = parse_positive_int(request.query_params.get("page"), default=1, maximum=100000)
     pii_level = subscriber_reference_pii_level(user)
     with connect_ctx(params, database=dev_db(), autocommit=False) as conn:
@@ -21407,7 +21450,7 @@ def person_event_progress(request: Request) -> Response:
         event_id = parse_positive_int(request.query_params.get("event_id"), default=default_event_id, maximum=999999)
         result = load_person_event_progress_rows(
             cur, event_id=event_id, query=query, reservation_status=reservation_status,
-            dashboard_status=dashboard_status, page=page
+            dashboard_status=dashboard_status, exam_facility_id=exam_facility_id, page=page
         ) if event_id else {
             "rows": [], "total_count": 0, "page": 1, "page_count": 1, "per_page": 30
         }
@@ -21419,6 +21462,8 @@ def person_event_progress(request: Request) -> Response:
             query=query,
             reservation_statuses=selected_reservation_statuses,
             dashboard_statuses=selected_dashboard_statuses,
+            exam_facility_id=exam_facility_id,
+            exam_facility_display=exam_facility_display,
             total_count=result["total_count"],
             row_count=len(result["rows"]),
             page=result["page"],
@@ -21450,9 +21495,11 @@ def person_event_progress(request: Request) -> Response:
     return templates.TemplateResponse(
         "person_event_progress.html",
         {"request": request, "user": user, "events": events, "event_id": event_id, "query": query,
+         "exam_facility_id": exam_facility_id, "exam_facility_display": exam_facility_display,
          "selected_reservation_statuses": selected_reservation_statuses,
          "selected_dashboard_statuses": selected_dashboard_statuses,
          "dashboard_status_options": dashboard_status_options,
+         "prefecture_options": PREFECTURE_OPTIONS,
          "pagination": pagination,
          "can_sync": can_manage_business_settings(user), "message": request.query_params.get("message"),
          "error": request.query_params.get("error"), **result},

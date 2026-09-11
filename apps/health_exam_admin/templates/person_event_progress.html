@@ -26,6 +26,7 @@
       <div class="form-grid two-column-grid">
         <label><span>イベント</span><select name="event_id" required>{% for event in events %}<option value="{{ event.event_id }}" {% if event.event_id == event_id %}selected{% endif %}>{{ event.event_year }} / {{ event.event_name or event.event_type }} / ID {{ event.event_id }}</option>{% endfor %}</select></label>
         <label><span>加入者検索</span><input name="query" value="{{ query }}" placeholder="HIA ID / subscriber ID / 氏名 / 記号 / 番号"></label>
+        <label class="input-with-action"><span>健診機関</span><span class="inline-input-action"><input id="person-event-facility-display" name="exam_facility_display" value="{{ exam_facility_display }}" readonly placeholder="未指定"><input id="person-event-facility-id" type="hidden" name="exam_facility_id" value="{{ exam_facility_id or '' }}"><button type="button" class="ghost-button compact-action-button" data-modal-open="person-event-facility-modal" data-alias-facility-picker-open data-target-input="person-event-facility-id" data-target-display-input="person-event-facility-display" data-target-value="exam_facility_id">選択</button></span></label>
       </div>
       <div class="person-event-filter-groups">
         <fieldset><legend>予約システムの状態（複数選択）</legend><div class="person-event-status-options">
@@ -66,5 +67,19 @@
     </table></div>
     {{ progress_pagination(pagination, true) }}
   </section>
+
+  <div id="person-event-facility-modal" class="edit-modal" hidden data-alias-facility-picker-modal data-prefer-alias-registered="1">
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="person-event-facility-title">
+      <div class="edit-modal__head"><div><p class="eyebrow">Facility Picker</p><h2 id="person-event-facility-title">健診機関を選択</h2></div><button type="button" class="ghost-button" data-modal-close>閉じる</button></div>
+      <div class="export-facility-search alias-facility-search">
+        <label class="alias-facility-search__code"><span>コード</span><input data-alias-facility-search-code data-modal-focus></label>
+        <label class="alias-facility-search__prefecture"><span>都道府県</span><input data-alias-facility-search-prefecture list="person-event-prefectures"><datalist id="person-event-prefectures">{% for prefecture in prefecture_options %}<option value="{{ prefecture }}"></option>{% endfor %}</datalist></label>
+        <label class="alias-facility-search__keyword"><span>キーワード</span><input data-alias-facility-search-keyword placeholder="名称 / 住所"></label>
+        <button type="button" class="primary-button" data-alias-facility-search>検索</button>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel"><table class="data-table compact-table"><thead><tr><th>健診機関</th><th>ID/コード</th><th>所在地</th><th>操作</th></tr></thead><tbody data-alias-facility-results><tr><td colspan="4">コードまたはキーワードで検索してください。</td></tr></tbody></table></div>
+    </section>
+  </div>
 </main>
 {% endblock %}

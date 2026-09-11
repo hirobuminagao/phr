@@ -74,3 +74,4 @@ def test_mapping_update_refreshes_existing_reservation_rows() -> None:
     assert "reservation_site_facility_mappings" in text
     assert "ON DUPLICATE KEY UPDATE" in text
     assert "UPDATE {qname(work_other_db())}.reservation_site_records" in text
+    assert "?hospital_id={reservation_hospital_id}&message=" not in text

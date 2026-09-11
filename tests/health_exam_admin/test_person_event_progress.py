@@ -66,6 +66,8 @@ def test_person_event_progress_pagination_preserves_multi_value_filters() -> Non
         query="札幌 太郎",
         reservation_statuses=["1", "3"],
         dashboard_statuses=["受診済み", "結果待ち"],
+        exam_facility_id=7386,
+        exam_facility_display="札幌健診センター",
         total_count=7316,
         row_count=30,
         page=4,
@@ -78,9 +80,21 @@ def test_person_event_progress_pagination_preserves_multi_value_filters() -> Non
     assert pagination["has_previous"] is True
     assert pagination["has_next"] is True
     assert "reservation_status=1&reservation_status=3" in pagination["next_url"]
+    assert "exam_facility_id=7386" in pagination["next_url"]
     assert "%E6%9C%AD%E5%B9%8C+%E5%A4%AA%E9%83%8E" in pagination["next_url"]
     assert pagination["pages"][0]["page"] == 1
     assert pagination["pages"][-1]["page"] == 244
+
+
+def test_person_event_progress_can_filter_by_facility_across_stages() -> None:
+    source = getsource(load_person_event_progress_rows)
+    template = Path("apps/health_exam_admin/templates/person_event_progress.html").read_text(encoding="utf-8")
+
+    assert "facility_reservation.exam_facility_id=%s" in source
+    assert "facility_ledger.exam_facility_id=%s" in source
+    assert "facility_case.exam_facility_id=%s" in source
+    assert 'name="exam_facility_id"' in template
+    assert "data-alias-facility-picker-modal" in template
 
 
 def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:
