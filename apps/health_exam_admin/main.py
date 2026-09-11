@@ -20606,11 +20606,11 @@ def load_person_event_dashboard_status_options(cur: Any, *, event_id: int) -> li
         f"""
         SELECT DISTINCT options.value_code
         FROM (
-          SELECT value_code
+          SELECT CONVERT(value_code USING utf8mb4) COLLATE utf8mb4_unicode_ci AS value_code
           FROM {qname(dev_db())}.person_event_status_items
           WHERE event_id=%s AND item_code='HIA_DASHBOARD_STATUS'
           UNION ALL
-          SELECT d.status AS value_code
+          SELECT CONVERT(d.status USING utf8mb4) COLLATE utf8mb4_unicode_ci AS value_code
           FROM {qname(work_other_db())}.hia_dashboard_status d
           INNER JOIN {qname(dev_db())}.event e
             ON e.event_id=%s

@@ -59,3 +59,4 @@ def test_dashboard_filter_options_fall_back_to_active_source_rows() -> None:
     assert "person_event_status_items" in source
     assert "hia_dashboard_status d" in source
     assert "d.is_active=1" in source
+    assert source.count("COLLATE utf8mb4_unicode_ci AS value_code") == 2
