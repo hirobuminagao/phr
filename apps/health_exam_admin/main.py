@@ -10998,6 +10998,7 @@ def _ensure_facility_summary_row(rows: dict[str, dict[str, Any]], source: Mappin
             "source_error_count": 0,
             "manual_source_count": 0,
             "subscriber_match_issue_count": 0,
+            "subscriber_match_resolved_count": 0,
             "case_count": 0,
             "case_ready_count": 0,
             "case_blocked_count": 0,
@@ -11142,7 +11143,16 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
                 THEN 0
               ELSE 1
             END
-          ) AS subscriber_match_issue_count
+          ) AS subscriber_match_issue_count,
+          SUM(
+            CASE
+              WHEN el.subscriber_match_status = 'MATCHED'
+               AND el.subscriber_match_method = 'manual'
+               AND el.subscriber_id IS NOT NULL
+                THEN 1
+              ELSE 0
+            END
+          ) AS subscriber_match_resolved_count
         FROM {qname(health_db())}.exam_ledgers AS el
         {el_event_clause}
         GROUP BY el.event_id, el.exam_facility_id, el.facility_code, el.facility_name
@@ -11161,6 +11171,7 @@ def load_facility_summary_rows(cur: Any, *, filters: dict[str, str], limit: int 
             "source_error_count",
             "manual_source_count",
             "subscriber_match_issue_count",
+            "subscriber_match_resolved_count",
         ):
             item[field] = int(source.get(field) or 0)
 

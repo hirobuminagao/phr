@@ -141,9 +141,9 @@
           <tr>
             <th rowspan="2" data-sort-index="0" data-sort-type="text"><span class="table-help-heading"><button type="button" class="table-sort-button">健診機関</button>{{ help_button("help-th-facility", "健診機関", "exam_facility_idまたは健診機関コードでまとめています。受領設定はフォルダalias側の想定受領方式です。") }}</span></th>
             <th colspan="4"><span class="table-help-heading">受領ファイル {{ help_button("help-th-files", "受領ファイル", "file_receiptsのファイル数です。XML、CSV、ZIPと、その合計ALLを表示します。") }}</span></th>
-            <th colspan="5"><span class="table-help-heading">取込チェック {{ help_button("help-th-source", "取込チェック", "exam_ledgersのsource単位です。OK/NG/ALLは取込結果、手入力は手入力で作成したsource数、加入者は突合要確認の件数です。") }}</span></th>
+            <th colspan="6"><span class="table-help-heading">取込チェック {{ help_button("help-th-source", "取込チェック", "exam_ledgersのsource単位です。OK/NG/ALLは取込結果、手入力は手入力で作成したsource数、加入者NGは現在の突合要確認、解決済みは画面で手動突合したsource数です。") }}</span></th>
             <th colspan="6"><span class="table-help-heading">人単位チェック {{ help_button("help-th-case", "人単位チェック", "exam_export_casesのcase単位です。法定/特定健診のチェック結果と、特定健診の対象者数を表示します。") }}</span></th>
-            <th rowspan="2" data-sort-index="16" data-sort-type="number"><span class="table-help-heading"><button type="button" class="table-sort-button">値エラー / 上位項目</button>{{ help_button("help-th-item-error", "値エラー / 上位項目", "normalize/validationで落ちたexam_item_valuesの件数と、件数が多い項目を表示します。", True) }}</span></th>
+            <th rowspan="2" data-sort-index="17" data-sort-type="number"><span class="table-help-heading"><button type="button" class="table-sort-button">値エラー / 上位項目</button>{{ help_button("help-th-item-error", "値エラー / 上位項目", "normalize/validationで落ちたexam_item_valuesの件数と、件数が多い項目を表示します。", True) }}</span></th>
             <th rowspan="2">遷移</th>
           </tr>
           <tr>
@@ -155,13 +155,14 @@
             <th data-sort-index="6" data-sort-type="number"><button type="button" class="table-sort-button">NG</button></th>
             <th data-sort-index="7" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
             <th data-sort-index="8" data-sort-type="number"><button type="button" class="table-sort-button">手入力</button></th>
-            <th data-sort-index="9" data-sort-type="number"><button type="button" class="table-sort-button">加入者</button></th>
-            <th data-sort-index="10" data-sort-type="number"><button type="button" class="table-sort-button">法定NG数</button></th>
-            <th data-sort-index="11" data-sort-type="percent" data-sort-secondary-index="10" data-sort-secondary-type="number"><button type="button" class="table-sort-button">法定NG率</button></th>
-            <th data-sort-index="12" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
-            <th data-sort-index="13" data-sort-type="number"><button type="button" class="table-sort-button">特定NG数</button></th>
-            <th data-sort-index="14" data-sort-type="percent" data-sort-secondary-index="13" data-sort-secondary-type="number"><button type="button" class="table-sort-button">特定NG率</button></th>
-            <th data-sort-index="15" data-sort-type="number"><button type="button" class="table-sort-button">特定対象数</button></th>
+            <th data-sort-index="9" data-sort-type="number"><button type="button" class="table-sort-button">加入者NG</button></th>
+            <th data-sort-index="10" data-sort-type="number"><button type="button" class="table-sort-button">解決済み</button></th>
+            <th data-sort-index="11" data-sort-type="number"><button type="button" class="table-sort-button">法定NG数</button></th>
+            <th data-sort-index="12" data-sort-type="percent" data-sort-secondary-index="11" data-sort-secondary-type="number"><button type="button" class="table-sort-button">法定NG率</button></th>
+            <th data-sort-index="13" data-sort-type="number"><button type="button" class="table-sort-button">ALL</button></th>
+            <th data-sort-index="14" data-sort-type="number"><button type="button" class="table-sort-button">特定NG数</button></th>
+            <th data-sort-index="15" data-sort-type="percent" data-sort-secondary-index="14" data-sort-secondary-type="number"><button type="button" class="table-sort-button">特定NG率</button></th>
+            <th data-sort-index="16" data-sort-type="number"><button type="button" class="table-sort-button">特定対象数</button></th>
           </tr>
         </thead>
         <tbody>
@@ -181,6 +182,7 @@
             <td class="numeric-cell" data-sort-value="{{ row.source_count }}"><strong>{{ row.source_count }}</strong></td>
             <td class="numeric-cell" data-sort-value="{{ row.manual_source_count }}">{{ row.manual_source_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.subscriber_match_issue_count }}">{{ row.subscriber_match_issue_count }}</td>
+            <td class="numeric-cell" data-sort-value="{{ row.subscriber_match_resolved_count }}">{{ row.subscriber_match_resolved_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.legal_ng_count }}">{{ row.legal_ng_count }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.legal_ng_rate }}">{{ row.legal_ng_rate }}</td>
             <td class="numeric-cell" data-sort-value="{{ row.case_count }}"><strong>{{ row.case_count }}</strong></td>
