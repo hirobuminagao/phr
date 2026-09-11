@@ -69,6 +69,9 @@ def test_person_event_progress_pagination_preserves_multi_value_filters() -> Non
     pagination = build_person_event_progress_pagination(
         event_id=2,
         query="札幌 太郎",
+        insurance_symbol="ABC",
+        insurance_number="001234",
+        relationship="本人",
         reservation_statuses=["1", "3"],
         dashboard_statuses=["受診済み", "結果待ち"],
         exam_months=["2026-05", "2026-06"],
@@ -90,6 +93,9 @@ def test_person_event_progress_pagination_preserves_multi_value_filters() -> Non
     assert "exam_facility_id=7386" in pagination["next_url"]
     assert "exam_month=2026-05%2C+2026-06" in pagination["next_url"]
     assert "case_presence=EXISTS" in pagination["next_url"]
+    assert "insurance_symbol=ABC" in pagination["next_url"]
+    assert "insurance_number=001234" in pagination["next_url"]
+    assert "%E6%9C%AC%E4%BA%BA" in pagination["next_url"]
     assert "%E6%9C%AD%E5%B9%8C+%E5%A4%AA%E9%83%8E" in pagination["next_url"]
     assert pagination["pages"][0]["page"] == 1
     assert pagination["pages"][-1]["page"] == 244
@@ -129,6 +135,18 @@ def test_person_event_progress_can_filter_active_case_presence() -> None:
     assert 'name="case_presence"' in template
     assert "caseあり" in template
     assert "caseなし" in template
+
+
+def test_person_event_progress_can_filter_subscriber_insurance_and_relationship() -> None:
+    source = getsource(load_person_event_progress_rows)
+    template = Path("apps/health_exam_admin/templates/person_event_progress.html").read_text(encoding="utf-8")
+
+    assert "normalize_insurance_symbol" in source
+    assert "normalize_insurance_number" in source
+    assert "s.relationship_name LIKE" in source
+    assert 'name="insurance_symbol"' in template
+    assert 'name="insurance_number"' in template
+    assert 'name="relationship"' in template
 
 
 def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:

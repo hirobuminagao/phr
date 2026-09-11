@@ -21107,6 +21107,9 @@ def load_person_event_progress_rows(
     *,
     event_id: int,
     query: str = "",
+    insurance_symbol: str = "",
+    insurance_number: str = "",
+    relationship: str = "",
     reservation_status: str = "",
     dashboard_status: str = "",
     exam_month: str = "",
@@ -21156,6 +21159,21 @@ def load_person_event_progress_rows(
             "OR s.insurance_symbol LIKE %s OR s.insurance_number LIKE %s)"
         )
         params.extend([like] * 6)
+    insurance_symbol = insurance_symbol.strip()
+    if insurance_symbol:
+        normalized_symbol = str(normalize_insurance_symbol(insurance_symbol).get("match") or insurance_symbol)
+        where.append("(s.insurance_symbol_match LIKE %s OR s.insurance_symbol LIKE %s)")
+        params.extend([f"%{normalized_symbol}%", f"%{insurance_symbol}%"])
+    insurance_number = insurance_number.strip()
+    if insurance_number:
+        normalized_number = str(normalize_insurance_number(insurance_number).get("match") or insurance_number)
+        where.append("(s.insurance_number_match LIKE %s OR s.insurance_number LIKE %s)")
+        params.extend([f"%{normalized_number}%", f"%{insurance_number}%"])
+    relationship = relationship.strip()
+    if relationship:
+        relationship_like = f"%{relationship}%"
+        where.append("(s.relationship_name LIKE %s OR s.relationship_code LIKE %s)")
+        params.extend([relationship_like, relationship_like])
     reservation_statuses = split_filter_values(reservation_status)
     if reservation_statuses:
         placeholders = ", ".join(["%s"] * len(reservation_statuses))
@@ -21370,6 +21388,9 @@ def build_person_event_progress_pagination(
     *,
     event_id: int,
     query: str,
+    insurance_symbol: str,
+    insurance_number: str,
+    relationship: str,
     reservation_statuses: Sequence[str],
     dashboard_statuses: Sequence[str],
     exam_months: Sequence[str],
@@ -21390,6 +21411,12 @@ def build_person_event_progress_pagination(
         params: list[tuple[str, str]] = [("event_id", str(event_id))]
         if query:
             params.append(("query", query))
+        if insurance_symbol:
+            params.append(("insurance_symbol", insurance_symbol))
+        if insurance_number:
+            params.append(("insurance_number", insurance_number))
+        if relationship:
+            params.append(("relationship", relationship))
         params.extend(("reservation_status", value) for value in reservation_statuses)
         params.extend(("dashboard_status", value) for value in dashboard_statuses)
         if exam_months:
@@ -21553,6 +21580,9 @@ def person_event_progress(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     params = load_mysql_base_params(db_prefix())
     query = str(request.query_params.get("query") or "").strip()
+    insurance_symbol = str(request.query_params.get("insurance_symbol") or "").strip()
+    insurance_number = str(request.query_params.get("insurance_number") or "").strip()
+    relationship = str(request.query_params.get("relationship") or "").strip()
     reservation_status = ",".join(request.query_params.getlist("reservation_status"))
     dashboard_status = ",".join(request.query_params.getlist("dashboard_status"))
     exam_month = str(request.query_params.get("exam_month") or "").strip()
@@ -21569,7 +21599,9 @@ def person_event_progress(request: Request) -> Response:
         default_event_id = int(events[0]["event_id"]) if events else 0
         event_id = parse_positive_int(request.query_params.get("event_id"), default=default_event_id, maximum=999999)
         result = load_person_event_progress_rows(
-            cur, event_id=event_id, query=query, reservation_status=reservation_status,
+            cur, event_id=event_id, query=query, insurance_symbol=insurance_symbol,
+            insurance_number=insurance_number, relationship=relationship,
+            reservation_status=reservation_status,
             dashboard_status=dashboard_status, exam_month=exam_month,
             case_presence=case_presence, exam_facility_id=exam_facility_id, page=page
         ) if event_id else {
@@ -21583,6 +21615,9 @@ def person_event_progress(request: Request) -> Response:
         pagination = build_person_event_progress_pagination(
             event_id=event_id,
             query=query,
+            insurance_symbol=insurance_symbol,
+            insurance_number=insurance_number,
+            relationship=relationship,
             reservation_statuses=selected_reservation_statuses,
             dashboard_statuses=selected_dashboard_statuses,
             exam_months=selected_exam_months,
@@ -21620,6 +21655,8 @@ def person_event_progress(request: Request) -> Response:
     return templates.TemplateResponse(
         "person_event_progress.html",
         {"request": request, "user": user, "events": events, "event_id": event_id, "query": query,
+         "insurance_symbol": insurance_symbol, "insurance_number": insurance_number,
+         "relationship": relationship,
          "exam_facility_id": exam_facility_id, "exam_facility_display": exam_facility_display,
          "selected_reservation_statuses": selected_reservation_statuses,
          "selected_dashboard_statuses": selected_dashboard_statuses,
