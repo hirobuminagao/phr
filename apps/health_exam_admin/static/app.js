@@ -4746,6 +4746,7 @@
     const ledgerHeaderList = document.querySelector("[data-csv-template-ledger-header-candidate-list]");
     const ledgerHeaderSearchInput = document.querySelector("[data-csv-template-ledger-header-search-input]");
     const ledgerSelectedList = document.querySelector("[data-csv-template-ledger-selected-list]");
+    const ledgerAssignmentSlots = Array.from(document.querySelectorAll("[data-csv-template-ledger-assignment-slot]"));
     const ledgerSelectedCount = document.querySelector("[data-csv-template-ledger-selected-count]");
     const ledgerApplyButton = document.querySelector("[data-csv-template-ledger-apply]");
     const ledgerDetail = document.querySelector("[data-csv-template-ledger-detail]");
@@ -4775,6 +4776,8 @@
     let focusedLedger = null;
     let ledgerMode = "one";
     let ledgerSelectedHeaders = [];
+    let ledgerAssignments = new Map();
+    let ledgerRemovedRuleIds = new Set();
     let draftItems = [];
     let editingDraftId = null;
     let editingRuleIds = [];
@@ -5276,36 +5279,72 @@
       `;
     };
 
+    const hydrateLedgerAssignments = () => {
+      ledgerAssignments = new Map();
+      ledgerRemovedRuleIds = new Set();
+      document.querySelectorAll("[data-ledger-rule-payload]").forEach((element) => {
+        try {
+          const draft = JSON.parse(element.getAttribute("data-ledger-rule-payload") || "{}");
+          if (draft.targetKind !== "LEDGER_FIELD" || !draft.targetCode) return;
+          ledgerAssignments.set(draft.targetCode, {
+            ...draft,
+            headers: Array.isArray(draft.headers) ? [...draft.headers] : [],
+            editable: element.getAttribute("data-ledger-rule-editable") === "1",
+          });
+        } catch (_error) {
+          // Ignore an unreadable legacy rule and leave it available in the normal rule list.
+        }
+      });
+    };
+
     const renderLedgerSelectedHeaders = () => {
-      if (ledgerSelectedCount) ledgerSelectedCount.textContent = `${ledgerSelectedHeaders.length}件`;
+      const configuredCount = Array.from(ledgerAssignments.values()).filter((assignment) => assignment.headers?.length).length;
+      if (ledgerSelectedCount) ledgerSelectedCount.textContent = `${configuredCount}件設定済み`;
       if (ledgerDetailToggle) {
         ledgerDetailToggle.disabled = !focusedLedger;
         ledgerDetailToggle.classList.toggle("disabled", !focusedLedger);
       }
       if (ledgerApplyButton) {
-        ledgerApplyButton.disabled = !focusedLedger || ledgerSelectedHeaders.length === 0;
-        ledgerApplyButton.classList.toggle("disabled", !focusedLedger || ledgerSelectedHeaders.length === 0);
+        const hasChanges = ledgerRemovedRuleIds.size > 0
+          || Array.from(ledgerAssignments.values()).some((assignment) => assignment.editable !== false && assignment.headers?.length);
+        ledgerApplyButton.disabled = !hasChanges;
+        ledgerApplyButton.classList.toggle("disabled", !hasChanges);
       }
       if (!ledgerSelectedList) return;
-      if (!ledgerSelectedHeaders.length) {
-        ledgerSelectedList.innerHTML = `<p class="subtle">下の候補ヘッダーから選んでください。</p>`;
-        return;
-      }
-      ledgerSelectedList.innerHTML = ledgerSelectedHeaders.map((header) => `
-        <article class="csv-template-target-selected-card">
-          <div>
+      for (const slot of ledgerAssignmentSlots) {
+        const targetCode = slot.getAttribute("data-csv-template-ledger-assignment-slot") || "";
+        const assignment = ledgerAssignments.get(targetCode);
+        const headers = assignment?.headers || [];
+        const locked = assignment?.editable === false;
+        const headerMarkup = headers.length ? headers.map((header) => `
+          <span class="csv-template-ledger-assignment-header">
             <strong>${escapeHtml(header.headerName || "-")}</strong>
-            <small>${escapeHtml(header.columnNo || "-")}列目（${escapeHtml(excelColumnLabel(header.columnNo))}列） / ${escapeHtml(header.headerContext || "contextなし")}</small>
-          </div>
-          <button type="button" class="ghost-button compact-action-button" data-csv-template-ledger-header-remove="${escapeHtml(header.columnNo || "")}">外す</button>
-        </article>
-      `).join("");
+            <small>${escapeHtml(header.columnNo || "-")}列目（${escapeHtml(excelColumnLabel(header.columnNo))}列）</small>
+          </span>`).join("") : `<small class="csv-template-ledger-assignment-empty">未設定</small>`;
+        const clearMarkup = headers.length && !locked
+          ? `<button type="button" class="csv-template-ledger-assignment-clear" data-csv-template-ledger-assignment-clear="${escapeHtml(targetCode)}">解除</button>`
+          : "";
+        slot.innerHTML = `<span class="csv-template-ledger-assignment-content">${headerMarkup}${locked ? '<small class="csv-template-ledger-assignment-lock">表示のみ</small>' : ""}</span>${clearMarkup}`;
+        slot.classList.toggle("is-focused", focusedLedger?.value === targetCode);
+        slot.classList.toggle("is-locked", locked);
+        slot.classList.toggle("is-configured", headers.length > 0);
+        const row = slot.closest("[data-csv-template-ledger-row]");
+        row?.classList.toggle("is-focused", focusedLedger?.value === targetCode);
+        row?.classList.toggle("is-locked", locked);
+        row?.classList.toggle("is-configured", headers.length > 0);
+      }
     };
 
     const renderLedgerHeaderCards = () => {
       for (const card of ledgerHeaderCards) {
         const columnNo = card.getAttribute("data-column-no") || "";
         card.classList.toggle("is-selected", ledgerSelectedHeaders.some((header) => header.columnNo === columnNo));
+      }
+      for (const card of ledgerCards) {
+        const targetCode = card.getAttribute("data-ledger-field") || "";
+        const assignment = ledgerAssignments.get(targetCode);
+        card.classList.toggle("is-configured", Boolean(assignment?.headers?.length));
+        card.classList.toggle("is-locked", assignment?.editable === false);
       }
       renderLedgerSelectedHeaders();
     };
@@ -5321,17 +5360,20 @@
     };
 
     const selectLedgerFieldCard = (card) => {
+      const targetCode = card.getAttribute("data-ledger-field") || "";
+      const existing = ledgerAssignments.get(targetCode);
       focusedLedger = {
         targetKind: "LEDGER_FIELD",
-        value: card.getAttribute("data-ledger-field") || "",
+        value: targetCode,
         label: card.getAttribute("data-ledger-label") || "",
         hint: card.getAttribute("data-ledger-hint") || "",
       };
+      ledgerSelectedHeaders = Array.isArray(existing?.headers) ? [...existing.headers] : [];
       for (const ledgerCard of ledgerCards) {
         ledgerCard.classList.toggle("is-selected", ledgerCard === card);
       }
       renderLedgerDetail(focusedLedger);
-      renderLedgerSelectedHeaders();
+      renderLedgerHeaderCards();
     };
 
     const resetLedgerModal = () => {
@@ -5339,11 +5381,12 @@
       focusedLedger = null;
       ledgerSelectedHeaders = [];
       ledgerMode = "one";
+      hydrateLedgerAssignments();
       ledgerModeButtons.forEach((button) => {
         button.classList.toggle("is-selected", button.getAttribute("data-csv-template-ledger-mode") === "one");
       });
       for (const card of ledgerCards) card.classList.remove("is-selected");
-      if (ledgerApplyButton) ledgerApplyButton.textContent = "マッピングに追加";
+      if (ledgerApplyButton) ledgerApplyButton.textContent = "設定を反映";
       renderLedgerDetail(null);
       setLedgerDetailDrawerOpen(false);
       renderLedgerHeaderCards();
@@ -5504,20 +5547,29 @@
       const target = event.target;
       if (!(target instanceof Element)) return;
       const card = target.closest("[data-csv-template-ledger-header-candidate]");
-      if (!card) return;
+      if (!card || !focusedLedger) return;
+      const currentAssignment = ledgerAssignments.get(focusedLedger.value);
+      if (currentAssignment?.editable === false) return;
       const header = {
         columnNo: card.getAttribute("data-column-no") || "",
         headerName: card.getAttribute("data-header-name") || "",
         headerContext: card.getAttribute("data-header-context") || "",
       };
-      const alreadySelected = ledgerSelectedHeaders.some((selected) => selected.columnNo === header.columnNo);
-      if (alreadySelected) {
-        ledgerSelectedHeaders = ledgerSelectedHeaders.filter((selected) => selected.columnNo !== header.columnNo);
-      } else if (ledgerMode === "one") {
-        ledgerSelectedHeaders = [header];
-      } else {
-        ledgerSelectedHeaders = [...ledgerSelectedHeaders, header];
-      }
+      ledgerSelectedHeaders = [header];
+      if (currentAssignment?.ruleId) ledgerRemovedRuleIds.delete(String(currentAssignment.ruleId));
+      ledgerAssignments.set(focusedLedger.value, {
+        ...(currentAssignment || {}),
+        ruleId: currentAssignment?.ruleId || null,
+        mode: "one",
+        targetKind: "LEDGER_FIELD",
+        targetName: focusedLedger.label,
+        targetCode: focusedLedger.value,
+        targetMeta: `LEDGER_FIELD / ${focusedLedger.hint || "-"}`,
+        targetCategory: "",
+        targetValueType: "",
+        headers: [...ledgerSelectedHeaders],
+        editable: true,
+      });
       renderLedgerHeaderCards();
     });
 
@@ -5526,26 +5578,67 @@
     ledgerSelectedList?.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const removeButton = target.closest("[data-csv-template-ledger-header-remove]");
-      if (!removeButton) return;
-      ledgerSelectedHeaders = ledgerSelectedHeaders.filter((header) => header.columnNo !== removeButton.getAttribute("data-csv-template-ledger-header-remove"));
-      renderLedgerHeaderCards();
+      const clearButton = target.closest("[data-csv-template-ledger-assignment-clear]");
+      if (clearButton) {
+        const targetCode = clearButton.getAttribute("data-csv-template-ledger-assignment-clear") || "";
+        const assignment = ledgerAssignments.get(targetCode);
+        if (assignment?.editable === false) return;
+        if (assignment?.ruleId) ledgerRemovedRuleIds.add(String(assignment.ruleId));
+        ledgerAssignments.delete(targetCode);
+        if (focusedLedger?.value === targetCode) ledgerSelectedHeaders = [];
+        renderLedgerHeaderCards();
+        return;
+      }
+      const focusButton = target.closest("[data-csv-template-ledger-assignment-focus]");
+      if (!focusButton) return;
+      const fieldCard = ledgerCards.find((card) => card.getAttribute("data-ledger-field") === focusButton.getAttribute("data-csv-template-ledger-assignment-focus"));
+      if (fieldCard) selectLedgerFieldCard(fieldCard);
     });
 
-    ledgerApplyButton?.addEventListener("click", () => {
-      if (!focusedLedger || !ledgerSelectedHeaders.length) return;
-      const draft = {
-        ruleId: editingDraftId || null,
-        mode: ledgerMode,
-        targetKind: "LEDGER_FIELD",
-        targetName: focusedLedger.label,
-        targetCode: focusedLedger.value,
-        targetMeta: `LEDGER_FIELD / ${focusedLedger.hint || "-"}`,
-        targetCategory: "",
-        targetValueType: "",
-        headers: [...ledgerSelectedHeaders],
-      };
-      saveTemplateMappingItem(draft, ledgerApplyButton);
+    ledgerSelectedList?.addEventListener("keydown", (event) => {
+      if (!(event.target instanceof Element) || !["Enter", " "].includes(event.key)) return;
+      if (event.target.closest("[data-csv-template-ledger-assignment-clear]")) return;
+      const focusButton = event.target.closest("[data-csv-template-ledger-assignment-focus]");
+      if (!focusButton) return;
+      event.preventDefault();
+      const fieldCard = ledgerCards.find((card) => card.getAttribute("data-ledger-field") === focusButton.getAttribute("data-csv-template-ledger-assignment-focus"));
+      if (fieldCard) selectLedgerFieldCard(fieldCard);
+    });
+
+    ledgerApplyButton?.addEventListener("click", async () => {
+      const drafts = Array.from(ledgerAssignments.values())
+        .filter((assignment) => assignment.editable !== false && assignment.headers?.length)
+        .map(({ editable: _editable, ...assignment }) => assignment);
+      if (!drafts.length && !ledgerRemovedRuleIds.size) return;
+      if (ledgerRemovedRuleIds.size) {
+        ledgerApplyButton.disabled = true;
+        ledgerApplyButton.classList.add("disabled");
+        setComposerMessage("基本項目の設定を保存中...");
+        try {
+          const token = cookieValue("phr_app_csrf");
+          for (const ruleId of ledgerRemovedRuleIds) {
+            const response = await fetch(`/api/admin/csv-mapping-templates/${csvTemplateId}/screen-rules/${encodeURIComponent(ruleId)}`, {
+              method: "DELETE",
+              headers: {
+                Accept: "application/json",
+                ...(token ? { "x-csrf-token": token } : {}),
+              },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.message || "割り当ての解除でエラーが発生しました。");
+          }
+        } catch (error) {
+          setComposerMessage(error.message || "割り当ての解除でエラーが発生しました。");
+          ledgerApplyButton.disabled = false;
+          ledgerApplyButton.classList.remove("disabled");
+          return;
+        }
+      }
+      if (!drafts.length) {
+        window.location.href = `${window.location.pathname}?message=${encodeURIComponent("基本項目の設定を変更しました。")}`;
+        return;
+      }
+      saveTemplateMappingItems(drafts, ledgerApplyButton);
     });
 
     document.querySelectorAll("[data-csv-template-target-open-kind]").forEach((button) => {

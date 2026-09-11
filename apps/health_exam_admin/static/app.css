@@ -7788,6 +7788,174 @@ th[data-sort-direction="desc"] .table-sort-button::after {
   overflow: hidden;
 }
 
+.csv-template-ledger-bulk-modal__panel {
+  width: min(1780px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.csv-template-ledger-bulk-layout {
+  display: grid;
+  grid-template-columns: minmax(620px, 1.2fr) minmax(500px, 0.8fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 2px 0 12px;
+  overflow: hidden;
+}
+
+.csv-template-ledger-bulk-column {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid #d7e2ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.csv-template-ledger-bulk-column__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.csv-template-ledger-bulk-column__head strong { color: var(--ink); font-weight: 900; }
+.csv-template-ledger-bulk-column__head small { color: var(--muted); font-weight: 800; }
+
+.csv-template-ledger-bulk-mappings {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.csv-template-ledger-bulk-mapping-head,
+.csv-template-ledger-bulk-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1.1fr);
+  gap: 8px;
+}
+
+.csv-template-ledger-bulk-mapping-head {
+  align-items: baseline;
+  padding: 0 3px 10px;
+}
+
+.csv-template-ledger-bulk-mapping-head > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.csv-template-ledger-bulk-mapping-head strong { color: var(--ink); font-weight: 900; }
+.csv-template-ledger-bulk-mapping-head small { color: var(--muted); font-weight: 800; }
+
+.csv-template-ledger-bulk-rows {
+  display: grid;
+  gap: 7px;
+  max-height: calc(100vh - 230px);
+  overflow: auto;
+  padding-right: 3px;
+  align-content: start;
+}
+
+.csv-template-ledger-bulk-row { min-width: 0; }
+.csv-template-ledger-bulk-row .csv-template-ledger-field-card { min-height: 82px; }
+
+.csv-template-ledger-field-card.is-configured:not(.is-selected) {
+  border-color: #79c8aa;
+  background: #eaf8f2;
+}
+
+.csv-template-ledger-field-card.is-locked { opacity: 0.7; }
+
+.csv-template-ledger-assignment-slot {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  min-height: 82px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.csv-template-ledger-assignment-slot.is-focused {
+  border-color: var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+
+.csv-template-ledger-assignment-slot.is-configured { border-color: #79c8aa; background: #eaf8f2; }
+.csv-template-ledger-assignment-slot.is-locked { background: #eef2f6; opacity: 0.75; }
+.csv-template-ledger-assignment-slot strong,
+.csv-template-ledger-assignment-slot small { display: block; color: inherit; }
+.csv-template-ledger-assignment-slot small { color: var(--muted); font-weight: 700; }
+.csv-template-ledger-assignment-header { display: block; min-width: 0; }
+.csv-template-ledger-assignment-content { display: block; min-width: 0; }
+.csv-template-ledger-assignment-header strong,
+.csv-template-ledger-assignment-header small { overflow-wrap: anywhere; }
+.csv-template-ledger-assignment-header + .csv-template-ledger-assignment-header { margin-top: 6px; }
+.csv-template-ledger-assignment-empty { color: var(--muted); }
+.csv-template-ledger-assignment-lock { margin-top: 3px; }
+.csv-template-ledger-assignment-clear {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #d9a4a4;
+  border-radius: 6px;
+  background: #fff;
+  color: #9f1c1c;
+  font-weight: 800;
+}
+.csv-template-ledger-assignment-clear:hover { background: #fff0f0; }
+
+.csv-template-ledger-bulk-headers {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.csv-template-ledger-bulk-headers .csv-template-ledger-bulk-column__head {
+  display: grid;
+  justify-content: start;
+  gap: 1px;
+  margin-bottom: 0;
+}
+.csv-template-ledger-bulk-headers > input { grid-column: 1; min-height: 42px; }
+.csv-template-ledger-bulk-headers .csv-template-header-candidate-list {
+  grid-column: 1;
+  max-height: calc(100vh - 285px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-height: 0;
+}
+.csv-template-ledger-bulk-headers .csv-template-header-candidate-card {
+  min-height: 70px;
+  padding: 7px 9px;
+}
+
+@media (max-width: 1050px) {
+  .csv-template-ledger-bulk-layout {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .csv-template-ledger-bulk-mappings,
+  .csv-template-ledger-bulk-headers { min-height: 360px; }
+}
+
+@media (max-width: 700px) {
+  .csv-template-ledger-bulk-mapping-head,
+  .csv-template-ledger-bulk-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
 .csv-template-target-item-layout {
   display: grid;
   grid-template-columns: minmax(420px, 0.9fr) minmax(420px, 1.1fr);

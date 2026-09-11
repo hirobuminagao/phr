@@ -296,7 +296,7 @@
         <p class="subtle">左側に登録先の基本情報・健診項目を並べ、各項目にCSV列を割り当てます。</p>
       </div>
       <div class="button-row">
-        <button type="button" class="primary-button" data-modal-open="csv-template-ledger-field-modal">基本・受診情報を追加</button>
+        <button type="button" class="primary-button" data-modal-open="csv-template-ledger-field-modal">基本項目を設定</button>
         <button type="button" class="primary-button" data-modal-open="csv-template-target-item-modal" data-csv-template-target-open-kind="exam">健診項目を追加</button>
       </div>
     </div>
@@ -553,102 +553,88 @@
   </section>
 </div>
 
-<div id="csv-template-ledger-field-modal" class="edit-modal csv-template-target-item-modal" hidden>
+<div id="csv-template-ledger-field-modal" class="edit-modal csv-template-ledger-bulk-modal" hidden>
   <div class="edit-modal__backdrop" data-modal-close></div>
-  <section class="edit-modal__panel csv-template-target-item-modal__panel" role="dialog" aria-modal="true" aria-labelledby="csv-template-ledger-field-title">
+  <section class="edit-modal__panel csv-template-ledger-bulk-modal__panel" role="dialog" aria-modal="true" aria-labelledby="csv-template-ledger-field-title">
     <div class="edit-modal__head">
       <div>
         <p class="eyebrow">Ledger Field</p>
-        <h2 id="csv-template-ledger-field-title">基本・受診情報を追加</h2>
-        <p class="subtle">追加する基本・受診情報を1つ選び、方式を決めてCSVヘッダー候補をセットします。</p>
+        <h2 id="csv-template-ledger-field-title">基本項目をまとめて設定</h2>
+        <p class="subtle">左で基本項目を選び、右のCSVヘッダーを割り当てます。変更内容は最後にまとめて保存します。</p>
       </div>
       <button type="button" class="ghost-button" data-modal-close>閉じる</button>
     </div>
 
-    <div class="csv-template-composer-body">
-      <div class="csv-template-composer-mode">
-        <div class="csv-template-target-item-mode" aria-label="追加パターン">
-          <span>方式</span>
-          <button type="button" class="is-selected" data-csv-template-ledger-mode="one">1:1</button>
-          <button type="button" data-csv-template-ledger-mode="many">n:1 結合</button>
+    <div class="csv-template-ledger-bulk-layout">
+      <section class="csv-template-ledger-bulk-column csv-template-ledger-bulk-mappings">
+        <div class="csv-template-ledger-bulk-mapping-head">
+          <strong>基本項目</strong>
+          <span><strong>選択されたヘッダー項目</strong><small data-csv-template-ledger-selected-count>0件設定済み</small></span>
         </div>
-        <button type="button" class="ghost-button csv-template-detail-toggle" data-csv-template-ledger-detail-toggle disabled>項目詳細</button>
-      </div>
-
-      <div class="csv-template-composer-layout">
-        <section class="csv-template-composer-column csv-template-ledger-field-grid">
+        <div class="csv-template-ledger-bulk-rows" data-csv-template-ledger-selected-list>
           {% for option in ledger_field_options %}
+          <article class="csv-template-ledger-bulk-row" data-csv-template-ledger-row="{{ option.value }}">
+            <button
+              type="button"
+              class="csv-template-ledger-field-card"
+              data-csv-template-ledger-modal-field
+              data-ledger-field="{{ option.value }}"
+              data-ledger-label="{{ option.label }}"
+              data-ledger-hint="{{ option.hint }}"
+              data-filter-text="{{ option.value }} {{ option.label }} {{ option.hint }}"
+            >
+              <strong>{{ option.label }}</strong>
+              <small>{{ option.value }}</small>
+              <span>{{ option.hint }}</span>
+            </button>
+            <div
+              class="csv-template-ledger-assignment-slot"
+              data-csv-template-ledger-assignment-slot="{{ option.value }}"
+              data-csv-template-ledger-assignment-focus="{{ option.value }}"
+              role="button"
+              tabindex="0"
+            >
+              <small class="csv-template-ledger-assignment-empty">未設定</small>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="csv-template-ledger-bulk-column csv-template-ledger-bulk-headers">
+        <div class="csv-template-ledger-bulk-column__head"><strong>ヘッダー項目</strong><small>{{ header_columns|length }}列</small></div>
+        <input data-csv-template-ledger-header-search-input autocomplete="off" placeholder="例: 氏名 / 受診日 / 保険者番号 / 8">
+        <div class="csv-template-header-candidate-list" data-csv-template-ledger-header-candidate-list>
+          {% for column in header_columns %}
           <button
             type="button"
-            class="csv-template-ledger-field-card"
-            data-csv-template-ledger-modal-field
-            data-ledger-field="{{ option.value }}"
-            data-ledger-label="{{ option.label }}"
-            data-ledger-hint="{{ option.hint }}"
-            data-filter-text="{{ option.value }} {{ option.label }} {{ option.hint }}"
+            class="csv-template-header-candidate-card {{ 'is-used' if column.is_mapped else '' }}"
+            data-csv-template-ledger-header-candidate
+            data-column-no="{{ column.column_no }}"
+            data-header-name="{{ column.name or column.header_name or '' }}"
+            data-header-context="{{ column.context or column.header_context or '' }}"
+            data-filter-text="{{ column.column_no }} {{ column.name or column.header_name or '' }} {{ column.context or column.header_context or '' }} {{ column.context_summary or '' }}"
           >
-            <strong>{{ option.label }}</strong>
-            <small>{{ option.value }}</small>
-            <span>{{ option.hint }}</span>
+            <span>{{ column.column_no }}列目（{{ column.column_no|excel_column }}列）</span>
+            <strong>{{ column.name or column.header_name or "-" }}</strong>
+            <small>{{ column.context or column.header_context or "contextなし" }}</small>
           </button>
+          {% else %}
+          <p class="subtle">基準ヘッダーを読み込むと候補が表示されます。</p>
           {% endfor %}
-        </section>
+        </div>
+      </section>
+    </div>
 
-        <section class="csv-template-composer-column csv-template-source-mapping">
-          <section class="csv-template-target-selected">
-            <div class="csv-template-target-selected__head">
-              <strong>選択済みヘッダー</strong>
-              <small data-csv-template-ledger-selected-count>0件</small>
-            </div>
-            <div class="csv-template-target-selected__list" data-csv-template-ledger-selected-list>
-              <p class="subtle">下の候補ヘッダーから選んでください。</p>
-            </div>
-          </section>
-          <section class="csv-template-header-candidates">
-            <div class="csv-template-target-selected__head">
-              <strong>候補ヘッダー</strong>
-              <small>{{ header_columns|length }}列</small>
-            </div>
-            <label class="csv-template-target-search csv-template-header-search">
-              <input data-csv-template-ledger-header-search-input autocomplete="off" placeholder="例: 氏名 / 受診日 / 保険者番号 / 8">
-            </label>
-            <div class="csv-template-header-candidate-list" data-csv-template-ledger-header-candidate-list>
-              {% for column in header_columns %}
-              <button
-                type="button"
-                class="csv-template-header-candidate-card {{ 'is-used' if column.is_mapped else '' }}"
-                data-csv-template-ledger-header-candidate
-                data-column-no="{{ column.column_no }}"
-                data-header-name="{{ column.name or column.header_name or '' }}"
-                data-header-context="{{ column.context or column.header_context or '' }}"
-                data-filter-text="{{ column.column_no }} {{ column.name or column.header_name or '' }} {{ column.context or column.header_context or '' }} {{ column.context_summary or '' }}"
-              >
-                <span>{{ column.column_no }}列目（{{ column.column_no|excel_column }}列）</span>
-                <strong>{{ column.name or column.header_name or "-" }}</strong>
-                <small>{{ column.context or column.header_context or "contextなし" }}</small>
-              </button>
-              {% else %}
-              <p class="subtle">基準ヘッダーを読み込むと候補が表示されます。</p>
-              {% endfor %}
-            </div>
-          </section>
-        </section>
-
-        <aside class="csv-template-target-detail-drawer" data-csv-template-ledger-detail-drawer>
-          <div class="csv-template-target-detail-drawer__head">
-            <strong>項目詳細</strong>
-            <button type="button" class="ghost-button compact-action-button" data-csv-template-ledger-detail-close>閉じる</button>
-          </div>
-          <div class="csv-template-target-detail" data-csv-template-ledger-detail>
-            <p class="subtle">候補を選ぶと、ここに基本・受診情報の詳細を表示します。</p>
-          </div>
-        </aside>
-      </div>
+    <div hidden data-csv-template-ledger-existing-rules>
+      {% for rule in rules if rule.target_kind == 'LEDGER_FIELD' %}
+      <span data-ledger-rule-payload="{{ rule.screen_edit_payload|tojson|forceescape }}" data-ledger-rule-editable="{{ '1' if rule.is_screen_editable else '0' }}"></span>
+      {% endfor %}
     </div>
 
     <div class="edit-modal__actions csv-template-composer-actions">
       <button type="button" class="ghost-button" data-modal-close>キャンセル</button>
-      <button type="button" class="primary-button" data-csv-template-ledger-apply disabled>マッピングに追加</button>
+      <button type="button" class="primary-button" data-csv-template-ledger-apply disabled>設定を反映</button>
     </div>
   </section>
 </div>
