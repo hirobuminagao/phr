@@ -45,6 +45,7 @@ def test_candidates_are_sorted_by_name_score() -> None:
     assert rows[0]["case_match_people"] == 8
     assert "person_event" in cur.calls[0][0]
     assert "exam_export_cases" in cur.calls[0][0]
+    assert "CAST(s.hia_subscriber_id AS UNSIGNED)=r.hia_member_id" in cur.calls[0][0]
     assert "SELECT DISTINCT matched_people.event_id" in cur.calls[0][0]
     assert "SELECT COUNT(*) FROM matched_people" not in cur.calls[0][0]
     assert "HAVING COUNT(DISTINCT subscriber_id)=1" in cur.calls[0][0]

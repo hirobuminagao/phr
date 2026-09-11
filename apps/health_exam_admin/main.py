@@ -4983,7 +4983,7 @@ def load_reservation_facility_candidates(
           INNER JOIN {qname(dev_db())}.subscribers s
             ON r.hia_member_id IS NOT NULL
            AND s.hia_subscriber_id IS NOT NULL
-           AND s.hia_subscriber_id=CAST(r.hia_member_id AS CHAR)
+           AND CAST(s.hia_subscriber_id AS UNSIGNED)=r.hia_member_id
           INNER JOIN {qname(dev_db())}.person_event pe
             ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
           WHERE r.reservation_hospital_id=%s
