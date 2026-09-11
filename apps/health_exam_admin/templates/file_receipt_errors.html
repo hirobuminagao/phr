@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set title = "受領ファイル エラー詳細" %}
+{% block body %}
+<header class="topbar">
+  <div>
+    <p class="eyebrow">FROM MEDICAL</p>
+    <h1>受領ファイル エラー詳細</h1>
+  </div>
+  <nav class="top-actions">
+    <a class="ghost-button" href="/file-receipts?event_id={{ receipt.event_id }}">受領ファイル一覧</a>
+    <a class="ghost-button" href="/">HOME</a>
+    <form method="post" action="/logout"><button class="ghost-button" type="submit">ログアウト</button></form>
+  </nav>
+</header>
+
+<main class="page">
+  <section class="panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">FILE RECEIPT {{ receipt.id }}</p>
+        <h2>{{ receipt.file_name }}</h2>
+        <p class="subtle">{{ receipt.relative_path }}</p>
+      </div>
+      <span class="status-pill {{ 'status-danger' if receipt.status == 'ERROR' else 'status-pending' }}">{{ receipt.status }}</span>
+    </div>
+    <dl class="detail-list detail-list-compact">
+      <dt>健診機関</dt><dd>{{ receipt.facility_name or "未設定" }}{% if receipt.facility_code %} / {{ receipt.facility_code }}{% endif %}</dd>
+      <dt>scan run</dt><dd>{{ receipt.etl_run_id or "-" }}</dd>
+      <dt>状態メッセージ</dt><dd>{{ receipt.summary_message or "-" }}</dd>
+      <dt>最終更新</dt><dd>{{ receipt.updated_at or "-" }}</dd>
+    </dl>
+  </section>
+
+  <section class="panel" id="errors">
+    <div class="section-heading">
+      <div>
+        <h2>エラー内容</h2>
+        <p class="subtle">このファイルに紐づくscan/importエラーを新しい順に表示します。</p>
+      </div>
+      <span class="status-pill {{ 'status-danger' if errors else 'status-neutral' }}">{{ errors|length }}件</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table compact-table">
+        <thead><tr><th>日時</th><th>処理</th><th>エラー</th><th>対象</th><th>内容</th><th>run</th></tr></thead>
+        <tbody>
+          {% for item in errors %}
+          <tr>
+            <td>{{ item.created_at or "-" }}</td>
+            <td><strong>{{ item.phase or "-" }}</strong><small>{{ item.field or "" }}</small></td>
+            <td><span class="status-pill status-danger">{{ item.error_code or "-" }}</span></td>
+            <td><small>{{ item.src_file or item.field_value or "-" }}</small></td>
+            <td><small>{{ item.message or "-" }}</small></td>
+            <td><a class="inline-link" href="/exam-processing/runs/{{ item.run_id }}#errors">{{ item.run_id }}</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty-state">このファイルに紐づくエラー記録はありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

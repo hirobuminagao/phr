@@ -175,7 +175,13 @@
               <strong>{{ row.facility_name or "未設定" }}</strong>
               <small>{{ row.facility_code or "" }}</small>
             </td>
-            <td><span class="status-pill {{ 'status-ready' if row.status == 'IMPORTED' else 'status-pending' if row.status in ['WAITING_CONFIRM', 'WAITING_PASSWORD'] else 'status-muted' }}">{{ row.status }}</span></td>
+            <td>
+              {% if row.status == 'ERROR' %}
+                <a class="status-pill status-danger inline-link" href="/file-receipts/{{ row.id }}/errors">{{ row.status }}</a>
+              {% else %}
+                <span class="status-pill {{ 'status-ready' if row.status == 'IMPORTED' else 'status-pending' if row.status in ['WAITING_CONFIRM', 'WAITING_PASSWORD'] else 'status-muted' }}">{{ row.status }}</span>
+              {% endif %}
+            </td>
             <td>
               <strong>run {{ row.etl_run_id or "-" }}</strong>
               <small>初回 {{ row.first_seen_at or "-" }} / 処理 {{ row.processed_at or "-" }}</small>

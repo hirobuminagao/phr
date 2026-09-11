@@ -7393,6 +7393,7 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
           fr.event_id,
           fr.file_type,
           fr.file_name,
+          fr.source_path,
           fr.relative_path,
           fr.file_sha256,
           fr.processable_count,
@@ -7448,6 +7449,45 @@ def load_file_receipt_rows(cur: Any, *, filters: dict[str, str], limit: int = 20
         (*params, limit),
     )
     return [dict(row) for row in cur.fetchall()]
+
+
+def load_file_receipt_error_detail(cur: Any, *, file_receipt_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    cur.execute(
+        f"""
+        SELECT
+          id, event_id, file_type, file_name, source_path, relative_path,
+          facility_code, facility_name, status, summary_message, etl_run_id,
+          first_seen_at, last_seen_at, processed_at, updated_at
+        FROM {qname(health_db())}.file_receipts
+        WHERE id = %s
+        LIMIT 1
+        """,
+        (file_receipt_id,),
+    )
+    receipt_row = cur.fetchone()
+    if not receipt_row:
+        return None, []
+    receipt = dict(receipt_row)
+    source_path = str(receipt.get("source_path") or "")
+    if not source_path:
+        return receipt, []
+    cur.execute(
+        f"""
+        SELECT
+          error_id, run_id, phase, source, src_file, src_row_no, src_line_no,
+          field, field_value, error_code, message, created_at
+        FROM {qname(health_db())}.etl_errors
+        WHERE (
+          src_file = %s
+          OR src_file LIKE CONCAT(%s, '!%%')
+          OR field_value = %s
+        )
+        ORDER BY created_at DESC, error_id DESC
+        LIMIT 500
+        """,
+        (source_path, source_path, source_path),
+    )
+    return receipt, [dict(row) for row in cur.fetchall()]
 
 
 def load_zip_password_admin_rows(cur: Any, *, query: str, include_inactive: bool) -> list[dict[str, Any]]:
@@ -17970,6 +18010,28 @@ def file_receipts(request: Request) -> Response:
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),
         },
+    )
+
+
+@app.get("/file-receipts/{file_receipt_id}/errors", response_class=HTMLResponse)
+def file_receipt_errors(request: Request, file_receipt_id: int) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_any_permission(user, ("export_lists.view", "export_lists.edit", "users.manage")):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=health_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        try:
+            receipt, errors = load_file_receipt_error_detail(cur, file_receipt_id=file_receipt_id)
+        finally:
+            cur.close()
+    if receipt is None:
+        return HTMLResponse("対象の受領ファイルが見つかりません。", status_code=404)
+    return templates.TemplateResponse(
+        "file_receipt_errors.html",
+        {"request": request, "user": user, "receipt": receipt, "errors": errors},
     )
 
 
