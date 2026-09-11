@@ -16,22 +16,9 @@
     </form>
   </section>
 
-  <section class="panel">
-    <div class="section-heading"><div><h2>予約施設ID一覧</h2><p class="subtle">予約CSVに存在する施設をID単位でまとめています。</p></div><span class="status-pill status-neutral">{{ rows|length }}施設</span></div>
-    <div class="table-wrap"><table class="data-table compact-table">
-      <thead><tr><th>予約施設</th><th>予約データ</th><th>紐付け先</th><th>操作</th></tr></thead>
-      <tbody>{% for row in rows %}<tr>
-        <td><strong>{{ row.reservation_hospital_name or '-' }}</strong><small>予約施設ID {{ row.reservation_hospital_id }}</small></td>
-        <td><strong>{{ row.reservation_count }}件</strong><small>最新受診予定 {{ row.latest_reservation_at or '-' }}</small></td>
-        <td>{% if row.exam_facility_id and row.is_active %}<span class="status-pill status-ready">紐付け済み</span><strong>{{ row.exam_facility_display_name or row.exam_facility_name }}</strong><small>{{ row.exam_facility_code or '-' }} / ID {{ row.exam_facility_id }}</small>{% else %}<span class="status-pill status-warning">未紐付け</span>{% endif %}</td>
-        <td><a class="ghost-button compact-action-button" href="?query={{ query|urlencode }}&link_status={{ link_status }}&hospital_id={{ row.reservation_hospital_id }}">{{ '変更' if row.exam_facility_id and row.is_active else '候補を見る' }}</a></td>
-      </tr>{% else %}<tr><td colspan="4">該当する予約施設がありません。</td></tr>{% endfor %}</tbody>
-    </table></div>
-  </section>
-
   {% if selected %}<section class="panel" id="facility-candidates">
     <div class="section-heading"><div><p class="eyebrow">予約施設ID {{ selected.reservation_hospital_id }}</p><h2>{{ selected.reservation_hospital_name }}</h2><p class="subtle">同じ予約施設を利用したHIA加入者のcase実績を優先し、名称の類似度を補助にしています。内容を確認して登録してください。</p></div></div>
-    <form method="get" action="/utilities/reservation-site-facilities" class="inline-form">
+    <form method="get" action="/utilities/reservation-site-facilities#facility-candidates" class="inline-form">
       <input type="hidden" name="hospital_id" value="{{ selected.reservation_hospital_id }}"><input type="hidden" name="query" value="{{ query }}"><input type="hidden" name="link_status" value="{{ link_status }}">
       <label><span>健診機関候補を検索</span><input name="facility_query" value="{{ facility_query }}" placeholder="名称 / コード / ID"></label><button type="submit" class="ghost-button">候補を絞る</button>
     </form>
@@ -46,5 +33,18 @@
       </tr>{% else %}<tr><td colspan="5">候補がありません。</td></tr>{% endfor %}</tbody>
     </table></div>
   </section>{% endif %}
+
+  <section class="panel">
+    <div class="section-heading"><div><h2>予約施設ID一覧</h2><p class="subtle">予約CSVに存在する施設をID単位でまとめています。</p></div><span class="status-pill status-neutral">{{ rows|length }}施設</span></div>
+    <div class="table-wrap"><table class="data-table compact-table">
+      <thead><tr><th>予約施設</th><th>予約データ</th><th>紐付け先</th><th>操作</th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <td><strong>{{ row.reservation_hospital_name or '-' }}</strong><small>予約施設ID {{ row.reservation_hospital_id }}</small></td>
+        <td><strong>{{ row.reservation_count }}件</strong><small>最新受診予定 {{ row.latest_reservation_at or '-' }}</small></td>
+        <td>{% if row.exam_facility_id and row.is_active %}<span class="status-pill status-ready">紐付け済み</span><strong>{{ row.exam_facility_display_name or row.exam_facility_name }}</strong><small>{{ row.exam_facility_code or '-' }} / ID {{ row.exam_facility_id }}</small>{% else %}<span class="status-pill status-warning">未紐付け</span>{% endif %}</td>
+        <td><a class="ghost-button compact-action-button" href="?query={{ query|urlencode }}&link_status={{ link_status }}&hospital_id={{ row.reservation_hospital_id }}#facility-candidates">{{ '変更' if row.exam_facility_id and row.is_active else '候補を見る' }}</a></td>
+      </tr>{% else %}<tr><td colspan="4">該当する予約施設がありません。</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
 </main>
 {% endblock %}

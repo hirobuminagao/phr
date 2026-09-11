@@ -63,6 +63,8 @@ def test_facility_mapping_page_has_status_candidates_and_registration() -> None:
     assert "case実績" in template
     assert "この機関に紐付け" in template
     assert "_csrf_token" in template
+    assert "#facility-candidates" in template
+    assert template.index('id="facility-candidates"') < template.index("予約施設ID一覧")
 
 
 def test_mapping_update_refreshes_existing_reservation_rows() -> None:
