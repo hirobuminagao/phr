@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import hashlib
+import io
 import re
 import sys
 import zipfile
@@ -67,6 +68,7 @@ FILE_STATUS_WAITING_PASSWORD = "WAITING_PASSWORD"
 
 FILE_TYPE_ZIP = "ZIP"
 FILE_TYPE_XML = "XML"
+MAX_NESTED_ZIP_DEPTH = 1
 XML_STATUS_READY = "READY"
 XML_STATUS_PARSE_ERROR = "PARSE_ERROR"
 LEDGER_TYPE_EXAM = "EXAM"
@@ -1804,7 +1806,12 @@ def resolve_xml_basic_facility(
 
 
 def resolve_zip_password_candidates(
-    cur: Any, config: ImportConfig, file_receipt: Mapping[str, Any]
+    cur: Any,
+    config: ImportConfig,
+    file_receipt: Mapping[str, Any],
+    *,
+    zip_name: str | None = None,
+    zip_sha256: str | None = None,
 ) -> list[bytes]:
     facility_codes = [
         compact_text(file_receipt.get("facility_code")),
@@ -1813,8 +1820,10 @@ def resolve_zip_password_candidates(
     facility_codes = [code for code in facility_codes if code]
     facility_placeholders = ", ".join(["%s"] * len(facility_codes)) or "NULL"
     params: list[Any] = [
-        compact_text(file_receipt.get("file_sha256")),
-        compact_text(file_receipt.get("file_name")) or Path(str(file_receipt.get("source_path") or "")).name,
+        compact_text(zip_sha256) or compact_text(file_receipt.get("file_sha256")),
+        compact_text(zip_name)
+        or compact_text(file_receipt.get("file_name"))
+        or Path(str(file_receipt.get("source_path") or "")).name,
         *facility_codes,
         facility_folder_name(file_receipt),
     ]
@@ -1886,6 +1895,80 @@ def select_zip_password(
     raise ZipDecryptError("password candidates exhausted")
 
 
+def read_xml_candidates_from_zip(
+    cur: Any,
+    file_receipt: Mapping[str, Any],
+    config: ImportConfig,
+    zf: zipfile.ZipFile,
+    *,
+    archive_path: str | None = None,
+    archive_sha256: str | None = None,
+    depth: int = 0,
+) -> tuple[list[XmlCandidate], int]:
+    target_infos: list[zipfile.ZipInfo] = []
+    nested_zip_infos: list[zipfile.ZipInfo] = []
+    excluded = 0
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        if is_target_inner_xml(info.filename, config.zip):
+            target_infos.append(info)
+        elif info.filename.lower().endswith(".xml"):
+            excluded += 1
+        elif depth < MAX_NESTED_ZIP_DEPTH and info.filename.lower().endswith(".zip"):
+            nested_zip_infos.append(info)
+
+    readable_infos = [*target_infos, *nested_zip_infos]
+    encrypted_infos = [info for info in readable_infos if is_encrypted_zip_info(info)]
+    password: bytes | None = None
+    if encrypted_infos:
+        password_candidates = resolve_zip_password_candidates(
+            cur,
+            config,
+            file_receipt,
+            zip_name=Path(archive_path).name if archive_path else None,
+            zip_sha256=archive_sha256,
+        )
+        if not password_candidates:
+            raise ZipPasswordNotFoundError(archive_path or "outer zip")
+        try:
+            password = select_zip_password(zf, encrypted_infos, password_candidates)
+        except ZipDecryptError as exc:
+            raise ZipDecryptError(f"archive={archive_path or 'outer zip'}: {exc}") from exc
+
+    candidates = [
+        XmlCandidate(
+            file_receipt=file_receipt,
+            inner_path=f"{archive_path}!/{info.filename}" if archive_path else info.filename,
+            data=read_zip_member(zf, info, password if is_encrypted_zip_info(info) else None),
+        )
+        for info in target_infos
+    ]
+    for info in nested_zip_infos:
+        nested_path = f"{archive_path}!/{info.filename}" if archive_path else info.filename
+        nested_data = read_zip_member(
+            zf,
+            info,
+            password if is_encrypted_zip_info(info) else None,
+        )
+        try:
+            with zipfile.ZipFile(io.BytesIO(nested_data)) as nested_zf:
+                nested_candidates, nested_excluded = read_xml_candidates_from_zip(
+                    cur,
+                    file_receipt,
+                    config,
+                    nested_zf,
+                    archive_path=nested_path,
+                    archive_sha256=sha256_bytes(nested_data),
+                    depth=depth + 1,
+                )
+        except zipfile.BadZipFile as exc:
+            raise zipfile.BadZipFile(f"nested archive={nested_path}: {exc}") from exc
+        candidates.extend(nested_candidates)
+        excluded += nested_excluded
+    return candidates, excluded
+
+
 def read_candidates_from_file(
     cur: Any,
     file_receipt: Mapping[str, Any],
@@ -1899,31 +1982,8 @@ def read_candidates_from_file(
         return [XmlCandidate(file_receipt=file_receipt, inner_path=None, data=data)], 0
 
     excluded = 0
-    candidates: list[XmlCandidate] = []
     with zipfile.ZipFile(source_path) as zf:
-        target_infos: list[zipfile.ZipInfo] = []
-        for info in zf.infolist():
-            if info.is_dir():
-                continue
-            if is_target_inner_xml(info.filename, config.zip):
-                target_infos.append(info)
-            elif info.filename.lower().endswith(".xml"):
-                excluded += 1
-        encrypted_infos = [info for info in target_infos if is_encrypted_zip_info(info)]
-        password: bytes | None = None
-        if encrypted_infos:
-            password_candidates = resolve_zip_password_candidates(cur, config, file_receipt)
-            if not password_candidates:
-                raise ZipPasswordNotFoundError
-            password = select_zip_password(zf, encrypted_infos, password_candidates)
-        for info in target_infos:
-            candidates.append(
-                XmlCandidate(
-                    file_receipt=file_receipt,
-                    inner_path=info.filename,
-                    data=read_zip_member(zf, info, password if is_encrypted_zip_info(info) else None),
-                )
-            )
+        candidates, excluded = read_xml_candidates_from_zip(cur, file_receipt, config, zf)
     summary.xml_excluded += excluded
     return candidates, excluded
 
@@ -2369,10 +2429,10 @@ def process_file_receipt(
             field_value=str(source_path),
         )
         candidates = []
-    except ZipPasswordNotFoundError:
+    except ZipPasswordNotFoundError as exc:
         candidate_read_failed = True
         waiting_password = True
-        message = f"zip password not found: path={source_path}"
+        message = f"zip password not found: path={source_path}, archive={compact_text(exc) or 'outer zip'}"
         record_import_error(
             health_cur if not config.dry_run else None,
             run_id=run_id,
@@ -2386,6 +2446,7 @@ def process_file_receipt(
         candidates = []
     except ZipDecryptError as exc:
         candidate_read_failed = True
+        waiting_password = True
         message = f"zip decrypt failed: path={source_path}, reason={compact_text(exc) or type(exc).__name__}"
         record_import_error(
             health_cur if not config.dry_run else None,

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import sys
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from xml.etree import ElementTree
@@ -182,6 +184,103 @@ def test_resolve_zip_password_candidates_keeps_priority_order_and_deduplicates()
     sql, _ = cur.execute_calls[-1]
     assert "LIMIT 1" not in sql
     assert "WHEN 'ZIP_SHA256' THEN 1" in sql
+
+
+def test_resolve_zip_password_candidates_can_target_nested_zip() -> None:
+    cur = FakeCursor([{"password_text": "nested-password"}])
+    config = SimpleNamespace(work_db="work_other")
+
+    passwords = import_xml.resolve_zip_password_candidates(
+        cur,
+        config,
+        {
+            "file_sha256": "a" * 64,
+            "file_name": "outer.zip",
+            "source_path": "/tmp/outer.zip",
+            "facility_code": "0110119674",
+            "submitter_facility_code": None,
+            "relative_path": "facility/02_健診結果（編集）/outer.zip",
+        },
+        zip_name="inner.zip",
+        zip_sha256="b" * 64,
+    )
+
+    assert passwords == [b"nested-password"]
+    _, params = cur.execute_calls[-1]
+    assert params[:2] == ("b" * 64, "inner.zip")
+
+
+def test_read_xml_candidates_from_nested_zip_tracks_composite_path() -> None:
+    config = SimpleNamespace(
+        zip=import_xml.ZipConfig(
+            target_xml_pattern="h*.xml",
+            exclude_prefixes=("ix08", "su08"),
+            exclude_keywords=("schema", "xsd"),
+            keep_work=False,
+        )
+    )
+    inner_buffer = io.BytesIO()
+    with zipfile.ZipFile(inner_buffer, "w") as inner_zf:
+        inner_zf.writestr("root/DATA/h-result.xml", b"<ClinicalDocument/>")
+        inner_zf.writestr("root/DATA/ix08.xml", b"<Index/>")
+    outer_buffer = io.BytesIO()
+    with zipfile.ZipFile(outer_buffer, "w") as outer_zf:
+        outer_zf.writestr("delivery/inner.zip", inner_buffer.getvalue())
+
+    with zipfile.ZipFile(io.BytesIO(outer_buffer.getvalue())) as outer_zf:
+        candidates, excluded = import_xml.read_xml_candidates_from_zip(
+            FakeCursor(),
+            {"source_path": "/tmp/outer.zip"},
+            config,
+            outer_zf,
+        )
+
+    assert excluded == 1
+    assert len(candidates) == 1
+    assert candidates[0].inner_path == "delivery/inner.zip!/root/DATA/h-result.xml"
+    assert candidates[0].data == b"<ClinicalDocument/>"
+
+
+def test_read_xml_candidates_from_nested_zip_uses_inner_password(monkeypatch) -> None:
+    config = SimpleNamespace(
+        zip=import_xml.ZipConfig(
+            target_xml_pattern="h*.xml",
+            exclude_prefixes=("ix08", "su08"),
+            exclude_keywords=("schema", "xsd"),
+            keep_work=False,
+        )
+    )
+    inner_buffer = io.BytesIO()
+    with zipfile.ZipFile(inner_buffer, "w") as inner_zf:
+        inner_zf.writestr("DATA/h-result.xml", b"<ClinicalDocument/>")
+    inner_sha256 = import_xml.sha256_bytes(inner_buffer.getvalue())
+    outer_buffer = io.BytesIO()
+    with zipfile.ZipFile(outer_buffer, "w") as outer_zf:
+        outer_zf.writestr("inner.zip", inner_buffer.getvalue())
+
+    password_lookups: list[tuple[str | None, str | None]] = []
+
+    def fake_resolve_passwords(cur, config, file_receipt, *, zip_name=None, zip_sha256=None):
+        password_lookups.append((zip_name, zip_sha256))
+        return [b"5555"]
+
+    monkeypatch.setattr(import_xml, "resolve_zip_password_candidates", fake_resolve_passwords)
+    monkeypatch.setattr(
+        import_xml,
+        "is_encrypted_zip_info",
+        lambda info: info.filename == "DATA/h-result.xml",
+    )
+
+    with zipfile.ZipFile(io.BytesIO(outer_buffer.getvalue())) as outer_zf:
+        candidates, _ = import_xml.read_xml_candidates_from_zip(
+            FakeCursor(),
+            {"source_path": "/tmp/outer.zip"},
+            config,
+            outer_zf,
+        )
+
+    assert len(candidates) == 1
+    assert password_lookups == [("inner.zip", inner_sha256)]
 
 
 def test_select_zip_password_tries_candidates_until_one_opens_all_members(monkeypatch) -> None:
