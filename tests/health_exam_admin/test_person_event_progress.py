@@ -6,7 +6,10 @@ from apps.health_exam_admin.main import (
     load_person_event_progress_rows,
     person_event_progress,
 )
-from scripts.health_exam_event.sync_person_event_hia_dashboard_status import create_temp_dashboard_status
+from scripts.health_exam_event.sync_person_event_hia_dashboard_status import (
+    create_temp_dashboard_status,
+    insert_status_items,
+)
 
 
 def test_person_event_progress_uses_person_event_without_health_result_tables() -> None:
@@ -61,3 +64,9 @@ def test_dashboard_filter_options_fall_back_to_active_source_rows() -> None:
     assert "hia_dashboard_status d" in source
     assert "d.is_active=1" in source
     assert source.count("COLLATE utf8mb4_unicode_ci AS value_code") == 2
+
+
+def test_dashboard_code_status_values_are_written_to_value_code_column() -> None:
+    source = getsource(insert_status_items)
+
+    assert "NULL, NULL, NULL, NULLIF(t.{column}, '')" in source

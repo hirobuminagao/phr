@@ -249,7 +249,7 @@ def insert_status_items(cur: Any, config: SyncConfig, run_id: int) -> int:
         total += run_insert(
             f"""
             '{item_code}', 'CODE',
-            NULL, NULL, NULLIF(t.{column}, ''),
+            NULL, NULL, NULL, NULLIF(t.{column}, ''),
             NULL, NULL, NULL, NULL, NULL
             """
         )
