@@ -5,6 +5,7 @@ from apps.health_exam_admin.main import (
     build_person_event_progress_pagination,
     load_person_event_dashboard_status_options,
     load_person_event_exam_progress,
+    load_person_event_facility_subscriber_ids,
     load_person_event_progress_rows,
     person_event_progress,
 )
@@ -88,11 +89,14 @@ def test_person_event_progress_pagination_preserves_multi_value_filters() -> Non
 
 def test_person_event_progress_can_filter_by_facility_across_stages() -> None:
     source = getsource(load_person_event_progress_rows)
+    facility_source = getsource(load_person_event_facility_subscriber_ids)
     template = Path("apps/health_exam_admin/templates/person_event_progress.html").read_text(encoding="utf-8")
 
-    assert "facility_reservation.exam_facility_id=%s" in source
-    assert "facility_ledger.exam_facility_id=%s" in source
-    assert "facility_case.exam_facility_id=%s" in source
+    assert "load_person_event_facility_subscriber_ids" in source
+    assert "pe.subscriber_id IN" in source
+    assert "exam_ledgers" in facility_source
+    assert "exam_export_cases" in facility_source
+    assert "reservation_site_records" in facility_source
     assert 'name="exam_facility_id"' in template
     assert "data-alias-facility-picker-modal" in template
 
