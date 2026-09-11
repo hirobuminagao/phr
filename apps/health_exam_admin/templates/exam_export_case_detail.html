@@ -375,6 +375,7 @@
             </td>
             <td class="case-adopted-value-cell">
               <strong>{{ value.adopted_value_text }}</strong>
+              {% if value.adopted_normalize_reason == 'XML_AUTHOR_ELEMENT' %}<span class="status-pill status-ready">XML authorから補完</span>{% endif %}
               <small>{{ value.code_value or value.normalized_unit or "-" }} {{ value.code_display or "" }} {{ value.normalized_unit or "" }}</small>
               <small>判定 {{ value.interpretation_code or "" }} {{ value.interpretation_name or "" }}</small>
             </td>

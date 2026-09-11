@@ -9056,6 +9056,68 @@ def author_recovered_count_sql(case_alias: str) -> str:
     """
 
 
+def load_case_author_recoveries(
+    cur: Any,
+    *,
+    case_ids: Sequence[int],
+) -> dict[int, list[dict[str, Any]]]:
+    normalized_case_ids = tuple(dict.fromkeys(int(case_id) for case_id in case_ids if int(case_id) > 0))
+    if not normalized_case_ids:
+        return {}
+    placeholders = ", ".join(["%s"] * len(normalized_case_ids))
+    cur.execute(
+        f"""
+        SELECT
+          eecv.exam_export_case_id,
+          eiv.namecode,
+          COALESCE(eiv.namecode_display_name, author_item.item_name, eiv.namecode) AS item_name,
+          COALESCE(eiv.normalized_value, eiv.code_display, eiv.code_value, eiv.raw_value, '-') AS recovered_value,
+          eiv.ledger_id AS source_exam_ledger_id,
+          COALESCE(fr.file_name, el.xml_file_name, '-') AS source_file_name,
+          GROUP_CONCAT(
+            DISTINCT CONCAT(parent_item.item_name, ' / ', parent_item.namecode)
+            ORDER BY parent_item.namecode SEPARATOR ' | '
+          ) AS parent_items
+        FROM {qname(health_db())}.exam_export_case_values AS eecv
+        INNER JOIN {qname(health_db())}.exam_item_values AS eiv
+          ON eiv.id = eecv.source_exam_item_value_id
+         AND eiv.normalize_reason = 'XML_AUTHOR_ELEMENT'
+        LEFT JOIN {qname(dev_db())}.exam_item_master AS author_item
+          ON CONVERT(author_item.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+           = CONVERT(eiv.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        LEFT JOIN {qname(dev_db())}.exam_item_master AS parent_item
+          ON CONVERT(parent_item.annex2_author_item_code USING utf8mb4) COLLATE utf8mb4_unicode_ci
+           = CONVERT(eiv.namecode USING utf8mb4) COLLATE utf8mb4_unicode_ci
+        LEFT JOIN {qname(health_db())}.exam_ledgers AS el
+          ON el.exam_ledger_id = eiv.ledger_id
+        LEFT JOIN {qname(health_db())}.file_receipts AS fr
+          ON fr.id = el.file_receipt_id
+        WHERE eecv.exam_export_case_id IN ({placeholders})
+        GROUP BY
+          eecv.exam_export_case_id,
+          eiv.id,
+          eiv.namecode,
+          eiv.namecode_display_name,
+          author_item.item_name,
+          eiv.normalized_value,
+          eiv.code_display,
+          eiv.code_value,
+          eiv.raw_value,
+          eiv.ledger_id,
+          fr.file_name,
+          el.xml_file_name
+        ORDER BY eecv.exam_export_case_id, eiv.namecode, eiv.id
+        """,
+        normalized_case_ids,
+    )
+    result: dict[int, list[dict[str, Any]]] = {}
+    for raw_row in cur.fetchall():
+        row = dict(raw_row)
+        case_id = int(row["exam_export_case_id"])
+        result.setdefault(case_id, []).append(row)
+    return result
+
+
 def load_exam_export_case_count(cur: Any, *, filters: dict[str, str]) -> int:
     where_sql, params = build_exam_export_case_where(filters)
     cur.execute(
@@ -9927,6 +9989,7 @@ def load_exam_export_case_values(
           eiv.raw_value_type AS adopted_raw_value_type,
           eiv.raw_unit AS adopted_raw_unit,
           eiv.normalize_status AS adopted_normalize_status,
+          eiv.normalize_reason AS adopted_normalize_reason,
           eiv.validation_status AS adopted_validation_status,
           eiv.review_status AS adopted_review_status,
           el.source_type AS adopted_source_type,
@@ -9964,6 +10027,7 @@ def load_exam_export_case_values(
           eiv.interpretation_code,
           eiv.interpretation_name,
           eiv.normalize_status,
+          eiv.normalize_reason,
           eiv.validation_status,
           eiv.review_status,
           src.source_role,
@@ -24936,6 +25000,13 @@ def exam_export_cases(request: Request) -> Response:
             offset = (page - 1) * limit
             rows = load_exam_export_case_rows(cur, filters=filters, limit=limit, offset=offset)
             record_timing("rows")
+            author_recoveries = load_case_author_recoveries(
+                cur,
+                case_ids=[int(row["exam_export_case_id"]) for row in rows],
+            )
+            for row in rows:
+                row["author_recoveries"] = author_recoveries.get(int(row["exam_export_case_id"]), [])
+            record_timing("author_recoveries")
             summary = load_exam_export_case_summary(cur, filters=filters)
             record_timing("summary")
             pagination = build_exam_export_case_pagination(

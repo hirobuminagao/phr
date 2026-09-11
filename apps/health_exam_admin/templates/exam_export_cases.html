@@ -578,7 +578,23 @@
               <span class="status-pill status-muted">{{ row.source_mode or "-" }}</span>
               <small>XML {{ row.xml_count or 0 }} / CSV {{ row.csv_count or 0 }} / 紙 {{ row.paper_count or 0 }}</small>
               <small>値 {{ row.case_value_count or 0 }} / build {{ row.value_build_status }}</small>
-              {% if row.author_recovered_count %}<span class="status-pill status-ready">author補完 {{ row.author_recovered_count }}件</span>{% endif %}
+              {% if row.author_recovered_count %}
+              <span class="inline-help-hover author-recovery-help">
+                <button type="button" class="status-pill status-ready author-recovery-button" data-help-toggle="author-recovery-{{ row.exam_export_case_id }}" aria-expanded="false">author補完 {{ row.author_recovered_count }}件</button>
+                <span id="author-recovery-{{ row.exam_export_case_id }}" class="help-popover help-popover-right" hidden>
+                  <strong>XML authorから補完</strong>
+                  {% for recovery in row.author_recoveries %}
+                  <span class="author-recovery-detail">
+                    <b>{{ recovery.item_name or recovery.namecode }}</b>
+                    <span>{{ recovery.recovered_value }}</span>
+                    <small>{{ recovery.namecode }} / ledger {{ recovery.source_exam_ledger_id }}</small>
+                    <small>元検査: {{ recovery.parent_items or '-' }}</small>
+                    <small>{{ recovery.source_file_name or '-' }}</small>
+                  </span>
+                  {% endfor %}
+                </span>
+              </span>
+              {% endif %}
               {% if row.author_missing_candidate %}<span class="status-pill status-warning">author未取得候補</span>{% endif %}
             </td>
             <td>
