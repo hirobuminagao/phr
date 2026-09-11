@@ -17,7 +17,14 @@ class CandidateCursor:
 
     def fetchall(self) -> list[dict[str, object]]:
         if len(self.calls) == 1:
-            return [{"exam_facility_id": 2, "case_match_people": 8, "case_evidence_total": 10}]
+            return [
+                *[
+                    {"event_id": 2, "subscriber_id": subscriber_id, "exam_facility_id": 2}
+                    for subscriber_id in range(1, 9)
+                ],
+                {"event_id": 2, "subscriber_id": 9, "exam_facility_id": 1},
+                {"event_id": 2, "subscriber_id": 10, "exam_facility_id": 1},
+            ]
         return [
             {"exam_facility_id": 2, "exam_facility_name": "札幌中央病院", "exam_facility_display_name": None},
             {"exam_facility_id": 1, "exam_facility_name": "医療法人社団 札幌中央病院", "exam_facility_display_name": None},
@@ -38,6 +45,8 @@ def test_candidates_are_sorted_by_name_score() -> None:
     assert rows[0]["case_match_people"] == 8
     assert "person_event" in cur.calls[0][0]
     assert "exam_export_cases" in cur.calls[0][0]
+    assert "SELECT DISTINCT matched_people.event_id" in cur.calls[0][0]
+    assert "SELECT COUNT(*) FROM matched_people" not in cur.calls[0][0]
     assert "HAVING COUNT(DISTINCT subscriber_id)=1" in cur.calls[0][0]
     assert cur.calls[0][1] == (77,)
     assert "exam_facilities" in cur.calls[1][0]

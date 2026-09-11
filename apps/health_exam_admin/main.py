@@ -4983,7 +4983,7 @@ def load_reservation_facility_candidates(
           INNER JOIN {qname(dev_db())}.subscribers s
             ON r.hia_member_id IS NOT NULL
            AND s.hia_subscriber_id IS NOT NULL
-           AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED)
+           AND s.hia_subscriber_id=CAST(r.hia_member_id AS CHAR)
           INNER JOIN {qname(dev_db())}.person_event pe
             ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
           WHERE r.reservation_hospital_id=%s
@@ -4999,30 +4999,27 @@ def load_reservation_facility_candidates(
           ) unique_candidate
             ON unique_candidate.reservation_site_record_id=candidate.reservation_site_record_id
         )
-        SELECT eec.exam_facility_id,
-               COUNT(DISTINCT CONCAT(matched_people.event_id, ':', matched_people.subscriber_id)) AS case_match_people,
-               (SELECT COUNT(*) FROM matched_people candidate
-                WHERE EXISTS (
-                  SELECT 1 FROM {qname(health_db())}.exam_export_cases candidate_case
-                  WHERE candidate_case.event_id=candidate.event_id
-                    AND candidate_case.subscriber_id=candidate.subscriber_id
-                    AND candidate_case.case_lifecycle_status='ACTIVE'
-                )) AS case_evidence_total
+        SELECT DISTINCT matched_people.event_id, matched_people.subscriber_id, eec.exam_facility_id
         FROM matched_people
         INNER JOIN {qname(health_db())}.exam_export_cases eec
           ON eec.event_id=matched_people.event_id
          AND eec.subscriber_id=matched_people.subscriber_id
          AND eec.case_lifecycle_status='ACTIVE'
-        GROUP BY eec.exam_facility_id
         """,
         (hospital_id,),
     )
     evidence_rows = [dict(row) for row in cur.fetchall()]
-    evidence = {
-        int(row["exam_facility_id"]): int(row.get("case_match_people") or 0)
-        for row in evidence_rows
+    evidence_people = {
+        (int(row["event_id"]), int(row["subscriber_id"])) for row in evidence_rows
     }
-    evidence_total = max((int(row.get("case_evidence_total") or 0) for row in evidence_rows), default=0)
+    evidence: dict[int, int] = {}
+    for facility_id in {int(row["exam_facility_id"]) for row in evidence_rows}:
+        evidence[facility_id] = len({
+            (int(row["event_id"]), int(row["subscriber_id"]))
+            for row in evidence_rows
+            if int(row["exam_facility_id"]) == facility_id
+        })
+    evidence_total = len(evidence_people)
     where = ["is_active=1"]
     params: list[Any] = []
     if query.strip():
