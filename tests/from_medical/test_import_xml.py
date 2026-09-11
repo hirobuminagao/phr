@@ -28,6 +28,25 @@ def parse_xml(body: str) -> ElementTree.Element:
     )
 
 
+def test_import_exit_code_can_continue_only_for_subscriber_errors() -> None:
+    subscriber_only = import_xml.ImportSummary(
+        event_id=2,
+        dry_run=False,
+        errors=3,
+        subscriber_errors=3,
+    )
+    mixed_errors = import_xml.ImportSummary(
+        event_id=2,
+        dry_run=False,
+        errors=3,
+        subscriber_errors=2,
+    )
+
+    assert import_xml.import_exit_code(subscriber_only) == 1
+    assert import_xml.import_exit_code(subscriber_only, continue_on_subscriber_errors=True) == 0
+    assert import_xml.import_exit_code(mixed_errors, continue_on_subscriber_errors=True) == 1
+
+
 def section_xml(
     *,
     section_code: str | None = "01030",

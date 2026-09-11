@@ -902,6 +902,35 @@
     });
   }
 
+  const examProcessingAliasPicker = document.querySelector("[data-exam-processing-alias-picker]");
+  if (examProcessingAliasPicker) {
+    const scopeInputs = Array.from(examProcessingAliasPicker.querySelectorAll("[data-exam-processing-alias-scope]"));
+    const aliasIdInput = examProcessingAliasPicker.querySelector("[data-exam-processing-alias-id]");
+    const aliasDisplay = examProcessingAliasPicker.querySelector("[data-exam-processing-alias-display]");
+    const openButton = examProcessingAliasPicker.querySelector("[data-exam-processing-alias-open]");
+    let selectedAliasDisplay = aliasIdInput?.value ? aliasDisplay?.textContent.trim() || "" : "";
+    const updateScope = () => {
+      const selectedOnly = scopeInputs.some((input) => input.checked && input.value === "SELECTED");
+      if (openButton) openButton.disabled = !selectedOnly;
+      if (aliasDisplay && !selectedOnly) aliasDisplay.textContent = "全受領フォルダ";
+      if (aliasDisplay && selectedOnly && !aliasIdInput?.value) aliasDisplay.textContent = "受領フォルダを選択してください";
+      if (aliasDisplay && selectedOnly && aliasIdInput?.value) aliasDisplay.textContent = selectedAliasDisplay;
+    };
+    for (const input of scopeInputs) input.addEventListener("change", updateScope);
+    for (const button of document.querySelectorAll("[data-exam-processing-alias-select]")) {
+      button.addEventListener("click", () => {
+        if (aliasIdInput) aliasIdInput.value = button.getAttribute("data-alias-id") || "";
+        selectedAliasDisplay = button.getAttribute("data-alias-display") || "";
+        if (aliasDisplay) aliasDisplay.textContent = selectedAliasDisplay;
+        const selectedScope = scopeInputs.find((input) => input.value === "SELECTED");
+        if (selectedScope) selectedScope.checked = true;
+        updateScope();
+        closeModal(button.closest(".edit-modal"));
+      });
+    }
+    updateScope();
+  }
+
   const zipPasswordModal = document.querySelector("[data-zip-password-modal]");
   if (zipPasswordModal) {
     const form = zipPasswordModal.querySelector("[data-zip-password-form]");

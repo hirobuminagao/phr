@@ -12337,6 +12337,7 @@ def run_exam_processing_step(
     medical_folder_alias_id: int | None = None,
     case_id_file: Path | None = None,
     case_id_output: Path | None = None,
+    continue_on_subscriber_errors: bool = False,
 ) -> dict[str, Any]:
     step = EXAM_PROCESSING_STEP_MAP.get(step_key)
     if not step:
@@ -12367,6 +12368,8 @@ def run_exam_processing_step(
         cmd.append("--dry-run")
     if include_imported and step_key in {"import_xml", "import_csv"}:
         cmd.append("--include-imported")
+    if continue_on_subscriber_errors and step_key == "import_xml":
+        cmd.append("--continue-on-subscriber-errors")
     if medical_folder_alias_id is not None and step_key in {
         "scan_files", "import_xml", "import_csv", "check_sources", "build_cases"
     }:
@@ -16607,6 +16610,7 @@ def exam_processing(request: Request) -> Response:
             "processing_aliases": processing_aliases,
             "selected_alias_id": selected_alias_id if selected_alias else None,
             "selected_alias": selected_alias,
+            "alias_scope": "SELECTED" if selected_alias else "ALL",
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
             "running_runs": running_runs,
@@ -16961,12 +16965,25 @@ async def run_exam_processing(request: Request) -> Response:
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     form = await request.form()
     event_id = parse_positive_int(str(form.get("event_id") or ""), default=2, maximum=999999)
-    medical_folder_alias_id = _optional_int(form.get("medical_folder_alias_id"))
+    alias_scope = str(form.get("alias_scope") or "ALL").strip().upper()
+    medical_folder_alias_id = (
+        _optional_int(form.get("medical_folder_alias_id")) if alias_scope == "SELECTED" else None
+    )
     dry_run = str(form.get("dry_run") or "") == "1"
     include_imported = str(form.get("include_imported") or "") == "1"
     limit = parse_positive_int(str(form.get("limit") or ""), default=0, maximum=100000)
     action = str(form.get("action") or "").strip()
     selected_step_keys = [str(value) for value in form.getlist("step_keys")]
+    if alias_scope not in {"ALL", "SELECTED"}:
+        return RedirectResponse(
+            f"/exam-processing?event_id={event_id}&error={quote('対象受領フォルダの指定が不正です。')}",
+            status_code=303,
+        )
+    if alias_scope == "SELECTED" and medical_folder_alias_id is None:
+        return RedirectResponse(
+            f"/exam-processing?event_id={event_id}&error={quote('指定のみの場合は受領aliasを選択してください。')}",
+            status_code=303,
+        )
     if action == "run_selected":
         valid_step_keys = {step["key"] for step in EXAM_PROCESSING_STEPS}
         step_keys = [step["key"] for step in EXAM_PROCESSING_STEPS if step["key"] in selected_step_keys and step["key"] in valid_step_keys]
@@ -17030,6 +17047,7 @@ async def run_exam_processing(request: Request) -> Response:
                     if medical_folder_alias_id is not None and step_key in {"build_values", "check_cases"}
                     else None
                 ),
+                continue_on_subscriber_errors=medical_folder_alias_id is not None,
             )
             results.append(result)
             if not result["ok"]:
@@ -17096,6 +17114,7 @@ async def run_exam_processing(request: Request) -> Response:
             "processing_aliases": processing_aliases,
             "selected_alias_id": medical_folder_alias_id,
             "selected_alias": selected_alias,
+            "alias_scope": alias_scope,
             "steps": EXAM_PROCESSING_STEPS,
             "recent_runs": recent_runs,
             "running_runs": running_runs,

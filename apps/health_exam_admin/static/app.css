@@ -734,6 +734,25 @@ button[type="submit"]:disabled {
   gap: 18px;
 }
 
+.exam-processing-alias-field {
+  display: grid;
+  gap: 7px;
+}
+
+.exam-processing-alias-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.exam-processing-alias-selection {
+  display: block;
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .case-rebuild-search {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

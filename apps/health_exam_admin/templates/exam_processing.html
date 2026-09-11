@@ -65,17 +65,20 @@
             {% endfor %}
           </select>
         </label>
-        <label>
-          対象受領フォルダ
-          <select name="medical_folder_alias_id">
-            <option value="">event全体</option>
-            {% for alias in processing_aliases %}
-            <option value="{{ alias.alias_id }}" {% if alias.alias_id == selected_alias_id %}selected{% endif %}>
-              {{ alias.facility_name }} / {{ alias.src_folder_raw }}
-            </option>
-            {% endfor %}
-          </select>
-        </label>
+        <div class="form-field exam-processing-alias-field" data-exam-processing-alias-picker>
+          <span class="form-field-label">対象受領フォルダ</span>
+          <div class="exam-processing-alias-controls">
+            <span class="segmented-control">
+              <label><input type="radio" name="alias_scope" value="ALL" {% if alias_scope != 'SELECTED' %}checked{% endif %} data-exam-processing-alias-scope><span>全件</span></label>
+              <label><input type="radio" name="alias_scope" value="SELECTED" {% if alias_scope == 'SELECTED' %}checked{% endif %} data-exam-processing-alias-scope><span>指定のみ</span></label>
+            </span>
+            <input type="hidden" name="medical_folder_alias_id" value="{{ selected_alias_id or '' }}" data-exam-processing-alias-id>
+            <button type="button" class="ghost-button compact-action-button" data-modal-open="exam-processing-alias-modal" data-exam-processing-alias-open>選択</button>
+          </div>
+          <strong class="exam-processing-alias-selection" data-exam-processing-alias-display>
+            {% if selected_alias %}{{ selected_alias.facility_name }} / {{ selected_alias.src_folder_raw }}{% else %}全受領フォルダ{% endif %}
+          </strong>
+        </div>
         <label>
           実行モード
           <select name="dry_run">
@@ -96,10 +99,37 @@
           </label>
         </div>
       </div>
-      {% if selected_alias %}<p class="form-note">対象alias: {{ selected_alias.src_folder_raw }} / {{ selected_alias.facility_name }} / ID {{ selected_alias.alias_id }}</p>{% endif %}
       <p class="form-note">※同じファイルとして再取込できるのは中身が完全に同じ場合です。1文字でも違う場合は別ファイル扱いになります。</p>
     </form>
   </section>
+
+  <div id="exam-processing-alias-modal" class="edit-modal" hidden>
+    <div class="edit-modal__backdrop" data-modal-close></div>
+    <section class="edit-modal__panel export-facility-modal" role="dialog" aria-modal="true" aria-labelledby="exam-processing-alias-title">
+      <div class="edit-modal__head">
+        <div><p class="eyebrow">受領フォルダ alias</p><h2 id="exam-processing-alias-title">対象受領フォルダを選択</h2></div>
+        <button type="button" class="ghost-button" data-modal-close>閉じる</button>
+      </div>
+      <div class="export-facility-search">
+        <label>検索<input data-modal-focus data-live-filter-input="#exam-processing-alias-table" placeholder="健診機関名 / コード / フォルダ名"></label>
+      </div>
+      <div class="table-panel export-facility-picker-table-panel">
+        <table id="exam-processing-alias-table" class="data-table compact-table" data-empty-message="一致する受領aliasはありません。">
+          <thead><tr><th>健診機関</th><th>受領フォルダ</th><th>source</th><th>操作</th></tr></thead>
+          <tbody>
+            {% for alias in processing_aliases %}
+            <tr data-filter-text="{{ alias.facility_name or '' }} {{ alias.exam_facility_code or '' }} {{ alias.src_folder_raw or '' }} {{ alias.expected_source_mode or '' }}">
+              <td><strong>{{ alias.facility_name or '-' }}</strong><small>{{ alias.exam_facility_code or 'コードなし' }} / alias {{ alias.alias_id }}</small></td>
+              <td><strong>{{ alias.src_folder_raw or '-' }}</strong></td>
+              <td>{{ alias.expected_source_mode or '未設定' }}</td>
+              <td><button type="button" class="ghost-button compact-action-button" data-exam-processing-alias-select data-alias-id="{{ alias.alias_id }}" data-alias-display="{{ alias.facility_name or '-' }} / {{ alias.src_folder_raw or '-' }}">選択</button></td>
+            </tr>
+            {% else %}<tr><td colspan="4">選択できる受領aliasはありません。</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 
   <section class="panel">
     <div class="section-heading">

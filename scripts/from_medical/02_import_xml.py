@@ -156,6 +156,7 @@ class ImportSummary:
     xml_parse_errors: int = 0
     identity_errors: int = 0
     subscriber_not_found: int = 0
+    subscriber_errors: int = 0
     zip_no_target_xml: int = 0
     xml_excluded: int = 0
     errors: int = 0
@@ -205,7 +206,8 @@ class ImportSummary:
         print(
             "  errors: "
             f"total={self.errors} identity={self.identity_errors} "
-            f"subscriber_not_found={self.subscriber_not_found} zip_no_target={self.zip_no_target_xml}"
+            f"subscriber={self.subscriber_errors} subscriber_not_found={self.subscriber_not_found} "
+            f"zip_no_target={self.zip_no_target_xml}"
         )
 
 
@@ -271,6 +273,11 @@ def parse_args() -> argparse.Namespace:
         "--include-imported",
         action="store_true",
         help="Also process file_receipts already marked IMPORTED or WARNING.",
+    )
+    parser.add_argument(
+        "--continue-on-subscriber-errors",
+        action="store_true",
+        help="Return success when every recorded error is limited to subscriber matching or identity generation.",
     )
     parser.add_argument("--db-prefix", default="PHR_DB_", help="Environment prefix for DB connection.")
     parser.add_argument("--health-db", default=None, help="Override health_exam_result schema name.")
@@ -1250,6 +1257,8 @@ def record_import_error(
     person_id_custom: str | None = None,
 ) -> None:
     summary.errors += 1
+    if field in {ERROR_FIELD_IDENTITY, ERROR_FIELD_SUBSCRIBER}:
+        summary.subscriber_errors += 1
     if field == ERROR_FIELD_IDENTITY:
         summary.identity_errors += 1
     elif error_code == "SUBSCRIBER_NOT_FOUND":
@@ -2560,13 +2569,27 @@ def run(config: ImportConfig, *, db_prefix: str) -> ImportSummary:
     return summary
 
 
+def import_exit_code(summary: ImportSummary, *, continue_on_subscriber_errors: bool = False) -> int:
+    if summary.errors == 0:
+        return 0
+    if continue_on_subscriber_errors and summary.errors == summary.subscriber_errors:
+        return 0
+    return 1
+
+
 def main() -> int:
     args = parse_args()
     try:
         config = resolve_config(args)
         summary = run(config, db_prefix=args.db_prefix)
         summary.print()
-        return 0 if summary.errors == 0 else 1
+        exit_code = import_exit_code(
+            summary,
+            continue_on_subscriber_errors=args.continue_on_subscriber_errors,
+        )
+        if summary.errors and exit_code == 0:
+            print("subscriber errors were recorded; continuing the selected-folder pipeline")
+        return exit_code
     except ValueError as exc:
         print(f"CONFIG_INVALID: {exc}", file=sys.stderr)
         return 2
