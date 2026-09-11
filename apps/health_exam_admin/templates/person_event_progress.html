@@ -1,5 +1,18 @@
 {% extends "base.html" %}
 {% set title = "健診進捗照会" %}
+{% macro progress_pagination(pagination, bottom=false) %}
+<nav class="pagination-bar{% if bottom %} pagination-bar-bottom{% endif %}" aria-label="イベント対象者ページ切り替え">
+  <div class="pagination-status">{{ pagination.page }} / {{ pagination.page_count }} ページ</div>
+  <div class="pagination-actions">
+    {% if pagination.has_previous %}<a class="ghost-button compact-action-button" href="{{ pagination.previous_url }}">前へ</a>{% else %}<span class="ghost-button compact-action-button is-disabled">前へ</span>{% endif %}
+    {% for item in pagination.pages %}
+      {% if item.gap_before %}<span class="pagination-gap">…</span>{% endif %}
+      {% if item.is_current %}<span class="pagination-page is-current">{{ item.page }}</span>{% else %}<a class="pagination-page" href="{{ item.url }}">{{ item.page }}</a>{% endif %}
+    {% endfor %}
+    {% if pagination.has_next %}<a class="ghost-button compact-action-button" href="{{ pagination.next_url }}">次へ</a>{% else %}<span class="ghost-button compact-action-button is-disabled">次へ</span>{% endif %}
+  </div>
+</nav>
+{% endmacro %}
 {% block body %}
 <header class="topbar">
   <div><p class="eyebrow">Utility</p><h1>健診進捗照会</h1><p class="subtle">イベント対象者を軸に、予約とHIAダッシュボードの現在状態を確認します。</p></div>
@@ -37,7 +50,8 @@
   </section>
 
   <section class="panel">
-    <div class="section-heading"><div><h2>対象者一覧</h2><p class="subtle">予約は現時点の照合候補です。複数候補は自動確定していません。</p></div></div>
+    <div class="section-heading"><div><h2>対象者一覧</h2><p class="subtle">検索結果 {{ total_count }} 件中、{{ pagination.start }}-{{ pagination.end }} 件を表示しています。予約は現時点の照合候補です。</p></div></div>
+    {{ progress_pagination(pagination) }}
     <div class="table-wrap"><table class="data-table compact-table">
       <thead><tr><th>加入者</th><th>予約システム</th><th>HIAダッシュボード</th><th>確認</th><th>操作</th></tr></thead>
       <tbody>{% for row in rows %}<tr>
@@ -48,10 +62,7 @@
         <td><a class="ghost-button" href="/utilities/subscribers/{{ row.subscriber_id }}">加入者詳細</a></td>
       </tr>{% else %}<tr><td colspan="5">対象者がありません。person_eventの母集団同期状況を確認してください。</td></tr>{% endfor %}</tbody>
     </table></div>
-    {% if page_count > 1 %}<nav class="pagination" aria-label="ページ移動">
-      {% set query_string = 'event_id=' ~ event_id ~ '&query=' ~ query|urlencode %}
-      <a class="ghost-button {% if page <= 1 %}disabled{% endif %}" {% if page > 1 %}href="?{{ query_string }}{% for value in selected_reservation_statuses %}&reservation_status={{ value|urlencode }}{% endfor %}{% for value in selected_dashboard_statuses %}&dashboard_status={{ value|urlencode }}{% endfor %}&page={{ page - 1 }}"{% endif %}>前へ</a><span>{{ page }} / {{ page_count }}</span><a class="ghost-button {% if page >= page_count %}disabled{% endif %}" {% if page < page_count %}href="?{{ query_string }}{% for value in selected_reservation_statuses %}&reservation_status={{ value|urlencode }}{% endfor %}{% for value in selected_dashboard_statuses %}&dashboard_status={{ value|urlencode }}{% endfor %}&page={{ page + 1 }}"{% endif %}>次へ</a>
-    </nav>{% endif %}
+    {{ progress_pagination(pagination, true) }}
   </section>
 </main>
 {% endblock %}

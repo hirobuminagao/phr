@@ -20669,6 +20669,61 @@ def load_person_event_dashboard_status_options(cur: Any, *, event_id: int) -> li
     return [str(row.get("value_code")) for row in cur.fetchall() if row.get("value_code")]
 
 
+def build_person_event_progress_pagination(
+    *,
+    event_id: int,
+    query: str,
+    reservation_statuses: Sequence[str],
+    dashboard_statuses: Sequence[str],
+    total_count: int,
+    row_count: int,
+    page: int,
+    page_count: int,
+    per_page: int,
+) -> dict[str, Any]:
+    page = min(max(1, page), max(1, page_count))
+    start = ((page - 1) * per_page) + 1 if total_count else 0
+    end = min(total_count, start + row_count - 1) if total_count else 0
+
+    def page_url(target_page: int) -> str:
+        params: list[tuple[str, str]] = [("event_id", str(event_id))]
+        if query:
+            params.append(("query", query))
+        params.extend(("reservation_status", value) for value in reservation_statuses)
+        params.extend(("dashboard_status", value) for value in dashboard_statuses)
+        params.append(("page", str(target_page)))
+        return f"/utilities/person-event-progress?{urlencode(params)}"
+
+    window_pages = {1, max(1, page_count)}
+    for candidate in range(page - 2, page + 3):
+        if 1 <= candidate <= page_count:
+            window_pages.add(candidate)
+    pages: list[dict[str, Any]] = []
+    previous_page = 0
+    for page_number in sorted(window_pages):
+        pages.append(
+            {
+                "page": page_number,
+                "url": page_url(page_number),
+                "is_current": page_number == page,
+                "gap_before": previous_page > 0 and page_number > previous_page + 1,
+            }
+        )
+        previous_page = page_number
+    return {
+        "page": page,
+        "page_count": max(1, page_count),
+        "total_count": total_count,
+        "start": start,
+        "end": end,
+        "has_previous": page > 1,
+        "has_next": page < page_count,
+        "previous_url": page_url(page - 1) if page > 1 else "",
+        "next_url": page_url(page + 1) if page < page_count else "",
+        "pages": pages,
+    }
+
+
 def sync_person_event_base_status(*, event_id: int) -> dict[str, str]:
     from scripts.health_exam_event.sync_person_event_hia_dashboard_status import (
         SyncConfig as DashboardSyncConfig,
@@ -20805,6 +20860,19 @@ def person_event_progress(request: Request) -> Response:
             "rows": [], "total_count": 0, "page": 1, "page_count": 1, "per_page": 30
         }
         dashboard_status_options = load_person_event_dashboard_status_options(cur, event_id=event_id) if event_id else []
+        selected_reservation_statuses = split_filter_values(reservation_status)
+        selected_dashboard_statuses = split_filter_values(dashboard_status)
+        pagination = build_person_event_progress_pagination(
+            event_id=event_id,
+            query=query,
+            reservation_statuses=selected_reservation_statuses,
+            dashboard_statuses=selected_dashboard_statuses,
+            total_count=result["total_count"],
+            row_count=len(result["rows"]),
+            page=result["page"],
+            page_count=result["page_count"],
+            per_page=result["per_page"],
+        )
         for row in result["rows"]:
             if pii_level == "HIDDEN":
                 row["name_kanji_full"] = None
@@ -20830,9 +20898,10 @@ def person_event_progress(request: Request) -> Response:
     return templates.TemplateResponse(
         "person_event_progress.html",
         {"request": request, "user": user, "events": events, "event_id": event_id, "query": query,
-         "selected_reservation_statuses": split_filter_values(reservation_status),
-         "selected_dashboard_statuses": split_filter_values(dashboard_status),
+         "selected_reservation_statuses": selected_reservation_statuses,
+         "selected_dashboard_statuses": selected_dashboard_statuses,
          "dashboard_status_options": dashboard_status_options,
+         "pagination": pagination,
          "can_sync": can_manage_business_settings(user), "message": request.query_params.get("message"),
          "error": request.query_params.get("error"), **result},
     )

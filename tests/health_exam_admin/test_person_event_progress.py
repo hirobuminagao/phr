@@ -2,6 +2,7 @@ from inspect import getsource
 from pathlib import Path
 
 from apps.health_exam_admin.main import (
+    build_person_event_progress_pagination,
     load_person_event_dashboard_status_options,
     load_person_event_progress_rows,
     person_event_progress,
@@ -45,6 +46,30 @@ def test_person_event_progress_template_has_base_progress_columns() -> None:
     assert "HIAダッシュボードの状態（複数選択）" in template
     assert "状態を更新" in template
     assert "data-checkbox-choice-card" in template
+    assert template.count("{{ progress_pagination(pagination") == 2
+
+
+def test_person_event_progress_pagination_preserves_multi_value_filters() -> None:
+    pagination = build_person_event_progress_pagination(
+        event_id=2,
+        query="札幌 太郎",
+        reservation_statuses=["1", "3"],
+        dashboard_statuses=["受診済み", "結果待ち"],
+        total_count=7316,
+        row_count=30,
+        page=4,
+        page_count=244,
+        per_page=30,
+    )
+
+    assert pagination["start"] == 91
+    assert pagination["end"] == 120
+    assert pagination["has_previous"] is True
+    assert pagination["has_next"] is True
+    assert "reservation_status=1&reservation_status=3" in pagination["next_url"]
+    assert "%E6%9C%AD%E5%B9%8C+%E5%A4%AA%E9%83%8E" in pagination["next_url"]
+    assert pagination["pages"][0]["page"] == 1
+    assert pagination["pages"][-1]["page"] == 244
 
 
 def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:
