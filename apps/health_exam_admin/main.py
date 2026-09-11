@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from difflib import SequenceMatcher
 import io
 import os
 import hashlib
@@ -4901,6 +4902,160 @@ def load_reservation_site_record_list(
     )
     rows = [dict(row) for row in cur.fetchall()]
     return {"filters": filters, "summary": summary, "rows": rows, "page": page, "page_count": page_count, "per_page": per_page}
+
+
+def normalize_facility_name_for_match(value: Any) -> str:
+    text = unicodedata.normalize("NFKC", str(value or "")).lower()
+    text = re.sub(r"(?:医療法人(?:社団|財団)?|社会医療法人|一般財団法人|一般社団法人|公益財団法人|公益社団法人)", "", text)
+    return re.sub(r"[\s\u3000・･\-ー()（）\[\]【】]", "", text)
+
+
+def facility_name_match_score(source_name: Any, candidate_name: Any) -> int:
+    source = normalize_facility_name_for_match(source_name)
+    candidate = normalize_facility_name_for_match(candidate_name)
+    if not source or not candidate:
+        return 0
+    score = SequenceMatcher(None, source, candidate).ratio()
+    if source in candidate or candidate in source:
+        score = max(score, min(len(source), len(candidate)) / max(len(source), len(candidate)))
+    return round(score * 100)
+
+
+def load_reservation_site_facility_mappings(
+    cur: Any, *, query: str = "", link_status: str = "ALL", selected_hospital_id: int | None = None
+) -> dict[str, Any]:
+    where = ["1=1"]
+    params: list[Any] = []
+    if query.strip():
+        like = f"%{query.strip()}%"
+        where.append("(CAST(h.reservation_hospital_id AS CHAR) LIKE %s OR h.reservation_hospital_name LIKE %s)")
+        params.extend([like, like])
+    if link_status == "MAPPED":
+        where.append("m.exam_facility_id IS NOT NULL AND m.is_active=1")
+    elif link_status == "UNMAPPED":
+        where.append("(m.exam_facility_id IS NULL OR m.is_active<>1)")
+    cur.execute(
+        f"""
+        SELECT h.reservation_hospital_id, h.reservation_hospital_name, h.reservation_count,
+               h.latest_reservation_at, m.reservation_site_facility_mapping_id,
+               m.exam_facility_id, m.is_active, m.mapping_note,
+               ef.exam_facility_code, ef.exam_facility_name, ef.exam_facility_display_name
+        FROM (
+          SELECT reservation_hospital_id,
+                 SUBSTRING_INDEX(GROUP_CONCAT(COALESCE(reservation_hospital_name, '') ORDER BY source_updated_at DESC, reservation_site_record_id DESC SEPARATOR '\\n'), '\\n', 1) AS reservation_hospital_name,
+                 COUNT(*) AS reservation_count, MAX(reservation_date) AS latest_reservation_at
+          FROM {qname(work_other_db())}.reservation_site_records
+          GROUP BY reservation_hospital_id
+        ) h
+        LEFT JOIN {qname(work_other_db())}.reservation_site_facility_mappings m
+          ON m.reservation_hospital_id=h.reservation_hospital_id
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id=m.exam_facility_id
+        WHERE {' AND '.join(where)}
+        ORDER BY (m.exam_facility_id IS NULL OR m.is_active<>1) DESC, h.reservation_count DESC, h.reservation_hospital_id
+        """,
+        tuple(params),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    selected = next(
+        (row for row in rows if int(row["reservation_hospital_id"]) == selected_hospital_id), None
+    )
+    if selected_hospital_id and selected is None:
+        cur.execute(
+            f"""SELECT reservation_hospital_id, MAX(reservation_hospital_name) AS reservation_hospital_name,
+                       COUNT(*) AS reservation_count, MAX(reservation_date) AS latest_reservation_at
+                FROM {qname(work_other_db())}.reservation_site_records
+                WHERE reservation_hospital_id=%s GROUP BY reservation_hospital_id""",
+            (selected_hospital_id,),
+        )
+        selected = dict(cur.fetchone() or {}) or None
+    return {"rows": rows, "selected": selected}
+
+
+def load_reservation_facility_candidates(
+    cur: Any, *, hospital_id: int, hospital_name: str, query: str = ""
+) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        WITH candidate_people AS (
+          SELECT DISTINCT r.reservation_site_record_id, r.event_id, s.id AS subscriber_id
+          FROM {qname(work_other_db())}.reservation_site_records r
+          INNER JOIN {qname(dev_db())}.subscribers s
+            ON r.hia_member_id IS NOT NULL
+           AND s.hia_subscriber_id IS NOT NULL
+           AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED)
+          INNER JOIN {qname(dev_db())}.person_event pe
+            ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
+          WHERE r.reservation_hospital_id=%s
+        ),
+        matched_people AS (
+          SELECT DISTINCT candidate.event_id, candidate.subscriber_id
+          FROM candidate_people candidate
+          INNER JOIN (
+            SELECT reservation_site_record_id
+            FROM candidate_people
+            GROUP BY reservation_site_record_id
+            HAVING COUNT(DISTINCT subscriber_id)=1
+          ) unique_candidate
+            ON unique_candidate.reservation_site_record_id=candidate.reservation_site_record_id
+        )
+        SELECT eec.exam_facility_id,
+               COUNT(DISTINCT CONCAT(matched_people.event_id, ':', matched_people.subscriber_id)) AS case_match_people,
+               (SELECT COUNT(*) FROM matched_people candidate
+                WHERE EXISTS (
+                  SELECT 1 FROM {qname(health_db())}.exam_export_cases candidate_case
+                  WHERE candidate_case.event_id=candidate.event_id
+                    AND candidate_case.subscriber_id=candidate.subscriber_id
+                    AND candidate_case.case_lifecycle_status='ACTIVE'
+                )) AS case_evidence_total
+        FROM matched_people
+        INNER JOIN {qname(health_db())}.exam_export_cases eec
+          ON eec.event_id=matched_people.event_id
+         AND eec.subscriber_id=matched_people.subscriber_id
+         AND eec.case_lifecycle_status='ACTIVE'
+        GROUP BY eec.exam_facility_id
+        """,
+        (hospital_id,),
+    )
+    evidence_rows = [dict(row) for row in cur.fetchall()]
+    evidence = {
+        int(row["exam_facility_id"]): int(row.get("case_match_people") or 0)
+        for row in evidence_rows
+    }
+    evidence_total = max((int(row.get("case_evidence_total") or 0) for row in evidence_rows), default=0)
+    where = ["is_active=1"]
+    params: list[Any] = []
+    if query.strip():
+        like = f"%{query.strip()}%"
+        where.append(
+            "(CAST(exam_facility_id AS CHAR) LIKE %s OR exam_facility_code LIKE %s "
+            "OR medical_institution_code LIKE %s OR exam_facility_name LIKE %s "
+            "OR exam_facility_display_name LIKE %s)"
+        )
+        params.extend([like] * 5)
+    cur.execute(
+        f"""
+        SELECT exam_facility_id, exam_facility_code, medical_institution_code,
+               exam_facility_name, exam_facility_display_name, address, phone_number
+        FROM {qname(master_db())}.exam_facilities
+        WHERE {' AND '.join(where)}
+        """,
+        tuple(params),
+    )
+    candidates = [dict(row) for row in cur.fetchall()]
+    for candidate in candidates:
+        names = [candidate.get("exam_facility_name"), candidate.get("exam_facility_display_name")]
+        candidate["match_score"] = max(facility_name_match_score(hospital_name, name) for name in names)
+        case_match_people = evidence.get(int(candidate["exam_facility_id"]), 0)
+        candidate["case_match_people"] = case_match_people
+        candidate["case_evidence_total"] = evidence_total
+        candidate["case_match_rate"] = round(case_match_people * 100 / evidence_total) if evidence_total else None
+    candidates.sort(
+        key=lambda item: (
+            -int(item["case_match_people"]), -int(item["match_score"]), int(item["exam_facility_id"])
+        )
+    )
+    return candidates[:20]
 
 
 def insurer_number_matches_event(source_value: Any, event_value: Any) -> bool | None:
@@ -16232,6 +16387,114 @@ def reservation_site_records(request: Request) -> Response:
         "reservation_site_records.html",
         {"request": request, "user": user, "events": events, "month_options": month_options,
          "selected_exam_months": split_filter_values(result["filters"]["exam_month"]), **result},
+    )
+
+
+@app.get("/utilities/reservation-site-facilities", response_class=HTMLResponse)
+def reservation_site_facilities(request: Request) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    query = str(request.query_params.get("query") or "").strip()
+    link_status = str(request.query_params.get("link_status") or "ALL").strip().upper()
+    if link_status not in {"ALL", "MAPPED", "UNMAPPED"}:
+        link_status = "ALL"
+    selected_hospital_id = _optional_int(request.query_params.get("hospital_id"))
+    facility_query = str(request.query_params.get("facility_query") or "").strip()
+    params = load_mysql_base_params(db_prefix())
+    with connect_ctx(params, database=work_other_db(), autocommit=True) as conn:
+        cur = dict_cursor(conn)
+        result = load_reservation_site_facility_mappings(
+            cur, query=query, link_status=link_status, selected_hospital_id=selected_hospital_id
+        )
+        candidates = load_reservation_facility_candidates(
+            cur,
+            hospital_id=selected_hospital_id,
+            hospital_name=str((result.get("selected") or {}).get("reservation_hospital_name") or ""),
+            query=facility_query,
+        ) if result.get("selected") else []
+        cur.close()
+    return templates.TemplateResponse(
+        "reservation_site_facilities.html",
+        {
+            "request": request, "user": user, "query": query, "link_status": link_status,
+            "facility_query": facility_query, "candidates": candidates,
+            "message": request.query_params.get("message"), "error": request.query_params.get("error"),
+            **result,
+        },
+    )
+
+
+@app.post("/utilities/reservation-site-facilities")
+def update_reservation_site_facility_mapping(
+    request: Request,
+    reservation_hospital_id: int = Form(...),
+    exam_facility_id: int = Form(...),
+    mapping_note: str = Form(""),
+) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not can_manage_business_settings(user):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    params = load_mysql_base_params(db_prefix())
+    try:
+        with connect_ctx(params, database=work_other_db(), autocommit=False) as conn:
+            cur = dict_cursor(conn)
+            cur.execute(
+                f"SELECT exam_facility_id FROM {qname(master_db())}.exam_facilities WHERE exam_facility_id=%s AND is_active=1",
+                (exam_facility_id,),
+            )
+            if not cur.fetchone():
+                raise ValueError("選択した健診機関が見つかりません。")
+            cur.execute(
+                f"""SELECT reservation_hospital_name FROM {qname(work_other_db())}.reservation_site_records
+                    WHERE reservation_hospital_id=%s
+                    ORDER BY source_updated_at DESC, reservation_site_record_id DESC LIMIT 1""",
+                (reservation_hospital_id,),
+            )
+            hospital = cur.fetchone()
+            if not hospital:
+                raise ValueError("予約施設IDが見つかりません。")
+            cur.execute(
+                f"""INSERT INTO {qname(work_other_db())}.reservation_site_facility_mappings (
+                       reservation_hospital_id, reservation_hospital_name, exam_facility_id,
+                       is_active, mapping_note, created_by_app_user_id, updated_by_app_user_id
+                     ) VALUES (%s, %s, %s, 1, NULLIF(%s, ''), %s, %s)
+                     ON DUPLICATE KEY UPDATE
+                       reservation_hospital_name=VALUES(reservation_hospital_name),
+                       exam_facility_id=VALUES(exam_facility_id), is_active=1,
+                       mapping_note=VALUES(mapping_note), updated_by_app_user_id=VALUES(updated_by_app_user_id)""",
+                (
+                    reservation_hospital_id, hospital.get("reservation_hospital_name") or "",
+                    exam_facility_id, mapping_note.strip(), user["app_user_id"], user["app_user_id"],
+                ),
+            )
+            cur.execute(
+                f"""UPDATE {qname(work_other_db())}.reservation_site_records
+                    SET exam_facility_id=%s WHERE reservation_hospital_id=%s""",
+                (exam_facility_id, reservation_hospital_id),
+            )
+            if audit_enabled(cur):
+                log_audit(
+                    cur, request=request, user=user, action_code="UPDATE_RESERVATION_SITE_FACILITY_MAPPING",
+                    target_schema=work_other_db(), target_table="reservation_site_facility_mappings",
+                    target_id=str(reservation_hospital_id),
+                    after={"reservation_hospital_id": reservation_hospital_id, "exam_facility_id": exam_facility_id},
+                )
+            conn.commit()
+            cur.close()
+    except Exception as exc:
+        LOGGER.exception("reservation site facility mapping update failed")
+        return RedirectResponse(
+            f"/utilities/reservation-site-facilities?hospital_id={reservation_hospital_id}&error={quote(str(exc))}",
+            status_code=303,
+        )
+    return RedirectResponse(
+        f"/utilities/reservation-site-facilities?hospital_id={reservation_hospital_id}&message={quote('健診機関を紐付けました。')}",
+        status_code=303,
     )
 
 

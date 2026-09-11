@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set title = "予約施設の健診機関紐付け" %}
+{% block body %}
+<header class="topbar">
+  <div><p class="eyebrow">Utility</p><h1>予約施設の健診機関紐付け</h1><p class="subtle">予約サイトの施設IDごとに、PHRの健診機関を確認して紐付けます。</p></div>
+  <nav class="top-actions"><a class="ghost-button" href="/utilities/reservation-site-records">予約データ一覧</a><a class="ghost-button" href="/">HOME</a></nav>
+</header>
+<main class="page">
+  {% if message %}<div class="notice success">{{ message }}</div>{% endif %}
+  {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+  <section class="panel filter-panel">
+    <form method="get" action="/utilities/reservation-site-facilities" class="form-grid three-column-grid">
+      <label><span>予約施設</span><input name="query" value="{{ query }}" placeholder="施設ID / 施設名"></label>
+      <label><span>紐付け状態</span><select name="link_status"><option value="ALL" {% if link_status == 'ALL' %}selected{% endif %}>すべて</option><option value="UNMAPPED" {% if link_status == 'UNMAPPED' %}selected{% endif %}>未紐付け</option><option value="MAPPED" {% if link_status == 'MAPPED' %}selected{% endif %}>紐付け済み</option></select></label>
+      <div class="action-row"><a class="ghost-button" href="/utilities/reservation-site-facilities">クリア</a><button type="submit">検索</button></div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="section-heading"><div><h2>予約施設ID一覧</h2><p class="subtle">予約CSVに存在する施設をID単位でまとめています。</p></div><span class="status-pill status-neutral">{{ rows|length }}施設</span></div>
+    <div class="table-wrap"><table class="data-table compact-table">
+      <thead><tr><th>予約施設</th><th>予約データ</th><th>紐付け先</th><th>操作</th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <td><strong>{{ row.reservation_hospital_name or '-' }}</strong><small>予約施設ID {{ row.reservation_hospital_id }}</small></td>
+        <td><strong>{{ row.reservation_count }}件</strong><small>最新受診予定 {{ row.latest_reservation_at or '-' }}</small></td>
+        <td>{% if row.exam_facility_id and row.is_active %}<span class="status-pill status-ready">紐付け済み</span><strong>{{ row.exam_facility_display_name or row.exam_facility_name }}</strong><small>{{ row.exam_facility_code or '-' }} / ID {{ row.exam_facility_id }}</small>{% else %}<span class="status-pill status-warning">未紐付け</span>{% endif %}</td>
+        <td><a class="ghost-button compact-action-button" href="?query={{ query|urlencode }}&link_status={{ link_status }}&hospital_id={{ row.reservation_hospital_id }}">{{ '変更' if row.exam_facility_id and row.is_active else '候補を見る' }}</a></td>
+      </tr>{% else %}<tr><td colspan="4">該当する予約施設がありません。</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+
+  {% if selected %}<section class="panel" id="facility-candidates">
+    <div class="section-heading"><div><p class="eyebrow">予約施設ID {{ selected.reservation_hospital_id }}</p><h2>{{ selected.reservation_hospital_name }}</h2><p class="subtle">同じ予約施設を利用したHIA加入者のcase実績を優先し、名称の類似度を補助にしています。内容を確認して登録してください。</p></div></div>
+    <form method="get" action="/utilities/reservation-site-facilities" class="inline-form">
+      <input type="hidden" name="hospital_id" value="{{ selected.reservation_hospital_id }}"><input type="hidden" name="query" value="{{ query }}"><input type="hidden" name="link_status" value="{{ link_status }}">
+      <label><span>健診機関候補を検索</span><input name="facility_query" value="{{ facility_query }}" placeholder="名称 / コード / ID"></label><button type="submit" class="ghost-button">候補を絞る</button>
+    </form>
+    <div class="table-wrap"><table class="data-table compact-table">
+      <thead><tr><th>case実績</th><th>名称一致率</th><th>健診機関</th><th>所在地・電話</th><th>登録</th></tr></thead>
+      <tbody>{% for candidate in candidates %}<tr>
+        <td>{% if candidate.case_match_people %}<strong>{{ candidate.case_match_rate }}%</strong><small>{{ candidate.case_match_people }} / {{ candidate.case_evidence_total }}件</small><span class="status-pill status-ready">実績あり</span>{% else %}<span class="status-pill status-neutral">実績なし</span>{% endif %}</td>
+        <td><strong>{{ candidate.match_score }}%</strong></td>
+        <td><strong>{{ candidate.exam_facility_display_name or candidate.exam_facility_name }}</strong><small>{{ candidate.exam_facility_code or '-' }} / 医療 {{ candidate.medical_institution_code or '-' }} / ID {{ candidate.exam_facility_id }}</small></td>
+        <td><small>{{ candidate.address or '-' }}</small><small>{{ candidate.phone_number or '-' }}</small></td>
+        <td><form method="post" action="/utilities/reservation-site-facilities" class="inline-form"><input type="hidden" name="_csrf_token" value="{{ request.cookies.get('phr_app_csrf', '') }}"><input type="hidden" name="reservation_hospital_id" value="{{ selected.reservation_hospital_id }}"><input type="hidden" name="exam_facility_id" value="{{ candidate.exam_facility_id }}"><input type="hidden" name="mapping_note" value="名称候補画面から登録"><button type="submit">この機関に紐付け</button></form></td>
+      </tr>{% else %}<tr><td colspan="5">候補がありません。</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>{% endif %}
+</main>
+{% endblock %}
