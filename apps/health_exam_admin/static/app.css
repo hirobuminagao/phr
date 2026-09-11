@@ -9876,11 +9876,13 @@ th[data-sort-direction="desc"] .table-sort-button::after {
 }
 
 .person-event-filter-card input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  flex: 0 0 auto;
-  accent-color: var(--accent);
+  position: absolute !important;
+  inline-size: 1px !important;
+  block-size: 1px !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none;
+  appearance: none;
 }
 
 .person-event-filter-card span {

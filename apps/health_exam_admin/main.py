@@ -21031,6 +21031,77 @@ def load_person_event_facility_subscriber_ids(
     return sorted(subscriber_ids)
 
 
+def load_person_event_month_options(cur: Any, *, event_id: int) -> list[dict[str, Any]]:
+    cur.execute(
+        f"""
+        SELECT exam_month, COUNT(*) AS source_count
+        FROM (
+          SELECT DATE_FORMAT(reservation_date, '%%Y-%%m') AS exam_month
+          FROM {qname(work_other_db())}.reservation_site_records
+          WHERE event_id=%s AND reservation_date IS NOT NULL
+          UNION ALL
+          SELECT DATE_FORMAT(exam_date, '%%Y-%%m') AS exam_month
+          FROM {qname(health_db())}.exam_ledgers
+          WHERE event_id=%s AND exam_date IS NOT NULL
+          UNION ALL
+          SELECT DATE_FORMAT(exam_date, '%%Y-%%m') AS exam_month
+          FROM {qname(health_db())}.exam_export_cases
+          WHERE event_id=%s AND exam_date IS NOT NULL AND case_lifecycle_status='ACTIVE'
+        ) months
+        WHERE exam_month IS NOT NULL
+        GROUP BY exam_month
+        ORDER BY exam_month DESC
+        LIMIT 36
+        """,
+        (event_id, event_id, event_id),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_person_event_month_subscriber_ids(
+    cur: Any, *, event_id: int, exam_months: Sequence[str]
+) -> list[int]:
+    if not exam_months:
+        return []
+    placeholders = ", ".join(["%s"] * len(exam_months))
+    subscriber_ids: set[int] = set()
+    for table_name, extra_where in (
+        ("exam_export_cases", "AND case_lifecycle_status='ACTIVE'"),
+        ("exam_ledgers", ""),
+    ):
+        cur.execute(
+            f"""SELECT DISTINCT subscriber_id
+                FROM {qname(health_db())}.{table_name}
+                WHERE event_id=%s AND DATE_FORMAT(exam_date, '%%Y-%%m') IN ({placeholders})
+                  AND subscriber_id IS NOT NULL {extra_where}""",
+            tuple([event_id, *exam_months]),
+        )
+        subscriber_ids.update(int(row["subscriber_id"]) for row in cur.fetchall())
+    cur.execute(
+        f"""
+        SELECT DISTINCT s.id AS subscriber_id
+        FROM {qname(work_other_db())}.reservation_site_records r
+        INNER JOIN {qname(dev_db())}.subscribers s
+          ON r.applicant_birthday=s.birth
+         AND (
+           (r.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
+            AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
+           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+               AND CONVERT(r.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
+               AND CONVERT(r.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+               AND CONVERT(r.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+         )
+        INNER JOIN {qname(dev_db())}.person_event pe
+          ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
+        WHERE r.event_id=%s AND DATE_FORMAT(r.reservation_date, '%%Y-%%m') IN ({placeholders})
+        """,
+        tuple([event_id, *exam_months]),
+    )
+    subscriber_ids.update(int(row["subscriber_id"]) for row in cur.fetchall())
+    return sorted(subscriber_ids)
+
+
 def load_person_event_progress_rows(
     cur: Any,
     *,
@@ -21038,12 +21109,35 @@ def load_person_event_progress_rows(
     query: str = "",
     reservation_status: str = "",
     dashboard_status: str = "",
+    exam_month: str = "",
+    case_presence: str = "ALL",
     exam_facility_id: int | None = None,
     page: int = 1,
     per_page: int = 30,
 ) -> dict[str, Any]:
     where = ["pe.event_id = %s"]
     params: list[Any] = [event_id]
+    case_presence = case_presence.strip().upper()
+    if case_presence in {"EXISTS", "NONE"}:
+        predicate = "EXISTS" if case_presence == "EXISTS" else "NOT EXISTS"
+        where.append(
+            f"""{predicate} (
+              SELECT 1 FROM {qname(health_db())}.exam_export_cases case_filter
+              WHERE case_filter.event_id=pe.event_id
+                AND case_filter.subscriber_id=pe.subscriber_id
+                AND case_filter.case_lifecycle_status='ACTIVE'
+            )"""
+        )
+    exam_months = split_filter_values(exam_month)
+    if exam_months:
+        month_subscriber_ids = load_person_event_month_subscriber_ids(
+            cur, event_id=event_id, exam_months=exam_months
+        )
+        if not month_subscriber_ids:
+            where.append("1=0")
+        else:
+            where.append(f"pe.subscriber_id IN ({', '.join(['%s'] * len(month_subscriber_ids))})")
+            params.extend(month_subscriber_ids)
     if exam_facility_id:
         facility_subscriber_ids = load_person_event_facility_subscriber_ids(
             cur, event_id=event_id, exam_facility_id=exam_facility_id
@@ -21278,6 +21372,8 @@ def build_person_event_progress_pagination(
     query: str,
     reservation_statuses: Sequence[str],
     dashboard_statuses: Sequence[str],
+    exam_months: Sequence[str],
+    case_presence: str,
     exam_facility_id: int | None,
     exam_facility_display: str,
     total_count: int,
@@ -21296,6 +21392,10 @@ def build_person_event_progress_pagination(
             params.append(("query", query))
         params.extend(("reservation_status", value) for value in reservation_statuses)
         params.extend(("dashboard_status", value) for value in dashboard_statuses)
+        if exam_months:
+            params.append(("exam_month", ", ".join(exam_months)))
+        if case_presence in {"EXISTS", "NONE"}:
+            params.append(("case_presence", case_presence))
         if exam_facility_id:
             params.append(("exam_facility_id", str(exam_facility_id)))
             if exam_facility_display:
@@ -21455,6 +21555,10 @@ def person_event_progress(request: Request) -> Response:
     query = str(request.query_params.get("query") or "").strip()
     reservation_status = ",".join(request.query_params.getlist("reservation_status"))
     dashboard_status = ",".join(request.query_params.getlist("dashboard_status"))
+    exam_month = str(request.query_params.get("exam_month") or "").strip()
+    case_presence = str(request.query_params.get("case_presence") or "ALL").strip().upper()
+    if case_presence not in {"ALL", "EXISTS", "NONE"}:
+        case_presence = "ALL"
     exam_facility_id = _optional_int(request.query_params.get("exam_facility_id"))
     exam_facility_display = str(request.query_params.get("exam_facility_display") or "").strip()
     page = parse_positive_int(request.query_params.get("page"), default=1, maximum=100000)
@@ -21466,18 +21570,23 @@ def person_event_progress(request: Request) -> Response:
         event_id = parse_positive_int(request.query_params.get("event_id"), default=default_event_id, maximum=999999)
         result = load_person_event_progress_rows(
             cur, event_id=event_id, query=query, reservation_status=reservation_status,
-            dashboard_status=dashboard_status, exam_facility_id=exam_facility_id, page=page
+            dashboard_status=dashboard_status, exam_month=exam_month,
+            case_presence=case_presence, exam_facility_id=exam_facility_id, page=page
         ) if event_id else {
             "rows": [], "total_count": 0, "page": 1, "page_count": 1, "per_page": 30
         }
         dashboard_status_options = load_person_event_dashboard_status_options(cur, event_id=event_id) if event_id else []
+        month_options = load_person_event_month_options(cur, event_id=event_id) if event_id else []
         selected_reservation_statuses = split_filter_values(reservation_status)
         selected_dashboard_statuses = split_filter_values(dashboard_status)
+        selected_exam_months = split_filter_values(exam_month)
         pagination = build_person_event_progress_pagination(
             event_id=event_id,
             query=query,
             reservation_statuses=selected_reservation_statuses,
             dashboard_statuses=selected_dashboard_statuses,
+            exam_months=selected_exam_months,
+            case_presence=case_presence,
             exam_facility_id=exam_facility_id,
             exam_facility_display=exam_facility_display,
             total_count=result["total_count"],
@@ -21514,6 +21623,9 @@ def person_event_progress(request: Request) -> Response:
          "exam_facility_id": exam_facility_id, "exam_facility_display": exam_facility_display,
          "selected_reservation_statuses": selected_reservation_statuses,
          "selected_dashboard_statuses": selected_dashboard_statuses,
+         "selected_exam_months": selected_exam_months,
+         "month_options": month_options,
+         "case_presence": case_presence,
          "dashboard_status_options": dashboard_status_options,
          "prefecture_options": PREFECTURE_OPTIONS,
          "pagination": pagination,

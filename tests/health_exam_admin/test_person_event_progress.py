@@ -6,6 +6,8 @@ from apps.health_exam_admin.main import (
     load_person_event_dashboard_status_options,
     load_person_event_exam_progress,
     load_person_event_facility_subscriber_ids,
+    load_person_event_month_options,
+    load_person_event_month_subscriber_ids,
     load_person_event_progress_rows,
     person_event_progress,
 )
@@ -44,8 +46,10 @@ def test_person_event_progress_template_has_base_progress_columns() -> None:
     assert "加入者詳細" in template
     assert "結果受領" in template
     assert "case・出力" in template
-    assert "予約システムの状態（複数選択）" in template
-    assert "HIAダッシュボードの状態（複数選択）" in template
+    assert "予約システムの状態" in template
+    assert "HIAダッシュボードの状態" in template
+    assert 'name="exam_month"' in template
+    assert "data-month-picker" in template
     assert "状態を更新" in template
     assert "data-checkbox-choice-card" in template
     assert template.count("{{ progress_pagination(pagination") == 2
@@ -67,6 +71,8 @@ def test_person_event_progress_pagination_preserves_multi_value_filters() -> Non
         query="札幌 太郎",
         reservation_statuses=["1", "3"],
         dashboard_statuses=["受診済み", "結果待ち"],
+        exam_months=["2026-05", "2026-06"],
+        case_presence="EXISTS",
         exam_facility_id=7386,
         exam_facility_display="札幌健診センター",
         total_count=7316,
@@ -82,6 +88,8 @@ def test_person_event_progress_pagination_preserves_multi_value_filters() -> Non
     assert pagination["has_next"] is True
     assert "reservation_status=1&reservation_status=3" in pagination["next_url"]
     assert "exam_facility_id=7386" in pagination["next_url"]
+    assert "exam_month=2026-05%2C+2026-06" in pagination["next_url"]
+    assert "case_presence=EXISTS" in pagination["next_url"]
     assert "%E6%9C%AD%E5%B9%8C+%E5%A4%AA%E9%83%8E" in pagination["next_url"]
     assert pagination["pages"][0]["page"] == 1
     assert pagination["pages"][-1]["page"] == 244
@@ -99,6 +107,28 @@ def test_person_event_progress_can_filter_by_facility_across_stages() -> None:
     assert "reservation_site_records" in facility_source
     assert 'name="exam_facility_id"' in template
     assert "data-alias-facility-picker-modal" in template
+
+
+def test_person_event_progress_month_filter_covers_reservation_ledger_and_case() -> None:
+    option_source = getsource(load_person_event_month_options)
+    filter_source = getsource(load_person_event_month_subscriber_ids)
+    loader_source = getsource(load_person_event_progress_rows)
+
+    for source in (option_source, filter_source):
+        assert "reservation_site_records" in source
+        assert "exam_ledgers" in source
+        assert "exam_export_cases" in source
+    assert "load_person_event_month_subscriber_ids" in loader_source
+
+
+def test_person_event_progress_can_filter_active_case_presence() -> None:
+    source = getsource(load_person_event_progress_rows)
+    template = Path("apps/health_exam_admin/templates/person_event_progress.html").read_text(encoding="utf-8")
+
+    assert "case_filter.case_lifecycle_status='ACTIVE'" in source
+    assert 'name="case_presence"' in template
+    assert "caseあり" in template
+    assert "caseなし" in template
 
 
 def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:
