@@ -162,6 +162,8 @@ def test_reservation_status_filter_is_prepared_once_for_count_and_rows() -> None
     assert "ADD PRIMARY KEY (subscriber_id)" in source
     assert loader_source.count("prepare_person_event_reservation_status_filter") == 1
     assert "SELECT subscriber_id FROM tmp_person_event_reservation_status_filter" in loader_source
+    assert "s.hia_subscriber_id=r.hia_member_id" in source
+    assert "insurance_symbol_match" not in source
 
 
 def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:

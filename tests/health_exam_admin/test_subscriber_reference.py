@@ -7,7 +7,7 @@ from apps.health_exam_admin.main import (
 )
 
 
-def test_reservation_candidate_match_accepts_strong_insurance_identity() -> None:
+def test_reservation_candidate_match_does_not_use_insurance_fallback() -> None:
     subscriber = {
         "hia_subscriber_id": None,
         "insurer_number": "06139463",
@@ -23,14 +23,14 @@ def test_reservation_candidate_match_accepts_strong_insurance_identity() -> None
         "applicant_birthday": "1990-01-02",
     }
 
-    assert _reservation_candidate_match(subscriber, reservation) == "保険情報・生年月日"
+    assert _reservation_candidate_match(subscriber, reservation) is None
 
 
-def test_reservation_candidate_match_does_not_trust_duplicate_hia_id_alone() -> None:
+def test_reservation_candidate_match_uses_hia_id_without_demographic_fallback() -> None:
     subscriber = {"hia_subscriber_id": "123", "birth": "1990-01-02"}
     reservation = {"hia_member_id": 123, "applicant_birthday": "1991-02-03"}
 
-    assert _reservation_candidate_match(subscriber, reservation) is None
+    assert _reservation_candidate_match(subscriber, reservation) == "HIA加入者ID"
 
 
 class SubscriberHistoryCursor:

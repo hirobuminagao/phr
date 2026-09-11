@@ -257,7 +257,9 @@ URL案: `/utilities/person-event-progress/{person_event_id}`
 
 ## 10. migration方針
 
-設計段階ではmigrationを作成しない。実装時に必要となる新規DB構造は、予約と加入者の確定関係を持つ `work_other.reservation_site_subscriber_links` を必須とする。予約と実受診の明示的な対応が必要な段階で `work_other.reservation_site_exam_links` を追加する。
+予約と加入者の照合は、予約CSVの `hia_member_id` と加入者マスタの `hia_subscriber_id` の完全一致だけを使用する。記号番号、氏名カナ、生年月日による代替照合は行わず、一致しなければ未紐付けとして扱う。この段階では専用linkテーブルを追加せず、両キーと画面条件に適したインデックスを使用する。
+
+予約テーブルには `event_id + reservation_status_raw`、`event_id + exam_facility_id`、`event_id + reservation_date` を起点とする複合インデックスを追加する。加入者テーブルには `hia_subscriber_id` のインデックスを追加する。予約と実受診の明示的な対応や、人手による予約加入者補正が必要になった段階でlinkテーブルを再検討する。
 
 eventの受診回数ルールは現時点で確定していないため、既存 `dev_phr.event` へ先行して固定列を追加しない。複数健診種別や期間別回数などの要件を確認してから、単純な必要回数列または別ルールテーブルを選ぶ。
 
@@ -286,6 +288,6 @@ eventの受診回数ルールは現時点で確定していないため、既存
 - 予約候補複数・有効予約複数の注意表示
 - 加入者詳細への導線と、加入者情報確認と同じPII権限・閲覧監査
 
-この段階では予約候補を確定関係として保存しない。実行環境で候補なし・一意候補・複数候補の割合を確認した後、`reservation_site_subscriber_links` と予約状態同期を実装する。
+予約候補はHIA加入者IDの完全一致だけで取得する。候補なしは加入者未紐付け、同じHIA加入者IDに複数加入者が存在する場合はデータ不整合として扱い、記号番号等で自動補完しない。健診機関は予約施設対応表から `reservation_site_records.exam_facility_id` へ反映し、施設別の検索・集計に利用する。
 
 ledger、case、XML出力、HIAアップロード、健保納品は初期版一覧へ直接JOINしない。これらは健診結果処理側の同期を整備した後、`person_event_status_items` を介して追加する。

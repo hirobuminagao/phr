@@ -49,6 +49,7 @@ CREATE TABLE `dev_phr`.`subscribers` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_subscribers_personid_namekana` (`person_id_custom`, `name_kana_full`),
   KEY `idx_subscribers_insurer` (`insurer_number`),
+  KEY `idx_subscribers_hia_subscriber_id` (`hia_subscriber_id`),
   KEY `idx_subscribers_insurance_full` (`insurer_number`, `insurance_symbol`, `insurance_number`, `insurance_branchnumber`),
   KEY `idx_subscribers_gender` (`gender_code`),
   KEY `idx_subscribers_last_change_run` (`last_change_run_id`),

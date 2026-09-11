@@ -201,7 +201,7 @@ def parse_csv(raw: bytes, *, event_id: int) -> dict[str, Any]:
                 "source_created_at": _datetime(base["created_at"], "created_at"),
                 "source_updated_at": _datetime(base["updated_at"], "updated_at"),
                 "applicant_id": _uint(base["applicant_id"], "applicant_id"),
-                "hia_member_id": _uint(base["hia_member_id"], "hia_member_id"),
+                "hia_member_id": _text(base["hia_member_id"]),
                 "applicant_fullname": _text(base["applicant_fullname"]),
                 "applicant_fullname_kana": _text(base["applicant_fullname_kana"]),
                 "applicant_fullname_kana_match": kana.get("match") if kana.get("ok") else None,

@@ -39,6 +39,7 @@ def test_parse_csv_keeps_all_eight_duplicate_header_option_slots() -> None:
     assert result["errors"] == []
     assert result["row_count"] == 1
     assert result["rows"][0]["record"]["reservation_id"] == 300272
+    assert result["rows"][0]["record"]["hia_member_id"] == "466501"
     assert result["rows"][0]["record"]["insurer_number_match"] == "6139463"
     assert len(result["rows"][0]["options"]) == 8
     assert result["rows"][0]["options"][0]["option_hia_code"] == "OP-A"

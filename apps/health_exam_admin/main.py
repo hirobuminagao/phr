@@ -20587,33 +20587,9 @@ RESERVATION_STATUS_LABELS = {
 
 
 def _reservation_candidate_match(subscriber: Mapping[str, Any], reservation: Mapping[str, Any]) -> str | None:
-    hia_id = str(subscriber.get("hia_subscriber_id") or "").strip().lstrip("0")
-    reservation_hia_id = str(reservation.get("hia_member_id") or "").strip().lstrip("0")
-    birth = str(subscriber.get("birth") or "").strip()[:10]
-    reservation_birth = str(reservation.get("applicant_birthday") or "").strip()[:10]
-    if hia_id and reservation_hia_id and hia_id == reservation_hia_id and birth and birth == reservation_birth:
-        return "HIA加入者ID・生年月日"
-
-    insurer = str(subscriber.get("insurer_number") or "").strip().lstrip("0")
-    reservation_insurer = str(reservation.get("insurer_number_match") or "").strip().lstrip("0")
-    symbol = str(subscriber.get("insurance_symbol_match") or subscriber.get("insurance_symbol") or "").strip()
-    number = str(subscriber.get("insurance_number_match") or subscriber.get("insurance_number") or "").strip()
-    if (
-        insurer and insurer == reservation_insurer
-        and symbol and symbol == str(reservation.get("insurance_symbol_match") or "").strip()
-        and number and number == str(reservation.get("insurance_number_match") or "").strip()
-        and birth and birth == reservation_birth
-    ):
-        return "保険情報・生年月日"
-
-    kana = str(subscriber.get("name_kana_full_match") or subscriber.get("name_kana_full") or "").strip()
-    if (
-        insurer and insurer == reservation_insurer
-        and kana and kana == str(reservation.get("applicant_fullname_kana_match") or "").strip()
-        and birth and birth == reservation_birth
-    ):
-        return "氏名カナ・生年月日・保険者"
-    return None
+    hia_id = str(subscriber.get("hia_subscriber_id") or "").strip()
+    reservation_hia_id = str(reservation.get("hia_member_id") or "").strip()
+    return "HIA加入者ID" if hia_id and reservation_hia_id and hia_id == reservation_hia_id else None
 
 
 def load_subscriber_reservation_candidates(
@@ -20628,21 +20604,10 @@ def load_subscriber_reservation_candidates(
     predicates: list[str] = []
     params: list[Any] = []
     for subscriber in subscribers:
-        hia_id = str(subscriber.get("hia_subscriber_id") or "").strip().lstrip("0")
-        insurer = str(subscriber.get("insurer_number") or "").strip().lstrip("0")
-        symbol = str(subscriber.get("insurance_symbol_match") or subscriber.get("insurance_symbol") or "").strip()
-        number = str(subscriber.get("insurance_number_match") or subscriber.get("insurance_number") or "").strip()
-        kana = str(subscriber.get("name_kana_full_match") or subscriber.get("name_kana_full") or "").strip()
-        birth = str(subscriber.get("birth") or "").strip()[:10]
-        if hia_id and birth:
-            predicates.append("(TRIM(LEADING '0' FROM CAST(r.hia_member_id AS CHAR)) = %s AND r.applicant_birthday = %s)")
-            params.extend((hia_id, birth))
-        if insurer and symbol and number and birth:
-            predicates.append("(TRIM(LEADING '0' FROM r.insurer_number_match) = %s AND r.insurance_symbol_match = %s AND r.insurance_number_match = %s AND r.applicant_birthday = %s)")
-            params.extend((insurer, symbol, number, birth))
-        if insurer and kana and birth:
-            predicates.append("(TRIM(LEADING '0' FROM r.insurer_number_match) = %s AND r.applicant_fullname_kana_match = %s AND r.applicant_birthday = %s)")
-            params.extend((insurer, kana, birth))
+        hia_id = str(subscriber.get("hia_subscriber_id") or "").strip()
+        if hia_id:
+            predicates.append("r.hia_member_id = %s")
+            params.append(hia_id)
     if not predicates:
         return result
     cur.execute(
@@ -21011,16 +20976,7 @@ def load_person_event_facility_subscriber_ids(
         SELECT DISTINCT s.id AS subscriber_id
         FROM {qname(work_other_db())}.reservation_site_records r
         INNER JOIN {qname(dev_db())}.subscribers s
-          ON r.applicant_birthday=s.birth
-         AND (
-           (r.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
-            AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
-           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-               AND CONVERT(r.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
-               AND CONVERT(r.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-               AND CONVERT(r.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-         )
+          ON s.hia_subscriber_id=r.hia_member_id
         INNER JOIN {qname(dev_db())}.person_event pe
           ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
         WHERE r.event_id=%s AND r.exam_facility_id=%s
@@ -21083,16 +21039,7 @@ def load_person_event_month_subscriber_ids(
         SELECT DISTINCT s.id AS subscriber_id
         FROM {qname(work_other_db())}.reservation_site_records r
         INNER JOIN {qname(dev_db())}.subscribers s
-          ON r.applicant_birthday=s.birth
-         AND (
-           (r.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
-            AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
-           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-               AND CONVERT(r.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
-               AND CONVERT(r.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-               AND CONVERT(r.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-         )
+          ON s.hia_subscriber_id=r.hia_member_id
         INNER JOIN {qname(dev_db())}.person_event pe
           ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
         WHERE r.event_id=%s
@@ -21115,16 +21062,7 @@ def prepare_person_event_reservation_status_filter(
         SELECT DISTINCT s.id AS subscriber_id
         FROM {qname(work_other_db())}.reservation_site_records r
         INNER JOIN {qname(dev_db())}.subscribers s
-          ON r.applicant_birthday=s.birth
-         AND (
-           (r.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
-            AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
-           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-               AND CONVERT(r.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
-               AND CONVERT(r.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-               AND CONVERT(r.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-         )
+          ON s.hia_subscriber_id=r.hia_member_id
         INNER JOIN {qname(dev_db())}.person_event pe
           ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
         WHERE r.event_id=%s AND r.reservation_status_raw IN ({placeholders})
