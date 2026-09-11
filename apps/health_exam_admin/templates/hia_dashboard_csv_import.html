@@ -54,7 +54,7 @@
 
   {% if result %}
   <section class="panel">
-    <div class="section-heading"><div><h2>{{ '事前確認結果' if result.action == 'preview' else '更新結果' }}</h2><p class="subtle">{{ result.file_name }} / 保険者 {{ result.insurer_number }} / {{ '全件更新' if result.import_scope == 'full' else 'CSV掲載者のみ更新' }}</p></div><span class="status-pill {{ 'status-ready' if result.ok else 'status-danger' }}">{{ 'OK' if result.ok else 'ERROR' }}</span></div>
+    <div class="section-heading"><div><h2>{{ '事前確認結果' if result.action == 'preview' else '更新結果' }}</h2><p class="subtle">{{ result.file_name }} / 保険者 {{ result.insurer_number }} / {{ '全件更新' if result.import_scope == 'full' else 'CSV掲載者のみ更新' }}</p></div><div class="section-actions"><span class="status-pill {{ 'status-ready' if result.ok else 'status-danger' }}">{{ 'OK' if result.ok else 'ERROR' }}</span>{% if result.error_download_token %}<a class="ghost-button compact-action-button" href="/utilities/hia-dashboard-csv/errors/{{ result.error_download_token }}/download">エラーをダウンロード</a>{% endif %}</div></div>
     <pre>{{ result.output }}</pre>
   </section>
   {% endif %}

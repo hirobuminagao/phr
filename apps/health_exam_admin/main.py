@@ -12111,6 +12111,7 @@ EXAM_PROCESSING_STEP_MAP = {step["key"]: step for step in EXAM_PROCESSING_STEPS}
 HIA_DASHBOARD_CSV_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 HIA_DASHBOARD_PLAN_TTL_SECONDS = 60 * 60
 HIA_DASHBOARD_PLAN_ROOT = Path(tempfile.gettempdir()) / "phr_hia_dashboard_plans"
+HIA_DASHBOARD_ERROR_ROOT = Path(tempfile.gettempdir()) / "phr_hia_dashboard_errors"
 RESERVATION_SITE_CSV_MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 RESERVATION_SITE_PLAN_ROOT = Path(tempfile.gettempdir()) / "phr_reservation_site_plans"
 RESERVATION_SITE_PLAN_TTL_SECONDS = 60 * 60
@@ -12235,6 +12236,39 @@ def cleanup_hia_dashboard_plans(*, token: str | None = None) -> None:
             continue
         if token is not None or now - target.stat().st_mtime > HIA_DASHBOARD_PLAN_TTL_SECONDS:
             shutil.rmtree(target, ignore_errors=True)
+
+
+def cleanup_hia_dashboard_error_reports() -> None:
+    HIA_DASHBOARD_ERROR_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    cutoff = time.time() - HIA_DASHBOARD_PLAN_TTL_SECONDS
+    for path in HIA_DASHBOARD_ERROR_ROOT.glob("*.json"):
+        if path.stat().st_mtime < cutoff:
+            path.unlink(missing_ok=True)
+
+
+def store_hia_dashboard_error_report(*, app_user_id: int, content: str) -> str:
+    cleanup_hia_dashboard_error_reports()
+    token = secrets.token_urlsafe(32)
+    path = HIA_DASHBOARD_ERROR_ROOT / f"{token}.json"
+    path.write_text(
+        json.dumps({"app_user_id": app_user_id, "content": content}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
+    return token
+
+
+def load_hia_dashboard_error_report(*, token: str, app_user_id: int) -> str | None:
+    cleanup_hia_dashboard_error_reports()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
+        return None
+    path = HIA_DASHBOARD_ERROR_ROOT / f"{token}.json"
+    if not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if int(payload.get("app_user_id") or 0) != app_user_id:
+        return None
+    return str(payload.get("content") or "")
 
 
 def load_hia_dashboard_plan(token: str, *, app_user_id: int) -> tuple[Path, dict[str, Any]]:
@@ -15837,6 +15871,7 @@ def hia_dashboard_csv_import(request: Request) -> Response:
     if not can_manage_business_settings(user):
         return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
     cleanup_hia_dashboard_plans()
+    cleanup_hia_dashboard_error_reports()
     selected_event_id = parse_positive_int(request.query_params.get("event_id"), default=2, maximum=999999)
     params = load_mysql_base_params(db_prefix())
     with connect_ctx(params, database=dev_db(), autocommit=True) as conn:
@@ -15974,6 +16009,21 @@ async def run_hia_dashboard_csv_import_from_screen(
             )
             if not result["ok"]:
                 error = "事前確認に失敗しました。" if action == "preview" else "更新に失敗しました。"
+                if has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+                    report = "\n".join(
+                        [
+                            f"ファイル: {safe_name or '-'}",
+                            f"保険者番号: {insurer_number or '-'}",
+                            f"取込方式: {'全件更新' if import_scope == 'full' else 'CSV掲載者のみ更新'}",
+                            f"処理: {'事前確認' if action == 'preview' else '更新'}",
+                            "",
+                            str(result.get("output") or "(出力なし)"),
+                        ]
+                    )
+                    result["error_download_token"] = store_hia_dashboard_error_report(
+                        app_user_id=int(user["app_user_id"]),
+                        content=report,
+                    )
             elif action == "apply":
                 try:
                     result["person_event_sync"] = sync_person_event_base_status(event_id=event_id)
@@ -16006,6 +16056,28 @@ async def run_hia_dashboard_csv_import_from_screen(
             "error": error,
         },
         status_code=400 if error and result is None else 200,
+    )
+
+
+@app.get("/utilities/hia-dashboard-csv/errors/{token}/download")
+def download_hia_dashboard_csv_error(request: Request, token: str) -> Response:
+    user = require_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    if not has_permission(user, SYSTEM_SETTINGS_PERMISSION):
+        return templates.TemplateResponse("forbidden.html", {"request": request, "user": user}, status_code=403)
+    content = load_hia_dashboard_error_report(token=token, app_user_id=int(user["app_user_id"]))
+    if content is None:
+        return Response(
+            "エラーファイルが見つからないか、有効期限が切れています。",
+            status_code=404,
+            media_type="text/plain; charset=utf-8",
+        )
+    filename = f"HIA_DASHBOARD_CSV_ERROR_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    return Response(
+        "\ufeff" + content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

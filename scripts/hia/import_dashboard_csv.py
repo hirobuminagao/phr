@@ -8,7 +8,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +111,12 @@ def qname(name: str) -> str:
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def json_plan_default(value: Any) -> str:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
 
 
 def text_or_none(value: Any) -> str | None:
@@ -654,7 +660,12 @@ def process_normalized_rows(
                 etl_log_error(
                     cur, run_id, phase=ETL_PHASE, source=ETL_SOURCE, insurer_number=insurer_number,
                     src_file=src_file, row_no=row_no, line_no=row_no, field="ROW",
-                    field_value=json.dumps(normalized, ensure_ascii=False, sort_keys=True),
+                    field_value=json.dumps(
+                        normalized,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        default=json_plan_default,
+                    ),
                     error_code=type(exc).__name__, message=str(exc),
                 )
     return metrics
@@ -673,7 +684,14 @@ def process_csv(cur: Any, *, config: Config, csv_path: Path, insurer_number: str
             except Exception:
                 parse_errors += 1
     if config.plan_output is not None and parse_errors == 0:
-        config.plan_output.write_text(json.dumps({"insurer_number": insurer_number, "rows": normalized_rows}, ensure_ascii=False), encoding="utf-8")
+        config.plan_output.write_text(
+            json.dumps(
+                {"insurer_number": insurer_number, "rows": normalized_rows},
+                ensure_ascii=False,
+                default=json_plan_default,
+            ),
+            encoding="utf-8",
+        )
         config.plan_output.chmod(0o600)
     metrics = process_normalized_rows(cur, config=config, rows=normalized_rows, insurer_number=insurer_number, run_id=run_id, src_file=str(csv_path))
     metrics.errors += parse_errors
