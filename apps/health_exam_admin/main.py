@@ -21074,6 +21074,25 @@ def prepare_person_event_reservation_status_filter(
     )
 
 
+def summarize_person_event_reservations(
+    candidates: Sequence[Mapping[str, Any]], *, exam_facility_id: int | None
+) -> dict[str, Any]:
+    scoped = list(candidates)
+    if exam_facility_id is not None:
+        scoped = [
+            item for item in scoped
+            if _optional_int(item.get("exam_facility_id")) == exam_facility_id
+        ]
+    active = [item for item in scoped if str(item.get("reservation_status_raw") or "") != "5"]
+    cancelled = [item for item in scoped if str(item.get("reservation_status_raw") or "") == "5"]
+    return {
+        "candidates": scoped,
+        "active": active,
+        "cancelled": cancelled,
+        "latest": (active or scoped)[0] if scoped else None,
+    }
+
+
 def load_person_event_progress_rows(
     cur: Any,
     *,
@@ -21205,14 +21224,17 @@ def load_person_event_progress_rows(
     load_person_event_exam_progress(cur, rows=rows, event_id=event_id)
     reservations = load_subscriber_reservation_candidates(cur, subscribers=rows, event_id=event_id)
     for row in rows:
-        candidates = reservations.get(int(row["subscriber_id"]), [])
-        active = [item for item in candidates if str(item.get("reservation_status_raw") or "") != "5"]
-        cancelled = [item for item in candidates if str(item.get("reservation_status_raw") or "") == "5"]
-        latest = candidates[0] if candidates else None
+        reservation_summary = summarize_person_event_reservations(
+            reservations.get(int(row["subscriber_id"]), []),
+            exam_facility_id=exam_facility_id,
+        )
+        candidates = reservation_summary["candidates"]
+        active = reservation_summary["active"]
+        cancelled = reservation_summary["cancelled"]
         row["reservation_candidate_count"] = len(candidates)
         row["active_reservation_count"] = len(active)
         row["cancelled_reservation_count"] = len(cancelled)
-        row["latest_reservation"] = latest
+        row["latest_reservation"] = reservation_summary["latest"]
         row["attention_codes"] = []
         if len(active) > 1:
             row["attention_codes"].append("有効予約が複数")

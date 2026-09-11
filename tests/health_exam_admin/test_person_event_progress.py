@@ -10,6 +10,7 @@ from apps.health_exam_admin.main import (
     load_person_event_month_subscriber_ids,
     load_person_event_progress_rows,
     prepare_person_event_reservation_status_filter,
+    summarize_person_event_reservations,
     person_event_progress,
 )
 from scripts.health_exam_event.sync_person_event_hia_dashboard_status import (
@@ -164,6 +165,31 @@ def test_reservation_status_filter_is_prepared_once_for_count_and_rows() -> None
     assert "SELECT subscriber_id FROM tmp_person_event_reservation_status_filter" in loader_source
     assert "s.hia_subscriber_id=r.hia_member_id" in source
     assert "insurance_symbol_match" not in source
+
+
+def test_reservation_summary_prefers_active_in_selected_facility() -> None:
+    summary = summarize_person_event_reservations(
+        [
+            {"reservation_id": 3, "exam_facility_id": 20, "reservation_status_raw": "5"},
+            {"reservation_id": 2, "exam_facility_id": 10, "reservation_status_raw": "5"},
+            {"reservation_id": 1, "exam_facility_id": 10, "reservation_status_raw": "3"},
+        ],
+        exam_facility_id=10,
+    )
+
+    assert summary["latest"]["reservation_id"] == 1
+    assert len(summary["candidates"]) == 2
+    assert len(summary["active"]) == 1
+    assert len(summary["cancelled"]) == 1
+
+
+def test_reservation_summary_uses_latest_cancelled_when_no_active_exists() -> None:
+    summary = summarize_person_event_reservations(
+        [{"reservation_id": 2, "exam_facility_id": 10, "reservation_status_raw": "5"}],
+        exam_facility_id=None,
+    )
+
+    assert summary["latest"]["reservation_id"] == 2
 
 
 def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:
