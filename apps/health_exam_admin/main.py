@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import traceback
+import unicodedata
 import zipfile
 from datetime import date, datetime
 from decimal import Decimal
@@ -5350,15 +5351,27 @@ def load_alias_facility_admin_rows(cur: Any, *, limit: int = 300) -> list[dict[s
 def facility_master_search_where(
     *,
     keyword: str | None = None,
+    facility_name: str | None = None,
+    phone_number: str | None = None,
     code: str | None = None,
     code_match: str = "exact",
     prefecture: str | None = None,
+    alias_registration: str | None = None,
+    keyword_include_name_phone: bool = True,
 ) -> tuple[str, list[Any]]:
     where_parts: list[str] = []
     params: list[Any] = []
     keyword = (keyword or "").strip()
+    facility_name = (facility_name or "").strip()
+    phone_number_raw = (phone_number or "").strip()
+    phone_number = "".join(
+        character
+        for character in unicodedata.normalize("NFKC", phone_number_raw)
+        if character in string.digits
+    )
     code = (code or "").strip()
     prefecture = (prefecture or "").strip()
+    alias_registration = (alias_registration or "").strip().upper()
     if prefecture:
         where_parts.append("address LIKE %s")
         params.append(f"{prefecture}%")
@@ -5373,19 +5386,34 @@ def facility_master_search_where(
             )"""
         )
         params.extend([code_value, code_value, code_value])
+    if facility_name:
+        like = f"%{facility_name}%"
+        where_parts.append("(exam_facility_name LIKE %s OR exam_facility_display_name LIKE %s)")
+        params.extend([like, like])
+    if phone_number_raw:
+        if phone_number:
+            where_parts.append(
+                "REGEXP_REPLACE(CONVERT(phone_number USING utf8mb4), '[^0-9]', '') LIKE %s"
+            )
+            params.append(f"%{phone_number}%")
+        else:
+            where_parts.append("1=0")
+    if alias_registration in {"REGISTERED", "UNREGISTERED"}:
+        exists_operator = "EXISTS" if alias_registration == "REGISTERED" else "NOT EXISTS"
+        where_parts.append(
+            f"""{exists_operator} (
+              SELECT 1
+              FROM {qname(master_db())}.medical_folder_aliases AS filter_alias
+              WHERE filter_alias.exam_facility_id = ef.exam_facility_id
+            )"""
+        )
     if keyword:
         like = f"%{keyword}%"
-        where_parts.append(
-            """(
-          exam_facility_name LIKE %s
-          OR exam_facility_display_name LIKE %s
-          OR postal_code LIKE %s
-          OR address LIKE %s
-          OR phone_number LIKE %s
-          OR note LIKE %s
-        )"""
-        )
-        params.extend([like] * 6)
+        keyword_columns = ["postal_code", "address", "note"]
+        if keyword_include_name_phone:
+            keyword_columns = ["exam_facility_name", "exam_facility_display_name", *keyword_columns, "phone_number"]
+        where_parts.append("(" + " OR ".join(f"{column} LIKE %s" for column in keyword_columns) + ")")
+        params.extend([like] * len(keyword_columns))
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     return where_sql, params
 
@@ -5394,20 +5422,28 @@ def count_facility_master_admin_rows(
     cur: Any,
     *,
     keyword: str | None = None,
+    facility_name: str | None = None,
+    phone_number: str | None = None,
     code: str | None = None,
     code_match: str = "exact",
     prefecture: str | None = None,
+    alias_registration: str | None = None,
+    keyword_include_name_phone: bool = True,
 ) -> int:
     where_sql, params = facility_master_search_where(
         keyword=keyword,
+        facility_name=facility_name,
+        phone_number=phone_number,
         code=code,
         code_match=code_match,
         prefecture=prefecture,
+        alias_registration=alias_registration,
+        keyword_include_name_phone=keyword_include_name_phone,
     )
     cur.execute(
         f"""
         SELECT COUNT(*) AS cnt
-        FROM {qname(master_db())}.exam_facilities
+        FROM {qname(master_db())}.exam_facilities AS ef
         {where_sql}
         """,
         params,
@@ -5421,16 +5457,24 @@ def load_facility_master_admin_rows(
     *,
     limit: int = 500,
     keyword: str | None = None,
+    facility_name: str | None = None,
+    phone_number: str | None = None,
     code: str | None = None,
     code_match: str = "exact",
     prefecture: str | None = None,
     prefer_alias_registered: bool = False,
+    alias_registration: str | None = None,
+    keyword_include_name_phone: bool = True,
 ) -> list[dict[str, Any]]:
     where_sql, params = facility_master_search_where(
         keyword=keyword,
+        facility_name=facility_name,
+        phone_number=phone_number,
         code=code,
         code_match=code_match,
         prefecture=prefecture,
+        alias_registration=alias_registration,
+        keyword_include_name_phone=keyword_include_name_phone,
     )
     cur.execute(
         f"""
@@ -21866,6 +21910,11 @@ def admin_facility_master(request: Request) -> Response:
     with connect_ctx(params, database=health_db(), autocommit=False) as conn:
         cur = dict_cursor(conn)
         facility_keyword = request.query_params.get("q", "").strip()
+        facility_name = request.query_params.get("name", "").strip()
+        facility_phone_number = request.query_params.get("phone", "").strip()
+        facility_alias_registration = request.query_params.get("alias_registration", "").strip().upper()
+        if facility_alias_registration not in {"REGISTERED", "UNREGISTERED"}:
+            facility_alias_registration = ""
         facility_code = request.query_params.get("code", "").strip()
         facility_prefecture = request.query_params.get("prefecture", "").strip()
         if facility_prefecture and facility_prefecture not in PREFECTURE_OPTIONS:
@@ -21873,10 +21922,14 @@ def admin_facility_master(request: Request) -> Response:
         try:
             facility_rows = load_facility_master_admin_rows(
                 cur,
-                limit=2000 if facility_keyword or facility_code or facility_prefecture else 500,
+                limit=2000 if facility_keyword or facility_name or facility_phone_number or facility_code or facility_prefecture or facility_alias_registration else 500,
                 keyword=facility_keyword,
+                facility_name=facility_name,
+                phone_number=facility_phone_number,
                 code=facility_code,
                 prefecture=facility_prefecture,
+                alias_registration=facility_alias_registration,
+                keyword_include_name_phone=False,
             )
             conn.commit()
         except Exception:
@@ -21888,7 +21941,14 @@ def admin_facility_master(request: Request) -> Response:
             "request": request,
             "user": user,
             "facility_rows": facility_rows,
-            "filters": {"q": facility_keyword, "code": facility_code, "prefecture": facility_prefecture},
+            "filters": {
+                "q": facility_keyword,
+                "name": facility_name,
+                "phone": facility_phone_number,
+                "code": facility_code,
+                "prefecture": facility_prefecture,
+                "alias_registration": facility_alias_registration,
+            },
             "prefecture_options": PREFECTURE_OPTIONS,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),

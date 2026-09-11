@@ -46,8 +46,24 @@
         </select>
       </label>
       <label>
+        <span>健診機関名</span>
+        <input name="name" value="{{ filters.name or '' }}" placeholder="正式名称 / 表示名">
+      </label>
+      <label>
+        <span>電話番号</span>
+        <input name="phone" value="{{ filters.phone or '' }}" placeholder="ハイフンあり・なし">
+      </label>
+      <label>
         <span>キーワード</span>
-        <input name="q" value="{{ filters.q or '' }}" data-live-filter-input="#facility-master-table" placeholder="名称 / 住所 / メモ">
+        <input name="q" value="{{ filters.q or '' }}" placeholder="住所 / 郵便番号 / メモ">
+      </label>
+      <label>
+        <span>alias登録</span>
+        <select name="alias_registration">
+          <option value="">すべて</option>
+          <option value="REGISTERED" {% if filters.alias_registration == 'REGISTERED' %}selected{% endif %}>登録済み</option>
+          <option value="UNREGISTERED" {% if filters.alias_registration == 'UNREGISTERED' %}selected{% endif %}>未登録</option>
+        </select>
       </label>
       <div class="filter-actions">
         <button type="submit">検索</button>
@@ -128,6 +144,11 @@
               {% if facility.data_source_name %}<small>source: {{ facility.data_source_name }}</small>{% endif %}
             </td>
             <td>
+              {% if facility.alias_count %}
+              <span class="status-pill status-ready">alias登録済み {{ facility.alias_count }}件</span>
+              {% else %}
+              <span class="status-pill status-neutral">alias未登録</span>
+              {% endif %}
               <label class="binary-switch {{ 'switch-on' if facility.is_active else 'switch-off' }}">
                 <input type="checkbox" name="is_active" value="1" form="facility-form-{{ facility.exam_facility_id }}" {% if facility.is_active %}checked{% endif %}>
                 <span>有効</span>
