@@ -9,6 +9,7 @@ from apps.health_exam_admin.main import (
     load_person_event_month_options,
     load_person_event_month_subscriber_ids,
     load_person_event_progress_rows,
+    prepare_person_event_reservation_status_filter,
     person_event_progress,
 )
 from scripts.health_exam_event.sync_person_event_hia_dashboard_status import (
@@ -25,7 +26,7 @@ def test_person_event_progress_uses_person_event_without_health_result_tables() 
     assert "HIA_DASHBOARD_STATUS" in source
     assert "load_subscriber_reservation_candidates" in source
     assert "load_person_event_exam_progress" in source
-    assert "reservation_status_raw IN" in source
+    assert "prepare_person_event_reservation_status_filter" in source
     assert "HIA_DASHBOARD_STATUS" in source
     assert "per_page: int = 30" in source
 
@@ -150,6 +151,17 @@ def test_person_event_progress_can_filter_subscriber_insurance_and_relationship(
     assert 'name="insurance_symbol"' in template
     assert 'name="insurance_number"' in template
     assert 'name="relationship"' in template
+
+
+def test_reservation_status_filter_is_prepared_once_for_count_and_rows() -> None:
+    source = getsource(prepare_person_event_reservation_status_filter)
+    loader_source = getsource(load_person_event_progress_rows)
+
+    assert "CREATE TEMPORARY TABLE tmp_person_event_reservation_status_filter" in source
+    assert "reservation_status_raw IN" in source
+    assert "ADD PRIMARY KEY (subscriber_id)" in source
+    assert loader_source.count("prepare_person_event_reservation_status_filter") == 1
+    assert "SELECT subscriber_id FROM tmp_person_event_reservation_status_filter" in loader_source
 
 
 def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:

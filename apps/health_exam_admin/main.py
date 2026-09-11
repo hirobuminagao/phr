@@ -21104,6 +21104,38 @@ def load_person_event_month_subscriber_ids(
     return sorted(subscriber_ids)
 
 
+def prepare_person_event_reservation_status_filter(
+    cur: Any, *, event_id: int, reservation_statuses: Sequence[str]
+) -> None:
+    placeholders = ", ".join(["%s"] * len(reservation_statuses))
+    cur.execute("DROP TEMPORARY TABLE IF EXISTS tmp_person_event_reservation_status_filter")
+    cur.execute(
+        f"""
+        CREATE TEMPORARY TABLE tmp_person_event_reservation_status_filter AS
+        SELECT DISTINCT s.id AS subscriber_id
+        FROM {qname(work_other_db())}.reservation_site_records r
+        INNER JOIN {qname(dev_db())}.subscribers s
+          ON r.applicant_birthday=s.birth
+         AND (
+           (r.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
+            AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
+           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+               AND CONVERT(r.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
+               AND CONVERT(r.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+           OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
+               AND CONVERT(r.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
+         )
+        INNER JOIN {qname(dev_db())}.person_event pe
+          ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
+        WHERE r.event_id=%s AND r.reservation_status_raw IN ({placeholders})
+        """,
+        tuple([event_id, *reservation_statuses]),
+    )
+    cur.execute(
+        "ALTER TABLE tmp_person_event_reservation_status_filter ADD PRIMARY KEY (subscriber_id)"
+    )
+
+
 def load_person_event_progress_rows(
     cur: Any,
     *,
@@ -21178,25 +21210,12 @@ def load_person_event_progress_rows(
         params.append(relationship_like)
     reservation_statuses = split_filter_values(reservation_status)
     if reservation_statuses:
-        placeholders = ", ".join(["%s"] * len(reservation_statuses))
-        where.append(
-            f"""EXISTS (
-              SELECT 1 FROM {qname(work_other_db())}.reservation_site_records r
-              WHERE r.event_id=pe.event_id
-                AND r.applicant_birthday=s.birth
-                AND r.reservation_status_raw IN ({placeholders})
-                AND (
-                  (r.hia_member_id IS NOT NULL AND s.hia_subscriber_id IS NOT NULL
-                   AND CAST(r.hia_member_id AS UNSIGNED)=CAST(s.hia_subscriber_id AS UNSIGNED))
-                  OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-                      AND CONVERT(r.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_symbol_match USING utf8mb4) COLLATE utf8mb4_unicode_ci
-                      AND CONVERT(r.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.insurance_number_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-                  OR (CAST(r.insurer_number_match AS UNSIGNED)=CAST(s.insurer_number AS UNSIGNED)
-                      AND CONVERT(r.applicant_fullname_kana_match USING utf8mb4) COLLATE utf8mb4_unicode_ci=CONVERT(s.name_kana_full_match USING utf8mb4) COLLATE utf8mb4_unicode_ci)
-                )
-            )"""
+        prepare_person_event_reservation_status_filter(
+            cur, event_id=event_id, reservation_statuses=reservation_statuses
         )
-        params.extend(reservation_statuses)
+        where.append(
+            "pe.subscriber_id IN (SELECT subscriber_id FROM tmp_person_event_reservation_status_filter)"
+        )
     dashboard_statuses = split_filter_values(dashboard_status)
     if dashboard_statuses:
         placeholders = ", ".join(["%s"] * len(dashboard_statuses))
