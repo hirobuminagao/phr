@@ -21174,8 +21174,8 @@ def load_person_event_progress_rows(
     relationship = relationship.strip()
     if relationship:
         relationship_like = f"%{relationship}%"
-        where.append("(s.relationship_name LIKE %s OR s.relationship_code LIKE %s)")
-        params.extend([relationship_like, relationship_like])
+        where.append("s.relationship_name LIKE %s")
+        params.append(relationship_like)
     reservation_statuses = split_filter_values(reservation_status)
     if reservation_statuses:
         placeholders = ", ".join(["%s"] * len(reservation_statuses))

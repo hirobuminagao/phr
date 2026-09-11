@@ -146,6 +146,7 @@ def test_person_event_progress_can_filter_subscriber_insurance_and_relationship(
     assert "normalize_insurance_symbol" in source
     assert "normalize_insurance_number" in source
     assert "s.relationship_name LIKE" in source
+    assert "s.relationship_code" not in source
     assert 'name="insurance_symbol"' in template
     assert 'name="insurance_number"' in template
     assert 'name="relationship"' in template
