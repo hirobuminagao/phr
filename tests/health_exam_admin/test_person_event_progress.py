@@ -4,6 +4,7 @@ from pathlib import Path
 from apps.health_exam_admin.main import (
     build_person_event_progress_pagination,
     load_person_event_dashboard_status_options,
+    load_person_event_exam_progress,
     load_person_event_progress_rows,
     person_event_progress,
 )
@@ -20,8 +21,7 @@ def test_person_event_progress_uses_person_event_without_health_result_tables() 
     assert ".person_event_status_items psi" in source
     assert "HIA_DASHBOARD_STATUS" in source
     assert "load_subscriber_reservation_candidates" in source
-    assert "exam_ledgers" not in source
-    assert "exam_export_cases" not in source
+    assert "load_person_event_exam_progress" in source
     assert "reservation_status_raw IN" in source
     assert "HIA_DASHBOARD_STATUS" in source
     assert "per_page: int = 30" in source
@@ -41,12 +41,23 @@ def test_person_event_progress_template_has_base_progress_columns() -> None:
     assert "予約システム" in template
     assert "HIAダッシュボード" in template
     assert "加入者詳細" in template
-    assert "健診結果" not in template
+    assert "結果受領" in template
+    assert "case・出力" in template
     assert "予約システムの状態（複数選択）" in template
     assert "HIAダッシュボードの状態（複数選択）" in template
     assert "状態を更新" in template
     assert "data-checkbox-choice-card" in template
     assert template.count("{{ progress_pagination(pagination") == 2
+
+
+def test_exam_progress_is_loaded_only_for_current_page_subscribers() -> None:
+    source = getsource(load_person_event_exam_progress)
+
+    assert "subscriber_id IN" in source
+    assert "exam_ledgers" in source
+    assert "exam_export_cases" in source
+    assert "case_lifecycle_status='ACTIVE'" in source
+    assert "ops_xml_export_list_cases" in source
 
 
 def test_person_event_progress_pagination_preserves_multi_value_filters() -> None:

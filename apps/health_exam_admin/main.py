@@ -20820,6 +20820,7 @@ def load_person_event_progress_rows(
         tuple([*params, per_page, (page - 1) * per_page]),
     )
     rows = [dict(row) for row in cur.fetchall()]
+    load_person_event_exam_progress(cur, rows=rows, event_id=event_id)
     reservations = load_subscriber_reservation_candidates(cur, subscribers=rows, event_id=event_id)
     for row in rows:
         candidates = reservations.get(int(row["subscriber_id"]), [])
@@ -20835,6 +20836,12 @@ def load_person_event_progress_rows(
             row["attention_codes"].append("有効予約が複数")
         if len(candidates) > 1:
             row["attention_codes"].append("予約候補が複数")
+        if row.get("ledger_ng_count"):
+            row["attention_codes"].append("受領NGあり")
+        if row.get("case_blocked_count"):
+            row["attention_codes"].append("case確認あり")
+        if row.get("export_error_count"):
+            row["attention_codes"].append("出力エラーあり")
     return {
         "rows": rows,
         "total_count": total_count,
@@ -20842,6 +20849,92 @@ def load_person_event_progress_rows(
         "page_count": page_count,
         "per_page": per_page,
     }
+
+
+def load_person_event_exam_progress(cur: Any, *, rows: list[dict[str, Any]], event_id: int) -> None:
+    """Attach health-result progress for only the subscribers on the current page."""
+    defaults = {
+        "ledger_count": 0, "ledger_ng_count": 0, "source_types": None,
+        "latest_ledger_at": None, "case_count": 0, "latest_case_id": None,
+        "latest_exam_date": None, "latest_facility_name": None,
+        "latest_check_status": None, "latest_readiness_status": None,
+        "latest_xml_export_status": None, "case_blocked_count": 0,
+        "export_list_count": 0, "exported_count": 0, "export_error_count": 0,
+    }
+    for row in rows:
+        row.update(defaults)
+    if not rows:
+        return
+
+    subscriber_ids = [int(row["subscriber_id"]) for row in rows]
+    placeholders = ", ".join(["%s"] * len(subscriber_ids))
+    by_subscriber = {int(row["subscriber_id"]): row for row in rows}
+    cur.execute(
+        f"""
+        SELECT subscriber_id, COUNT(*) AS ledger_count,
+               SUM(CASE WHEN check_status='NG' OR subscriber_match_status IN ('NG','UNMATCHED','MULTIPLE','CONFLICT') THEN 1 ELSE 0 END) AS ledger_ng_count,
+               GROUP_CONCAT(DISTINCT source_type ORDER BY source_type SEPARATOR ' / ') AS source_types,
+               MAX(COALESCE(source_updated_at, updated_at)) AS latest_ledger_at
+        FROM {qname(health_db())}.exam_ledgers
+        WHERE event_id=%s AND subscriber_id IN ({placeholders})
+        GROUP BY subscriber_id
+        """,
+        tuple([event_id, *subscriber_ids]),
+    )
+    for item in cur.fetchall():
+        target = by_subscriber.get(int(item["subscriber_id"]))
+        if target:
+            target.update(dict(item))
+
+    cur.execute(
+        f"""
+        SELECT eec.exam_export_case_id, eec.subscriber_id, eec.exam_date,
+               COALESCE(ef.exam_facility_name, eec.facility_name) AS facility_name,
+               eec.check_status, eec.export_readiness_status, eec.xml_export_status,
+               COALESCE(list_state.export_list_count, 0) AS export_list_count,
+               COALESCE(list_state.exported_count, 0) AS exported_count,
+               COALESCE(list_state.export_error_count, 0) AS export_error_count
+        FROM {qname(health_db())}.exam_export_cases eec
+        LEFT JOIN {qname(master_db())}.exam_facilities ef
+          ON ef.exam_facility_id=eec.exam_facility_id
+        LEFT JOIN (
+          SELECT exam_export_case_id, COUNT(*) AS export_list_count,
+                 SUM(list_case_status='EXPORTED') AS exported_count,
+                 SUM(list_case_status='EXPORT_ERROR') AS export_error_count
+          FROM {qname(health_db())}.ops_xml_export_list_cases
+          GROUP BY exam_export_case_id
+        ) list_state ON list_state.exam_export_case_id=eec.exam_export_case_id
+        WHERE eec.event_id=%s AND eec.subscriber_id IN ({placeholders})
+          AND eec.case_lifecycle_status='ACTIVE'
+        ORDER BY eec.subscriber_id, eec.exam_date DESC, eec.exam_export_case_id DESC
+        """,
+        tuple([event_id, *subscriber_ids]),
+    )
+    seen_latest: set[int] = set()
+    for item in cur.fetchall():
+        subscriber_id = int(item["subscriber_id"])
+        target = by_subscriber.get(subscriber_id)
+        if not target:
+            continue
+        target["case_count"] += 1
+        target["case_blocked_count"] += int(
+            item.get("check_status") == "NG"
+            or item.get("export_readiness_status") in {"BLOCKED", "WAITING_RESUBMISSION"}
+        )
+        target["export_list_count"] += int(item.get("export_list_count") or 0)
+        target["exported_count"] += int(item.get("exported_count") or 0)
+        target["export_error_count"] += int(item.get("export_error_count") or 0)
+        if subscriber_id in seen_latest:
+            continue
+        seen_latest.add(subscriber_id)
+        target.update({
+            "latest_case_id": item.get("exam_export_case_id"),
+            "latest_exam_date": item.get("exam_date"),
+            "latest_facility_name": item.get("facility_name"),
+            "latest_check_status": item.get("check_status"),
+            "latest_readiness_status": item.get("export_readiness_status"),
+            "latest_xml_export_status": item.get("xml_export_status"),
+        })
 
 
 def load_person_event_dashboard_status_options(cur: Any, *, event_id: int) -> list[str]:

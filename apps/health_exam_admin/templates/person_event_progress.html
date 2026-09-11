@@ -15,7 +15,7 @@
 {% endmacro %}
 {% block body %}
 <header class="topbar">
-  <div><p class="eyebrow">Utility</p><h1>健診進捗照会</h1><p class="subtle">イベント対象者を軸に、予約とHIAダッシュボードの現在状態を確認します。</p></div>
+  <div><p class="eyebrow">Utility</p><h1>健診進捗照会</h1><p class="subtle">イベント対象者を軸に、予約・結果受領・case・出力・HIAダッシュボードの現在状態を確認します。</p></div>
   <nav class="top-actions"><a class="ghost-button" href="/utilities/reservation-site-records?event_id={{ event_id }}">予約データ一覧</a><a class="ghost-button" href="/utilities/subscribers">加入者情報確認</a><a class="ghost-button" href="/">HOME</a></nav>
 </header>
 <main class="page">
@@ -53,14 +53,16 @@
     <div class="section-heading"><div><h2>対象者一覧</h2><p class="subtle">検索結果 {{ total_count }} 件中、{{ pagination.start }}-{{ pagination.end }} 件を表示しています。予約は現時点の照合候補です。</p></div></div>
     {{ progress_pagination(pagination) }}
     <div class="table-wrap"><table class="data-table compact-table">
-      <thead><tr><th>加入者</th><th>予約システム</th><th>HIAダッシュボード</th><th>確認</th><th>操作</th></tr></thead>
+      <thead><tr><th>加入者</th><th>予約システム</th><th>結果受領</th><th>case・出力</th><th>HIAダッシュボード</th><th>確認</th><th>操作</th></tr></thead>
       <tbody>{% for row in rows %}<tr>
         <td><strong>subscriber {{ row.subscriber_id }}</strong><small>HIA {{ row.hia_subscriber_id or '-' }}</small><small>{{ row.name_kanji_full or '-' }} / {{ row.name_kana_full or '-' }}</small><small>{{ row.birth or '-' }} / 記号 {{ row.insurance_symbol or '-' }} / 番号 {{ row.insurance_number or '-' }}</small></td>
         <td>{% if row.latest_reservation %}<strong>{{ row.latest_reservation.reservation_date or '-' }} {{ row.latest_reservation.status_label }}</strong><small>{{ row.latest_reservation.reservation_hospital_name or '-' }}</small><small>{{ row.latest_reservation.course_name or '-' }}</small><small>有効 {{ row.active_reservation_count }} / キャンセル {{ row.cancelled_reservation_count }} / 候補 {{ row.reservation_candidate_count }}</small>{% else %}<span class="status-pill status-neutral">候補なし</span>{% endif %}</td>
+        <td>{% if row.ledger_count %}<strong>{{ row.ledger_count }}件</strong><small>{{ row.source_types or '-' }}</small><small>最新 {{ row.latest_ledger_at or '-' }}</small>{% if row.ledger_ng_count %}<span class="status-pill status-warning">NG {{ row.ledger_ng_count }}件</span>{% endif %}{% else %}<span class="status-pill status-neutral">未受領</span>{% endif %}</td>
+        <td>{% if row.case_count %}<strong><a class="inline-link" href="/exam-export-cases/{{ row.latest_case_id }}">case {{ row.latest_case_id }}</a></strong><small>{{ row.latest_exam_date or '-' }} / {{ row.latest_facility_name or '-' }}</small><small>active {{ row.case_count }}件 / check {{ row.latest_check_status or '-' }}</small><small>出力可否 {{ row.latest_readiness_status or '-' }} / XML {{ row.latest_xml_export_status or '-' }}</small><small>リスト {{ row.export_list_count }} / 出力済み {{ row.exported_count }}</small>{% else %}<span class="status-pill status-neutral">case未作成</span>{% endif %}</td>
         <td>{% if row.hia_dashboard_status %}<strong>{{ row.hia_dashboard_status }}</strong><small>予約日 {{ row.hia_reservation_date or '-' }} / 受診日 {{ row.hia_exam_date or '-' }}</small><small>{{ row.hia_medical_institution or '-' }}</small><small>{{ row.hia_course_name or '-' }} / 更新 {{ row.hia_refreshed_at or '-' }}</small>{% else %}<span class="status-pill status-neutral">情報なし</span>{% endif %}</td>
         <td>{% if row.attention_codes %}{% for code in row.attention_codes %}<span class="status-pill status-warning">{{ code }}</span>{% endfor %}{% else %}<span class="status-pill status-ready">候補正常</span>{% endif %}</td>
         <td><a class="ghost-button" href="/utilities/subscribers/{{ row.subscriber_id }}">加入者詳細</a></td>
-      </tr>{% else %}<tr><td colspan="5">対象者がありません。person_eventの母集団同期状況を確認してください。</td></tr>{% endfor %}</tbody>
+      </tr>{% else %}<tr><td colspan="7">対象者がありません。person_eventの母集団同期状況を確認してください。</td></tr>{% endfor %}</tbody>
     </table></div>
     {{ progress_pagination(pagination, true) }}
   </section>
