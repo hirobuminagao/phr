@@ -124,6 +124,8 @@ def test_person_event_progress_month_filter_covers_reservation_ledger_and_case()
         assert "reservation_site_records" in source
         assert "exam_ledgers" in source
         assert "exam_export_cases" in source
+        assert "CONCAT(YEAR(" in source
+        assert "%%Y-%%m" not in source
     assert "load_person_event_month_subscriber_ids" in loader_source
 
 

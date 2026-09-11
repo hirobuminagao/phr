@@ -21036,15 +21036,15 @@ def load_person_event_month_options(cur: Any, *, event_id: int) -> list[dict[str
         f"""
         SELECT exam_month, COUNT(*) AS source_count
         FROM (
-          SELECT DATE_FORMAT(reservation_date, '%%Y-%%m') AS exam_month
+          SELECT CONCAT(YEAR(reservation_date), '-', LPAD(MONTH(reservation_date), 2, '0')) AS exam_month
           FROM {qname(work_other_db())}.reservation_site_records
           WHERE event_id=%s AND reservation_date IS NOT NULL
           UNION ALL
-          SELECT DATE_FORMAT(exam_date, '%%Y-%%m') AS exam_month
+          SELECT CONCAT(YEAR(exam_date), '-', LPAD(MONTH(exam_date), 2, '0')) AS exam_month
           FROM {qname(health_db())}.exam_ledgers
           WHERE event_id=%s AND exam_date IS NOT NULL
           UNION ALL
-          SELECT DATE_FORMAT(exam_date, '%%Y-%%m') AS exam_month
+          SELECT CONCAT(YEAR(exam_date), '-', LPAD(MONTH(exam_date), 2, '0')) AS exam_month
           FROM {qname(health_db())}.exam_export_cases
           WHERE event_id=%s AND exam_date IS NOT NULL AND case_lifecycle_status='ACTIVE'
         ) months
@@ -21072,7 +21072,8 @@ def load_person_event_month_subscriber_ids(
         cur.execute(
             f"""SELECT DISTINCT subscriber_id
                 FROM {qname(health_db())}.{table_name}
-                WHERE event_id=%s AND DATE_FORMAT(exam_date, '%%Y-%%m') IN ({placeholders})
+                WHERE event_id=%s
+                  AND CONCAT(YEAR(exam_date), '-', LPAD(MONTH(exam_date), 2, '0')) IN ({placeholders})
                   AND subscriber_id IS NOT NULL {extra_where}""",
             tuple([event_id, *exam_months]),
         )
@@ -21094,7 +21095,8 @@ def load_person_event_month_subscriber_ids(
          )
         INNER JOIN {qname(dev_db())}.person_event pe
           ON pe.event_id=r.event_id AND pe.subscriber_id=s.id
-        WHERE r.event_id=%s AND DATE_FORMAT(r.reservation_date, '%%Y-%%m') IN ({placeholders})
+        WHERE r.event_id=%s
+          AND CONCAT(YEAR(r.reservation_date), '-', LPAD(MONTH(r.reservation_date), 2, '0')) IN ({placeholders})
         """,
         tuple([event_id, *exam_months]),
     )
