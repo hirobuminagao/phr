@@ -7600,6 +7600,7 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     hia_subscriber_id = filters.get("hia_subscriber_id", "").strip()
     facility_query = filters.get("facility_q", "").strip()
     facility_codes = split_filter_values(filters.get("facility_codes", ""))
+    exam_months = split_filter_values(filters.get("exam_month", ""))
     if event_id:
         where_parts.append("event_id = %s")
         params.append(event_id)
@@ -7668,6 +7669,11 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
     if facility_codes:
         where_parts.append(f"facility_code IN ({', '.join(['%s'] * len(facility_codes))})")
         params.extend(facility_codes)
+    if exam_months:
+        where_parts.append(
+            f"DATE_FORMAT(exam_date, '%Y-%m') IN ({', '.join(['%s'] * len(exam_months))})"
+        )
+        params.extend(exam_months)
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     cur.execute(
         f"""
@@ -7702,6 +7708,33 @@ def load_exam_ledger_rows(cur: Any, *, filters: dict[str, str], limit: int = 200
         FROM {qname(health_db())}.exam_ledgers
         {where_sql}
         ORDER BY updated_at DESC, exam_ledger_id DESC
+        LIMIT %s
+        """,
+        (*params, limit),
+    )
+    return [dict(row) for row in cur.fetchall()]
+
+
+def load_exam_ledger_month_options(
+    cur: Any,
+    *,
+    event_id: str | None = None,
+    limit: int = 36,
+) -> list[dict[str, Any]]:
+    where_parts = ["exam_date IS NOT NULL"]
+    params: list[Any] = []
+    if event_id:
+        where_parts.append("event_id = %s")
+        params.append(event_id)
+    cur.execute(
+        f"""
+        SELECT
+          DATE_FORMAT(exam_date, '%Y-%m') AS exam_month,
+          COUNT(*) AS ledger_count
+        FROM {qname(health_db())}.exam_ledgers
+        WHERE {' AND '.join(where_parts)}
+        GROUP BY DATE_FORMAT(exam_date, '%Y-%m')
+        ORDER BY exam_month DESC
         LIMIT %s
         """,
         (*params, limit),
@@ -24367,6 +24400,7 @@ def exam_ledgers(request: Request) -> Response:
         "name_kana": request.query_params.get("name_kana", ""),
         "facility_q": request.query_params.get("facility_q", ""),
         "facility_codes": request.query_params.get("facility_codes", ""),
+        "exam_month": request.query_params.get("exam_month", ""),
         "limit": request.query_params.get("limit", "2000"),
     }
     limit = parse_positive_int(filters["limit"], default=2000, maximum=5000)
@@ -24376,6 +24410,7 @@ def exam_ledgers(request: Request) -> Response:
         try:
             event_options = load_event_options(cur)
             folder_aliases = load_received_folder_alias_rows(cur)
+            exam_month_options = load_exam_ledger_month_options(cur, event_id=filters["event_id"])
             rows = load_exam_ledger_rows(cur, filters=filters, limit=limit)
             if audit_enabled(cur):
                 for row in rows:
@@ -24409,6 +24444,8 @@ def exam_ledgers(request: Request) -> Response:
             "limit": limit,
             "event_options": event_options,
             "folder_aliases": folder_aliases,
+            "exam_month_options": exam_month_options,
+            "selected_exam_months": split_filter_values(filters["exam_month"]),
         },
     )
 
