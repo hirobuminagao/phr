@@ -152,7 +152,7 @@ def create_temp_dashboard_status(cur: Any, config: SyncConfig, insurer_number: s
           d.last_seen_run_id,
           d.inactive_at,
           d.inactive_reason,
-          d.updated_at,
+          CAST(d.updated_at AS DATETIME(6)) AS source_updated_at,
           ROW_NUMBER() OVER (
             PARTITION BY p.person_event_id
             ORDER BY d.is_active DESC, d.updated_at DESC, d.hia_dashboard_person_id DESC
@@ -307,7 +307,7 @@ def update_person_events(cur: Any, config: SyncConfig) -> int:
         SET p.hia_status_code = t.status,
             p.last_observed_at = GREATEST(
               COALESCE(p.last_observed_at, TIMESTAMP '1970-01-01 00:00:00'),
-              COALESCE(t.updated_at, TIMESTAMP '1970-01-01 00:00:00')
+              COALESCE(t.source_updated_at, TIMESTAMP '1970-01-01 00:00:00')
             )
         WHERE p.event_id = %s
         """,

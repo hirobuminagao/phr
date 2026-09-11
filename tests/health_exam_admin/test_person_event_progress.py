@@ -50,6 +50,7 @@ def test_dashboard_sync_selects_one_latest_row_per_person_event() -> None:
     assert "ROW_NUMBER() OVER" in source
     assert "PARTITION BY p.person_event_id" in source
     assert "ORDER BY d.is_active DESC, d.updated_at DESC, d.hia_dashboard_person_id DESC" in source
+    assert "CAST(d.updated_at AS DATETIME(6)) AS source_updated_at" in source
     assert "WHERE ranked.dashboard_row_number = 1" in source
 
 
